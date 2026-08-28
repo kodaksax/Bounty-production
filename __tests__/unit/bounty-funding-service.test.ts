@@ -155,9 +155,11 @@ describe('bounty-funding-service (unit)', () => {
     test.each([
       ['insufficient_funds_for_escrow', 'insufficient_funds'],
       ['Insufficient funds: new balance would be -30', 'insufficient_funds'],
-      // The DB guard firing means an acceptance path skipped escrow. To the
-      // poster that is the same recoverable "not funded yet" situation.
-      ['bounty_not_funded', 'insufficient_funds'],
+      // The DB guard firing means an acceptance path skipped escrow. That is
+      // NOT a balance problem, so it must not be folded into
+      // 'insufficient_funds' — a poster with plenty of money was being shown an
+      // "add funds" screen because of it.
+      ['bounty_not_funded', 'not_funded'],
       ['bounty_amount_locked_by_applications', 'terms_locked'],
       ['bounty_honor_flag_locked_by_escrow', 'terms_locked'],
       ['bounty_funding_mode_is_immutable', 'terms_locked'],
@@ -190,7 +192,7 @@ describe('bounty-funding-service (unit)', () => {
       const svc = loadWith(jest.fn());
       // The single most important property of this copy: a poster must never
       // be left believing a hunter is now working on an unpaid job.
-      for (const reason of ['insufficient_funds', 'network', 'unknown'] as const) {
+      for (const reason of ['insufficient_funds', 'not_funded', 'network', 'unknown'] as const) {
         const { title, message } = svc.describeAcceptFundingFailure(reason);
         expect(title).toBeTruthy();
         expect(message.toLowerCase()).toMatch(/not been funded|hasn't been funded/);
@@ -201,6 +203,7 @@ describe('bounty-funding-service (unit)', () => {
       const svc = loadWith(jest.fn());
       const reasons = [
         'insufficient_funds',
+        'not_funded',
         'state_conflict',
         'terms_locked',
         'not_authorized',

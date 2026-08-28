@@ -37,6 +37,15 @@ interface UseAcceptRequestParams {
    * rather than by this hook. Omitting it costs UX, never integrity.
    */
   ensureFunded?: (bountyId: string | number, context?: { hunterName?: string; variant?: string }) => Promise<boolean>
+  /**
+   * Pulls the authoritative wallet balance from the server. Called immediately
+   * after a successful pay-at-accept acceptance, because that transaction is
+   * what debits the poster and no local state knows about it yet.
+   *
+   * Optional for the same reason as `ensureFunded`: omitting it costs only the
+   * freshness of a displayed number, never correctness.
+   */
+  refreshWallet?: () => Promise<void>
   /** Returns `true` when the poster fixed the problem and we should retry once. */
   handleAcceptFailure?: (
     error: unknown,
@@ -60,6 +69,7 @@ export function useAcceptRequest({
   onBountyAccepted,
   setActiveScreen,
   ensureFunded,
+  refreshWallet,
   handleAcceptFailure,
 }: UseAcceptRequestParams) {
   const handleAcceptRequest = useCallback(async (requestId: string | number) => {
@@ -271,6 +281,35 @@ export function useAcceptRequest({
       // the acceptance transaction above. Either way, charging from this hook
       // would double-charge the poster.
 
+      // ...but for an 'at_accept' bounty the poster's balance just changed and
+      // nothing on this device knows it yet. Pull the authoritative figure now
+      // so the wallet reflects the charge the instant the hunter is selected,
+      // rather than whenever the next mount/auth event happens to refresh it.
+      //
+      // Deliberately a REFRESH and not a local subtraction: profiles.balance is
+      // the only source of truth for the ledger figure, and
+      // use-wallet-balance-display exists precisely because writing the balance
+      // optimistically from ~10 call sites is what let the displayed number
+      // drift from the withdrawable one. One extra read is worth not becoming
+      // the eleventh writer.
+      //
+      // The Realtime subscription in wallet-context covers this too, but only
+      // where `profiles` is in the supabase_realtime publication and the socket
+      // is actually connected. This makes it deterministic instead.
+      if (wasDeferredFunding && refreshWallet) {
+        try {
+          await refreshWallet()
+        } catch (refreshErr) {
+          // Non-fatal: the acceptance and the charge both already committed.
+          // A stale figure self-corrects on the next refresh, and showing a
+          // slightly old balance must never fail an acceptance that succeeded.
+          logClientError('Wallet refresh after accept failed', {
+            err: refreshErr,
+            bountyId: bountyId != null ? String(bountyId) : undefined,
+          })
+        }
+      }
+
       // Auto-create a conversation for coordination (use bountyId as context)
       try {
         // Use Supabase RPC to create conversation via SECURITY DEFINER function
@@ -457,6 +496,7 @@ export function useAcceptRequest({
     onBountyAccepted,
     setActiveScreen,
     ensureFunded,
+    refreshWallet,
     handleAcceptFailure,
   ])
 

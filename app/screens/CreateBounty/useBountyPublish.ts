@@ -119,22 +119,56 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   const deferredGrantRef = useRef(false);
 
   /**
-   * Resolve — once, at the moment of publishing — whether this bounty may be
-   * posted unfunded. Two independent conditions must both hold:
-   *   1. this device is in the experiment's test arm, and
-   *   2. the SERVER says this poster currently qualifies
-   *      (fn_can_i_defer_bounty_funding: kill switch, scope, amount cap, and
-   *      "has this poster ever posted before").
-   * Deliberately not memoised against draft.amount — it is one RPC on a
-   * deliberate button press, and a cached answer could be stale across an
-   * amount edit or a bounty posted on another device.
+   * Whether this bounty will be posted unfunded — PREFETCHED, not resolved on
+   * the button press.
+   *
+   * Pay-at-accept is the product default now, not an experiment arm: posting is
+   * publishing an offer and never debits the wallet. The PostHog variant no
+   * longer gates it (it was the reason the whole mechanism sat inert — the flag
+   * was never created, so every device resolved 'control' and never asked).
+   *
+   * Resolved AHEAD of the tap on purpose. The publish path must stay
+   * synchronous: an await between the tap and the funding gate leaves the CTA
+   * looking dead for a round-trip (the submit spinner has not started yet), and
+   * it perturbs the very posting funnel this feature is measured on. Amount is
+   * chosen several steps before Publish, so this has always resolved by then.
+   *
+   * `null` = not answered yet. Treated as NOT deferred at publish time, which
+   * is the safe direction: the poster sees the same pre-funding gate they saw
+   * before this feature existed, rather than being sent down a deferred path
+   * the server might not grant.
+   *
+   * This is only a PREDICTION. The authority is
+   * trg_bounties_normalize_funding_mode, which re-decides at INSERT from the
+   * bounty's own columns and ignores whatever the client asked for — so a wrong
+   * answer here is cosmetic, never financial: we read the granted mode back off
+   * the created row before deciding whether to escrow.
    */
-  const resolveDeferredGrant = async (useV2Payments: boolean): Promise<boolean> => {
-    if (useV2Payments) return false;              // v2 funds via Stripe, not the wallet
-    if (draft.isForHonor || draft.amount <= 0) return false;
-    if (fundingVariant !== 'deferred') return false;
-    return canDeferBountyFunding(draft.amount);
-  };
+  const deferredEligibleRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    deferredEligibleRef.current = null;
+
+    if (draft.isForHonor || draft.amount <= 0) {
+      deferredEligibleRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    canDeferBountyFunding(draft.amount)
+      .then(eligible => {
+        if (!cancelled) deferredEligibleRef.current = eligible;
+      })
+      .catch(() => {
+        // Eligibility is an optimisation; failing to read it just means this
+        // poster takes the pre-funded path.
+        if (!cancelled) deferredEligibleRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.amount, draft.isForHonor]);
 
   // Defensive invariant: if the wallet becomes sufficient while the
   // insufficient-balance summary is showing (a delayed webhook/reconcile, or
@@ -198,9 +232,25 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // you pick someone") must not appear on a bounty that was in fact charged
       // at insert. Offline publishes hand back a synthetic temp row with no
       // server-decided column, so fall back to what we requested there.
+      // When the server did not tell us (an offline publish hands back a
+      // synthetic temp row with no server-decided column), assume DEFERRED and
+      // skip the post-time escrow. Both directions of being wrong were weighed:
+      //
+      //   * assume at_post  -> if the server actually deferred, we debit the
+      //     poster at post time. That is the exact bug this whole change
+      //     exists to remove, and it is invisible to the poster until their
+      //     balance is short.
+      //   * assume at_accept -> if the server actually chose at_post, the
+      //     AFTER INSERT trigger (fn_reserve_bounty_escrow) has ALREADY taken
+      //     the money server-side. The client call we skip here is redundant
+      //     belt-and-braces; apply_escrow would have returned applied=false.
+      //
+      // So the unknown case is safe in one direction and harmful in the other.
+      // Deliberately NOT falling back to `deferFunding`: since the server now
+      // grants at_accept from the bounty's own columns and ignores what the
+      // client asked, our request is no longer evidence of what it decided.
       const grantedFundingMode =
-        (createdBounty as { funding_mode?: string | null }).funding_mode ??
-        (deferFunding ? 'at_accept' : 'at_post');
+        (createdBounty as { funding_mode?: string | null }).funding_mode ?? 'at_accept';
       const postedUnfunded = grantedFundingMode === 'at_accept';
 
       // Skip the post-time escrow for a granted deferred bounty. The DB trigger
@@ -436,35 +486,26 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     submit();
   };
 
-  const publish = async () => {
+  const publish = () => {
     const useV2Payments =
       !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
 
-    deferredGrantRef.current = false;
+    // Fully synchronous: the eligibility answer was prefetched when the amount
+    // was chosen (see deferredEligibleRef). A poster whose bounty defers must
+    // never see the insufficient-balance gate at all — but reaching that
+    // decision must not put a network round-trip between the tap and the next
+    // screen, which would leave the CTA looking dead with no spinner.
+    //
+    // Anything unresolved or ineligible falls through to publishWithBalanceGate,
+    // i.e. the pre-funded path. That is the safe direction to be wrong in: the
+    // poster is asked to fund up front, and the server still refuses to debit at
+    // insert if it independently decides the bounty defers.
+    const deferred =
+      !useV2Payments &&
+      !draft.isForHonor &&
+      draft.amount > 0 &&
+      deferredEligibleRef.current === true;
 
-    // Control arm short-circuit. `fundingVariant` is known synchronously (it is
-    // resolved once per session from a cached PostHog flag), so a poster who is
-    // not in the experiment never waits on the eligibility RPC and reaches the
-    // funding gate on exactly the same tick as before. Keeping the control path
-    // free of an added await is not just tidiness: a network round-trip between
-    // the tap and the gate is a real, measurable change to the very funnel this
-    // experiment is trying to measure.
-    if (fundingVariant !== 'deferred') {
-      publishWithBalanceGate(useV2Payments);
-      return;
-    }
-
-    // Test arm: ask the server BEFORE deciding whether to show a funding
-    // screen. A poster who qualifies must never see the insufficient-balance
-    // gate at all — showing it and then withdrawing it is worse than the gate.
-    let deferred = false;
-    try {
-      deferred = await resolveDeferredGrant(useV2Payments);
-    } catch {
-      // Eligibility is an optimisation; failing to read it just means this
-      // poster takes today's pre-funded path.
-      deferred = false;
-    }
     deferredGrantRef.current = deferred;
 
     if (deferred) {

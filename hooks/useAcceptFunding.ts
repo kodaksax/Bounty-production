@@ -209,10 +209,21 @@ export function useAcceptFunding(): UseAcceptFundingResult {
         source: 'accept_flow',
       });
 
-      // The one recoverable-in-place failure: reopen the gate at the shortfall
-      // summary so "add funds and try again" is one tap, not a re-navigation.
+      // Recoverable in place: reopen the gate rather than re-navigating.
+      //
+      // The two reasons take different entry points on purpose. Only
+      // 'insufficient_funds' is a statement about the balance, so only it may
+      // jump straight to the shortfall summary. 'not_funded' means the DB guard
+      // refused a transition for want of an escrow row, which says nothing
+      // about what the poster can afford — so it re-enters at 'confirm' and
+      // lets openGate re-read the server. If the balance really is short,
+      // openGate itself routes to 'insufficient'; if it isn't, the poster gets
+      // a retry instead of being told to add funds they already have.
       if (reason === 'insufficient_funds') {
         return openGate(bountyId, context, 'insufficient');
+      }
+      if (reason === 'not_funded') {
+        return openGate(bountyId, context, 'confirm');
       }
 
       const { title, message } = describeAcceptFundingFailure(reason);

@@ -309,13 +309,12 @@ export function CreateBountyFlow({
   /** Step 2's CTA. Snapshots the draft first — publishing clears it. */
   const handlePublishFromAmountStep = () => {
     publishedDraftRef.current = draft;
-    // handlePublish is async (it asks the server whether this poster qualifies
-    // for deferred funding before choosing between the funding gate and a
-    // straight publish). Its own error handling covers every failure inside it,
-    // so this only needs to stop an unhandled rejection escaping the tap.
-    void handlePublish().catch(() => {
-      /* surfaced by useBountyPublish's onError / ErrorBanner */
-    });
+    // handlePublish is synchronous: deferred-funding eligibility is prefetched
+    // when the amount is chosen, precisely so the tap does not wait on a
+    // round-trip before showing either the funding gate or the submit spinner.
+    // Failures inside the submit it kicks off are surfaced by useBountyPublish's
+    // onError / ErrorBanner.
+    handlePublish();
   };
 
   /** Open one of the optional-detail screens over the confirmation screen. */

@@ -5,11 +5,7 @@ import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-nativ
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
-import {
-  getInsufficientBalanceMessage,
-  validateAmount,
-  validateBalance,
-} from '../../../../lib/utils/bounty-validation';
+import { validateAmount, validateBalance } from '../../../../lib/utils/bounty-validation';
 import { useWallet } from '../../../../lib/wallet-context';
 import { QuickStepLayout } from './QuickStepLayout';
 
@@ -21,12 +17,14 @@ interface StepPayProps {
   step: number;
   totalSteps: number;
   /**
-   * The amount the poster just committed to (preset tap, or Continue with a
-   * custom amount) exceeds their wallet balance. CreateBountyFlow handles
-   * this by showing the shared insufficient-balance → top-up gate and
-   * returning here once resolved — see app/screens/CreateBounty/index.tsx.
+   * Retained for the shared insufficient-balance → top-up gate owned by
+   * CreateBountyFlow (see app/screens/CreateBounty/index.tsx). This step no
+   * longer calls it: under pay-at-accept, choosing an amount you cannot yet
+   * cover is valid, because posting debits nothing. The gate now belongs
+   * solely to the paths that really do charge — publish time for at_post/v2
+   * bounties, and acceptance for pay-at-accept ones.
    */
-  onInsufficientBalance: (amount: number) => void;
+  onInsufficientBalance?: (amount: number) => void;
   /**
    * Label for the bottom CTA. Defaults to 'Continue'. The two-step flow makes
    * this the final step and passes 'Post Bounty', since `onNext` publishes
@@ -42,12 +40,14 @@ const AMOUNT_PRESETS = [20, 40, 60, 100, 150];
 /**
  * Step 5 — compensation, including the for-honor option.
  *
- * Keeps the previous compensation step's business logic verbatim: the same
- * validateAmount gate and the same post_switched_to_honor / amount_set /
- * payment_attached funnel events. The balance guard no longer blocks with a
- * raw Alert — insufficient balance routes to the shared top-up flow instead
- * (see onInsufficientBalance), so a poster who can't afford their chosen
- * amount is never left at a dead end.
+ * Keeps the same validateAmount gate and the same post_switched_to_honor /
+ * amount_set / payment_attached funnel events.
+ *
+ * There is deliberately NO balance gate on this step. Under pay-at-accept the
+ * poster's wallet is untouched until they accept an applicant, so blocking (or
+ * diverting to top-up) on a balance that only matters later would recreate the
+ * activation barrier the funding change exists to remove. A shortfall is shown
+ * as an informational note instead.
  */
 export function StepPay({
   draft,
@@ -56,7 +56,6 @@ export function StepPay({
   onBack,
   step,
   totalSteps,
-  onInsufficientBalance,
   ctaLabel = 'Continue',
   isSubmitting = false,
 }: StepPayProps) {
@@ -86,21 +85,12 @@ export function StepPay({
 
   const handlePreset = (preset: number) => {
     setError(null);
-    // Select the amount regardless of balance — the poster's next step when
-    // they can't yet afford it is the top-up gate below, not a block on the
-    // tap itself (see onInsufficientBalance).
+    // Balance is irrelevant when choosing an amount: under pay-at-accept,
+    // posting is publishing an offer and debits nothing. The poster is asked
+    // for money only if and when they accept an applicant. Routing to the
+    // top-up gate here would reintroduce, at the amount step, exactly the
+    // activation block that deferring the charge exists to remove.
     onUpdate({ amount: preset, isForHonor: false });
-
-    if (!validateBalance(preset, balance, false)) {
-      analyticsService.trackEvent('post_amount_blocked_by_balance', {
-        surface: 'create_flow',
-        attemptedAmount: preset,
-        balance,
-        shortfall: Number((preset - balance).toFixed(2)),
-        method: 'preset',
-      });
-      onInsufficientBalance(preset);
-    }
   };
 
   const handleCustomAmount = (value: string) => {
@@ -118,22 +108,12 @@ export function StepPay({
 
     const amountCovered = !draft.isForHonor && draft.amount > 0 && balance >= draft.amount;
 
-    // A custom-typed amount over balance never blocked here before — it just
-    // showed a passive warning and let the poster proceed to Review with an
-    // unfundable draft, deferring the reckoning to publish time. Route to the
-    // same top-up gate the preset tap uses instead, so this step behaves
-    // consistently no matter how the amount was chosen.
-    if (!draft.isForHonor && draft.amount > 0 && !amountCovered) {
-      analyticsService.trackEvent('post_amount_blocked_by_balance', {
-        surface: 'create_flow',
-        attemptedAmount: draft.amount,
-        balance,
-        shortfall: Number((draft.amount - balance).toFixed(2)),
-        method: 'continue',
-      });
-      onInsufficientBalance(draft.amount);
-      return;
-    }
+    // No balance gate here. Posting never debits the wallet, so an amount the
+    // poster cannot currently cover is a perfectly valid offer to publish —
+    // they have until someone applies and they choose to accept to fund it.
+    // The publish path still holds the real gate for the cases that DO charge
+    // at insert (kill switch off, or v2 Stripe-native funding), and the
+    // acceptance path holds it for pay-at-accept bounties.
 
     analyticsService.trackEvent('amount_set', {
       surface: 'create_flow',
@@ -269,7 +249,13 @@ export function StepPay({
       </TouchableOpacity>
 
       {showBalanceWarning ? (
-        <Text style={styles.warning}>{getInsufficientBalanceMessage(draft.amount, balance)}</Text>
+        // Informational, not a blocker. Posting is free; the charge lands when
+        // the poster accepts someone, so the honest message is "you'll need
+        // this later", not "add funds or lower the amount".
+        <Text style={styles.warning}>
+          {`Posting is free — you'll be charged $${draft.amount} only when you accept someone. ` +
+            `Your balance is $${balance.toFixed(2)}, so you'll need to add funds before then.`}
+        </Text>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </QuickStepLayout>

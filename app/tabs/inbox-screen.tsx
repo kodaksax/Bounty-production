@@ -39,6 +39,8 @@ import {
   useBountyStatusFilters,
 } from '../../hooks/useBountyStatusFilters'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
+import { getBountyFundingRequirement } from '../../lib/services/bounty-funding-service'
+import { useAuthContext } from '../../hooks/use-auth-context'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
@@ -89,7 +91,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   const insets = useSafeAreaInsets()
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
-  const { refundEscrow } = useWallet()
+  const { refundEscrow, refreshFromApi } = useWallet()
+  const { session: walletSession } = useAuthContext()
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
   // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
@@ -308,6 +311,17 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   // Owns the pay-at-accept gate. Rendered as a full-screen early return below,
   // so the poster can never be looking at an "in progress" list while a
   // payment sheet is open.
+  // Pull the authoritative balance the moment a pay-at-accept acceptance
+  // charges the poster. `force` because the server just debited us: a recent
+  // optimistic top-up (very likely here — the poster may have just topped up
+  // inside the funding gate) would otherwise keep the pre-charge figure on
+  // screen. `silent` so the wallet updates in place instead of blanking.
+  const refreshWalletBalance = React.useCallback(async () => {
+    const token = walletSession?.access_token
+    if (!token) return
+    await refreshFromApi(token, { silent: true, force: true })
+  }, [walletSession?.access_token, refreshFromApi])
+
   const { gate: acceptFundingGate, ensureFunded, handleAcceptFailure } = useAcceptFunding()
 
   const { handleAcceptRequest } = useAcceptRequest({
@@ -325,6 +339,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     onBountyAccepted,
     setActiveScreen,
     ensureFunded,
+    refreshWallet: refreshWalletBalance,
     handleAcceptFailure,
   })
 
@@ -446,8 +461,29 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
           style: "destructive",
           onPress: async () => {
             try {
-              // Process refund FIRST for paid bounties before any other operations
-              if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
+              // Process refund FIRST for paid bounties before any other operations.
+              //
+              // ...but only when there is actually something to refund. Under
+              // pay-at-accept an OPEN bounty has normally never been funded —
+              // the poster is charged when they select a hunter, not at post —
+              // so the old unconditional refund would fail on a bounty that was
+              // never debited and then hit the `return` below, making the
+              // posting undeletable. Before this flow existed, an open paid
+              // bounty always had escrow, so the situation could not arise.
+              //
+              // Asked of the SERVER rather than inferred from funding_mode: an
+              // escrow can exist on an open at_accept bounty (e.g. one created
+              // by an older build), and refusing to refund that would strand
+              // real money. getBountyFundingRequirement reports already_funded
+              // from the canonical wallet_transactions row, and its documented
+              // fallback when the RPC is unavailable is already_funded=true —
+              // i.e. attempt the refund exactly as this code always has.
+              const needsRefund =
+                bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open'
+                  ? (await getBountyFundingRequirement(bounty.id)).alreadyFunded
+                  : false
+
+              if (needsRefund) {
                 const useV2 = isPhase2Bounty(bounty)
                 try {
                   await analyticsService.trackEvent('payment_architecture_routed', {

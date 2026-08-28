@@ -38,6 +38,16 @@ export interface BountyFundingRequirement {
  */
 export type AcceptFundingFailureReason =
   | 'insufficient_funds'
+  /**
+   * The DB guard (trg_bounties_enforce_funding_before_work) refused the
+   * transition because no escrow exists. Deliberately NOT folded into
+   * 'insufficient_funds': it says nothing about the poster's balance, and a
+   * poster with plenty of money was being told to add funds. In practice it
+   * means the acceptance took a path that did not reserve escrow first — the
+   * legacy sequential fallback in bounty-request-service, or a server whose
+   * fn_accept_bounty_request is missing the reservation step.
+   */
+  | 'not_funded'
   /** Someone else's action changed the bounty/request underneath this attempt. */
   | 'state_conflict'
   /** The poster edited the bounty in a way the price freeze forbids. */
@@ -164,11 +174,10 @@ export function classifyAcceptFundingError(err: unknown): AcceptFundingFailureRe
   if (msg.includes('insufficient_funds_for_escrow') || msg.includes('insufficient funds')) {
     return 'insufficient_funds';
   }
-  // The DB guard fired. In practice this means an acceptance was attempted
-  // through a path that did not reserve escrow first (e.g. the legacy
-  // sequential fallback in bounty-request-service). From the poster's point of
-  // view it is the same recoverable "not funded yet" situation.
-  if (msg.includes('bounty_not_funded')) return 'insufficient_funds';
+  // The DB guard fired. This is NOT a statement about the balance — see the
+  // 'not_funded' doc above. Routing it to its own reason is what stops a poster
+  // with $12 being shown an "add funds" screen for a $3 bounty.
+  if (msg.includes('bounty_not_funded')) return 'not_funded';
   if (msg.includes('_locked_by_') || msg.includes('funding_mode_is_immutable')) return 'terms_locked';
   if (msg.includes('request_not_pending') || msg.includes('bounty_not_open')) return 'state_conflict';
   if (msg.includes('only the bounty poster')) return 'not_authorized';
@@ -191,6 +200,13 @@ export function describeAcceptFundingFailure(reason: AcceptFundingFailureReason)
         message:
           "Your bounty hasn't been funded yet, so nobody has been assigned to it. " +
           'Add funds and try selecting your hunter again.',
+      };
+    case 'not_funded':
+      return {
+        title: "Couldn't secure this bounty",
+        message:
+          "This bounty hasn't been funded yet, so nobody has been assigned. Your " +
+          "balance wasn't charged — please try selecting your hunter again.",
       };
     case 'terms_locked':
       return {

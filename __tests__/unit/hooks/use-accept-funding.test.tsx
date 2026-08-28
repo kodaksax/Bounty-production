@@ -252,6 +252,39 @@ describe('useAcceptFunding', () => {
       expect(propsFor('accept_funding_failed')).toMatchObject({ reason: 'insufficient_funds' });
     });
 
+    test('bounty_not_funded reopens at confirm, not the shortfall screen', async () => {
+      // Regression: this used to classify as 'insufficient_funds' and jump
+      // straight to the "add funds" screen. A poster with $12 accepting a $3
+      // bounty was told to top up. bounty_not_funded says nothing about the
+      // balance, so it must re-check and let the server decide.
+      mockGetRequirement.mockResolvedValue(NEEDS_FUNDING); // shortfall 0
+      const { result } = renderHook(() => useAcceptFunding());
+
+      act(() => {
+        void result.current.handleAcceptFailure(new Error('bounty_not_funded'), 'b1', {
+          variant: 'deferred',
+        });
+      });
+
+      await waitFor(() => expect(result.current.gate.stage).toBe('confirm'));
+      expect(result.current.gate.stage).not.toBe('insufficient');
+      expect(mockAlert).not.toHaveBeenCalled();
+      expect(propsFor('accept_funding_failed')).toMatchObject({ reason: 'not_funded' });
+    });
+
+    test('bounty_not_funded still shows the shortfall screen when truly short', async () => {
+      // The re-check is authoritative in both directions: same error, but this
+      // poster genuinely cannot cover it, so openGate routes to 'insufficient'.
+      mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
+      const { result } = renderHook(() => useAcceptFunding());
+
+      act(() => {
+        void result.current.handleAcceptFailure(new Error('bounty_not_funded'), 'b1');
+      });
+
+      await waitFor(() => expect(result.current.gate.stage).toBe('insufficient'));
+    });
+
     test('other failures alert and resolve false without reopening the gate', async () => {
       const { result } = renderHook(() => useAcceptFunding());
 

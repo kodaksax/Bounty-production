@@ -73,7 +73,12 @@ const DRAFT = {
   attachments: [],
 };
 
-function setup(overrides: Record<string, unknown> = {}) {
+// Async because useBountyPublish PREFETCHES deferred-funding eligibility in an
+// effect rather than resolving it on the publish tap (publish() is deliberately
+// synchronous, so it reads an already-resolved answer). Every test must let that
+// effect settle first, otherwise it would be asserting against the
+// "not answered yet" default rather than the server's real answer.
+async function setup(overrides: Record<string, unknown> = {}) {
   const onPublished = jest.fn();
   const onEditAmount = jest.fn();
   const { result } = renderHook(() =>
@@ -91,6 +96,7 @@ function setup(overrides: Record<string, unknown> = {}) {
       ...overrides,
     })
   );
+  await act(async () => {});
   return { result, onPublished, onEditAmount };
 }
 
@@ -114,17 +120,22 @@ describe('useBountyPublish — deferred funding', () => {
     });
   });
 
-  describe('control arm', () => {
-    test('never asks the server about eligibility', async () => {
-      const { result } = setup({ balance: 100 });
+  // Formerly the PostHog "control arm". Pay-at-accept is now the default, so
+  // these cases are the ones where the SERVER declines to defer: the kill
+  // switch is off, the bounty is v2 Stripe-native, or it is for-honor/$0.
+  describe('server declines to defer', () => {
+    test('always asks the server about eligibility', async () => {
+      const { result } = await setup({ balance: 100 });
       await act(async () => {
         await result.current.publish();
       });
-      expect(mockCanDefer).not.toHaveBeenCalled();
+      // The PostHog variant no longer short-circuits this RPC — that
+      // short-circuit was what kept the whole mechanism inert in production.
+      expect(mockCanDefer).toHaveBeenCalledWith(50);
     });
 
     test('an unfundable draft still routes to the balance gate', async () => {
-      const { result } = setup({ balance: 0 });
+      const { result } = await setup({ balance: 0 });
       await act(async () => {
         await result.current.publish();
       });
@@ -135,7 +146,7 @@ describe('useBountyPublish — deferred funding', () => {
     });
 
     test('a funded post asks for at_post and escrows at post time', async () => {
-      const { result } = setup({ balance: 100 });
+      const { result } = await setup({ balance: 100 });
       await act(async () => {
         await result.current.publish();
       });
@@ -158,7 +169,7 @@ describe('useBountyPublish — deferred funding', () => {
     });
 
     test('posts with a zero balance, no gate and no escrow', async () => {
-      const { result, onPublished } = setup({ balance: 0 });
+      const { result, onPublished } = await setup({ balance: 0 });
       await act(async () => {
         await result.current.publish();
       });
@@ -171,7 +182,7 @@ describe('useBountyPublish — deferred funding', () => {
     });
 
     test('emits the unfunded-post funnel step with a bucketed amount', async () => {
-      const { result } = setup({ balance: 0 });
+      const { result } = await setup({ balance: 0 });
       await act(async () => {
         await result.current.publish();
       });
@@ -190,7 +201,7 @@ describe('useBountyPublish — deferred funding', () => {
     });
 
     test('tells the poster they will be charged when they choose someone', async () => {
-      const { result } = setup({ balance: 0 });
+      const { result } = await setup({ balance: 0 });
       await act(async () => {
         await result.current.publish();
       });
@@ -201,7 +212,7 @@ describe('useBountyPublish — deferred funding', () => {
 
     test('falls back to the balance gate when the server refuses the deferral', async () => {
       mockCanDefer.mockResolvedValue(false);
-      const { result } = setup({ balance: 0 });
+      const { result } = await setup({ balance: 0 });
       await act(async () => {
         await result.current.publish();
       });
@@ -212,7 +223,7 @@ describe('useBountyPublish — deferred funding', () => {
 
     test('falls back to the balance gate when the eligibility check fails', async () => {
       mockCanDefer.mockRejectedValue(new Error('offline'));
-      const { result } = setup({ balance: 0 });
+      const { result } = await setup({ balance: 0 });
       await act(async () => {
         await result.current.publish();
       });
@@ -231,7 +242,7 @@ describe('useBountyPublish — deferred funding', () => {
         bounty: { id: 'b1', funding_mode: 'at_post' },
         created: true,
       });
-      const { result } = setup({ balance: 100 });
+      const { result } = await setup({ balance: 100 });
       await act(async () => {
         await result.current.publish();
       });
@@ -242,8 +253,30 @@ describe('useBountyPublish — deferred funding', () => {
       expect(message).not.toMatch(/only be charged when you choose someone/i);
     });
 
+    test('never escrows at post when the server did not report funding_mode', async () => {
+      // Regression: an offline publish (and any insert whose returned row omits
+      // the column) leaves funding_mode undefined. The client used to fall back
+      // to what it ASKED for, but the server now grants at_accept from the
+      // bounty's own columns regardless of the request — so falling back to
+      // at_post debited the poster at post time for a bounty the server had
+      // actually deferred. Unknown must mean "assume deferred, do not escrow":
+      // if the server really chose at_post, its AFTER INSERT trigger already
+      // took the money and this client call is redundant anyway.
+      mockCanDefer.mockResolvedValue(false); // client believes it is NOT deferring
+      mockCreateBounty.mockResolvedValue({
+        bounty: { id: 'b1' }, // no funding_mode on the row
+        created: true,
+      });
+      const { result } = await setup({ balance: 100 });
+      await act(async () => {
+        await result.current.publish();
+      });
+
+      expect(mockCreateEscrow).not.toHaveBeenCalled();
+    });
+
     test('a for-honor draft is never deferred', async () => {
-      const { result } = setup({ balance: 0, draft: { ...DRAFT, isForHonor: true, amount: 0 } });
+      const { result } = await setup({ balance: 0, draft: { ...DRAFT, isForHonor: true, amount: 0 } });
       await act(async () => {
         await result.current.publish();
       });

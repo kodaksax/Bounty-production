@@ -116,6 +116,53 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     expect(eventNames()).not.toContain('bounty_work_started');
   });
 
+  test('refreshes the wallet after a deferred acceptance charges the poster', async () => {
+    // The escrow is taken server-side inside the acceptance transaction, so
+    // nothing on this device knows the balance changed. Without this the poster
+    // sees their pre-charge balance until some unrelated event refreshes it.
+    const refreshWallet = jest.fn().mockResolvedValue(undefined);
+    mockAcceptRequest.mockResolvedValue({ id: 'req-1', hunter_id: 'hunter-1', bounty_id: 'b1' });
+
+    const result = setup({ ensureFunded: jest.fn().mockResolvedValue(true), refreshWallet });
+    await act(async () => {
+      await result.current.handleAcceptRequest('req-1');
+    });
+
+    expect(refreshWallet).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not refresh the wallet for a legacy at_post bounty', async () => {
+    // Nothing was charged at acceptance — the money moved when it was posted —
+    // so there is no reason to spend a round-trip re-reading the balance.
+    const refreshWallet = jest.fn().mockResolvedValue(undefined);
+    mockAcceptRequest.mockResolvedValue({ id: 'req-1', hunter_id: 'hunter-1', bounty_id: 'b1' });
+
+    const result = setup(
+      { ensureFunded: jest.fn().mockResolvedValue(true), refreshWallet },
+      makeRequest({ bounty: { funding_mode: 'at_post' } })
+    );
+    await act(async () => {
+      await result.current.handleAcceptRequest('req-1');
+    });
+
+    expect(refreshWallet).not.toHaveBeenCalled();
+  });
+
+  test('a failing wallet refresh never fails an acceptance that succeeded', async () => {
+    const refreshWallet = jest.fn().mockRejectedValue(new Error('network down'));
+    mockAcceptRequest.mockResolvedValue({ id: 'req-1', hunter_id: 'hunter-1', bounty_id: 'b1' });
+
+    const result = setup({ ensureFunded: jest.fn().mockResolvedValue(true), refreshWallet });
+    await act(async () => {
+      await result.current.handleAcceptRequest('req-1');
+    });
+
+    // The hunter IS accepted and the money IS escrowed; a stale displayed
+    // number must not surface as a failed acceptance.
+    expect(mockAcceptRequest).toHaveBeenCalled();
+    expect(eventNames()).toContain('bounty_work_started');
+  });
+
   test('the gate runs BEFORE the acceptance, not after', async () => {
     const order: string[] = [];
     const ensureFunded = jest.fn().mockImplementation(async () => {
