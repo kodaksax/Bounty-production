@@ -773,7 +773,7 @@ describe('NotificationService', () => {
 
       expect(result).toEqual(mockNotifs);
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-        'notifications:cache',
+        'notifications:cache:user-123',
         JSON.stringify(mockNotifs)
       );
     });
@@ -849,21 +849,30 @@ describe('NotificationService', () => {
       const cached = [{ id: 'n1' }, { id: 'n2' }];
       AsyncStorage.getItem.mockResolvedValue(JSON.stringify(cached));
 
-      const result = await notificationService.getCachedNotifications();
+      const result = await notificationService.getCachedNotifications('user-123');
 
       expect(result).toEqual(cached);
+      expect(AsyncStorage.getItem).toHaveBeenCalledWith('notifications:cache:user-123');
     });
 
     it('should return empty array when cache is empty', async () => {
       AsyncStorage.getItem.mockResolvedValue(null);
 
-      const result = await notificationService.getCachedNotifications();
+      const result = await notificationService.getCachedNotifications('user-123');
 
       expect(result).toEqual([]);
     });
 
     it('should return empty array when AsyncStorage throws', async () => {
       AsyncStorage.getItem.mockRejectedValue(new Error('storage error'));
+
+      const result = await notificationService.getCachedNotifications('user-123');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array when there is no user id', async () => {
+      AsyncStorage.getItem.mockResolvedValue(JSON.stringify([{ id: 'n1' }]));
 
       const result = await notificationService.getCachedNotifications();
 
@@ -980,7 +989,10 @@ describe('NotificationService', () => {
 
       expect((notificationService as any).cachedNotifications[0].read).toBe(true);
       expect((notificationService as any).cachedNotifications[1].read).toBe(false);
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith('notifications:cache', expect.any(String));
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:cache:user-123',
+        expect.any(String)
+      );
     });
 
     it('should log error when API returns non-ok response', async () => {
@@ -1149,6 +1161,15 @@ describe('NotificationService', () => {
       expect(AsyncStorage.removeItem).toHaveBeenCalledWith('notifications:last_fetch');
       expect((notificationService as any).cachedNotifications).toEqual([]);
       expect((notificationService as any).unreadCount).toBe(0);
+    });
+
+    it('should remove the per-user cache key for the given user', async () => {
+      AsyncStorage.removeItem.mockResolvedValue(undefined);
+
+      await notificationService.clearCache('user-123');
+
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith('notifications:cache:user-123');
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith('notifications:cache');
     });
 
     it('should log error and not throw when AsyncStorage.removeItem throws', async () => {

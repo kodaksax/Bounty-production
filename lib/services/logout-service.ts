@@ -13,6 +13,7 @@ export type LogoutDeps = Partial<{
   router: { replace: (path: string) => void } | null;
   currentUserId: string | null;
   deregisterPushToken: () => Promise<void>;
+  clearNotificationCache: (userId: string | null) => Promise<void>;
 }>;
 
 /**
@@ -28,6 +29,8 @@ export async function performLogout(deps: LogoutDeps = {}) {
     router = null,
     currentUserId = null,
     deregisterPushToken = () => notificationService.deregisterPushToken(),
+    clearNotificationCache = (userId: string | null) =>
+      notificationService.clearCache(userId ?? undefined),
   } = deps;
 
   // Mark sign-out intentional so session-expiration alerts don't appear
@@ -49,6 +52,12 @@ export async function performLogout(deps: LogoutDeps = {}) {
     deregisterPushToken().catch(() => undefined),
     new Promise((resolve) => setTimeout(resolve, 2000)),
   ]);
+
+  // Clear the signed-out user's notification cache — the in-memory copies and
+  // the per-user AsyncStorage entry — so the next account on this device can't
+  // read the previous account's notifications. Runs before signOut so the
+  // session is still available when currentUserId wasn't supplied.
+  await clearNotificationCache(currentUserId).catch(() => undefined);
 
   // Try a full sign-out and wait for it (short timeout), fall back to local sign-out
   // Track whether sign-out ultimately failed so we only retry in background when needed
