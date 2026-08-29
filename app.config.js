@@ -218,7 +218,7 @@ function resolvePlugins(plugins = []) {
         : `${GOOGLE_IOS_URL_SCHEME_PREFIX}placeholder`,
     };
     if (hasValidGoogleAndroidClientId) {
-      googlePluginConfig.androidClientId = androidClientId;
+      googlePluginConfig.androidClientId = androidClientId.trim();
     }
 
     return [[pluginName, googlePluginConfig]];
