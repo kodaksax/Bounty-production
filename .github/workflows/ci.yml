@@ -89,7 +89,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Generate coverage report
-        run: npm run test:coverage
+        run: npm run test:ci
         env:
           NODE_ENV: test
 

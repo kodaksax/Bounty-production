@@ -2003,7 +2003,7 @@ Deno.serve(async (req: Request) => {
       const { data: profile } = await supabase
         .from('profiles')
         .select(
-          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status'
+          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, stripe_connect_payouts_enabled, account_status'
         )
         .eq('id', userId)
         .single();
@@ -3041,7 +3041,7 @@ Deno.serve(async (req: Request) => {
       const { data: profile } = await supabase
         .from('profiles')
         .select(
-          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status'
+          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, stripe_connect_payouts_enabled, account_status'
         )
         .eq('id', userId)
         .single();
@@ -3070,6 +3070,31 @@ Deno.serve(async (req: Request) => {
             error:
               'Your payout account is not set up yet. Please complete Stripe Connect onboarding before withdrawing.',
             code: 'connect_not_onboarded',
+          },
+          400
+        );
+      }
+
+      // stripe_connect_onboarded_at is set exactly once on the first transition
+      // to fully-onboarded and is NEVER cleared (see
+      // docs/payments/BOUNTY_WITHDRAWAL_TECHNICAL_SPECIFICATION.md), so the
+      // gate above passes for a hunter who onboarded months ago and has since
+      // become restricted. stripe_connect_payouts_enabled is the field the
+      // account.updated / capability.updated webhooks keep live-synced, and it
+      // is the one that answers "can this account receive a payout right now".
+      //
+      // /connect/transfer follows this with a live stripe.accounts.retrieve
+      // check; this route had neither. ADR 0001 §4.3 item 4.
+      if (p.stripe_connect_payouts_enabled !== true) {
+        console.warn('[connect/instant-payout] payouts not enabled on profile', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+        });
+        return jsonResponse(
+          {
+            error:
+              'Payouts are not enabled on your account yet. Please finish your payout setup, then try again.',
+            code: 'payouts_disabled',
           },
           400
         );

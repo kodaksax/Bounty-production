@@ -15,9 +15,29 @@ import { TransactionDetailModal } from "./transaction-detail-modal"
 import { BrandingLogo } from "./ui/branding-logo"
 import { EmptyState } from "./ui/empty-state"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
+import { describeSettlement, type SettlementState } from "../lib/utils/settlement-vocabulary"
 
 // Constants for transaction display
 const DEFAULT_TITLE = 'Transaction'
+
+function getSettlementSummary(transaction: Transaction) {
+  if (transaction.details.settlementLabel) {
+    return {
+      label: transaction.details.settlementLabel,
+      tone: transaction.details.settlementTone ?? 'neutral',
+    }
+  }
+
+  const described = describeSettlement(
+    transaction.type,
+    transaction.details.settlementState ?? 'ledger_only'
+  )
+
+  return {
+    label: described.label,
+    tone: described.tone,
+  }
+}
 
 export interface Transaction {
   id: string
@@ -30,6 +50,15 @@ export interface Transaction {
     status?: string
     counterparty?: string
     bounty_id?: number
+    /**
+     * What Stripe can prove about this row, from GET /wallet/transactions.
+     * Absent on rows cached before ADR 0001 shipped — treat undefined as
+     * "unknown", never as settled.
+     */
+    settlementState?: SettlementState
+    settlementLabel?: string
+    settlementDetail?: string
+    settlementTone?: "neutral" | "pending" | "success"
   }
   // Optional runtime-only fields for UI badges
   escrowStatus?: string
@@ -143,11 +172,11 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       case "bounty_completed":
         return `Completed Bounty: ${title}`
       case "bounty_received":
-        return `Received Payment: ${title}`
+        return `Bounty Earnings: ${title}`
       case "escrow":
         return `Escrow Hold: ${title}`
       case "release":
-        return `Escrow Released: ${title}`
+        return `${getSettlementSummary(transaction).label}: ${title}`
       case "refund":
         return `Refund: ${title}`
     }
@@ -157,9 +186,17 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const renderTransactionItem = useCallback(({ item: transaction }: { item: Transaction }) => {
     const isPositive = transaction.amount > 0
     const amountColor = isPositive ? theme.success : theme.text
-    const statusKey = transaction.details.status?.toLowerCase()
+    const settlement = getSettlementSummary(transaction)
+    const shouldShowStatus =
+      transaction.details.status !== undefined ||
+      transaction.details.settlementLabel !== undefined ||
+      transaction.details.settlementState !== undefined
     const statusColor =
-      statusKey === "completed" ? theme.success : statusKey === "failed" ? theme.error : theme.warning
+      settlement.tone === "success"
+        ? theme.success
+        : settlement.tone === "pending"
+          ? theme.warning
+          : theme.textSecondary
 
     return (
       <TouchableOpacity
@@ -186,11 +223,11 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             <View style={s.transactionMeta}>
               <View style={s.metaRow}>
                 <Text style={s.timeText}>{format(transaction.date, "h:mm a")}</Text>
-                {transaction.details.status && (
+                {shouldShowStatus && (
                   <View style={s.statusRow}>
                     <View style={[s.statusDot, { backgroundColor: statusColor }]} />
                     <Text style={[s.statusText, { color: statusColor }]}>
-                      {transaction.details.status}
+                      {settlement.label}
                     </Text>
                   </View>
                 )}
