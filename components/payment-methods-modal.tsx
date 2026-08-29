@@ -663,7 +663,6 @@ function makeStyles(theme: AppTheme) {
       gap: 4,
     },
     addButton: {
-      marginBottom: theme.spacing.lg,
       width: '100%',
     },
     addButtonContent: {
@@ -681,6 +680,7 @@ function makeStyles(theme: AppTheme) {
       flex: 1,
       minHeight: 0,
       paddingHorizontal: theme.spacing.xl,
+      paddingTop: theme.spacing.lg,
     },
     list: {
       flex: 1,
