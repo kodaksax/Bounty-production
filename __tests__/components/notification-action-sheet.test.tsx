@@ -1,9 +1,11 @@
 import { fireEvent, render } from '@testing-library/react-native';
-import { KeyboardAvoidingView, Platform } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { NotificationActionSheet } from '../../components/notifications/notification-action-sheet';
 import type { Notification } from '../../lib/types';
 
 const push = jest.fn();
+
+const originalOS = Platform.OS;
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push }),
@@ -48,6 +50,10 @@ describe('NotificationActionSheet', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
   });
 
+  afterEach(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOS });
+  });
+
   it('keeps the reply composer above the iOS keyboard', () => {
     const { UNSAFE_root } = render(
       <NotificationActionSheet notification={messageNotification} currentUserId="user-id" onClose={jest.fn()} />
@@ -55,7 +61,7 @@ describe('NotificationActionSheet', () => {
 
     const keyboardAvoider = UNSAFE_root.findByType(KeyboardAvoidingView);
     expect(keyboardAvoider.props.behavior).toBe('padding');
-    expect(keyboardAvoider.props.style).toEqual({ flex: 1, justifyContent: 'flex-end' });
+    expect(StyleSheet.flatten(keyboardAvoider.props.style)).toEqual({ flex: 1, justifyContent: 'flex-end' });
   });
 
   it('opens the notified conversation directly', () => {

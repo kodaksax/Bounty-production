@@ -11,7 +11,6 @@ import {
     useState,
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { navigationIntent } from '../services/navigation-intent';
 import { resolveNotificationDeepLink } from '../services/notification-deep-links';
 import { notificationService } from '../services/notification-service';
 import { isNotificationsChannelConnected, subscribeToNotifications } from '../services/notification-realtime';
@@ -134,8 +133,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (action.kind === 'route') {
         router.push(action.path as any);
       } else if (action.kind === 'conversation') {
-        await navigationIntent.setPendingConversationId(action.conversationId);
-        router.push('/tabs/bounty-app?screen=messages');
+        router.push(`/tabs/messenger/${encodeURIComponent(action.conversationId)}` as any);
       } else if (data.senderId) {
         // Legacy fallback for payloads that predate the `type` field.
         router.push(`/profile/${data.senderId}` as any);
