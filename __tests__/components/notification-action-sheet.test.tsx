@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
-import { Platform } from 'react-native';
+import { KeyboardAvoidingView, Platform } from 'react-native';
 import { NotificationActionSheet } from '../../components/notifications/notification-action-sheet';
 import type { Notification } from '../../lib/types';
 
@@ -53,7 +53,7 @@ describe('NotificationActionSheet', () => {
       <NotificationActionSheet notification={messageNotification} currentUserId="user-id" onClose={jest.fn()} />
     );
 
-    const keyboardAvoider = UNSAFE_root.findByType('KeyboardAvoidingView');
+    const keyboardAvoider = UNSAFE_root.findByType(KeyboardAvoidingView);
     expect(keyboardAvoider.props.behavior).toBe('padding');
     expect(keyboardAvoider.props.style).toEqual({ flex: 1, justifyContent: 'flex-end' });
   });
