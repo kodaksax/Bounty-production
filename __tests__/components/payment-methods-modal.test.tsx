@@ -2,6 +2,7 @@ import { render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import { PaymentMethodsModal } from '../../components/payment-methods-modal';
+import { spacing } from '../../lib/themes/tokens';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
@@ -38,7 +39,8 @@ describe('PaymentMethodsModal', () => {
 
     expect(
       UNSAFE_getAllByType(View).some(
-        ({ props }) => props.style?.paddingHorizontal === 24 && props.style?.paddingTop === 16
+        ({ props }) =>
+          props.style?.paddingHorizontal === spacing.xl && props.style?.paddingTop === spacing.lg
       )
     ).toBe(true);
   });
