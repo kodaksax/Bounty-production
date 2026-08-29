@@ -1062,19 +1062,20 @@ export const bountyService = {
           throw error;
         }
 
-        logOnce('bounties:delete:fk', 'warn', 'Bounty delete hit FK violation; deleting bounty_payments and retrying', {
+        // FK violation: payment/escrow rows reference this bounty. Deleting
+        // those rows would destroy the only record of the escrowed funds, so
+        // soft-delete the bounty instead. It drops out of active views (which
+        // filter status='deleted') while the payment audit trail survives.
+        logOnce('bounties:delete:fk', 'warn', 'Bounty has payment records; soft-deleting to preserve bounty_payments', {
           id,
-          error,
         });
 
-        const { error: paymentsError } = await supabase.from('bounty_payments').delete().eq('bounty_id', id);
-        if (paymentsError) {
-          throw paymentsError;
-        }
-
-        const { error: retryError } = await supabase.from('bounties').delete().eq('id', id);
-        if (retryError) {
-          throw retryError;
+        const { error: softError } = await supabase
+          .from('bounties')
+          .update({ status: 'deleted' })
+          .eq('id', id);
+        if (softError) {
+          throw softError;
         }
         return true;
       }

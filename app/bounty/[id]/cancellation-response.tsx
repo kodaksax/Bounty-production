@@ -105,13 +105,19 @@ export default function CancellationResponseScreen() {
                       await bountyPaymentsService.cancelBountyPayment(String(bountyId));
                       result = true;
                     } else {
+                      // refundEscrow returns false on failure instead of
+                      // throwing, so escrow_refunded must be gated on the result.
                       result = await refundEscrow(bountyId, title, refundPercentage);
                     }
                     try {
-                      await analyticsService.trackEvent('escrow_refunded', {
-                        bountyId: String(bountyId),
-                        architecture: useV2 ? 'v2' : 'v1',
-                      });
+                      await analyticsService.trackEvent(
+                        result ? 'escrow_refunded' : 'payment_failed',
+                        {
+                          bountyId: String(bountyId),
+                          architecture: useV2 ? 'v2' : 'v1',
+                          ...(result ? {} : { stage: 'cancel' }),
+                        }
+                      );
                     } catch {
                       /* analytics is best-effort */
                     }

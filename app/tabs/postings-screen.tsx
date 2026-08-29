@@ -158,6 +158,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // Refs for lists so we can scroll items into view when expanded
   const inProgressListRef = useRef<any>(null)
   const myPostingsListRef = useRef<any>(null)
+  // Bounty ids with a delete/refund in flight — blocks repeat taps from
+  // re-entering the refund and firing duplicate escrow events.
+  const deletingBountyIdsRef = useRef<Set<string>>(new Set())
   // Attests that the New Bounty tab was reached via an explicit tap, not by
   // defaulting to it (activeTab starts as "new" whenever no initialTab is
   // passed). Seeded from `deliberateTapParam` so a moments CTA that routes
@@ -545,6 +548,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            const deleteKey = String(bounty.id)
+            if (deletingBountyIdsRef.current.has(deleteKey)) return
+            deletingBountyIdsRef.current.add(deleteKey)
             try {
               // Process refund FIRST for paid bounties before any other operations
               if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
@@ -564,7 +570,13 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     // pre-capture, or issues a refund post-capture.
                     await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
                   } else {
-                    await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
+                    // refundEscrow signals failure by returning false, not by
+                    // throwing — so the boolean must be checked or a failed
+                    // refund would still delete the bounty and lose the money.
+                    const refunded = await refundEscrow(bounty.id, bounty.title, 100) // 100% refund for unaccepted bounties
+                    if (!refunded) {
+                      throw new Error('Escrow refund did not complete')
+                    }
                   }
                   try {
                     await analyticsService.trackEvent('escrow_refunded', {
@@ -602,6 +614,16 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 throw new Error("Failed to delete bounty")
               }
 
+              try {
+                await analyticsService.trackEvent('bounty_deleted', {
+                  bountyId: String(bounty.id),
+                  isForHonor: !!bounty.is_for_honor,
+                  amount: bounty.amount ?? 0,
+                })
+              } catch {
+                /* analytics is best-effort */
+              }
+
               // Update UI only after successful deletion
               setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
 
@@ -611,6 +633,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               // Error handling - no rollback needed since we didn't optimistically update
               setError(err.message || "Failed to delete posting")
               Alert.alert('Error', err.message || 'Failed to delete bounty. Please try again.')
+            } finally {
+              deletingBountyIdsRef.current.delete(deleteKey)
             }
           },
         },

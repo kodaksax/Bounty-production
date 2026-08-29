@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
+import { bountyHoldsUnreleasedEscrow } from '../../../../lib/utils/payment-architecture';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 import { useWallet } from '../../../../lib/wallet-context';
@@ -154,6 +155,17 @@ export default function HunterPayoutScreen() {
 
   const handleDelete = async () => {
     if (!bounty || !routeBountyId) return;
+
+    // Do not delete a bounty that still holds escrowed funds — this path does
+    // not refund, so deleting would strand the money. Route to cancellation.
+    if (bountyHoldsUnreleasedEscrow(bounty)) {
+      Alert.alert(
+        'Cannot Delete',
+        'This bounty still holds escrowed funds. Cancel it first to refund the money, then delete it.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
     Alert.alert(
       'Delete Bounty',
