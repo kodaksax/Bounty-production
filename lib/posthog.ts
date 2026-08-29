@@ -35,7 +35,6 @@ export const isInternalEmail = (email: string): boolean => {
 };
 
 let _posthog: any | null = null;
-const aliasTransitionsSeen = new Set<string>();
 
 // Construct the client eagerly (synchronously) so it is available to the
 // PostHogProvider at first render. The PostHog React Native SDK constructs
@@ -152,21 +151,24 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
       ? { ...properties, is_internal: isInternalEmail(email) }
       : properties;
 
-    // Ensure the anonymous->identified merge occurs exactly once per
-    // anonymous distinct id in this app runtime before identify() updates
-    // the person's canonical distinct id.
+    // identify() already merges the current anonymous person into the
+    // identified person, so no alias() call is needed. But calling it while the
+    // SDK is already identified as a different user would instead ask the
+    // pipeline to merge two identified persons, which it rejects
+    // (cannot_merge_already_identified). Reset first so identify() starts from a
+    // fresh anonymous id — this covers shared or account-switch devices.
     const currentDistinctId =
       typeof _posthog.getDistinctId === 'function' ? _posthog.getDistinctId() : undefined;
+    const anonymousId =
+      typeof _posthog.getAnonymousId === 'function' ? _posthog.getAnonymousId() : undefined;
+    const currentIsIdentified =
+      !!anonymousId && !!currentDistinctId && currentDistinctId !== anonymousId;
     if (
-      currentDistinctId &&
+      currentIsIdentified &&
       currentDistinctId !== distinctId &&
-      typeof _posthog.alias === 'function'
+      typeof _posthog.reset === 'function'
     ) {
-      const aliasTransition = `${currentDistinctId}->${distinctId}`;
-      if (!aliasTransitionsSeen.has(aliasTransition)) {
-        aliasTransitionsSeen.add(aliasTransition);
-        _posthog.alias(distinctId);
-      }
+      _posthog.reset();
     }
 
     if (email && typeof _posthog.register === 'function') {
