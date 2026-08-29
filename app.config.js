@@ -132,6 +132,19 @@ const ENV_ICONS = {
   development: './assets/images/icon-dev.png',
   preview: './assets/images/icon-preview.png',
 };
+
+// R8 keep rules appended to the generated android/app/proguard-rules.pro.
+// Kept in a real .pro file (rather than inline in app.json) so the rules are
+// reviewable and syntax-highlighted; see that file's header for why each block
+// exists and the "prefer over-broad keeps" editing rule.
+//
+// NOTE: this string is part of the resolved Expo config, so editing the .pro
+// file changes the fingerprint runtime version and therefore requires a new
+// native build — it cannot ship as an OTA update.
+const ANDROID_PROGUARD_RULES = fs.readFileSync(
+  path.resolve(__dirname, 'lib/config/android-proguard-rules.pro'),
+  'utf8'
+);
 const envIcon = ENV_ICONS[APP_ENV]; // undefined for production → app.json default
 const GOOGLE_IOS_URL_SCHEME_PREFIX = 'com.googleusercontent.apps.';
 
@@ -178,6 +191,26 @@ function resolvePlugins(plugins = []) {
             apiKey,
             iosAppDomain: domain,
             iosUniversalLinkDomains: [domain],
+          },
+        ],
+      ];
+    }
+
+    if (pluginName === 'expo-build-properties') {
+      // Attach the Android R8 keep rules. app.json stays the source of truth
+      // for every other build property (including the enableMinify /
+      // enableShrinkResources flags these rules protect); only the rules text
+      // is injected here so it can live in a real .pro file.
+      const existingPluginConfig = Array.isArray(plugin) ? plugin[1] || {} : {};
+      return [
+        [
+          pluginName,
+          {
+            ...existingPluginConfig,
+            android: {
+              ...(existingPluginConfig.android || {}),
+              extraProguardRules: ANDROID_PROGUARD_RULES,
+            },
           },
         ],
       ];
