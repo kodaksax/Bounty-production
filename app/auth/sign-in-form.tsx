@@ -712,6 +712,15 @@ export function SignInForm() {
         setSocialAuthLoading(false);
         if (response.type === 'error') {
           setSocialAuthError(response.error?.message ?? 'Google sign-in failed');
+          // The prompt failed before any token exchange — e.g. the native
+          // Google Sign-In config is missing from the build. Record it so the
+          // break shows up in analytics instead of only in a bug report (#727).
+          posthogCapture('AUTH_ATTEMPT_FAILED', {
+            correlation_id: generateCorrelationId('signin_google'),
+            method: 'google',
+            error_code: response.error?.code ?? 'google_prompt_error',
+            outcome: 'unavailable',
+          });
         }
         return;
       }
