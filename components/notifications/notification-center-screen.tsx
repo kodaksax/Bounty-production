@@ -9,7 +9,6 @@ import { useNotifications } from 'lib/context/notification-context';
 import { notificationService } from 'lib/services/notification-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { resolveNotificationDeepLink, supportsActionSheet } from 'lib/services/notification-deep-links';
-import { navigationIntent } from 'lib/services/navigation-intent';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import type { Notification, NotificationCategory } from 'lib/types';
@@ -97,9 +96,7 @@ export function NotificationCenterScreen() {
     if (action.kind === 'route') {
       router.push(action.path as any);
     } else if (action.kind === 'conversation') {
-      navigationIntent.setPendingConversationId(action.conversationId).then(() => {
-        router.push('/tabs/bounty-app?screen=messages' as any);
-      });
+      router.push(`/tabs/messenger/${encodeURIComponent(action.conversationId)}` as any);
     }
   }, [router]);
 
