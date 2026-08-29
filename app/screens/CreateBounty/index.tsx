@@ -16,6 +16,7 @@ import { EmailVerificationBanner } from 'components/ui/email-verification-banner
 import { useAuthContext } from 'hooks/use-auth-context';
 import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
+import { markPosterActivated } from 'lib/analytics/lifecycle';
 import { analyticsService } from 'lib/services/analytics-service';
 import { useStripe } from 'lib/stripe-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
@@ -280,14 +281,34 @@ export function CreateBountyFlow({
       const { seconds: secondsTotal, capped: secondsCapped } = capSeconds(
         flowTimerRef.current.elapsedSeconds()
       );
+      // The single canonical terminal event for a live bounty. Merges the
+      // business payload from useBountyPublish's `meta` with this flow's own
+      // timing/variant props. (Historically post_published fired here too —
+      // that duplicate was removed 2026-08-28.)
       analyticsService.trackEvent('bounty_published', {
-        category: meta.category,
+        role: 'poster',
+        surface: meta.surface,
+        bounty_id: bountyId,
+        amount: meta.amountDollars,
         amount_cents: meta.amountCents,
+        is_for_honor: meta.isForHonor,
+        funded: meta.funded,
+        category: meta.category,
+        work_type: meta.workType,
+        architecture: meta.architecture,
+        queued_offline: meta.queuedOffline,
         // No category-chip UI exists yet on this arm — always false.
         used_chip: false,
         seconds_total: secondsTotal,
         seconds_capped: secondsCapped,
         variant: POST_FLOW_VARIANT,
+      });
+      // First successful publish by this user (once per device) — see
+      // lib/analytics/lifecycle.ts.
+      void markPosterActivated(session?.user?.id, {
+        bounty_id: bountyId,
+        amount: meta.amountDollars,
+        surface: meta.surface,
       });
       // Hand off to the confirmation screen rather than leaving the flow —
       // onComplete now fires from its Continue button, so the host screen
@@ -488,7 +509,8 @@ export function CreateBountyFlow({
     stepBackgroundMsRef.current = 0;
     backgroundedAtRef.current = appStateRef.current === 'active' ? null : getMonotonicNow();
     if (deliberateTapRef.current) {
-      analyticsService.trackEvent('post_flow_started', {
+      analyticsService.trackEvent('composer_opened', {
+        role: 'poster',
         variant: POST_FLOW_VARIANT,
         entry_point: entryPoint,
         deliberate_entry: true,
@@ -523,7 +545,8 @@ export function CreateBountyFlow({
   ) => {
     if (composerStartedRef.current) return;
     composerStartedRef.current = true;
-    analyticsService.trackEvent('post_started', {
+    analyticsService.trackEvent('bounty_started', {
+      role: 'poster',
       surface: POST_SURFACE,
       // snake_case is the single canonical spelling — it matches the
       // onboarding surface's emit so the two don't fragment the breakdown.

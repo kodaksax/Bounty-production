@@ -155,12 +155,12 @@ describe('getScheduleChip', () => {
 
     test('starting later this week shows a dated chip', () => {
       const chip = getScheduleChip('scheduled', iso(2026, 6, 7, 9, 0));
-      expect(chip).toEqual({ label: 'Jul 7', icon: '📅', variant: 'normal' });
+      expect(chip).toEqual({ label: 'Tue, Jul 7', icon: '📅', variant: 'normal' });
     });
 
     test('starting beyond this week is muted', () => {
       const chip = getScheduleChip('scheduled', iso(2026, 6, 20, 9, 0));
-      expect(chip).toEqual({ label: 'Jul 20', icon: '📅', variant: 'muted' });
+      expect(chip).toEqual({ label: 'Mon, Jul 20', icon: '📅', variant: 'muted' });
     });
   });
 
@@ -197,17 +197,17 @@ describe('formatScheduleDescription', () => {
 
   test('describes a future start date with a full date', () => {
     const schedule: BountySchedule = { type: 'scheduled', startDate: iso(2026, 6, 10, 14, 0) };
-    expect(formatScheduleDescription(schedule)).toBe('Starts Jul 10, 2 PM');
+    expect(formatScheduleDescription(schedule)).toBe('Starts Fri, Jul 10, 2 PM');
   });
 
   test('describes a future start date with an AM time and minutes', () => {
     const schedule: BountySchedule = { type: 'scheduled', startDate: iso(2026, 6, 10, 8, 15) };
-    expect(formatScheduleDescription(schedule)).toBe('Starts Jul 10, 8:15 AM');
+    expect(formatScheduleDescription(schedule)).toBe('Starts Fri, Jul 10, 8:15 AM');
   });
 
   test('describes a future start date at noon', () => {
     const schedule: BountySchedule = { type: 'scheduled', startDate: iso(2026, 6, 10, 12, 0) };
-    expect(formatScheduleDescription(schedule)).toBe('Starts Jul 10, 12 PM');
+    expect(formatScheduleDescription(schedule)).toBe('Starts Fri, Jul 10, 12 PM');
   });
 
   test('describes an end-only deadline today', () => {
@@ -217,7 +217,7 @@ describe('formatScheduleDescription', () => {
 
   test('describes an end-only deadline on a future date', () => {
     const schedule: BountySchedule = { type: 'scheduled', endDate: iso(2026, 6, 6, 17, 0) };
-    expect(formatScheduleDescription(schedule)).toBe('Due by Jul 6, 5 PM');
+    expect(formatScheduleDescription(schedule)).toBe('Due by Mon, Jul 6, 5 PM');
   });
 
   test('joins a start and end window', () => {

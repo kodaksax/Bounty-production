@@ -78,6 +78,7 @@ export default function UsernameScreen() {
   const { data: onboardingData } = useOnboarding();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const {
+    isAppleAvailable,
     isGoogleConfigured,
     googleRequest,
     promptGoogleSignIn,
@@ -154,21 +155,23 @@ export default function UsernameScreen() {
       <View style={styles.content} />
 
       <View style={styles.actionContainer}>
-        <TouchableOpacity
-          style={styles.appleButton}
-          onPress={handleAppleContinue}
-          disabled={loading}
-          accessibilityRole="button"
-          accessibilityLabel="Continue with Apple"
-          accessibilityState={{ disabled: loading, busy: loading }}
-        >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" style={styles.buttonIcon} />
-          ) : (
-            <FontAwesome name="apple" size={20} color="#ffffff" style={styles.buttonIcon} />
-          )}
-          <Text style={styles.appleButtonText}>Continue with Apple</Text>
-        </TouchableOpacity>
+        {isAppleAvailable && (
+          <TouchableOpacity
+            style={styles.appleButton}
+            onPress={handleAppleContinue}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Apple"
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" style={styles.buttonIcon} />
+            ) : (
+              <FontAwesome name="apple" size={20} color="#ffffff" style={styles.buttonIcon} />
+            )}
+            <Text style={styles.appleButtonText}>Continue with Apple</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.googleButton}

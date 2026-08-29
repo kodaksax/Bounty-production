@@ -4,6 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
+import { withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
@@ -552,24 +553,13 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
           style: "destructive",
           onPress: async () => {
             try {
-              // Get the bounty request for this bounty and current user
-              const requests = await bountyRequestService.getAll({
-                bountyId: String(bountyId),
-                userId: currentUserId,
+              // Deletes the pending request and emits `application_withdrawn`
+              // only on a confirmed success — see lib/services/application-withdrawal.ts.
+              await withdrawApplication({
+                bountyId,
+                currentUserId,
+                surface: 'inbox',
               })
-
-              if (requests.length === 0) {
-                throw new Error("No application found for this bounty")
-              }
-
-              const request = requests[0]
-
-              // Delete the bounty request
-              const success = await bountyRequestService.delete(request.id)
-
-              if (!success) {
-                throw new Error("Failed to withdraw application")
-              }
 
               // Remove from in-progress list
               setInProgressBounties((prev) => prev.filter((b) => b.id !== bountyId))

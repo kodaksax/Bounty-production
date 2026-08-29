@@ -88,6 +88,16 @@ const TYPE_CATEGORY: Record<string, Category> = {
   balance_update: 'payments',
   dispute_created: 'security', dispute_resolved: 'security', workflow_dispute_created: 'security',
   dispute_escalated: 'security', account_warning: 'security', account_restricted: 'security',
+  // Operator-facing payment-integrity page (Phase 4). 'security' is deliberate,
+  // not a workaround: it is the only category whose push and in-app channels
+  // cannot be switched off (isForcedChannel) and which bypasses quiet hours
+  // (isUrgent). Under the default 'marketplace' fallback this alert would be
+  // user-disableable and suppressed overnight — a page that waits until 8am is
+  // not a page. Only ever addressed to admin accounts.
+  reconciliation_alert: 'security',
+  // Daily informational digest of warning/info findings. 'payments' (non-security)
+  // so delivery is not forced and quiet hours apply.
+  reconciliation_digest: 'payments',
   verification_submitted: 'verification', verification_verified: 'verification',
   verification_rejected: 'verification', verification_canceled: 'verification',
   follow: 'followers',

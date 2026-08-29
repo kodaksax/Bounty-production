@@ -11,6 +11,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
 import {
+  describeSettlement,
+  deriveSettlementState,
+  type SettlementState,
+} from '../_shared/settlement-state.ts';
+import {
   resolveReleasePayee,
   type ReleaseBountyLookupClient,
 } from '../_shared/release-authorization.ts';
@@ -235,18 +240,54 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Failed to fetch transactions' }, 500);
         }
 
-        const formattedTransactions = (transactions ?? []).map((tx: WalletTransaction) => ({
-          id: tx.id,
-          type: tx.type,
-          amount: tx.amount,
-          date: tx.created_at,
-          details: {
-            title: tx.description,
-            method: tx.stripe_payment_intent_id ? 'Stripe' : 'Wallet',
-            status: tx.status ?? 'completed',
-            bounty_id: tx.bounty_id,
-          },
-        }));
+        const formattedTransactions = (transactions ?? []).map((tx: WalletTransaction) => {
+          const row = tx as WalletTransaction & {
+            settlement_state?: SettlementState | null;
+            stripe_payout_id?: string | null;
+            stripe_payout_status?: string | null;
+            stripe_transfer_id?: string | null;
+            stripe_charge_id?: string | null;
+            stripe_refund_id?: string | null;
+          };
+
+          // Prefer the stored column; fall back to deriving from the same
+          // evidence if this row predates the backfill. Both routes use the
+          // identical rule, so the fallback cannot disagree with the column.
+          const settlementState: SettlementState =
+            row.settlement_state ??
+            deriveSettlementState({
+              type: tx.type,
+              stripePayoutId: row.stripe_payout_id,
+              stripePayoutStatus: row.stripe_payout_status,
+              stripeTransferId: row.stripe_transfer_id,
+              stripeChargeId: row.stripe_charge_id,
+              stripePaymentIntentId: tx.stripe_payment_intent_id,
+              stripeRefundId: row.stripe_refund_id,
+            });
+
+          const described = describeSettlement(tx.type, settlementState);
+
+          return {
+            id: tx.id,
+            type: tx.type,
+            amount: tx.amount,
+            date: tx.created_at,
+            details: {
+              title: tx.description,
+              method: tx.stripe_payment_intent_id ? 'Stripe' : 'Wallet',
+              // A null status is not a settled one. This used to default to
+              // 'completed', which rendered an unknown row as a green check —
+              // the most reassuring possible reading of no information.
+              // Mirrors the deliberate opposite choice at connect/index.ts:3027.
+              status: tx.status ?? 'pending',
+              settlementState,
+              settlementLabel: described.label,
+              settlementDetail: described.detail,
+              settlementTone: described.tone,
+              bounty_id: tx.bounty_id,
+            },
+          };
+        });
 
         return jsonResponse({ transactions: formattedTransactions });
       }
@@ -879,6 +920,45 @@ Deno.serve(async (req: Request) => {
           );
         }
 
+        // Payout readiness for the hunter who was just credited.
+        //
+        // ADR 0001 §4.3 (option B3): this deliberately does NOT block the
+        // release. A v1 credit is recoverable — the hunter onboards later and
+        // withdraws — whereas blocking would strand the poster's escrow and
+        // leave the hunter with nothing for completed work, over a gap that
+        // resolves itself. What was actually missing was that nobody was told.
+        // So: allow, label honestly, and surface the state to both sides.
+        //
+        // Advisory only. A lookup failure must never fail a release that has
+        // already moved money in the ledger.
+        let hunterPayoutReady = false;
+        try {
+          const { data: hunterProfile } = await supabase
+            .from('profiles')
+            .select('stripe_connect_account_id, stripe_connect_payouts_enabled')
+            .eq('id', hunterId)
+            .maybeSingle();
+          const hp = hunterProfile as {
+            stripe_connect_account_id?: string | null;
+            stripe_connect_payouts_enabled?: boolean | null;
+          } | null;
+          hunterPayoutReady =
+            Boolean(hp?.stripe_connect_account_id) && hp?.stripe_connect_payouts_enabled === true;
+        } catch (readinessErr) {
+          console.warn('[wallet] release: hunter payout readiness lookup failed', {
+            bountyId,
+            hunterId,
+            error: readinessErr,
+          });
+        }
+
+        // NOTE: the hunter's "finish payout setup" notification is NOT enqueued
+        // here. It is fired by trg_wallet_tx_notify_unready_payee, an AFTER
+        // INSERT trigger on wallet_transactions, so that it covers every release
+        // path uniformly — including fn_release_wallet_escrow_for_dispute(),
+        // which is PL/pgSQL and never passes through this function. Enqueueing
+        // in both places would double-notify.
+
         const { data: posterProfile, error: posterBalanceErr } = await supabase
           .from('profiles')
           .select('balance')
@@ -901,7 +981,21 @@ Deno.serve(async (req: Request) => {
             typeof (posterProfile as Profile | null)?.balance === 'number'
               ? (posterProfile as Profile).balance
               : null,
-          message: `$${hunterAmount.toFixed(2)} released to hunter.`,
+          // A v1 release moves nothing outside Postgres — this function does
+          // not import Stripe at all. The honest description is a balance
+          // credit, not a payment. "Released"/"paid" here is what led both
+          // parties on bounty 53656a8b ("Walk my cat") to believe $73.60 had
+          // settled to a hunter who had no Connect account and could not
+          // withdraw a cent of it. See ADR 0001 §2.7.
+          settlementState: 'ledger_only' satisfies SettlementState,
+          hunterPayoutReady,
+          message: `$${hunterAmount.toFixed(2)} added to the hunter's Bounty balance.`,
+          ...(hunterPayoutReady
+            ? {}
+            : {
+                hunterPayoutWarning:
+                  'This hunter has not finished payout setup, so they cannot move these funds to a bank account yet. They keep the balance and can withdraw once onboarding is complete.',
+              }),
         });
       }
 

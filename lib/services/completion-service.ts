@@ -173,6 +173,21 @@ export const completionService = {
 
         if (error) throw new Error(error?.message ?? JSON.stringify(error));
 
+        // Canonical `completion_submitted` — the hunter submitted completed
+        // work for the poster's review. Only fires for a genuinely NEW
+        // submission row (the dedupe branch above returns early), so it stays
+        // 1:1 with real submissions. Fire-and-forget with an explicit .catch so
+        // a rejected analytics promise can never bubble or reject the caller.
+        void analyticsService
+          .trackEvent('completion_submitted', {
+            role: 'hunter',
+            bounty_id: String(submission.bounty_id),
+            hunter_id: String(submission.hunter_id),
+            proof_item_count: submission.proof_items?.length ?? 0,
+            has_message: !!submission.message?.trim(),
+          })
+          .catch(() => {});
+
         // The poster's "work submitted for review" notification is enqueued by
         // the `trg_completion_submission_notification` database trigger (see
         // 20260812000000_notify_poster_on_completion_submission.sql), NOT here.
