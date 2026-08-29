@@ -7,6 +7,7 @@ import {
 import { supabase } from '../supabase';
 import type { Conversation, FullConversation, Message } from '../types';
 import { getCurrentUserId } from '../utils/data-utils';
+import { mediaPreviewLabel } from '../utils/message-media';
 import { sanitizeMessage } from '../utils/sanitization';
 import { analyticsService } from './analytics-service';
 import { e2eKeyService } from './e2e-key-service';
@@ -108,20 +109,27 @@ export const messageService = {
     conversationId: string,
     text: string,
     senderId?: string,
-    participantIds?: string[]
+    participantIds?: string[],
+    mediaUrl?: string | null
   ): Promise<{ message: Message; error?: string; encryptionWarning?: string }> => {
     const userId = getCurrentUserId();
     const effectiveSenderId = senderId ?? userId;
 
+    // An attachment with no caption is a valid message, and sanitizeMessage
+    // rejects empty strings — only run it when there is text to sanitize.
     let sanitizedText: string;
-    try {
-      sanitizedText = sanitizeMessage(text);
-    } catch (error) {
-      console.error('[sendMessage] sanitizeMessage failed:', error);
-      return {
-        message: {} as Message,
-        error: error instanceof Error ? error.message : 'Invalid message',
-      };
+    if (!text.trim() && mediaUrl) {
+      sanitizedText = '';
+    } else {
+      try {
+        sanitizedText = sanitizeMessage(text);
+      } catch (error) {
+        console.error('[sendMessage] sanitizeMessage failed:', error);
+        return {
+          message: {} as Message,
+          error: error instanceof Error ? error.message : 'Invalid message',
+        };
+      }
     }
 
     let finalText = sanitizedText;
@@ -133,7 +141,9 @@ export const messageService = {
       const convoParticipantIds = conversation?.participantIds ?? participantIds ?? [];
       const recipientId = convoParticipantIds.find(id => id !== userId);
 
-      if (recipientId && convoParticipantIds.length === 2) {
+      // An attachment-only message has no text to encrypt (the media URL points
+      // at a storage object and is stored as-is).
+      if (recipientId && convoParticipantIds.length === 2 && sanitizedText.length > 0) {
         const [recipientPublicKey, senderKeys] = await Promise.all([
           e2eKeyService.getRecipientPublicKey(recipientId),
           e2eKeyService.getOrGenerateKeyPair(userId),
@@ -179,6 +189,7 @@ export const messageService = {
         createdAt: new Date().toISOString(),
         status: 'sending',
         isEncrypted,
+        mediaUrl: mediaUrl ?? undefined,
       };
 
       await offlineQueueService.enqueue('message', {
@@ -187,6 +198,7 @@ export const messageService = {
         senderId: effectiveSenderId,
         tempId: tempMessage.id,
         isEncrypted,
+        mediaUrl: mediaUrl ?? undefined,
       });
 
       return { message: tempMessage, encryptionWarning };
@@ -201,7 +213,8 @@ export const messageService = {
         const localMessage = await messagingService.sendMessage(
           conversationId,
           finalText,
-          effectiveSenderId
+          effectiveSenderId,
+          mediaUrl
         );
         message = { ...localMessage, isEncrypted };
       } else {
@@ -209,7 +222,8 @@ export const messageService = {
         const sentMessage = await supabaseMessaging.sendMessage(
           conversationId,
           finalText,
-          effectiveSenderId
+          effectiveSenderId,
+          mediaUrl
         );
         message = {
           ...sentMessage,
@@ -224,7 +238,7 @@ export const messageService = {
         } = await supabase
           .from('conversations')
           .update({
-            last_message: sanitizedText,
+            last_message: sanitizedText || (mediaUrl ? mediaPreviewLabel(mediaUrl) : ''),
             updated_at: message.createdAt,
           })
           .eq('id', conversationId)
@@ -258,7 +272,10 @@ export const messageService = {
 
     await analyticsService.incrementUserProperty('messages_sent');
 
-    return { message: { ...message, isEncrypted, text: sanitizedText }, encryptionWarning };
+    return {
+      message: { ...message, isEncrypted, text: sanitizedText, mediaUrl: mediaUrl ?? message.mediaUrl },
+      encryptionWarning,
+    };
   },
 
   retryMessage: async (messageId: string): Promise<{ success: boolean; error?: string }> => {
@@ -399,7 +416,8 @@ export const messageService = {
   processQueuedMessage: async (
     conversationId: string,
     text: string,
-    senderId: string
+    senderId: string,
+    mediaUrl?: string | null
   ): Promise<Message> => {
     try {
       const dedupeCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
@@ -414,7 +432,11 @@ export const messageService = {
 
       const match = (recent || []).find((row: any) => {
         const rowText = row.text ?? row.body ?? row.message ?? row.content ?? '';
-        return rowText === text;
+        const rowMedia = row.media_url ?? row.attachment_url ?? null;
+        // Attachment-only messages all share an empty text, so the media URL
+        // has to be part of the comparison or two different photos sent while
+        // offline would collapse into one.
+        return rowText === text && rowMedia === (mediaUrl ?? null);
       });
 
       if (match) {
@@ -429,6 +451,7 @@ export const messageService = {
           text,
           createdAt: match.created_at,
           status: 'sent',
+          mediaUrl: match.media_url ?? match.attachment_url ?? undefined,
         } as Message;
       }
     } catch (dedupeCheckError) {
@@ -436,7 +459,7 @@ export const messageService = {
       // to the normal send rather than blocking queue processing entirely.
     }
 
-    return messagingService.sendMessage(conversationId, text, senderId);
+    return messagingService.sendMessage(conversationId, text, senderId, mediaUrl);
   },
 
   getAllConversationsWithUser: async (otherUserId: string): Promise<Conversation[]> => {

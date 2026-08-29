@@ -9,7 +9,7 @@
  * - listConversations(userId: string): Promise<Conversation[]>
  * - getConversation(conversationId: string): Promise<Conversation | null>
  * - getMessages(conversationId: string): Promise<Message[]>
- * - sendMessage(conversationId: string, text: string, senderId: string): Promise<Message>
+ * - sendMessage(conversationId: string, text: string, senderId: string, mediaUrl?: string | null): Promise<Message>
  * - createConversation(participantIds: string[], name: string, isGroup?: boolean, bountyId?: string): Promise<Conversation>
  * - markAsRead(conversationId: string, userId: string): Promise<void>
  * - getOrCreateConversation(participantIds: string[], name: string, bountyId?: string): Promise<Conversation>
@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import type { Conversation, Message } from '../types';
 import { EventEmitter } from '../utils/event-emitter';
+import { mediaPreviewLabel } from '../utils/message-media';
 
 // Storage keys
 const CONVERSATIONS_KEY = '@bountyexpo:conversations';
@@ -126,7 +127,8 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
 export async function sendMessage(
   conversationId: string,
   text: string,
-  senderId: string
+  senderId: string,
+  mediaUrl?: string | null
 ): Promise<Message> {
   const messages = await loadMessages();
   const conversations = await loadConversations();
@@ -138,6 +140,7 @@ export async function sendMessage(
     text,
     createdAt: new Date().toISOString(),
     status: 'sent',
+    mediaUrl: mediaUrl ?? undefined,
   };
 
   messages.push(message);
@@ -146,7 +149,9 @@ export async function sendMessage(
   // Update conversation's lastMessage and updatedAt
   const conversation = conversations.find(c => c.id === conversationId);
   if (conversation) {
-    conversation.lastMessage = text;
+    // Attachment-only messages have empty text; label them so the conversation
+    // row isn't blank.
+    conversation.lastMessage = text.trim() || (mediaUrl ? mediaPreviewLabel(mediaUrl) : '');
     conversation.updatedAt = message.createdAt;
     await saveConversations(conversations);
   }
