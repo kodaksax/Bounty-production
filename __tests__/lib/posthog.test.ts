@@ -377,3 +377,60 @@ describe('lib/posthog — initialization failure (require throws)', () => {
     expect(posthogModule.isPostHogReady()).toBe(false);
   });
 });
+
+describe('lib/posthog — session replay configuration', () => {
+  const MockPostHog = jest.fn().mockImplementation(() => ({
+    capture: jest.fn(),
+    register: jest.fn(),
+  }));
+
+  let options: any;
+
+  beforeAll(() => {
+    process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-key-replay';
+    jest.isolateModules(() => {
+      jest.doMock('posthog-react-native', () => ({
+        PostHog: MockPostHog,
+        useFeatureFlag: jest.fn(),
+      }));
+      require('../../lib/posthog');
+    });
+    options = MockPostHog.mock.calls[0]?.[1];
+  });
+
+  afterAll(() => {
+    delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
+  });
+
+  test('constructs exactly one PostHog client', () => {
+    expect(MockPostHog).toHaveBeenCalledTimes(1);
+  });
+
+  test('session replay is enabled', () => {
+    expect(options.enableSessionReplay).toBe(true);
+  });
+
+  test('session replay masks all text inputs and all images', () => {
+    expect(options.sessionReplayConfig).toEqual(
+      expect.objectContaining({
+        maskAllTextInputs: true,
+        maskAllImages: true,
+        maskAllSandboxedViews: true,
+        captureLog: false,
+      })
+    );
+  });
+
+  test('enabling replay preserves the pre-existing client options', () => {
+    expect(options.host).toBe(
+      process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com'
+    );
+    expect(options.personProfiles).toBe('identified_only');
+    expect(options.captureAppLifecycleEvents).toBe(true);
+    expect(options.errorTracking.autocapture).toEqual({
+      uncaughtExceptions: false,
+      unhandledRejections: false,
+      console: false,
+    });
+  });
+});

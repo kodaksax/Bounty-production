@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
 import type { Transaction } from "./transaction-history-screen"
+import { describeSettlement, mayDescribeAsPaid } from "../lib/utils/settlement-vocabulary"
 
 const DEFAULT_TITLE = 'Transaction'
 
@@ -140,7 +141,13 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
       case "escrow":
         return `Funds for "${title}" are held in escrow until the bounty is completed.`
       case "release":
-        return `Escrowed funds for "${title}" were released${counterparty ? ` to ${counterparty}` : ''}.`
+        // "Released" reads as "paid" to most people. It is only true in the
+        // settlement sense when Stripe moved the money; for a v1 bounty nothing
+        // left the platform and the hunter may not be able to withdraw it at
+        // all. See ADR 0001 §2.7.
+        return mayDescribeAsPaid(transaction.details.settlementState)
+          ? `Funds for "${title}" were paid${counterparty ? ` to ${counterparty}` : ''} via Stripe.`
+          : `Funds for "${title}" were added${counterparty ? ` to ${counterparty}'s` : ' to the hunter\'s'} Bounty balance.`
       case "refund":
         return `Escrowed funds for "${title}" were refunded to your account.`
       default:
@@ -152,9 +159,25 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
 
   const escrowStatusText: Record<string, string> = {
     funded: 'Funds are held in escrow until bounty completion.',
-    released: 'Funds have been released to the hunter.',
+    // Not "released to the hunter" — that implies the money reached them. It
+    // reached their Bounty balance, which is a different claim (ADR 0001).
+    released: mayDescribeAsPaid(transaction.details.settlementState)
+      ? 'Funds have been paid to the hunter via Stripe.'
+      : 'Funds have been added to the hunter’s Bounty balance.',
     pending: 'Escrow is pending verification.',
   }
+
+  // Server-provided settlement copy, with a client-side fallback so a row
+  // fetched before ADR 0001 shipped still renders honestly rather than
+  // defaulting to the most reassuring reading.
+  const settlement =
+    transaction.details.settlementLabel && transaction.details.settlementDetail
+      ? {
+          label: transaction.details.settlementLabel,
+          detail: transaction.details.settlementDetail,
+          tone: transaction.details.settlementTone ?? 'neutral',
+        }
+      : describeSettlement(transaction.type, transaction.details.settlementState ?? 'ledger_only')
 
   // Build the details list as data so rows (and dividers between them) stay
   // in sync with whichever fields are actually present, instead of five
@@ -170,21 +193,39 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
     { icon: 'info', label: 'Transaction ID', value: transaction.id, valueColor: undefined },
     { icon: 'calendar-today', label: 'Date', value: format(transaction.date, 'MMMM d, yyyy'), valueColor: undefined },
     { icon: 'schedule', label: 'Time', value: format(transaction.date, 'h:mm:ss a'), valueColor: undefined },
-    transaction.details.status
-      ? {
-          icon: 'check-circle',
-          label: 'Status',
-          value: transaction.details.status,
-          valueColor: getStatusColor(theme, transaction.details.status),
-        }
-      : null,
+    // Settlement, not ledger status. The old row rendered
+    // `details.status` — which the server defaulted to 'completed' when null —
+    // next to a green check-circle, so "we know nothing about this row" and
+    // "this money reached you" looked identical.
+    {
+      icon:
+        settlement.tone === 'success'
+          ? 'check-circle'
+          : settlement.tone === 'pending'
+            ? 'schedule'
+            : 'info',
+      label: 'Status',
+      value: settlement.label,
+      valueColor:
+        settlement.tone === 'success'
+          ? theme.success
+          : settlement.tone === 'pending'
+            ? theme.text
+            : theme.textSecondary,
+    },
     transaction.details.method
       ? { icon: 'credit-card', label: 'Method', value: transaction.details.method, valueColor: undefined }
       : null,
     transaction.details.counterparty
       ? {
           icon: 'gps-fixed',
-          label: transaction.type === 'bounty_completed' ? 'Paid to' : 'From',
+          // "Paid to" is a settlement claim. Only make it when Stripe confirms.
+          label:
+            transaction.type === 'bounty_completed'
+              ? mayDescribeAsPaid(transaction.details.settlementState)
+                ? 'Paid to'
+                : 'Credited to'
+              : 'From',
           value: transaction.details.counterparty,
           valueColor: undefined,
         }

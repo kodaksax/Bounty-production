@@ -214,13 +214,14 @@ export const disputeService = {
       // and the cancellation has been linked, so we only count fully-formed
       // disputes (not rolled-back orphan inserts).
       try {
-        await analyticsService.trackEvent('dispute_opened', {
-          disputeId: String(data.id),
-          bountyId: String(data.bounty_id),
-          cancellationId: String(cancellationId),
-          initiatorId: String(initiatorId),
-          hasEvidence: !!(evidence && evidence.length > 0),
-          evidenceCount: evidence?.length || 0,
+        await analyticsService.trackEvent('dispute_started', {
+          dispute_id: String(data.id),
+          bounty_id: String(data.bounty_id),
+          cancellation_id: String(cancellationId),
+          initiator_id: String(initiatorId),
+          stage: 'cancellation',
+          has_evidence: !!(evidence && evidence.length > 0),
+          evidence_count: evidence?.length || 0,
         });
       } catch {
         /* analytics is best-effort */
@@ -1762,6 +1763,24 @@ export const disputeService = {
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
+
+      // Canonical `dispute_started` — workflow-stage dispute (no cancellation).
+      // Previously this path emitted nothing, so in-progress / review-verify
+      // disputes were invisible in analytics. `stage` distinguishes it from
+      // the cancellation-derived dispute above.
+      try {
+        await analyticsService.trackEvent('dispute_started', {
+          dispute_id: String(data.id),
+          bounty_id: String(bountyId),
+          initiator_id: String(initiatorId),
+          respondent_id: String(respondentId),
+          stage,
+          has_evidence: !!(evidence && evidence.length > 0),
+          evidence_count: evidence?.length || 0,
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
 
       // Upload evidence items if provided
       if (evidence && evidence.length > 0) {

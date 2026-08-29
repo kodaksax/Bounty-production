@@ -251,6 +251,13 @@ export function useCompleteOnboarding(destination: OnboardingDestination = '/tab
 
     analyticsService.trackEvent('onboarding_completed', {
       intent: onboardingData.intent ?? 'none',
+      // `role` stays strictly 'poster' | 'hunter' (the canonical concept) —
+      // omitted entirely when intent is unset, rather than emitting a sentinel
+      // that downstream role breakdowns would have to special-case.
+      ...(onboardingData.intent === 'poster' || onboardingData.intent === 'hunter'
+        ? { role: onboardingData.intent }
+        : {}),
+      lifecycle_stage: 'onboarded',
       hasAvatar: !!onboardingData.avatarUri,
       hasBio: !!onboardingData.bio,
       skillCount: onboardingData.skills?.length ?? 0,
