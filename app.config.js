@@ -208,10 +208,15 @@ function resolvePlugins(plugins = []) {
       return [];
     }
 
-    // The config plugin's iOS step throws without an `iosUrlScheme`, so keep a
-    // harmless placeholder when only Android is configured. The scheme is
-    // iOS-only, so a placeholder has no effect on the Android binary — it only
-    // stops a missing iOS value from dropping the whole plugin.
+    // The config plugin's iOS step throws without an `iosUrlScheme`. A placeholder
+    // is only acceptable for Android builds; on iOS builds fail fast so we don't
+    // ship a binary with a dummy scheme and broken Google Sign-In.
+    if (process.env.EAS_BUILD_PLATFORM === 'ios' && !hasValidGoogleIosUrlScheme) {
+      throw new Error(
+        '[FATAL] Missing/invalid EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME for an iOS build. Refusing to inject a placeholder.'
+      );
+    }
+
     const googlePluginConfig = {
       iosUrlScheme: hasValidGoogleIosUrlScheme
         ? iosUrlScheme
