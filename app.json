@@ -143,7 +143,6 @@
           },
           "android": {
             "useHermesV1": false,
-            "buildReactNativeFromSource": true,
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true
           }
