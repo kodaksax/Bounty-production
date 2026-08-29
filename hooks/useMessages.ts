@@ -83,7 +83,19 @@ export function useMessages(conversationId: string): UseMessagesResult {
       // local `messageService` instead to persist the message locally.
       if (!UUID_RE.test(conversationId)) {
         try {
-          const result = await messageService.sendMessage(conversationId, text, currentUserId);
+          const result = await messageService.sendMessage(
+            conversationId,
+            text,
+            currentUserId,
+            undefined,
+            mediaUrl
+          );
+          // A rejected send comes back as `{ message: {}, error }` rather than
+          // throwing; without this check the temp message was replaced by an
+          // empty object and vanished from the thread with no explanation.
+          if (result && (result as any).error) {
+            throw new Error((result as any).error);
+          }
           // `messageService.sendMessage` returns an object with `message`
           // but also some call sites may return the Message directly; handle both.
           const sentMessage: Message =
@@ -162,7 +174,9 @@ export function useMessages(conversationId: string): UseMessagesResult {
     try {
       const message = messages.find(m => m.id === messageId);
       if (message) {
-        await Clipboard.setStringAsync(message.text);
+        // Attachment-only messages have no text — copy the media link instead
+        // of putting an empty string on the clipboard.
+        await Clipboard.setStringAsync(message.text || message.mediaUrl || '');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to copy message');

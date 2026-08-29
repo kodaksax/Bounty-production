@@ -40,6 +40,12 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   dispute_escalated: 'security',
   account_warning: 'security',
   account_restricted: 'security',
+  // Phase 4 operator page. 'security' so push/in-app cannot be disabled and
+  // quiet hours are bypassed — mirrors process-notification's TYPE_CATEGORY.
+  reconciliation_alert: 'security',
+  // Phase 4 daily digest. 'payments' (non-security) so delivery is not forced
+  // and quiet hours apply — this is informational, not a page.
+  reconciliation_digest: 'payments',
 
   verification_submitted: 'verification',
   verification_verified: 'verification',

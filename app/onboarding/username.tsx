@@ -78,6 +78,7 @@ export default function UsernameScreen() {
   const { data: onboardingData } = useOnboarding();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const {
+    isAppleAvailable,
     isGoogleConfigured,
     googleRequest,
     promptGoogleSignIn,

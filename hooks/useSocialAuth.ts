@@ -31,6 +31,24 @@ export function useSocialAuth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [googleSessionReady, setGoogleSessionReady] = useState(false);
+  const [isAppleAvailable, setIsAppleAvailable] = useState(false);
+
+  // Apple sign-in works only on iOS 13+. Keep the button hidden everywhere
+  // else so Android and older iOS users never reach a dead end.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let active = true;
+    AppleAuthentication.isAvailableAsync()
+      .then((available) => {
+        if (active) setIsAppleAvailable(available);
+      })
+      .catch(() => {
+        if (active) setIsAppleAvailable(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const iosGoogleClientId =
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'placeholder-ios-client-id';
@@ -167,6 +185,7 @@ export function useSocialAuth() {
   };
 
   return {
+    isAppleAvailable,
     isGoogleConfigured,
     googleRequest,
     promptGoogleSignIn,

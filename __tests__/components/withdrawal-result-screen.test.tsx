@@ -181,6 +181,12 @@ describe('WithdrawalResultScreen', () => {
     // payout landed, and the DB allows one in-flight withdrawal per hunter.
     // A second attempt is declined with 409 withdrawal_already_in_progress.
     describe('withdrawal_already_in_progress', () => {
+      // The real 409 body (see inFlightWithdrawalResponse in
+      // supabase/functions/connect/index.ts) names the pending amount.
+      const SERVER_MESSAGE =
+        'You already have a withdrawal of $96.00 on its way to your bank. ' +
+        'You can start another one once it lands — usually within 1-2 business days.';
+
       const renderInProgress = (extra = {}) =>
         render(
           <WithdrawalResultScreen
@@ -188,18 +194,44 @@ describe('WithdrawalResultScreen', () => {
             method="standard"
             amount={50}
             errorCode="withdrawal_already_in_progress"
-            errorMessage="raw server message"
+            errorMessage={SERVER_MESSAGE}
             onDismiss={jest.fn()}
             {...extra}
           />
         );
 
-      it('explains that an earlier withdrawal is still on its way', () => {
+      // This code is the one place the server message beats the static copy,
+      // because it names the amount already in flight instead of saying
+      // "a withdrawal". See resolveErrorCopy.
+      it('prefers the server message, which names the pending amount', () => {
         const { getByText } = renderInProgress();
+      it('explains that an earlier withdrawal is still on its way', () => {
+        // With no server-crafted message, the screen falls back to its own
+        // static copy for this code.
+        const { getByText } = renderInProgress({ errorMessage: undefined });
+        expect(
+          getByText(/already have a withdrawal of \$96\.00 on its way to your bank/i)
+        ).toBeTruthy();
+        expect(getByText(/1-2 business days/i)).toBeTruthy();
+      });
+
+      it('falls back to static copy explaining the wait when the server sends no message', () => {
+        const { getByText } = renderInProgress({ errorMessage: undefined });
         expect(
           getByText(/already have a withdrawal on its way to your bank/i)
         ).toBeTruthy();
         expect(getByText(/1-2 business days/i)).toBeTruthy();
+      });
+
+      it('prefers the server message when it names the pending amount', () => {
+        const { getByText, queryByText } = renderInProgress({
+          errorMessage:
+            'You already have a withdrawal of $96.00 on its way to your bank.',
+        });
+        expect(getByText(/withdrawal of \$96\.00/i)).toBeTruthy();
+        expect(
+          queryByText(/already have a withdrawal on its way to your bank/i)
+        ).toBeNull();
       });
 
       it('does not frame a decline as a failure', () => {

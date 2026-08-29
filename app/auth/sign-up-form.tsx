@@ -326,9 +326,10 @@ export function SignUpForm() {
         // succeed. We track regardless of whether a session was returned
         // (email-confirmation flow still counts as a signup conversion).
         try {
-          await analyticsService.trackEvent('user_signed_up', {
+          await analyticsService.trackEvent('signup_completed', {
             method: 'email',
-            hasSession: !!session,
+            has_session: !!session,
+            lifecycle_stage: 'signed_up',
           });
         } catch {
           /* analytics is best-effort */

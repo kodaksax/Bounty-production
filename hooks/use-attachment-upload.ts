@@ -17,6 +17,13 @@ export interface AttachmentUploadOptions {
   allowedTypes?: 'all' | 'images' | 'videos' | 'documents'
   maxSizeMB?: number
   allowsMultiple?: boolean
+  /**
+   * Reject uploads that only landed in the on-device AsyncStorage fallback.
+   * Set this wherever the resulting URL is shared with someone else (chat
+   * attachments, for example): a local cache key is meaningless to the
+   * recipient, so it's better to fail loudly than to send a dead link.
+   */
+  requireRemote?: boolean
   onUploaded?: (attachment: Attachment) => void
   onError?: (error: Error) => void
 }
@@ -48,6 +55,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
     allowedTypes = 'all',
     maxSizeMB = 10,
     allowsMultiple = false,
+    requireRemote = false,
     onUploaded,
     onError,
   } = options
@@ -128,6 +136,9 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
         const fileMetas = results.map((r) => r)
 
         const uploadedAttachments: Attachment[] = []
+        // Failures from the batch path only — the per-file fallback path
+        // reports and alerts inside uploadAttachment.
+        const failures: Error[] = []
 
         // Prefer a batch upload helper if available on the storageService, otherwise
         // fall back to per-file uploads using the existing uploadAttachment helper.
@@ -137,6 +148,12 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
           const uploadResults = await (storageService as any).uploadFiles(fileUris, {
             bucket,
             path: folder,
+            // Hand the picker's own name and MIME type to the uploader: an
+            // Android content:// URI carries neither, and without them the
+            // object lands as application/octet-stream with no extension,
+            // which stops it rendering as an image later.
+            fileNames: fileMetas.map((m) => m.name),
+            contentTypes: fileMetas.map((m) => m.mimeType),
             concurrency: allowsMultiple ? 3 : 1,
             onFileProgress: (index: number, p: number) => {
               // noop per-file hook for now; could be wired up to individual UI
@@ -149,7 +166,13 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
           for (let i = 0; i < uploadResults.length; i++) {
             const res = uploadResults[i]
             const meta = fileMetas[i]
-            if (res && res.success && res.url) {
+            if (res && res.success && res.url && requireRemote && res.fallbackToLocal) {
+              const err = new Error(
+                `"${meta.name}" could not be uploaded. Check your connection and try again.`
+              )
+              failures.push(err)
+              onError?.(err)
+            } else if (res && res.success && res.url) {
               const timestamp = Date.now()
               const attachment: Attachment = {
                 id: `att-${timestamp}-${i}`,
@@ -167,6 +190,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
             } else {
               const errMsg = res?.error || 'Upload failed'
               const err = new Error(errMsg)
+              failures.push(err)
               onError?.(err)
             }
           }
@@ -186,7 +210,24 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
           }
         }
 
-        if (isMounted.current) setState((s) => ({ ...s, isUploading: false, progress: 1 }))
+        if (isMounted.current) {
+          setState((s) => ({
+            ...s,
+            isUploading: false,
+            progress: 1,
+            // Keep whatever error the per-file path already recorded.
+            error: failures[0]?.message ?? s.error,
+          }))
+        }
+
+        // Previously a batch where every upload failed returned null with no
+        // user-visible feedback, so tapping "attach" appeared to do nothing.
+        if (failures.length > 0 && uploadedAttachments.length === 0) {
+          Alert.alert(
+            'Upload Failed',
+            `${failures[0].message}\n\nPlease check your connection and try again.`
+          )
+        }
 
         return uploadedAttachments.length > 0 ? uploadedAttachments : null
       } catch (err) {
@@ -231,6 +272,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
         const uploadResult = await storageService.uploadFile(file.uri, {
           bucket,
           path: filePath,
+          contentType: file.mimeType,
           onProgress: (progress) => {
             if (isMounted.current) setState((s) => ({ ...s, progress }))
           },
@@ -238,6 +280,12 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
 
         if (!uploadResult.success) {
           throw new Error(uploadResult.error || 'Upload failed')
+        }
+
+        if (requireRemote && uploadResult.fallbackToLocal) {
+          throw new Error(
+            `"${fileName}" could not be uploaded. Check your connection and try again.`
+          )
         }
 
         const attachment: Attachment = {
