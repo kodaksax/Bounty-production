@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 import { NotificationActionSheet } from '../../components/notifications/notification-action-sheet';
 import type { Notification } from '../../lib/types';
 
@@ -44,6 +45,7 @@ const messageNotification: Notification = {
 describe('NotificationActionSheet', () => {
   beforeEach(() => {
     push.mockClear();
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
   });
 
   it('keeps the reply composer above the iOS keyboard', () => {
