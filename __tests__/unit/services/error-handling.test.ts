@@ -195,7 +195,7 @@ describe('Error Handling Improvements', () => {
       const notifications = await notificationService.fetchNotifications();
 
       expect(notifications).toEqual(cachedNotifications);
-      expect(AsyncStorage.getItem).toHaveBeenCalledWith('notifications:cache');
+      expect(AsyncStorage.getItem).toHaveBeenCalledWith('notifications:cache:test-user-id');
     });
   });
 });
