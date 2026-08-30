@@ -973,10 +973,19 @@ serve(async (req: Request) => {
     // only claim confirmation when Stripe itself says so.
     // =====================================================================
     try {
+      // MUST filter on the write source, not on leg alone. The Phase 1
+      // backfill mirrored every v1 wallet_transactions row into
+      // ledger_entries, and a v1 'release' maps to leg='capture_release'.
+      // Those rows are app_state='succeeded' with no stripe_transfer_id
+      // (v1 releases never created a Stripe object), so selecting by leg
+      // alone reports each one as a CRITICAL v3_release_without_transfer.
+      // At the time of writing that is 21 rows of legitimate v1 history
+      // that would be flagged as missing money on the first run.
       const { data: v3Rows, error: v3Err } = await supabase
         .from('ledger_entries')
         .select('id, bounty_id, user_id, amount_cents, app_state, stripe_state, stripe_transfer_id, created_at')
-        .eq('leg', 'capture_release');
+        .eq('leg', 'capture_release')
+        .filter('metadata->>source', 'eq', 'bounty_payments_v3_release');
 
       if (v3Err) {
         console.error('[reconciliation] v3 ledger read failed', v3Err);
