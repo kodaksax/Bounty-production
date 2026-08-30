@@ -79,6 +79,7 @@ jest.mock('lib/stripe-context', () => ({
 
 jest.mock('lib/utils/payment-architecture', () => ({
   shouldFundNewBountiesWithPhase2: jest.fn(() => false),
+  shouldUseStripeNativeFunding: jest.fn(() => false),
 }));
 
 jest.mock('lib/services/analytics-service', () => ({

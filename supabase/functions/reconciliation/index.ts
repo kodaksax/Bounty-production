@@ -963,6 +963,184 @@ serve(async (req: Request) => {
       // absence of this check must not fail the whole run.
     }
 
+    // =====================================================================
+    // v3 release reconciliation — same run, same counters, same findings
+    // table. Deliberately NOT a second job: the v1 lesson was that parallel
+    // reconciliation mechanisms each go quiet without the others noticing.
+    //
+    // Diffs ledger_entries(leg='capture_release') against the real Stripe
+    // Transfer, applying the identical rule v1 payouts use: a ledger row may
+    // only claim confirmation when Stripe itself says so.
+    // =====================================================================
+    try {
+      const { data: v3Rows, error: v3Err } = await supabase
+        .from('ledger_entries')
+        .select('id, bounty_id, user_id, amount_cents, app_state, stripe_state, stripe_transfer_id, created_at')
+        .eq('leg', 'capture_release');
+
+      if (v3Err) {
+        console.error('[reconciliation] v3 ledger read failed', v3Err);
+      } else {
+        for (const row of v3Rows ?? []) {
+          const ageH = Math.max(
+            0,
+            (Date.now() - new Date(row.created_at as string).getTime()) / 3_600_000
+          );
+          const transferId = row.stripe_transfer_id as string | null;
+
+          // Claims succeeded but carries no Transfer at all: the v3 analogue
+          // of a completed withdrawal with no payout.
+          if (!transferId) {
+            if (row.app_state === 'succeeded') {
+              orphanLedger++;
+              unreconciled.push({
+                kind: 'v3_release_without_transfer',
+                transactionId: row.id as string,
+                userId: (row.user_id as string) ?? null,
+                ledgerStatus: `${row.app_state}/${row.stripe_state}`,
+                ageHours: Math.round(ageH),
+              });
+              findings.push({
+                findingType: 'v3_release_without_transfer',
+                severity: 'CRITICAL',
+                userId: (row.user_id as string) ?? null,
+                details: {
+                  bountyId: row.bounty_id,
+                  ledgerEntryId: row.id,
+                  amountCents: row.amount_cents,
+                  note: 'A v3 capture_release row claims success but references no Stripe Transfer. Do not resolve by inventing a transfer id — verify in Stripe first.',
+                },
+              });
+              alert('CRITICAL', 'v3_release_without_transfer', {
+                bountyId: row.bounty_id,
+                ledgerEntryId: row.id,
+              });
+            }
+            continue;
+          }
+
+          let transfer: Stripe.Transfer | null = null;
+          try {
+            transfer = await stripe.transfers.retrieve(transferId);
+          } catch (retrErr) {
+            const code = (retrErr as { code?: string })?.code;
+            if (code === 'resource_missing') {
+              orphanLedger++;
+              unreconciled.push({
+                kind: 'v3_orphan_ledger_transfer',
+                transactionId: row.id as string,
+                userId: (row.user_id as string) ?? null,
+                ledgerStatus: `${row.app_state}/${row.stripe_state}`,
+                ageHours: Math.round(ageH),
+              });
+              findings.push({
+                findingType: 'v3_orphan_ledger_transfer',
+                severity: 'CRITICAL',
+                userId: (row.user_id as string) ?? null,
+                details: {
+                  bountyId: row.bounty_id,
+                  transferId,
+                  note: 'Ledger references a Stripe Transfer that Stripe does not return.',
+                },
+              });
+              alert('CRITICAL', 'v3_orphan_ledger_transfer', { transferId });
+            } else {
+              console.error('[reconciliation] v3 transfer retrieve failed', {
+                transferId,
+                retrErr,
+              });
+            }
+            continue;
+          }
+
+          // A reversed Transfer paid nobody. If the ledger still says
+          // confirmed, that is an active false claim of payment.
+          if (transfer?.reversed) {
+            mismatched++;
+            unreconciled.push({
+              kind: 'v3_transfer_reversed',
+              transactionId: row.id as string,
+              userId: (row.user_id as string) ?? null,
+              ledgerStatus: `${row.app_state}/${row.stripe_state}`,
+              ageHours: Math.round(ageH),
+            });
+            findings.push({
+              findingType: 'v3_transfer_reversed',
+              severity: 'CRITICAL',
+              userId: (row.user_id as string) ?? null,
+              details: {
+                bountyId: row.bounty_id,
+                transferId,
+                amountReversed: transfer.amount_reversed,
+                ledgerStripeState: row.stripe_state,
+                note: 'Stripe reversed this Transfer. The hunter was not paid; the bounty needs manual review.',
+              },
+            });
+            alert('CRITICAL', 'v3_transfer_reversed', { transferId, bountyId: row.bounty_id });
+            continue;
+          }
+
+          // Amounts must agree exactly.
+          if (Number(transfer?.amount) !== Number(row.amount_cents)) {
+            mismatched++;
+            unreconciled.push({
+              kind: 'v3_transfer_amount_mismatch',
+              transactionId: row.id as string,
+              userId: (row.user_id as string) ?? null,
+              ledgerStatus: `${row.app_state}/${row.stripe_state}`,
+              ageHours: Math.round(ageH),
+            });
+            findings.push({
+              findingType: 'v3_transfer_amount_mismatch',
+              severity: 'CRITICAL',
+              userId: (row.user_id as string) ?? null,
+              details: {
+                bountyId: row.bounty_id,
+                transferId,
+                stripeAmountCents: transfer?.amount,
+                ledgerAmountCents: row.amount_cents,
+              },
+            });
+            alert('CRITICAL', 'v3_transfer_amount_mismatch', { transferId });
+            continue;
+          }
+
+          // Stripe confirms it, the ledger does not: the transfer.created
+          // webhook was missed or failed. Flag rather than self-heal.
+          if (row.stripe_state !== 'confirmed') {
+            if (ageH > STALE_PENDING_WARN_HOURS) {
+              stalePending++;
+              unreconciled.push({
+                kind: 'v3_release_unconfirmed',
+                transactionId: row.id as string,
+                userId: (row.user_id as string) ?? null,
+                ledgerStatus: `${row.app_state}/${row.stripe_state}`,
+                ageHours: Math.round(ageH),
+              });
+              findings.push({
+                findingType: 'v3_release_unconfirmed',
+                severity: 'WARNING',
+                userId: (row.user_id as string) ?? null,
+                details: {
+                  bountyId: row.bounty_id,
+                  transferId,
+                  ageHours: Math.round(ageH),
+                  note: 'Stripe shows a healthy Transfer but the ledger never received transfer.created. Likely a missed webhook.',
+                },
+              });
+              alert('WARNING', 'v3_release_unconfirmed', { transferId, ageHours: Math.round(ageH) });
+            }
+            continue;
+          }
+
+          reconciled++;
+        }
+      }
+    } catch (v3PassErr) {
+      // The v3 pass must never take down the v1 reconciliation run.
+      console.error('[reconciliation] v3 pass threw (non-fatal)', v3PassErr);
+    }
+
     const deltaCents = totalStripeAmountCents - totalLedgerAmountCents;
     const criticalFindings = findings.filter(f => f.severity === 'CRITICAL').length;
     const health = computeHealth({

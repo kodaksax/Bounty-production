@@ -29,6 +29,13 @@ export interface CreateBountyPaymentResult {
   amount: number;
   /** True when an existing PaymentIntent was returned instead of creating a new one. */
   reused?: boolean;
+  /**
+   * Which architecture the server actually routed this bounty to. 3 means a
+   * manual-capture authorization, so a successful client confirmation lands on
+   * 'requires_capture' rather than 'succeeded'. Absent means the legacy v2
+   * automatic-capture path ran.
+   */
+  architectureVersion?: 2 | 3;
 }
 
 export interface ReleaseBountyPaymentResult {

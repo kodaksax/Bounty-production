@@ -6,7 +6,7 @@ import { stripeService } from 'lib/services/stripe-service'
 import { useStripe } from 'lib/stripe-context'
 import type { Bounty } from 'lib/services/database.types'
 import { logger } from 'lib/utils/error-logger'
-import { shouldFundNewBountiesWithPhase2 } from 'lib/utils/payment-architecture'
+import { shouldUseStripeNativeFunding } from 'lib/utils/payment-architecture'
 import type { WalletTransactionRecord } from 'lib/wallet-context'
 import { momentsService } from 'lib/moments/momentsService'
 import { analyticsService } from 'lib/services/analytics-service'
@@ -131,11 +131,13 @@ export function useBountyForm({
     try {
       setIsSubmitting(true)
 
-      // Route new paid bounties to the Stripe-native Phase 2 escrow path when
-      // enabled; existing/legacy bounties always keep the custodial wallet
-      // flow they were created with (see lib/utils/payment-architecture.ts).
+      // Route new paid bounties to the Stripe-native escrow path (v2 capture
+      // or v3 authorization) when enabled; existing/legacy bounties always
+      // keep the custodial wallet flow they were created with (see
+      // lib/utils/payment-architecture.ts). Either way the custodial wallet
+      // balance is irrelevant, so the balance gate below is skipped.
       const useV2Payments =
-        !formData.isForHonor && formData.amount > 0 && shouldFundNewBountiesWithPhase2()
+        !formData.isForHonor && formData.amount > 0 && shouldUseStripeNativeFunding()
 
       // Validate balance BEFORE posting bounty for paid, v1 bounties. The v2
       // path charges a card directly via Stripe, so the custodial wallet
@@ -236,7 +238,16 @@ export function useBountyForm({
               undefined,
               { userId: currentUserId }
             )
-            if (confirmedIntent.status !== 'succeeded') {
+            // v2 captures immediately ('succeeded'); v3 only authorizes, so a
+            // successful v3 confirmation lands on 'requires_capture'. Rejecting
+            // that would roll back and delete every v3 bounty. The server
+            // reports which path actually ran.
+            const isV3Payment =
+              (paymentResult as { architectureVersion?: number }).architectureVersion === 3
+            const acceptableStatuses = isV3Payment
+              ? ['requires_capture', 'succeeded']
+              : ['succeeded']
+            if (!acceptableStatuses.includes(confirmedIntent.status)) {
               throw new Error('Payment was not completed. Please try again.')
             }
 

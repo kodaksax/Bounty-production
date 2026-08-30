@@ -9,6 +9,7 @@
 //   POST /wallet/release   (release escrowed funds to hunter on completion)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import Stripe from 'npm:stripe@14';
 import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
 import {
   describeSettlement,
@@ -173,7 +174,9 @@ Deno.serve(async (req: Request) => {
       if (subPath === '/balance') {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('balance, payout_failed_at, payout_failure_code')
+          .select(
+            'balance, payout_failed_at, payout_failure_code, stripe_connect_account_id'
+          )
           .eq('id', userId)
           .maybeSingle();
 
@@ -213,9 +216,177 @@ Deno.serve(async (req: Request) => {
             })
           | null;
 
+        // ─────────────────────────────────────────────────────────────────
+        // v3: spendable balance is the hunter's own Stripe Connect balance,
+        // not a second internally-maintained figure. Applies ONLY to hunters
+        // with no live v1 position; every v1 hunter falls through to the
+        // profiles.balance read above, byte-for-byte as before.
+        //
+        // v1 keeps writing profiles.balance throughout this phase — nothing
+        // here changes what any v1 code path does.
+        // ─────────────────────────────────────────────────────────────────
+        const connectAccountId =
+          (profile as { stripe_connect_account_id?: string | null } | null)
+            ?.stripe_connect_account_id ?? null;
+
+        type StripeBalanceBlock = {
+          availableCents: number;
+          pendingCents: number;
+          currency: string;
+          fetchedAt: string;
+          cached: boolean;
+        };
+        let stripeBalance: StripeBalanceBlock | null = null;
+        let balanceSource: 'v1_ledger' | 'stripe_connect' | 'both' = 'v1_ledger';
+
+        if (connectAccountId) {
+          // "v3-only" = no live v1 position. Either no v1 ledger history at
+          // all, or history that is fully settled and zeroed. An unsettled
+          // row (a pending withdrawal, say) means the hunter still has a real
+          // v1 position and must keep seeing the v1 number.
+          const { count: unsettledCount, error: unsettledErr } = await supabase
+            .from('wallet_transactions')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId)
+            .eq('status', 'pending');
+
+          const { count: anyHistoryCount, error: historyErr } = await supabase
+            .from('wallet_transactions')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId);
+
+          // Fail closed: if we cannot establish the v1 position, keep showing
+          // the v1 number rather than risk presenting a Stripe figure to
+          // someone who still holds custodial funds.
+          const v1PositionKnown = !unsettledErr && !historyErr;
+          const hasLiveV1Position =
+            !v1PositionKnown ||
+            (unsettledCount ?? 0) > 0 ||
+            Number(balance) > 0;
+          const isV3Only =
+            v1PositionKnown && !hasLiveV1Position && ((anyHistoryCount ?? 0) === 0 || Number(balance) === 0);
+
+          // Has this hunter ever been on the receiving end of a v3 bounty?
+          // Without this, every v1 hunter who happens to hold a Connect
+          // account would pay a Stripe round-trip on every wallet load. Pure
+          // v1 hunters must take exactly the path they take today.
+          const { count: v3ActivityCount } = await supabase
+            .from('bounty_v3_funding')
+            .select('bounty_id', { count: 'exact', head: true })
+            .eq('hunter_id', userId);
+          const hasV3Activity = (v3ActivityCount ?? 0) > 0;
+
+          if (isV3Only || hasV3Activity) {
+            const CACHE_TTL_MS = 30_000;
+            const nowMs = Date.now();
+
+            const { data: cached } = await supabase
+              .from('connect_balance_cache')
+              .select('available_cents, pending_cents, currency, fetched_at')
+              .eq('user_id', userId)
+              .maybeSingle();
+
+            const cacheFresh =
+              cached &&
+              nowMs - new Date(cached.fetched_at as string).getTime() < CACHE_TTL_MS;
+
+            if (cacheFresh) {
+              stripeBalance = {
+                availableCents: Number(cached.available_cents),
+                pendingCents: Number(cached.pending_cents),
+                currency: String(cached.currency ?? 'usd'),
+                fetchedAt: String(cached.fetched_at),
+                cached: true,
+              };
+            } else {
+              const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+              if (stripeKey) {
+                try {
+                  const stripe = new Stripe(stripeKey, {
+                    apiVersion: '2023-10-16',
+                    httpClient: Stripe.createFetchHttpClient(),
+                  });
+                  const liveBalance = await stripe.balance.retrieve({
+                    stripeAccount: connectAccountId,
+                  });
+                  const usdAvailable =
+                    liveBalance.available?.find(b => b.currency === 'usd') ??
+                    liveBalance.available?.[0];
+                  const usdPending =
+                    liveBalance.pending?.find(b => b.currency === 'usd') ??
+                    liveBalance.pending?.[0];
+
+                  const fetchedAtIso = new Date().toISOString();
+                  stripeBalance = {
+                    availableCents: Number(usdAvailable?.amount ?? 0),
+                    pendingCents: Number(usdPending?.amount ?? 0),
+                    currency: String(usdAvailable?.currency ?? 'usd'),
+                    fetchedAt: fetchedAtIso,
+                    cached: false,
+                  };
+
+                  await supabase.from('connect_balance_cache').upsert(
+                    {
+                      user_id: userId,
+                      stripe_connect_account_id: connectAccountId,
+                      available_cents: stripeBalance.availableCents,
+                      pending_cents: stripeBalance.pendingCents,
+                      currency: stripeBalance.currency,
+                      fetched_at: fetchedAtIso,
+                    },
+                    { onConflict: 'user_id' }
+                  );
+                } catch (balErr) {
+                  // A Stripe outage must not blank the wallet screen. Fall
+                  // back to a stale cache entry if we have one; otherwise the
+                  // response simply carries no stripeBalance block and the
+                  // caller keeps the v1 number.
+                  console.error('[wallet] Stripe balance retrieve failed', {
+                    userId,
+                    connectAccountId,
+                    balErr,
+                  });
+                  if (cached) {
+                    stripeBalance = {
+                      availableCents: Number(cached.available_cents),
+                      pendingCents: Number(cached.pending_cents),
+                      currency: String(cached.currency ?? 'usd'),
+                      fetchedAt: String(cached.fetched_at),
+                      cached: true,
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Never sum a pooled ledger figure with a live Stripe figure. When
+        // both are meaningful they are reported separately and the legacy
+        // number stays in `balance`, so existing clients are unchanged.
+        const legacyBalance = Number(balance) || 0;
+        const stripeAvailableDollars = stripeBalance
+          ? stripeBalance.availableCents / 100
+          : 0;
+
+        let reportedBalance = legacyBalance;
+        if (stripeBalance) {
+          if (legacyBalance > 0) {
+            balanceSource = 'both';
+          } else {
+            balanceSource = 'stripe_connect';
+            reportedBalance = stripeAvailableDollars;
+          }
+        }
+
         return jsonResponse({
-          balance,
+          balance: reportedBalance,
           currency: 'USD',
+          // Which figure `balance` came from. 'both' means the two are
+          // reported separately below and were deliberately not combined.
+          balanceSource,
+          legacyBalance,
+          stripeBalance,
           payoutFailedAt: typedProfile?.payout_failed_at ?? null,
           payoutFailureCode: typedProfile?.payout_failure_code ?? null,
         });

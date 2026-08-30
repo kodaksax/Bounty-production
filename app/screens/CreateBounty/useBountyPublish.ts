@@ -12,7 +12,7 @@ import {
   validateBalance,
 } from 'lib/utils/bounty-validation';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
-import { shouldFundNewBountiesWithPhase2 } from 'lib/utils/payment-architecture';
+import { shouldUseStripeNativeFunding } from 'lib/utils/payment-architecture';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 
@@ -29,7 +29,7 @@ import { Alert, Platform } from 'react-native';
 export interface PublishedBountyMeta {
   amountCents: number;
   category: string;
-  architecture: 1 | 2;
+  architecture: 1 | 2 | 3;
   /** Canonical `bounty_published` payload fields. The surface layer emits the
    * single terminal event (see app/screens/CreateBounty/index.tsx onPublished);
    * this hook no longer emits it itself, to avoid the historical duplicate
@@ -154,7 +154,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       }
 
       const useV2Payments =
-        !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
+        !draft.isForHonor && draft.amount > 0 && shouldUseStripeNativeFunding();
 
       if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
         analyticsService.trackEvent('post_amount_blocked_by_balance', {
@@ -210,7 +210,17 @@ export function useBountyPublish(params: UseBountyPublishParams) {
               undefined,
               { userId: sessionUserId }
             );
-            if (confirmedIntent.status !== 'succeeded') {
+            // v2 captures immediately, so a confirmed intent lands on
+            // 'succeeded'. v3 authorizes without capturing, so a *successful*
+            // v3 confirmation lands on 'requires_capture' — treating that as a
+            // failure would roll back and delete every v3 bounty ever posted.
+            // The server tells us which path actually ran.
+            const isV3Payment = (paymentResult as { architectureVersion?: number })
+              .architectureVersion === 3;
+            const acceptableStatuses = isV3Payment
+              ? ['requires_capture', 'succeeded']
+              : ['succeeded'];
+            if (!acceptableStatuses.includes(confirmedIntent.status)) {
               throw new Error('Payment was not completed. Please try again.');
             }
 
@@ -358,7 +368,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // safety net for anything that reaches it despite this gate).
   const publish = () => {
     const useV2Payments =
-      !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
+      !draft.isForHonor && draft.amount > 0 && shouldUseStripeNativeFunding();
 
     if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
       analyticsService.trackEvent('post_amount_blocked_by_balance', {

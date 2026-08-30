@@ -16,7 +16,7 @@ import { paymentService } from './services/payment-service';
 import { supabase } from './supabase';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
-import { isPhase2Bounty } from './utils/payment-architecture';
+import { isPhase2Bounty, isV3Bounty } from './utils/payment-architecture';
 import {
     getSecureJSON,
     migrateSecureStorageKeys,
@@ -804,12 +804,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // fallback amount source for legacy bounties that have no local escrow record.
         const bountyData = await bountyService.getById(bountyId);
 
-        // Phase 2 funds are held by Stripe, not the legacy wallet ledger.
-        // Their authoritative release is the bounty-payments edge function,
-        // which creates the Connect transfer with a Stripe idempotency key.
-        if (isPhase2Bounty(bountyData)) {
+        // Phase 2 and v3 funds are held by Stripe, not the legacy wallet
+        // ledger. Their authoritative release is the bounty-payments edge
+        // function, which creates the Connect transfer with a Stripe
+        // idempotency key. The server branches on the bounty's own
+        // payment_architecture_version.
+        if (isPhase2Bounty(bountyData) || isV3Bounty(bountyData)) {
           const result = await bountyPaymentsService.releaseBountyPayment(bountyIdStr, hunterId);
-          if (!result.released || result.status !== 'released') return false;
+          // v3 settles asynchronously: /release returns 'release_pending' and
+          // only the transfer.created webhook makes it 'released'. Treating
+          // that as failure would tell the poster the payout broke when it is
+          // simply not confirmed yet.
+          const acceptedRelease =
+            result.status === 'released' ||
+            (result.status === 'release_pending' && !!result.transferId);
+          if (!acceptedRelease) return false;
           try {
             const refreshToken = await getAccessToken();
             if (refreshToken) await refreshFromApi(refreshToken, { silent: true });
