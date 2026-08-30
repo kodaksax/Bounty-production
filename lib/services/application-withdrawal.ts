@@ -36,16 +36,31 @@ export async function withdrawApplication(
 ): Promise<WithdrawApplicationResult> {
   const { bountyId, currentUserId, surface } = params;
 
-  const requests = await bountyRequestService.getAll({
+  // Scope the lookup to pending applications so the intent matches what the
+  // hunter delete policy allows (own row, still pending). A non-pending row
+  // deletes zero rows under RLS and would report a false success.
+  const pending = await bountyRequestService.getAll({
     bountyId: String(bountyId),
     userId: currentUserId,
+    status: 'pending',
   });
 
-  if (requests.length === 0) {
+  if (pending.length === 0) {
+    // Tell an already-accepted application apart from one that never existed,
+    // so the hunter gets an actionable message instead of a generic miss.
+    const all = await bountyRequestService.getAll({
+      bountyId: String(bountyId),
+      userId: currentUserId,
+    });
+    if (all.some((r) => r.status === 'accepted')) {
+      throw new Error(
+        'This application has already been accepted and can no longer be withdrawn.'
+      );
+    }
     throw new Error('No application found for this bounty');
   }
 
-  const request = requests[0];
+  const request = pending[0];
   const success = await bountyRequestService.delete(request.id);
 
   if (!success) {

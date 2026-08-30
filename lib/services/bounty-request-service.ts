@@ -864,8 +864,20 @@ export const bountyRequestService = {
   async delete(id: string | number): Promise<boolean> {
     try {
       if (isSupabaseConfigured) {
-        const { error } = await supabase.from('bounty_requests').delete().eq('id', String(id));
+        // Ask for the deleted row back so we can tell a real delete from a
+        // Row Level Security no-op. Postgres drops rows a policy forbids
+        // silently — no error — so an empty result means nothing was removed
+        // (for example an accepted application the hunter may not delete).
+        const { data, error } = await supabase
+          .from('bounty_requests')
+          .delete()
+          .eq('id', String(id))
+          .select('id');
         if (error) throw error;
+        if (!data || data.length === 0) {
+          logger.warning('Delete removed no bounty request rows', { id });
+          return false;
+        }
         return true;
       }
       const response = await fetch(`${API_BASE_URL}/api/bounty-requests/${id}`, {

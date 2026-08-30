@@ -561,8 +561,9 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                 surface: 'inbox',
               })
 
-              // Remove from in-progress list
-              setInProgressBounties((prev) => prev.filter((b) => b.id !== bountyId))
+              // Reload from the source so the card only disappears when the
+              // row is really gone, never on an optimistic local filter.
+              await loadInProgress()
 
               Alert.alert("Success", "Your application has been withdrawn.")
             } catch (err: any) {
