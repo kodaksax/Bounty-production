@@ -138,11 +138,30 @@ export default function ConnectOnboardingScreen() {
       verifyingRef.current = true;
       lastBrowserResultRef.current = browserResultType;
 
+      // Emits the single terminal-outcome event for this attempt. Best-effort,
+      // like every other analytics call on this screen.
+      const trackOutcome = async (
+        outcomeValue: ConnectOnboardingOutcome,
+        detail?: Record<string, unknown>
+      ) => {
+        try {
+          await analyticsService.trackEvent('identity_onboarding_outcome', {
+            source: 'stripe_connect_onboarding',
+            outcome: outcomeValue,
+            browserResult: browserResultType,
+            ...detail,
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
+      };
+
       const token = session?.access_token;
       if (!token) {
         verifyingRef.current = false;
         setOutcome('verify_error');
         setPhase('result');
+        await trackOutcome('verify_error', { reason: 'no_session' });
         return;
       }
 
@@ -187,17 +206,24 @@ export default function ConnectOnboardingScreen() {
         if (!body.onboarded && session?.user?.id) {
           await momentsService.enqueue(session.user.id, 'stripe_connect_onboarding');
         }
-        setOutcome(
-          deriveOutcome({
-            browserResultType,
-            onboarded: !!body.onboarded,
-            detailsSubmitted: !!body.detailsSubmitted,
-            currentlyDue,
-          })
-        );
+        const derivedOutcome = deriveOutcome({
+          browserResultType,
+          onboarded: !!body.onboarded,
+          detailsSubmitted: !!body.detailsSubmitted,
+          currentlyDue,
+        });
+        setOutcome(derivedOutcome);
+        await trackOutcome(derivedOutcome, {
+          chargesEnabled: !!body.chargesEnabled,
+          payoutsEnabled: !!body.payoutsEnabled,
+          detailsSubmitted: !!body.detailsSubmitted,
+          requirementsCurrentlyDueCount: currentlyDue.length,
+          disabledReason: body.disabledReason ?? null,
+        });
       } catch (err) {
         console.warn('[connect-onboarding] verify-onboarding failed', err);
         setOutcome('verify_error');
+        await trackOutcome('verify_error', { reason: 'verify_request_failed' });
       } finally {
         clearTimeout(timeoutId);
         verifyingRef.current = false;
@@ -218,6 +244,14 @@ export default function ConnectOnboardingScreen() {
     try {
       setError(null);
       setPhase('starting');
+
+      try {
+        await analyticsService.trackEvent('identity_onboarding_started', {
+          source: 'stripe_connect_onboarding',
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
 
       // 1. Ask our edge function for a fresh, short-lived Stripe Account Link.
       const linkRes = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
