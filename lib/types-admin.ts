@@ -501,3 +501,227 @@ export interface AdminFeedFilters {
   bountyId?: string;
   actorId?: string;
 }
+
+// ─── Bounty Moderation Queue ──────────────────────────────────────────────
+// Backed by public.bounty_moderation / moderation_signals / moderation_alerts
+// and the admin_moderation_* RPCs in
+// supabase/migrations/20260829120000_bounty_moderation_queue.sql.
+//
+// A listing has an implicit ACTIVE state until a detection signal fires or an
+// admin acts on it. Automation only ever reaches FLAGGED; UNDER_REVIEW /
+// APPROVED / HIDDEN / REMOVED are admin-only. HIDDEN and REMOVED also drive
+// bounties.status ('archived' / 'deleted') so the listing leaves every feed.
+
+export const MODERATION_STATES = [
+  'active',
+  'flagged',
+  'under_review',
+  'hidden',
+  'removed',
+  'approved',
+] as const;
+export type AdminModerationState = (typeof MODERATION_STATES)[number];
+
+export const MODERATION_STATE_LABEL: Record<AdminModerationState, string> = {
+  active: 'Active',
+  flagged: 'Flagged',
+  under_review: 'Under review',
+  hidden: 'Hidden',
+  removed: 'Removed',
+  approved: 'Approved',
+};
+
+/**
+ * Allowed admin transitions, mirrored from moderation_transition_allowed() in
+ * the migration. Used only to enable/disable action buttons — the database
+ * function is the real gate. `active` is the state of a listing with no
+ * moderation row yet.
+ */
+export const MODERATION_TRANSITIONS: Record<AdminModerationState, AdminModerationState[]> = {
+  active: ['flagged', 'under_review', 'hidden', 'removed', 'approved'],
+  flagged: ['under_review', 'approved', 'hidden', 'removed', 'active'],
+  under_review: ['approved', 'hidden', 'removed', 'flagged'],
+  hidden: ['removed', 'approved', 'under_review'],
+  removed: ['approved'],
+  approved: ['flagged', 'under_review', 'hidden', 'removed'],
+};
+
+export const MODERATION_SIGNAL_TYPES = [
+  'promotional_language',
+  'external_link',
+  'contact_off_platform',
+  'affiliate_referral',
+  'crypto_promotion',
+  'no_actionable_task',
+  'application_velocity',
+  'new_account_high_value',
+  'duplicate_description',
+  'repeated_listing',
+] as const;
+export type ModerationSignalType = (typeof MODERATION_SIGNAL_TYPES)[number];
+
+export const MODERATION_SIGNAL_LABEL: Record<string, string> = {
+  promotional_language: 'Promotional / social-media language',
+  external_link: 'External link',
+  contact_off_platform: '"DM me" / off-platform contact',
+  affiliate_referral: 'Affiliate / referral language',
+  crypto_promotion: 'Crypto promotion',
+  no_actionable_task: 'No actionable task',
+  application_velocity: 'Unusually high application velocity',
+  new_account_high_value: 'High-value listing from a new account',
+  duplicate_description: 'Duplicate description',
+  repeated_listing: 'Repeated listing',
+};
+
+export type ModerationSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface AdminModerationSignal {
+  type: string;
+  severity: ModerationSeverity;
+  weight: number;
+  source: 'content' | 'sweep' | 'manual';
+  evidence: Record<string, unknown>;
+  detectedAt: string;
+}
+
+/** One row of the moderation queue. Field set mirrors the founder brief. */
+export interface AdminModerationQueueRow {
+  bountyId: string;
+  title: string;
+  amount?: Money;
+  isForHonor: boolean;
+  bountyStatus: AdminBountyStatus;
+  createdAt: string;
+  posterId?: string;
+  posterUsername?: string;
+  /** Days since the poster's account was created. */
+  posterAccountAgeDays?: number;
+  posterAccountStatus: AdminUserStatus;
+  posterRiskLevel: string;
+  applications: number;
+  /** Peak applications in any 30-minute window over the last 24 h. */
+  applicationVelocity: number;
+  /** Other listings from this poster in the last 7 days. */
+  relatedListings: number;
+  state: AdminModerationState;
+  signalScore: number;
+  autoFlagged: boolean;
+  flaggedAt?: string;
+  flaggedReason?: string;
+  resolution?: 'legitimate' | 'suspicious_confirmed';
+  updatedAt: string;
+  signals: AdminModerationSignal[];
+}
+
+export interface AdminModerationEvent {
+  id: string;
+  bountyId: string;
+  fromState?: AdminModerationState;
+  toState: AdminModerationState;
+  actor: 'system' | 'admin';
+  actorId?: string;
+  reason?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface AdminModerationRelatedListing {
+  id: string;
+  title: string;
+  amount?: Money;
+  status: AdminBountyStatus;
+  createdAt: string;
+}
+
+export interface AdminModerationDetail {
+  bounty: {
+    id: string;
+    title: string;
+    description?: string;
+    amount?: Money;
+    isForHonor: boolean;
+    category?: string;
+    location?: string;
+    status: AdminBountyStatus;
+    createdAt: string;
+    updatedAt?: string;
+    deadline?: string;
+    hunterId?: string;
+  };
+  poster: {
+    id: string;
+    username?: string;
+    displayName?: string;
+    accountStatus: AdminUserStatus;
+    accountRestricted: boolean;
+    riskLevel: string;
+    accountAgeDays?: number;
+    createdAt: string;
+  } | null;
+  moderation: {
+    state: AdminModerationState;
+    signalScore: number;
+    autoFlagged: boolean;
+    flaggedAt?: string;
+    flaggedReason?: string;
+    reviewStartedAt?: string;
+    reviewedBy?: string;
+    resolvedAt?: string;
+    resolution?: 'legitimate' | 'suspicious_confirmed';
+    notes?: string;
+  };
+  signals: AdminModerationSignal[];
+  events: AdminModerationEvent[];
+  applications: {
+    total: number;
+    recent: { id: string; hunterId?: string; status: string; createdAt: string }[];
+  };
+  relatedListings: AdminModerationRelatedListing[];
+}
+
+export interface AdminModerationAlert {
+  id: string;
+  alertKey: string;
+  thresholdKey: string;
+  bountyId?: string;
+  posterId?: string;
+  severity: ModerationSeverity;
+  summary: string;
+  detail: Record<string, unknown>;
+  createdAt: string;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+}
+
+export interface AdminModerationThreshold {
+  key: string;
+  description: string;
+  comparator: string;
+  thresholdValue: number;
+  windowMinutes?: number;
+  severity: ModerationSeverity;
+  enabled: boolean;
+  updatedBy?: string;
+  updatedAt: string;
+}
+
+export interface AdminModerationMetrics {
+  generatedAt: string;
+  byState: Partial<Record<AdminModerationState, number>>;
+  openQueue: number;
+  autoFlagged: number;
+  resolvedLegitimate: number;
+  resolvedSuspicious: number;
+  /** Applications accumulated on listings ultimately resolved legitimate. */
+  legitimateDemand: number;
+  /** Applications accumulated on listings hidden or removed as suspicious. */
+  suspiciousDemand: number;
+  unacknowledgedAlerts: number;
+  lastSweepAt?: string;
+}
+
+export interface AdminModerationQueueFilters {
+  state?: AdminModerationState;
+  limit?: number;
+  offset?: number;
+}

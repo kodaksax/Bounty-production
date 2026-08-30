@@ -411,7 +411,13 @@ export type AnalyticsEvent =
   | 'dispute_resolved'
   // Search events
   | 'search_performed'
-  | 'filter_applied';
+  | 'filter_applied'
+  // Admin — bounty moderation queue. `moderation_action` fires when an admin
+  // transitions a listing (properties: from_state, to_state, reason,
+  // signal_score, applications); `moderation_alert_viewed` fires when the
+  // founder opens an alert from the queue.
+  | 'moderation_action'
+  | 'moderation_alert_viewed';
 
 export interface AnalyticsProperties {
   [key: string]: string | number | boolean | string[] | undefined;

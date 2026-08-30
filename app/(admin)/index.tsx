@@ -9,7 +9,7 @@
 // job being done.
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import {
@@ -27,6 +27,7 @@ import {
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdminMetrics } from '../../hooks/useAdminMetrics';
 import { useAdminPreferences } from '../../lib/admin/adminPreferences';
+import { moderationClient } from '../../lib/admin/moderationClient';
 import { ROUTES } from '../../lib/routes';
 import type { AdminMetrics } from '../../lib/types-admin';
 
@@ -125,6 +126,13 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Trust & Safety',
     entries: [
       {
+        id: 'moderation',
+        title: 'Moderation Queue',
+        description: 'Flagged listings: promotional / spam detection and takedown',
+        icon: 'shield',
+        route: ROUTES.ADMIN.MODERATION,
+      },
+      {
         id: 'disputes',
         title: 'Disputes',
         description: 'Bounty disputes awaiting a decision',
@@ -134,7 +142,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         id: 'reports',
         title: 'Reports',
-        description: 'User-submitted reports and moderation queue',
+        description: 'User-submitted reports queue',
         icon: 'report',
         route: ROUTES.ADMIN.REPORTS,
       },
@@ -236,10 +244,50 @@ export default function AdminDashboard() {
     return () => clearInterval(timer);
   }, [preferences.autoRefreshSeconds]);
 
-  const attention = useMemo(
-    () => (metrics ? attentionItems(metrics, router) : []),
-    [metrics, router]
-  );
+  // Moderation queue depth is fetched independently of the shared metrics
+  // contract so the dashboard degrades silently if the moderation migration
+  // is not applied yet.
+  const [moderation, setModeration] = useState<{ openQueue: number; alerts: number }>({
+    openQueue: 0,
+    alerts: 0,
+  });
+  useEffect(() => {
+    let cancelled = false;
+    moderationClient
+      .fetchMetrics()
+      .then((m) => {
+        if (!cancelled) setModeration({ openQueue: m.openQueue, alerts: m.unacknowledgedAlerts });
+      })
+      .catch(() => {
+        if (!cancelled) setModeration({ openQueue: 0, alerts: 0 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const attention = useMemo(() => {
+    const base = metrics ? attentionItems(metrics, router) : [];
+    const modItems = [
+      moderation.alerts > 0 && {
+        id: 'moderation-alerts',
+        count: moderation.alerts,
+        label: 'moderation alert',
+        icon: 'notifications-active' as IconName,
+        tone: 'error' as const,
+        onPress: () => router.push(ROUTES.ADMIN.MODERATION as never),
+      },
+      moderation.openQueue > 0 && {
+        id: 'moderation-queue',
+        count: moderation.openQueue,
+        label: 'listing to review',
+        icon: 'shield' as IconName,
+        tone: 'warning' as const,
+        onPress: () => router.push(ROUTES.ADMIN.MODERATION as never),
+      },
+    ].filter(Boolean) as typeof base;
+    return [...modItems, ...base];
+  }, [metrics, moderation, router]);
 
   const go = useCallback((route: string) => router.push(route as never), [router]);
 

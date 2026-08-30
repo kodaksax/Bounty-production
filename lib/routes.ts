@@ -68,6 +68,11 @@ export const ROUTES = {
     // Analytics & Reporting
     ANALYTICS: '/(admin)/analytics',
     REPORTS: '/(admin)/reports',
+
+    // Trust & Safety: proactive bounty moderation queue (detect -> review ->
+    // approve / hide / remove), separate from the user-report queue above.
+    MODERATION: '/(admin)/moderation',
+    MODERATION_DETAIL: (id: string | number) => `/(admin)/moderation/${id}` as const,
     
     // Dispute Management
     DISPUTES: '/(admin)/disputes',
