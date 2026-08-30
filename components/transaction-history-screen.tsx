@@ -8,7 +8,6 @@ import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View, Sty
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
-import { config } from "../lib/config"
 import { formatCurrency } from "../lib/utils"
 import { PayoutHistorySection } from "./payout-history-section"
 import { TransactionDetailModal } from "./transaction-detail-modal"
@@ -76,10 +75,6 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
-
-  // Withdrawals are only Stripe-authoritative once the wallet reads its
-  // balance from Connect; before that the ledger list below is the full story.
-  const isConnectNativeHistory = config.features.walletBalanceSource === 'connect'
 
   // Filter and sort transactions
   const filteredTransactions = useMemo(() => {
@@ -413,10 +408,11 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
       {/* Stripe-sourced withdrawal history. Rendered above the ledger list
           because for withdrawals Stripe is authoritative — the ledger rows
-          below describe our own record of the same events. Only shown when
-          the wallet is reading from Connect; on the legacy path the ledger
-          list already tells the whole story. */}
-      <PayoutHistorySection enabled={isConnectNativeHistory} />
+          below describe our own record of the same events. The section
+          self-gates on whether the user has a Connect account, so it stays
+          hidden for users who never withdraw and needs no balance-source
+          flag; gating it on the flag only hid a real payout record. */}
+      <PayoutHistorySection />
 
       {/* Transaction list - Using FlatList for better scroll performance */}
       <View style={[s.listContainer, { paddingBottom: insets.bottom }]}>
