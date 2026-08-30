@@ -91,6 +91,27 @@ export default function UsernameScreen() {
 
   const totalSteps = totalStepsFor(onboardingData.intent);
 
+  // Visitors who picked a role on the welcome screen land here without knowing
+  // why sign-in is required or what happens after it — the biggest drop-off in
+  // the funnel. One intent-aware line confirms their choice, says what signing
+  // in unlocks, and previews the remaining step.
+  const nextUpMessage = useMemo(() => {
+    switch (onboardingData.intent) {
+      case 'poster':
+        return 'Sign in to post your bounty — then a quick style pick and you’re in.';
+      case 'hunter':
+        return 'Sign in to claim bounties and get paid — then a quick style pick and you’re in.';
+      default:
+        return 'Sign in to post or claim bounties — then a quick style pick and you’re in.';
+    }
+  }, [onboardingData.intent]);
+
+  useEffect(() => {
+    analyticsService.trackEvent('onboarding_signin_context_shown', {
+      intent: onboardingData.intent ?? 'none',
+    });
+  }, [onboardingData.intent]);
+
   useEffect(() => {
     if (!googleSessionReady) return;
     (async () => {
@@ -151,6 +172,11 @@ export default function UsernameScreen() {
 
       <Text style={styles.heading}>Sign in — one tap, no password</Text>
       <Text style={styles.subheading}>We never post or share anything without asking.</Text>
+
+      <View style={styles.nextUpCard}>
+        <MaterialIcons name="lock-open" size={16} color={theme.textSecondary} />
+        <Text style={styles.nextUpText}>{nextUpMessage}</Text>
+      </View>
 
       <View style={styles.content} />
 
@@ -233,6 +259,24 @@ function makeStyles(theme: AppTheme) {
       color: theme.textSecondary,
       textAlign: 'center',
       marginTop: 8,
+    },
+    nextUpCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    nextUpText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+      color: theme.textSecondary,
     },
     content: {
       flex: 1,

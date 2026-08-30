@@ -137,6 +137,9 @@ export type AnalyticsEvent =
   | 'onboarding_role_selection_skipped'
   | 'onboarding_intent_switched'
   | 'onboarding_login_tapped'
+  // Sign-in screen rendered its intent-aware "why sign in / what's next" line
+  // to a visitor who picked a role but hasn't authenticated yet.
+  | 'onboarding_signin_context_shown'
   | 'onboarding_auth_started'
   | 'onboarding_auth_completed'
   | 'onboarding_style_step_viewed'
