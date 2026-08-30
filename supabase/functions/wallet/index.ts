@@ -9,6 +9,7 @@
 //   POST /wallet/release   (release escrowed funds to hunter on completion)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import Stripe from 'npm:stripe@14';
 import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
 import {
   describeSettlement,
@@ -19,6 +20,11 @@ import {
   resolveReleasePayee,
   type ReleaseBountyLookupClient,
 } from '../_shared/release-authorization.ts';
+import {
+  isPaymentIntentId,
+  verifyDepositPaymentIntent,
+  type DepositPaymentIntent,
+} from '../_shared/deposit-verification.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,6 +37,17 @@ function jsonResponse(data: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// Structured logging for rejected deposit attempts. Mirrors the logCritical
+// convention in supabase/functions/webhooks/index.ts (duplicated rather than
+// imported because the deploy bundler doesn't follow local imports).
+// Never log tokens, Stripe secrets or client secrets — only ids and amounts.
+function logDepositRejected(event: string, context: Record<string, unknown>) {
+  console.warn(
+    `[wallet/deposit] ${event}`,
+    JSON.stringify({ event, ts: new Date().toISOString(), ...context })
+  );
 }
 
 function isApplyDepositResult(obj: unknown): obj is ApplyDepositResult {
@@ -90,6 +107,14 @@ Deno.serve(async (req: Request) => {
       // profiles.balance is updated durably without relying solely on the webhook.
       // Uses the apply_deposit RPC which is idempotent on stripe_payment_intent_id,
       // so a concurrent webhook delivery results in a safe no-op.
+      //
+      // SECURITY: the client is *not* authoritative for anything here. It may
+      // only nominate a PaymentIntent id; the amount, the payment status, the
+      // currency and the ownership of the payment are all read back from
+      // Stripe. This endpoint previously trusted `body.amount` outright, which
+      // let any authenticated caller mint arbitrary balance by POSTing a large
+      // amount with a made-up id. The `amount` field is still accepted (older
+      // shipped builds send it) but is used only to detect and log a mismatch.
       if (req.method === 'POST' && subPath === '/deposit') {
         let body: { amount?: unknown; paymentIntentId?: unknown };
         try {
@@ -98,15 +123,85 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Invalid JSON body' }, 400);
         }
 
-        const amount = typeof body.amount === 'number' ? body.amount : Number(body.amount);
+        const requestedAmount =
+          typeof body.amount === 'number' ? body.amount : Number(body.amount);
         const paymentIntentId =
           typeof body.paymentIntentId === 'string' ? body.paymentIntentId.trim() : '';
 
-        if (!Number.isFinite(amount) || amount <= 0) {
-          return jsonResponse({ error: 'Invalid amount' }, 400);
-        }
         if (!paymentIntentId) {
           return jsonResponse({ error: 'paymentIntentId is required' }, 400);
+        }
+        if (!isPaymentIntentId(paymentIntentId)) {
+          logDepositRejected('deposit_verification_failed', {
+            reason: 'malformed_payment_intent_id',
+            userId,
+            paymentIntentId,
+          });
+          return jsonResponse({ error: 'Invalid paymentIntentId' }, 400);
+        }
+
+        const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+        if (!stripeKey) {
+          console.error('[wallet] STRIPE_SECRET_KEY is not configured');
+          return jsonResponse({ error: 'Payment verification unavailable' }, 503);
+        }
+        const stripe = new Stripe(stripeKey, {
+          apiVersion: '2023-10-16',
+          httpClient: Stripe.createFetchHttpClient(),
+        });
+
+        // A. The PaymentIntent must actually exist in Stripe. A retrieve
+        //    failure is never treated as "close enough" — no credit.
+        let paymentIntent: Stripe.PaymentIntent;
+        try {
+          paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        } catch (stripeErr: unknown) {
+          const code = (stripeErr as { code?: string })?.code;
+          const status = (stripeErr as { statusCode?: number })?.statusCode;
+          logDepositRejected('deposit_verification_failed', {
+            reason: 'payment_intent_not_retrievable',
+            userId,
+            paymentIntentId,
+            stripeCode: code ?? null,
+          });
+          // 404-equivalents are the client's problem; anything else (network,
+          // Stripe outage) is transient and must be retryable.
+          const isMissing = code === 'resource_missing' || status === 404;
+          return jsonResponse(
+            { error: isMissing ? 'Payment not found' : 'Unable to verify payment' },
+            isMissing ? 404 : 502
+          );
+        }
+
+        // B–E. Status, ownership, purpose, currency and amount are all
+        //       decided from the Stripe object by a pure, unit-tested rule set.
+        const verdict = verifyDepositPaymentIntent({
+          callerId: userId,
+          intent: paymentIntent as unknown as DepositPaymentIntent,
+          requestedAmount,
+        });
+
+        if (!verdict.ok) {
+          logDepositRejected(verdict.event, {
+            reason: verdict.reason,
+            userId,
+            paymentIntentId,
+            status: paymentIntent.status,
+          });
+          return jsonResponse({ error: verdict.error }, verdict.status);
+        }
+
+        const amount = verdict.amount;
+
+        if (verdict.amountMismatch) {
+          // Not fatal — Stripe wins either way — but a gap is the exact
+          // signature of an amount-manipulation attempt, so make it visible.
+          logDepositRejected('deposit_amount_mismatch', {
+            userId,
+            paymentIntentId,
+            requestedAmount: verdict.amountMismatch.requested,
+            verifiedAmount: verdict.amountMismatch.verified,
+          });
         }
 
         // Call the atomic apply_deposit function which:
@@ -118,8 +213,10 @@ Deno.serve(async (req: Request) => {
           p_amount: amount,
           p_payment_intent_id: paymentIntentId,
           p_metadata: {
+            ...(paymentIntent.metadata ?? {}),
             payment_intent_id: paymentIntentId,
             created_via: 'client_post_payment',
+            verified_via: 'stripe_payment_intent_retrieve',
           },
         });
 
@@ -142,6 +239,13 @@ Deno.serve(async (req: Request) => {
           tx_id = (candidate as any).tx_id ?? null;
         } else {
           console.warn('[wallet] apply_deposit returned unexpected shape', applyRes);
+        }
+
+        if (!applied) {
+          // Not an error: the webhook (or an earlier retry of this same call)
+          // already credited this PaymentIntent. Recorded so a burst of
+          // duplicates is distinguishable from a genuine double-credit.
+          logDepositRejected('deposit_duplicate', { userId, paymentIntentId });
         }
 
         // Fetch updated balance to return to client
