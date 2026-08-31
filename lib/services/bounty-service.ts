@@ -6,6 +6,7 @@ import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
 import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { escapeIlike, quotePostgrestValue } from 'lib/utils/postgrest-utils';
+import { analyticsService } from './analytics-service';
 import { offlineQueueService } from './offline-queue-service';
 
 // UUID validation pattern used to guard PostgREST OR filter strings against injection.
@@ -1055,6 +1056,11 @@ export const bountyService = {
       if (isSupabaseConfigured) {
         const { error } = await supabase.from('bounties').delete().eq('id', id);
         if (!error) {
+          try {
+            await analyticsService.trackEvent('bounty_deleted', { bountyId: String(id) });
+          } catch {
+            /* analytics is best-effort */
+          }
           return true;
         }
 
@@ -1077,6 +1083,12 @@ export const bountyService = {
         if (softError) {
           throw softError;
         }
+
+        try {
+          await analyticsService.trackEvent('bounty_deleted', { bountyId: String(id) });
+        } catch {
+          /* analytics is best-effort */
+        }
         return true;
       }
 
@@ -1090,6 +1102,11 @@ export const bountyService = {
         throw new Error(`Failed to delete bounty: ${errorText}`);
       }
 
+      try {
+        await analyticsService.trackEvent('bounty_deleted', { bountyId: String(id) });
+      } catch {
+        /* analytics is best-effort */
+      }
       return true;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
@@ -1106,6 +1123,14 @@ export const bountyService = {
    */
   async updateStatus(id: string | number, status: BountyStatus): Promise<Bounty | null> {
     const result = await this.update(id, { status });
+
+    if (result && status === 'deleted') {
+      try {
+        await analyticsService.trackEvent('bounty_deleted', { bountyId: String(result.id) });
+      } catch {
+        /* analytics is best-effort */
+      }
+    }
 
     // Notify via WebSocket for real-time updates
     if (result) {

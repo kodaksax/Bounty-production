@@ -30,7 +30,7 @@ import { registerConsolidatedBountyRoutes } from '../consolidated-bounties';
 
 describe('DELETE /api/bounties/:id', () => {
   let handler: (request: any, reply: any) => Promise<any>;
-  const bounty = { id: 'bounty-1', user_id: 'owner-1' };
+  const bounty = { id: 'bounty-1', user_id: 'owner-1', payment_architecture_version: 1 };
 
   const fastify: any = {
     get: jest.fn(),
@@ -71,6 +71,18 @@ describe('DELETE /api/bounties/:id', () => {
     fromMock
       .mockImplementationOnce(() => fetchBountyOnce()) // fetch bounty for ownership check
       .mockImplementationOnce((table: string) => {
+        expect(table).toBe('wallet_transactions');
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              in: jest.fn(() => ({
+                limit: jest.fn(() => Promise.resolve({ data: [], error: null })),
+              })),
+            })),
+          })),
+        };
+      })
+      .mockImplementationOnce((table: string) => {
         // initial hard delete hits FK violation
         expect(table).toBe('bounties');
         return {
@@ -90,9 +102,42 @@ describe('DELETE /api/bounties/:id', () => {
     expect(softUpdate).toHaveBeenCalledWith({ status: 'deleted' });
   });
 
+  it('blocks deleting a v2 bounty while escrow remains active', async () => {
+    const previousVersion = bounty.payment_architecture_version;
+    bounty.payment_architecture_version = 2;
+
+    try {
+      fromMock
+        .mockImplementationOnce(() => fetchBountyOnce())
+        .mockImplementationOnce(() => ({
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              maybeSingle: jest.fn(() => Promise.resolve({
+                data: { status: 'captured', settlement_state: 'stripe_pending' },
+                error: null,
+              })),
+            })),
+          })),
+        }));
+
+      await expect(handler(makeRequest(), {} as any)).rejects.toThrow('unreleased escrow');
+    } finally {
+      bounty.payment_architecture_version = previousVersion;
+    }
+  });
+
   it('throws when the FK-violation soft-delete fails', async () => {
     fromMock
       .mockImplementationOnce(() => fetchBountyOnce())
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            in: jest.fn(() => ({
+              limit: jest.fn(() => Promise.resolve({ data: [], error: null })),
+            })),
+          })),
+        })),
+      }))
       .mockImplementationOnce(() => ({
         delete: jest.fn(() => ({
           eq: jest.fn(() => Promise.resolve({ error: { code: '23503', message: 'fk violation' } })),
@@ -110,6 +155,15 @@ describe('DELETE /api/bounties/:id', () => {
   it('throws directly for non-FK delete errors', async () => {
     fromMock
       .mockImplementationOnce(() => fetchBountyOnce())
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            in: jest.fn(() => ({
+              limit: jest.fn(() => Promise.resolve({ data: [], error: null })),
+            })),
+          })),
+        })),
+      }))
       .mockImplementationOnce(() => ({
         delete: jest.fn(() => ({
           eq: jest.fn(() =>

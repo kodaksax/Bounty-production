@@ -567,8 +567,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 try {
                   if (useV2) {
                     // Stripe-native Phase 2 escrow: cancels the PaymentIntent
-                    // pre-capture, or issues a refund post-capture.
-                    await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
+                    // pre-capture, or issues a refund post-capture. Only a
+                    // terminal v2 status is safe to treat as a successful refund.
+                    const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
+                    if (cancelResult.status !== 'canceled' && cancelResult.status !== 'refunded') {
+                      throw new Error(`Escrow cancellation is still pending (${cancelResult.status})`)
+                    }
                   } else {
                     // refundEscrow signals failure by returning false, not by
                     // throwing — so the boolean must be checked or a failed
@@ -612,16 +616,6 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
               if (!success) {
                 throw new Error("Failed to delete bounty")
-              }
-
-              try {
-                await analyticsService.trackEvent('bounty_deleted', {
-                  bountyId: String(bounty.id),
-                  isForHonor: !!bounty.is_for_honor,
-                  amount: bounty.amount ?? 0,
-                })
-              } catch {
-                /* analytics is best-effort */
               }
 
               // Update UI only after successful deletion
