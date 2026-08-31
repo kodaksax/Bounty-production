@@ -14,7 +14,7 @@
 //
 // POST body: { action: 'list' | 'getById' | 'updateStatus', id?, status?, verificationStatus? }
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,7 +46,7 @@ function jsonResponse(data: unknown, status = 200) {
  * reintroduce the fabricated zeros this replaced.
  */
 async function attachStats(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   rows: Record<string, unknown>[]
 ): Promise<Record<string, unknown>[]> {
   if (rows.length === 0) return rows;
