@@ -343,9 +343,13 @@ describe('REGRESSION 2: a withdrawal cannot be completed without a payout id', (
 
 describe('REGRESSION 3: an unready hunter cannot trigger a settled fund release', () => {
   test('the v2 release endpoint blocks a hunter without payouts enabled', () => {
+    // The /release route now serves v3 first (it captures an authorization and
+    // Transfers) and falls through to the v2 path. Slice to the LAST
+    // stripe.transfers.create so the v2 release guard — which sits after the v3
+    // block's own Transfer call — is included.
     const releaseRoute = bountyPaymentsSource.slice(
       bountyPaymentsSource.indexOf("subPath === '/release'"),
-      bountyPaymentsSource.indexOf('stripe.transfers.create')
+      bountyPaymentsSource.lastIndexOf('stripe.transfers.create')
     );
     expect(releaseRoute.length).toBeGreaterThan(500);
     expect(releaseRoute).toMatch(/stripe_connect_payouts_enabled !== true/);
