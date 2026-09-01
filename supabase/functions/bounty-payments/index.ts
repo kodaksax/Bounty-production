@@ -740,7 +740,7 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        const v3HunterId = hunterIdInput || v3Bounty.accepted_by;
+        const v3HunterId = v3Bounty.accepted_by;
         if (!v3HunterId) {
           return jsonResponse(
             { error: 'This bounty has no assigned hunter.', code: 'no_hunter' },
