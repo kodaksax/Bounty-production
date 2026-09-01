@@ -148,7 +148,7 @@ export default function ConnectOnboardingScreen() {
           await analyticsService.trackEvent('identity_onboarding_outcome', {
             source: 'stripe_connect_onboarding',
             outcome: outcomeValue,
-            browserResult: browserResultType,
+            browserResult: browserResultType ?? 'opened',
             ...detail,
           });
         } catch {
@@ -204,7 +204,11 @@ export default function ConnectOnboardingScreen() {
         setRequirementsCurrentlyDue(currentlyDue);
         setDisabledReason(body.disabledReason ?? null);
         if (!body.onboarded && session?.user?.id) {
-          await momentsService.enqueue(session.user.id, 'stripe_connect_onboarding');
+          try {
+            await momentsService.enqueue(session.user.id, 'stripe_connect_onboarding');
+          } catch (err) {
+            console.warn('[connect-onboarding] moments enqueue failed', err);
+          }
         }
         const derivedOutcome = deriveOutcome({
           browserResultType,
@@ -241,6 +245,8 @@ export default function ConnectOnboardingScreen() {
       return;
     }
 
+    let launchFailureReason = 'launch_failed';
+
     try {
       setError(null);
       setPhase('starting');
@@ -268,6 +274,7 @@ export default function ConnectOnboardingScreen() {
       });
 
       if (!linkRes.ok) {
+        launchFailureReason = 'create_account_link_failed';
         let message = `Couldn't start Stripe onboarding (${linkRes.status}).`;
         try {
           const body = (await linkRes.json()) as { error?: string };
@@ -280,6 +287,7 @@ export default function ConnectOnboardingScreen() {
 
       const { url } = (await linkRes.json()) as { url?: string };
       if (!url || typeof url !== 'string') {
+        launchFailureReason = 'missing_account_link_url';
         throw new Error("Stripe didn't return an onboarding URL. Please try again.");
       }
 
@@ -287,11 +295,17 @@ export default function ConnectOnboardingScreen() {
       //    Chrome Custom Tab. The OS dismisses automatically when Stripe
       //    redirects to our universal link.
       setPhase('in_browser');
-      const result = await WebBrowser.openAuthSessionAsync(url, CONNECT_RETURN_URL, {
-        // Sharing cookies gives users a smoother flow if they've already
-        // authenticated with Stripe or their bank in Safari/Chrome.
-        preferEphemeralSession: false,
-      });
+      let result;
+      try {
+        result = await WebBrowser.openAuthSessionAsync(url, CONNECT_RETURN_URL, {
+          // Sharing cookies gives users a smoother flow if they've already
+          // authenticated with Stripe or their bank in Safari/Chrome.
+          preferEphemeralSession: false,
+        });
+      } catch (err) {
+        launchFailureReason = 'open_auth_session_failed';
+        throw err;
+      }
 
       // Track the funnel step regardless of final verification outcome —
       // reaching the return URL means the user submitted identity/KYC info.
@@ -324,6 +338,16 @@ export default function ConnectOnboardingScreen() {
           ? err.message
           : 'Something went wrong starting Stripe onboarding. Please try again.';
       console.warn('[connect-onboarding] launch failed', err);
+      try {
+        await analyticsService.trackEvent('identity_onboarding_outcome', {
+          source: 'stripe_connect_onboarding',
+          outcome: 'verify_error',
+          browserResult: lastBrowserResultRef.current ?? 'opened',
+          reason: launchFailureReason,
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
       setError(message);
       setPhase('error');
     }
