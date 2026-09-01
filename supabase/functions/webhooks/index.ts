@@ -199,6 +199,61 @@ async function syncConnectAccountToProfile(
       error: updateError,
     });
   }
+
+  // v3 re-check: a hunter who finished onboarding may have approved bounties
+  // parked in awaiting_hunter_onboarding. Move them back to 'authorized' so
+  // the poster can release, and tell both sides.
+  //
+  // Deliberately does NOT auto-capture. Capturing here would charge the
+  // poster's card from a webhook with nobody present; that is a product
+  // decision, not an implementation detail. The authorization is still live,
+  // so nothing is lost by waiting for the poster.
+  if (account.payouts_enabled) {
+    try {
+      const { data: waiting } = await supabase
+        .from('bounty_v3_funding')
+        .select('bounty_id')
+        .eq('hunter_id', userId)
+        .eq('state', 'awaiting_hunter_onboarding');
+
+      if (waiting && waiting.length > 0) {
+        const nowIso = new Date().toISOString();
+        const { error: unblockErr } = await supabase
+          .from('bounty_v3_funding')
+          .update({
+            state: 'authorized',
+            last_error_code: null,
+            last_error_message: null,
+            updated_at: nowIso,
+          })
+          .eq('hunter_id', userId)
+          .eq('state', 'awaiting_hunter_onboarding');
+
+        if (unblockErr) {
+          console.error('[webhooks] v3 onboarding re-check failed to unblock', {
+            userId,
+            error: unblockErr,
+          });
+        } else {
+          console.log(
+            `[webhooks] v3 onboarding re-check unblocked ${waiting.length} bounty(ies) for hunter ${userId}`
+          );
+          await enqueuePushEmailFanout(supabase, {
+            userId,
+            type: 'payout_setup_complete',
+            title: 'Payout setup complete',
+            body: `Your payout setup is done. ${
+              waiting.length === 1 ? 'A payment is' : `${waiting.length} payments are`
+            } ready to be released to you.`,
+            data: { bountyIds: waiting.map((w: { bounty_id: string }) => w.bounty_id) },
+          });
+        }
+      }
+    } catch (recheckErr) {
+      // Never fail Connect sync because of the v3 re-check.
+      console.error('[webhooks] v3 onboarding re-check threw (non-fatal)', recheckErr);
+    }
+  }
 }
 
 /**
@@ -1688,6 +1743,119 @@ Deno.serve(async (req: Request) => {
               : `[webhooks] bounty_escrow PI ${paymentIntent.id} canceled — no pending row to update (idempotent no-op)`
           );
         }
+
+        // v3: a manual-capture authorization that was released. Stripe sets
+        // cancellation_reason 'automatic' when it auto-cancels an uncaptured
+        // authorization at the end of the ~7-day window; anything else is a
+        // deliberate cancel. Expiry is an expected state for a long-open
+        // bounty, not an error, so it is recorded as 'expired' and flagged for
+        // re-authorization rather than being treated as a payment failure.
+        if (paymentIntent.metadata?.purpose === 'bounty_escrow_v3') {
+          const expired = paymentIntent.cancellation_reason === 'automatic';
+          const v3State = expired ? 'expired' : 'canceled';
+
+          const { error: v3CancelErr } = await supabase
+            .from('bounty_v3_funding')
+            .update({
+              state: v3State,
+              needs_reauthorization: expired,
+              last_error_code: expired ? 'authorization_expired' : 'canceled',
+              last_error_message: expired
+                ? 'The card authorization expired before the bounty was completed.'
+                : `PaymentIntent canceled (${paymentIntent.cancellation_reason ?? 'unspecified'}).`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .in('state', ['authorizing', 'authorized']);
+          if (v3CancelErr) {
+            console.error('[webhooks] v3 funding cancel update failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: v3CancelErr,
+            });
+            throw v3CancelErr;
+          }
+
+          const { error: v3LedgerErr } = await supabase
+            .from('ledger_entries')
+            .update({
+              app_state: 'failed',
+              stripe_state: 'failed',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .eq('leg', 'payment');
+          if (v3LedgerErr) {
+            console.error('[webhooks] v3 ledger cancel update failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: v3LedgerErr,
+            });
+            throw v3LedgerErr;
+          }
+
+          console.log(
+            `[webhooks] v3 bounty authorization ${v3State} for intent ${paymentIntent.id}`
+          );
+        }
+        break;
+      }
+
+      // v3 only. Stripe has no 'payment_intent.requires_capture' event —
+      // requires_capture is a PaymentIntent *status*. The event that fires
+      // when a manual-capture intent becomes capturable is this one.
+      case 'payment_intent.amount_capturable_updated': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        if (paymentIntent.metadata?.purpose !== 'bounty_escrow_v3') break;
+        if ((paymentIntent.amount_capturable ?? 0) <= 0) break;
+
+        const authorizedAt = new Date();
+        // Informational only — Stripe's payment_intent.canceled is the
+        // authority on when a hold actually lapses.
+        const expiresAt = new Date(authorizedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        const { error: v3AuthErr } = await supabase
+          .from('bounty_v3_funding')
+          .update({
+            state: 'authorized',
+            authorized_at: authorizedAt.toISOString(),
+            authorization_expires_at: expiresAt.toISOString(),
+            needs_reauthorization: false,
+            last_error_code: null,
+            last_error_message: null,
+            updated_at: authorizedAt.toISOString(),
+          })
+          .eq('stripe_payment_intent_id', paymentIntent.id)
+          .eq('state', 'authorizing');
+        if (v3AuthErr) {
+          console.error('[webhooks] v3 funding authorize update failed — letting Stripe retry', {
+            paymentIntentId: paymentIntent.id,
+            error: v3AuthErr,
+          });
+          throw v3AuthErr;
+        }
+
+        // app_state 'succeeded' = we asked Stripe to authorize and it did.
+        // stripe_state stays 'pending' because the money has not moved: the
+        // charge is authorized, not captured. Only capture (Phase 3) confirms.
+        const { error: v3AuthLedgerErr } = await supabase
+          .from('ledger_entries')
+          .update({
+            app_state: 'succeeded',
+            stripe_state: 'pending',
+            updated_at: authorizedAt.toISOString(),
+          })
+          .eq('stripe_payment_intent_id', paymentIntent.id)
+          .eq('leg', 'payment');
+        if (v3AuthLedgerErr) {
+          console.error('[webhooks] v3 ledger authorize update failed — letting Stripe retry', {
+            paymentIntentId: paymentIntent.id,
+            error: v3AuthLedgerErr,
+          });
+          throw v3AuthLedgerErr;
+        }
+
+        console.log(
+          `[webhooks] v3 bounty authorized: ${paymentIntent.id} (${paymentIntent.amount_capturable} capturable)`
+        );
         break;
       }
 
@@ -1698,6 +1866,50 @@ Deno.serve(async (req: Request) => {
 
         console.log(`[webhooks] PaymentIntent failed: ${paymentIntent.id} for user ${userId}`);
         console.log(`[webhooks] Failure reason: ${error?.code} - ${error?.message}`);
+
+        // v3: the authorization itself failed (declined card, 3DS abandoned).
+        // The bounty is left in place but explicitly unfunded, so it can never
+        // sit in a paid-but-unusable state and the poster can re-authorize.
+        if (paymentIntent.metadata?.purpose === 'bounty_escrow_v3') {
+          const { error: v3FailErr } = await supabase
+            .from('bounty_v3_funding')
+            .update({
+              state: 'failed',
+              needs_reauthorization: true,
+              last_error_code: error?.code ?? 'authorization_failed',
+              last_error_message:
+                error?.message ?? 'The card could not be authorized for this bounty.',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .in('state', ['authorizing', 'authorized']);
+          if (v3FailErr) {
+            console.error('[webhooks] v3 funding failure update failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: v3FailErr,
+            });
+            throw v3FailErr;
+          }
+
+          const { error: v3FailLedgerErr } = await supabase
+            .from('ledger_entries')
+            .update({
+              app_state: 'failed',
+              stripe_state: 'failed',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .eq('leg', 'payment');
+          if (v3FailLedgerErr) {
+            console.error('[webhooks] v3 ledger failure update failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: v3FailLedgerErr,
+            });
+            throw v3FailLedgerErr;
+          }
+
+          console.log(`[webhooks] v3 bounty authorization failed for intent ${paymentIntent.id}`);
+        }
 
         await supabase
           .from('stripe_events')
@@ -2043,6 +2255,57 @@ Deno.serve(async (req: Request) => {
         // there), then UPDATE that specific row by id with an optimistic-lock guard.
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer created: ${transfer.id}`);
+
+        // v3 MUST be checked before the Phase 2 branch below: v3 transfers
+        // also carry metadata.bounty_id, so they would otherwise be routed
+        // into reconcilePhase2Transfer, which expects a bounty_payments row
+        // that no v3 bounty has.
+        //
+        // This is the only place a v3 release becomes confirmed. reversed=false
+        // is required: a transfer that arrives already reversed has not paid
+        // anyone, and an API 200 alone never counts as confirmation.
+        if (transfer.metadata?.purpose === 'bounty_release_v3') {
+          const v3BountyId = transfer.metadata?.bounty_id;
+          if (transfer.reversed === true) {
+            console.warn(
+              `[webhooks] v3 transfer ${transfer.id} arrived already reversed — not confirming`
+            );
+            break;
+          }
+
+          const nowIso = new Date().toISOString();
+          const { error: v3RelErr } = await supabase
+            .from('bounty_v3_funding')
+            .update({ state: 'released', released_at: nowIso, updated_at: nowIso })
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('state', 'capturing');
+          if (v3RelErr) {
+            console.error('[webhooks] v3 funding release update failed — letting Stripe retry', {
+              transferId: transfer.id,
+              error: v3RelErr,
+            });
+            throw v3RelErr;
+          }
+
+          const { error: v3LedgerConfirmErr } = await supabase
+            .from('ledger_entries')
+            .update({ stripe_state: 'confirmed', updated_at: nowIso })
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('leg', 'capture_release');
+          if (v3LedgerConfirmErr) {
+            console.error('[webhooks] v3 ledger confirm failed — letting Stripe retry', {
+              transferId: transfer.id,
+              error: v3LedgerConfirmErr,
+            });
+            throw v3LedgerConfirmErr;
+          }
+
+          console.log(
+            `[webhooks] v3 release confirmed for bounty ${v3BountyId} via transfer ${transfer.id}`
+          );
+          break;
+        }
+
         // Phase 2 transfers carry bounty_id in metadata and are recorded
         // synchronously by /bounty-payments/release (stripe_transfer_id +
         // status='released' set at creation time). Skip the legacy
@@ -2134,6 +2397,55 @@ Deno.serve(async (req: Request) => {
         // account) was pulled back. See handleTransferSetback's docstring
         // for why this always requires manual review.
         const transfer = event.data.object as Stripe.Transfer;
+
+        // v3 first, for the same reason as transfer.created: v3 transfers
+        // carry metadata.bounty_id and would otherwise be misrouted into the
+        // Phase 2 handler. A reversal un-confirms the release — the hunter was
+        // not paid — so the ledger must never be left claiming otherwise.
+        if (transfer.metadata?.purpose === 'bounty_release_v3') {
+          const nowIso = new Date().toISOString();
+          const { error: v3RevErr } = await supabase
+            .from('bounty_v3_funding')
+            .update({
+              state: 'capture_failed',
+              released_at: null,
+              last_error_code: 'transfer_reversed',
+              last_error_message:
+                'The transfer to the hunter was reversed by Stripe. This needs manual review.',
+              updated_at: nowIso,
+            })
+            .eq('stripe_transfer_id', transfer.id);
+          if (v3RevErr) {
+            console.error('[webhooks] v3 funding reversal update failed — letting Stripe retry', {
+              transferId: transfer.id,
+              error: v3RevErr,
+            });
+            throw v3RevErr;
+          }
+
+          const { error: v3RevLedgerErr } = await supabase
+            .from('ledger_entries')
+            .update({ app_state: 'failed', stripe_state: 'failed', updated_at: nowIso })
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('leg', 'capture_release');
+          if (v3RevLedgerErr) {
+            console.error('[webhooks] v3 ledger reversal update failed — letting Stripe retry', {
+              transferId: transfer.id,
+              error: v3RevLedgerErr,
+            });
+            throw v3RevLedgerErr;
+          }
+
+          console.error(
+            `[webhooks] v3 transfer REVERSED for bounty ${transfer.metadata?.bounty_id} (${transfer.id}) — manual review required`
+          );
+          // v3 is tracked through bounty_v3_funding + ledger_entries, not the
+          // wallet_transactions path used by legacy/Phase 2 transfers. Do not
+          // invoke handleTransferSetback here or it would incorrectly mutate
+          // wallet rows for a v3 release.
+          break;
+        }
+
         if (transfer.metadata?.bounty_id) {
           await reconcilePhase2Transfer(supabase, transfer, 'reversed');
           break;
@@ -3011,6 +3323,26 @@ Deno.serve(async (req: Request) => {
         // that's the only signal distinguishing which Stripe balance changed.
         const accountId = (event as any).account as string | undefined;
         if (accountId) {
+          // Invalidate the v3 balance cache for this connected account before
+          // anything else. Deleting the row (rather than rewriting it) means
+          // the next GET /wallet/balance refetches from Stripe, so a hunter
+          // never sees a stale number after their balance actually moved.
+          // Best-effort: a cache-eviction failure must not fail the webhook.
+          try {
+            const { error: cacheEvictErr } = await supabase
+              .from('connect_balance_cache')
+              .delete()
+              .eq('stripe_connect_account_id', accountId);
+            if (cacheEvictErr) {
+              console.error('[webhooks] connect_balance_cache eviction failed (non-fatal)', {
+                accountId,
+                error: cacheEvictErr,
+              });
+            }
+          } catch (evictErr) {
+            console.error('[webhooks] connect_balance_cache eviction threw (non-fatal)', evictErr);
+          }
+
           const ownerUserId = await findUserIdByConnectAccountId(supabase, accountId);
           if (ownerUserId) {
             await compareConnectAccountBalance(stripe, supabase, ownerUserId, accountId);

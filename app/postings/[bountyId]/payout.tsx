@@ -23,7 +23,12 @@ import { getHoursSinceClaimed } from '../../../lib/services/bounty-request-servi
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
-import { bountyHoldsUnreleasedEscrow, isPhase2Bounty } from '../../../lib/utils/payment-architecture';
+import {
+  bountyHoldsUnreleasedEscrow,
+  isPhase2Bounty,
+  isStripeNativeBounty,
+  isV3Bounty,
+} from '../../../lib/utils/payment-architecture';
 import { useWallet } from '../../../lib/wallet-context';
 
 export default function PayoutScreen() {
@@ -94,17 +99,19 @@ export default function PayoutScreen() {
       setIsProcessing(true);
 
       const useV2 = isPhase2Bounty(bounty);
+      const useV3 = isV3Bounty(bounty);
+      const useStripeNative = isStripeNativeBounty(bounty);
       try {
         await analyticsService.trackEvent('payment_architecture_routed', {
           bountyId: String(bounty.id),
-          version: useV2 ? 2 : 1,
+          version: useV3 ? 3 : useV2 ? 2 : 1,
           context: 'release',
         });
       } catch {
         /* analytics is best-effort */
       }
 
-      if (useV2) {
+      if (useStripeNative) {
         // Stripe-native Phase 2 escrow: transfer captured funds to the
         // hunter's Connect account via the bounty-payments edge function.
         try {
@@ -120,7 +127,7 @@ export default function PayoutScreen() {
           try {
             await analyticsService.trackEvent('escrow_released', {
               bountyId: String(bounty.id),
-              architecture: 'v2',
+              architecture: useV3 ? 'v3' : 'v2',
               amount: bounty.amount,
             });
           } catch {
@@ -130,7 +137,7 @@ export default function PayoutScreen() {
           try {
             await analyticsService.trackEvent('payment_failed', {
               bountyId: String(bounty.id),
-              architecture: 'v2',
+              architecture: useV3 ? 'v3' : 'v2',
               stage: 'release',
             });
           } catch {

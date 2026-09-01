@@ -13,7 +13,7 @@ import { bountyService } from "lib/services/bounty-service"
 import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { isPhase2Bounty } from "lib/utils/payment-architecture"
+import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -555,17 +555,18 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               // Process refund FIRST for paid bounties before any other operations
               if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
                 const useV2 = isPhase2Bounty(bounty)
+                const useV3 = isV3Bounty(bounty)
                 try {
                   await analyticsService.trackEvent('payment_architecture_routed', {
                     bountyId: String(bounty.id),
-                    version: useV2 ? 2 : 1,
+                    version: useV3 ? 3 : useV2 ? 2 : 1,
                     context: 'cancel',
                   })
                 } catch {
                   /* analytics is best-effort */
                 }
                 try {
-                  if (useV2) {
+                  if (useV2 || useV3) {
                     // Stripe-native Phase 2 escrow: cancels the PaymentIntent
                     // pre-capture, or issues a refund post-capture. Only a
                     // terminal v2 status is safe to treat as a successful refund.
@@ -585,7 +586,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   try {
                     await analyticsService.trackEvent('escrow_refunded', {
                       bountyId: String(bounty.id),
-                      architecture: useV2 ? 'v2' : 'v1',
+                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                       amount: bounty.amount,
                     })
                   } catch {
@@ -596,7 +597,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   try {
                     await analyticsService.trackEvent('payment_failed', {
                       bountyId: String(bounty.id),
-                      architecture: useV2 ? 'v2' : 'v1',
+                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                       stage: 'cancel',
                     })
                   } catch {

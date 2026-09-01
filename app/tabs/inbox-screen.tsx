@@ -10,7 +10,7 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
-import { isPhase2Bounty } from "lib/utils/payment-architecture"
+import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -447,20 +447,20 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               // Process refund FIRST for paid bounties before any other operations
               if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
                 const useV2 = isPhase2Bounty(bounty)
+                const useV3 = isV3Bounty(bounty)
                 try {
                   await analyticsService.trackEvent('payment_architecture_routed', {
                     bountyId: String(bounty.id),
-                    version: useV2 ? 2 : 1,
+                    version: useV3 ? 3 : useV2 ? 2 : 1,
                     context: 'cancel',
                   })
                 } catch {
                   /* analytics is best-effort */
                 }
                 try {
-                  if (useV2) {
-                    // Stripe-native Phase 2 escrow: cancels the PaymentIntent
-                    // pre-capture, or issues a refund post-capture. Only a
-                    // terminal v2 status is safe to treat as a successful refund.
+                  if (useV2 || useV3) {
+                    // Stripe-native escrow: cancels the PaymentIntent or v3 auth.
+                    // Only terminal states are safe to treat as a successful refund.
                     const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
                     if (cancelResult.status !== 'canceled' && cancelResult.status !== 'refunded') {
                       throw new Error(`Escrow cancellation is still pending (${cancelResult.status})`)
@@ -477,7 +477,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                   try {
                     await analyticsService.trackEvent('escrow_refunded', {
                       bountyId: String(bounty.id),
-                      architecture: useV2 ? 'v2' : 'v1',
+                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                       amount: bounty.amount,
                     })
                   } catch {
@@ -488,7 +488,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                   try {
                     await analyticsService.trackEvent('payment_failed', {
                       bountyId: String(bounty.id),
-                      architecture: useV2 ? 'v2' : 'v1',
+                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                       stage: 'cancel',
                     })
                   } catch {
