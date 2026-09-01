@@ -12,8 +12,7 @@ export type WithdrawApplicationSurface = 'my_postings' | 'inbox';
 
 export interface WithdrawApplicationParams {
   bountyId: string | number;
-  /** May be undefined if the session isn't resolved — the lookup then simply
-   * returns no requests and the operation throws "No application found". */
+  /** Must be resolved before we can scope the lookup to the current hunter. */
   currentUserId: string | undefined;
   surface: WithdrawApplicationSurface;
 }
@@ -36,6 +35,10 @@ export async function withdrawApplication(
 ): Promise<WithdrawApplicationResult> {
   const { bountyId, currentUserId, surface } = params;
 
+  if (!currentUserId) {
+    throw new Error('You must be signed in to withdraw an application.');
+  }
+
   // Scope the lookup to pending applications so the intent matches what the
   // hunter delete policy allows (own row, still pending). A non-pending row
   // deletes zero rows under RLS and would report a false success.
@@ -46,15 +49,26 @@ export async function withdrawApplication(
   });
 
   if (pending.length === 0) {
-    // Tell an already-accepted application apart from one that never existed,
-    // so the hunter gets an actionable message instead of a generic miss.
+    // Distinguish "never existed" from an application that existed but is no
+    // longer eligible for withdrawal so the hunter sees the right recovery.
     const all = await bountyRequestService.getAll({
       bountyId: String(bountyId),
       userId: currentUserId,
     });
-    if (all.some((r) => r.status === 'accepted')) {
+    const existingNonPending = all.find((r) => r.status !== 'pending');
+    if (existingNonPending?.status === 'accepted') {
       throw new Error(
         'This application has already been accepted and can no longer be withdrawn.'
+      );
+    }
+    if (existingNonPending?.status === 'rejected') {
+      throw new Error(
+        'This application has already been rejected and can no longer be withdrawn.'
+      );
+    }
+    if (existingNonPending) {
+      throw new Error(
+        'This application is no longer pending and can no longer be withdrawn.'
       );
     }
     throw new Error('No application found for this bounty');

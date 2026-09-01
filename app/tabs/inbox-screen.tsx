@@ -561,9 +561,13 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                 surface: 'inbox',
               })
 
-              // Reload from the source so the card only disappears when the
-              // row is really gone, never on an optimistic local filter.
-              await loadInProgress()
+              try {
+                // Reload from the source so the card only disappears when the
+                // row is really gone, never on an optimistic local filter.
+                await loadInProgress()
+              } catch (refreshError) {
+                console.warn('Failed to refresh in-progress bounties after withdrawal:', refreshError)
+              }
 
               Alert.alert("Success", "Your application has been withdrawn.")
             } catch (err: any) {
