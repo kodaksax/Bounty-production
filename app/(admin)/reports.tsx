@@ -1,6 +1,8 @@
 // app/(admin)/reports.tsx - Enhanced Reports/Moderation Queue Screen
 // Follows Apple Human Interface Guidelines for clean, accessible design
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -60,7 +62,24 @@ function calculateStatsFromReports(reports: EnhancedReport[]): ReportStats {
   };
 }
 
+// Canned reasons for a suspend/ban action, written to admin_action_log for
+// audit purposes -- every account_status change now requires one, see
+// 20260726000000_enforce_account_status.sql.
+//
+// Module scope, not component scope: as a local it was rebuilt on every render
+// and left the useCallback below with an incomplete dependency array.
+const STATUS_CHANGE_REASONS: { label: string; value: string }[] = [
+    { label: 'Spam', value: 'Spam' },
+    { label: 'Harassment', value: 'Harassment' },
+    { label: 'Fraud / Scam', value: 'Fraud / Scam' },
+    { label: 'Inappropriate Content', value: 'Inappropriate Content' },
+    { label: 'Guideline Violation', value: 'Guideline Violation' },
+    { label: 'Other', value: 'Other' },
+  ];
+
 export default function AdminReportsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [reports, setReports] = useState<EnhancedReport[]>([]);
@@ -190,17 +209,7 @@ export default function AdminReportsScreen() {
     []
   );
 
-  // Canned reasons for a suspend/ban action, written to admin_action_log for
-  // audit purposes -- every account_status change now requires one, see
-  // 20260726000000_enforce_account_status.sql.
-  const STATUS_CHANGE_REASONS: { label: string; value: string }[] = [
-    { label: 'Spam', value: 'Spam' },
-    { label: 'Harassment', value: 'Harassment' },
-    { label: 'Fraud / Scam', value: 'Fraud / Scam' },
-    { label: 'Inappropriate Content', value: 'Inappropriate Content' },
-    { label: 'Guideline Violation', value: 'Guideline Violation' },
-    { label: 'Other', value: 'Other' },
-  ];
+
 
   // Handle suspend/ban user actions
   const handleUserAction = useCallback(
@@ -323,30 +332,30 @@ export default function AdminReportsScreen() {
   const getPriorityConfig = (priority: string) => {
     switch (priority) {
       case 'critical':
-        return { color: '#dc2626', bg: 'rgba(220,38,38,0.15)', icon: 'error' };
+        return { color: theme.error, bg: 'rgba(220,38,38,0.15)', icon: 'error' };
       case 'high':
-        return { color: '#f97316', bg: 'rgba(249,115,22,0.15)', icon: 'warning' };
+        return { color: theme.cancelled, bg: 'rgba(249,115,22,0.15)', icon: 'warning' };
       case 'medium':
-        return { color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', icon: 'info' };
+        return { color: theme.warning, bg: 'rgba(251,191,36,0.15)', icon: 'info' };
       case 'low':
-        return { color: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: 'check-circle' };
+        return { color: theme.success, bg: 'rgba(16,185,129,0.15)', icon: 'check-circle' };
       default:
-        return { color: '#a7f3d0', bg: 'rgba(167,243,208,0.15)', icon: 'help' };
+        return { color: theme.primaryLight, bg: 'rgba(167,243,208,0.15)', icon: 'help' };
     }
   };
 
   const getReasonConfig = (reason: string) => {
     switch (reason) {
       case 'fraud':
-        return { color: '#dc2626', label: 'Fraud' };
+        return { color: theme.error, label: 'Fraud' };
       case 'harassment':
-        return { color: '#ef4444', label: 'Harassment' };
+        return { color: theme.error, label: 'Harassment' };
       case 'inappropriate':
-        return { color: '#f97316', label: 'Inappropriate' };
+        return { color: theme.cancelled, label: 'Inappropriate' };
       case 'spam':
-        return { color: '#fbbf24', label: 'Spam' };
+        return { color: theme.warning, label: 'Spam' };
       default:
-        return { color: '#a7f3d0', label: reason };
+        return { color: theme.primaryLight, label: reason };
     }
   };
 
@@ -410,23 +419,23 @@ export default function AdminReportsScreen() {
       <View style={styles.statsRow}>
         {stats.critical > 0 && (
           <View style={[styles.statBadge, { backgroundColor: 'rgba(220,38,38,0.15)' }]}>
-            <MaterialIcons name="error" size={14} color="#dc2626" />
-            <Text style={[styles.statBadgeText, { color: '#dc2626' }]}>
+            <MaterialIcons name="error" size={14} color={theme.error} />
+            <Text style={[styles.statBadgeText, { color: theme.error }]}>
               {stats.critical} Critical
             </Text>
           </View>
         )}
         {stats.high > 0 && (
           <View style={[styles.statBadge, { backgroundColor: 'rgba(249,115,22,0.15)' }]}>
-            <MaterialIcons name="warning" size={14} color="#f97316" />
-            <Text style={[styles.statBadgeText, { color: '#f97316' }]}>
+            <MaterialIcons name="warning" size={14} color={theme.cancelled} />
+            <Text style={[styles.statBadgeText, { color: theme.cancelled }]}>
               {stats.high} High
             </Text>
           </View>
         )}
         <View style={[styles.statBadge, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
-          <MaterialIcons name="pending" size={14} color="#10b981" />
-          <Text style={[styles.statBadgeText, { color: '#10b981' }]}>
+          <MaterialIcons name="pending" size={14} color={theme.success} />
+          <Text style={[styles.statBadgeText, { color: theme.success }]}>
             {stats.pending} Pending
           </Text>
         </View>
@@ -438,11 +447,11 @@ export default function AdminReportsScreen() {
   const SearchBar = () => (
     <View style={styles.searchContainer}>
       <View style={styles.searchInputWrapper}>
-        <MaterialIcons name="search" size={20} color="rgba(255,254,245,0.5)" />
+        <MaterialIcons name="search" size={20} color={theme.textDisabled} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search reports..."
-          placeholderTextColor="rgba(255,254,245,0.4)"
+          placeholderTextColor={theme.textDisabled}
           value={searchQuery}
           onChangeText={setSearchQuery}
           returnKeyType="search"
@@ -453,7 +462,7 @@ export default function AdminReportsScreen() {
             onPress={() => setSearchQuery('')}
             accessibilityLabel="Clear search"
           >
-            <MaterialIcons name="close" size={18} color="rgba(255,254,245,0.5)" />
+            <MaterialIcons name="close" size={18} color={theme.textDisabled} />
           </TouchableOpacity>
         )}
       </View>
@@ -471,7 +480,7 @@ export default function AdminReportsScreen() {
           }}
           accessibilityLabel={`Sort by ${sortBy}`}
         >
-          <MaterialIcons name="sort" size={20} color="#a7f3d0" />
+          <MaterialIcons name="sort" size={20} color={theme.primaryLight} />
           <Text style={styles.sortButtonText}>
             {sortBy === 'priority' ? 'Priority' : sortBy === 'newest' ? 'Newest' : 'Oldest'}
           </Text>
@@ -488,7 +497,7 @@ export default function AdminReportsScreen() {
           }}
           accessibilityLabel={`Filter by priority ${priorityFilter}`}
         >
-          <MaterialIcons name="filter-list" size={20} color="#a7f3d0" />
+          <MaterialIcons name="filter-list" size={20} color={theme.primaryLight} />
           <Text style={styles.sortButtonText}>{priorityFilter === 'all' ? 'All' : priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)}</Text>
         </TouchableOpacity>
       </View>
@@ -527,13 +536,13 @@ export default function AdminReportsScreen() {
                 <View
                   style={[
                     styles.contentTypeIcon,
-                    { backgroundColor: 'rgba(0,145,44,0.2)' },
+                    { backgroundColor: theme.border },
                   ]}
                 >
                   <MaterialIcons
                     name={getContentTypeIcon(report.content_type)}
                     size={18}
-                    color="#00dc50"
+                    color={theme.primary}
                   />
                 </View>
                 <View>
@@ -594,7 +603,7 @@ export default function AdminReportsScreen() {
                   onPress={() => handleUpdateStatus(report.id, 'reviewed')}
                   accessibilityLabel="Mark as reviewed"
                 >
-                  <MaterialIcons name="visibility" size={16} color="#3b82f6" />
+                  <MaterialIcons name="visibility" size={16} color={theme.info} />
                   <Text style={styles.reviewActionText}>Review</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -602,7 +611,7 @@ export default function AdminReportsScreen() {
                   onPress={() => handleUpdateStatus(report.id, 'resolved')}
                   accessibilityLabel="Resolve report"
                 >
-                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={16} color={theme.success} />
                   <Text style={styles.resolveActionText}>Resolve</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -610,7 +619,7 @@ export default function AdminReportsScreen() {
                   onPress={() => handleUpdateStatus(report.id, 'dismissed')}
                   accessibilityLabel="Dismiss report"
                 >
-                  <MaterialIcons name="close" size={16} color="#ef4444" />
+                  <MaterialIcons name="close" size={16} color={theme.error} />
                   <Text style={styles.dismissActionText}>Dismiss</Text>
                 </TouchableOpacity>
               </View>
@@ -619,7 +628,7 @@ export default function AdminReportsScreen() {
             {/* Resolution info for resolved reports */}
             {report.status === 'resolved' && report.resolution_notes && (
               <View style={styles.resolutionInfo}>
-                <MaterialIcons name="check-circle" size={14} color="#10b981" />
+                <MaterialIcons name="check-circle" size={14} color={theme.success} />
                 <Text style={styles.resolutionText}>{report.resolution_notes}</Text>
               </View>
             )}
@@ -636,7 +645,7 @@ export default function AdminReportsScreen() {
         <MaterialIcons
           name={statusFilter === 'pending' ? 'check-circle' : 'inbox'}
           size={64}
-          color="#10b981"
+          color={theme.success}
         />
       </View>
       <Text style={styles.emptyTitle}>
@@ -663,7 +672,7 @@ export default function AdminReportsScreen() {
       <View style={styles.container}>
         <AdminHeader title="Moderation Queue" onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={48} color={theme.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchReports}>
             <Text style={styles.retryButtonText}>Try Again</Text>
@@ -684,7 +693,7 @@ export default function AdminReportsScreen() {
             style={styles.headerAction}
             accessibilityLabel="View audit logs"
           >
-            <MaterialIcons name="history" size={22} color="#c8ffe0" />
+            <MaterialIcons name="history" size={22} color={theme.primaryLight} />
           </TouchableOpacity>
         }
       />
@@ -711,8 +720,8 @@ export default function AdminReportsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchReports}
-            tintColor="#10b981"
-            colors={['#10b981']}
+            tintColor={theme.success}
+            colors={[theme.success]}
           />
         }
         ListEmptyComponent={<EmptyState />}
@@ -725,15 +734,16 @@ export default function AdminReportsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   headerAction: {
     padding: 6,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: theme.surfaceSecondary,
   },
   statsContainer: {
     paddingHorizontal: 16,
@@ -778,19 +788,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   segmentButtonActive: {
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
   },
   segmentButtonText: {
     fontSize: 13,
     fontWeight: '500',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   segmentButtonTextActive: {
-    color: '#fffef5',
+    color: theme.text,
     fontWeight: '600',
   },
   badgeContainer: {
-    backgroundColor: '#dc2626',
+    backgroundColor: theme.error,
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -801,7 +811,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -823,7 +833,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#fffef5',
+    color: theme.text,
   },
   sortButton: {
     flexDirection: 'row',
@@ -844,7 +854,7 @@ const styles = StyleSheet.create({
   },
   sortButtonText: {
     fontSize: 13,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     fontWeight: '500',
   },
   listContent: {
@@ -883,11 +893,11 @@ const styles = StyleSheet.create({
   reportContentType: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
   reportTime: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
     marginTop: 2,
   },
   reportHeaderRight: {
@@ -924,11 +934,11 @@ const styles = StyleSheet.create({
   },
   reporterName: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
   },
   reportDetails: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     lineHeight: 20,
   },
   quickActions: {
@@ -951,7 +961,7 @@ const styles = StyleSheet.create({
   reviewActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#3b82f6',
+    color: theme.info,
   },
   resolveAction: {
     backgroundColor: 'rgba(16,185,129,0.15)',
@@ -959,7 +969,7 @@ const styles = StyleSheet.create({
   resolveActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#10b981',
+    color: theme.success,
   },
   dismissAction: {
     backgroundColor: 'rgba(239,68,68,0.15)',
@@ -967,7 +977,7 @@ const styles = StyleSheet.create({
   dismissActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#ef4444',
+    color: theme.error,
   },
   resolutionInfo: {
     flexDirection: 'row',
@@ -980,7 +990,7 @@ const styles = StyleSheet.create({
   resolutionText: {
     flex: 1,
     fontSize: 13,
-    color: '#10b981',
+    color: theme.success,
     lineHeight: 18,
   },
   emptyContainer: {
@@ -1002,12 +1012,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -1015,13 +1025,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     borderRadius: 10,
   },
   viewAllButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
   errorContainer: {
     flex: 1,
@@ -1032,19 +1042,19 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 15,
-    color: '#ef4444',
+    color: theme.error,
     textAlign: 'center',
   },
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     borderRadius: 10,
     marginTop: 8,
   },
   retryButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
 });

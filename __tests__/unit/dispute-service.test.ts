@@ -1141,10 +1141,13 @@ describe('DisputeService', () => {
         },
       ];
 
+      // The admin dispute queue is bounded, so the chain ends at .limit().
       mockFrom.mockReturnValue({
         select: jest.fn().mockReturnValue({
           in: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({ data: activeDisputes, error: null }),
+            order: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue({ data: activeDisputes, error: null }),
+            }),
           }),
         }),
       });

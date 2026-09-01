@@ -1,69 +1,44 @@
 // hooks/useAdminBounties.ts - Hook for managing admin bounty data
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 import { adminDataClient } from '../lib/admin/adminDataClient';
 import type { AdminBounty, AdminBountyFilters } from '../lib/types-admin';
+import { useAdminList, type UseAdminListResult } from './useAdminList';
 
-interface UseAdminBountiesResult {
+export interface UseAdminBountiesResult extends UseAdminListResult<AdminBounty> {
   bounties: AdminBounty[];
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
   updateStatus: (id: string, status: AdminBounty['status']) => Promise<void>;
 }
 
+const getBountyId = (b: AdminBounty) => b.id;
+
 export function useAdminBounties(filters?: AdminBountyFilters): UseAdminBountiesResult {
-  const [bounties, setBounties] = useState<AdminBounty[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  const list = useAdminList<AdminBounty, AdminBountyFilters>({
+    filters: filters ?? {},
+    fetcher: adminDataClient.fetchAdminBounties.bind(adminDataClient),
+    getId: getBountyId,
+    // Debounced because the bounties screen feeds a search box into `filters`.
+    debounceMs: 250,
+  });
 
-  const fetchBounties = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await adminDataClient.fetchAdminBounties(filtersRef.current);
-      setBounties(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch bounties');
-      console.error('Error fetching admin bounties:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchBounties();
-  }, [fetchBounties]);
+  const { patchItem, refetch } = list;
 
   const updateStatus = useCallback(
     async (id: string, status: AdminBounty['status']) => {
+      // Optimistic: a status flip is a single scalar the server either accepts
+      // or rejects outright, so a local patch is safe to show immediately.
+      patchItem(id, { status, lastModified: new Date().toISOString() });
       try {
-        // Optimistic update
-        setBounties((prev) =>
-          prev.map((b) => (b.id === id ? { ...b, status, lastModified: new Date().toISOString() } : b))
-        );
-
-        // Actual update
         await adminDataClient.updateBountyStatus(id, status);
-
-        // Refetch to ensure consistency
-        await fetchBounties();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to update bounty status');
-        console.error('Error updating bounty status:', err);
-        // Revert optimistic update on error
-        await fetchBounties();
+      } finally {
+        // Refetch either way: on success to pick up server-side side effects,
+        // on failure to roll the optimistic patch back to the real value.
+        // `refetch` also re-applies the active status filter, so a bounty that
+        // no longer matches drops out of the list instead of lingering.
+        await refetch();
       }
     },
-    [fetchBounties]
+    [patchItem, refetch]
   );
 
-  return {
-    bounties,
-    isLoading,
-    error,
-    refetch: fetchBounties,
-    updateStatus,
-  };
+  return { ...list, bounties: list.items, updateStatus };
 }

@@ -101,10 +101,17 @@ ROUTES.ADMIN = {
 - `useRequireAdmin()` hook for guarded routes
 
 ### Data Layer
-All admin data is currently **mocked** via `lib/admin/adminDataClient.ts`:
-- Simulates network delay (500ms)
-- In-memory mock data for bounties, users, transactions
-- Optional failure simulation via `DEBUG_SIMULATE_FAILURES` flag
+All admin data is read from the real database. `lib/admin/adminDataClient.ts`
+queries Supabase directly for bounties and transactions, and goes through the
+service-role `admin-profiles` Edge Function for users. There is no mock client
+and no simulated latency.
+
+Every list is paginated and returns `AdminPage<T>` (`items`, server-side
+`total`, `hasMore`). Per-user activity and financial aggregates are computed by
+the `admin_user_stats(uuid[])` database function; when that is unavailable the
+records carry `statsLoaded: false` so the UI shows an em dash rather than a
+fabricated zero.
+
 - Methods:
   - `fetchAdminMetrics()` - Dashboard stats
   - `fetchAdminBounties(filters)` - List bounties with status filter
@@ -231,15 +238,20 @@ All screens implement:
 3. **Error state**: Error icon + message + retry button
 4. **Inline errors**: Error banners that can be dismissed
 
-Network errors are simulated randomly when `DEBUG_SIMULATE_FAILURES = true` in `adminDataClient.ts`.
+Errors are real. A hard failure with nothing on screen takes over the viewport
+with a retry; a failed refresh over data already on screen degrades to a
+dismissible banner rather than blanking good rows.
 
 ## Future Enhancements
 
 ### Near Term
-- Real backend integration (replace mock client)
-- Search bars for users and bounties
-- Moderation queue (flagged items)
-- User actions (suspend, ban, verify)
+- Bulk actions on the moderation and dispute queues
+- Saved filter presets per operator
+- Server-side sorting (lists are currently newest-first only)
+
+Done since this document was first written: real backend integration, search
+on bounties/users/transactions, the moderation queue, and user suspend / ban /
+restore with an audited reason.
 
 ### Medium Term
 - Analytics charts (bounty trends, user growth)
@@ -311,13 +323,18 @@ Edge Cases / Notes:
 ### Adding New Screens
 1. Create screen file in `app/(admin)/`
 2. Follow existing patterns (AdminHeader, error handling, FlatList)
-3. Add route link to AdminDashboard quick actions
-4. Add corresponding mock data to `adminDataClient.ts`
+3. Add the route to `lib/routes.ts` and link it from the dashboard's NAV_GROUPS
+4. Add the query to `adminDataClient.ts`, paginated, against real columns
 
 ### Styling Guidelines
-- Use emerald theme colors (`#00912C`, `#00dc50`, `#1a3d2e`, `#2d5240`)
-- Match existing spacing and typography
-- Test on both iOS and Android
+- Use the `useAppTheme()` token set (`theme.background`, `theme.surface`,
+  `theme.primary`, `theme.text`, ...). Do not hardcode colours — the legacy
+  emerald values (`#00912C`, `#00dc50`, `#1a3d2e`, `#2d5240`) have been removed
+  and will not follow light mode.
+- Build from `components/admin/AdminUI.tsx` so loading, empty and error states
+  stay consistent across screens.
+- Match existing spacing and typography via `theme.spacing` / `theme.radius`
+- Test on both iOS and Android, in light and dark mode
 - Ensure safe area insets are respected
 
 ### Type Safety

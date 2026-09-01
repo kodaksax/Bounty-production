@@ -1394,16 +1394,52 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Log event for tracking — upsert on stripe_event_id to safely handle retries
-    await supabase.from('stripe_events').upsert(
-      {
-        stripe_event_id: event.id,
-        event_type: event.type,
-        event_data: event.data.object,
-        processed: false,
-      },
-      { onConflict: 'stripe_event_id' }
-    );
+    // Claim the event before doing any work.
+    //
+    // This used to be an unconditional
+    //   upsert({ ..., processed: false }, { onConflict: 'stripe_event_id' })
+    // followed by running the handler regardless. `stripe_events` looked like a
+    // dedupe table but never deduped anything: a Stripe redelivery of an event
+    // that had already been processed reset `processed` back to false and then
+    // re-ran the full handler, re-crediting balances and re-writing ledger rows
+    // for every handler that did not happen to carry its own idempotency key.
+    //
+    // claim_stripe_event() does the insert-or-take atomically and only hands the
+    // event over when it is not already processed, so a redelivery is a no-op.
+    const { data: claimed, error: claimError } = await supabase.rpc('claim_stripe_event', {
+      p_stripe_event_id: event.id,
+      p_event_type: event.type,
+      p_event_data: event.data.object,
+    });
+
+    if (claimError) {
+      // Could not establish whether this is a duplicate. Fail loudly so Stripe
+      // retries rather than silently processing an event twice.
+      console.error('[webhooks] Failed to claim event — asking Stripe to retry', {
+        eventId: event.id,
+        error: claimError,
+      });
+      return jsonResponse({ error: 'Could not claim webhook event' }, 500);
+    }
+
+    if (claimed === false) {
+      console.log('[webhooks] Duplicate delivery ignored', { eventId: event.id, type: event.type });
+      return jsonResponse({ received: true, duplicate: true });
+    }
+
+    // Record the signature-verified delivery in the canonical event ledger.
+    // This is the ONLY provenance the Command Center treats as Stripe
+    // confirmation (`source='webhook'`); our own wallet rows are `source='app'`.
+    // Best-effort by design: observability must never fail a webhook.
+    try {
+      await supabase.rpc('record_stripe_webhook_event', {
+        p_stripe_event_id: event.id,
+        p_event_type: event.type,
+        p_object: event.data.object,
+      });
+    } catch (ledgerErr) {
+      console.error('[webhooks] Failed to record ledger event (non-fatal)', { ledgerErr });
+    }
 
     // stripe@14's Event.type union doesn't include every event name this
     // endpoint legitimately receives (e.g. legacy transfer.paid/failed and

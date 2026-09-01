@@ -1,7 +1,9 @@
 // app/(admin)/support/index.tsx - Admin Support Hub
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../../hooks/use-app-theme';
+import type { AppTheme } from '../../../lib/themes/types';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
 import { ROUTES } from '../../../lib/routes';
@@ -54,6 +56,8 @@ const quickResources = [
 ];
 
 export default function AdminSupportScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
 
   const handlePress = (item: SupportLink) => {
@@ -81,7 +85,7 @@ export default function AdminSupportScreen() {
                 onPress={() => handlePress(item)}
               >
                 <View style={styles.linkIcon}>
-                  <MaterialIcons name={item.icon} size={28} color="#00dc50" />
+                  <MaterialIcons name={item.icon} size={28} color={theme.primary} />
                 </View>
                 <View style={styles.linkContent}>
                   <Text style={styles.linkTitle}>{item.title}</Text>
@@ -90,7 +94,7 @@ export default function AdminSupportScreen() {
                 <MaterialIcons 
                   name={item.externalUrl ? 'open-in-new' : 'chevron-right'} 
                   size={20} 
-                  color="rgba(255,254,245,0.4)" 
+                  color={theme.textDisabled} 
                 />
               </TouchableOpacity>
             ))}
@@ -103,7 +107,7 @@ export default function AdminSupportScreen() {
           <View style={styles.resourcesGrid}>
             {quickResources.map((resource) => (
               <TouchableOpacity key={resource.id} style={styles.resourceCard}>
-                <MaterialIcons name={resource.icon as any} size={24} color="#00dc50" />
+                <MaterialIcons name={resource.icon as any} size={24} color={theme.primary} />
                 <Text style={styles.resourceTitle}>{resource.title}</Text>
               </TouchableOpacity>
             ))}
@@ -138,7 +142,7 @@ export default function AdminSupportScreen() {
 
         {/* Emergency Contact */}
         <View style={styles.emergencyCard}>
-          <MaterialIcons name="warning" size={24} color="#ffc107" />
+          <MaterialIcons name="warning" size={24} color={theme.warning} />
           <View style={styles.emergencyContent}>
             <Text style={styles.emergencyTitle}>Emergency Support</Text>
             <Text style={styles.emergencyText}>
@@ -149,7 +153,7 @@ export default function AdminSupportScreen() {
             style={styles.emergencyButton}
             onPress={() => Linking.openURL('tel:+1-555-BOUNTY')}
           >
-            <MaterialIcons name="phone" size={20} color="#fffef5" />
+            <MaterialIcons name="phone" size={20} color={theme.text} />
           </TouchableOpacity>
         </View>
 
@@ -160,10 +164,11 @@ export default function AdminSupportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   scrollView: {
     flex: 1,
@@ -177,7 +182,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -188,17 +193,17 @@ const styles = StyleSheet.create({
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
+    borderColor: theme.border,
     gap: 16,
   },
   linkIcon: {
     width: 48,
     height: 48,
-    backgroundColor: 'rgba(0,145,44,0.15)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -209,12 +214,12 @@ const styles = StyleSheet.create({
   linkTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 4,
   },
   linkDescription: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   resourcesGrid: {
     flexDirection: 'row',
@@ -223,26 +228,26 @@ const styles = StyleSheet.create({
   },
   resourceCard: {
     width: '48%',
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
+    borderColor: theme.border,
     alignItems: 'center',
     gap: 8,
   },
   resourceTitle: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#fffef5',
+    color: theme.text,
     textAlign: 'center',
   },
   infoCard: {
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
+    borderColor: theme.border,
     gap: 12,
   },
   infoRow: {
@@ -252,11 +257,11 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   infoValue: {
     fontSize: 14,
-    color: '#fffef5',
+    color: theme.text,
     fontWeight: '500',
   },
   statusBadge: {
@@ -268,11 +273,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#4caf50',
+    backgroundColor: theme.success,
   },
   statusText: {
     fontSize: 14,
-    color: '#4caf50',
+    color: theme.success,
     fontWeight: '500',
   },
   emergencyCard: {
@@ -292,12 +297,12 @@ const styles = StyleSheet.create({
   emergencyTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffc107',
+    color: theme.warning,
     marginBottom: 2,
   },
   emergencyText: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   emergencyButton: {
     width: 40,

@@ -1,12 +1,16 @@
 // app/(admin)/not-found.tsx - Admin 404/Not Found Screen
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ROUTES } from '../../lib/routes';
 
 export default function AdminNotFoundScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -26,7 +30,7 @@ export default function AdminNotFoundScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.content}>
         <View style={styles.iconContainer}>
-          <MaterialIcons name="error-outline" size={80} color="rgba(255,254,245,0.3)" />
+          <MaterialIcons name="error-outline" size={80} color={theme.textDisabled} />
         </View>
         
         <Text style={styles.errorCode}>404</Text>
@@ -41,12 +45,12 @@ export default function AdminNotFoundScreen() {
 
         <View style={styles.actions}>
           <TouchableOpacity style={styles.primaryButton} onPress={handleGoToDashboard}>
-            <MaterialIcons name="dashboard" size={20} color="#fffef5" />
+            <MaterialIcons name="dashboard" size={20} color={theme.text} />
             <Text style={styles.primaryButtonText}>Go to Dashboard</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.secondaryButton} onPress={handleGoBack}>
-            <MaterialIcons name="arrow-back" size={20} color="#00dc50" />
+            <MaterialIcons name="arrow-back" size={20} color={theme.primary} />
             <Text style={styles.secondaryButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -62,10 +66,11 @@ export default function AdminNotFoundScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   content: {
     flex: 1,
@@ -79,18 +84,18 @@ const styles = StyleSheet.create({
   errorCode: {
     fontSize: 64,
     fontWeight: '800',
-    color: '#00dc50',
+    color: theme.primary,
     marginBottom: 8,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 12,
   },
   description: {
     fontSize: 15,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 40,
@@ -104,7 +109,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
@@ -113,24 +118,24 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
   secondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,145,44,0.15)',
+    backgroundColor: theme.surfaceSecondary,
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.3)',
+    borderColor: theme.border,
   },
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#00dc50',
+    color: theme.primary,
   },
   helpSection: {
     alignItems: 'center',
@@ -138,11 +143,11 @@ const styles = StyleSheet.create({
   },
   helpText: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
   },
   helpLink: {
     fontSize: 14,
-    color: '#00dc50',
+    color: theme.primary,
     fontWeight: '500',
   },
 });

@@ -1,81 +1,116 @@
 // components/admin/AdminStatusBadge.tsx - Status badge component for admin screens
+//
+// The colour table used to be a wall of hardcoded hex/rgba pairs that did not
+// match the app's semantic tokens (`#00dc50` brand green, `#4caf50` Material
+// green, `#f44336` Material red), and it only knew four bounty statuses -- so
+// a `cancelled`, `cancellation_requested` or `deleted` bounty fell through to
+// the neutral default and read as if it had no status at all. Colours now come
+// from the theme's semantic tokens and every enum value is covered.
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import type { AppTheme } from '../../lib/themes/types';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import { AdminBadge } from './AdminUI';
+
+type BadgeTone = React.ComponentProps<typeof AdminBadge>['tone'];
 
 interface AdminStatusBadgeProps {
   status: string;
-  type?: 'bounty' | 'user' | 'transaction';
+  type?: 'bounty' | 'user' | 'transaction' | 'request' | 'dispute';
 }
 
 export function AdminStatusBadge({ status, type = 'bounty' }: AdminStatusBadgeProps) {
-  const colors = getStatusColors(status, type);
-
-  return (
-    <View style={[styles.badge, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-      <Text style={[styles.text, { color: colors.text }]}>{status.toUpperCase()}</Text>
-    </View>
-  );
+  const { theme } = useAppTheme();
+  const { tone, label } = describeStatus(status, type, theme);
+  return <AdminBadge label={label} tone={tone} />;
 }
 
-function getStatusColors(status: string, type: string) {
-  // Bounty status colors
+/**
+ * Maps a raw status string onto a semantic tone. Exported so lists can colour
+ * other affordances (left borders, icons) to match their badge.
+ */
+export function describeStatus(
+  status: string,
+  type: string,
+  _theme: AppTheme
+): { tone: BadgeTone; label: string } {
+  const label = String(status ?? 'unknown').replace(/_/g, ' ');
+
   if (type === 'bounty') {
     switch (status) {
       case 'open':
-        return { bg: 'rgba(0,145,44,0.15)', border: 'rgba(0,145,44,0.4)', text: '#00dc50' };
+        return { tone: 'brand', label };
       case 'in_progress':
-        return { bg: 'rgba(255,193,7,0.15)', border: 'rgba(255,193,7,0.4)', text: '#ffc107' };
+        return { tone: 'warning', label };
       case 'completed':
-        return { bg: 'rgba(76,175,80,0.15)', border: 'rgba(76,175,80,0.4)', text: '#4caf50' };
+        return { tone: 'success', label };
       case 'archived':
-        return { bg: 'rgba(158,158,158,0.15)', border: 'rgba(158,158,158,0.4)', text: '#9e9e9e' };
+        return { tone: 'neutral', label };
+      case 'cancelled':
+      case 'cancellation_requested':
+        return { tone: 'cancelled', label };
+      case 'deleted':
+        return { tone: 'error', label };
       default:
-        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#fffef5' };
+        return { tone: 'neutral', label };
     }
   }
 
-  // User status colors
   if (type === 'user') {
     switch (status) {
       case 'active':
-        return { bg: 'rgba(76,175,80,0.15)', border: 'rgba(76,175,80,0.4)', text: '#4caf50' };
+        return { tone: 'success', label };
       case 'suspended':
-        return { bg: 'rgba(255,152,0,0.15)', border: 'rgba(255,152,0,0.4)', text: '#ff9800' };
+        return { tone: 'warning', label };
       case 'banned':
-        return { bg: 'rgba(244,67,54,0.15)', border: 'rgba(244,67,54,0.4)', text: '#f44336' };
+        return { tone: 'error', label };
       default:
-        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#fffef5' };
+        return { tone: 'neutral', label };
     }
   }
 
-  // Transaction status colors
   if (type === 'transaction') {
     switch (status) {
       case 'completed':
-        return { bg: 'rgba(76,175,80,0.15)', border: 'rgba(76,175,80,0.4)', text: '#4caf50' };
+        return { tone: 'success', label };
       case 'pending':
-        return { bg: 'rgba(255,193,7,0.15)', border: 'rgba(255,193,7,0.4)', text: '#ffc107' };
+        return { tone: 'warning', label };
       case 'failed':
-        return { bg: 'rgba(244,67,54,0.15)', border: 'rgba(244,67,54,0.4)', text: '#f44336' };
+        return { tone: 'error', label };
+      case 'manually_paid':
+        return { tone: 'info', label };
       default:
-        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#fffef5' };
+        return { tone: 'neutral', label };
     }
   }
 
-  return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#fffef5' };
-}
+  if (type === 'request') {
+    switch (status) {
+      case 'accepted':
+        return { tone: 'success', label };
+      case 'pending':
+        return { tone: 'warning', label };
+      case 'rejected':
+        return { tone: 'error', label };
+      default:
+        return { tone: 'neutral', label };
+    }
+  }
 
-const styles = StyleSheet.create({
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    alignSelf: 'flex-start',
-  },
-  text: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-});
+  if (type === 'dispute') {
+    switch (status) {
+      case 'resolved':
+      case 'closed':
+        return { tone: 'success', label };
+      case 'escalated':
+        return { tone: 'error', label };
+      case 'open':
+      case 'pending':
+      case 'under_review':
+        return { tone: 'warning', label };
+      default:
+        return { tone: 'neutral', label };
+    }
+  }
+
+  return { tone: 'neutral', label };
+}

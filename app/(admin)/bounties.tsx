@@ -1,304 +1,319 @@
-// app/(admin)/bounties.tsx - Admin Bounties List with filters
+// app/(admin)/bounties.tsx - Admin Bounties List
+//
+// Fixed here:
+//  - The status filter chips changed their own highlight but never refiltered
+//    the list (see hooks/useAdminList.ts for the root cause).
+//  - Only 4 of the 7 bounty_status_enum values were offered, so cancelled and
+//    deleted bounties were unreachable.
+//  - There was no search at all, and the query had no LIMIT — the screen
+//    fetched every bounty row on the platform on every visit.
+//  - The "Flagged N times" banner read `flaggedCount`, mapped from a
+//    `bounties.flagged_count` column that does not exist, so it never showed.
+//    Replaced with the stale flag the expiry sweeper actually writes.
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminStatusBadge } from '../../components/admin/AdminStatusBadge';
+import {
+  AdminEmpty,
+  AdminError,
+  AdminErrorBanner,
+  AdminFilterChips,
+  AdminLoading,
+  AdminListFooter,
+  AdminScreen,
+  AdminSearchBar,
+  formatMoney,
+  formatRelative,
+} from '../../components/admin/AdminUI';
+import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdminBounties } from '../../hooks/useAdminBounties';
+import { useAdminPreferences } from '../../lib/admin/adminPreferences';
 import { ROUTES } from '../../lib/routes';
-import type { AdminBounty, AdminBountyFilters } from '../../lib/types-admin';
+import {
+  ADMIN_BOUNTY_STATUSES,
+  type AdminBounty,
+  type AdminBountyStatus,
+} from '../../lib/types-admin';
+
+const STATUS_OPTIONS = ['all', ...ADMIN_BOUNTY_STATUSES] as const;
+type StatusOption = (typeof STATUS_OPTIONS)[number];
 
 export default function AdminBountiesScreen() {
   const router = useRouter();
-  const [filters, setFilters] = useState<AdminBountyFilters>({ status: 'all' });
-  const { bounties, isLoading, error, refetch } = useAdminBounties(filters);
+  const { theme } = useAppTheme();
 
-  const statusOptions: AdminBountyFilters['status'][] = ['all', 'open', 'in_progress', 'completed', 'archived'];
+  // Deep-link support: /(admin)/bounties?posterId=…&status=… lets the user
+  // detail screen link straight into a pre-filtered list.
+  const params = useLocalSearchParams<{ posterId?: string; hunterId?: string; status?: string }>();
 
-  const renderBountyItem = ({ item }: { item: AdminBounty }) => (
-    <TouchableOpacity
-      style={styles.bountyCard}
-      onPress={() => router.push(ROUTES.ADMIN.BOUNTY_DETAIL(item.id))}
-    >
-      <View style={styles.bountyHeader}>
-        <Text style={styles.bountyTitle} numberOfLines={1}>
-          {item.title}
-        </Text>
-        <AdminStatusBadge status={item.status} type="bounty" />
-      </View>
-      <Text style={styles.bountyDescription} numberOfLines={2}>
-        {item.description}
-      </Text>
-      <View style={styles.bountyFooter}>
-        <View style={styles.bountyMeta}>
-          {item.isForHonor ? (
-            <View style={styles.metaItem}>
-              <MaterialIcons name="favorite" size={14} color="#00dc50" />
-              <Text style={styles.metaText}>For Honor</Text>
-            </View>
-          ) : (
-            <View style={styles.metaItem}>
-              <MaterialIcons name="attach-money" size={14} color="#00dc50" />
-              <Text style={styles.metaText}>${item.amount?.toFixed(2)}</Text>
-            </View>
-          )}
-          {item.location && (
-            <View style={styles.metaItem}>
-              <MaterialIcons name="location-on" size={14} color="rgba(255,254,245,0.6)" />
-              <Text style={styles.metaText}>{item.location}</Text>
-            </View>
-          )}
-        </View>
-        <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
-      </View>
-      {(item.flaggedCount ?? 0) > 0 && (
-        <View style={styles.flaggedBanner}>
-          <MaterialIcons name="flag" size={14} color="#f44336" />
-          <Text style={styles.flaggedText}>Flagged {item.flaggedCount} times</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+  const { preferences, isLoading: prefsLoading } = useAdminPreferences();
+
+  // A status in the URL wins (deep link), then the operator's default-filter
+  // preference, then 'all'. `appliedPreference` stops the preference from
+  // clobbering a filter the operator has since chosen by hand.
+  const [status, setStatus] = useState<StatusOption>(
+    STATUS_OPTIONS.includes(params.status as StatusOption) ? (params.status as StatusOption) : 'all'
+  );
+  const appliedPreference = useRef(false);
+  useEffect(() => {
+    if (prefsLoading || appliedPreference.current) return;
+    appliedPreference.current = true;
+    if (params.status) return; // deep link takes precedence
+    if (preferences.defaultBountyStatus !== 'all') {
+      setStatus(preferences.defaultBountyStatus as StatusOption);
+    }
+  }, [prefsLoading, preferences.defaultBountyStatus, params.status]);
+
+  const [search, setSearch] = useState('');
+
+  const filters = useMemo(
+    () => ({
+      status: status === 'all' ? ('all' as const) : (status as AdminBountyStatus),
+      search: search.trim() || undefined,
+      posterId: params.posterId || undefined,
+      hunterId: params.hunterId || undefined,
+    }),
+    [status, search, params.posterId, params.hunterId]
   );
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <MaterialIcons name="work-off" size={64} color="rgba(255,254,245,0.3)" />
-      <Text style={styles.emptyTitle}>No bounties found</Text>
-      <Text style={styles.emptyText}>
-        {filters.status !== 'all' ? `No ${filters.status} bounties` : 'No bounties match this filter'}
-      </Text>
-      <TouchableOpacity style={styles.refreshButton} onPress={refetch}>
-        <Text style={styles.refreshButtonText}>Refresh</Text>
-      </TouchableOpacity>
-    </View>
+  const {
+    bounties,
+    total,
+    isLoading,
+    isLoadingMore,
+    isRefreshing,
+    error,
+    hasMore,
+    refetch,
+    loadMore,
+  } = useAdminBounties(filters);
+
+  const openBounty = useCallback(
+    (id: string) => router.push(ROUTES.ADMIN.BOUNTY_DETAIL(id) as never),
+    [router]
   );
 
-  const renderErrorState = () => (
-    <View style={styles.errorContainer}>
-      <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.3)" />
-      <Text style={styles.errorTitle}>Failed to load bounties</Text>
-      <Text style={styles.errorText}>{error}</Text>
-      <TouchableOpacity style={styles.retryButton} onPress={refetch}>
-        <Text style={styles.retryButtonText}>Retry</Text>
-      </TouchableOpacity>
-    </View>
+  const scopeLabel = params.posterId
+    ? 'Bounties posted by this user'
+    : params.hunterId
+      ? 'Bounties accepted by this user'
+      : undefined;
+
+  const renderItem = useCallback(
+    ({ item }: { item: AdminBounty }) => (
+      <BountyRow item={item} onPress={openBounty} />
+    ),
+    [openBounty]
   );
+
+  const keyExtractor = useCallback((item: AdminBounty) => item.id, []);
+
+  // A hard error with nothing on screen owns the viewport; a failed refresh
+  // over existing rows is only a banner.
+  const showFullError = !!error && bounties.length === 0 && !isLoading;
 
   return (
-    <View style={styles.container}>
-      <AdminHeader title="Bounties" onBack={() => router.back()} />
+    <AdminScreen>
+      <AdminHeader
+        title="Bounties"
+        subtitle={scopeLabel}
+        showBack
+        backFallback={ROUTES.ADMIN.INDEX}
+      />
 
-      {/* Filters */}
-      <View style={styles.filtersContainer}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={statusOptions}
-          keyExtractor={(item) => item || 'all'}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.filterChip, filters.status === item && styles.filterChipActive]}
-              onPress={() => setFilters({ ...filters, status: item })}
-            >
-              <Text style={[styles.filterText, filters.status === item && styles.filterTextActive]}>
-                {item === 'all' ? 'All' : (item || '').replace('_', ' ')}
-              </Text>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.filtersContent}
-        />
+      <AdminSearchBar
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search title or description…"
+      />
+
+      <View style={{ marginTop: theme.spacing.sm }}>
+        <AdminFilterChips options={STATUS_OPTIONS} value={status} onChange={setStatus} />
       </View>
 
-      {/* List */}
-      {error && !bounties.length ? (
-        renderErrorState()
+      {error && bounties.length > 0 ? <AdminErrorBanner message={error} onRetry={refetch} /> : null}
+
+      {showFullError ? (
+        <AdminError
+          title="Couldn't load bounties"
+          message="The bounty list could not be read. Check your connection and try again."
+          detail={error}
+          onRetry={refetch}
+        />
+      ) : isLoading && bounties.length === 0 ? (
+        <AdminLoading label="Loading bounties…" />
       ) : (
         <FlatList
           data={bounties}
-          renderItem={renderBountyItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={isLoading ? null : renderEmptyState}
-          refreshing={isLoading}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: 40 }}
+          refreshing={isRefreshing}
           onRefresh={refetch}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListEmptyComponent={
+            <AdminEmpty
+              icon="work-off"
+              title="No bounties found"
+              description={
+                search.trim()
+                  ? `Nothing matches "${search.trim()}"${status !== 'all' ? ` with status ${status.replace(/_/g, ' ')}` : ''}.`
+                  : status !== 'all'
+                    ? `No bounties currently have the status "${status.replace(/_/g, ' ')}".`
+                    : 'No bounties have been posted yet.'
+              }
+              actionLabel={search.trim() || status !== 'all' ? 'Clear filters' : 'Refresh'}
+              onAction={() => {
+                if (search.trim() || status !== 'all') {
+                  setSearch('');
+                  setStatus('all');
+                } else {
+                  void refetch();
+                }
+              }}
+            />
+          }
+          ListFooterComponent={
+            <AdminListFooter
+              shown={bounties.length}
+              total={total}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={loadMore}
+              noun="bounties"
+            />
+          }
         />
       )}
-    </View>
+    </AdminScreen>
   );
 }
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+const BountyRow = React.memo(function BountyRow({
+  item,
+  onPress,
+}: {
+  item: AdminBounty;
+  onPress: (id: string) => void;
+}) {
+  const { theme } = useAppTheme();
+  return (
+    <TouchableOpacity
+      style={{
+        backgroundColor: theme.surface,
+        borderRadius: theme.radius.lg,
+        padding: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.border,
+      }}
+      onPress={() => onPress(item.id)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.title}, status ${item.status}`}
+    >
+      <View style={styles.header}>
+        <Text
+          style={{ flex: 1, fontSize: 16, fontWeight: '600', color: theme.text }}
+          numberOfLines={1}
+        >
+          {item.title || 'Untitled bounty'}
+        </Text>
+        <AdminStatusBadge status={item.status} type="bounty" />
+      </View>
 
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
-}
+      {item.description ? (
+        <Text
+          style={{ fontSize: 14, color: theme.textSecondary, marginTop: 6, lineHeight: 20 }}
+          numberOfLines={2}
+        >
+          {item.description}
+        </Text>
+      ) : null}
+
+      <View style={[styles.meta, { marginTop: theme.spacing.md }]}>
+        <View style={styles.metaItem}>
+          <MaterialIcons
+            name={item.isForHonor ? 'favorite' : 'attach-money'}
+            size={14}
+            color={theme.primary}
+          />
+          <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+            {item.isForHonor ? 'For Honor' : formatMoney(item.amount)}
+          </Text>
+        </View>
+
+        {/* Poster is resolved to a username instead of showing a raw UUID. */}
+        {item.posterUsername || item.user_id ? (
+          <View style={styles.metaItem}>
+            <MaterialIcons name="person" size={14} color={theme.textSecondary} />
+            <Text style={{ fontSize: 12, color: theme.textSecondary }} numberOfLines={1}>
+              {item.posterUsername ?? 'Unknown poster'}
+            </Text>
+          </View>
+        ) : null}
+
+        {item.acceptedUsername ? (
+          <View style={styles.metaItem}>
+            <MaterialIcons name="handyman" size={14} color={theme.textSecondary} />
+            <Text style={{ fontSize: 12, color: theme.textSecondary }} numberOfLines={1}>
+              {item.acceptedUsername}
+            </Text>
+          </View>
+        ) : null}
+
+        {item.location ? (
+          <View style={styles.metaItem}>
+            <MaterialIcons name="location-on" size={14} color={theme.textSecondary} />
+            <Text style={{ fontSize: 12, color: theme.textSecondary }} numberOfLines={1}>
+              {item.location}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={[styles.footer, { marginTop: theme.spacing.sm }]}>
+        <Text style={{ fontSize: 12, color: theme.textDisabled }}>
+          {formatRelative(item.createdAt)}
+        </Text>
+        {item.isStale ? (
+          <View style={styles.metaItem}>
+            <MaterialIcons name="schedule" size={14} color={theme.warning} />
+            <Text style={{ fontSize: 12, color: theme.warning, fontWeight: '600' }}>
+              {item.staleReason ? `Stale: ${item.staleReason}` : 'Stale'}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a3d2e',
-  },
-  filtersContainer: {
-    backgroundColor: '#1a3d2e',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,145,44,0.2)',
-  },
-  filtersContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginRight: 8,
-  },
-  filterChipActive: {
-    backgroundColor: '#00912C',
-  },
-  filterText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,254,245,0.8)',
-    textTransform: 'capitalize',
-  },
-  filterTextActive: {
-    color: '#fffef5',
-  },
-  listContent: {
-    padding: 16,
-  },
-  bountyCard: {
-    backgroundColor: '#2d5240',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
-  },
-  bountyHeader: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
     gap: 12,
   },
-  bountyTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fffef5',
-  },
-  bountyDescription: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.7)',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  bountyFooter: {
+  meta: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  bountyMeta: {
-    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    maxWidth: '100%',
   },
-  metaText: {
-    fontSize: 12,
-    color: 'rgba(255,254,245,0.6)',
-  },
-  dateText: {
-    fontSize: 12,
-    color: 'rgba(255,254,245,0.5)',
-  },
-  flaggedBanner: {
+  footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(244,67,54,0.3)',
-  },
-  flaggedText: {
-    fontSize: 12,
-    color: '#f44336',
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    minHeight: 400,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fffef5',
-    marginTop: 16,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  refreshButton: {
-    backgroundColor: '#00912C',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 24,
-  },
-  refreshButtonText: {
-    color: '#fffef5',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fffef5',
-    marginTop: 16,
-  },
-  errorText: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#00912C',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 24,
-  },
-  retryButtonText: {
-    color: '#fffef5',
-    fontSize: 14,
-    fontWeight: '600',
+    justifyContent: 'space-between',
+    gap: 8,
   },
 });

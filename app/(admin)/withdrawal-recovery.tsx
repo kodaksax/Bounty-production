@@ -12,7 +12,9 @@
 // confirm an action actually happened without needing DB access.
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -56,6 +58,8 @@ async function callAdminWithdrawals(body: Record<string, unknown>) {
 }
 
 export default function AdminWithdrawalRecoveryScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [retryTransactionId, setRetryTransactionId] = useState('');
   const [retryReason, setRetryReason] = useState('');
   const [retrying, setRetrying] = useState(false);
@@ -308,7 +312,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="wallet_transactions.id"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={retryTransactionId}
             onChangeText={setRetryTransactionId}
             autoCapitalize="none"
@@ -316,7 +320,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="Reason (required, goes in the audit log)"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={retryReason}
             onChangeText={setRetryReason}
             multiline
@@ -327,7 +331,7 @@ export default function AdminWithdrawalRecoveryScreen() {
             disabled={retrying}
           >
             {retrying ? (
-              <ActivityIndicator color="#fffef5" />
+              <ActivityIndicator color={theme.text} />
             ) : (
               <Text style={styles.buttonText}>Force Retry</Text>
             )}
@@ -344,7 +348,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="User ID (profiles.id)"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={adjustUserId}
             onChangeText={setAdjustUserId}
             autoCapitalize="none"
@@ -352,7 +356,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="Amount, e.g. 38.00 or -38.00"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={adjustAmount}
             onChangeText={setAdjustAmount}
             keyboardType="numbers-and-punctuation"
@@ -360,7 +364,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="Related transaction ID (optional)"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={adjustRelatedTx}
             onChangeText={setAdjustRelatedTx}
             autoCapitalize="none"
@@ -368,7 +372,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="Reason (required, goes in the audit log)"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={adjustReason}
             onChangeText={setAdjustReason}
             multiline
@@ -379,7 +383,7 @@ export default function AdminWithdrawalRecoveryScreen() {
             disabled={adjusting}
           >
             {adjusting ? (
-              <ActivityIndicator color="#fffef5" />
+              <ActivityIndicator color={theme.text} />
             ) : (
               <Text style={styles.buttonText}>Apply Adjustment</Text>
             )}
@@ -399,7 +403,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="wallet_transactions.id"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={settleTransactionId}
             onChangeText={setSettleTransactionId}
             autoCapitalize="none"
@@ -407,7 +411,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="Reason (required, goes in the audit log)"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={settleReason}
             onChangeText={setSettleReason}
             multiline
@@ -415,7 +419,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="Note (optional, e.g. how/when paid)"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={settleNote}
             onChangeText={setSettleNote}
             multiline
@@ -423,7 +427,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="Balance adjustment (optional — leave blank if balance is already correct)"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={settleBalanceAdjustment}
             onChangeText={setSettleBalanceAdjustment}
             keyboardType="numbers-and-punctuation"
@@ -435,7 +439,7 @@ export default function AdminWithdrawalRecoveryScreen() {
             <MaterialIcons
               name={settleConfirmed ? 'check-box' : 'check-box-outline-blank'}
               size={20}
-              color="#00dc50"
+              color={theme.primary}
             />
             <Text style={styles.checkboxLabel}>
               I&apos;ve verified in the Stripe Dashboard that no payout has landed for this withdrawal
@@ -447,7 +451,7 @@ export default function AdminWithdrawalRecoveryScreen() {
             disabled={settling}
           >
             {settling ? (
-              <ActivityIndicator color="#fffef5" />
+              <ActivityIndicator color={theme.text} />
             ) : (
               <Text style={styles.buttonText}>Mark Settled</Text>
             )}
@@ -466,7 +470,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="wallet_transactions.id"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={reverseTransactionId}
             onChangeText={setReverseTransactionId}
             autoCapitalize="none"
@@ -474,7 +478,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           <TextInput
             style={styles.input}
             placeholder="Reason (required, goes in the audit log)"
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={theme.textDisabled}
             value={reverseReason}
             onChangeText={setReverseReason}
             multiline
@@ -485,7 +489,7 @@ export default function AdminWithdrawalRecoveryScreen() {
             disabled={reversing}
           >
             {reversing ? (
-              <ActivityIndicator color="#fffef5" />
+              <ActivityIndicator color={theme.text} />
             ) : (
               <Text style={styles.buttonText}>Reverse Transfer</Text>
             )}
@@ -505,7 +509,7 @@ export default function AdminWithdrawalRecoveryScreen() {
             disabled={runningReconciliation}
           >
             {runningReconciliation ? (
-              <ActivityIndicator color="#fffef5" />
+              <ActivityIndicator color={theme.text} />
             ) : (
               <Text style={styles.buttonText}>Run Reconciliation Now</Text>
             )}
@@ -515,11 +519,11 @@ export default function AdminWithdrawalRecoveryScreen() {
         <View style={styles.logHeaderRow}>
           <Text style={styles.sectionTitle}>Recent Recovery Actions</Text>
           <TouchableOpacity onPress={loadLog}>
-            <MaterialIcons name="refresh" size={22} color="#00dc50" />
+            <MaterialIcons name="refresh" size={22} color={theme.primary} />
           </TouchableOpacity>
         </View>
         {loadingLog && log.length === 0 ? (
-          <ActivityIndicator color="#00dc50" style={{ marginTop: 12 }} />
+          <ActivityIndicator color={theme.primary} style={{ marginTop: 12 }} />
         ) : log.length === 0 ? (
           <Text style={styles.hint}>No recovery actions recorded yet.</Text>
         ) : (
@@ -546,39 +550,40 @@ export default function AdminWithdrawalRecoveryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a3d2e' },
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.background },
   content: { padding: 16 },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
     marginTop: 8,
     marginBottom: 8,
   },
   hint: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginBottom: 12,
     lineHeight: 17,
   },
   input: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 10,
     fontSize: 14,
   },
   button: {
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fffef5', fontSize: 14, fontWeight: '700' },
+  buttonText: { color: theme.text, fontSize: 14, fontWeight: '700' },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -586,7 +591,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   checkboxLabel: {
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     fontSize: 12,
     flex: 1,
     lineHeight: 16,
@@ -601,9 +606,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 6,
   },
-  logAction: { color: '#00dc50', fontWeight: '700', fontSize: 13 },
-  logResult: { color: '#00dc50', fontWeight: '700', fontSize: 13, textTransform: 'uppercase' },
-  logResultFailure: { color: '#f44336' },
-  logMeta: { color: 'rgba(255,254,245,0.7)', fontSize: 12, marginBottom: 2 },
-  logDate: { color: 'rgba(255,254,245,0.5)', fontSize: 11, marginTop: 4, textAlign: 'right' },
+  logAction: { color: theme.primary, fontWeight: '700', fontSize: 13 },
+  logResult: { color: theme.primary, fontWeight: '700', fontSize: 13, textTransform: 'uppercase' },
+  logResultFailure: { color: theme.error },
+  logMeta: { color: theme.textSecondary, fontSize: 12, marginBottom: 2 },
+  logDate: { color: theme.textDisabled, fontSize: 11, marginTop: 4, textAlign: 'right' },
 });
