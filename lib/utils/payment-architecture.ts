@@ -38,3 +38,62 @@ export function isPhase2Bounty(bounty: BountyVersionFields | null | undefined): 
 export function shouldFundNewBountiesWithPhase2(): boolean {
   return config.features.paymentArchitectureVersion === '2';
 }
+
+/**
+ * Statuses in which a paid bounty's escrow is still held — the funds are
+ * neither released to a hunter nor refunded to the poster.
+ */
+const ESCROW_HELD_STATUSES = ['open', 'in_progress', 'cancellation_requested'];
+const V2_ESCROW_PENDING_STATUSES = [
+  'authorized',
+  'captured',
+  'pending_payment',
+  'release_pending',
+  'refund_pending',
+];
+const V2_ESCROW_TERMINAL_STATUSES = ['canceled', 'refunded', 'released'];
+
+interface BountyEscrowFields {
+  amount?: number | null;
+  is_for_honor?: boolean | null;
+  status?: string | null;
+  payment_architecture_version?: number | null;
+  payment_status?: string | null;
+  settlement_state?: string | null;
+}
+
+/**
+ * True when a bounty still holds escrowed funds. Delete paths that do not
+ * refund must block on this, so a poster cannot destroy a funded bounty and
+ * lose the money. Prefer the payment row's status/settlement state over the
+ * bounty lifecycle status when the bounty was funded under the v2 Stripe-native
+ * escrow architecture.
+ */
+export function bountyHoldsUnreleasedEscrow(
+  bounty: BountyEscrowFields | null | undefined
+): boolean {
+  if (!bounty) return false;
+  if (bounty.is_for_honor) return false;
+  if (!bounty.amount || bounty.amount <= 0) return false;
+
+  const normalizedStatus = (bounty.status ?? '').toLowerCase();
+  const paymentStatus = (bounty.payment_status ?? '').toLowerCase();
+  const settlementState = (bounty.settlement_state ?? '').toLowerCase();
+
+  if (isPhase2Bounty(bounty)) {
+    if (V2_ESCROW_TERMINAL_STATUSES.includes(paymentStatus)) {
+      return false;
+    }
+    if (V2_ESCROW_PENDING_STATUSES.includes(paymentStatus)) {
+      return true;
+    }
+    if (settlementState === 'stripe_settled' || settlementState === 'stripe_failed') {
+      return false;
+    }
+    if (settlementState === 'stripe_pending') {
+      return true;
+    }
+  }
+
+  return ESCROW_HELD_STATUSES.includes(normalizedStatus);
+}

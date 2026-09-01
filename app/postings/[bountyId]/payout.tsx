@@ -23,7 +23,7 @@ import { getHoursSinceClaimed } from '../../../lib/services/bounty-request-servi
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
-import { isPhase2Bounty } from '../../../lib/utils/payment-architecture';
+import { bountyHoldsUnreleasedEscrow, isPhase2Bounty } from '../../../lib/utils/payment-architecture';
 import { useWallet } from '../../../lib/wallet-context';
 
 export default function PayoutScreen() {
@@ -301,6 +301,17 @@ export default function PayoutScreen() {
 
   const handleDeleteBounty = async () => {
     if (!bounty) return;
+
+    // Do not delete a bounty that still holds escrowed funds — this path does
+    // not refund, so deleting would strand the money. Route to cancellation.
+    if (bountyHoldsUnreleasedEscrow(bounty)) {
+      Alert.alert(
+        'Cannot Delete',
+        'This bounty still holds escrowed funds. Cancel it first to refund your money, then delete it.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
     Alert.alert(
       'Delete Bounty',

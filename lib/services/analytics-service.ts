@@ -357,6 +357,11 @@ export type AnalyticsEvent =
   // `application_started` below) never contaminate a real liquidity metric.
   | 'bounty_completed'
   | 'bounty_cancelled'
+  // Fired once a bounty row is actually removed from the poster's active view
+  // (hard delete, or a soft delete to status='deleted' when payment records
+  // must be preserved). Carries `is_for_honor` and `amount` so a deletion that
+  // stranded escrowed funds is measurable — this had no event before.
+  | 'bounty_deleted'
   // Bounty browse/discovery events — see docs on the supply-vs-plumbing
   // question these resolve. `bounty_list_viewed` fires whenever a
   // list/feed/map of bounties renders with results (including zero — the

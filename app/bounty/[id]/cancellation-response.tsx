@@ -101,17 +101,25 @@ export default function CancellationResponseScreen() {
                     if (useV2) {
                       // Stripe-native Phase 2 escrow only supports a full
                       // cancel/refund server-side; the v1-only partial
-                      // refundPercentage isn't applicable here.
-                      await bountyPaymentsService.cancelBountyPayment(String(bountyId));
-                      result = true;
+                      // refundPercentage isn't applicable here. Require a
+                      // terminal v2 status before treating the cancellation as
+                      // complete — refund_pending is not a settled refund.
+                      const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bountyId));
+                      result = cancelResult.status === 'canceled' || cancelResult.status === 'refunded';
                     } else {
+                      // refundEscrow returns false on failure instead of
+                      // throwing, so escrow_refunded must be gated on the result.
                       result = await refundEscrow(bountyId, title, refundPercentage);
                     }
                     try {
-                      await analyticsService.trackEvent('escrow_refunded', {
-                        bountyId: String(bountyId),
-                        architecture: useV2 ? 'v2' : 'v1',
-                      });
+                      await analyticsService.trackEvent(
+                        result ? 'escrow_refunded' : 'payment_failed',
+                        {
+                          bountyId: String(bountyId),
+                          architecture: useV2 ? 'v2' : 'v1',
+                          ...(result ? {} : { stage: 'cancel' }),
+                        }
+                      );
                     } catch {
                       /* analytics is best-effort */
                     }

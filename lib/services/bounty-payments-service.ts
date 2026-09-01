@@ -50,6 +50,8 @@ export interface CancelBountyPaymentResult {
   reused?: boolean;
 }
 
+const TERMINAL_CANCEL_STATUSES = new Set(['canceled', 'refunded']);
+
 /** Error thrown when the edge function returns a non-2xx response. Carries the
  *  server's machine-readable `code` (e.g. 'hunter_not_onboarded') and message. */
 export class BountyPaymentError extends Error {
@@ -131,7 +133,18 @@ export async function releaseBountyPayment(
  * states; rejects if funds were already released to the hunter.
  */
 export async function cancelBountyPayment(bountyId: string): Promise<CancelBountyPaymentResult> {
-  return postBountyPayments<CancelBountyPaymentResult>('/cancel', { bountyId });
+  const result = await postBountyPayments<CancelBountyPaymentResult>('/cancel', { bountyId });
+  const status = String(result?.status ?? '').toLowerCase();
+
+  if (!TERMINAL_CANCEL_STATUSES.has(status)) {
+    throw new BountyPaymentError(
+      `Bounty payment cancellation is still pending (${status || 'unknown'}).`,
+      409,
+      'cancel_pending'
+    );
+  }
+
+  return result;
 }
 
 export const bountyPaymentsService = {

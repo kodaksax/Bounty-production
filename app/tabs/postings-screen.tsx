@@ -158,6 +158,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // Refs for lists so we can scroll items into view when expanded
   const inProgressListRef = useRef<any>(null)
   const myPostingsListRef = useRef<any>(null)
+  // Bounty ids with a delete/refund in flight — blocks repeat taps from
+  // re-entering the refund and firing duplicate escrow events.
+  const deletingBountyIdsRef = useRef<Set<string>>(new Set())
   // Attests that the New Bounty tab was reached via an explicit tap, not by
   // defaulting to it (activeTab starts as "new" whenever no initialTab is
   // passed). Seeded from `deliberateTapParam` so a moments CTA that routes
@@ -545,6 +548,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            const deleteKey = String(bounty.id)
+            if (deletingBountyIdsRef.current.has(deleteKey)) return
+            deletingBountyIdsRef.current.add(deleteKey)
             try {
               // Process refund FIRST for paid bounties before any other operations
               if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
@@ -561,10 +567,20 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 try {
                   if (useV2) {
                     // Stripe-native Phase 2 escrow: cancels the PaymentIntent
-                    // pre-capture, or issues a refund post-capture.
-                    await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
+                    // pre-capture, or issues a refund post-capture. Only a
+                    // terminal v2 status is safe to treat as a successful refund.
+                    const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
+                    if (cancelResult.status !== 'canceled' && cancelResult.status !== 'refunded') {
+                      throw new Error(`Escrow cancellation is still pending (${cancelResult.status})`)
+                    }
                   } else {
-                    await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
+                    // refundEscrow signals failure by returning false, not by
+                    // throwing — so the boolean must be checked or a failed
+                    // refund would still delete the bounty and lose the money.
+                    const refunded = await refundEscrow(bounty.id, bounty.title, 100) // 100% refund for unaccepted bounties
+                    if (!refunded) {
+                      throw new Error('Escrow refund did not complete')
+                    }
                   }
                   try {
                     await analyticsService.trackEvent('escrow_refunded', {
@@ -611,6 +627,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               // Error handling - no rollback needed since we didn't optimistically update
               setError(err.message || "Failed to delete posting")
               Alert.alert('Error', err.message || 'Failed to delete bounty. Please try again.')
+            } finally {
+              deletingBountyIdsRef.current.delete(deleteKey)
             }
           },
         },
