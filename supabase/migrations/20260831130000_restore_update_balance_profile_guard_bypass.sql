@@ -1,12 +1,19 @@
 -- Migration: restore the app.bypass_profile_guard bypass inside update_balance()
 -- Created: 2026-08-31
 --
--- Follow-up to 20260831120000.  The same out-of-band hardening pass that added
--- the request.jwt.claims guard to update_balance() also rewrote the body
--- *without* the profile-guard bypass that 20260719120000 had put around its
--- UPDATE.  The jwt guard raised first, so this second break stayed masked until
--- 20260831120000 fixed it; posting a funded v1 bounty then failed one layer
--- deeper with:
+-- Follow-up to 20260831120000, which now includes this same bypass restoration
+-- directly (so that migration is self-sufficient on its own and does not leave
+-- update_balance() broken a second, deeper way if applied without this one).
+-- This migration re-applies the identical, already-correct function body via
+-- CREATE OR REPLACE — a no-op change over 20260831120000 — kept as its own
+-- migration to match the original two-step history of how this was diagnosed
+-- and fixed in production.
+--
+-- Context: the out-of-band hardening pass that added the request.jwt.claims
+-- guard to update_balance() also rewrote the body *without* the profile-guard
+-- bypass that 20260719120000 had put around its UPDATE.  The jwt guard raised
+-- first, so this second break stayed masked until 20260831120000's guard fix;
+-- posting a funded v1 bounty then failed one layer deeper with:
 --
 --     Direct client writes to financial, risk, verification, or Stripe Connect
 --     profile fields are not permitted...
@@ -19,16 +26,15 @@
 -- that had stopped setting it.
 --
 -- This restores the bypass exactly as 20260719120000 specified it, on top of
--- the current_user guard from 20260831120000.
---
--- It also fixes a latent defect in that original bypass ordering: PL/pgSQL's
--- FOUND is reassigned by PERFORM, and `SELECT set_config(...)` always returns a
--- row, so the `PERFORM set_config(...'off'...)` between the UPDATE and the
--- `IF NOT FOUND` check left FOUND permanently true.  The 'User not found' P0002
--- branch was therefore dead: update_balance() for a nonexistent user silently
--- returned NULL instead of raising (and the NULL then skipped the < 0 check
--- too).  The FOUND test now sits immediately after the UPDATE, before any other
--- statement can clobber it.
+-- the current_user guard from 20260831120000, and keeps the fix to a latent
+-- defect in that original bypass ordering: PL/pgSQL's FOUND is reassigned by
+-- PERFORM, and `SELECT set_config(...)` always returns a row, so the
+-- `PERFORM set_config(...'off'...)` between the UPDATE and the `IF NOT FOUND`
+-- check left FOUND permanently true.  The 'User not found' P0002 branch was
+-- therefore dead: update_balance() for a nonexistent user silently returned
+-- NULL instead of raising (and the NULL then skipped the < 0 check too).  The
+-- FOUND test now sits immediately after the UPDATE, before any other statement
+-- can clobber it.
 --
 -- Unchanged and still verified: only postgres and service_role hold EXECUTE.
 
@@ -43,11 +49,14 @@ AS $$
 DECLARE
   v_new_balance NUMERIC;
 BEGIN
-  -- Backend-only.  current_user is the *effective* role: the caller's PostgREST
-  -- role for a direct call, and the definer (postgres) when reached from one of
-  -- the SECURITY DEFINER wallet functions/triggers.  Unlike request.jwt.claims
-  -- this distinguishes the two, so internal callers running inside an end
-  -- user's transaction are not rejected.
+  -- Backend-only.  This is a SECURITY DEFINER function, so current_user is
+  -- always its owner (postgres), on any call path — direct or nested. It does
+  -- not distinguish a direct client call from a nested one from a trusted
+  -- caller; the real "backend-only" enforcement is the EXECUTE grants below
+  -- (only postgres/service_role hold EXECUTE, so PostgREST 42501s a direct
+  -- client call before the body runs). This check is defence in depth for the
+  -- case a grant is later handed out by mistake, asserting the function is
+  -- running as a trusted owner role.
   IF current_user NOT IN ('postgres', 'service_role', 'supabase_admin') THEN
     RAISE EXCEPTION 'update_balance: backend-only function'
       USING ERRCODE = '42501';
