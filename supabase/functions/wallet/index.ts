@@ -385,12 +385,13 @@ Deno.serve(async (req: Request) => {
 
             const { data: cached } = await supabase
               .from('connect_balance_cache')
-              .select('available_cents, pending_cents, currency, fetched_at')
+              .select('stripe_connect_account_id, available_cents, pending_cents, currency, fetched_at')
               .eq('user_id', userId)
               .maybeSingle();
 
             const cacheFresh =
               cached &&
+              String(cached.stripe_connect_account_id ?? '') === String(connectAccountId) &&
               nowMs - new Date(cached.fetched_at as string).getTime() < CACHE_TTL_MS;
 
             if (cacheFresh) {

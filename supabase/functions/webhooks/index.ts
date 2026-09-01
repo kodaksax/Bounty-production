@@ -2439,7 +2439,10 @@ Deno.serve(async (req: Request) => {
           console.error(
             `[webhooks] v3 transfer REVERSED for bounty ${transfer.metadata?.bounty_id} (${transfer.id}) — manual review required`
           );
-          await handleTransferSetback(supabase, transfer, 'reversed');
+          // v3 is tracked through bounty_v3_funding + ledger_entries, not the
+          // wallet_transactions path used by legacy/Phase 2 transfers. Do not
+          // invoke handleTransferSetback here or it would incorrectly mutate
+          // wallet rows for a v3 release.
           break;
         }
 

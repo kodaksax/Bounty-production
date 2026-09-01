@@ -32,6 +32,11 @@ export function isPhase2Bounty(bounty: BountyVersionFields | null | undefined): 
   return getBountyPaymentArchitectureVersion(bounty) === 2;
 }
 
+export function isStripeNativeBounty(bounty: BountyVersionFields | null | undefined): boolean {
+  const v = getBountyPaymentArchitectureVersion(bounty);
+  return v === 2 || v === 3;
+}
+
 export function isV3Bounty(bounty: BountyVersionFields | null | undefined): boolean {
   return getBountyPaymentArchitectureVersion(bounty) === 3;
 }

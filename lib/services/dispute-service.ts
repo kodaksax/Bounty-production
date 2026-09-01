@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
-import { isPhase2Bounty } from 'lib/utils/payment-architecture';
+import { isPhase2Bounty, isStripeNativeBounty, isV3Bounty } from 'lib/utils/payment-architecture';
 import type { BountyDispute, DisputeEvidence, LocalDisputeEvidence } from '../types';
 import { analyticsService } from './analytics-service';
 import { bountyPaymentsService } from './bounty-payments-service';
@@ -589,6 +589,7 @@ export const disputeService = {
       // either the legacy payment_intent_id field or bounty_payments, never
       // both).
       const isPhase2 = !!bounty && !isHonorBounty && isPhase2Bounty(bounty);
+      const isStripeNative = !!bounty && !isHonorBounty && isStripeNativeBounty(bounty);
 
       // Map the winner to the new application-level resolution status and
       // atomically release the balance_on_hold via fn_close_dispute_hold.
@@ -607,7 +608,7 @@ export const disputeService = {
       // would cause, which would double-charge the poster (once via Stripe, once via wallet).
       // The dispute row's status is corrected to resolvedStatus by the update() call below.
       const holdReleaseStatus =
-        winner === 'hunter' && (hasStripeEscrow || isPhase2) ? 'resolved' : resolvedStatus;
+        winner === 'hunter' && (hasStripeEscrow || isStripeNative) ? 'resolved' : resolvedStatus;
 
       const _pDisputeId = normalizeDisputeIdParam(disputeId);
       const { error: holdRpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
@@ -649,7 +650,7 @@ export const disputeService = {
           resolvedStatus,
           isHonorBounty: !!isHonorBounty,
           hasStripeEscrow: !!hasStripeEscrow,
-          paymentArchitectureVersion: isPhase2 ? 2 : 1,
+          paymentArchitectureVersion: isV3Bounty(bounty) ? 3 : isPhase2 ? 2 : 1,
         });
       } catch {
         /* analytics is best-effort */
@@ -669,7 +670,7 @@ export const disputeService = {
         try {
           await analyticsService.trackEvent('payment_architecture_routed', {
             bountyId: String(dispute.bountyId),
-            version: isPhase2 ? 2 : 1,
+            version: isV3Bounty(bounty) ? 3 : isPhase2 ? 2 : 1,
             context: 'dispute_resolution',
           });
         } catch {
@@ -685,7 +686,7 @@ export const disputeService = {
                 escrowActionExecuted = true;
                 await analyticsService.trackEvent('escrow_released', {
                   bountyId: String(dispute.bountyId),
-                  architecture: 'v2',
+                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   via: 'dispute_resolution',
                 });
               } catch (releaseErr) {
@@ -696,7 +697,7 @@ export const disputeService = {
                 });
                 await analyticsService.trackEvent('payment_failed', {
                   bountyId: String(dispute.bountyId),
-                  architecture: 'v2',
+                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   stage: 'dispute_release',
                 });
               }
@@ -706,7 +707,7 @@ export const disputeService = {
                 escrowActionExecuted = true;
                 await analyticsService.trackEvent('escrow_refunded', {
                   bountyId: String(dispute.bountyId),
-                  architecture: 'v2',
+                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   via: 'dispute_resolution',
                 });
               } catch (refundErr) {
@@ -717,7 +718,7 @@ export const disputeService = {
                 });
                 await analyticsService.trackEvent('payment_failed', {
                   bountyId: String(dispute.bountyId),
-                  architecture: 'v2',
+                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   stage: 'dispute_cancel',
                 });
               }

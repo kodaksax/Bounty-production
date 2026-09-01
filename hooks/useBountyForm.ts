@@ -136,13 +136,13 @@ export function useBountyForm({
       // keep the custodial wallet flow they were created with (see
       // lib/utils/payment-architecture.ts). Either way the custodial wallet
       // balance is irrelevant, so the balance gate below is skipped.
-      const useV2Payments =
+      const useStripeNativePayments =
         !formData.isForHonor && formData.amount > 0 && shouldUseStripeNativeFunding()
 
-      // Validate balance BEFORE posting bounty for paid, v1 bounties. The v2
-      // path charges a card directly via Stripe, so the custodial wallet
-      // balance is not relevant there.
-      if (!useV2Payments && !formData.isForHonor && formData.amount > 0) {
+      // Validate balance BEFORE posting bounty for paid, v1 bounties. The Stripe-native
+      // path charges a card directly via Stripe, so the custodial wallet balance is not
+      // relevant there.
+      if (!useStripeNativePayments && !formData.isForHonor && formData.amount > 0) {
         if (balance < formData.amount) {
           // Real signal that the user needs funds right now — surface the
           // Moments Queue's fund_wallet prompt next time it's evaluated,
@@ -201,29 +201,35 @@ export function useBountyForm({
 
       // Create escrow for paid bounties (funds are held when bounty is posted)
       if (bounty && !bounty.is_for_honor && bounty.amount > 0) {
-        try {
-          await analyticsService.trackEvent('payment_architecture_routed', {
-            bountyId: String(bounty.id),
-            version: useV2Payments ? 2 : 1,
-            context: 'funding',
-          })
-        } catch {
-          /* analytics is best-effort */
-        }
+        let paymentArchitectureVersion: 1 | 2 | 3 = useStripeNativePayments ? 2 : 1
 
-        if (useV2Payments) {
+        if (useStripeNativePayments) {
           try {
+            const paymentResult = await bountyPaymentsService.createBountyPayment(String(bounty.id))
+            const actualArchitectureVersion =
+              (paymentResult as { architectureVersion?: number }).architectureVersion ?? 2
+            paymentArchitectureVersion =
+              actualArchitectureVersion === 3 ? 3 : actualArchitectureVersion === 2 ? 2 : 1
+
             try {
-              await analyticsService.trackEvent('payment_initiated', {
+              await analyticsService.trackEvent('payment_architecture_routed', {
                 bountyId: String(bounty.id),
-                architecture: 'v2',
-                amount: bounty.amount,
+                version: paymentArchitectureVersion,
+                context: 'funding',
               })
             } catch {
               /* analytics is best-effort */
             }
 
-            const paymentResult = await bountyPaymentsService.createBountyPayment(String(bounty.id))
+            try {
+              await analyticsService.trackEvent('payment_initiated', {
+                bountyId: String(bounty.id),
+                architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
+                amount: bounty.amount,
+              })
+            } catch {
+              /* analytics is best-effort */
+            }
 
             // Confirm against the poster's saved payment method — this
             // codebase does not use Stripe's PaymentSheet UI component (see
@@ -242,8 +248,7 @@ export function useBountyForm({
             // successful v3 confirmation lands on 'requires_capture'. Rejecting
             // that would roll back and delete every v3 bounty. The server
             // reports which path actually ran.
-            const isV3Payment =
-              (paymentResult as { architectureVersion?: number }).architectureVersion === 3
+            const isV3Payment = paymentArchitectureVersion === 3
             const acceptableStatuses = isV3Payment
               ? ['requires_capture', 'succeeded']
               : ['succeeded']
@@ -254,7 +259,7 @@ export function useBountyForm({
             try {
               await analyticsService.trackEvent('escrow_funded', {
                 bountyId: String(bounty.id),
-                architecture: 'v2',
+                architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
                 amount: bounty.amount,
               })
             } catch {
@@ -265,7 +270,7 @@ export function useBountyForm({
             try {
               await analyticsService.trackEvent('payment_failed', {
                 bountyId: String(bounty.id),
-                architecture: 'v2',
+                architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
                 stage: 'create_or_confirm',
               })
             } catch {
