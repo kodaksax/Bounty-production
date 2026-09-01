@@ -23,6 +23,7 @@ export interface ApplePayPaymentRequest {
   amount: number; // in dollars
   description: string;
   bountyId?: string;
+  attemptId?: string;
 }
 
 export interface ApplePayResult {
@@ -37,8 +38,9 @@ export interface ApplePayResult {
  * idempotency key. A confirm failure makes the user tap Pay again within
  * seconds (a duplicate $1.00 charge 17 seconds apart is the case that
  * motivated this), so the key must stay stable across that retry loop.
+ * Kept short (60s) so legitimate back-to-back deposits are not blocked.
  */
-const IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000;
+const IDEMPOTENCY_WINDOW_MS = 60 * 1000;
 
 /** PaymentIntent statuses that mean the charge will never complete. */
 const TERMINAL_FAILURE_STATUSES = new Set(['requires_payment_method', 'canceled']);
@@ -90,12 +92,12 @@ class ApplePayService {
   /**
    * Build the Stripe idempotency key for a deposit attempt.
    *
-   * The key is derived from the user, the amount, and a short time bucket —
-   * NOT from Date.now(). A per-timestamp key gave every tap a new key and
-   * therefore a brand-new PaymentIntent, so a second tap after a confirm error
-   * created a second charge. With this key, re-taps of the same deposit inside
-   * one window share a key, so Stripe returns the first PaymentIntent instead
-   * of charging again.
+   * The key is derived from the user, the amount, and either a client-supplied
+   * attemptId or a short time bucket — NOT from Date.now(). A per-timestamp key
+   * gave every tap a new key and therefore a brand-new PaymentIntent, so a
+   * second tap after a confirm error created a second charge. With this key,
+   * re-taps of the same deposit inside one attempt/window share a key, so Stripe
+   * returns the first PaymentIntent instead of charging again.
    *
    * The user scope prevents two people on the same device (or a missing user
    * id) from ever sharing a key. Without a user id we fall back to a unique
@@ -105,6 +107,10 @@ class ApplePayService {
     const amountKey = Math.round(request.amount * 100);
     if (!userId) {
       return `apple_pay_${amountKey}_${Date.now()}`;
+    }
+    if (request.attemptId) {
+      const safeAttemptId = request.attemptId.replace(/[^a-zA-Z0-9_-]/g, '');
+      return `apple_pay_${userId}_${amountKey}_${safeAttemptId}`;
     }
     const bucket = Math.floor(Date.now() / IDEMPOTENCY_WINDOW_MS);
     return `apple_pay_${userId}_${amountKey}_${bucket}`;

@@ -99,6 +99,51 @@ describe('ApplePayService duplicate-charge guards', () => {
     expect(sentKeys[0]).not.toContain(String(Date.now()));
   });
 
+  it('scopes idempotency key to explicit attemptId when provided', async () => {
+    const sentKeys: string[] = [];
+    fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      if (url.endsWith('/payment-intent')) {
+        sentKeys.push(body.idempotencyKey);
+        return jsonResponse(paymentIntentBody('pi_attempt'));
+      }
+      return jsonResponse({ success: true, status: 'succeeded' });
+    });
+    mockConfirmPlatformPayPayment.mockResolvedValue({ error: null });
+
+    await applePayService.processPayment(
+      { amount: 5, description: 'Add Money', attemptId: 'attempt_abc123' },
+      'tok'
+    );
+
+    expect(sentKeys).toHaveLength(1);
+    expect(sentKeys[0]).toContain('attempt_abc123');
+    expect(sentKeys[0]).toContain(USER_ID);
+  });
+
+  it('generates a new idempotency key for a deposit after the window expires', async () => {
+    const sentKeys: string[] = [];
+    fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      if (url.endsWith('/payment-intent')) {
+        sentKeys.push(body.idempotencyKey);
+        return jsonResponse(paymentIntentBody('pi_time'));
+      }
+      return jsonResponse({ success: true, status: 'succeeded' });
+    });
+    mockConfirmPlatformPayPayment.mockResolvedValue({ error: null });
+
+    await applePayService.processPayment({ amount: 1, description: 'Add Money' }, 'tok');
+
+    // Advance time by 61 seconds (past the 60s window)
+    (Date.now as jest.Mock).mockReturnValue(1_700_000_000_000 + 61_000);
+
+    await applePayService.processPayment({ amount: 1, description: 'Add Money' }, 'tok');
+
+    expect(sentKeys).toHaveLength(2);
+    expect(sentKeys[0]).not.toBe(sentKeys[1]);
+  });
+
   it('reports success when a non-cancel confirm error hides an already-succeeded charge', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url.endsWith('/payment-intent')) {

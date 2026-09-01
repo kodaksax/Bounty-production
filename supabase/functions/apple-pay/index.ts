@@ -28,7 +28,7 @@ function sanitizeText(input: unknown): string {
 
 // How far back a "recent" succeeded deposit counts as the same logical deposit.
 // Matches the client idempotency window (lib/services/apple-pay-service.ts).
-const RECENT_DEPOSIT_WINDOW_SECONDS = 10 * 60
+const RECENT_DEPOSIT_WINDOW_SECONDS = 60
 
 /**
  * Find a recent succeeded wallet-deposit PaymentIntent for this user and exact
@@ -41,7 +41,7 @@ async function findRecentSucceededDeposit(
   stripe: Stripe,
   userId: string,
   amount: number,
-): Promise<{ id: string; client_secret: string | null } | undefined> {
+): Promise<{ id: string; client_secret: string } | undefined> {
   // Quote characters would break out of the search query literal.
   const safeUserId = userId.replace(/['"\\]/g, '')
   if (!safeUserId) return undefined
@@ -51,7 +51,24 @@ async function findRecentSucceededDeposit(
     const query = `status:'succeeded' AND metadata['user_id']:'${safeUserId}' AND metadata['purpose']:'wallet_deposit'`
     const results = await stripe.paymentIntents.search({ query, limit: 20 })
     const match = results.data.find((pi) => pi.amount === amount && pi.created >= cutoff)
-    return match ? { id: match.id, client_secret: match.client_secret } : undefined
+    if (!match) return undefined
+
+    let clientSecret = match.client_secret
+    if (!clientSecret) {
+      try {
+        const retrieved = await stripe.paymentIntents.retrieve(match.id)
+        clientSecret = retrieved.client_secret
+      } catch (retrieveError) {
+        console.warn('[apple-pay edge fn] Failed to retrieve matched PaymentIntent client_secret:', retrieveError)
+        return undefined
+      }
+    }
+
+    if (!clientSecret) {
+      return undefined
+    }
+
+    return { id: match.id, client_secret: clientSecret }
   } catch (error) {
     console.warn('[apple-pay edge fn] Recent-deposit search failed; proceeding to create:', error)
     return undefined
