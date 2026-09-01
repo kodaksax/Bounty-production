@@ -91,6 +91,7 @@ type InitPayload = {
 type BridgeMessage =
   | { type: 'ready' }
   | { type: 'exit' }
+  | { type: 'need_secret'; id: number }
   | { type: 'mounted'; component?: string }
   | { type: 'retry' }
   | { type: 'load_error'; error?: string }
@@ -523,6 +524,32 @@ export function ConnectEmbeddedWebView({
         case 'mounted':
           onMounted?.(component);
           break;
+        case 'need_secret': {
+          // Connect.js asked for a fresh client secret because the Account
+          // Session expired mid-flow. Mint a new one and hand it back rather
+          // than letting the component fail.
+          const requestId = msg.id;
+          fetchSession()
+            .then(next => {
+              webViewRef.current?.postMessage(
+                JSON.stringify({
+                  type: 'client_secret',
+                  id: requestId,
+                  clientSecret: next.clientSecret,
+                })
+              );
+            })
+            .catch((err: unknown) => {
+              webViewRef.current?.postMessage(
+                JSON.stringify({
+                  type: 'client_secret',
+                  id: requestId,
+                  error: err instanceof Error ? err.message : 'Could not refresh Stripe session.',
+                })
+              );
+            });
+          break;
+        }
         case 'retry':
           reloadWebView();
           break;
@@ -554,7 +581,7 @@ export function ConnectEmbeddedWebView({
           break;
       }
     },
-    [component, onError, onExit, onMounted, reloadWebView, sendInit, sendToPopup]
+    [component, fetchSession, onError, onExit, onMounted, reloadWebView, sendInit, sendToPopup]
   );
 
   // If the WebView loads *after* session data is ready, the `ready` message

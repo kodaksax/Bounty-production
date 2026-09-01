@@ -1,33 +1,33 @@
 /**
- * Stripe Connect onboarding screen (mobile-native in-app flow).
+ * Stripe Connect onboarding screen — embedded onboarding.
  *
- * Apple's ASWebAuthenticationSession (iOS) and Android's Chrome Custom Tabs
- * are the platform-sanctioned way to present a third-party onboarding /
- * authentication flow without taking the user out of the app:
+ * Follows https://docs.stripe.com/connect/embedded-onboarding using Stripe's
+ * official React Native bindings, so the connected account completes KYC
+ * inside our own app instead of on a Stripe-hosted page:
  *
- *   - They render over the app and dismiss back to it automatically when
- *     the hosted flow redirects to a registered deep link / universal link.
- *   - They share the system's browser engine (WKWebView on iOS, Chrome on
- *     Android), so every page feature Stripe relies on works — including
- *     `window.open`, cross-origin `postMessage`, storage for `m.stripe.network`,
- *     Stripe Identity document capture, Apple/Google autofill, and SMS
- *     one-time-code autofill. These are the exact invariants that break
- *     inside a nested `react-native-webview`.
- *   - Both Apple and Google explicitly treat these as "in-app" presentations
- *     for App Store / Play review purposes.
+ *   1. `POST /connect/create-account-session` mints an Account Session with
+ *      `components.account_onboarding` enabled (creating the Express account
+ *      on first run) and returns its `client_secret` + publishable key.
+ *   2. `loadConnectAndInitialize` builds a Connect instance whose
+ *      `fetchClientSecret` re-mints a session on demand — Stripe calls it
+ *      again whenever the session expires, which a long KYC flow (document
+ *      upload, bank details) can easily outlive.
+ *   3. `<ConnectAccountOnboarding />` presents Stripe's account-onboarding
+ *      component as a full-screen modal, themed with our appearance
+ *      variables. Stripe owns the auth WebView it needs for Express accounts.
  *
- * We combine that with Stripe's hosted Express Account Link (the
- * `POST /connect/create-account-link` edge route we already ship), whose
- * `return_url` is our universal link `https://bountyfinder.app/wallet/connect/return`.
- * Stripe redirects to it on completion, the OS auto-dismisses the session,
- * and we refresh onboarding state via `/connect/verify-onboarding` — the
- * `account.updated` webhook remains authoritative.
+ * Completion signal: `onExit` fires when the account owner finishes or leaves
+ * the flow, and Stripe's own truth is the arbiter from there — we call
+ * `/connect/verify-onboarding` and derive the outcome from charges_enabled /
+ * payouts_enabled / details_submitted / requirements.currently_due, then show
+ * it via ConnectOnboardingResult and wait for the user to acknowledge. The
+ * `account.updated` webhook remains authoritative for the profile columns
+ * (the client cannot write them — the profile guard trigger rejects it).
  *
- * Once status is reconciled, we show an explicit outcome screen (success /
- * pending / action-required / cancelled / couldn't-verify) via
- * ConnectOnboardingResult and wait for the user to acknowledge it before
- * dismissing — rather than silently popping the stack the instant the
- * "Finalizing…" spinner finishes, which gave no feedback either way.
+ * Browser fallback: if the embedded component can't load (`onLoadError`), the
+ * error screen offers the hosted Account Link in an ASWebAuthenticationSession
+ * (iOS) / Chrome Custom Tab (Android) so a hunter is never locked out of
+ * getting paid.
  *
  * The screen is reached via `router.push('/wallet/connect/embedded-onboarding')`
  * from `ConnectOnboardingButton`, the withdraw flows, etc. — keeping the
@@ -38,6 +38,12 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
+import {
+    ConnectAccountOnboarding,
+    ConnectComponentsProvider,
+    loadConnectAndInitialize,
+    type StripeConnectInstance,
+} from '@stripe/stripe-react-native';
 import { Stack, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -62,13 +68,16 @@ import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../../../lib/config/app
 import { momentsService } from '../../../lib/moments/momentsService';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { authProfileService } from '../../../lib/services/auth-profile-service';
-import { supabase } from '../../../lib/supabase';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { useWallet } from '../../../lib/wallet-context';
 
-type Phase = 'starting' | 'in_browser' | 'finalizing' | 'result' | 'error';
-type BrowserResultType = 'success' | 'cancel' | 'dismiss' | 'opened' | 'locked' | null;
+type Phase = 'starting' | 'embedded' | 'in_browser' | 'finalizing' | 'result' | 'error';
+
+interface AccountSession {
+  clientSecret: string;
+  publishableKey: string;
+}
 
 interface VerifyOnboardingResponse {
   onboarded?: boolean;
@@ -79,21 +88,79 @@ interface VerifyOnboardingResponse {
   disabledReason?: string | null;
 }
 
-// Stripe's own truth (charges_enabled && payouts_enabled) always wins, even
-// over a "cancelled" browser result — covers the case where the account was
-// already fully onboarded (e.g. a webhook landed between sessions) and the
-// user just closed a redundant onboarding screen.
+// Stripe's account state is the only signal we trust here. Unlike the hosted
+// flow there is no "returned to our redirect URL" hint to lean on — `onExit`
+// fires both when the account owner completes onboarding and when they back
+// out of it — so the outcome is derived purely from the account itself.
 function deriveOutcome(args: {
-  browserResultType: BrowserResultType;
   onboarded: boolean;
   detailsSubmitted: boolean;
   currentlyDue: string[];
 }): ConnectOnboardingOutcome {
   if (args.onboarded) return 'success';
-  if (args.browserResultType !== 'success') return 'cancelled';
+  // Nothing submitted yet ⇒ they left the form before finishing it.
+  if (!args.detailsSubmitted) return 'cancelled';
   if (args.currentlyDue.length > 0) return 'action_required';
-  if (args.detailsSubmitted) return 'pending';
-  return 'action_required';
+  return 'pending';
+}
+
+/** Mints a fresh Account Session scoped to the account-onboarding component. */
+async function createAccountSession(token: string): Promise<AccountSession> {
+  const response = await fetch(`${API_BASE_URL}/connect/create-account-session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ components: { account_onboarding: true } }),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as {
+    clientSecret?: string;
+    publishableKey?: string;
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(data.error || `Couldn't start Stripe onboarding (${response.status}).`);
+  }
+  if (!data.clientSecret || !data.publishableKey) {
+    throw new Error('Stripe returned an incomplete onboarding session. Please try again.');
+  }
+
+  return { clientSecret: data.clientSecret, publishableKey: data.publishableKey };
+}
+
+/** Maps the app theme onto Connect's appearance variables. */
+function connectAppearance(t: AppTheme) {
+  return {
+    overlays: 'dialog' as const,
+    variables: {
+      colorPrimary: t.primary,
+      colorBackground: t.background,
+      colorText: t.text,
+      colorSecondaryText: t.textSecondary,
+      colorBorder: t.border,
+      colorDanger: t.error,
+      buttonPrimaryColorBackground: t.primary,
+      buttonPrimaryColorBorder: t.primary,
+      buttonPrimaryColorText: '#ffffff',
+      buttonSecondaryColorBackground: t.surfaceSecondary,
+      buttonSecondaryColorBorder: t.border,
+      buttonSecondaryColorText: t.text,
+      actionPrimaryColorText: t.primary,
+      actionSecondaryColorText: t.textSecondary,
+      offsetBackgroundColor: t.surface,
+      formBackgroundColor: t.surfaceSecondary,
+      formHighlightColorBorder: t.primary,
+      formAccentColor: t.primary,
+      borderRadius: '12px',
+      buttonBorderRadius: '10px',
+      formBorderRadius: '10px',
+      spacingUnit: '9px',
+      fontSizeBase: '15px',
+    },
+  };
 }
 
 const VERIFY_TIMEOUT_MS = 15000;
@@ -111,15 +178,20 @@ export default function ConnectOnboardingScreen() {
   const [outcome, setOutcome] = useState<ConnectOnboardingOutcome | null>(null);
   const [requirementsCurrentlyDue, setRequirementsCurrentlyDue] = useState<string[]>([]);
   const [disabledReason, setDisabledReason] = useState<string | null>(null);
+  const [connectInstance, setConnectInstance] = useState<StripeConnectInstance | null>(null);
 
-  // Guard against React strict-mode / re-focus double-invocations.
-  const launchedRef = useRef(false);
   // Prevents overlapping verify-onboarding calls (e.g. a manual Retry
   // pressed while the auto-triggered check is still in flight).
   const verifyingRef = useRef(false);
-  // Remembers the last browser session result so a manual "Retry" (which
-  // doesn't reopen the browser) still derives the outcome consistently.
-  const lastBrowserResultRef = useRef<BrowserResultType>(null);
+  // The session we minted to read the publishable key, handed to Stripe on
+  // its first fetchClientSecret call instead of paying for a second one.
+  const primedSecretRef = useRef<string | null>(null);
+  // Kept current so the long-lived fetchClientSecret closure always signs its
+  // request with a live token, even after a silent refresh.
+  const tokenRef = useRef<string | undefined>(session?.access_token);
+  useEffect(() => {
+    tokenRef.current = session?.access_token;
+  }, [session?.access_token]);
 
   // Best-effort refresh of everything the completion state can affect —
   // wallet balance/transactions and the cached auth profile — run in
@@ -132,82 +204,96 @@ export default function ConnectOnboardingScreen() {
     [refreshFromApi]
   );
 
-  const verifyOnboardingStatus = useCallback(
-    async (browserResultType: BrowserResultType) => {
-      if (verifyingRef.current) return;
-      verifyingRef.current = true;
-      lastBrowserResultRef.current = browserResultType;
+  const verifyOnboardingStatus = useCallback(async () => {
+    if (verifyingRef.current) return;
+    verifyingRef.current = true;
 
-      const token = session?.access_token;
-      if (!token) {
-        verifyingRef.current = false;
-        setOutcome('verify_error');
-        setPhase('result');
-        return;
+    const token = session?.access_token;
+    if (!token) {
+      verifyingRef.current = false;
+      setOutcome('verify_error');
+      setPhase('result');
+      return;
+    }
+
+    setPhase('finalizing');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
+
+    try {
+      const [verifyResult] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        }),
+        refreshAncillaryState(token),
+      ]);
+
+      if (verifyResult.status !== 'fulfilled' || !verifyResult.value.ok) {
+        throw new Error('verify-onboarding request failed');
       }
 
-      setPhase('finalizing');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
+      const body = (await verifyResult.value.json()) as VerifyOnboardingResponse;
 
-      try {
-        const [verifyResult] = await Promise.allSettled([
-          fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            signal: controller.signal,
-          }),
-          refreshAncillaryState(token),
-        ]);
-
-        if (verifyResult.status !== 'fulfilled' || !verifyResult.value.ok) {
-          throw new Error('verify-onboarding request failed');
+      // `details_submitted` is the embedded equivalent of the hosted flow's
+      // "reached the return URL" signal: the account owner pushed their
+      // identity/KYC information through to Stripe.
+      if (body?.detailsSubmitted) {
+        try {
+          await analyticsService.trackEvent('identity_submitted', {
+            source: 'stripe_connect_onboarding',
+          });
+        } catch {
+          /* analytics is best-effort */
         }
-
-        const body = (await verifyResult.value.json()) as VerifyOnboardingResponse;
-
-        if (body?.onboarded) {
-          try {
-            await analyticsService.trackEvent('identity_verified', {
-              source: 'stripe_connect_onboarding',
-              chargesEnabled: !!body.chargesEnabled,
-              payoutsEnabled: !!body.payoutsEnabled,
-            });
-          } catch {
-            /* analytics is best-effort */
-          }
-        }
-
-        const currentlyDue = body.requirementsCurrentlyDue ?? [];
-        setRequirementsCurrentlyDue(currentlyDue);
-        setDisabledReason(body.disabledReason ?? null);
-        if (!body.onboarded && session?.user?.id) {
-          await momentsService.enqueue(session.user.id, 'stripe_connect_onboarding');
-        }
-        setOutcome(
-          deriveOutcome({
-            browserResultType,
-            onboarded: !!body.onboarded,
-            detailsSubmitted: !!body.detailsSubmitted,
-            currentlyDue,
-          })
-        );
-      } catch (err) {
-        console.warn('[connect-onboarding] verify-onboarding failed', err);
-        setOutcome('verify_error');
-      } finally {
-        clearTimeout(timeoutId);
-        verifyingRef.current = false;
-        setPhase('result');
       }
-    },
-    [session?.access_token, refreshAncillaryState]
-  );
 
-  const launchOnboarding = useCallback(async () => {
+      if (body?.onboarded) {
+        try {
+          await analyticsService.trackEvent('identity_verified', {
+            source: 'stripe_connect_onboarding',
+            chargesEnabled: !!body.chargesEnabled,
+            payoutsEnabled: !!body.payoutsEnabled,
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
+      }
+
+      const currentlyDue = body.requirementsCurrentlyDue ?? [];
+      setRequirementsCurrentlyDue(currentlyDue);
+      setDisabledReason(body.disabledReason ?? null);
+      if (!body.onboarded && session?.user?.id) {
+        await momentsService.enqueue(session.user.id, 'stripe_connect_onboarding');
+      }
+      setOutcome(
+        deriveOutcome({
+          onboarded: !!body.onboarded,
+          detailsSubmitted: !!body.detailsSubmitted,
+          currentlyDue,
+        })
+      );
+    } catch (err) {
+      console.warn('[connect-onboarding] verify-onboarding failed', err);
+      setOutcome('verify_error');
+    } finally {
+      clearTimeout(timeoutId);
+      verifyingRef.current = false;
+      setPhase('result');
+    }
+  }, [session?.access_token, session?.user?.id, refreshAncillaryState]);
+
+  const appearance = useMemo(() => connectAppearance(theme), [theme]);
+
+  /**
+   * Mints the first Account Session (which also tells us the publishable key
+   * for the backend's Stripe mode) and builds the Connect instance.
+   */
+  const startEmbeddedOnboarding = useCallback(async () => {
     const token = session?.access_token;
     if (!token) {
       setError('You must be signed in to set up payouts.');
@@ -217,9 +303,88 @@ export default function ConnectOnboardingScreen() {
 
     try {
       setError(null);
-      setPhase('starting');
+      const primed = await createAccountSession(token);
+      primedSecretRef.current = primed.clientSecret;
 
-      // 1. Ask our edge function for a fresh, short-lived Stripe Account Link.
+      const instance = loadConnectAndInitialize({
+        publishableKey: primed.publishableKey,
+        // Stripe calls this again whenever the Account Session expires.
+        fetchClientSecret: async () => {
+          const primedSecret = primedSecretRef.current;
+          if (primedSecret) {
+            primedSecretRef.current = null;
+            return primedSecret;
+          }
+          const next = await createAccountSession(tokenRef.current ?? token);
+          return next.clientSecret;
+        },
+        appearance,
+        locale: 'en-US',
+      });
+
+      setConnectInstance(instance);
+      setPhase('embedded');
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Something went wrong starting Stripe onboarding. Please try again.';
+      console.warn('[connect-onboarding] failed to start embedded onboarding', err);
+      setError(message);
+      setPhase('error');
+    }
+  }, [appearance, session?.access_token]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (phase !== 'starting' || connectInstance) return;
+    void startEmbeddedOnboarding();
+  }, [authLoading, connectInstance, phase, startEmbeddedOnboarding]);
+
+  // Stripe's `onExit` — the account owner finished onboarding or closed the
+  // component. Either way, reconcile against the account itself.
+  const handleEmbeddedExit = useCallback(() => {
+    void verifyOnboardingStatus();
+  }, [verifyOnboardingStatus]);
+
+  const handleLoadError = useCallback((payload: { error?: { message?: string } }) => {
+    const message =
+      payload?.error?.message ?? 'Stripe onboarding could not load. Please try again.';
+    console.warn('[connect-onboarding] embedded component load error', message);
+    setError(message);
+    setPhase('error');
+  }, []);
+
+  /** Restart embedded onboarding with a fresh Account Session. */
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setOutcome(null);
+    primedSecretRef.current = null;
+    setConnectInstance(null);
+    setPhase('starting');
+  }, []);
+
+  const handleRetryVerify = useCallback(() => {
+    void verifyOnboardingStatus();
+  }, [verifyOnboardingStatus]);
+
+  /**
+   * Escape hatch when the embedded component can't run on this device:
+   * Stripe's hosted Account Link presented in an ASWebAuthenticationSession /
+   * Chrome Custom Tab, which redirects back to our universal link.
+   */
+  const launchHostedFallback = useCallback(async () => {
+    const token = session?.access_token;
+    if (!token) {
+      setError('You must be signed in to set up payouts.');
+      setPhase('error');
+      return;
+    }
+
+    try {
+      setError(null);
+      setPhase('in_browser');
+
       const linkRes = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
         method: 'POST',
         headers: {
@@ -249,69 +414,26 @@ export default function ConnectOnboardingScreen() {
         throw new Error("Stripe didn't return an onboarding URL. Please try again.");
       }
 
-      // 2. Present the hosted onboarding in an ASWebAuthenticationSession /
-      //    Chrome Custom Tab. The OS dismisses automatically when Stripe
-      //    redirects to our universal link.
-      setPhase('in_browser');
-      const result = await WebBrowser.openAuthSessionAsync(url, CONNECT_RETURN_URL, {
+      await WebBrowser.openAuthSessionAsync(url, CONNECT_RETURN_URL, {
         // Sharing cookies gives users a smoother flow if they've already
         // authenticated with Stripe or their bank in Safari/Chrome.
         preferEphemeralSession: false,
       });
 
-      // Track the funnel step regardless of final verification outcome —
-      // reaching the return URL means the user submitted identity/KYC info.
-      const userId = session?.user?.id;
-      if (userId && result.type === 'success') {
-        try {
-          await analyticsService.trackEvent('identity_submitted', {
-            source: 'stripe_connect_onboarding',
-          });
-        } catch {
-          /* analytics is best-effort */
-        }
-        try {
-          await supabase
-            .from('profiles')
-            .update({ stripe_connect_onboarding_complete: true })
-            .eq('id', userId);
-        } catch (err) {
-          console.warn('[connect-onboarding] optimistic update failed', err);
-        }
-      }
-
-      // 3. Regardless of whether the user completed or cancelled, reconcile
-      //    state with Stripe. The webhook is authoritative but this gives
-      //    the UI an immediate, correct answer.
-      await verifyOnboardingStatus(result.type);
+      await verifyOnboardingStatus();
     } catch (err) {
       const message =
         err instanceof Error && err.message
           ? err.message
           : 'Something went wrong starting Stripe onboarding. Please try again.';
-      console.warn('[connect-onboarding] launch failed', err);
+      console.warn('[connect-onboarding] hosted fallback failed', err);
       setError(message);
       setPhase('error');
     }
-  }, [session?.access_token, session?.user?.id, verifyOnboardingStatus]);
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (launchedRef.current) return;
-    launchedRef.current = true;
-    launchOnboarding();
-  }, [authLoading, launchOnboarding]);
-
-  const handleRetry = useCallback(() => {
-    launchOnboarding();
-  }, [launchOnboarding]);
-
-  const handleRetryVerify = useCallback(() => {
-    verifyOnboardingStatus(lastBrowserResultRef.current);
-  }, [verifyOnboardingStatus]);
+  }, [session?.access_token, verifyOnboardingStatus]);
 
   // Single dismissal path for every "leave this screen" action (X button,
-  // Done, Go to Wallet, Maybe Later, the pre-launch error's Back to wallet).
+  // Done, Go to Wallet, Maybe Later, the error screen's Back to wallet).
   // Fades the content out first so the pop doesn't feel abrupt, then pops
   // the stack — which naturally returns to whatever screen launched
   // onboarding, with no route reset needed.
@@ -362,7 +484,7 @@ export default function ConnectOnboardingScreen() {
         ? "We're refreshing your account status. This takes a moment."
         : phase === 'in_browser'
           ? "Complete the Stripe onboarding in the secure browser window. You'll return here automatically when you're done."
-          : "Opening Stripe's secure onboarding…";
+          : 'Preparing your secure Stripe session…';
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -412,6 +534,9 @@ export default function ConnectOnboardingScreen() {
                   <MaterialIcons name="refresh" size={20} color="#ffffff" />
                   <Text style={styles.primaryBtnText}>Try again</Text>
                 </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={launchHostedFallback}>
+                  <Text style={styles.secondaryBtnText}>Continue in browser instead</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss}>
                   <Text style={styles.secondaryBtnText}>Back to wallet</Text>
                 </TouchableOpacity>
@@ -420,6 +545,18 @@ export default function ConnectOnboardingScreen() {
           </View>
         )}
       </Animated.View>
+
+      {/* Stripe presents account onboarding as its own full-screen modal over
+          this screen, so it renders outside the fading content above. */}
+      {phase === 'embedded' && connectInstance ? (
+        <ConnectComponentsProvider connectInstance={connectInstance}>
+          <ConnectAccountOnboarding
+            title="Set up payouts"
+            onExit={handleEmbeddedExit}
+            onLoadError={handleLoadError}
+          />
+        </ConnectComponentsProvider>
+      ) : null}
     </SafeAreaView>
   );
 }

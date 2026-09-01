@@ -1659,7 +1659,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id, email')
+        .select('stripe_connect_account_id, email, full_name, phone, zip_code')
         .eq('id', userId)
         .single();
 
@@ -1670,15 +1670,32 @@ Deno.serve(async (req: Request) => {
         const requestedCountry =
           typeof body.country === 'string' ? body.country.trim().toUpperCase() : '';
         const country = /^[A-Z]{2}$/.test(requestedCountry) ? requestedCountry : 'US';
+        // Same shape as the /create-account-link route: hunters only ever
+        // receive transfers, and prefilling what we already know shortens the
+        // embedded onboarding form (the account owner can still edit it).
+        const fullName = profileRow?.full_name?.trim() ?? '';
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        const individual: Record<string, unknown> = {
+          first_name: nameParts[0] ?? undefined,
+          last_name: nameParts.slice(1).join(' ') || undefined,
+          email: profileRow?.email ?? undefined,
+          phone: profileRow?.phone ?? undefined,
+          address: {
+            postal_code: profileRow?.zip_code ?? undefined,
+          },
+        };
         const account = await stripe.accounts.create({
           type: 'express',
           country,
           email: profileRow?.email ?? undefined,
           capabilities: {
-            card_payments: { requested: true },
             transfers: { requested: true },
           },
           business_type: 'individual',
+          individual,
+          business_profile: {
+            product_description: 'Completes local errands and tasks via the Bounty marketplace.',
+          },
           metadata: { user_id: userId },
           ...manualPayoutSettings,
         });
@@ -4109,6 +4126,41 @@ function renderEmbeddedPage(): string {
       rn({ type: 'retry' });
     });
 
+    // Connect.js calls `fetchClientSecret` again whenever the Account Session
+    // expires — onboarding (document upload, bank details) easily outlives a
+    // single session. The first call is served from the payload the app sent
+    // with `init`; later ones ask the app to mint a fresh Account Session.
+    var pendingSecretRequests = {};
+    var secretSeq = 0;
+    var initialClientSecret = null;
+
+    function fetchClientSecret() {
+      if (initialClientSecret) {
+        var first = initialClientSecret;
+        initialClientSecret = null;
+        return Promise.resolve(first);
+      }
+      return new Promise(function (resolve, reject) {
+        var id = ++secretSeq;
+        var timer = setTimeout(function () {
+          delete pendingSecretRequests[id];
+          reject(new Error('Timed out refreshing the Stripe session.'));
+        }, 20000);
+        pendingSecretRequests[id] = function (secret, err) {
+          clearTimeout(timer);
+          delete pendingSecretRequests[id];
+          if (secret) resolve(secret);
+          else reject(new Error(err || 'Could not refresh the Stripe session.'));
+        };
+        rn({ type: 'need_secret', id: id });
+      });
+    }
+
+    function resolveClientSecret(data) {
+      var handler = pendingSecretRequests[data.id];
+      if (handler) handler(data.clientSecret, data.error);
+    }
+
     var initialized = false;
     function handleInit(payload) {
       if (initialized) return;
@@ -4117,6 +4169,7 @@ function renderEmbeddedPage(): string {
         return;
       }
       initialized = true;
+      initialClientSecret = payload.clientSecret;
       var component = payload.component || 'onboarding';
       var appearance = payload.appearance || DEFAULT_APPEARANCE;
       var locale = payload.locale || 'en-US';
@@ -4132,7 +4185,7 @@ function renderEmbeddedPage(): string {
       try {
         var instance = loader({
           publishableKey: payload.publishableKey,
-          fetchClientSecret: function () { return Promise.resolve(payload.clientSecret); },
+          fetchClientSecret: fetchClientSecret,
           appearance: { overlays: appearance.overlays || 'dialog', variables: appearance.variables || {} },
           locale: locale,
         });
@@ -4166,6 +4219,7 @@ function renderEmbeddedPage(): string {
       }
       if (!data || typeof data !== 'object') return;
       if (data.type === 'init') handleInit(data);
+      else if (data.type === 'client_secret') resolveClientSecret(data);
     }
     // WebView delivers messages on both window and document depending on platform.
     window.addEventListener('message', onMessage);
