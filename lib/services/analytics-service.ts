@@ -191,7 +191,17 @@ export type AnalyticsEvent =
   | 'moment_completed'
   | 'moment_skipped'
   | 'moment_expired'
-  // Identity verification (Stripe Connect KYC)
+  // Identity verification (Stripe Connect KYC).
+  //
+  // `identity_onboarding_started` fires each time the payout-setup screen opens
+  // the hosted Stripe onboarding (including retries). `identity_onboarding_outcome`
+  // fires once the flow reaches a terminal state, carrying the derived `outcome`
+  // (success | pending | action_required | cancelled | verify_error) plus the
+  // eligibility booleans. Together they give the funnel a start, a failure, and
+  // an outcome — previously only `identity_verified` (the success case) was
+  // visible, so a blocked flow left no signal.
+  | 'identity_onboarding_started'
+  | 'identity_onboarding_outcome'
   | 'identity_submitted'
   | 'identity_verified'
   // Posting funnel — the canonical drop-off funnel for "does a published

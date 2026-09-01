@@ -1542,7 +1542,16 @@ Deno.serve(async (req: Request) => {
         const account = await stripe.accounts.create({
           type: 'express',
           email: profileRow?.email ?? undefined,
+          // Request card_payments in addition to transfers. verify-onboarding
+          // and the account.updated webhook both gate `onboarded` on
+          // charges_enabled && payouts_enabled, and charges_enabled tracks the
+          // card_payments capability. Without it, charges_enabled stays false
+          // forever, so a hunter who finishes KYC is never marked onboarded and
+          // stripe_connect_onboarded_at is never written. The embedded-session
+          // path and services/api/src/services/stripe-connect-service.ts already
+          // request both.
           capabilities: {
+            card_payments: { requested: true },
             transfers: { requested: true },
           },
           business_type: 'individual',
@@ -1561,6 +1570,25 @@ Deno.serve(async (req: Request) => {
         console.log(`[connect] Created new account: ${accountId} for user ${userId}`, {
           manualPayouts: CONNECT_MANUAL_PAYOUTS,
         });
+      } else {
+        // Legacy accounts created here before card_payments was requested only
+        // have the transfers capability, so charges_enabled never turns true and
+        // the hunter stays wrongly reported as not onboarded. Re-request
+        // card_payments so re-entering onboarding can finish. Requesting an
+        // already-active capability is a no-op, so this is safe for accounts
+        // that already have it. Best-effort: a failure here must not block the
+        // onboarding link.
+        try {
+          await stripe.accounts.update(accountId, {
+            capabilities: { card_payments: { requested: true } },
+          });
+        } catch (err) {
+          console.warn('[connect] Failed to backfill card_payments capability', {
+            userId,
+            accountId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
 
       const accountLink = await stripe.accountLinks.create({
