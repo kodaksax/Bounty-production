@@ -42,7 +42,11 @@ describe('withdrawApplication', () => {
       surface: 'my_postings',
     });
 
-    expect(mockGetAll).toHaveBeenCalledWith({ bountyId: '7', userId: 'hunter-1' });
+    expect(mockGetAll).toHaveBeenCalledWith({
+      bountyId: '7',
+      userId: 'hunter-1',
+      status: 'pending',
+    });
     expect(mockDelete).toHaveBeenCalledWith('req-42');
     expect(result).toEqual({ applicationId: 'req-42' });
     expect(mockTrack).toHaveBeenCalledWith('application_withdrawn', {
@@ -69,12 +73,49 @@ describe('withdrawApplication', () => {
     );
   });
 
+  it('fails fast when the current user session is unresolved', async () => {
+    await expect(
+      withdrawApplication({ bountyId: 7, currentUserId: undefined, surface: 'inbox' })
+    ).rejects.toThrow('signed in');
+
+    expect(mockGetAll).not.toHaveBeenCalled();
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
   it('throws and does NOT emit when no application exists', async () => {
     mockGetAll.mockResolvedValue([]);
 
     await expect(
       withdrawApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
     ).rejects.toThrow('No application found for this bounty');
+
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('throws a clear error and does NOT delete when the application is already accepted', async () => {
+    // No pending row, but an accepted one exists for the same bounty.
+    mockGetAll
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 'req-3', status: 'accepted' }]);
+
+    await expect(
+      withdrawApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
+    ).rejects.toThrow('already been accepted');
+
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('throws a clear error and does NOT delete when the application was rejected', async () => {
+    mockGetAll
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 'req-4', status: 'rejected' }]);
+
+    await expect(
+      withdrawApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
+    ).rejects.toThrow('already been rejected');
 
     expect(mockDelete).not.toHaveBeenCalled();
     expect(mockTrack).not.toHaveBeenCalled();
