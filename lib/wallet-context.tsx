@@ -28,6 +28,7 @@ import {
     safeUnsubscribe,
     SupabaseAuthSubscription,
 } from './utils/supabase-subscription';
+import type { SettlementState, SettlementTone } from './utils/settlement-vocabulary';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -61,6 +62,14 @@ export interface WalletTransactionRecord {
     gross_amount?: number; // Original amount before fees
     platform_fee?: number; // Fee amount deducted
     fee_percentage?: number; // Fee percentage applied
+    // What Stripe can prove about this row, computed server-side by
+    // GET /wallet/transactions. Carried through so the transaction list and
+    // detail modal render the real settlement status instead of the weakest
+    // fallback label. Absent on rows cached before settlement state shipped.
+    settlementState?: SettlementState;
+    settlementLabel?: string;
+    settlementDetail?: string;
+    settlementTone?: SettlementTone;
   };
   disputeStatus?: 'none' | 'pending' | 'resolved';
   escrowStatus?: 'funded' | 'pending' | 'released';
@@ -340,6 +349,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                       method: tx.details?.method,
                       status: tx.details?.status,
                       bounty_id: tx.details?.bounty_id,
+                      // Settlement fields (see WalletTransactionRecord.details).
+                      settlementState: tx.details?.settlementState,
+                      settlementLabel: tx.details?.settlementLabel,
+                      settlementDetail: tx.details?.settlementDetail,
+                      settlementTone: tx.details?.settlementTone,
                     },
                   };
                 }

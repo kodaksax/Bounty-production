@@ -11,9 +11,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAuthContext } from '../hooks/use-auth-context';
 import { useConnectPayout } from '../hooks/use-connect-payout';
 import { useWalletBalanceDisplay } from '../hooks/use-wallet-balance-display';
 import { useHapticFeedback } from '../lib/haptic-feedback';
+import { useWallet } from '../lib/wallet-context';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { formatCurrencyCents } from '../lib/utils';
@@ -43,6 +45,8 @@ export function WithdrawNowCard({ onWithdrawComplete }: WithdrawNowCardProps) {
 
   const balance = useWalletBalanceDisplay();
   const payout = useConnectPayout();
+  const { refreshFromApi } = useWallet();
+  const { session } = useAuthContext();
   const [hasRequested, setHasRequested] = useState(false);
 
   const availableCents = balance.amountCents;
@@ -63,6 +67,10 @@ export function WithdrawNowCard({ onWithdrawComplete }: WithdrawNowCardProps) {
     if (result) {
       // Stripe is authoritative — re-read rather than assuming the new balance.
       balance.refresh({ force: true });
+      // Re-sync the wallet ledger so the new payout row shows in transaction
+      // history — the payout was a direct Connect call, not a wallet-context
+      // mutation. Silent to avoid flashing the history list.
+      void refreshFromApi(session?.access_token, { silent: true });
       onWithdrawComplete?.();
     }
   };
