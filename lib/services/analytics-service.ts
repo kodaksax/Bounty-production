@@ -137,6 +137,9 @@ export type AnalyticsEvent =
   | 'onboarding_role_selection_skipped'
   | 'onboarding_intent_switched'
   | 'onboarding_login_tapped'
+  // Sign-in screen rendered its intent-aware "why sign in / what's next" line
+  // to a visitor who picked a role but hasn't authenticated yet.
+  | 'onboarding_signin_context_shown'
   | 'onboarding_auth_started'
   | 'onboarding_auth_completed'
   | 'onboarding_style_step_viewed'
@@ -354,6 +357,11 @@ export type AnalyticsEvent =
   // `application_started` below) never contaminate a real liquidity metric.
   | 'bounty_completed'
   | 'bounty_cancelled'
+  // Fired once a bounty row is actually removed from the poster's active view
+  // (hard delete, or a soft delete to status='deleted' when payment records
+  // must be preserved). Carries `is_for_honor` and `amount` so a deletion that
+  // stranded escrowed funds is measurable — this had no event before.
+  | 'bounty_deleted'
   // Bounty browse/discovery events — see docs on the supply-vs-plumbing
   // question these resolve. `bounty_list_viewed` fires whenever a
   // list/feed/map of bounties renders with results (including zero — the
@@ -469,7 +477,13 @@ export type AnalyticsEvent =
   | 'hunter_activated'
   // Search events
   | 'search_performed'
-  | 'filter_applied';
+  | 'filter_applied'
+  // Admin — bounty moderation queue. `moderation_action` fires when an admin
+  // transitions a listing (properties: from_state, to_state, reason,
+  // signal_score, applications); `moderation_alert_viewed` fires when the
+  // founder opens an alert from the queue.
+  | 'moderation_action'
+  | 'moderation_alert_viewed';
 
 export interface AnalyticsProperties {
   [key: string]: string | number | boolean | string[] | undefined;

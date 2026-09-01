@@ -1,7 +1,9 @@
 // app/(admin)/disputes/[id].tsx - Admin dispute detail and resolution screen
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../../hooks/use-app-theme';
+import type { AppTheme } from '../../../lib/themes/types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -29,6 +31,8 @@ interface DisputeDetailData {
 }
 
 export default function AdminDisputeDetailScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { isAdmin, isLoading: isAdminLoading } = useAdmin();
@@ -179,15 +183,15 @@ export default function AdminDisputeDetailScreen() {
   // const getStatusColor = (status: string) => {
   //   switch (status) {
   //     case 'open':
-  //       return '#f59e0b';
+  //       return theme.warning;
   //     case 'under_review':
-  //       return '#3b82f6';
+  //       return theme.info;
   //     case 'resolved':
-  //       return '#10b981';
+  //       return theme.success;
   //     case 'closed':
-  //       return '#6b7280';
+  //       return theme.textDisabled;
   //     default:
-  //       return '#6b7280';
+  //       return theme.textDisabled;
   //   }
   // };
 
@@ -212,7 +216,7 @@ export default function AdminDisputeDetailScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
+          <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Checking permissions...</Text>
         </View>
       </View>
@@ -224,7 +228,7 @@ export default function AdminDisputeDetailScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="block" size={48} color="rgba(255,254,245,0.6)" />
+          <MaterialIcons name="block" size={48} color={theme.textSecondary} />
           <Text style={styles.errorText}>Access denied. Admin privileges required.</Text>
         </View>
       </View>
@@ -236,7 +240,7 @@ export default function AdminDisputeDetailScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
+          <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading dispute...</Text>
         </View>
       </View>
@@ -248,7 +252,7 @@ export default function AdminDisputeDetailScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="rgba(255,254,245,0.6)" />
+          <MaterialIcons name="error-outline" size={48} color={theme.textSecondary} />
           <Text style={styles.errorText}>Dispute not found</Text>
         </View>
       </View>
@@ -272,7 +276,7 @@ export default function AdminDisputeDetailScreen() {
           <MaterialIcons
             name={getDisputeStatusIcon(dispute.status) as any}
             size={24}
-            color="#fff"
+            color='#FFFFFF'
           />
           <Text style={styles.statusBannerText}>
             Status: {dispute.status.replace('_', ' ').toUpperCase()}
@@ -282,7 +286,7 @@ export default function AdminDisputeDetailScreen() {
         {/* Bounty Information */}
         <AdminCard>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="work" size={20} color="#059669" />
+            <MaterialIcons name="work" size={20} color={theme.primary} />
             <Text style={styles.sectionTitle}>Bounty Information</Text>
           </View>
           <View style={styles.infoRow}>
@@ -304,7 +308,7 @@ export default function AdminDisputeDetailScreen() {
         {/* Dispute Details */}
         <AdminCard>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="report-problem" size={20} color="#059669" />
+            <MaterialIcons name="report-problem" size={20} color={theme.primary} />
             <Text style={styles.sectionTitle}>Dispute Details</Text>
           </View>
           <View style={styles.infoRow}>
@@ -323,7 +327,7 @@ export default function AdminDisputeDetailScreen() {
         {dispute.evidence && dispute.evidence.length > 0 && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="attach-file" size={20} color="#059669" />
+              <MaterialIcons name="attach-file" size={20} color={theme.primary} />
               <Text style={styles.sectionTitle}>
                 Evidence ({dispute.evidence.length})
               </Text>
@@ -342,7 +346,7 @@ export default function AdminDisputeDetailScreen() {
                         : 'text-fields'
                     }
                     size={16}
-                    color="#059669"
+                    color={theme.primary}
                   />
                   <Text style={styles.evidenceType}>{item.type.toUpperCase()}</Text>
                   <Text style={styles.evidenceDate}>
@@ -364,7 +368,7 @@ export default function AdminDisputeDetailScreen() {
         {cancellation && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="info-outline" size={20} color="#059669" />
+              <MaterialIcons name="info-outline" size={20} color={theme.primary} />
               <Text style={styles.sectionTitle}>Cancellation Context</Text>
             </View>
             <View style={styles.infoRow}>
@@ -392,7 +396,7 @@ export default function AdminDisputeDetailScreen() {
         {dispute.resolution && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="check-circle" size={20} color="#10b981" />
+              <MaterialIcons name="check-circle" size={20} color={theme.success} />
               <Text style={styles.sectionTitle}>Resolution</Text>
             </View>
             <View style={styles.infoRow}>
@@ -406,7 +410,7 @@ export default function AdminDisputeDetailScreen() {
             {dispute.winner && (
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Winner</Text>
-                <Text style={[styles.infoValue, { color: '#10b981' }]}>
+                <Text style={[styles.infoValue, { color: theme.success }]}>
                   {dispute.winner === 'hunter' ? 'Hunter (Funds Released)' : 'Poster (Funds Refunded)'}
                 </Text>
               </View>
@@ -422,7 +426,7 @@ export default function AdminDisputeDetailScreen() {
         {dispute.status !== 'resolved' && dispute.status !== 'closed' && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="admin-panel-settings" size={20} color="#059669" />
+              <MaterialIcons name="admin-panel-settings" size={20} color={theme.primary} />
               <Text style={styles.sectionTitle}>Admin Actions</Text>
             </View>
 
@@ -432,7 +436,7 @@ export default function AdminDisputeDetailScreen() {
                 onPress={() => handleUpdateStatus('under_review')}
                 style={styles.actionButton}
               >
-                <MaterialIcons name="visibility" size={18} color="#fff" />
+                <MaterialIcons name="visibility" size={18} color='#FFFFFF' />
                 <Text style={styles.actionButtonText}>Mark Under Review</Text>
               </TouchableOpacity>
             )}
@@ -443,7 +447,7 @@ export default function AdminDisputeDetailScreen() {
                 onPress={() => setShowResolveForm(true)}
                 style={[styles.actionButton, styles.resolveButton]}
               >
-                <MaterialIcons name="check-circle" size={18} color="#fff" />
+                <MaterialIcons name="check-circle" size={18} color='#FFFFFF' />
                 <Text style={styles.actionButtonText}>Resolve Dispute</Text>
               </TouchableOpacity>
             ) : (
@@ -467,7 +471,7 @@ export default function AdminDisputeDetailScreen() {
                     <MaterialIcons
                       name="arrow-forward"
                       size={18}
-                      color={winner === 'hunter' ? '#fff' : '#10b981'}
+                      color={winner === 'hunter' ? '#FFFFFF' : theme.success}
                     />
                     <Text
                       style={[
@@ -489,7 +493,7 @@ export default function AdminDisputeDetailScreen() {
                     <MaterialIcons
                       name="reply"
                       size={18}
-                      color={winner === 'poster' ? '#fff' : '#f59e0b'}
+                      color={winner === 'poster' ? '#FFFFFF' : theme.warning}
                     />
                     <Text
                       style={[
@@ -506,7 +510,7 @@ export default function AdminDisputeDetailScreen() {
                   value={resolution}
                   onChangeText={setResolution}
                   placeholder="Enter resolution details..."
-                  placeholderTextColor="rgba(255,254,245,0.4)"
+                  placeholderTextColor={theme.textDisabled}
                   multiline
                   numberOfLines={6}
                   textAlignVertical="top"
@@ -524,10 +528,10 @@ export default function AdminDisputeDetailScreen() {
                     ]}
                   >
                     {resolving ? (
-                      <ActivityIndicator color="#fff" size="small" />
+                      <ActivityIndicator color='#FFFFFF' size="small" />
                     ) : (
                       <>
-                        <MaterialIcons name="check" size={18} color="#fff" />
+                        <MaterialIcons name="check" size={18} color='#FFFFFF' />
                         <Text style={styles.actionButtonText}>Confirm Resolution</Text>
                       </>
                     )}
@@ -554,21 +558,21 @@ export default function AdminDisputeDetailScreen() {
               onPress={() => handleUpdateStatus('closed')}
               style={[styles.actionButton, styles.closeButton]}
             >
-              <MaterialIcons name="cancel" size={18} color="#fff" />
+              <MaterialIcons name="cancel" size={18} color='#FFFFFF' />
               <Text style={styles.actionButtonText}>Close Without Resolution</Text>
             </TouchableOpacity>
             {/* Escalation (manual) */}
             {(dispute as any).escalated ? (
               <TouchableOpacity style={[styles.actionButton, styles.actionButtonDisabled]} disabled>
-                <MaterialIcons name="priority-high" size={18} color="#fff" />
+                <MaterialIcons name="priority-high" size={18} color='#FFFFFF' />
                 <Text style={styles.actionButtonText}>Already Escalated</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 onPress={handleManualEscalate}
-                style={[styles.actionButton, { backgroundColor: '#f59e0b' }]}
+                style={[styles.actionButton, { backgroundColor: theme.warning }]}
               >
-                <MaterialIcons name="priority-high" size={18} color="#fff" />
+                <MaterialIcons name="priority-high" size={18} color='#FFFFFF' />
                 <Text style={styles.actionButtonText}>Escalate & Notify Admins</Text>
               </TouchableOpacity>
             )}
@@ -582,10 +586,11 @@ export default function AdminDisputeDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   scrollView: {
     flex: 1,
@@ -600,7 +605,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     fontSize: 14,
   },
   errorContainer: {
@@ -612,7 +617,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
   },
   statusBanner: {
     flexDirection: 'row',
@@ -625,7 +630,7 @@ const styles = StyleSheet.create({
   statusBannerText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -636,7 +641,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
   },
   infoRow: {
     flexDirection: 'row',
@@ -644,16 +649,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,145,44,0.15)',
+    borderBottomColor: theme.surfaceSecondary,
   },
   infoLabel: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   infoValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     textAlign: 'right',
     flex: 1,
     marginLeft: 16,
@@ -664,16 +669,16 @@ const styles = StyleSheet.create({
   textLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginBottom: 6,
   },
   textContent: {
     fontSize: 14,
-    color: '#fffef5',
+    color: theme.text,
     lineHeight: 20,
   },
   evidenceItem: {
-    backgroundColor: 'rgba(0,145,44,0.1)',
+    backgroundColor: theme.surfaceSecondary,
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
@@ -687,29 +692,29 @@ const styles = StyleSheet.create({
   evidenceType: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#059669',
+    color: theme.primary,
   },
   evidenceDate: {
     fontSize: 11,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
     marginLeft: 'auto',
   },
   evidenceDescription: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 4,
   },
   evidenceContent: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     lineHeight: 18,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     padding: 14,
     borderRadius: 8,
     marginBottom: 12,
@@ -718,24 +723,24 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   actionButtonDisabled: {
-    backgroundColor: 'rgba(0,145,44,0.5)',
+    backgroundColor: theme.primary,
   },
   resolveButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: theme.success,
   },
   closeButton: {
-    backgroundColor: '#dc2626',
+    backgroundColor: theme.error,
   },
   cancelButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: 'rgba(255,254,245,0.3)',
+    borderColor: theme.textDisabled,
   },
   cancelButtonText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
   },
   resolveForm: {
     marginBottom: 12,
@@ -743,18 +748,18 @@ const styles = StyleSheet.create({
   resolveFormTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 4,
   },
   resolveFormHint: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginBottom: 12,
   },
   winnerLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginBottom: 8,
   },
   winnerSelection: {
@@ -770,31 +775,31 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,254,245,0.3)',
+    borderColor: theme.textDisabled,
     backgroundColor: 'transparent',
     gap: 6,
   },
   winnerButtonActive: {
-    backgroundColor: '#059669',
-    borderColor: '#059669',
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
   },
   winnerButtonActivePoster: {
-    backgroundColor: '#d97706',
-    borderColor: '#d97706',
+    backgroundColor: theme.warning,
+    borderColor: theme.warning,
   },
   winnerButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
   },
   winnerButtonTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   resolutionInput: {
-    backgroundColor: 'rgba(0,145,44,0.15)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 8,
     padding: 12,
-    color: '#fffef5',
+    color: theme.text,
     fontSize: 14,
     minHeight: 120,
     textAlignVertical: 'top',

@@ -6,6 +6,7 @@ import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
 import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { escapeIlike, quotePostgrestValue } from 'lib/utils/postgrest-utils';
+import { analyticsService } from './analytics-service';
 import { offlineQueueService } from './offline-queue-service';
 
 // UUID validation pattern used to guard PostgREST OR filter strings against injection.
@@ -1055,6 +1056,11 @@ export const bountyService = {
       if (isSupabaseConfigured) {
         const { error } = await supabase.from('bounties').delete().eq('id', id);
         if (!error) {
+          try {
+            await analyticsService.trackEvent('bounty_deleted', { bountyId: String(id) });
+          } catch {
+            /* analytics is best-effort */
+          }
           return true;
         }
 
@@ -1062,19 +1068,26 @@ export const bountyService = {
           throw error;
         }
 
-        logOnce('bounties:delete:fk', 'warn', 'Bounty delete hit FK violation; deleting bounty_payments and retrying', {
+        // FK violation: payment/escrow rows reference this bounty. Deleting
+        // those rows would destroy the only record of the escrowed funds, so
+        // soft-delete the bounty instead. It drops out of active views (which
+        // filter status='deleted') while the payment audit trail survives.
+        logOnce('bounties:delete:fk', 'warn', 'Bounty has payment records; soft-deleting to preserve bounty_payments', {
           id,
-          error,
         });
 
-        const { error: paymentsError } = await supabase.from('bounty_payments').delete().eq('bounty_id', id);
-        if (paymentsError) {
-          throw paymentsError;
+        const { error: softError } = await supabase
+          .from('bounties')
+          .update({ status: 'deleted' })
+          .eq('id', id);
+        if (softError) {
+          throw softError;
         }
 
-        const { error: retryError } = await supabase.from('bounties').delete().eq('id', id);
-        if (retryError) {
-          throw retryError;
+        try {
+          await analyticsService.trackEvent('bounty_deleted', { bountyId: String(id) });
+        } catch {
+          /* analytics is best-effort */
         }
         return true;
       }
@@ -1089,6 +1102,11 @@ export const bountyService = {
         throw new Error(`Failed to delete bounty: ${errorText}`);
       }
 
+      try {
+        await analyticsService.trackEvent('bounty_deleted', { bountyId: String(id) });
+      } catch {
+        /* analytics is best-effort */
+      }
       return true;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
@@ -1105,6 +1123,14 @@ export const bountyService = {
    */
   async updateStatus(id: string | number, status: BountyStatus): Promise<Bounty | null> {
     const result = await this.update(id, { status });
+
+    if (result && status === 'deleted') {
+      try {
+        await analyticsService.trackEvent('bounty_deleted', { bountyId: String(result.id) });
+      } catch {
+        /* analytics is best-effort */
+      }
+    }
 
     // Notify via WebSocket for real-time updates
     if (result) {

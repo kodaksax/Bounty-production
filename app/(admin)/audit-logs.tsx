@@ -1,6 +1,8 @@
 // app/(admin)/audit-logs.tsx - Audit Log Viewer Screen
 // Apple Human Interface Guidelines compliant design for transparent audit trail viewing
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -27,11 +29,17 @@ type CategoryFilter = AuditLogCategory | 'all';
 type SeverityFilter = 'all' | 'info' | 'warning' | 'critical';
 
 export default function AuditLogsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Audit tables that could not be read at all. Reported separately from
+  // `error` so the screen can say "this source is missing" rather than let an
+  // empty list imply the platform had no activity.
+  const [unavailableSources, setUnavailableSources] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLog, setSelectedLog] = useState<AuditLogEntry | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -66,6 +74,7 @@ export default function AuditLogsScreen() {
 
       if (result.success && result.logs) {
         setLogs(result.logs);
+        setUnavailableSources(result.unavailableSources ?? []);
       } else {
         setError(result.error || 'Failed to load audit logs');
       }
@@ -142,19 +151,19 @@ export default function AuditLogsScreen() {
   const getCategoryConfig = (category: string) => {
     switch (category) {
       case 'user':
-        return { icon: 'person', color: '#3b82f6', label: 'User' };
+        return { icon: 'person', color: theme.info, label: 'User' };
       case 'bounty':
-        return { icon: 'work', color: '#10b981', label: 'Bounty' };
+        return { icon: 'work', color: theme.success, label: 'Bounty' };
       case 'payment':
-        return { icon: 'account-balance-wallet', color: '#8b5cf6', label: 'Payment' };
+        return { icon: 'account-balance-wallet', color: theme.completed, label: 'Payment' };
       case 'moderation':
-        return { icon: 'shield', color: '#f59e0b', label: 'Moderation' };
+        return { icon: 'shield', color: theme.warning, label: 'Moderation' };
       case 'system':
-        return { icon: 'settings', color: '#6b7280', label: 'System' };
+        return { icon: 'settings', color: theme.textDisabled, label: 'System' };
       case 'security':
-        return { icon: 'security', color: '#ef4444', label: 'Security' };
+        return { icon: 'security', color: theme.error, label: 'Security' };
       default:
-        return { icon: 'info', color: '#a7f3d0', label: category };
+        return { icon: 'info', color: theme.primaryLight, label: category };
     }
   };
 
@@ -162,12 +171,12 @@ export default function AuditLogsScreen() {
   const getSeverityConfig = (severity: string) => {
     switch (severity) {
       case 'critical':
-        return { color: '#dc2626', bg: 'rgba(220,38,38,0.15)', label: 'Critical' };
+        return { color: theme.error, bg: 'rgba(220,38,38,0.15)', label: 'Critical' };
       case 'warning':
-        return { color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', label: 'Warning' };
+        return { color: theme.warning, bg: 'rgba(245,158,11,0.15)', label: 'Warning' };
       case 'info':
       default:
-        return { color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: 'Info' };
+        return { color: theme.success, bg: 'rgba(16,185,129,0.15)', label: 'Info' };
     }
   };
 
@@ -239,7 +248,7 @@ export default function AuditLogsScreen() {
             <MaterialIcons
               name={cat.icon as any}
               size={14}
-              color={categoryFilter === cat.id ? '#1a3d2e' : '#a7f3d0'}
+              color={categoryFilter === cat.id ? theme.background : theme.primaryLight}
             />
             <Text
               style={[
@@ -262,7 +271,7 @@ export default function AuditLogsScreen() {
       {(['all', 'info', 'warning', 'critical'] as SeverityFilter[]).map((sev) => {
         const config =
           sev === 'all'
-            ? { color: '#a7f3d0', bg: 'transparent', label: 'All' }
+            ? { color: theme.primaryLight, bg: 'transparent', label: 'All' }
             : getSeverityConfig(sev);
         return (
           <TouchableOpacity
@@ -309,22 +318,22 @@ export default function AuditLogsScreen() {
         </View>
         {stats.recentCritical > 0 && (
           <View style={[styles.statItem, styles.criticalStat]}>
-            <Text style={[styles.statValue, { color: '#dc2626' }]}>
+            <Text style={[styles.statValue, { color: theme.error }]}>
               {stats.recentCritical}
             </Text>
-            <Text style={[styles.statLabel, { color: '#dc2626' }]}>
+            <Text style={[styles.statLabel, { color: theme.error }]}>
               Critical (24h)
             </Text>
           </View>
         )}
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: '#f59e0b' }]}>
+          <Text style={[styles.statValue, { color: theme.warning }]}>
             {stats.bySeverity?.warning ?? 0}
           </Text>
           <Text style={styles.statLabel}>Warnings</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: '#10b981' }]}>
+          <Text style={[styles.statValue, { color: theme.success }]}>
             {stats.bySeverity?.info ?? 0}
           </Text>
           <Text style={styles.statLabel}>Info</Text>
@@ -337,11 +346,11 @@ export default function AuditLogsScreen() {
   const SearchBar = () => (
     <View style={styles.searchContainer}>
       <View style={styles.searchInputWrapper}>
-        <MaterialIcons name="search" size={20} color="rgba(255,254,245,0.5)" />
+        <MaterialIcons name="search" size={20} color={theme.textDisabled} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search logs..."
-          placeholderTextColor="rgba(255,254,245,0.4)"
+          placeholderTextColor={theme.textDisabled}
           value={searchQuery}
           onChangeText={setSearchQuery}
           returnKeyType="search"
@@ -352,7 +361,7 @@ export default function AuditLogsScreen() {
             onPress={() => setSearchQuery('')}
             accessibilityLabel="Clear search"
           >
-            <MaterialIcons name="close" size={18} color="rgba(255,254,245,0.5)" />
+            <MaterialIcons name="close" size={18} color={theme.textDisabled} />
           </TouchableOpacity>
         )}
       </View>
@@ -361,7 +370,7 @@ export default function AuditLogsScreen() {
         onPress={handleExport}
         accessibilityLabel="Export logs"
       >
-        <MaterialIcons name="file-download" size={20} color="#a7f3d0" />
+        <MaterialIcons name="file-download" size={20} color={theme.primaryLight} />
       </TouchableOpacity>
     </View>
   );
@@ -434,7 +443,7 @@ export default function AuditLogsScreen() {
                   <MaterialIcons
                     name="person-outline"
                     size={14}
-                    color="rgba(255,254,245,0.5)"
+                    color={theme.textDisabled}
                   />
                   <Text style={styles.actorText}>{log.actorName}</Text>
                 </View>
@@ -445,7 +454,7 @@ export default function AuditLogsScreen() {
             <MaterialIcons
               name="chevron-right"
               size={20}
-              color="rgba(255,254,245,0.3)"
+              color={theme.textDisabled}
             />
           </View>
         </AdminCard>
@@ -474,7 +483,7 @@ export default function AuditLogsScreen() {
               onPress={() => setShowDetailModal(false)}
               style={styles.modalCloseButton}
             >
-              <MaterialIcons name="close" size={24} color="#fffef5" />
+              <MaterialIcons name="close" size={24} color={theme.text} />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Log Details</Text>
             <View style={{ width: 36 }} />
@@ -536,7 +545,7 @@ export default function AuditLogsScreen() {
                 <Text style={styles.detailLabel}>Actor</Text>
                 <View style={styles.detailActorRow}>
                   <View style={styles.detailActorIcon}>
-                    <MaterialIcons name="person" size={16} color="#a7f3d0" />
+                    <MaterialIcons name="person" size={16} color={theme.primaryLight} />
                   </View>
                   <View>
                     <Text style={styles.detailValue}>{selectedLog.actorName}</Text>
@@ -621,7 +630,7 @@ export default function AuditLogsScreen() {
   const EmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconContainer}>
-        <MaterialIcons name="history" size={64} color="#10b981" />
+        <MaterialIcons name="history" size={64} color={theme.success} />
       </View>
       <Text style={styles.emptyTitle}>No Logs Found</Text>
       <Text style={styles.emptySubtitle}>
@@ -649,7 +658,7 @@ export default function AuditLogsScreen() {
       <View style={styles.container}>
         <AdminHeader title="Audit Logs" onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={48} color={theme.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchLogs}>
             <Text style={styles.retryButtonText}>Try Again</Text>
@@ -670,7 +679,7 @@ export default function AuditLogsScreen() {
             style={[styles.headerAction, showFilters && styles.headerActionActive]}
             accessibilityLabel="Toggle filters"
           >
-            <MaterialIcons name="filter-list" size={22} color="#c8ffe0" />
+            <MaterialIcons name="filter-list" size={22} color={theme.primaryLight} />
           </TouchableOpacity>
         }
       />
@@ -689,6 +698,19 @@ export default function AuditLogsScreen() {
         </View>
       )}
 
+      {/* An audit source that could not be read is called out explicitly: an
+          empty list must never be mistaken for "nothing happened". */}
+      {unavailableSources.length > 0 && (
+        <View style={styles.sourceWarning}>
+          <MaterialIcons name="warning-amber" size={16} color={theme.warning} />
+          <Text style={styles.sourceWarningText}>
+            {unavailableSources.length === 1
+              ? `The ${unavailableSources[0]} audit source could not be read, so entries from it are missing.`
+              : `${unavailableSources.length} audit sources could not be read (${unavailableSources.join(', ')}), so entries from them are missing.`}
+          </Text>
+        </View>
+      )}
+
       {/* Logs list */}
       <FlatList
         data={filteredLogs}
@@ -702,8 +724,8 @@ export default function AuditLogsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchLogs}
-            tintColor="#10b981"
-            colors={['#10b981']}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
           />
         }
         ListEmptyComponent={<EmptyState />}
@@ -719,18 +741,38 @@ export default function AuditLogsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    sourceWarning: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: theme.surfaceSecondary,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.warning,
+    },
+    sourceWarningText: {
+      flex: 1,
+      fontSize: 12,
+      color: theme.textSecondary,
+      lineHeight: 17,
+    },
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   headerAction: {
     padding: 6,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: theme.surfaceSecondary,
   },
   headerActionActive: {
-    backgroundColor: 'rgba(0,145,44,0.3)',
+    backgroundColor: theme.border,
   },
   statsContainer: {
     paddingHorizontal: 16,
@@ -753,11 +795,11 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
   },
   statLabel: {
     fontSize: 11,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginTop: 2,
   },
   searchContainer: {
@@ -780,7 +822,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#fffef5',
+    color: theme.text,
   },
   exportButton: {
     padding: 10,
@@ -807,15 +849,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   filterChipActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: theme.success,
   },
   filterChipText: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     fontWeight: '500',
   },
   filterChipTextActive: {
-    color: '#1a3d2e',
+    color: theme.background,
     fontWeight: '600',
   },
   severityFiltersRow: {
@@ -825,7 +867,7 @@ const styles = StyleSheet.create({
   },
   severityLabel: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     fontWeight: '500',
   },
   severityChip: {
@@ -843,7 +885,7 @@ const styles = StyleSheet.create({
   },
   severityChipText: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     fontWeight: '500',
   },
   listContent: {
@@ -888,12 +930,12 @@ const styles = StyleSheet.create({
   logAction: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     textTransform: 'capitalize',
   },
   logTime: {
     fontSize: 11,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
     marginTop: 2,
   },
   severityBadge: {
@@ -907,7 +949,7 @@ const styles = StyleSheet.create({
   },
   logDescription: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     lineHeight: 18,
   },
   actorRow: {
@@ -917,7 +959,7 @@ const styles = StyleSheet.create({
   },
   actorText: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
   },
   emptyContainer: {
     flex: 1,
@@ -938,12 +980,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -951,12 +993,12 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 8,
   },
   clearFiltersText: {
     fontSize: 14,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     fontWeight: '500',
   },
   errorContainer: {
@@ -968,25 +1010,25 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 15,
-    color: '#ef4444',
+    color: theme.error,
     textAlign: 'center',
   },
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     borderRadius: 10,
     marginTop: 8,
   },
   retryButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
   // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -995,7 +1037,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,145,44,0.2)',
+    borderBottomColor: theme.border,
   },
   modalCloseButton: {
     padding: 6,
@@ -1003,7 +1045,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
   modalContent: {
     flex: 1,
@@ -1041,24 +1083,24 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   detailValue: {
     fontSize: 16,
-    color: '#fffef5',
+    color: theme.text,
     fontWeight: '500',
   },
   detailDescription: {
     fontSize: 15,
-    color: '#fffef5',
+    color: theme.text,
     lineHeight: 22,
   },
   detailSubtext: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   detailActorRow: {
     flexDirection: 'row',
@@ -1069,7 +1111,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,145,44,0.2)',
+    backgroundColor: theme.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1085,12 +1127,12 @@ const styles = StyleSheet.create({
   },
   metadataKey: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     fontWeight: '500',
   },
   metadataValue: {
     flex: 1,
     fontSize: 13,
-    color: '#fffef5',
+    color: theme.text,
   },
 });

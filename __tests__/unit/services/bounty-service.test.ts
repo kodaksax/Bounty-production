@@ -327,27 +327,13 @@ describe('bountyService', () => {
     expect(ok).toBe(false);
   });
 
-  it('delete retries after FK violation by clearing bounty_payments first', async () => {
-    const bountiesEq = jest
-      .fn()
-      .mockResolvedValueOnce({ error: { code: '23503', message: 'fk violation' } })
-      .mockResolvedValueOnce({ error: null });
+  it('delete soft-deletes on FK violation and never touches bounty_payments', async () => {
+    const softUpdateEq = jest.fn(() => Promise.resolve({ error: null }));
+    const softUpdate = jest.fn(() => ({ eq: softUpdateEq }));
     supabase.from.mockImplementation((table: string) => {
-      if (table === 'bounties') {
-        return { delete: jest.fn(() => ({ eq: bountiesEq })) };
-      }
       if (table === 'bounty_payments') {
-        return { delete: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ error: null })) })) };
+        throw new Error('bounty_payments must not be deleted on FK violation');
       }
-      throw new Error(`unexpected table ${table}`);
-    });
-
-    const ok = await bountyService.delete(12);
-    expect(ok).toBe(true);
-  });
-
-  it('delete returns false when clearing bounty_payments fails after FK violation', async () => {
-    supabase.from.mockImplementation((table: string) => {
       if (table === 'bounties') {
         return {
           delete: jest.fn(() => ({
@@ -355,12 +341,31 @@ describe('bountyService', () => {
               Promise.resolve({ error: { code: '23503', message: 'fk violation' } })
             ),
           })),
+          update: softUpdate,
         };
       }
+      throw new Error(`unexpected table ${table}`);
+    });
+
+    const ok = await bountyService.delete(12);
+    expect(ok).toBe(true);
+    expect(softUpdate).toHaveBeenCalledWith({ status: 'deleted' });
+  });
+
+  it('delete returns false when the FK-violation soft-delete fails', async () => {
+    supabase.from.mockImplementation((table: string) => {
       if (table === 'bounty_payments') {
+        throw new Error('bounty_payments must not be deleted on FK violation');
+      }
+      if (table === 'bounties') {
         return {
           delete: jest.fn(() => ({
-            eq: jest.fn(() => Promise.resolve({ error: { message: 'payments delete failed' } })),
+            eq: jest.fn(() =>
+              Promise.resolve({ error: { code: '23503', message: 'fk violation' } })
+            ),
+          })),
+          update: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ error: { message: 'soft-delete failed' } })),
           })),
         };
       }
@@ -368,25 +373,6 @@ describe('bountyService', () => {
     });
 
     const ok = await bountyService.delete(13);
-    expect(ok).toBe(false);
-  });
-
-  it('delete returns false when retry delete fails after clearing bounty_payments', async () => {
-    const bountiesEq = jest
-      .fn()
-      .mockResolvedValueOnce({ error: { code: '23503', message: 'fk violation' } })
-      .mockResolvedValueOnce({ error: { message: 'retry failed' } });
-    supabase.from.mockImplementation((table: string) => {
-      if (table === 'bounties') {
-        return { delete: jest.fn(() => ({ eq: bountiesEq })) };
-      }
-      if (table === 'bounty_payments') {
-        return { delete: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ error: null })) })) };
-      }
-      throw new Error(`unexpected table ${table}`);
-    });
-
-    const ok = await bountyService.delete(14);
     expect(ok).toBe(false);
   });
 

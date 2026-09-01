@@ -877,6 +877,59 @@ export async function registerConsolidatedBountyRoutes(
           throw new AuthorizationError('Only the bounty owner can perform this action');
         }
 
+        // Do not destroy an in-flight escrow. The bounty lifecycle status is not
+        // authoritative for paid bounties; rely on the payment ledger instead.
+        const paymentArchitectureVersion = bounty.payment_architecture_version ?? 1;
+
+        if (paymentArchitectureVersion === 2) {
+          const { data: paymentRow, error: paymentRowError } = await supabase
+            .from('bounty_payments')
+            .select('status, settlement_state')
+            .eq('bounty_id', bountyId)
+            .maybeSingle();
+
+          if (paymentRowError) {
+            throw new Error(paymentRowError.message);
+          }
+
+          const paymentStatus = String(paymentRow?.status ?? '').toLowerCase();
+          const settlementState = String(paymentRow?.settlement_state ?? '').toLowerCase();
+          const isTerminalEscrow = [
+            'canceled',
+            'refunded',
+            'released',
+          ].includes(paymentStatus) || ['stripe_settled', 'stripe_failed'].includes(settlementState);
+
+          if (!isTerminalEscrow) {
+            throw new ConflictError(
+              'This bounty still has unreleased escrow. Cancel or refund the payment before deleting it.'
+            );
+          }
+        } else {
+          const { data: walletRows, error: walletRowsError } = await supabase
+            .from('wallet_transactions')
+            .select('type, status')
+            .eq('bounty_id', bountyId)
+            .in('type', ['escrow', 'release', 'refund'])
+            .limit(20);
+
+          if (walletRowsError) {
+            throw new Error(walletRowsError.message);
+          }
+
+          const hasActiveEscrow = (walletRows ?? []).some((row: any) => {
+            const type = String(row?.type ?? '').toLowerCase();
+            const status = String(row?.status ?? '').toLowerCase();
+            return type === 'escrow' && ['completed', 'pending'].includes(status);
+          });
+
+          if (hasActiveEscrow) {
+            throw new ConflictError(
+              'This bounty still has unreleased escrow. Complete the refund or release before deleting it.'
+            );
+          }
+        }
+
         const { error: deleteError } = await supabase
           .from('bounties')
           .delete()
@@ -891,35 +944,26 @@ export async function registerConsolidatedBountyRoutes(
             throw new Error(deleteError.message);
           }
 
+          // FK violation: payment/escrow rows reference this bounty. Deleting
+          // those rows would destroy the only record of the escrowed funds, so
+          // soft-delete the bounty instead. It drops out of active views (which
+          // filter status='deleted') while the payment audit trail survives.
           request.log.warn(
-            { error: deleteError.message, bountyId },
-            'Bounty delete hit FK violation; deleting bounty_payments and retrying'
+            { bountyId },
+            'Bounty has payment records; soft-deleting to preserve bounty_payments'
           );
 
-          const { error: paymentsDeleteError } = await supabase
-            .from('bounty_payments')
-            .delete()
-            .eq('bounty_id', bountyId);
-
-          if (paymentsDeleteError) {
-            request.log.error(
-              { error: paymentsDeleteError.message, bountyId },
-              'Failed to delete bounty_payments records after FK violation'
-            );
-            throw new Error(paymentsDeleteError.message);
-          }
-
-          const { error: retryDeleteError } = await supabase
+          const { error: softDeleteError } = await supabase
             .from('bounties')
-            .delete()
+            .update({ status: 'deleted' })
             .eq('id', bountyId);
 
-          if (retryDeleteError) {
+          if (softDeleteError) {
             request.log.error(
-              { error: retryDeleteError.message, bountyId },
-              'Bounty deletion retry failed'
+              { error: softDeleteError.message, bountyId },
+              'Bounty soft-delete failed after FK violation'
             );
-            throw new Error(retryDeleteError.message);
+            throw new Error(softDeleteError.message);
           }
         }
 

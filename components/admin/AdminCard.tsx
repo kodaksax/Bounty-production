@@ -1,23 +1,22 @@
 // components/admin/AdminCard.tsx - Reusable card component for admin screens
+//
+// Thin compatibility wrapper over AdminPanel so the ~15 screens already
+// importing AdminCard pick up the canonical theme tokens without each needing
+// to be rewritten in the same commit. Prefer AdminPanel in new code.
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
+import { AdminPanel } from './AdminUI';
 
 interface AdminCardProps {
   children: React.ReactNode;
-  style?: any;
+  style?: StyleProp<ViewStyle>;
+  onPress?: () => void;
 }
 
-export function AdminCard({ children, style }: AdminCardProps) {
-  return <View style={[styles.card, style]}>{children}</View>;
+export function AdminCard({ children, style, onPress }: AdminCardProps) {
+  return (
+    <AdminPanel style={style} onPress={onPress}>
+      {children}
+    </AdminPanel>
+  );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#2d5240',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
-  },
-});
