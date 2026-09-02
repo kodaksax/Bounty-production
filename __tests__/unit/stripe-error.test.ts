@@ -27,7 +27,7 @@ describe('serializeStripeError', () => {
   });
 
   test('preserves the useful string representation of Error instances', () => {
-    expect(serializeStripeError(new Error('card declined')).message).toBe('Error: card declined');
+    expect(serializeStripeError(new Error('card declined')).message).toBe('card declined');
   });
 
   test('preserves both payment intent and charge identifiers', () => {
