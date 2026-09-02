@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -65,6 +65,7 @@ export function WorkflowDisputeModal({
   const [textEvidence, setTextEvidence] = useState('')
   const [linkEvidence, setLinkEvidence] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const scrollViewRef = useRef<ScrollView>(null)
 
   const { pickAttachment } = useAttachmentUpload({
     bucket: 'bounty-attachments',
@@ -286,6 +287,9 @@ export function WorkflowDisputeModal({
         placeholderTextColor={theme.textDisabled}
         value={reasonText}
         onChangeText={setReasonText}
+        onFocus={() => {
+          setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 250)
+        }}
         multiline
         numberOfLines={4}
         maxLength={2000}
@@ -455,6 +459,7 @@ export function WorkflowDisputeModal({
 
         {/* Content */}
         <ScrollView
+          ref={scrollViewRef}
           style={styles.scrollView}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
           showsVerticalScrollIndicator={false}
