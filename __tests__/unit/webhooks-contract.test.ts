@@ -71,4 +71,15 @@ describe("case 'payout.paid'", () => {
     expect(body).toContain('shouldReconcileInstantFee');
     expect(body).toContain('reconcileInstantPayoutFee');
   });
+
+  describe("case 'payout.closed'", () => {
+    test('handles terminal closures through the failed payout reconciliation path', () => {
+      const start = webhooksSource.indexOf("case 'payout.closed':");
+      expect(start).toBeGreaterThan(-1);
+      const nextCase = webhooksSource.indexOf("case 'charge.dispute.created':", start);
+      expect(nextCase).toBeGreaterThan(start);
+      const body = webhooksSource.slice(start, nextCase);
+      expect(body).toContain("handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed')");
+    });
+  });
 });
