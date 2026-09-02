@@ -99,3 +99,96 @@ export function getBottomNavKeyboardOffset(bottomInset = 0) {
     bottomInset + BOTTOM_NAV_MIN_SAFE_AREA_PADDING
   );
 }
+
+/**
+ * How far BottomNav's buttons are lifted out of the bar's own box (the
+ * `marginTop` on `navButton` / `centerButton`). The crosshair is *not*
+ * contained by the bar: it floats above the bar's top edge, so screens that
+ * only clear `getBottomNavBaseClearance` still get their centered content
+ * covered by it.
+ */
+export const BOTTOM_NAV_ITEM_LIFT = 28;
+
+/** The center button scales up by this factor while the bounty tab is active. */
+export const BOTTOM_NAV_CENTER_ACTIVE_SCALE = 1.15;
+
+/** Horizontal breathing room between the center column and the side sections. */
+export const BOTTOM_NAV_CENTER_GUTTER = 8;
+
+/**
+ * The center button is sized as a share of the viewport width, clamped at both
+ * ends: below the minimum the icon crowds its border, above the maximum it
+ * dominates the bar.
+ */
+export const BOTTOM_NAV_CENTER_WIDTH_RATIO = 0.17;
+export const BOTTOM_NAV_CENTER_MIN_SIZE = 56;
+export const BOTTOM_NAV_CENTER_MAX_SIZE = 72;
+
+/**
+ * Center-button geometry, derived from the viewport rather than hardcoded so
+ * the crosshair keeps the same visual weight from a 320pt SE up to a 430pt Pro
+ * Max. `sectionWidth` reserves the *scaled* footprint plus a gutter so the side
+ * sections are never laid out underneath the active (enlarged) button.
+ *
+ * Shared with the screens that must clear the bar — see
+ * `getBottomNavOccludedHeight`.
+ */
+export function getBottomNavCenterMetrics(windowWidth = 0) {
+  const buttonSize = Math.round(
+    Math.min(
+      BOTTOM_NAV_CENTER_MAX_SIZE,
+      Math.max(BOTTOM_NAV_CENTER_MIN_SIZE, windowWidth * BOTTOM_NAV_CENTER_WIDTH_RATIO)
+    )
+  );
+  const sectionWidth =
+    Math.ceil(buttonSize * BOTTOM_NAV_CENTER_ACTIVE_SCALE) + BOTTOM_NAV_CENTER_GUTTER;
+  return { buttonSize, sectionWidth };
+}
+
+/**
+ * How far the floating center button rises above the bar's top edge, mirroring
+ * BottomNav's own layout: the button is centered in the bar's content box (bar
+ * height minus its safe-area padding), then lifted by BOTTOM_NAV_ITEM_LIFT and
+ * scaled for the active state. Returns 0 when it stays inside the bar.
+ */
+export function getBottomNavCenterOverhang(bottomInset = 0, windowWidth = 0) {
+  const contentHeight =
+    getBottomNavBarHeight(bottomInset) - getBottomNavSafeAreaPadding(bottomInset);
+  const { buttonSize } = getBottomNavCenterMetrics(windowWidth);
+  const scaledSize = buttonSize * BOTTOM_NAV_CENTER_ACTIVE_SCALE;
+  const buttonTop = (contentHeight - scaledSize) / 2 - BOTTOM_NAV_ITEM_LIFT;
+  return Math.max(0, Math.ceil(-buttonTop));
+}
+
+/**
+ * Total height the BottomNav actually occludes: the bar itself *plus* the
+ * floating center button that overhangs it. Screens with a fixed bottom CTA
+ * should clear this, not `getBottomNavBaseClearance` — anything centered
+ * horizontally (a link row under a CTA, say) otherwise lands under the
+ * crosshair.
+ */
+export function getBottomNavOccludedHeight(
+  bottomInset = 0,
+  windowWidth = 0,
+  minimumBottomPadding = BOTTOM_NAV_MIN_SAFE_AREA_PADDING
+) {
+  return (
+    getBottomNavBaseClearance(bottomInset, minimumBottomPadding) +
+    getBottomNavCenterOverhang(bottomInset, windowWidth)
+  );
+}
+
+/**
+ * Gap between a screen's bottom-most control and the top of the BottomNav,
+ * scaled to the viewport height so it reads the same on a short SE as on a tall
+ * Pro Max. Clamped so it never collapses or eats the layout.
+ */
+export const BOTTOM_NAV_GAP_HEIGHT_RATIO = 0.02;
+export const BOTTOM_NAV_MIN_GAP = 12;
+export const BOTTOM_NAV_MAX_GAP = 24;
+
+export function getBottomNavContentGap(windowHeight = 0) {
+  return Math.round(
+    Math.min(BOTTOM_NAV_MAX_GAP, Math.max(BOTTOM_NAV_MIN_GAP, windowHeight * BOTTOM_NAV_GAP_HEIGHT_RATIO))
+  );
+}
