@@ -31,17 +31,17 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // could pass while the two copies diverged in behaviour, and broke on reformatting. One
 // implementation, imported, removes both problems.
 import {
-  PAYOUT_PENDING_CRITICAL_HOURS,
-  PAYOUT_PENDING_WARN_HOURS,
-  STALE_PENDING_WARN_HOURS,
-  INVARIANT_GRANDFATHER_CUTOFF_ISO,
-  computeHealth,
-  correlatePayoutToPendingWithdrawal,
-  isSafeStatusRepair,
-  normalizeStripeStatus,
-  splitInvariantViolations,
-  type Health,
-  type Severity,
+    INVARIANT_GRANDFATHER_CUTOFF_ISO,
+    PAYOUT_PENDING_CRITICAL_HOURS,
+    PAYOUT_PENDING_WARN_HOURS,
+    STALE_PENDING_WARN_HOURS,
+    computeHealth,
+    correlatePayoutToPendingWithdrawal,
+    isSafeStatusRepair,
+    normalizeStripeStatus,
+    splitInvariantViolations,
+    type Health,
+    type Severity,
 } from './reconciliation-logic.ts';
 
 // @ts-ignore: Deno global is not present in the Node typecheck environment.
@@ -406,7 +406,9 @@ serve(async (req: Request) => {
 
     const { data: ledgerRows } = await supabase
       .from('wallet_transactions')
-      .select('id, user_id, amount, status, stripe_payout_id, stripe_transfer_id, payout_method, metadata, created_at')
+      .select(
+        'id, user_id, amount, status, stripe_payout_id, stripe_transfer_id, payout_method, metadata, created_at'
+      )
       .eq('type', 'withdrawal')
       .gte('created_at', windowStart.toISOString());
 
@@ -670,9 +672,12 @@ serve(async (req: Request) => {
         }
 
         // --- Statuses disagree ---
-        const localMeta = (typeof local.metadata === 'object' && local.metadata !== null && !Array.isArray(local.metadata))
-          ? local.metadata as Record<string, unknown>
-          : null;
+        const localMeta =
+          typeof local.metadata === 'object' &&
+          local.metadata !== null &&
+          !Array.isArray(local.metadata)
+            ? (local.metadata as Record<string, unknown>)
+            : null;
         if (isSafeStatusRepair(payout.status, ledgerStatus, localMeta)) {
           // Provably safe: Stripe reached a terminal state, our row is still
           // pending. Move the ledger to match what Stripe already did. This
@@ -956,22 +961,22 @@ serve(async (req: Request) => {
       // cannot be forgotten, but it no longer competes with live incidents.
       const split = splitInvariantViolations(
         violations.map(r => ({
-          row: r,
+          id: String(r.id ?? ''),
           createdAtMs: Date.parse(String(r.created_at ?? '')) || 0,
+          amountCents: Math.round(Math.abs(Number(r.amount ?? 0)) * 100),
         }))
       );
 
-      const summarise = (entries: Array<{ row: Record<string, unknown> }>) => {
-        const rows = entries.map(e => e.row);
+      const summarise = (entries: typeof split.current) => {
         return {
-          count: rows.length,
-          totalCents: rows.reduce(
-            (sum, r) => sum + Math.round(Math.abs(Number(r.amount ?? 0)) * 100),
-            0
-          ),
-          oldest: rows[rows.length - 1]?.created_at ?? null,
-          newest: rows[0]?.created_at ?? null,
-          transactionIds: rows.slice(0, 50).map(r => r.id),
+          count: entries.length,
+          totalCents: entries.reduce((sum, entry) => sum + entry.amountCents, 0),
+          oldest:
+            entries.length > 0
+              ? new Date(entries[entries.length - 1].createdAtMs).toISOString()
+              : null,
+          newest: entries.length > 0 ? new Date(entries[0].createdAtMs).toISOString() : null,
+          transactionIds: entries.slice(0, 50).map(entry => entry.id),
         };
       };
 
@@ -1019,7 +1024,10 @@ serve(async (req: Request) => {
       .eq('type', 'withdrawal')
       .eq('status', 'pending')
       .not('stripe_payout_id', 'is', null)
-      .lt('created_at', new Date(Date.now() - PAYOUT_PENDING_CRITICAL_HOURS * HOUR_MS).toISOString())
+      .lt(
+        'created_at',
+        new Date(Date.now() - PAYOUT_PENDING_CRITICAL_HOURS * HOUR_MS).toISOString()
+      )
       .limit(200);
 
     if (!stuckError && (stuckRows ?? []).length > 0) {
@@ -1088,7 +1096,9 @@ serve(async (req: Request) => {
       // that would be flagged as missing money on the first run.
       const { data: v3Rows, error: v3Err } = await supabase
         .from('ledger_entries')
-        .select('id, bounty_id, user_id, amount_cents, app_state, stripe_state, stripe_transfer_id, created_at')
+        .select(
+          'id, bounty_id, user_id, amount_cents, app_state, stripe_state, stripe_transfer_id, created_at'
+        )
         .eq('leg', 'capture_release')
         .filter('metadata->>source', 'eq', 'bounty_payments_v3_release');
 
@@ -1242,7 +1252,10 @@ serve(async (req: Request) => {
                   note: 'Stripe shows a healthy Transfer but the ledger never received transfer.created. Likely a missed webhook.',
                 },
               });
-              alert('WARNING', 'v3_release_unconfirmed', { transferId, ageHours: Math.round(ageH) });
+              alert('WARNING', 'v3_release_unconfirmed', {
+                transferId,
+                ageHours: Math.round(ageH),
+              });
             }
             continue;
           }
@@ -1407,6 +1420,9 @@ serve(async (req: Request) => {
     });
     alert('CRITICAL', 'reconciliation_run_failed', { error: message });
 
-    return jsonResponse({ error: 'Reconciliation run failed', detail: message, health: 'RED' }, 500);
+    return jsonResponse(
+      { error: 'Reconciliation run failed', detail: message, health: 'RED' },
+      500
+    );
   }
 });
