@@ -20,12 +20,12 @@
 // Local type shims so `tsc --noEmit` (Node tooling) doesn't error on Deno
 // runtime imports/globals. Intentionally loose so the repo can typecheck
 // without pulling runtime deps into the monorepo build.
-declare const Deno: any;
-
 // @ts-ignore: Allow runtime URL import for Deno/edge function.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // @ts-ignore: Allow runtime npm import for Deno/edge function.
 import Stripe from 'npm:stripe@14';
+
+declare const Deno: any;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -63,6 +63,10 @@ function sanitizeText(input: unknown): string {
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/;
   return emailRegex.test(email);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Resolve (or lazily create) the poster's Stripe Customer. Mirrors the exact
@@ -535,13 +539,12 @@ Deno.serve(async (req: Request) => {
             purpose: 'bounty_escrow',
           },
         },
-        { idempotencyKey: `bounty_payment_create_${bountyId}` }
+        { idempotencyKey: `bounty_payment_create_${bountyId}_${amountCents}` }
       );
 
-      // Persist the bounty_payments row. There is no unique constraint on
-      // bounty_id (only a plain index), so `.upsert(onConflict:'bounty_id')`
-      // would error. Instead: UPDATE the existing (canceled/failed) row by id,
-      // or INSERT a fresh one.
+      // Persist the bounty_payments row. Existing terminal rows are updated by
+      // id; fresh rows are inserted. The database also enforces one active row
+      // per bounty, so insert conflicts are treated as in-flight replays below.
       const rowPatch = {
         bounty_id: bountyId,
         poster_id: userId,
@@ -584,24 +587,61 @@ Deno.serve(async (req: Request) => {
         )) as any;
         if (insErr || !inserted) {
           if ((insErr as { code?: string } | null)?.code === '23505') {
-            const { data: winner } = (await withDbTimeout(
-              supabaseAdmin
-                .from('bounty_payments')
-                .select('id, status, amount')
-                .eq('stripe_payment_intent_id', paymentIntent.id)
-                .maybeSingle()
-            )) as any;
+            let winner: any = null;
+            for (const waitMs of [0, 50, 150]) {
+              if (waitMs > 0) await delay(waitMs);
+
+              const { data: byPaymentIntent } = (await withDbTimeout(
+                supabaseAdmin
+                  .from('bounty_payments')
+                  .select('id, stripe_payment_intent_id, status, amount')
+                  .eq('stripe_payment_intent_id', paymentIntent.id)
+                  .maybeSingle()
+              )) as any;
+
+              if (byPaymentIntent?.id) {
+                winner = byPaymentIntent;
+                break;
+              }
+
+              const { data: byBounty } = (await withDbTimeout(
+                supabaseAdmin
+                  .from('bounty_payments')
+                  .select('id, stripe_payment_intent_id, status, amount')
+                  .eq('bounty_id', bountyId)
+                  .in('status', ACTIVE_BP_STATUSES)
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle()
+              )) as any;
+
+              if (byBounty?.id) {
+                winner = byBounty;
+                break;
+              }
+            }
 
             if (winner?.id) {
               return jsonResponse({
                 bountyPaymentId: winner.id,
-                paymentIntentId: paymentIntent.id,
+                paymentIntentId: winner.stripe_payment_intent_id ?? paymentIntent.id,
                 clientSecret: paymentIntent.client_secret,
                 status: winner.status,
                 amount: Number(winner.amount),
                 reused: true,
               });
             }
+
+            return jsonResponse(
+              {
+                error:
+                  'Payment recording is already in progress for this bounty. Please retry shortly.',
+                code: 'payment_record_conflict_in_flight',
+                status: 'pending_payment',
+                reused: true,
+              },
+              409
+            );
           }
 
           await stripe.paymentIntents.cancel(paymentIntent.id).catch(() => {});

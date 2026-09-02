@@ -26,8 +26,8 @@ import * as path from 'path';
 // The reconciliation decision rules are plain TypeScript with no imports, so
 // they can be executed here directly rather than pattern-matched in source.
 import {
-    isSafeStatusRepair,
-    normalizeStripeStatus,
+  isSafeStatusRepair,
+  normalizeStripeStatus,
 } from '../../supabase/functions/reconciliation/reconciliation-logic';
 
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '../../', p), 'utf8');
@@ -143,7 +143,9 @@ describe('invariant: no duplicate transfers', () => {
       bountyPaymentsSource.indexOf("if (req.method === 'POST' && subPath === '/release')")
     );
     expect(createRoute).toContain('stripe.paymentIntents.create');
-    expect(createRoute).toContain('idempotencyKey: `bounty_payment_create_${bountyId}`');
+    expect(createRoute).toContain(
+      'idempotencyKey: `bounty_payment_create_${bountyId}_${amountCents}`'
+    );
   });
 
   it('Phase 2 funding treats insert conflicts as idempotent replays instead of canceling the shared PaymentIntent', () => {
@@ -159,6 +161,9 @@ describe('invariant: no duplicate transfers', () => {
       )
     );
     expect(conflictBranch).toContain(".eq('stripe_payment_intent_id', paymentIntent.id)");
+    expect(conflictBranch).toContain(".eq('bounty_id', bountyId)");
+    expect(conflictBranch).toContain(".in('status', ACTIVE_BP_STATUSES)");
+    expect(conflictBranch).toContain("code: 'payment_record_conflict_in_flight'");
     expect(conflictBranch).toContain('reused: true');
     expect(conflictBranch).not.toContain('paymentIntents.cancel');
   });

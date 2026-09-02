@@ -4,7 +4,7 @@
 
 This pass audited the Supabase Edge Function payment surfaces and implemented three immediate hardening changes:
 
-1. Phase 2 bounty funding now creates Stripe PaymentIntents with a deterministic idempotency key per bounty.
+1. Phase 2 bounty funding now creates Stripe PaymentIntents with a deterministic idempotency key per bounty and amount.
 2. A concurrent insert conflict after a Stripe-idempotent PaymentIntent replay is treated as an idempotent replay, not as a reason to cancel the shared PaymentIntent.
 3. Stripe webhooks now fail closed if the handler succeeds but the durable `stripe_events.processed` marker cannot be written.
 4. A database migration adds uniqueness backstops for live bounty payment rows and Stripe object evidence.
@@ -103,8 +103,8 @@ Webhook idempotency is through `claim_stripe_event(stripe_event_id, event_type, 
 
 ### P0 Fixed
 
-- Phase 2 `/bounty-payments/create` could create multiple Stripe PaymentIntents for one bounty under concurrent requests because the initial existence check was not a lock and the Stripe call had no idempotency key. Fixed by adding `idempotencyKey: bounty_payment_create_<bountyId>`.
-- The same path could cancel a shared Stripe-idempotent PaymentIntent if the loser hit a DB unique conflict after Stripe replayed the winner's object. Fixed by resolving the winning `bounty_payments` row and returning it as `reused: true` before attempting cancellation.
+- Phase 2 `/bounty-payments/create` could create multiple Stripe PaymentIntents for one bounty under concurrent requests because the initial existence check was not a lock and the Stripe call had no idempotency key. Fixed by adding `idempotencyKey: bounty_payment_create_<bountyId>_<amountCents>`, so a materially different bounty amount does not silently replay an old PaymentIntent.
+- The same path could cancel a shared Stripe-idempotent PaymentIntent if the loser hit a DB unique conflict after Stripe replayed the winner's object. Fixed by retrying reads for the winning `bounty_payments` row by PaymentIntent and bounty ID, then returning `reused: true` or an explicit in-flight conflict without canceling on `23505`.
 - `webhooks` could finish handling an event, fail to mark `stripe_events` as processed, log CRITICAL, and still return 200 to Stripe. Fixed by throwing so Stripe retries after the processing lease expires.
 - Storage could allow duplicate active bounty payment rows and duplicate Stripe-object ledger evidence. Fixed by adding unique indexes.
 
@@ -123,11 +123,11 @@ Webhook idempotency is through `claim_stripe_event(stripe_event_id, event_type, 
 
 Added migration `20260902213000_payment_idempotency_constraints.sql`:
 
-- `bounty_payments_one_live_row_per_bounty_idx`: one non-canceled/non-failed payment row per bounty.
-- `bounty_payments_stripe_transfer_unique_idx`: one bounty payment per Stripe Transfer.
-- `bounty_payments_stripe_refund_unique_idx`: one bounty payment per Stripe Refund.
-- `ledger_entries_one_transfer_leg_idx`: one ledger entry per `(leg, stripe_transfer_id)`.
-- `ledger_entries_one_payout_leg_idx`: one ledger entry per `(leg, stripe_payout_id)`.
+- `bounty_payments_one_live_row_per_bounty_idx`: one non-canceled/non-failed payment row per bounty, built concurrently.
+- `bounty_payments_stripe_transfer_unique_idx`: one bounty payment per Stripe Transfer, built concurrently.
+- `bounty_payments_stripe_refund_unique_idx`: one bounty payment per Stripe Refund, built concurrently.
+- `ledger_entries_one_transfer_leg_idx`: one ledger entry per `(leg, stripe_transfer_id)`, built concurrently.
+- `ledger_entries_one_payout_leg_idx`: one ledger entry per `(leg, stripe_payout_id)`, built concurrently.
 
 ## Tests Run
 
@@ -147,7 +147,7 @@ Added migration `20260902213000_payment_idempotency_constraints.sql`:
    ```
 2. If rows are returned, reconcile each bounty against Stripe before migration.
 3. Apply `20260902210000_stripe_event_claim_lease.sql` if not already applied, then reload PostgREST schema cache.
-4. Apply `20260902213000_payment_idempotency_constraints.sql`.
+4. Apply `20260902213000_payment_idempotency_constraints.sql` with a migration runner that does not wrap the file in a transaction; it uses `CREATE UNIQUE INDEX CONCURRENTLY` to avoid blocking payment writes during index builds.
 5. Deploy `bounty-payments` and `webhooks` Edge Functions together.
 6. Verify env vars: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, optional rotation secret, and reconciliation cron secret.
 7. Confirm Stripe Dashboard sends platform and Connect events to the same webhook URL with matching secrets.

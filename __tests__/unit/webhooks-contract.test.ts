@@ -75,13 +75,13 @@ describe("case 'payout.paid'", () => {
 
 describe('webhook event finalization', () => {
   test('fails closed when the processed marker cannot be written', () => {
-    const marker = 'if (markError) {';
-    const idx = webhooksSource.indexOf(marker);
-    expect(idx).toBeGreaterThan(-1);
-    const block = webhooksSource.slice(idx, idx + 500);
-    expect(block).toContain('logCritical');
-    expect(block).toContain(
-      "throw new Error('Webhook event handled but could not be marked processed')"
+    const start = webhooksSource.indexOf('const { error: markError } = await supabase');
+    const end = webhooksSource.indexOf('return jsonResponse({ received: true });', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const block = webhooksSource.slice(start, end);
+    expect(block).toMatch(
+      /if\s*\(\s*markError\s*\)\s*{[\s\S]*?logCritical\([\s\S]*?event handled but could not be marked processed[\s\S]*?throw new Error\([\s\S]*?could not be marked processed[\s\S]*?\)/
     );
   });
 });

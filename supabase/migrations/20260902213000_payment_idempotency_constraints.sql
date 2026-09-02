@@ -5,6 +5,11 @@
 -- migration is deliberately fail-loud: if live duplicate active payment rows
 -- already exist, an operator must reconcile those Stripe objects before adding
 -- the constraint rather than letting the migration pick a winner.
+--
+-- IMPORTANT — DO NOT wrap this file in an explicit transaction, and do not
+-- apply it via a tool that auto-wraps DDL in one. CREATE INDEX CONCURRENTLY
+-- cannot run inside a transaction block; it is used here so index creation
+-- does not block payment writes while scanning bounty_payments/ledger_entries.
 
 DO $$
 DECLARE
@@ -24,26 +29,26 @@ BEGIN
   END IF;
 END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS bounty_payments_one_live_row_per_bounty_idx
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS bounty_payments_one_live_row_per_bounty_idx
   ON public.bounty_payments (bounty_id)
   WHERE status NOT IN ('canceled', 'failed');
 
-CREATE UNIQUE INDEX IF NOT EXISTS bounty_payments_stripe_transfer_unique_idx
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS bounty_payments_stripe_transfer_unique_idx
   ON public.bounty_payments (stripe_transfer_id)
   WHERE stripe_transfer_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS bounty_payments_stripe_refund_unique_idx
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS bounty_payments_stripe_refund_unique_idx
   ON public.bounty_payments (stripe_refund_id)
   WHERE stripe_refund_id IS NOT NULL;
 
 -- v3 writes release evidence directly to ledger_entries. A retry after Stripe
 -- accepted the transfer may execute the insert again; this index turns that
 -- into a single durable release row instead of duplicate audit evidence.
-CREATE UNIQUE INDEX IF NOT EXISTS ledger_entries_one_transfer_leg_idx
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ledger_entries_one_transfer_leg_idx
   ON public.ledger_entries (leg, stripe_transfer_id)
   WHERE stripe_transfer_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ledger_entries_one_payout_leg_idx
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ledger_entries_one_payout_leg_idx
   ON public.ledger_entries (leg, stripe_payout_id)
   WHERE stripe_payout_id IS NOT NULL;
 
