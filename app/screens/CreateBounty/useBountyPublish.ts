@@ -421,24 +421,6 @@ export function useBountyPublish(params: UseBountyPublishParams) {
 
       if (created) {
         publishedRef.current = true;
-        analyticsService.trackEvent('post_published', {
-          surface,
-          bountyId: String(createdBounty.id),
-          amount: draft.isForHonor ? 0 : draft.amount,
-          isForHonor: draft.isForHonor,
-          // `funded` used to be implied by "paid bounty published". A deferred
-          // bounty breaks that equivalence — it is a paid bounty with no money
-          // captured — so this now reports the real funding state. Dashboards
-          // reading `funded` keep working and simply become correct.
-          funded: !draft.isForHonor && draft.amount > 0 && !postedUnfunded,
-          fundingMode: grantedFundingMode,
-          variant: fundingVariant,
-          category: draft.category || 'none',
-          workType: draft.workType,
-          architecture: useStripeNativePayments ? 2 : 1,
-          queuedOffline: !isOnline,
-        });
-
         if (postedUnfunded) {
           // The experiment's step-2 event: a real, discoverable bounty exists
           // and nothing has been charged. `firstBounty` is true by construction

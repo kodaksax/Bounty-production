@@ -237,14 +237,11 @@ export function useAcceptRequest({
           amount: (request.bounty as any)?.amount ?? undefined,
         }
         await analyticsService.trackEvent('application_accepted', acceptProps)
-        await analyticsService.trackEvent('work_started', acceptProps)
-
-        // Also emit the existing `bounty_accepted` event name so downstream
-        // dashboards that already query that name keep working.
-        await analyticsService.trackEvent('bounty_accepted', {
-          bountyId: bountyId != null ? String(bountyId) : undefined,
+        await analyticsService.trackEvent('bounty_claimed' as any, {
+          bountyId: bountyIdStr,
           requestId: String(requestId),
         })
+        await analyticsService.trackEvent('work_started', acceptProps)
 
         // Deferred bounties only: the server just took the money as part of
         // this same transaction, so success here IS the funding moment.
