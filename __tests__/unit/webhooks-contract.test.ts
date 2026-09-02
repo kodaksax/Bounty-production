@@ -72,3 +72,16 @@ describe("case 'payout.paid'", () => {
     expect(body).toContain('reconcileInstantPayoutFee');
   });
 });
+
+describe('webhook event finalization', () => {
+  test('fails closed when the processed marker cannot be written', () => {
+    const marker = 'if (markError) {';
+    const idx = webhooksSource.indexOf(marker);
+    expect(idx).toBeGreaterThan(-1);
+    const block = webhooksSource.slice(idx, idx + 500);
+    expect(block).toContain('logCritical');
+    expect(block).toContain(
+      "throw new Error('Webhook event handled but could not be marked processed')"
+    );
+  });
+});

@@ -13,6 +13,11 @@ import {
 } from '../_shared/bounty-payment-settlement-state.ts';
 import { decidePayoutEventAction } from '../_shared/payout-state.ts';
 import type { WalletTransaction } from '../_shared/types.ts';
+import {
+    collectWebhookSecrets,
+    verifyStripeSignature,
+    WEBHOOK_SECRET_ENV_VARS,
+} from '../_shared/webhook-signature.ts';
 
 // Module scope, once per server bundle — see the HeyCatch RN/server install
 // guide. Business events fired below (payment_completed, payout_success,
@@ -1345,9 +1350,16 @@ Deno.serve(async (req: Request) => {
   }
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
-  const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
-  if (!stripeKey || !webhookSecret) {
-    console.error('[webhooks] Missing STRIPE_SECRET_KEY or STRIPE_WEBHOOK_SECRET');
+  // Two Stripe endpoints (platform + Connect) post to this same URL, each with
+  // its own signing secret — see _shared/webhook-signature.ts for the incident
+  // this fixes. Reading only STRIPE_WEBHOOK_SECRET meant one of the two could
+  // never verify.
+  const webhookSecrets = collectWebhookSecrets(name => Deno.env.get(name));
+  if (!stripeKey || webhookSecrets.length === 0) {
+    console.error(
+      '[webhooks] Missing STRIPE_SECRET_KEY or every webhook signing secret ' +
+        `(checked ${WEBHOOK_SECRET_ENV_VARS.join(', ')})`
+    );
     return jsonResponse({ error: 'Webhook not configured' }, 500);
   }
 
@@ -1368,76 +1380,28 @@ Deno.serve(async (req: Request) => {
 
   let event: Stripe.Event;
 
-  function hex(buffer: ArrayBuffer) {
-    const bytes = new Uint8Array(buffer);
-    return Array.from(bytes)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  async function computeHmacSha256(key: string, data: string) {
-    const enc = new TextEncoder();
-    const keyData = enc.encode(key);
-    const msgData = enc.encode(data);
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    const sig = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
-    return hex(sig);
-  }
-
-  function safeCompare(a: string, b: string) {
-    if (a.length !== b.length) return false;
-    let res = 0;
-    for (let i = 0; i < a.length; i++) {
-      res |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return res === 0;
-  }
-
-  async function verifyStripeSignature(payload: string, header: string | null, secret: string) {
-    if (!header) return false;
-    // header like: t=timestamp,v1=signature[,v1=...]
-    const headerParts = header.split(',').map(part => part.trim());
-    const headerKeyValues: Record<string, string[]> = {};
-    for (const part of headerParts) {
-      const [key, value] = part.split('=');
-      if (!headerKeyValues[key]) headerKeyValues[key] = [];
-      headerKeyValues[key].push(value);
-    }
-    const t = headerKeyValues['t']?.[0];
-    const signatures = headerKeyValues['v1'] ?? [];
-    if (!t || signatures.length === 0) return false;
-
-    const signedPayload = `${t}.${payload}`;
-    const expected = await computeHmacSha256(secret, signedPayload);
-
-    for (const s of signatures) {
-      if (safeCompare(s, expected)) {
-        // optional: validate timestamp skew (5 minutes)
-        const ts = Number(t);
-        if (Number.isFinite(ts)) {
-          const now = Math.floor(Date.now() / 1000);
-          if (Math.abs(now - ts) > 5 * 60) return false;
-        }
-        return true;
-      }
-    }
-    return false;
-  }
-
   try {
-    const verified = await verifyStripeSignature(rawBody, sig, webhookSecret);
-    if (!verified) {
-      console.error('[webhooks] Signature verification failed (manual):', {
+    const verification = await verifyStripeSignature(rawBody, sig, webhookSecrets);
+    if (!verification.verified) {
+      // `reason` distinguishes a genuinely forged/corrupt payload from the two
+      // operational causes that look identical in a log without it: a secret
+      // this deployment does not hold (`no_match` — the 2026-09-02 Connect
+      // outage), and a replayed capture (`timestamp_skew`).
+      console.error('[webhooks] Signature verification failed', {
         timestamp: new Date().toISOString(),
+        reason: verification.reason,
         rawBodyLength: typeof rawBody === 'string' ? rawBody.length : undefined,
+        configuredSecretCount: webhookSecrets.length,
       });
       return jsonResponse({ error: `Webhook signature verification failed` }, 400);
+    }
+    if (verification.secretIndex > 0) {
+      // Signed by a non-primary secret (the Connect endpoint, or a rotation
+      // key). Worth seeing so a stale secret can be retired deliberately
+      // rather than discovered by an outage. Index only — never the secret.
+      console.log('[webhooks] Verified with non-primary signing secret', {
+        secretIndex: verification.secretIndex,
+      });
     }
 
     // signature verified — parse event
@@ -1470,10 +1434,27 @@ Deno.serve(async (req: Request) => {
     if (claimError) {
       // Could not establish whether this is a duplicate. Fail loudly so Stripe
       // retries rather than silently processing an event twice.
-      console.error('[webhooks] Failed to claim event — asking Stripe to retry', {
-        eventId: event.id,
-        error: claimError,
-      });
+      //
+      // PGRST202 means the RPC itself is absent from the database — i.e. this
+      // function was deployed ahead of its migration. That is a total webhook
+      // outage, not a transient error, and Stripe's retries will never clear
+      // it, so it is logged as CRITICAL with the remedy attached. This is
+      // exactly what happened on 2026-08-31: webhooks v76 shipped while
+      // `claim_stripe_event` had never been applied to production.
+      const claimCode = (claimError as { code?: string }).code;
+      if (claimCode === 'PGRST202') {
+        logCritical('claim_stripe_event RPC is missing — ALL webhook processing is down', {
+          eventId: event.id,
+          eventType: event.type,
+          remedy:
+            'apply supabase/migrations/*_stripe_event_claim_lease.sql, then reload the PostgREST schema cache',
+        });
+      } else {
+        console.error('[webhooks] Failed to claim event — asking Stripe to retry', {
+          eventId: event.id,
+          error: claimError,
+        });
+      }
       return jsonResponse({ error: 'Could not claim webhook event' }, 500);
     }
 
@@ -3781,10 +3762,13 @@ Deno.serve(async (req: Request) => {
             }
             posterId = (racedId as string | null) ?? null;
             if (!posterId) {
-              console.error('[webhooks] Could not create or resolve a poster account — createUser returned 422 but re-resolve also found no user', {
-                sessionId: session.id,
-                createErr,
-              });
+              console.error(
+                '[webhooks] Could not create or resolve a poster account — createUser returned 422 but re-resolve also found no user',
+                {
+                  sessionId: session.id,
+                  createErr,
+                }
+              );
               await recordCheckoutFailure(
                 'account_creation_failed: re-resolve returned no user after 422 conflict'
               );
@@ -3932,11 +3916,25 @@ Deno.serve(async (req: Request) => {
         console.log(`[webhooks] Unhandled event type: ${event.type}`);
     }
 
-    // Mark event as processed
-    await supabase
+    // Mark event as processed. This releases the claim lease taken above, so a
+    // failure here is not cosmetic: the row stays `processing`, monitoring
+    // reads it as an unprocessed event, and — worse — the handler's work is
+    // done but nothing records it, so a Stripe redelivery after the lease
+    // expires would re-enter the handler. The result was previously discarded
+    // entirely; check it and escalate.
+    const { error: markError } = await supabase
       .from('stripe_events')
       .update({ processed: true, processed_at: new Date().toISOString(), status: 'processed' })
       .eq('stripe_event_id', event.id);
+
+    if (markError) {
+      logCritical('event handled but could not be marked processed — replay risk', {
+        eventId: event.id,
+        eventType: event.type,
+        error: markError,
+      });
+      throw new Error('Webhook event handled but could not be marked processed');
+    }
 
     return jsonResponse({ received: true });
   } catch (error: unknown) {

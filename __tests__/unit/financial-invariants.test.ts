@@ -26,8 +26,8 @@ import * as path from 'path';
 // The reconciliation decision rules are plain TypeScript with no imports, so
 // they can be executed here directly rather than pattern-matched in source.
 import {
-  isSafeStatusRepair,
-  normalizeStripeStatus,
+    isSafeStatusRepair,
+    normalizeStripeStatus,
 } from '../../supabase/functions/reconciliation/reconciliation-logic';
 
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '../../', p), 'utf8');
@@ -37,13 +37,28 @@ const webhooksSource = read('supabase/functions/webhooks/index.ts');
 const walletSource = read('supabase/functions/wallet/index.ts');
 const bountyPaymentsSource = read('supabase/functions/bounty-payments/index.ts');
 const reconciliationSource = read('supabase/functions/reconciliation/index.ts');
+const paymentIdempotencyMigration = read(
+  'supabase/migrations/20260902213000_payment_idempotency_constraints.sql'
+);
 
 describe('invariant: one financial event produces one ledger event', () => {
+  it('the database rejects duplicate live bounty payment rows and duplicate Stripe release evidence', () => {
+    expect(paymentIdempotencyMigration).toContain('bounty_payments_one_live_row_per_bounty_idx');
+    expect(paymentIdempotencyMigration).toContain("WHERE status NOT IN ('canceled', 'failed')");
+    expect(paymentIdempotencyMigration).toContain('bounty_payments_stripe_transfer_unique_idx');
+    expect(paymentIdempotencyMigration).toContain('bounty_payments_stripe_refund_unique_idx');
+    expect(paymentIdempotencyMigration).toContain('ledger_entries_one_transfer_leg_idx');
+    expect(paymentIdempotencyMigration).toContain('ledger_entries_one_payout_leg_idx');
+  });
+
   it('every payout-creating route writes exactly one wallet_transactions row', () => {
     // The native handler is the single payout path for both instant and
     // standard; more than one insert would mean two rows per payout.
     const handlerStart = connectSource.indexOf('async function handleConnectNativePayout');
-    const handlerEnd = connectSource.indexOf('\n}', connectSource.indexOf('remainingAvailableCents'));
+    const handlerEnd = connectSource.indexOf(
+      '\n}',
+      connectSource.indexOf('remainingAvailableCents')
+    );
     const handler = connectSource.slice(handlerStart, handlerEnd);
     const inserts = handler.match(/\.from\('wallet_transactions'\)\s*\n?\s*\.insert\(/g) ?? [];
     expect(inserts).toHaveLength(1);
@@ -63,7 +78,9 @@ describe('invariant: one financial event produces one ledger event', () => {
 
 describe('invariant: no duplicate payouts', () => {
   it('the native payout path replays instead of re-paying on a known key', () => {
-    expect(connectSource).toContain("This withdrawal was already submitted and is being processed.");
+    expect(connectSource).toContain(
+      'This withdrawal was already submitted and is being processed.'
+    );
     expect(connectSource).toMatch(/\.eq\(\s*'idempotency_key'\s*,\s*idempotencyKey\s*\)/);
   });
 
@@ -88,7 +105,10 @@ describe('invariant: no duplicate payouts', () => {
 describe('invariant: no duplicate transfers', () => {
   it('the Connect-native path creates no transfer at all', () => {
     const handlerStart = connectSource.indexOf('async function handleConnectNativePayout');
-    const handlerEnd = connectSource.indexOf('\n}', connectSource.indexOf('remainingAvailableCents'));
+    const handlerEnd = connectSource.indexOf(
+      '\n}',
+      connectSource.indexOf('remainingAvailableCents')
+    );
     const handler = connectSource.slice(handlerStart, handlerEnd);
     expect(handler).not.toContain('stripe.transfers.create');
   });
@@ -115,6 +135,32 @@ describe('invariant: no duplicate transfers', () => {
     // source_transaction is what stops a release transferring funds the
     // platform never actually received for that bounty.
     expect(bountyPaymentsSource).toContain('source_transaction');
+  });
+
+  it('Phase 2 funding creates the PaymentIntent with a deterministic Stripe idempotency key', () => {
+    const createRoute = bountyPaymentsSource.slice(
+      bountyPaymentsSource.indexOf("if (req.method === 'POST' && subPath === '/create')"),
+      bountyPaymentsSource.indexOf("if (req.method === 'POST' && subPath === '/release')")
+    );
+    expect(createRoute).toContain('stripe.paymentIntents.create');
+    expect(createRoute).toContain('idempotencyKey: `bounty_payment_create_${bountyId}`');
+  });
+
+  it('Phase 2 funding treats insert conflicts as idempotent replays instead of canceling the shared PaymentIntent', () => {
+    const createRoute = bountyPaymentsSource.slice(
+      bountyPaymentsSource.indexOf("if (req.method === 'POST' && subPath === '/create')"),
+      bountyPaymentsSource.indexOf("if (req.method === 'POST' && subPath === '/release')")
+    );
+    const conflictBranch = createRoute.slice(
+      createRoute.indexOf("(insErr as { code?: string } | null)?.code === '23505'"),
+      createRoute.indexOf(
+        'await stripe.paymentIntents.cancel(paymentIntent.id)',
+        createRoute.indexOf("(insErr as { code?: string } | null)?.code === '23505'")
+      )
+    );
+    expect(conflictBranch).toContain(".eq('stripe_payment_intent_id', paymentIntent.id)");
+    expect(conflictBranch).toContain('reused: true');
+    expect(conflictBranch).not.toContain('paymentIntents.cancel');
   });
 });
 
@@ -178,7 +224,10 @@ describe('invariant: concurrent withdrawals cannot double-spend', () => {
 describe('invariant: nothing is marked complete unless Stripe completed it', () => {
   it('the native payout records pending, never assumed completion', () => {
     const handlerStart = connectSource.indexOf('async function handleConnectNativePayout');
-    const handlerEnd = connectSource.indexOf('\n}', connectSource.indexOf('remainingAvailableCents'));
+    const handlerEnd = connectSource.indexOf(
+      '\n}',
+      connectSource.indexOf('remainingAvailableCents')
+    );
     const handler = connectSource.slice(handlerStart, handlerEnd);
     expect(handler).toContain("status: 'pending'");
     expect(handler).not.toContain("status: 'completed'");

@@ -521,19 +521,22 @@ Deno.serve(async (req: Request) => {
       // (tracked via bounty_payments.status) until release. Automatic capture
       // is used because real bounties routinely stay open far longer than the
       // 7-day manual-capture auto-cancel window.
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amountCents,
-        currency: 'usd',
-        customer: customerId,
-        capture_method: 'automatic',
-        automatic_payment_methods: { enabled: true },
-        transfer_group: transferGroup,
-        metadata: {
-          user_id: userId,
-          bounty_id: bountyId,
-          purpose: 'bounty_escrow',
+      const paymentIntent = await stripe.paymentIntents.create(
+        {
+          amount: amountCents,
+          currency: 'usd',
+          customer: customerId,
+          capture_method: 'automatic',
+          automatic_payment_methods: { enabled: true },
+          transfer_group: transferGroup,
+          metadata: {
+            user_id: userId,
+            bounty_id: bountyId,
+            purpose: 'bounty_escrow',
+          },
         },
-      });
+        { idempotencyKey: `bounty_payment_create_${bountyId}` }
+      );
 
       // Persist the bounty_payments row. There is no unique constraint on
       // bounty_id (only a plain index), so `.upsert(onConflict:'bounty_id')`
@@ -580,6 +583,27 @@ Deno.serve(async (req: Request) => {
           supabaseAdmin.from('bounty_payments').insert(rowPatch).select('id').maybeSingle()
         )) as any;
         if (insErr || !inserted) {
+          if ((insErr as { code?: string } | null)?.code === '23505') {
+            const { data: winner } = (await withDbTimeout(
+              supabaseAdmin
+                .from('bounty_payments')
+                .select('id, status, amount')
+                .eq('stripe_payment_intent_id', paymentIntent.id)
+                .maybeSingle()
+            )) as any;
+
+            if (winner?.id) {
+              return jsonResponse({
+                bountyPaymentId: winner.id,
+                paymentIntentId: paymentIntent.id,
+                clientSecret: paymentIntent.client_secret,
+                status: winner.status,
+                amount: Number(winner.amount),
+                reused: true,
+              });
+            }
+          }
+
           await stripe.paymentIntents.cancel(paymentIntent.id).catch(() => {});
           return jsonResponse(
             { error: 'Failed to record bounty payment. No charge was made.' },
@@ -633,11 +657,7 @@ Deno.serve(async (req: Request) => {
       // would return 404 for every v3 release.
       // ───────────────────────────────────────────────────────────────────
       const { data: v3Funding } = (await withDbTimeout(
-        supabaseAdmin
-          .from('bounty_v3_funding')
-          .select('*')
-          .eq('bounty_id', bountyId)
-          .maybeSingle()
+        supabaseAdmin.from('bounty_v3_funding').select('*').eq('bounty_id', bountyId).maybeSingle()
       )) as any;
 
       if (v3Funding) {
