@@ -533,7 +533,11 @@ const toHeyCatchProperties = (
     ) {
       result[key] = value;
     } else {
-      result[key] = String(value);
+      try {
+        result[key] = JSON.stringify(value) ?? '[unserializable]';
+      } catch {
+        result[key] = '[unserializable]';
+      }
     }
   }
   return result;
