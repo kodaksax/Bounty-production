@@ -475,12 +475,26 @@ async function findInFlightWithdrawal(
   return (data as { id: string; amount: number; created_at: string } | null) ?? null;
 }
 
-/** Shared 409 for a hunter who already has a withdrawal settling. */
+/**
+ * Shared 409 for a hunter who already has a withdrawal settling.
+ *
+ * `stripeAttempted: false` marks this as a pre-flight business-rule rejection
+ * for the client's analytics layer — Stripe was never asked to move money
+ * for THIS request, so it must not be counted as a payout failure (see the
+ * 2026-08-24 incident where a single hunter's 36 retries against this exact
+ * block inflated the payout_failed metric 5x). `pendingAmount` is the numeric
+ * amount of the withdrawal already in flight, exposed structurally (not just
+ * interpolated into `error`) so the client can build UI copy and analytics
+ * properties without parsing prose out of an error string.
+ */
 function inFlightWithdrawalResponse(inFlight: { amount: number }): Response {
+  const pendingAmount = Math.abs(inFlight.amount);
   return jsonResponse(
     {
-      error: `You already have a withdrawal of $${Math.abs(inFlight.amount).toFixed(2)} on its way to your bank. You can start another one once it lands — usually within 1-2 business days.`,
+      error: `You already have a withdrawal of $${pendingAmount.toFixed(2)} on its way to your bank. You can start another one once it lands — usually within 1-2 business days.`,
       code: 'withdrawal_already_in_progress',
+      pendingAmount,
+      stripeAttempted: false,
     },
     409
   );
@@ -1093,8 +1107,13 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     });
     // No compensating action is needed or correct here: nothing was debited
     // anywhere. The money never left the connected account.
+    //
+    // stripeAttempted: true — the payout-creation call just above was actually
+    // made and Stripe rejected or failed to process it. This is the one
+    // genuine provider-failure exit from this function; every other error
+    // return above happens before that call and must not carry the flag.
     const mapped = mapStripePayoutError(errInfo);
-    return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+    return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
   }
 
   await writePayoutAudit(supabase, {
@@ -1523,7 +1542,16 @@ Deno.serve(async (req: Request) => {
         const account = await stripe.accounts.create({
           type: 'express',
           email: profileRow?.email ?? undefined,
+          // Request card_payments in addition to transfers. verify-onboarding
+          // and the account.updated webhook both gate `onboarded` on
+          // charges_enabled && payouts_enabled, and charges_enabled tracks the
+          // card_payments capability. Without it, charges_enabled stays false
+          // forever, so a hunter who finishes KYC is never marked onboarded and
+          // stripe_connect_onboarded_at is never written. The embedded-session
+          // path and services/api/src/services/stripe-connect-service.ts already
+          // request both.
           capabilities: {
+            card_payments: { requested: true },
             transfers: { requested: true },
           },
           business_type: 'individual',
@@ -1542,6 +1570,25 @@ Deno.serve(async (req: Request) => {
         console.log(`[connect] Created new account: ${accountId} for user ${userId}`, {
           manualPayouts: CONNECT_MANUAL_PAYOUTS,
         });
+      } else {
+        // Legacy accounts created here before card_payments was requested only
+        // have the transfers capability, so charges_enabled never turns true and
+        // the hunter stays wrongly reported as not onboarded. Re-request
+        // card_payments so re-entering onboarding can finish. Requesting an
+        // already-active capability is a no-op, so this is safe for accounts
+        // that already have it. Best-effort: a failure here must not block the
+        // onboarding link.
+        try {
+          await stripe.accounts.update(accountId, {
+            capabilities: { card_payments: { requested: true } },
+          });
+        } catch (err) {
+          console.warn('[connect] Failed to backfill card_payments capability', {
+            userId,
+            accountId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
 
       const accountLink = await stripe.accountLinks.create({
@@ -1984,7 +2031,7 @@ Deno.serve(async (req: Request) => {
       const { data: profile } = await supabase
         .from('profiles')
         .select(
-          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status'
+          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, stripe_connect_payouts_enabled, account_status'
         )
         .eq('id', userId)
         .single();
@@ -2294,17 +2341,23 @@ Deno.serve(async (req: Request) => {
               error: refundError,
             }
           );
+          // stripeAttempted: true on both exits from this catch block —
+          // stripe.transfers.create() was actually called and rejected the
+          // request; the refund-RPC failure is a second, independent problem
+          // on top of that genuine provider failure, not a reason to treat it
+          // as unattempted.
           return jsonResponse(
             {
               error:
                 'Transfer failed and your balance may have been affected. Please contact support for assistance.',
               code: 'transfer_failed_refund_failed',
+              stripeAttempted: true,
             },
             500
           );
         }
         const mapped = mapStripeTransferError(errInfo);
-        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
       }
 
       console.log('[connect/transfer] Stripe transfer created', {
@@ -2628,11 +2681,15 @@ Deno.serve(async (req: Request) => {
               error: retryRefundError,
             }
           );
+          // stripeAttempted: true on both exits — stripe.transfers.create()
+          // was actually called and rejected the request. See the identical
+          // rationale on the primary /transfer route above.
           return jsonResponse(
             {
               error:
                 'Transfer failed and your balance may have been affected. Please contact support for assistance.',
               code: 'transfer_failed_refund_failed',
+              stripeAttempted: true,
             },
             500
           );
@@ -2640,7 +2697,7 @@ Deno.serve(async (req: Request) => {
         const mapped = mapStripeTransferError(
           stripeError as { code?: string; type?: string; message?: string }
         );
-        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
       }
 
       // Same two-hop rule as the primary /transfer path: the retry re-ran hop
@@ -3012,7 +3069,7 @@ Deno.serve(async (req: Request) => {
       const { data: profile } = await supabase
         .from('profiles')
         .select(
-          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status'
+          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, stripe_connect_payouts_enabled, account_status'
         )
         .eq('id', userId)
         .single();
@@ -3041,6 +3098,31 @@ Deno.serve(async (req: Request) => {
             error:
               'Your payout account is not set up yet. Please complete Stripe Connect onboarding before withdrawing.',
             code: 'connect_not_onboarded',
+          },
+          400
+        );
+      }
+
+      // stripe_connect_onboarded_at is set exactly once on the first transition
+      // to fully-onboarded and is NEVER cleared (see
+      // docs/payments/BOUNTY_WITHDRAWAL_TECHNICAL_SPECIFICATION.md), so the
+      // gate above passes for a hunter who onboarded months ago and has since
+      // become restricted. stripe_connect_payouts_enabled is the field the
+      // account.updated / capability.updated webhooks keep live-synced, and it
+      // is the one that answers "can this account receive a payout right now".
+      //
+      // /connect/transfer follows this with a live stripe.accounts.retrieve
+      // check; this route had neither. ADR 0001 §4.3 item 4.
+      if (p.stripe_connect_payouts_enabled !== true) {
+        console.warn('[connect/instant-payout] payouts not enabled on profile', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+        });
+        return jsonResponse(
+          {
+            error:
+              'Payouts are not enabled on your account yet. Please finish your payout setup, then try again.',
+            code: 'payouts_disabled',
           },
           400
         );
@@ -3380,17 +3462,23 @@ Deno.serve(async (req: Request) => {
               error: refundError,
             }
           );
+          // stripeAttempted: true on both exits from this catch block —
+          // stripe.transfers.create() was actually called and rejected the
+          // request; the refund-RPC failure is a second, independent problem
+          // on top of that genuine provider failure, not a reason to treat it
+          // as unattempted.
           return jsonResponse(
             {
               error:
                 'Transfer failed and your balance may have been affected. Please contact support for assistance.',
               code: 'transfer_failed_refund_failed',
+              stripeAttempted: true,
             },
             500
           );
         }
         const mapped = mapStripeTransferError(errInfo);
-        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
       }
 
       console.log('[connect/instant-payout] platform transfer created', {

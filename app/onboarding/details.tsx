@@ -27,6 +27,7 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isLocalBounty, rankNearbyBounties } from '../../lib/onboarding/hunter-discovery';
 import { makeOnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
 import { useDeferredFundingVariant } from '../../lib/experiments/deferred-funding-variant';
+import { markPosterActivated } from '../../lib/analytics/lifecycle';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { amountBucket, canDeferBountyFunding } from '../../lib/services/bounty-funding-service';
 import { authProfileService } from '../../lib/services/auth-profile-service';
@@ -164,22 +165,57 @@ export default function DetailsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // post_started — entry into the onboarding poster branch. Emitted with the
-  // same event name as the main composer (app/screens/CreateBounty) so both
-  // posting surfaces roll up into one funnel, split by `surface`.
+  // post_started — the FIRST genuine interaction with the onboarding poster
+  // composer. Emitted with the same event name as the main composer
+  // (app/screens/CreateBounty) so both posting surfaces roll up into one
+  // funnel, split by `surface` — which means it also has to mean the same
+  // thing on both.
+  //
+  // It used to fire from an effect keyed on `intent === 'poster'`, i.e. the
+  // instant the user tapped "I need help". That made the declared-poster
+  // funnel's first step a tautology: declaring poster intent WAS the
+  // post_started, so the step could never show loss, and the real drop
+  // between "said they'd post" and "began composing" was invisible. Gating
+  // it on a real edit measures that gap instead. See the matching change on
+  // the create_flow surface for the tab-traffic version of the same bug.
+  //
+  // `resumed_draft` is snapshotted at the point of first interaction rather
+  // than read live, so the poster's own first keystroke can't make a cold
+  // start look resumed.
   const posterFunnelStartedRef = useRef(false);
-  useEffect(() => {
+  const markPosterComposerStarted = (
+    trigger: 'task_edit' | 'price_edit' | 'schedule_edit' | 'publish'
+  ) => {
     if (onboardingData.intent !== 'poster' || posterFunnelStartedRef.current) return;
     posterFunnelStartedRef.current = true;
-    analyticsService.trackEvent('post_started', {
+    analyticsService.trackEvent('bounty_started', {
+      role: 'poster',
       surface: 'onboarding',
       // snake_case to match the same property on the main composer's
-      // post_started call (app/screens/CreateBounty/index.tsx) — previously
+      // bounty_started call (app/screens/CreateBounty/index.tsx) — previously
       // `resumedDraft` here, which the (now-removed) analytics-service
       // key-normalizer expanded into three competing spellings on PostHog.
       resumed_draft: Boolean(onboardingData.taskDescription?.trim()),
+      trigger,
     });
-  }, [onboardingData.intent, onboardingData.taskDescription]);
+  };
+
+  // composer_opened — the onboarding poster reached the composer on purpose
+  // (they tapped "I need help" on welcome.tsx). Mirrors the create_flow
+  // surface's `composer_opened`, split by `surface`. Fires once per mount of
+  // the poster branch.
+  const composerOpenedRef = useRef(false);
+  useEffect(() => {
+    if (onboardingData.intent !== 'poster' || composerOpenedRef.current) return;
+    composerOpenedRef.current = true;
+    analyticsService.trackEvent('composer_opened', {
+      role: 'poster',
+      surface: 'onboarding',
+      entry_point: 'onboarding_poster_branch',
+      deliberate_entry: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onboardingData.intent]);
 
   // A bounty was already created earlier in this onboarding session (e.g. the
   // user navigated back into this screen after createBountyNow succeeded).
@@ -204,12 +240,10 @@ export default function DetailsScreen() {
   // Initial (pre-location) preview: recent local bounties, recency-sorted —
   // matches what the location prompt shows before we know where the hunter
   // is. Once location/ZIP resolves, resolveNearby() re-ranks a fresh fetch by
-  // real distance instead. Also runs pre-choice for the 'onboarding-skip-role-
-  // selection' test arm, since CombinedActivationPrompt shows the same
-  // preview before intent is even set.
-  const needsPreviewFetch =
-    onboardingData.intent === 'hunter' ||
-    (onboardingData.experimentVariant === 'test' && !onboardingData.intent);
+  // real distance instead. Also runs pre-choice when intent isn't set yet,
+  // since CombinedActivationPrompt shows the same preview before intent is
+  // picked (see the no-intent fallback below).
+  const needsPreviewFetch = onboardingData.intent === 'hunter' || !onboardingData.intent;
   useEffect(() => {
     if (!needsPreviewFetch) return;
     let cancelled = false;
@@ -750,6 +784,9 @@ export default function DetailsScreen() {
   // createBountyNow(false), or skipped as an honor bounty via
   // createBountyNow(true)).
   const handlePostBounty = () => {
+    // Backstop so a publish can never outrun its own funnel start — every
+    // realistic path here already edited at least the description.
+    markPosterComposerStarted('publish');
     const description = onboardingData.taskDescription.trim();
     const descriptionError = validateDescription(description);
     if (descriptionError) {
@@ -825,6 +862,14 @@ export default function DetailsScreen() {
     const title = deriveTitleFromDescription(description);
     const amount = Number(onboardingData.price) || 0;
 
+    // Canonical `bounty_submitted` — the poster committed a publish attempt.
+    analyticsService.trackEvent('bounty_submitted', {
+      role: 'poster',
+      surface: 'onboarding',
+      is_for_honor: isForHonor,
+      amount: isForHonor ? 0 : amount,
+    });
+
     setPosting(true);
     try {
       // Only ever 'at_accept' when handlePostBounty already confirmed the grant
@@ -862,22 +907,29 @@ export default function DetailsScreen() {
       const postedUnfunded = grantedFundingMode === 'at_accept';
 
       analyticsService.trackEvent('onboarding_bounty_posted', { isForHonor, amount });
-      // post_published — same terminal funnel event as the main composer.
-      // `funded` is the headline metric: did this published bounty carry real
-      // money. Kept alongside the pre-existing onboarding_bounty_posted event
-      // rather than replacing it, so existing onboarding insights don't break.
-      analyticsService.trackEvent('post_published', {
+      // Canonical `bounty_published` — same terminal funnel event as the main
+      // composer, split by `surface`. `funded` is the headline metric: did this
+      // published bounty carry real money. Kept alongside the pre-existing
+      // onboarding_bounty_posted event so existing onboarding insights don't break.
+      analyticsService.trackEvent('bounty_published', {
+        role: 'poster',
         surface: 'onboarding',
-        bountyId: String(result.bounty.id),
+        bounty_id: String(result.bounty.id),
         amount: isForHonor ? 0 : amount,
-        isForHonor,
+        is_for_honor: isForHonor,
         funded: !isForHonor && amount > 0 && !postedUnfunded,
         fundingMode: grantedFundingMode,
         variant: fundingVariant,
         category: 'none',
-        workType: 'in_person',
+        work_type: 'in_person',
         architecture: 1,
-        queuedOffline: false,
+        queued_offline: false,
+      });
+      // First successful publish by this user (once per device).
+      void markPosterActivated(userId || session?.user?.id, {
+        bounty_id: String(result.bounty.id),
+        amount: isForHonor ? 0 : amount,
+        surface: 'onboarding',
       });
 
       if (postedUnfunded) {
@@ -970,7 +1022,7 @@ export default function DetailsScreen() {
     // the module comment on getPreviewCards in previewBounties.ts — there is
     // no fixed/fabricated demo bounty), so bounty_claim_* here is a genuine
     // application, just tagged so it never counts as real marketplace demand.
-    analyticsService.trackEvent('bounty_claim_started', {
+    analyticsService.trackEvent('application_started', {
       bounty_id: String(sampleBounty.id),
       amount: typeof sampleBounty.amount === 'number' ? sampleBounty.amount : undefined,
       is_for_honor: Boolean(sampleBounty.is_for_honor),
@@ -989,7 +1041,7 @@ export default function DetailsScreen() {
       } as any);
 
       if (result.success) {
-        analyticsService.trackEvent('bounty_claim_submitted', {
+        analyticsService.trackEvent('application_submitted', {
           bounty_id: String(sampleBounty.id),
           is_onboarding_demo: true,
           had_message: false,
@@ -1009,7 +1061,7 @@ export default function DetailsScreen() {
       }
 
       console.warn('[Onboarding] Bounty application failed:', result.error);
-      analyticsService.trackEvent('bounty_claim_failed', {
+      analyticsService.trackEvent('application_failed', {
         bounty_id: String(sampleBounty.id),
         reason: /banned|suspended/i.test(result.error || '') ? 'not_eligible' : 'validation',
         is_onboarding_demo: true,
@@ -1024,7 +1076,7 @@ export default function DetailsScreen() {
       );
     } catch (err) {
       console.error('[Onboarding] Failed to apply to sample bounty:', err);
-      analyticsService.trackEvent('bounty_claim_failed', {
+      analyticsService.trackEvent('application_failed', {
         bounty_id: String(sampleBounty.id),
         reason: 'network',
         is_onboarding_demo: true,
@@ -1064,11 +1116,20 @@ export default function DetailsScreen() {
         styles={styles}
         insets={insets}
         taskDescription={onboardingData.taskDescription}
-        onChangeTaskDescription={taskDescription => updateOnboardingData({ taskDescription })}
+        onChangeTaskDescription={taskDescription => {
+          markPosterComposerStarted('task_edit');
+          updateOnboardingData({ taskDescription });
+        }}
         price={onboardingData.price}
-        onChangePrice={price => updateOnboardingData({ price })}
+        onChangePrice={price => {
+          markPosterComposerStarted('price_edit');
+          updateOnboardingData({ price });
+        }}
         schedule={onboardingData.schedule}
-        onChangeSchedule={schedule => updateOnboardingData({ schedule })}
+        onChangeSchedule={schedule => {
+          markPosterComposerStarted('schedule_edit');
+          updateOnboardingData({ schedule });
+        }}
         onNext={handlePostBounty}
         posting={posting}
         onSkip={handleSkipToApp}
@@ -1121,11 +1182,12 @@ export default function DetailsScreen() {
     );
   }
 
-  // 'onboarding-skip-role-selection' experiment, test arm: welcome.tsx sent
-  // this user here with intent still null. Show the combined chooser instead
-  // of the generic profile-only form; picking a card sets intent and the
-  // branches above take over on the next render, unchanged.
-  if (onboardingData.experimentVariant === 'test') {
+  // Defensive fallback for a resumed draft that never got an intent (e.g. one
+  // persisted by an older build, before role selection became mandatory on
+  // welcome.tsx). Show the combined chooser instead of the generic
+  // profile-only form; picking a card sets intent and the branches above
+  // take over on the next render, unchanged.
+  if (!onboardingData.intent) {
     return (
       <CombinedActivationPrompt
         theme={theme}

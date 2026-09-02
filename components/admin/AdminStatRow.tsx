@@ -1,46 +1,20 @@
 // components/admin/AdminStatRow.tsx - Stat row component for admin metrics
+//
+// Compatibility wrapper over AdminRow (see AdminUI.tsx). Kept so existing
+// screens keep working; AdminRow adds link/mono support on top.
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AdminRow } from './AdminUI';
 
 interface AdminStatRowProps {
   label: string;
   value: string | number;
   icon?: React.ReactNode;
+  /** Render as a tappable link to a related record. */
+  onPress?: () => void;
+  /** Use the compact treatment for identifiers (UUIDs, Stripe ids). */
+  mono?: boolean;
 }
 
-export function AdminStatRow({ label, value, icon }: AdminStatRowProps) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.labelContainer}>
-        {icon}
-        <Text style={styles.label}>{label}</Text>
-      </View>
-      <Text style={styles.value}>{value}</Text>
-    </View>
-  );
+export function AdminStatRow({ label, value, onPress, mono }: AdminStatRowProps) {
+  return <AdminRow label={label} value={value} onPress={onPress} mono={mono} />;
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  labelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.8)',
-  },
-  value: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fffef5',
-  },
-});

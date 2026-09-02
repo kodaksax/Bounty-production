@@ -100,6 +100,7 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
   const mockRegister = jest.fn();
   const mockAlias = jest.fn();
   const mockGetDistinctId = jest.fn(() => 'anon-distinct-id');
+  const mockGetAnonymousId = jest.fn(() => 'anon-distinct-id');
   const mockSetPersonProperties = jest.fn();
   const mockSet = jest.fn();
 
@@ -108,6 +109,7 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
     identify: mockIdentify,
     alias: mockAlias,
     getDistinctId: mockGetDistinctId,
+    getAnonymousId: mockGetAnonymousId,
     screen: mockScreen,
     reset: mockReset,
     flush: mockFlush,
@@ -157,7 +159,6 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
 
   test('identify calls client.identify with userId and properties', () => {
     posthogModule.identify('user-42', { email: 'test@example.com' });
-    expect(mockAlias).toHaveBeenCalledWith('user-42');
     expect(mockIdentify).toHaveBeenCalledWith('user-42', {
       email: 'test@example.com',
       is_internal: false,
@@ -165,30 +166,42 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
     expect(mockRegister).toHaveBeenCalledWith({ is_internal: false });
   });
 
-  test('identify aliases before identify to preserve anonymous event continuity', () => {
-    // Use a fresh anonymous distinct id so this transition hasn't been seen yet
-    mockGetDistinctId.mockReturnValueOnce('anon-test-6');
-    posthogModule.identify('user-42', { email: 'test@example.com' });
-    expect(mockAlias.mock.invocationCallOrder[0]).toBeLessThan(
-      mockIdentify.mock.invocationCallOrder[0]
-    );
-  });
-
-  test('identify skips alias when distinct id is already the stable user id', () => {
-    mockGetDistinctId.mockReturnValueOnce('user-42');
+  test('identify never aliases — the SDK merges anonymous to identified itself', () => {
+    // Current id is still the anonymous id, the normal first sign-in case.
     posthogModule.identify('user-42', { email: 'test@example.com' });
     expect(mockAlias).not.toHaveBeenCalled();
-    expect(mockIdentify).toHaveBeenCalledWith('user-42', {
+  });
+
+  test('identify resets before identifying a different already-identified user', () => {
+    // Shared or account-switch device: the SDK still holds a prior user id.
+    mockGetDistinctId.mockReturnValue('old-user');
+    mockGetAnonymousId.mockReturnValue('anon-distinct-id');
+    posthogModule.identify('new-user', { email: 'test@example.com' });
+    expect(mockReset).toHaveBeenCalledTimes(1);
+    expect(mockReset.mock.invocationCallOrder[0]).toBeLessThan(
+      mockIdentify.mock.invocationCallOrder[0]
+    );
+    expect(mockIdentify).toHaveBeenCalledWith('new-user', {
       email: 'test@example.com',
       is_internal: false,
     });
+    mockGetDistinctId.mockReturnValue('anon-distinct-id');
+    mockGetAnonymousId.mockReturnValue('anon-distinct-id');
   });
 
-  test('identify emits alias only once per anonymous-to-user transition', () => {
-    // Use a fresh user id so the transition hasn't been seen by prior tests
-    posthogModule.identify('user-8', { email: 'test@example.com' });
-    posthogModule.identify('user-8', { email: 'test@example.com' });
-    expect(mockAlias).toHaveBeenCalledTimes(1);
+  test('identify does not reset when the current id is still anonymous', () => {
+    mockGetDistinctId.mockReturnValue('anon-distinct-id');
+    mockGetAnonymousId.mockReturnValue('anon-distinct-id');
+    posthogModule.identify('user-42', { email: 'test@example.com' });
+    expect(mockReset).not.toHaveBeenCalled();
+  });
+
+  test('identify does not reset when re-identifying the same user', () => {
+    mockGetDistinctId.mockReturnValue('user-42');
+    mockGetAnonymousId.mockReturnValue('anon-distinct-id');
+    posthogModule.identify('user-42', { email: 'test@example.com' });
+    expect(mockReset).not.toHaveBeenCalled();
+    mockGetDistinctId.mockReturnValue('anon-distinct-id');
   });
 
   test.each([
@@ -375,5 +388,62 @@ describe('lib/posthog — initialization failure (require throws)', () => {
 
   test('isPostHogReady returns false when initialization failed', () => {
     expect(posthogModule.isPostHogReady()).toBe(false);
+  });
+});
+
+describe('lib/posthog — session replay configuration', () => {
+  const MockPostHog = jest.fn().mockImplementation(() => ({
+    capture: jest.fn(),
+    register: jest.fn(),
+  }));
+
+  let options: any;
+
+  beforeAll(() => {
+    process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-key-replay';
+    jest.isolateModules(() => {
+      jest.doMock('posthog-react-native', () => ({
+        PostHog: MockPostHog,
+        useFeatureFlag: jest.fn(),
+      }));
+      require('../../lib/posthog');
+    });
+    options = MockPostHog.mock.calls[0]?.[1];
+  });
+
+  afterAll(() => {
+    delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
+  });
+
+  test('constructs exactly one PostHog client', () => {
+    expect(MockPostHog).toHaveBeenCalledTimes(1);
+  });
+
+  test('session replay is enabled', () => {
+    expect(options.enableSessionReplay).toBe(true);
+  });
+
+  test('session replay masks all text inputs and all images', () => {
+    expect(options.sessionReplayConfig).toEqual(
+      expect.objectContaining({
+        maskAllTextInputs: true,
+        maskAllImages: true,
+        maskAllSandboxedViews: true,
+        captureLog: false,
+      })
+    );
+  });
+
+  test('enabling replay preserves the pre-existing client options', () => {
+    expect(options.host).toBe(
+      process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com'
+    );
+    expect(options.personProfiles).toBe('identified_only');
+    expect(options.captureAppLifecycleEvents).toBe(true);
+    expect(options.errorTracking.autocapture).toEqual({
+      uncaughtExceptions: false,
+      unhandledRejections: false,
+      console: false,
+    });
   });
 });

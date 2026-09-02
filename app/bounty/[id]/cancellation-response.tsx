@@ -17,7 +17,7 @@ import { bountyPaymentsService } from 'lib/services/bounty-payments-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
 import { useWallet } from 'lib/wallet-context';
-import { isPhase2Bounty } from 'lib/utils/payment-architecture';
+import { isPhase2Bounty, isStripeNativeBounty, isV3Bounty } from 'lib/utils/payment-architecture';
 import type { BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
@@ -87,10 +87,12 @@ export default function CancellationResponseScreen() {
                 responseMessage || undefined,
                 async (bountyId: string, title: string, refundPercentage: number) => {
                   const useV2 = isPhase2Bounty(bounty);
+                  const useV3 = isV3Bounty(bounty);
+                  const useStripeNative = isStripeNativeBounty(bounty);
                   try {
                     await analyticsService.trackEvent('payment_architecture_routed', {
                       bountyId: String(bountyId),
-                      version: useV2 ? 2 : 1,
+                      version: useV3 ? 3 : useV2 ? 2 : 1,
                       context: 'cancel',
                     });
                   } catch {
@@ -98,20 +100,28 @@ export default function CancellationResponseScreen() {
                   }
                   try {
                     let result: boolean;
-                    if (useV2) {
+                    if (useStripeNative) {
                       // Stripe-native Phase 2 escrow only supports a full
                       // cancel/refund server-side; the v1-only partial
-                      // refundPercentage isn't applicable here.
-                      await bountyPaymentsService.cancelBountyPayment(String(bountyId));
-                      result = true;
+                      // refundPercentage isn't applicable here. Require a
+                      // terminal v2 status before treating the cancellation as
+                      // complete — refund_pending is not a settled refund.
+                      const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bountyId));
+                      result = cancelResult.status === 'canceled' || cancelResult.status === 'refunded';
                     } else {
+                      // refundEscrow returns false on failure instead of
+                      // throwing, so escrow_refunded must be gated on the result.
                       result = await refundEscrow(bountyId, title, refundPercentage);
                     }
                     try {
-                      await analyticsService.trackEvent('escrow_refunded', {
-                        bountyId: String(bountyId),
-                        architecture: useV2 ? 'v2' : 'v1',
-                      });
+                      await analyticsService.trackEvent(
+                        result ? 'escrow_refunded' : 'payment_failed',
+                        {
+                          bountyId: String(bountyId),
+                          architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
+                          ...(result ? {} : { stage: 'cancel' }),
+                        }
+                      );
                     } catch {
                       /* analytics is best-effort */
                     }
@@ -120,7 +130,7 @@ export default function CancellationResponseScreen() {
                     try {
                       await analyticsService.trackEvent('payment_failed', {
                         bountyId: String(bountyId),
-                        architecture: useV2 ? 'v2' : 'v1',
+                        architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                         stage: 'cancel',
                       });
                     } catch {

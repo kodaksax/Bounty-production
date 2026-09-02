@@ -24,6 +24,7 @@
  */
 import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
+import { serializeStripeError } from '../utils/stripe-error';
 import { connectService } from './connect-service';
 import { escrowService } from './escrow-service';
 import {
@@ -292,7 +293,7 @@ class StripeService {
       await analyticsService.trackEvent('payment_failed', {
         amount,
         currency,
-        error: String(error),
+        ...serializeStripeError(error),
         stage: 'initiate',
       });
 
@@ -456,7 +457,7 @@ class StripeService {
 
       await analyticsService.trackEvent('payment_failed', {
         paymentMethodId,
-        error: String(error),
+        ...serializeStripeError(error),
         stage: 'confirm',
       });
 

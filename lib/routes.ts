@@ -37,6 +37,12 @@ export const ROUTES = {
   ADMIN: {
     // Root admin dashboard
     INDEX: '/(admin)',
+
+    // Founder Command Center: marketplace flow, money integrity, live event feed
+    COMMAND_CENTER: '/(admin)/command-center',
+    /** Financial integrity queue -- everything anomaly detection found. */
+    ANOMALIES: '/(admin)/anomalies',
+
     
     // User Management
     USERS: '/(admin)/users',
@@ -47,6 +53,12 @@ export const ROUTES = {
     // Bounty Management
     BOUNTIES: '/(admin)/bounties',
     BOUNTY_DETAIL: (id: string | number) => `/(admin)/bounty/${id}` as const,
+    /** Hunter applications for one bounty. */
+    BOUNTY_REQUESTS: (id: string | number) => `/(admin)/bounty/${id}/requests` as const,
+    /** Completion submissions (proof of work) for one bounty. */
+    BOUNTY_COMPLETIONS: (id: string | number) => `/(admin)/bounty/${id}/completions` as const,
+    /** Canonical event ledger for one bounty: the real lifecycle sequence. */
+    BOUNTY_TIMELINE: (id: string | number) => `/(admin)/bounty/${id}/timeline` as const,
     
     // Financial & Transactions
     TRANSACTIONS: '/(admin)/transactions',
@@ -56,6 +68,11 @@ export const ROUTES = {
     // Analytics & Reporting
     ANALYTICS: '/(admin)/analytics',
     REPORTS: '/(admin)/reports',
+
+    // Trust & Safety: proactive bounty moderation queue (detect -> review ->
+    // approve / hide / remove), separate from the user-report queue above.
+    MODERATION: '/(admin)/moderation',
+    MODERATION_DETAIL: (id: string | number) => `/(admin)/moderation/${id}` as const,
     
     // Dispute Management
     DISPUTES: '/(admin)/disputes',
@@ -65,9 +82,13 @@ export const ROUTES = {
     SETTINGS: {
       INDEX: '/(admin)/settings',
       GENERAL: '/(admin)/settings/general',
-      NOTIFICATIONS: '/(admin)/settings/notifications',
+      // NOTIFICATIONS removed: /(admin)/settings/notifications persisted
+      // nothing and no backend consumed any of its values -- there is no admin
+      // alerting system for it to configure.
       SECURITY: '/(admin)/settings/security',
-      AUDIT_LOG: '/(admin)/settings/audit-log',
+      // AUDIT_LOG removed: /(admin)/settings/audit-log rendered a hardcoded
+      // seven-row mock array and shadowed the real, Supabase-backed audit
+      // viewer. Settings now links to ADMIN.AUDIT_LOGS below.
     },
     
     // Support section

@@ -1,209 +1,170 @@
-ADMIN SECTION FILE STRUCTURE
-============================
+BOUNTY ADMIN CONSOLE — STRUCTURE
+================================
+Last verified: 2026-08-27 against the production schema.
 
-app/(admin)/                           # Admin route group (protected)
-├── _layout.tsx                        # Gating layout (redirects non-admin)
-├── index.tsx                          # Dashboard (metrics + quick links)
-├── not-found.tsx                      # 404 fallback for invalid routes
+This file previously described the admin section as backed by "Mock data +
+simulated network delay" and listed screens that no longer exist. It is now a
+map of what is actually there.
+
+
+ROUTES
+------
+Every route in lib/routes.ts ROUTES.ADMIN resolves 1:1 to a file below.
+
+app/(admin)/
+├── _layout.tsx                  Gating layout (UX redirect only — see SECURITY)
+├── index.tsx                    Dashboard: attention queues + headline metrics
+├── not-found.tsx                Fallback for an invalid admin route
 │
-├── [User Management]
-├── users.tsx                          # Users list with filters
-├── user/
-│   └── [id].tsx                       # User detail with stats
-├── blocked-users.tsx                  # Blocked users management
+├── [Marketplace]
+├── bounties.tsx                 Bounty list: search, 7-status filter, paging
+├── bounty/[id]/
+│   ├── index.tsx                Bounty detail + lifecycle actions + cross-links
+│   ├── requests.tsx             Hunter applications for this bounty (read-only)
+│   └── completions.tsx          Proof-of-work submissions (read-only)
+├── users.tsx                    User list: search, status filter, paging
+├── user/[id].tsx                User detail + moderation + cross-links
+├── blocked-users.tsx            Block relationships (bounded list)
 │
-├── [Bounty Management]
-├── bounties.tsx                       # Bounties list with filters
-├── bounty/
-│   └── [id].tsx                       # Bounty detail + status transitions
+├── [Money]
+├── transactions.tsx             Wallet ledger: type + status filters, paging
+├── withdrawal-recovery.tsx      Retry / manually settle stuck payouts
+├── balance-reconciliation.tsx   Ledger vs Stripe comparison
 │
-├── [Financial]
-├── transactions.tsx                   # Transactions list (read-only)
+├── [Trust & Safety]
+├── disputes/
+│   ├── index.tsx                Dispute queue (bounded, oldest first)
+│   └── [id].tsx                 Dispute detail and resolution
+├── reports.tsx                  User-report queue (bounded)
+├── moderation.tsx               Bounty Moderation Queue: detection-flagged
+│                                promotional / spam listings, founder alerts
+├── moderation/
+│   └── [id].tsx                 Review one listing: signal breakdown, related
+│                                listings, history, APPROVE / HIDE / REMOVE
 │
-├── [Analytics & Reporting]
-├── analytics.tsx                      # Analytics dashboard
-├── reports.tsx                        # Reports management
+├── [Insight]
+├── analytics.tsx                Activity counted live from the database
+├── audit-logs.tsx               Audit trail assembled from 4 real tables
 │
-├── [Settings Section - NEW]
+├── [Console]
 ├── settings/
-│   ├── index.tsx                      # Settings hub
-│   ├── general.tsx                    # General preferences
-│   ├── notifications.tsx              # Notification settings
-│   ├── security.tsx                   # Security & access control
-│   └── audit-log.tsx                  # Admin activity history
+│   ├── index.tsx                Settings hub
+│   ├── general.tsx              Console preferences (persisted, consumed)
+│   └── security.tsx             Real TOTP state + global sign-out
+├── support/
+│   ├── index.tsx                Support hub
+│   ├── help.tsx                 Operator notes (verified content)
+│   └── feedback.tsx             Bug / feature submission -> real tables
 │
-└── [Support Section - NEW]
-    └── support/
-        ├── index.tsx                  # Support hub
-        ├── help.tsx                   # Help center with FAQs
-        └── feedback.tsx               # Send feedback form
+└── verifications.tsx            Dormant. Manual ID review was replaced by
+                                 Stripe Identity's async pipeline; kept as a
+                                 rollback path and deliberately not linked
+                                 from the dashboard.
 
-lib/
-├── routes.ts                          # Centralized route constants (UPDATED)
-├── admin-context.tsx                  # AdminProvider + useAdmin hook
-├── types-admin.ts                     # Admin-specific TypeScript types
-└── admin/
-    └── adminDataClient.ts             # Mock data + network simulation
+Removed (were placeholders):
+  settings/notifications.tsx     Persisted nothing; no admin alerting backend.
+  settings/audit-log.tsx         Seven hardcoded rows; shadowed audit-logs.tsx.
+  components/admin/AnalyticsMetricsCard.tsx
+                                 Orphaned once analytics moved off the Node API.
 
-hooks/
-├── useAdminBounties.ts                # Bounties data with status updates
-├── useAdminUsers.ts                   # Users data
-├── useAdminTransactions.ts            # Transactions data
-└── useAdminMetrics.ts                 # Dashboard metrics
 
-components/admin/
-├── AdminCard.tsx                      # Reusable card container
-├── AdminHeader.tsx                    # Header with ADMIN badge
-├── AdminStatRow.tsx                   # Key-value stat row
-├── AdminStatusBadge.tsx               # Color-coded status badges
-└── AnalyticsMetricsCard.tsx           # Analytics metrics display
+SUPPORTING CODE
+---------------
+lib/routes.ts                    Route constants (ADMIN group)
+lib/admin-context.tsx            AdminProvider; role from JWT app_metadata
+lib/types-admin.ts               Types + the canonical status vocabularies,
+                                 which mirror the Postgres enums exactly
+lib/admin/adminDataClient.ts     Bounties / users / transactions / relations
+lib/admin/adminAnalytics.ts      Analytics counted from the real tables
+lib/admin/adminPreferences.ts    Persisted console preferences
+lib/admin/moderationClient.ts    Moderation queue reads + state transitions;
+                                 pure state-machine / signal helpers
+lib/services/audit-log-service.ts  Audit trail (4 real sources, no mocks)
 
-Integration Points:
--------------------
-app/_layout.tsx                        # Wraps app in AdminProvider
-app/tabs/bounty-app.tsx                # Uses useAdmin + routes to admin
-components/ui/bottom-nav.tsx           # Conditional admin tab
-components/settings-screen.tsx         # Dev toggle for admin mode
+hooks/useAdminList.ts            Shared paginated + filtered list state
+hooks/useAdminBounties.ts        \
+hooks/useAdminUsers.ts            > thin wrappers over useAdminList
+hooks/useAdminTransactions.ts    /
+hooks/useAdminMetrics.ts         Dashboard metrics
+hooks/useModerationQueue.ts      Moderation queue + founder alerts + metrics
 
-Documentation:
---------------
-ADMIN_SECTION.md                       # Complete architecture guide
-ADMIN_STRUCTURE.txt                    # This file (visual structure)
+supabase/functions/moderation-sweep/   Scheduled: run_moderation_sweep() then
+                                 fan out founder alerts (in-app / push / email)
+supabase/migrations/20260829120000_bounty_moderation_queue.sql
+                                 bounty_moderation state machine, content +
+                                 sweep detection, admin_moderation_* RPCs
 
-KEY FEATURES BY SCREEN
-======================
+components/admin/AdminUI.tsx     The themed building blocks (screen shell,
+                                 loading / empty / error states, panels, rows,
+                                 links, buttons, search, chips, badges, tiles)
+components/admin/AdminHeader.tsx Header with deep-link-safe back
+components/admin/AdminStatusBadge.tsx  Status -> semantic tone
+components/admin/AdminCard.tsx   \ compatibility wrappers over AdminUI
+components/admin/AdminStatRow.tsx/
 
-AdminDashboard (/)
-- Metrics: bounties (by status), users, escrow volume, transactions
-- Quick access cards to main sections
-- Pull-to-refresh
+supabase/functions/admin-profiles/     Service-role user reads/writes + stats
+supabase/migrations/20260826120000_add_admin_user_stats.sql
+                                 admin_user_stats(uuid[]) — per-user aggregates
 
-AdminBountiesList (/bounties)
-- Filter by status: all, open, in_progress, completed, archived
-- Shows flagged items with warning banner
-- Tap to view detail
 
-AdminBountyDetail (/bounty/[id])
-- Full bounty information
-- Status transition buttons with confirmation
-- Optimistic UI updates
+DATA SOURCES
+------------
+Screen                  Source
+----------------------  ----------------------------------------------------
+Dashboard               Server-side counts over bounties / profiles /
+                        wallet_transactions / bounty_requests / bounty_disputes
+                        / reports; escrow derived from the completed ledger
+Bounties, Bounty detail bounties (+ profiles for names)
+Applications            bounty_requests
+Completions             completion_submissions
+Users, User detail      admin-profiles Edge Function (service role)
+Transactions            wallet_transactions (+ profiles, bounties for labels)
+Blocked users           blocked_users with profile embeds
+Disputes                dispute-service -> bounty_disputes
+Reports                 report-service -> reports
+Moderation Queue        admin_moderation_* RPCs -> bounty_moderation,
+                        moderation_signals, moderation_alerts (admin-only RLS);
+                        HIDE/REMOVE drive bounties.status
+Analytics               Counted live; see lib/admin/adminAnalytics.ts
+Audit log               admin_action_log, dispute_audit_log, admin_warnings,
+                        payout_audit_log
+Withdrawal recovery     admin-withdrawals Edge Function
+Balance reconciliation  reconciliation_findings, stripe_balance_snapshots
 
-AdminUsersList (/users)
-- Filter by status: all, active, suspended, banned
-- Shows verification badges
-- Stats preview: posted, completed, balance
 
-AdminUserDetail (/user/[id])
-- Activity stats grid
-- Financial summary
-- Account information
+SECURITY
+--------
+Admin role comes from the `role` claim in the JWT's app_metadata, which only
+the server can set. It is NOT read from user_metadata and cannot be granted
+client-side.
 
-AdminTransactionsList (/transactions)
-- Filter by type: escrow, release, refund, deposit, withdrawal
-- Read-only view with status badges
-- Shows related bounty/user IDs
+The redirect in _layout.tsx is a UX guard, not the authorization boundary.
+Every admin read and write is enforced by Postgres row-level security or by a
+service-role Edge Function that re-verifies the claim (admin-profiles,
+admin-withdrawals, admin-review-id, admin-verifications-list). Hiding a button
+never decides access.
 
-FLOW DIAGRAM
-============
+Account status changes require a reason and are written to admin_action_log.
 
-1. User enables Admin Mode in Settings (dev toggle)
-   ↓
-2. Admin tab appears in BottomNav (replaces Profile)
-   ↓
-3. Tap admin tab → navigates to /(admin)/
-   ↓
-4. AdminLayout checks isAdmin via context
-   ↓
-5. If not admin → Redirect to /tabs/bounty-app
-   If admin → Show AdminDashboard
-   ↓
-6. From dashboard, access:
-   - Bounties → List → Detail (with actions)
-   - Users → List → Detail
-   - Transactions → List (read-only)
 
-DATA FLOW
-=========
+CONVENTIONS
+-----------
+Theme       Every admin file uses the useAppTheme() token set from lib/themes.
+            No hardcoded brand or semantic colours remain; #FFFFFF for text on
+            filled buttons and one dark ink for text on amber are deliberate.
 
-Screen Component
-    ↓
-useAdminX hook (e.g., useAdminBounties)
-    ↓
-adminDataClient method (e.g., fetchAdminBounties)
-    ↓
-Mock data + simulated network delay
-    ↓
-Returns data to hook
-    ↓
-Hook updates state (data, loading, error)
-    ↓
-Screen renders with data / loading / error UI
+States      Loading / empty / error come from AdminUI so they stay consistent.
+            An empty state says what is empty and why. A failed refresh over
+            existing data degrades to a banner rather than blanking the screen.
 
-TESTING CHECKLIST
-=================
+Honesty     A value that could not be computed shows an em dash, never a
+            defaulted zero. A truncated list says so. An unreadable data source
+            is named rather than looking like an empty one. No screen reports
+            success for an operation that did not happen.
 
-Access Control:
-☐ Non-admin redirected from /(admin) routes
-☐ Admin toggle in settings works
-☐ Admin tab visible when isAdmin=true
-☐ Admin tab hidden when isAdmin=false
+Paging      Every list is bounded and shows "showing N of M". Rows per page is
+            an operator preference read by hooks/useAdminList.ts.
 
-Navigation:
-☐ Dashboard quick links work
-☐ List → Detail navigation works
-☐ Back button returns to previous screen
-☐ BottomNav admin tab routes correctly
-
-Data Loading:
-☐ All lists show loading spinner initially
-☐ Pull-to-refresh works
-☐ Empty states display correctly
-☐ Error states show retry button
-
-Bounty Management:
-☐ Status filter works (all, open, in_progress, completed, archived)
-☐ Flagged bounties show warning
-☐ Detail screen loads individual bounty
-☐ Status transitions show confirmation
-☐ Status updates persist (optimistic UI)
-
-User Management:
-☐ Status filter works (all, active, suspended, banned)
-☐ User detail shows correct stats
-☐ Financial summary displays properly
-
-Transactions:
-☐ Type filter works
-☐ Transaction details display correctly
-
-UI/UX:
-☐ Consistent emerald theme throughout
-☐ Safe area insets respected
-☐ BottomNav not duplicated in admin screens
-☐ Scrolling works smoothly (FlatList)
-☐ No layout issues on iOS
-☐ No layout issues on Android
-
-TypeScript:
-☐ npx tsc --noEmit passes with no admin errors
-☐ No console errors during navigation
-
-NEXT STEPS (FUTURE)
-===================
-
-Short Term:
-- Replace mock client with real API
-- Add search functionality
-- Implement moderation queue
-
-Medium Term:
-- Analytics charts
-- Bulk actions
-- Audit logs
-- User actions (suspend, ban)
-
-Long Term:
-- Role-based permissions
-- Dispute resolution
-- Payment operations
-- Integration with external tools
+Writes      Money-moving operations stay on their own flows (completion,
+            disputes, withdrawal recovery). Bounty status changes are lifecycle
+            only and never release escrow.

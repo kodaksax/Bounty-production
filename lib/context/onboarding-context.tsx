@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthContext } from '../../hooks/use-auth-context';
 
-const ONBOARDING_STATE_KEY_BASE = '@bounty_onboarding_state';
+export const ONBOARDING_STATE_KEY_BASE = '@bounty_onboarding_state';
 
 /**
  * Bumped whenever OnboardingData's shape or the onboarding flow itself
@@ -23,7 +23,14 @@ export const CURRENT_ONBOARDING_VERSION = 1;
 // their progress persisted almost immediately.
 const PERSIST_DEBOUNCE_MS = 400;
 
-function storageKeyFor(userId: string | null | undefined): string {
+/**
+ * The AsyncStorage key for a given account's in-progress onboarding draft
+ * (or the shared pre-auth draft when `userId` is null). Exported so account
+ * deletion (lib/services/account-deletion-service.ts) can remove a user's
+ * draft without duplicating this key format — a prior duplicate list drifted
+ * out of sync with the real keys and silently stopped clearing anything.
+ */
+export function storageKeyFor(userId: string | null | undefined): string {
   return userId ? `${ONBOARDING_STATE_KEY_BASE}:${userId}` : ONBOARDING_STATE_KEY_BASE;
 }
 
@@ -31,12 +38,6 @@ export interface OnboardingData {
   // Welcome screen — which of the two entry CTAs the user picked.
   // 'poster' = "Get something done", 'hunter' = "Start earning nearby"
   intent: 'poster' | 'hunter' | null;
-
-  // Resolved once from the `onboarding-skip-role-selection` PostHog flag on
-  // welcome.tsx and persisted here so every later screen reads the same
-  // value instead of re-evaluating the flag mid-flow (which could flip on a
-  // background reload). null until the flag has resolved for this session.
-  experimentVariant: 'control' | 'test' | null;
 
   // Details screen
   displayName: string;
@@ -76,7 +77,6 @@ export interface OnboardingData {
 
 const defaultOnboardingData: OnboardingData = {
   intent: null,
-  experimentVariant: null,
   displayName: '',
   title: '',
   bio: '',

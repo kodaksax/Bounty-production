@@ -16,6 +16,7 @@ import { EmailVerificationBanner } from 'components/ui/email-verification-banner
 import { useAuthContext } from 'hooks/use-auth-context';
 import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
+import { markPosterActivated } from 'lib/analytics/lifecycle';
 import { analyticsService } from 'lib/services/analytics-service';
 import { useStripe } from 'lib/stripe-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
@@ -24,13 +25,13 @@ import { createForegroundTimer, getMonotonicNow } from 'lib/utils/foreground-tim
 import { useWallet } from 'lib/wallet-context';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    AppState,
-    KeyboardAvoidingView,
-    Platform,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  AppState,
+  KeyboardAvoidingView,
+  Platform,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -140,10 +141,30 @@ export function CreateBountyFlow({
   const { theme } = useAppThemeContext();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
 
-  // Posting-funnel bookkeeping. `startedRef`/`currentStepRef` stay local to
-  // this orchestrator; `publishedRef` (below) comes from useBountyPublish so
-  // post_abandoned never double-counts a completed publish.
-  const startedRef = useRef(false);
+  // Posting-funnel bookkeeping. These stay local to this orchestrator;
+  // `publishedRef` (below) comes from useBountyPublish so post_abandoned
+  // never double-counts a completed publish.
+  //
+  // TWO distinct "started" notions, deliberately not merged:
+  //
+  //  - `flowMountedRef` — the composer finished mounting and its draft
+  //    settled. This is a RENDER fact, not a user fact: the host screen
+  //    mounts this component whenever the Post tab is selected (see
+  //    app/tabs/bounty-app.tsx's `{activeScreen === "postings" && ...}`),
+  //    so it is also true for someone who merely tapped through the tab
+  //    bar. It gates the "graveyard" funnel's timers and
+  //    post_step_abandoned, whose denominator is post_flow_started.
+  //
+  //  - `composerStartedRef` — the poster actually interacted with the
+  //    composer. Gates post_started/post_abandoned. See
+  //    markComposerStarted() below for why this exists.
+  const flowMountedRef = useRef(false);
+  const composerStartedRef = useRef(false);
+  // Whether a saved draft was already present when the poster ARRIVED, not
+  // whether one exists by the time they first interact. Snapshotted at
+  // mount-settle because post_started now fires later than that, and by then
+  // the poster's own first keystroke would make every start look "resumed".
+  const resumedDraftRef = useRef(false);
   // Mirrors `currentStep` for use inside cleanup/callbacks that would
   // otherwise close over a stale value.
   const currentStepRef = useRef(1);
@@ -174,6 +195,9 @@ export function CreateBountyFlow({
   // whether the mount that already fired post_flow_started counted as
   // deliberate.
   const deliberateTapRef = useRef(deliberateTap);
+  // Same reasoning as deliberateTapRef, plus it keeps the unmount effect
+  // below (deps: []) from closing over a stale prop.
+  const entryPointRef = useRef(entryPoint);
   // Guards post_field_focused against firing more than once per flow
   // instance — the composer-engagement signal only cares about the FIRST
   // real interaction.
@@ -257,14 +281,34 @@ export function CreateBountyFlow({
       const { seconds: secondsTotal, capped: secondsCapped } = capSeconds(
         flowTimerRef.current.elapsedSeconds()
       );
+      // The single canonical terminal event for a live bounty. Merges the
+      // business payload from useBountyPublish's `meta` with this flow's own
+      // timing/variant props. (Historically post_published fired here too —
+      // that duplicate was removed 2026-08-28.)
       analyticsService.trackEvent('bounty_published', {
-        category: meta.category,
+        role: 'poster',
+        surface: meta.surface,
+        bounty_id: bountyId,
+        amount: meta.amountDollars,
         amount_cents: meta.amountCents,
+        is_for_honor: meta.isForHonor,
+        funded: meta.funded,
+        category: meta.category,
+        work_type: meta.workType,
+        architecture: meta.architecture,
+        queued_offline: meta.queuedOffline,
         // No category-chip UI exists yet on this arm — always false.
         used_chip: false,
         seconds_total: secondsTotal,
         seconds_capped: secondsCapped,
         variant: POST_FLOW_VARIANT,
+      });
+      // First successful publish by this user (once per device) — see
+      // lib/analytics/lifecycle.ts.
+      void markPosterActivated(session?.user?.id, {
+        bounty_id: bountyId,
+        amount: meta.amountDollars,
+        surface: meta.surface,
       });
       // Hand off to the confirmation screen rather than leaving the flow —
       // onComplete now fires from its Continue button, so the host screen
@@ -277,6 +321,9 @@ export function CreateBountyFlow({
   });
 
   const handleNext = () => {
+    // Advancing a step is composer intent even if the title arrived from a
+    // resumed draft and the poster never focused the field.
+    markComposerStarted('step_advance');
     // post_title_typed — fires once, the first time the poster advances past
     // the title step (step 1), regardless of how many times they later
     // return to it.
@@ -308,6 +355,9 @@ export function CreateBountyFlow({
 
   /** Step 2's CTA. Snapshots the draft first — publishing clears it. */
   const handlePublishFromAmountStep = () => {
+    // Backstop so a publish can never outrun its own funnel start — every
+    // realistic path here already went through handleNext.
+    markComposerStarted('publish');
     publishedDraftRef.current = draft;
     // handlePublish is synchronous: deferred-funding eligibility is prefetched
     // when the amount is chosen, precisely so the tap does not wait on a
@@ -449,24 +499,23 @@ export function CreateBountyFlow({
     onStepChange?.(currentStep);
   }, [currentStep, onStepChange]);
 
-  // post_started / post_flow_started — once per entry into the flow, after
-  // the draft load settles so `resumed_draft` reflects whether the poster is
-  // resuming or starting cold. `resumed_draft` (snake_case) is the single
-  // canonical spelling — it matches the onboarding surface's emit so the two
-  // don't fragment the breakdown.
+  // Flow mount — starts the graveyard funnel's timers and, for a mount a
+  // call site attests was a deliberate "Post a bounty" tap, emits
+  // post_flow_started. Runs once the draft load settles.
+  //
+  // This effect deliberately does NOT emit post_started; see
+  // markComposerStarted() below.
   useEffect(() => {
-    if (isLoading || startedRef.current) return;
-    startedRef.current = true;
+    if (isLoading || flowMountedRef.current) return;
+    flowMountedRef.current = true;
+    resumedDraftRef.current = Boolean(draft.title?.trim());
     flowTimerRef.current.start();
     stepTimerRef.current.start();
     stepBackgroundMsRef.current = 0;
     backgroundedAtRef.current = appStateRef.current === 'active' ? null : getMonotonicNow();
-    analyticsService.trackEvent('post_started', {
-      surface: POST_SURFACE,
-      resumed_draft: Boolean(draft.title?.trim()),
-    });
     if (deliberateTapRef.current) {
-      analyticsService.trackEvent('post_flow_started', {
+      analyticsService.trackEvent('composer_opened', {
+        role: 'poster',
         variant: POST_FLOW_VARIANT,
         entry_point: entryPoint,
         deliberate_entry: true,
@@ -474,12 +523,62 @@ export function CreateBountyFlow({
     }
   }, [isLoading, draft.title, entryPoint]);
 
+  /**
+   * post_started — emitted at most once per composer instance, on the FIRST
+   * genuine interaction with the composer.
+   *
+   * It used to fire from the mount effect above. That was wrong, and
+   * measurably so: the host screen mounts this component whenever the Post
+   * tab is selected and unmounts it when the poster leaves, so every pass
+   * through the tab bar produced a post_started + post_abandoned pair. In
+   * production that made the median gap between the two 0.9 seconds, put
+   * 100% of post_step_abandoned into `exit_method: 'tab'`, and let single
+   * sessions rack up 29 and 35 "composer opens" without a keystroke. The
+   * `deliberateTap` gate added for post_flow_started doesn't help here —
+   * a bottom-nav tab press IS a deliberate tap, it just isn't intent to
+   * compose.
+   *
+   * So `post_started` now means: the poster typed, focused the title field,
+   * advanced a step, or tried to publish. Mount, focus, re-render, back
+   * navigation and app resume cannot reach it — none of them call this.
+   *
+   * `trigger` records which of those it was, so the intent boundary itself
+   * stays auditable rather than becoming another unexaminable default.
+   */
+  const markComposerStarted = (
+    trigger: 'field_focus' | 'draft_edit' | 'step_advance' | 'publish'
+  ) => {
+    if (composerStartedRef.current) return;
+    composerStartedRef.current = true;
+    analyticsService.trackEvent('bounty_started', {
+      role: 'poster',
+      surface: POST_SURFACE,
+      // snake_case is the single canonical spelling — it matches the
+      // onboarding surface's emit so the two don't fragment the breakdown.
+      resumed_draft: resumedDraftRef.current,
+      entry_point: entryPointRef.current,
+      deliberate_entry: deliberateTapRef.current,
+      trigger,
+    });
+  };
+
+  /** Draft edits are composer intent — wrap saveDraft rather than passing it
+   * to the step screens raw. Only real onUpdate calls reach this; nothing
+   * writes the draft on mount. */
+  const handleDraftUpdate = (patch: Partial<BountyDraft>) => {
+    markComposerStarted('draft_edit');
+    saveDraft(patch);
+  };
+
   /** post_field_focused — the composer-engagement signal, fired once per
    * flow instance on the first real interaction with the title field (the
    * flow's first screen), regardless of `deliberateTap`. `deliberate_entry`
    * lets this be segmented the same way as the rest of the funnel below —
    * see the `deliberate_entry` note above `bounty_published`. */
   const handleFieldFocused = () => {
+    // The earliest reliable intent signal in this UX: the title field is not
+    // autoFocused, so reaching here always took a tap.
+    markComposerStarted('field_focus');
     if (fieldFocusedFiredRef.current) return;
     fieldFocusedFiredRef.current = true;
     analyticsService.trackEvent('post_field_focused', {
@@ -538,17 +637,21 @@ export function CreateBountyFlow({
     }
   }, [currentStep, isLoading]);
 
-  // post_abandoned / post_step_abandoned — fires when the flow unmounts
+  // post_abandoned / post_step_abandoned — fire when the flow unmounts
   // without a publish. Covers both explicit cancel and navigating away,
   // which the cancel handler alone would miss.
+  //
+  // The two are gated DIFFERENTLY on purpose:
+  //  - post_abandoned needs a genuine composer start, so it stays the exact
+  //    mirror of post_started. No start, no abandon.
+  //  - post_step_abandoned keeps firing for any mounted flow, because its
+  //    funnel counterpart (post_flow_started) also counts mounts. Dropping
+  //    it here would leave that funnel with starts and no terminations. It
+  //    instead carries `composer_started` so incidental tab teardowns can be
+  //    filtered out at query time rather than deleted at source.
   useEffect(() => {
     return () => {
-      if (!startedRef.current || publishedRef.current) return;
-      analyticsService.trackEvent('post_abandoned', {
-        surface: POST_SURFACE,
-        step: currentStepRef.current,
-        stepTitle: STEP_TITLES[currentStepRef.current - 1],
-      });
+      if (!flowMountedRef.current || publishedRef.current) return;
       // Backgrounding is the strongest available signal — if the app isn't
       // foregrounded right now, prefer that over an in-app exit path that
       // may just be the host screen tearing this component down as a side
@@ -573,6 +676,21 @@ export function CreateBountyFlow({
         background_seconds: Math.round(backgroundMs / 1000),
         exit_method: exitMethod,
         variant: POST_FLOW_VARIANT,
+        deliberate_entry: deliberateTapRef.current,
+        composer_started: composerStartedRef.current,
+      });
+
+      // Only a composition that actually began can be abandoned.
+      if (!composerStartedRef.current) return;
+      analyticsService.trackEvent('post_abandoned', {
+        surface: POST_SURFACE,
+        step: currentStepRef.current,
+        stepTitle: STEP_TITLES[currentStepRef.current - 1],
+        // Carried here too so `exit_method: 'tab'` finally means "left a
+        // real composition via the tab bar" on at least one event, rather
+        // than only ever appearing on mounts nobody engaged with.
+        exit_method: exitMethod,
+        entry_point: entryPointRef.current,
         deliberate_entry: deliberateTapRef.current,
       });
     };
@@ -612,7 +730,7 @@ export function CreateBountyFlow({
             {!postedBountyId && currentStep === 1 && (
               <StepTask
                 draft={draft}
-                onUpdate={saveDraft}
+                onUpdate={handleDraftUpdate}
                 onNext={handleNext}
                 onFieldFocus={handleFieldFocused}
                 step={1}
@@ -622,7 +740,7 @@ export function CreateBountyFlow({
             {!postedBountyId && currentStep === 2 && (
               <StepPay
                 draft={draft}
-                onUpdate={saveDraft}
+                onUpdate={handleDraftUpdate}
                 onNext={handlePublishFromAmountStep}
                 onBack={handleBack}
                 step={2}

@@ -1,294 +1,346 @@
 /**
  * Audit Log Service
- * Provides comprehensive audit trail for admin and compliance purposes
- * Follows Apple Human Interface Guidelines for data presentation
+ *
+ * Provides the audit trail behind app/(admin)/audit-logs.tsx.
+ *
+ * This file previously carried a `mockAuditLogs` array of eight fabricated
+ * entries ("User @spammer suspended for policy violations", "Escrow released
+ * for bounty completion: $250.00", a login from 192.168.1.100) and served them
+ * for every category. A later change merged real account-status entries into
+ * the `user` category but left the fabricated rows in place alongside them, so
+ * the audit viewer showed real and invented history interleaved with no way to
+ * tell them apart — the worst possible state for a compliance surface.
+ *
+ * Every entry now comes from a real table:
+ *
+ *   admin_action_log     -> user       (suspend / ban / restore, withdrawal ops)
+ *   dispute_audit_log    -> moderation (dispute lifecycle)
+ *   admin_warnings       -> moderation (guideline warnings issued)
+ *   payout_audit_log     -> payment    (payout decisions and failures)
+ *
+ * Categories with no backing table return nothing rather than filler. A table
+ * that cannot be read (RLS, or absent in a given environment) is reported via
+ * `unavailableSources` so the screen can say so instead of implying the
+ * platform had no activity.
  */
 
 import { supabase } from '../supabase';
 import type { AuditLogEntry, AuditLogFilters } from '../types-admin';
 
-// Mock data for development - simulates various system events
-const mockAuditLogs: AuditLogEntry[] = [
-  {
-    id: 'log-001',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    category: 'moderation',
-    action: 'report_resolved',
-    actorId: 'admin-001',
-    actorName: 'Admin User',
-    targetId: 'report-123',
-    targetType: 'report',
-    description: 'Report #123 resolved - Content removed for harassment',
-    severity: 'warning',
-    metadata: { reason: 'harassment', resolution: 'content_removed' },
-  },
-  {
-    id: 'log-002',
-    timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-    category: 'user',
-    action: 'suspended',
-    actorId: 'admin-001',
-    actorName: 'Admin User',
-    targetId: 'user-456',
-    targetType: 'user',
-    description: 'User @spammer suspended for policy violations',
-    severity: 'critical',
-    metadata: { suspensionDuration: '7 days', reason: 'spam' },
-  },
-  {
-    id: 'log-003',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    category: 'payment',
-    action: 'payment_completed',
-    actorId: 'system',
-    actorName: 'System',
-    targetId: 'tx-789',
-    targetType: 'transaction',
-    description: 'Escrow released for bounty completion: $250.00',
-    severity: 'info',
-    metadata: { amount: 250, bountyId: 'bounty-001' },
-  },
-  {
-    id: 'log-004',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-    category: 'security',
-    action: 'login',
-    actorId: 'user-123',
-    actorName: '@techguru',
-    description: 'Successful login from new device',
-    severity: 'info',
-    ipAddress: '192.168.1.100',
-    metadata: { device: 'iPhone 15 Pro', location: 'San Francisco, CA' },
-  },
-  {
-    id: 'log-005',
-    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    category: 'bounty',
-    action: 'created',
-    actorId: 'user-789',
-    actorName: '@designpro',
-    targetId: 'bounty-002',
-    targetType: 'bounty',
-    description: 'New bounty created: "Build Mobile App UI"',
-    severity: 'info',
-    metadata: { amount: 500, category: 'design' },
-  },
-  {
-    id: 'log-006',
-    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-    category: 'moderation',
-    action: 'content_flagged',
-    actorId: 'system',
-    actorName: 'Auto-Moderation',
-    targetId: 'message-456',
-    targetType: 'message',
-    description: 'Message flagged by automated content filter',
-    severity: 'warning',
-    metadata: { flagType: 'profanity', confidence: 0.92 },
-  },
-  {
-    id: 'log-007',
-    timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-    category: 'payment',
-    action: 'refund_issued',
-    actorId: 'admin-002',
-    actorName: 'Finance Admin',
-    targetId: 'tx-456',
-    targetType: 'transaction',
-    description: 'Refund issued for disputed bounty: $150.00',
-    severity: 'warning',
-    metadata: { amount: 150, disputeId: 'dispute-001' },
-  },
-  {
-    id: 'log-008',
-    timestamp: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
-    category: 'user',
-    action: 'email_verified',
-    actorId: 'user-999',
-    actorName: '@newuser',
-    description: 'Email verification completed',
-    severity: 'info',
-  },
-  {
-    id: 'log-009',
-    timestamp: new Date(Date.now() - 1000 * 60 * 300).toISOString(),
-    category: 'system',
-    action: 'updated',
-    actorId: 'system',
-    actorName: 'System',
-    description: 'Database maintenance completed successfully',
-    severity: 'info',
-    metadata: { duration: '5 minutes', tablesOptimized: 12 },
-  },
-  {
-    id: 'log-010',
-    timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
-    category: 'security',
-    action: 'password_change',
-    actorId: 'user-555',
-    actorName: '@safeguard',
-    description: 'Password changed successfully',
-    severity: 'info',
-    ipAddress: '10.0.0.50',
-  },
-  {
-    id: 'log-011',
-    timestamp: new Date(Date.now() - 1000 * 60 * 400).toISOString(),
-    category: 'moderation',
-    action: 'user_blocked',
-    actorId: 'user-111',
-    actorName: '@safeuser',
-    targetId: 'user-222',
-    targetType: 'user',
-    description: 'User blocked @problematic',
-    severity: 'info',
-  },
-  {
-    id: 'log-012',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    category: 'bounty',
-    action: 'deleted',
-    actorId: 'admin-001',
-    actorName: 'Admin User',
-    targetId: 'bounty-spam-001',
-    targetType: 'bounty',
-    description: 'Bounty removed for violating community guidelines',
-    severity: 'critical',
-    metadata: { reason: 'spam', reportCount: 5 },
-  },
-];
+/** How many rows to pull per source. */
+const PER_SOURCE_LIMIT = 200;
 
-/**
- * Simulates network delay for development/testing purposes.
- * This function wraps data with a configurable delay to mimic real API calls.
- * Should be replaced with actual API calls in production.
- * @param data - The data to return after delay
- * @param delayMs - Delay in milliseconds (default: 400ms)
- */
-function simulateNetwork<T>(data: T, delayMs = 400): Promise<T> {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(data), delayMs);
-  });
+type Severity = AuditLogEntry['severity'];
+
+interface SourceResult {
+  entries: AuditLogEntry[];
+  /** Set when the source could not be read at all. */
+  unavailable?: string;
 }
 
-type AccountStatusLogRow = {
+/* ─────────────────────────── Sources ─────────────────────────── */
+
+type AdminActionLogRow = {
   id: string;
-  admin_user_id: string;
-  target_user_id: string;
-  reason: string;
-  result: 'success' | 'failure';
-  metadata: { old_status?: string | null; new_status?: string } | null;
+  admin_user_id: string | null;
+  action_type: string | null;
+  target_user_id: string | null;
+  target_transaction_id: string | null;
+  amount: number | string | null;
+  reason: string | null;
+  result: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 };
 
 /**
- * Real (non-mock) account-status-change entries, written by admin-profiles'
- * updateStatus action to admin_action_log -- see
- * 20260726000000_enforce_account_status.sql. Merged into the 'user' category
- * below alongside the still-mocked entries for every other category.
+ * admin_action_log covers both account-status changes and the
+ * withdrawal-recovery operations (force-retry, manual balance adjustment)
+ * written by the admin-withdrawals Edge Function.
  */
-async function fetchAccountStatusLogEntries(): Promise<AuditLogEntry[]> {
+async function fetchAdminActionLog(): Promise<SourceResult> {
   try {
-    const { data, error } = await supabase.functions.invoke('admin-profiles', {
-      body: { action: 'listAccountStatusLog' },
-    });
-    if (error || data?.error) {
-      console.error('Error fetching account status log:', error || data?.error);
-      return [];
-    }
-    const rows: AccountStatusLogRow[] = data?.entries ?? [];
-    return rows.map((row) => {
-      const newStatus = row.metadata?.new_status;
-      const oldStatus = row.metadata?.old_status ?? 'active';
-      const action = newStatus === 'active' ? 'restored' : newStatus === 'banned' ? 'banned' : 'suspended';
-      const severity = newStatus === 'banned' ? 'critical' : newStatus === 'suspended' ? 'warning' : 'info';
+    const { data, error } = await supabase
+      .from('admin_action_log')
+      .select(
+        'id, admin_user_id, action_type, target_user_id, target_transaction_id, amount, reason, result, metadata, created_at'
+      )
+      .order('created_at', { ascending: false })
+      .limit(PER_SOURCE_LIMIT);
+    if (error) throw error;
+
+    const entries = ((data ?? []) as AdminActionLogRow[]).map((row): AuditLogEntry => {
+      const failed = row.result === 'failure';
+      const newStatus = row.metadata?.new_status as string | undefined;
+      const oldStatus = (row.metadata?.old_status as string | undefined) ?? 'active';
+      const isStatusChange = row.action_type === 'account_status_change';
+
+      const action: AuditLogEntry['action'] = isStatusChange
+        ? newStatus === 'active'
+          ? 'restored'
+          : newStatus === 'banned'
+            ? 'banned'
+            : 'suspended'
+        : 'updated';
+
+      let severity: Severity = 'info';
+      if (failed) severity = 'critical';
+      else if (newStatus === 'banned') severity = 'critical';
+      else if (newStatus === 'suspended') severity = 'warning';
+      else if (!isStatusChange) severity = 'warning';
+
+      const description = isStatusChange
+        ? failed
+          ? `Failed attempt to change account status (${oldStatus} → ${newStatus}): ${row.reason ?? 'no reason given'}`
+          : `Account status changed from ${oldStatus} to ${newStatus}: ${row.reason ?? 'no reason given'}`
+        : `${(row.action_type ?? 'admin action').replace(/_/g, ' ')}${
+            row.amount != null ? ` (${row.amount})` : ''
+          }: ${row.reason ?? 'no reason given'}${failed ? ' — FAILED' : ''}`;
+
       return {
-        id: `account-status-${row.id}`,
+        id: `admin-action-${row.id}`,
         timestamp: row.created_at,
         category: 'user',
         action,
-        actorId: row.admin_user_id,
-        targetId: row.target_user_id,
-        targetType: 'user',
-        description:
-          row.result === 'failure'
-            ? `Failed attempt to change account status (${oldStatus} → ${newStatus}): ${row.reason}`
-            : `Account status changed from ${oldStatus} to ${newStatus}: ${row.reason}`,
-        severity: row.result === 'failure' ? 'critical' : severity,
-        metadata: { ...row.metadata, result: row.result },
-      } satisfies AuditLogEntry;
+        actorId: row.admin_user_id ?? undefined,
+        targetId: row.target_user_id ?? row.target_transaction_id ?? undefined,
+        targetType: row.target_user_id ? 'user' : 'transaction',
+        description,
+        severity,
+        metadata: { ...(row.metadata ?? {}), result: row.result, action_type: row.action_type },
+      };
     });
+
+    return { entries };
   } catch (error) {
-    console.error('Error fetching account status log:', error);
-    return [];
+    console.error('[audit-log] admin_action_log unavailable', error);
+    return { entries: [], unavailable: 'admin_action_log' };
   }
+}
+
+type DisputeAuditRow = {
+  id: string | number;
+  dispute_id: string | number | null;
+  action: string | null;
+  actor_id: string | null;
+  actor_type: string | null;
+  details: unknown;
+  created_at: string;
+};
+
+async function fetchDisputeAuditLog(): Promise<SourceResult> {
+  try {
+    const { data, error } = await supabase
+      .from('dispute_audit_log')
+      .select('id, dispute_id, action, actor_id, actor_type, details, created_at')
+      .order('created_at', { ascending: false })
+      .limit(PER_SOURCE_LIMIT);
+    if (error) throw error;
+
+    const entries = ((data ?? []) as DisputeAuditRow[]).map((row): AuditLogEntry => {
+      const action = row.action ?? 'updated';
+      const severity: Severity =
+        action.includes('escalat') || action.includes('reject')
+          ? 'critical'
+          : action.includes('resolv') || action.includes('close')
+            ? 'info'
+            : 'warning';
+      return {
+        id: `dispute-audit-${row.id}`,
+        timestamp: row.created_at,
+        category: 'moderation',
+        action: 'updated',
+        actorId: row.actor_id ?? undefined,
+        actorName: row.actor_type ?? undefined,
+        targetId: row.dispute_id != null ? String(row.dispute_id) : undefined,
+        targetType: 'report',
+        description: `Dispute ${row.dispute_id ?? ''}: ${action.replace(/_/g, ' ')}`.trim(),
+        severity,
+        metadata: typeof row.details === 'object' && row.details ? (row.details as Record<string, unknown>) : undefined,
+      };
+    });
+
+    return { entries };
+  } catch (error) {
+    console.error('[audit-log] dispute_audit_log unavailable', error);
+    return { entries: [], unavailable: 'dispute_audit_log' };
+  }
+}
+
+type AdminWarningRow = {
+  id: string;
+  admin_id: string | null;
+  user_id: string | null;
+  bounty_id: string | null;
+  violation_type: string | null;
+  message: string | null;
+  created_at: string;
+};
+
+async function fetchAdminWarnings(): Promise<SourceResult> {
+  try {
+    const { data, error } = await supabase
+      .from('admin_warnings')
+      .select('id, admin_id, user_id, bounty_id, violation_type, message, created_at')
+      .order('created_at', { ascending: false })
+      .limit(PER_SOURCE_LIMIT);
+    if (error) throw error;
+
+    const entries = ((data ?? []) as AdminWarningRow[]).map((row): AuditLogEntry => ({
+      id: `warning-${row.id}`,
+      timestamp: row.created_at,
+      category: 'moderation',
+      action: 'content_flagged',
+      actorId: row.admin_id ?? undefined,
+      targetId: row.user_id ?? undefined,
+      targetType: 'user',
+      description: `Warning issued (${(row.violation_type ?? 'other').replace(/_/g, ' ')})`,
+      severity: 'warning',
+      metadata: { bountyId: row.bounty_id, message: row.message },
+    }));
+
+    return { entries };
+  } catch (error) {
+    console.error('[audit-log] admin_warnings unavailable', error);
+    return { entries: [], unavailable: 'admin_warnings' };
+  }
+}
+
+type PayoutAuditRow = {
+  id: string;
+  user_id: string | null;
+  event: string | null;
+  payout_method: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  stripe_payout_id: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+};
+
+async function fetchPayoutAuditLog(): Promise<SourceResult> {
+  try {
+    const { data, error } = await supabase
+      .from('payout_audit_log')
+      .select(
+        'id, user_id, event, payout_method, amount_cents, currency, stripe_payout_id, error_code, error_message, created_at'
+      )
+      .order('created_at', { ascending: false })
+      .limit(PER_SOURCE_LIMIT);
+    if (error) throw error;
+
+    const entries = ((data ?? []) as PayoutAuditRow[]).map((row): AuditLogEntry => {
+      const failed = !!row.error_code || (row.event ?? '').includes('fail');
+      const amount =
+        row.amount_cents != null
+          ? `${(row.amount_cents / 100).toFixed(2)} ${(row.currency ?? 'usd').toUpperCase()}`
+          : null;
+      return {
+        id: `payout-audit-${row.id}`,
+        timestamp: row.created_at,
+        category: 'payment',
+        action: failed ? 'payment_failed' : 'payment_completed',
+        actorId: row.user_id ?? undefined,
+        targetId: row.stripe_payout_id ?? undefined,
+        targetType: 'transaction',
+        description: [
+          (row.event ?? 'payout').replace(/_/g, ' '),
+          amount,
+          row.payout_method ? `via ${row.payout_method}` : null,
+          row.error_message,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        severity: failed ? 'critical' : 'info',
+        metadata: { errorCode: row.error_code, payoutMethod: row.payout_method },
+      };
+    });
+
+    return { entries };
+  } catch (error) {
+    console.error('[audit-log] payout_audit_log unavailable', error);
+    return { entries: [], unavailable: 'payout_audit_log' };
+  }
+}
+
+/** Which sources contribute to which category, so a filtered read skips the rest. */
+const SOURCES: { category: AuditLogEntry['category']; fetch: () => Promise<SourceResult> }[] = [
+  { category: 'user', fetch: fetchAdminActionLog },
+  { category: 'moderation', fetch: fetchDisputeAuditLog },
+  { category: 'moderation', fetch: fetchAdminWarnings },
+  { category: 'payment', fetch: fetchPayoutAuditLog },
+];
+
+async function loadEntries(
+  category?: AuditLogFilters['category']
+): Promise<{ entries: AuditLogEntry[]; unavailableSources: string[] }> {
+  const wanted =
+    !category || category === 'all' ? SOURCES : SOURCES.filter((s) => s.category === category);
+
+  const results = await Promise.all(wanted.map((s) => s.fetch()));
+  const entries = results.flatMap((r) => r.entries);
+  const unavailableSources = results
+    .map((r) => r.unavailable)
+    .filter((s): s is string => typeof s === 'string');
+
+  entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return { entries, unavailableSources };
+}
+
+function applyFilters(entries: AuditLogEntry[], filters?: AuditLogFilters): AuditLogEntry[] {
+  let out = entries;
+
+  if (filters?.category && filters.category !== 'all') {
+    out = out.filter((log) => log.category === filters.category);
+  }
+  if (filters?.severity && filters.severity !== 'all') {
+    out = out.filter((log) => log.severity === filters.severity);
+  }
+  if (filters?.startDate) {
+    const start = new Date(filters.startDate).getTime();
+    out = out.filter((log) => new Date(log.timestamp).getTime() >= start);
+  }
+  if (filters?.endDate) {
+    const end = new Date(filters.endDate).getTime();
+    out = out.filter((log) => new Date(log.timestamp).getTime() <= end);
+  }
+  if (filters?.searchQuery) {
+    const q = filters.searchQuery.toLowerCase();
+    out = out.filter(
+      (log) =>
+        log.description.toLowerCase().includes(q) ||
+        log.actorName?.toLowerCase().includes(q) ||
+        log.actorId?.toLowerCase().includes(q) ||
+        log.targetId?.toLowerCase().includes(q) ||
+        log.action.toLowerCase().includes(q)
+    );
+  }
+  if (filters?.actorId) {
+    out = out.filter((log) => log.actorId === filters.actorId);
+  }
+
+  return out;
 }
 
 export const auditLogService = {
   /**
-   * Fetch audit logs with filtering and pagination
+   * Fetch audit logs with filtering.
+   *
+   * `unavailableSources` names any audit table that could not be read, so the
+   * caller can distinguish "no activity" from "could not look".
    */
   async getAuditLogs(filters?: AuditLogFilters): Promise<{
     success: boolean;
     logs?: AuditLogEntry[];
     totalCount?: number;
+    unavailableSources?: string[];
     error?: string;
   }> {
     try {
-      let filtered = [...mockAuditLogs];
-
-      // Merge in real account-status-change entries for the 'user' category
-      // (or 'all') -- the only category with a real backing table so far.
-      if (!filters?.category || filters.category === 'all' || filters.category === 'user') {
-        const realEntries = await fetchAccountStatusLogEntries();
-        filtered = [...realEntries, ...filtered];
-      }
-
-      // Apply category filter
-      if (filters?.category && filters.category !== 'all') {
-        filtered = filtered.filter((log) => log.category === filters.category);
-      }
-
-      // Apply severity filter
-      if (filters?.severity && filters.severity !== 'all') {
-        filtered = filtered.filter((log) => log.severity === filters.severity);
-      }
-
-      // Apply date range filter
-      if (filters?.startDate) {
-        const startDate = new Date(filters.startDate).getTime();
-        filtered = filtered.filter((log) => new Date(log.timestamp).getTime() >= startDate);
-      }
-
-      if (filters?.endDate) {
-        const endDate = new Date(filters.endDate).getTime();
-        filtered = filtered.filter((log) => new Date(log.timestamp).getTime() <= endDate);
-      }
-
-      // Apply search query
-      if (filters?.searchQuery) {
-        const query = filters.searchQuery.toLowerCase();
-        filtered = filtered.filter(
-          (log) =>
-            log.description.toLowerCase().includes(query) ||
-            log.actorName?.toLowerCase().includes(query) ||
-            log.action.toLowerCase().includes(query)
-        );
-      }
-
-      // Apply actor filter
-      if (filters?.actorId) {
-        filtered = filtered.filter((log) => log.actorId === filters.actorId);
-      }
-
-      // Sort by timestamp (most recent first)
-      filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-      return simulateNetwork({
-        success: true,
-        logs: filtered,
-        totalCount: filtered.length,
-      });
+      const { entries, unavailableSources } = await loadEntries(filters?.category);
+      const logs = applyFilters(entries, filters);
+      return { success: true, logs, totalCount: logs.length, unavailableSources };
     } catch (error) {
       console.error('Error fetching audit logs:', error);
       return {
@@ -299,7 +351,10 @@ export const auditLogService = {
   },
 
   /**
-   * Get a single audit log entry by ID
+   * Get a single audit log entry by ID.
+   *
+   * Entry ids are synthesised per source (`admin-action-<uuid>` etc.), so this
+   * reloads and scans rather than hitting one table by primary key.
    */
   async getAuditLogById(id: string): Promise<{
     success: boolean;
@@ -307,13 +362,10 @@ export const auditLogService = {
     error?: string;
   }> {
     try {
-      const log = mockAuditLogs.find((l) => l.id === id);
-
-      if (!log) {
-        return { success: false, error: 'Audit log entry not found' };
-      }
-
-      return simulateNetwork({ success: true, log });
+      const { entries } = await loadEntries();
+      const log = entries.find((l) => l.id === id);
+      if (!log) return { success: false, error: 'Audit log entry not found' };
+      return { success: true, log };
     } catch (error) {
       console.error('Error fetching audit log:', error);
       return {
@@ -323,9 +375,7 @@ export const auditLogService = {
     }
   },
 
-  /**
-   * Get audit log statistics for dashboard
-   */
+  /** Aggregate counts for the audit screen's header. */
   async getAuditLogStats(): Promise<{
     success: boolean;
     stats?: {
@@ -337,29 +387,32 @@ export const auditLogService = {
     error?: string;
   }> {
     try {
-      const stats = {
-        totalLogs: mockAuditLogs.length,
-        bySeverity: {
-          info: mockAuditLogs.filter((l) => l.severity === 'info').length,
-          warning: mockAuditLogs.filter((l) => l.severity === 'warning').length,
-          critical: mockAuditLogs.filter((l) => l.severity === 'critical').length,
-        },
-        byCategory: {
-          user: mockAuditLogs.filter((l) => l.category === 'user').length,
-          bounty: mockAuditLogs.filter((l) => l.category === 'bounty').length,
-          payment: mockAuditLogs.filter((l) => l.category === 'payment').length,
-          moderation: mockAuditLogs.filter((l) => l.category === 'moderation').length,
-          system: mockAuditLogs.filter((l) => l.category === 'system').length,
-          security: mockAuditLogs.filter((l) => l.category === 'security').length,
-        },
-        recentCritical: mockAuditLogs.filter(
-          (l) =>
-            l.severity === 'critical' &&
-            new Date(l.timestamp).getTime() > Date.now() - 1000 * 60 * 60 * 24
-        ).length,
-      };
+      const { entries } = await loadEntries();
+      const dayAgo = Date.now() - 86_400_000;
 
-      return simulateNetwork({ success: true, stats });
+      const bySeverity: Record<string, number> = { info: 0, warning: 0, critical: 0 };
+      const byCategory: Record<string, number> = {
+        user: 0,
+        bounty: 0,
+        payment: 0,
+        moderation: 0,
+        system: 0,
+        security: 0,
+      };
+      let recentCritical = 0;
+
+      for (const entry of entries) {
+        bySeverity[entry.severity] = (bySeverity[entry.severity] ?? 0) + 1;
+        byCategory[entry.category] = (byCategory[entry.category] ?? 0) + 1;
+        if (entry.severity === 'critical' && new Date(entry.timestamp).getTime() > dayAgo) {
+          recentCritical += 1;
+        }
+      }
+
+      return {
+        success: true,
+        stats: { totalLogs: entries.length, bySeverity, byCategory, recentCritical },
+      };
     } catch (error) {
       console.error('Error fetching audit log stats:', error);
       return {
@@ -369,9 +422,7 @@ export const auditLogService = {
     }
   },
 
-  /**
-   * Export audit logs (for compliance/download)
-   */
+  /** Export audit logs (for compliance/download). */
   async exportAuditLogs(
     filters?: AuditLogFilters,
     format: 'json' | 'csv' = 'json'
@@ -382,44 +433,30 @@ export const auditLogService = {
   }> {
     try {
       const result = await this.getAuditLogs(filters);
-
       if (!result.success || !result.logs) {
         return { success: false, error: result.error };
       }
 
       if (format === 'json') {
-        return simulateNetwork({
-          success: true,
-          data: JSON.stringify(result.logs, null, 2),
-        });
+        return { success: true, data: JSON.stringify(result.logs, null, 2) };
       }
 
-      // CSV format
-      const headers = [
-        'ID',
-        'Timestamp',
-        'Category',
-        'Action',
-        'Actor',
-        'Description',
-        'Severity',
-      ].join(',');
+      const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+      const headers = ['ID', 'Timestamp', 'Category', 'Action', 'Actor', 'Target', 'Description', 'Severity'].join(',');
       const rows = result.logs.map((log) =>
         [
           log.id,
           log.timestamp,
           log.category,
           log.action,
-          log.actorName || '',
-          `"${log.description.replace(/"/g, '""')}"`,
+          log.actorName || log.actorId || '',
+          log.targetId || '',
+          escape(log.description),
           log.severity,
         ].join(',')
       );
 
-      return simulateNetwork({
-        success: true,
-        data: [headers, ...rows].join('\n'),
-      });
+      return { success: true, data: [headers, ...rows].join('\n') };
     } catch (error) {
       console.error('Error exporting audit logs:', error);
       return {

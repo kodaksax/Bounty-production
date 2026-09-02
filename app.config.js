@@ -132,6 +132,19 @@ const ENV_ICONS = {
   development: './assets/images/icon-dev.png',
   preview: './assets/images/icon-preview.png',
 };
+
+// R8 keep rules appended to the generated android/app/proguard-rules.pro.
+// Kept in a real .pro file (rather than inline in app.json) so the rules are
+// reviewable and syntax-highlighted; see that file's header for why each block
+// exists and the "prefer over-broad keeps" editing rule.
+//
+// NOTE: this string is part of the resolved Expo config, so editing the .pro
+// file changes the fingerprint runtime version and therefore requires a new
+// native build — it cannot ship as an OTA update.
+const ANDROID_PROGUARD_RULES = fs.readFileSync(
+  path.resolve(__dirname, 'lib/config/android-proguard-rules.pro'),
+  'utf8'
+);
 const envIcon = ENV_ICONS[APP_ENV]; // undefined for production → app.json default
 const GOOGLE_IOS_URL_SCHEME_PREFIX = 'com.googleusercontent.apps.';
 
@@ -149,6 +162,8 @@ function resolvePlugins(plugins = []) {
     typeof iosUrlScheme === 'string' &&
     iosUrlScheme.startsWith(GOOGLE_IOS_URL_SCHEME_PREFIX) &&
     iosUrlScheme.length > GOOGLE_IOS_URL_SCHEME_PREFIX.length;
+  const hasValidGoogleAndroidClientId =
+    typeof androidClientId === 'string' && androidClientId.trim().length > 0;
 
   return plugins.flatMap(plugin => {
     const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
@@ -181,6 +196,26 @@ function resolvePlugins(plugins = []) {
       ];
     }
 
+    if (pluginName === 'expo-build-properties') {
+      // Attach the Android R8 keep rules. app.json stays the source of truth
+      // for every other build property (including the enableMinify /
+      // enableShrinkResources flags these rules protect); only the rules text
+      // is injected here so it can live in a real .pro file.
+      const existingPluginConfig = Array.isArray(plugin) ? plugin[1] || {} : {};
+      return [
+        [
+          pluginName,
+          {
+            ...existingPluginConfig,
+            android: {
+              ...(existingPluginConfig.android || {}),
+              extraProguardRules: ANDROID_PROGUARD_RULES,
+            },
+          },
+        ],
+      ];
+    }
+
     if (pluginName === '@stripe/stripe-react-native') {
       // Force the plugin's merchantIdentifier to the single source of truth
       // so the entitlement app.config.js generates (see APPLE_PAY_MERCHANT_ID
@@ -193,17 +228,35 @@ function resolvePlugins(plugins = []) {
       return [plugin];
     }
 
-    if (!hasValidGoogleIosUrlScheme) {
-      // CI/export validation intentionally runs without Google Sign-In secrets.
-      // Dropping the plugin here lets Metro/Expo export succeed while the app
-      // already treats Google Sign-In as disabled until valid env vars exist;
-      // see app/auth/sign-in-form.tsx and lib/config/validation.ts.
+    // Gate the plugin per platform. `iosUrlScheme` is an iOS-only value, so it
+    // must NOT decide whether Android keeps the plugin: gating both platforms on
+    // it dropped the plugin from the Android binary whenever the iOS scheme was
+    // missing or malformed, shipping Android with no native Google Sign-In
+    // config while the JS button still rendered (see #727).
+    if (!hasValidGoogleIosUrlScheme && !hasValidGoogleAndroidClientId) {
+      // Neither platform is configured. CI/export validation intentionally runs
+      // without Google Sign-In secrets, and dropping the plugin here lets
+      // Metro/Expo export succeed while the app already treats Google Sign-In as
+      // disabled; see app/auth/sign-in-form.tsx and lib/config/validation.ts.
       return [];
     }
 
-    const googlePluginConfig = { iosUrlScheme };
-    if (androidClientId) {
-      googlePluginConfig.androidClientId = androidClientId;
+    // The config plugin's iOS step throws without an `iosUrlScheme`. A placeholder
+    // is only acceptable for Android builds; on iOS builds fail fast so we don't
+    // ship a binary with a dummy scheme and broken Google Sign-In.
+    if (process.env.EAS_BUILD_PLATFORM === 'ios' && !hasValidGoogleIosUrlScheme) {
+      throw new Error(
+        '[FATAL] Missing/invalid EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME for an iOS build. Refusing to inject a placeholder.'
+      );
+    }
+
+    const googlePluginConfig = {
+      iosUrlScheme: hasValidGoogleIosUrlScheme
+        ? iosUrlScheme
+        : `${GOOGLE_IOS_URL_SCHEME_PREFIX}placeholder`,
+    };
+    if (hasValidGoogleAndroidClientId) {
+      googlePluginConfig.androidClientId = androidClientId.trim();
     }
 
     return [[pluginName, googlePluginConfig]];

@@ -3,9 +3,10 @@
 
 jest.mock('../../../lib/posthog', () => ({
   capture: jest.fn(),
+  screen: jest.fn(),
 }));
 
-import { capture as posthogCapture } from '../../../lib/posthog';
+import { capture as posthogCapture, screen as posthogScreen } from '../../../lib/posthog';
 import {
   __resetScreenTrackingStateForTests,
   markPendingNavigationSource,
@@ -13,6 +14,7 @@ import {
 } from '../../../lib/analytics/screen-tracking';
 
 const mockCapture = posthogCapture as jest.MockedFunction<typeof posthogCapture>;
+const mockScreen = posthogScreen as jest.MockedFunction<typeof posthogScreen>;
 
 // The module keeps mutable state at module scope (current screen, last-viewed
 // timestamp, a small back-stack), so every test starts from a fresh instance.
@@ -27,6 +29,22 @@ describe('trackScreenView', () => {
     expect(mockCapture).toHaveBeenCalledWith('screen_viewed', {
       screen_name: 'home_feed',
       navigation_source: 'push',
+    });
+  });
+
+  test('every navigation also mirrors into PostHog\'s native $screen event', () => {
+    trackScreenView('home_feed');
+    expect(mockScreen).toHaveBeenCalledWith('home_feed', {
+      screen_name: 'home_feed',
+      navigation_source: 'push',
+    });
+
+    trackScreenView('bounty_detail', { source: 'push' });
+    expect(mockScreen).toHaveBeenLastCalledWith('bounty_detail', {
+      screen_name: 'bounty_detail',
+      previous_screen: 'home_feed',
+      navigation_source: 'push',
+      seconds_on_previous_screen: expect.any(Number),
     });
   });
 

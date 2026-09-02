@@ -13,6 +13,7 @@ describe('performLogout', () => {
     const mockMarkIntent = jest.fn();
     const mockRouter = { replace: jest.fn() } as any;
     const mockDeregisterPushToken = jest.fn().mockResolvedValue(undefined);
+    const mockClearNotificationCache = jest.fn().mockResolvedValue(undefined);
 
     await performLogout({
       supabase: mockSupabase,
@@ -22,10 +23,12 @@ describe('performLogout', () => {
       router: mockRouter,
       currentUserId: 'user-1',
       deregisterPushToken: mockDeregisterPushToken,
+      clearNotificationCache: mockClearNotificationCache,
     });
 
     expect(mockMarkIntent).toHaveBeenCalled();
     expect(mockDeregisterPushToken).toHaveBeenCalled();
+    expect(mockClearNotificationCache).toHaveBeenCalledWith('user-1');
     expect(mockSupabase.auth.signOut).toHaveBeenCalled();
     expect(mockProfileSvc.clearUserDraftData).toHaveBeenCalledWith('user-1');
     expect(mockProfileSvc.setSession).toHaveBeenCalledWith(null);
@@ -50,6 +53,7 @@ describe('performLogout', () => {
       router: { replace: jest.fn() },
       currentUserId: null,
       deregisterPushToken: jest.fn().mockResolvedValue(undefined),
+      clearNotificationCache: jest.fn().mockResolvedValue(undefined),
     });
 
     // Even if signOut failed, we still call setSession(null)
@@ -73,6 +77,7 @@ describe('performLogout', () => {
       router: mockRouter,
       currentUserId: null,
       deregisterPushToken: jest.fn().mockRejectedValue(new Error('token removal failed')),
+      clearNotificationCache: jest.fn().mockResolvedValue(undefined),
     });
 
     // Logout should still navigate even if token deregistration fails

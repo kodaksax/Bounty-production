@@ -181,6 +181,12 @@ describe('WithdrawalResultScreen', () => {
     // payout landed, and the DB allows one in-flight withdrawal per hunter.
     // A second attempt is declined with 409 withdrawal_already_in_progress.
     describe('withdrawal_already_in_progress', () => {
+      // The real 409 body (see inFlightWithdrawalResponse in
+      // supabase/functions/connect/index.ts) names the pending amount.
+      const SERVER_MESSAGE =
+        'You already have a withdrawal of $96.00 on its way to your bank. ' +
+        'You can start another one once it lands — usually within 1-2 business days.';
+
       const renderInProgress = (extra = {}) =>
         render(
           <WithdrawalResultScreen
@@ -188,14 +194,14 @@ describe('WithdrawalResultScreen', () => {
             method="standard"
             amount={50}
             errorCode="withdrawal_already_in_progress"
-            errorMessage="raw server message"
+            errorMessage={SERVER_MESSAGE}
             onDismiss={jest.fn()}
             {...extra}
           />
         );
 
-      it('explains that an earlier withdrawal is still on its way', () => {
-        const { getByText } = renderInProgress();
+      it('falls back to static copy explaining the wait when the server sends no message', () => {
+        const { getByText } = renderInProgress({ errorMessage: undefined });
         expect(
           getByText(/already have a withdrawal on its way to your bank/i)
         ).toBeTruthy();

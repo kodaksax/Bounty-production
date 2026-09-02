@@ -1,7 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { bountyRequestService } from 'lib/services/bounty-request-service';
-import { navigationIntent } from 'lib/services/navigation-intent';
 import { notificationService } from 'lib/services/notification-service';
 import { resolveNotificationDeepLink } from 'lib/services/notification-deep-links';
 import { sendMessage } from 'lib/services/supabase-messaging';
@@ -63,9 +62,7 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     if (action.kind === 'route') {
       router.push(action.path as any);
     } else if (action.kind === 'conversation') {
-      navigationIntent.setPendingConversationId(action.conversationId).then(() => {
-        router.push('/tabs/bounty-app?screen=messages' as any);
-      });
+      router.push(`/tabs/messenger/${encodeURIComponent(action.conversationId)}` as any);
     }
   };
 
@@ -117,8 +114,8 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
   };
 
   return (
-    <AppModal visible={visible} onRequestClose={onClose} variant="sheet">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <AppModal visible={visible} onRequestClose={onClose} variant="sheet" contentStyle={s.modalContent}>
+      <KeyboardAvoidingView style={s.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.sheet}>
           <View style={s.handle} />
           {notification && (
@@ -179,6 +176,8 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
+    modalContent: { flex: 1, width: '100%' },
+    keyboardAvoider: { flex: 1, justifyContent: 'flex-end' },
     sheet: {
       backgroundColor: t.surface,
       borderTopLeftRadius: 20,

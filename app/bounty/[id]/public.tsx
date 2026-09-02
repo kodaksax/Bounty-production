@@ -15,6 +15,7 @@ import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
+import { markHunterActivated } from '../../../lib/analytics/lifecycle';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
@@ -160,14 +161,16 @@ export default function PublicBountyDetail() {
     if (!bounty) return;
 
     const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
-      analyticsService.trackEvent('bounty_claim_failed', {
+      analyticsService.trackEvent('application_failed', {
+        role: 'hunter',
         bounty_id: String(bounty.id),
         reason,
         is_onboarding_demo: false,
       });
     };
 
-    analyticsService.trackEvent('bounty_claim_started', {
+    analyticsService.trackEvent('application_started', {
+      role: 'hunter',
       bounty_id: String(bounty.id),
       amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
       is_for_honor: Boolean(bounty.is_for_honor),
@@ -210,12 +213,28 @@ export default function PublicBountyDetail() {
 
               if (result && (result as any).success) {
                 setHasApplied(true);
-                analyticsService.trackEvent('bounty_claim_submitted', {
+                const applicationId =
+                  (result as any)?.request?.id != null
+                    ? String((result as any).request.id)
+                    : undefined;
+                analyticsService.trackEvent('application_submitted', {
+                  role: 'hunter',
                   bounty_id: String(bounty.id),
+                  application_id: applicationId,
+                  amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
+                  is_for_honor: Boolean(bounty.is_for_honor),
+                  source: typeof source === 'string' ? source : 'public_route',
                   is_onboarding_demo: false,
                   seconds_from_view_to_submit: Math.max(0, Math.round((Date.now() - viewedAtRef.current) / 1000)),
                   had_message: false,
                   attachment_count: 0,
+                });
+                // First accepted... no — first SUBMITTED application is the
+                // hunter-activation milestone (there is no guarantee any will
+                // be accepted). Once per device — see lib/analytics/lifecycle.ts.
+                void markHunterActivated(currentUserId, {
+                  bounty_id: String(bounty.id),
+                  application_id: applicationId,
                 });
                 Alert.alert('Success', 'Your application has been submitted!', [
                   { text: 'View Status', onPress: () => router.push(`/in-progress/${bounty.id}/hunter`) },

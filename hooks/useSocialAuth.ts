@@ -31,6 +31,24 @@ export function useSocialAuth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [googleSessionReady, setGoogleSessionReady] = useState(false);
+  const [isAppleAvailable, setIsAppleAvailable] = useState(false);
+
+  // Apple sign-in works only on iOS 13+. Keep the button hidden everywhere
+  // else so Android and older iOS users never reach a dead end.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let active = true;
+    AppleAuthentication.isAvailableAsync()
+      .then((available) => {
+        if (active) setIsAppleAvailable(available);
+      })
+      .catch(() => {
+        if (active) setIsAppleAvailable(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const iosGoogleClientId =
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'placeholder-ios-client-id';
@@ -65,6 +83,15 @@ export function useSocialAuth() {
         setLoading(false);
         if (googleResponse.type === 'error') {
           setError(googleResponse.error?.message ?? 'Google sign-in failed');
+          // The prompt failed before any token exchange — e.g. the native
+          // Google Sign-In config is missing from the build. Record it so the
+          // break shows up in analytics instead of only in a bug report (#727).
+          posthogCapture('AUTH_ATTEMPT_FAILED', {
+            correlation_id: generateCorrelationId('social_google'),
+            method: 'google',
+            error_code: googleResponse.error?.code ?? 'google_prompt_error',
+            outcome: 'unavailable',
+          });
         }
         return;
       }
@@ -158,6 +185,7 @@ export function useSocialAuth() {
   };
 
   return {
+    isAppleAvailable,
     isGoogleConfigured,
     googleRequest,
     promptGoogleSignIn,

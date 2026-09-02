@@ -47,16 +47,51 @@ const heycatch = (): HeyCatchApi | null => {
   return heycatchModule;
 };
 
-// Track key user events according to requirements
+// Track key user events according to requirements.
+//
+// ── CANONICAL MARKETPLACE-LIFECYCLE EVENTS ─────────────────────────────────
+// The names below are the canonical taxonomy for the real marketplace
+// lifecycle. Several were renamed in place from older names on 2026-08-28
+// (see docs/analytics/EVENT_TAXONOMY_CUTOVER.md § "Canonical rename"):
+//
+//   composer_opened        (was post_flow_started)
+//   bounty_started         (was post_started)
+//   bounty_submitted       (new — publish attempt, before success)
+//   bounty_published       (unchanged name; post_published folded into it)
+//   bounty_cancelled       (unchanged)
+//   bounty_viewed          (unchanged)
+//   application_started    (was bounty_claim_started)
+//   application_submitted  (was bounty_claim_submitted)
+//   application_failed     (was bounty_claim_failed)
+//   application_withdrawn  (new — hunter retracts a pending application)
+//   application_accepted   (was bounty_claimed / bounty_accepted, de-duped)
+//   work_started           (new — bounty transitions to in_progress)
+//   completion_submitted   (new — hunter submits work for review)
+//   bounty_completed       (unchanged)
+//   dispute_started        (was dispute_opened; now also covers workflow disputes)
+//   signup_completed       (was user_signed_up)
+//   onboarding_completed   (unchanged)
+//   role_selected          (was onboarding_role_selected)
+//   poster_activated       (new — first successful publish, see lib/analytics/lifecycle.ts)
+//   hunter_activated       (new — first accepted application)
+//
+// Every canonical event SHOULD carry, where known: bounty_id, amount,
+// application_id, role ('poster' | 'hunter'), surface, and source/referrer.
+// Never attach raw message/description text, emails, or precise coordinates.
+// PostHog is behavioural analytics; the Supabase row state is operational truth.
+// ──────────────────────────────────────────────────────────────────────────
 export type AnalyticsEvent =
   // App lifecycle / acquisition funnel
   | 'app_opened'
   // Auth events
-  | 'user_signed_up'
+  // `signup_completed` (renamed from `user_signed_up`) is the single signup
+  // conversion event. The `auth_signup_*` events below are diagnostic detail
+  // on how a registration attempt ended — keep them distinct.
+  | 'signup_completed'
   | 'user_logged_in'
   | 'user_logged_out'
   | 'email_verified'
-  // Registration lifecycle. `user_signed_up` above stays the single conversion
+  // Registration lifecycle. `signup_completed` above stays the single conversion
   // event; these describe HOW a registration attempt ended so a future
   // "new users can't get in" report is traceable without a device in hand.
   // Deliberately NOT one event per auth stage — the per-stage traces stay
@@ -86,25 +121,25 @@ export type AnalyticsEvent =
   // straight from registration" from "logged-out visitor browsing the intro".
   | 'onboarding_started'
   | 'onboarding_resumed'
-  | 'onboarding_role_selected'
-  // 'welcome-page-redesign' PostHog experiment (see
-  // lib/experiments/first-screen-variant.ts): control vs poster_first arm of
-  // app/onboarding/welcome.tsx ('poster_first' is the flag's 'test'). Fired
-  // identically by both arms (in addition to the funnel events above, which
-  // both arms also still fire) so poster-tap-rate can be compared cleanly:
-  // poster taps ÷ total first_screen_cta_tapped where side != 'login'.
-  // first_screen_proof_impression only applies to the poster_first arm
-  // (control has no proof card).
+  // Canonical: the user picked poster / hunter intent (was `onboarding_role_selected`).
+  | 'role_selected'
+  // Fired by app/onboarding/welcome.tsx (the poster_first design, formerly
+  // the 'test' arm of the now-concluded 'welcome-page-redesign' PostHog
+  // experiment — the 'control' layout it was compared against was deleted
+  // 2026-08-24). `variant` is always 'poster_first' now; kept as a payload
+  // field for continuity with historical events grouped by it.
   | 'first_screen_viewed'
   | 'first_screen_proof_impression'
   | 'first_screen_cta_tapped'
-  // 'onboarding-skip-role-selection' PostHog experiment, test arm only: fired
-  // from the single "Get started" CTA that replaces the two intent buttons.
-  // Role is deferred to CombinedActivationPrompt (or inferred later from a
-  // real first action) instead of being picked here.
+  // Historical only — fired by the "Get started" CTA of the now-deleted
+  // 'onboarding-skip-role-selection' test arm. No longer emitted; kept so
+  // past events remain queryable under this type.
   | 'onboarding_role_selection_skipped'
   | 'onboarding_intent_switched'
   | 'onboarding_login_tapped'
+  // Sign-in screen rendered its intent-aware "why sign in / what's next" line
+  // to a visitor who picked a role but hasn't authenticated yet.
+  | 'onboarding_signin_context_shown'
   | 'onboarding_auth_started'
   | 'onboarding_auth_completed'
   | 'onboarding_style_step_viewed'
@@ -156,7 +191,17 @@ export type AnalyticsEvent =
   | 'moment_completed'
   | 'moment_skipped'
   | 'moment_expired'
-  // Identity verification (Stripe Connect KYC)
+  // Identity verification (Stripe Connect KYC).
+  //
+  // `identity_onboarding_started` fires each time the payout-setup screen opens
+  // the hosted Stripe onboarding (including retries). `identity_onboarding_outcome`
+  // fires once the flow reaches a terminal state, carrying the derived `outcome`
+  // (success | pending | action_required | cancelled | verify_error) plus the
+  // eligibility booleans. Together they give the funnel a start, a failure, and
+  // an outcome — previously only `identity_verified` (the success case) was
+  // visible, so a blocked flow left no signal.
+  | 'identity_onboarding_started'
+  | 'identity_onboarding_outcome'
   | 'identity_submitted'
   | 'identity_verified'
   // Posting funnel — the canonical drop-off funnel for "does a published
@@ -166,8 +211,8 @@ export type AnalyticsEvent =
   // every event carries `surface: 'create_flow' | 'onboarding'`.
   //
   // Happy path, in order:
-  //   post_started -> category_selected -> amount_set -> payment_attached
-  //   -> post_published -> first_submission_received
+  //   bounty_started -> category_selected -> amount_set -> payment_attached
+  //   -> bounty_submitted -> bounty_published -> first_submission_received
   //
   // `category_selected` is genuinely optional (the category step allows skip),
   // so treat it as an informational step rather than a required funnel stage.
@@ -184,12 +229,43 @@ export type AnalyticsEvent =
   // application is the first one on that bounty, so its distinct_id is the
   // hunter, not the poster. Join it to `post_published` on `bountyId` rather
   // than treating it as a person-level funnel step.
-  | 'post_started'
+  //
+  // `post_started` MEANS: the poster demonstrated intent to create a bounty
+  // by interacting with the composer — focusing the title field, editing the
+  // draft, advancing a step, or attempting to publish. The emitting property
+  // `trigger` says which. It fires at most once per composer instance.
+  //
+  // It explicitly does NOT mean any of: tapping the Post tab, tab focus,
+  // screen mount, navigating into the composer, returning to it, an app
+  // resume, a re-render, or the composer UI merely being on screen.
+  //
+  // That distinction is not hypothetical. Until 2026-08-24 this event fired
+  // from the composer's mount effect, and the host screen mounts the composer
+  // whenever the Post tab is selected — so every pass through the tab bar
+  // produced a post_started + post_abandoned pair. Production over the 30
+  // days to 2026-08-24: 1253 post_started against 61 post_published, a MEDIAN
+  // of 0.91s between start and abandon, 879 of 1072 pairs under 3 seconds,
+  // 100% of post_step_abandoned in `exit_method: 'tab'`, and single sessions
+  // reaching 29 and 35 "composer opens" without one keystroke. Anything
+  // comparing across that boundary must split on 2026-08-24 — the event's
+  // denominator changed meaning, so pre-fix conversion rates are not
+  // comparable to post-fix ones.
+  //
+  // `post_abandoned` is the exact mirror: it fires only when a composition
+  // that produced a post_started ends without a publish, so start/abandon
+  // stay 1:1 per genuine composition. A composer torn down without any
+  // interaction produces NEITHER. Both surfaces (create_flow and onboarding)
+  // follow this contract — see the note above the shared funnel.
+  // Canonical: first genuine interaction with the composer (was `post_started`).
+  | 'bounty_started'
   | 'post_step_viewed'
   | 'category_selected'
   | 'amount_set'
   | 'payment_attached'
-  | 'post_published'
+  // Canonical: the poster committed a publish attempt (tapped "Post Bounty").
+  // Fires once per create attempt, BEFORE the create/escrow round-trip, so
+  // `bounty_published ÷ bounty_submitted` is the publish success rate.
+  | 'bounty_submitted'
   | 'first_submission_received'
   | 'post_abandoned'
   // Post-flow "graveyard" funnel (2026-08 Part C spec) — a finer-grained,
@@ -217,11 +293,34 @@ export type AnalyticsEvent =
   // conversion. `post_field_focused` (below) is the composer-engagement
   // signal to pair it with — it fires on the first real interaction
   // (the title field's first focus) regardless of how the poster arrived.
-  | 'post_flow_started'
+  //
+  // NOTE: `deliberateTap` gates this event but NOT `post_started`, and the
+  // two answer different questions. A bottom-nav Post-tab press IS a
+  // deliberate tap, so post_flow_started still counts tab traffic by design
+  // — it measures "arrived at the composer on purpose". Production bears
+  // this out: 353 post_flow_started against 44 post_title_typed since it
+  // shipped. `post_started` is the stricter, intent-based denominator; use
+  // post_flow_started for entry attribution and post_started for
+  // composition conversion, and don't substitute one for the other.
+  //
+  // `post_step_abandoned` fires for ANY mounted flow torn down without a
+  // publish, matching post_flow_started's mount-level denominator. It
+  // carries `composer_started` (boolean) so incidental tab teardowns can be
+  // filtered out at query time. Its `exit_method` is a residual bucket —
+  // 'tab' is the default whenever no explicit exit path was taken, which in
+  // practice is nearly always, so treat 'tab' as "unattributed teardown"
+  // rather than an observed user action. `post_abandoned` carries the same
+  // `exit_method`, but only ever for a real composition — that is the one
+  // to trust.
+  // Canonical: composer reached on purpose (was `post_flow_started`).
+  | 'composer_opened'
   | 'post_field_focused'
   | 'post_step_completed'
   | 'post_step_abandoned'
   | 'post_title_typed'
+  // Canonical terminal event for a live bounty. `post_published` (the old
+  // posting-funnel terminal) was folded into this on 2026-08-28 — the two
+  // used to BOTH fire on every create_flow publish, which was a duplicate.
   | 'bounty_published'
   // NOT YET WIRED — no UI exists for these today. The redesigned fast-path
   // flow they belong to (category chips on the title step, a price-anchor
@@ -250,21 +349,29 @@ export type AnalyticsEvent =
   // posters enrich a bounty after publishing versus leaving it bare.
   | 'bounty_details_added'
   | 'bounty_viewed'
-  // NOTE ON NAMING COLLISION: `bounty_accepted`/`bounty_claimed` below are
-  // fired from hooks/useAcceptRequest.ts when the POSTER accepts a hunter's
-  // request (open -> in_progress). The `bounty_claim_*` funnel further down
-  // is unrelated and fires from the HUNTER's apply action instead. Same verb
-  // ("claim"/"accept"), two different actors and funnel stages — don't
-  // conflate them when querying.
-  | 'bounty_accepted'
-  | 'bounty_claimed'
+  // Canonical: the POSTER accepted a hunter's application (open -> in_progress),
+  // fired from hooks/useAcceptRequest.ts. Was `bounty_claimed` + `bounty_accepted`
+  // (a dual-emit) — de-duped into one event on 2026-08-28. Distinct from the
+  // hunter-side `application_*` funnel below (different actor, different stage).
+  | 'application_accepted'
+  // Canonical: work on an accepted bounty has begun. Emitted alongside
+  // `application_accepted` once the server confirms the in_progress transition.
+  | 'work_started'
+  // Canonical: the hunter submitted completed work for the poster's review
+  // (completion_submissions insert). Fired from lib/services/completion-service.ts.
+  | 'completion_submitted'
   // `bounty_completed` fires from 3 real completion paths (payout release,
   // manual mark-complete, and poster approving a submitted-work review) plus
-  // the hunter-claim funnel below carries `is_onboarding_demo` on every
+  // the hunter application funnel below carries `is_onboarding_demo` on every
   // event so tutorial completions (there is no fixed demo bounty — see
-  // `bounty_claim_started` below) never contaminate a real liquidity metric.
+  // `application_started` below) never contaminate a real liquidity metric.
   | 'bounty_completed'
   | 'bounty_cancelled'
+  // Fired once a bounty row is actually removed from the poster's active view
+  // (hard delete, or a soft delete to status='deleted' when payment records
+  // must be preserved). Carries `is_for_honor` and `amount` so a deletion that
+  // stranded escrowed funds is measurable — this had no event before.
+  | 'bounty_deleted'
   // Bounty browse/discovery events — see docs on the supply-vs-plumbing
   // question these resolve. `bounty_list_viewed` fires whenever a
   // list/feed/map of bounties renders with results (including zero — the
@@ -273,9 +380,12 @@ export type AnalyticsEvent =
   // `query_length`, never the raw query text (PII risk).
   | 'bounty_list_viewed'
   | 'bounty_search'
-  // Hunter claim funnel — bounty_claim_started (Apply tapped) ->
-  // bounty_claim_submitted (insert succeeded) or bounty_claim_failed.
-  // `is_onboarding_demo` is MANDATORY on all three and on `bounty_completed`.
+  // Canonical hunter application funnel — application_started (Apply tapped) ->
+  // application_submitted (insert succeeded) or application_failed.
+  // Renamed from bounty_claim_started / bounty_claim_submitted / bounty_claim_failed
+  // on 2026-08-28. `application_withdrawn` fires when the hunter retracts a
+  // still-pending application (postings-screen / inbox-screen).
+  // `is_onboarding_demo` is MANDATORY on all four and on `bounty_completed`.
   //
   // There is no fixed "demo bounty" — the onboarding hunter tutorial applies
   // to a real, live, randomly-selected open bounty (see
@@ -285,9 +395,10 @@ export type AnalyticsEvent =
   // (components/bountydetailmodal.tsx, app/bounty/[id]/public.tsx), `true`
   // from the onboarding tutorial. Same convention as the posting funnel's
   // `surface: 'create_flow' | 'onboarding'` property above.
-  | 'bounty_claim_started'
-  | 'bounty_claim_submitted'
-  | 'bounty_claim_failed'
+  | 'application_started'
+  | 'application_submitted'
+  | 'application_failed'
+  | 'application_withdrawn'
   // Payment events
   | 'payment_initiated'
   | 'payment_completed'
@@ -351,10 +462,31 @@ export type AnalyticsEvent =
   // escrow_refunded above are reused for both architectures (properties
   // carry `architecture: 'v1' | 'v2'`); this event is v2-routing-specific.
   | 'payment_architecture_routed'
-  // Payout (withdrawal) events
+  // Payout (withdrawal) events. `payout_failed` means Stripe was actually
+  // asked to move money and the attempt failed — see classifyPayoutFailure()
+  // in lib/utils/payout-analytics.ts, the single place both withdrawal paths
+  // (legacy bank transfer and Connect-native payout/instant-payout) decide
+  // which of these three fires. A pre-flight rejection by a Bounty business
+  // rule (validation, insufficient balance, disabled payouts, etc.) must
+  // fire `payout_rejected`, never `payout_failed` — conflating the two is
+  // what made a single hunter's 36 retries against an already-pending
+  // withdrawal look like 36 independent provider failures (2026-08-24).
   | 'payout_initiated'
   | 'payout_success'
   | 'payout_failed'
+  // The hunter already had a withdrawal in flight (409
+  // withdrawal_already_in_progress) and the backend refused to start a
+  // second one before ever contacting Stripe. Broken out from
+  // `payout_rejected` because it is the single highest-signal case for
+  // "duplicate/pending attempt rate" and is expected to fire more than once
+  // per underlying pending withdrawal — that repetition is the metric, not
+  // a bug in it.
+  | 'payout_already_pending'
+  // Any other pre-flight business-rule rejection: validation failure,
+  // insufficient balance, account not eligible, payouts disabled, no bank
+  // account/debit card linked, instant-payout limits, etc. Stripe was never
+  // called for this attempt.
+  | 'payout_rejected'
   // SetupIntent events
   | 'setup_intent_created'
   | 'setup_intent_confirmed'
@@ -385,12 +517,25 @@ export type AnalyticsEvent =
   | 'share_cancelled'
   | 'share_link_copied'
   | 'deep_link_opened'
-  // Dispute events
-  | 'dispute_opened'
+  // Dispute events. Canonical `dispute_started` (was `dispute_opened`) covers
+  // BOTH the cancellation-derived dispute and the workflow-stage dispute
+  // (createWorkflowDispute previously emitted nothing). `stage` disambiguates.
+  | 'dispute_started'
   | 'dispute_resolved'
+  // User-lifecycle activation milestones — first time this device sees the
+  // user complete the defining action of a role. Emitted (once, AsyncStorage-
+  // guarded) from lib/analytics/lifecycle.ts. NOT a running count.
+  | 'poster_activated'
+  | 'hunter_activated'
   // Search events
   | 'search_performed'
-  | 'filter_applied';
+  | 'filter_applied'
+  // Admin — bounty moderation queue. `moderation_action` fires when an admin
+  // transitions a listing (properties: from_state, to_state, reason,
+  // signal_score, applications); `moderation_alert_viewed` fires when the
+  // founder opens an alert from the queue.
+  | 'moderation_action'
+  | 'moderation_alert_viewed';
 
 export interface AnalyticsProperties {
   [key: string]: string | number | boolean | string[] | undefined;
@@ -422,6 +567,8 @@ const toHeyCatchProperties = (
     if (value === undefined) continue;
     if (Array.isArray(value)) {
       result[key] = value.join(',');
+    } else if (value instanceof Error) {
+      result[key] = String(value);
     } else if (
       typeof value === 'string' ||
       typeof value === 'number' ||
@@ -430,7 +577,11 @@ const toHeyCatchProperties = (
     ) {
       result[key] = value;
     } else {
-      result[key] = String(value);
+      try {
+        result[key] = JSON.stringify(value) ?? '[unserializable]';
+      } catch {
+        result[key] = '[unserializable]';
+      }
     }
   }
   return result;

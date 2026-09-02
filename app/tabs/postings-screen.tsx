@@ -6,13 +6,14 @@ import { CreateBountyFlow } from "app/screens/CreateBounty"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
+import { withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { isPhase2Bounty } from "lib/utils/payment-architecture"
+import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -160,6 +161,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // Refs for lists so we can scroll items into view when expanded
   const inProgressListRef = useRef<any>(null)
   const myPostingsListRef = useRef<any>(null)
+  // Bounty ids with a delete/refund in flight — blocks repeat taps from
+  // re-entering the refund and firing duplicate escrow events.
+  const deletingBountyIdsRef = useRef<Set<string>>(new Set())
   // Attests that the New Bounty tab was reached via an explicit tap, not by
   // defaulting to it (activeTab starts as "new" whenever no initialTab is
   // passed). Seeded from `deliberateTapParam` so a moments CTA that routes
@@ -566,6 +570,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            const deleteKey = String(bounty.id)
+            if (deletingBountyIdsRef.current.has(deleteKey)) return
+            deletingBountyIdsRef.current.add(deleteKey)
             try {
               // Process refund FIRST for paid bounties before any other operations.
               //
@@ -591,27 +598,38 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
               if (needsRefund) {
                 const useV2 = isPhase2Bounty(bounty)
+                const useV3 = isV3Bounty(bounty)
                 try {
                   await analyticsService.trackEvent('payment_architecture_routed', {
                     bountyId: String(bounty.id),
-                    version: useV2 ? 2 : 1,
+                    version: useV3 ? 3 : useV2 ? 2 : 1,
                     context: 'cancel',
                   })
                 } catch {
                   /* analytics is best-effort */
                 }
                 try {
-                  if (useV2) {
+                  if (useV2 || useV3) {
                     // Stripe-native Phase 2 escrow: cancels the PaymentIntent
-                    // pre-capture, or issues a refund post-capture.
-                    await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
+                    // pre-capture, or issues a refund post-capture. Only a
+                    // terminal v2 status is safe to treat as a successful refund.
+                    const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
+                    if (cancelResult.status !== 'canceled' && cancelResult.status !== 'refunded') {
+                      throw new Error(`Escrow cancellation is still pending (${cancelResult.status})`)
+                    }
                   } else {
-                    await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
+                    // refundEscrow signals failure by returning false, not by
+                    // throwing — so the boolean must be checked or a failed
+                    // refund would still delete the bounty and lose the money.
+                    const refunded = await refundEscrow(bounty.id, bounty.title, 100) // 100% refund for unaccepted bounties
+                    if (!refunded) {
+                      throw new Error('Escrow refund did not complete')
+                    }
                   }
                   try {
                     await analyticsService.trackEvent('escrow_refunded', {
                       bountyId: String(bounty.id),
-                      architecture: useV2 ? 'v2' : 'v1',
+                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                       amount: bounty.amount,
                     })
                   } catch {
@@ -622,7 +640,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   try {
                     await analyticsService.trackEvent('payment_failed', {
                       bountyId: String(bounty.id),
-                      architecture: useV2 ? 'v2' : 'v1',
+                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                       stage: 'cancel',
                     })
                   } catch {
@@ -653,6 +671,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               // Error handling - no rollback needed since we didn't optimistically update
               setError(err.message || "Failed to delete posting")
               Alert.alert('Error', err.message || 'Failed to delete bounty. Please try again.')
+            } finally {
+              deletingBountyIdsRef.current.delete(deleteKey)
             }
           },
         },
@@ -705,27 +725,21 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           style: "destructive",
           onPress: async () => {
             try {
-              // Get the bounty request for this bounty and current user
-              const requests = await bountyRequestService.getAll({
-                bountyId: String(bountyId),
-                userId: currentUserId,
+              // Deletes the pending request and emits `application_withdrawn`
+              // only on a confirmed success — see lib/services/application-withdrawal.ts.
+              await withdrawApplication({
+                bountyId,
+                currentUserId,
+                surface: 'my_postings',
               })
 
-              if (requests.length === 0) {
-                throw new Error("No application found for this bounty")
+              try {
+                // Reload from the source so the card only disappears when the
+                // row is really gone, never on an optimistic local filter.
+                await loadInProgress()
+              } catch (refreshError) {
+                console.warn('Failed to refresh in-progress bounties after withdrawal:', refreshError)
               }
-
-              const request = requests[0]
-
-              // Delete the bounty request
-              const success = await bountyRequestService.delete(request.id)
-
-              if (!success) {
-                throw new Error("Failed to withdraw application")
-              }
-
-              // Remove from in-progress list
-              setInProgressBounties((prev) => prev.filter((b) => b.id !== bountyId))
 
               Alert.alert("Success", "Your application has been withdrawn.")
             } catch (err: any) {

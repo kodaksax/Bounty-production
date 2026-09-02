@@ -28,6 +28,14 @@ const REGISTER_TOKEN_BACKOFF_MAX_MS = 60_000;
 // caller writes the key directly or a legacy oversized array is read back.
 const MAX_PENDING_PUSH_TOKENS = 20;
 
+// Cache notifications under a per-user key so one account's cached rows can
+// never be read back by a different account on the same device. The bare
+// `notifications:cache` key is kept only so clearCache can purge caches that
+// older builds wrote device-wide.
+function notificationCacheKey(userId: string): string {
+  return `${NOTIFICATION_CACHE_KEY}:${userId}`;
+}
+
 // Helper to safely read response text without throwing further errors
 async function safeReadResponseText(response: Response): Promise<string> {
   try {
@@ -126,6 +134,84 @@ export class NotificationService {
   }
 
   /**
+   * Create Bounty's Android notification channels.
+   *
+   * On Android 8+ every notification is delivered through a channel, and the
+   * channel — not the payload — owns importance, sound, vibration and whether
+   * the notification can appear as a heads-up banner. A channel that is never
+   * created means every notification falls back to expo-notifications' generic
+   * default channel, so users cannot mute chat without also muting payouts,
+   * and Bounty's payment notifications get no priority treatment.
+   *
+   * These definitions previously existed only in app/hooks/usePushNotifications.tsx,
+   * which is not imported anywhere — so in the shipped app no Bounty-defined
+   * channel was ever created. They live here instead because this service is
+   * the live push path.
+   *
+   * Channels are created before the permission prompt on purpose: that is the
+   * documented Android pattern, it makes the categories visible in system
+   * settings immediately, and `setNotificationChannelAsync` is an idempotent
+   * upsert so repeat calls are free.
+   *
+   * NOTE: categorisation only takes effect for messages whose push payload
+   * carries the matching `channelId`. Messages sent without one continue to
+   * use the default channel below.
+   */
+  async ensureAndroidChannels(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    try {
+      this.ensureNotificationsModule();
+      if (!Notifications || typeof Notifications.setNotificationChannelAsync !== 'function') {
+        return;
+      }
+
+      const importance = Notifications.AndroidImportance;
+      const vibrationPattern = [0, 250, 250, 250];
+      const lightColor = '#10B981';
+
+      await Promise.all([
+        Notifications.setNotificationChannelAsync('messages', {
+          name: 'Messages',
+          description: 'Chat message notifications',
+          importance: importance.HIGH,
+          vibrationPattern,
+          lightColor,
+        }),
+        Notifications.setNotificationChannelAsync('bounties', {
+          name: 'Bounties',
+          description: 'Bounty applications, acceptances and updates',
+          importance: importance.HIGH,
+          vibrationPattern,
+          lightColor,
+        }),
+        Notifications.setNotificationChannelAsync('payments', {
+          name: 'Payments',
+          description: 'Payment and payout notifications',
+          importance: importance.MAX,
+          vibrationPattern,
+          lightColor,
+        }),
+        Notifications.setNotificationChannelAsync('system', {
+          name: 'System',
+          description: 'System and account notifications',
+          importance: importance.DEFAULT,
+        }),
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: importance.MAX,
+          vibrationPattern,
+          lightColor,
+        }),
+      ]);
+    } catch (e) {
+      // Channel setup is best-effort — never let it break notification setup.
+      if (__DEV__) {
+        console.warn('[NotificationService] Android channel setup failed:', e);
+      }
+    }
+  }
+
+  /**
    * Validate and normalize permission status to known values
    */
   private normalizePermissionStatus(status: string | null): 'granted' | 'denied' | 'undetermined' {
@@ -180,6 +266,13 @@ export class NotificationService {
   async requestPermissionsAndRegisterToken(): Promise<string | null> {
     try {
       this.ensureNotificationsModule();
+
+      // Channels must exist before the first notification is delivered, and
+      // creating them ahead of the permission prompt is the documented Android
+      // pattern. Awaited (not fire-and-forget) so a token issued moments later
+      // can never beat the channels into existence.
+      await this.ensureAndroidChannels();
+
       const { status: existingStatus } = Notifications
         ? await Notifications.getPermissionsAsync()
         : { status: 'undetermined' };
@@ -465,7 +558,34 @@ export class NotificationService {
     return false;
   }
 
+  /** Resolve the signed-in user id, or undefined when there is no session. */
+  private async getCurrentUserId(): Promise<string | undefined> {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      return session?.user?.id ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Persist the in-memory cache under the given user's key. No-op without a user. */
+  private async persistCachedNotifications(userId?: string): Promise<void> {
+    const resolvedUserId = userId ?? (await this.getCurrentUserId());
+    if (!resolvedUserId) return;
+    try {
+      await AsyncStorage.setItem(
+        notificationCacheKey(resolvedUserId),
+        JSON.stringify(this.cachedNotifications)
+      );
+    } catch (error) {
+      console.error('Error persisting notification cache:', error);
+    }
+  }
+
   async fetchNotifications(limit: number = 50, offset: number = 0): Promise<Notification[]> {
+    let userId: string | undefined;
     try {
       const {
         data: { session },
@@ -475,7 +595,7 @@ export class NotificationService {
       }
 
       // First try Supabase directly (more reliable for development)
-      const userId = session.user?.id;
+      userId = session.user?.id;
       if (userId) {
         try {
           const { data, error: sbErr } = await supabase
@@ -487,10 +607,7 @@ export class NotificationService {
 
           if (!sbErr && data) {
             this.cachedNotifications = data as any;
-            await AsyncStorage.setItem(
-              NOTIFICATION_CACHE_KEY,
-              JSON.stringify(this.cachedNotifications)
-            );
+            await this.persistCachedNotifications(userId);
             await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
             return this.cachedNotifications;
           }
@@ -525,14 +642,14 @@ export class NotificationService {
           );
         }
         // Return cached notifications instead of throwing
-        return this.getCachedNotifications();
+        return this.getCachedNotifications(userId);
       }
 
       const data = await response.json();
       this.cachedNotifications = data.notifications || [];
 
       // Cache notifications locally
-      await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+      await this.persistCachedNotifications(userId);
       await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
 
       return this.cachedNotifications;
@@ -546,16 +663,20 @@ export class NotificationService {
         console.error('Error fetching notifications:', error);
       }
       // Return cached notifications on error
-      return this.getCachedNotifications();
+      return this.getCachedNotifications(userId);
     }
   }
 
   /**
-   * Get cached notifications from AsyncStorage
+   * Get cached notifications from AsyncStorage for the given user (defaults to
+   * the signed-in user). Scoped by user id so a fetch error can't hand one
+   * account the previous account's cached notifications.
    */
-  async getCachedNotifications(): Promise<Notification[]> {
+  async getCachedNotifications(userId?: string): Promise<Notification[]> {
     try {
-      const cached = await AsyncStorage.getItem(NOTIFICATION_CACHE_KEY);
+      const resolvedUserId = userId ?? (await this.getCurrentUserId());
+      if (!resolvedUserId) return [];
+      const cached = await AsyncStorage.getItem(notificationCacheKey(resolvedUserId));
       if (cached) {
         this.cachedNotifications = JSON.parse(cached);
         return this.cachedNotifications;
@@ -676,7 +797,7 @@ export class NotificationService {
       this.cachedNotifications = this.cachedNotifications.map(notif =>
         notificationIds.includes(notif.id) ? { ...notif, read: true } : notif
       );
-      await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+      await this.persistCachedNotifications(session.user?.id);
 
       // Sync OS badge with updated unread count
       this.syncBadgeCount().catch(() => {});
@@ -716,7 +837,7 @@ export class NotificationService {
 
       // Update local cache
       this.cachedNotifications = this.cachedNotifications.map(notif => ({ ...notif, read: true }));
-      await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+      await this.persistCachedNotifications(session.user?.id);
       this.unreadCount = 0;
 
       // Sync OS badge to 0
@@ -736,10 +857,7 @@ export class NotificationService {
             .eq('user_id', userId)
             .eq('read', false);
           this.cachedNotifications = this.cachedNotifications.map(n => ({ ...n, read: true }));
-          await AsyncStorage.setItem(
-            NOTIFICATION_CACHE_KEY,
-            JSON.stringify(this.cachedNotifications)
-          );
+          await this.persistCachedNotifications(userId);
           this.unreadCount = 0;
         }
       } catch {}
@@ -762,7 +880,7 @@ export class NotificationService {
       this.cachedNotifications = this.cachedNotifications.map(notif =>
         notificationIds.includes(notif.id) ? { ...notif, read: false } : notif
       );
-      await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+      await this.persistCachedNotifications();
       this.syncBadgeCount().catch(() => {});
     } catch (error) {
       console.error('Error marking notifications as unread:', error);
@@ -785,7 +903,7 @@ export class NotificationService {
       this.cachedNotifications = this.cachedNotifications.map(notif =>
         notificationIds.includes(notif.id) ? { ...notif, archived } : notif
       );
-      await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+      await this.persistCachedNotifications();
     } catch (error) {
       console.error('Error archiving notifications:', error);
       throw error;
@@ -951,10 +1069,19 @@ export class NotificationService {
   }
 
   /**
-   * Clear all cached notifications
+   * Clear all cached notifications for the given user (defaults to the
+   * signed-in user). Resets the in-memory copies and removes the AsyncStorage
+   * entries. Call on logout so the next account on this device can't read the
+   * previous account's notifications.
    */
-  async clearCache(): Promise<void> {
+  async clearCache(userId?: string): Promise<void> {
     try {
+      const resolvedUserId = userId ?? (await this.getCurrentUserId());
+      if (resolvedUserId) {
+        await AsyncStorage.removeItem(notificationCacheKey(resolvedUserId));
+      }
+      // Also remove the legacy device-wide key so a cache written by an older
+      // build can't survive logout.
       await AsyncStorage.removeItem(NOTIFICATION_CACHE_KEY);
       await AsyncStorage.removeItem(LAST_FETCH_KEY);
       this.cachedNotifications = [];

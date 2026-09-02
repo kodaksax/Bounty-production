@@ -35,7 +35,6 @@ export const isInternalEmail = (email: string): boolean => {
 };
 
 let _posthog: any | null = null;
-const aliasTransitionsSeen = new Set<string>();
 
 // Construct the client eagerly (synchronously) so it is available to the
 // PostHogProvider at first render. The PostHog React Native SDK constructs
@@ -67,10 +66,33 @@ try {
             console: false,
           },
         },
-        // Session Replay stays off — this app has Stripe/ACH/password
-        // screens and no current product need for it. Flip this on (plus
-        // "Record user sessions" in PostHog project settings) if that changes.
-        enableSessionReplay: false,
+        // Session Replay. Also requires "Record user sessions" to be enabled
+        // in the PostHog project settings, and the optional native module
+        // `posthog-react-native-session-replay` to be present (it is a
+        // dependency in package.json) — without it the SDK logs "Session
+        // replay enabled but not installed." and records nothing.
+        enableSessionReplay: true,
+        // This app renders Stripe/ACH, password, KYC, private-message and
+        // bounty-description screens, so replay runs fully masked. Do not
+        // relax these to make recordings easier to read; use
+        // `PostHogMaskView` from posthog-react-native to mask *more*.
+        sessionReplayConfig: {
+          // Masks all text input fields (emails, addresses, phone numbers, payment fields).
+          // Static <Text> content is not guaranteed to be masked — wrap sensitive UI in PostHogMaskView.
+          maskAllTextInputs: true,
+          // Masks all images to a placeholder (avatars, bounty photos, ID /
+          // KYC uploads, attachment previews).
+          maskAllImages: true,
+          // Explicit even though it matches the SDK default: masks iOS
+          // sandboxed system views (photo/contact pickers used by the
+          // attachment and avatar flows).
+          maskAllSandboxedViews: true,
+          // Off (SDK default is on): console output is Sentry's channel in
+          // this app (see `errorTracking` above), and the diagnostic logs in
+          // lib/utils/auth-diagnostics.ts and the payment paths are not
+          // written with replay redaction in mind.
+          captureLog: false,
+        },
         debug: __DEV__,
       });
       _posthog.register({ app_env: APP_ENVIRONMENT });
@@ -129,21 +151,24 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
       ? { ...properties, is_internal: isInternalEmail(email) }
       : properties;
 
-    // Ensure the anonymous->identified merge occurs exactly once per
-    // anonymous distinct id in this app runtime before identify() updates
-    // the person's canonical distinct id.
+    // identify() already merges the current anonymous person into the
+    // identified person, so no alias() call is needed. But calling it while the
+    // SDK is already identified as a different user would instead ask the
+    // pipeline to merge two identified persons, which it rejects
+    // (cannot_merge_already_identified). Reset first so identify() starts from a
+    // fresh anonymous id — this covers shared or account-switch devices.
     const currentDistinctId =
       typeof _posthog.getDistinctId === 'function' ? _posthog.getDistinctId() : undefined;
+    const anonymousId =
+      typeof _posthog.getAnonymousId === 'function' ? _posthog.getAnonymousId() : undefined;
+    const currentIsIdentified =
+      !!anonymousId && !!currentDistinctId && currentDistinctId !== anonymousId;
     if (
-      currentDistinctId &&
+      currentIsIdentified &&
       currentDistinctId !== distinctId &&
-      typeof _posthog.alias === 'function'
+      typeof _posthog.reset === 'function'
     ) {
-      const aliasTransition = `${currentDistinctId}->${distinctId}`;
-      if (!aliasTransitionsSeen.has(aliasTransition)) {
-        aliasTransitionsSeen.add(aliasTransition);
-        _posthog.alias(distinctId);
-      }
+      _posthog.reset();
     }
 
     if (email && typeof _posthog.register === 'function') {

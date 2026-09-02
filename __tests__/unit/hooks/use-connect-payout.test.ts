@@ -9,9 +9,16 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 jest.mock('../../../hooks/use-auth-context', () => ({ useAuthContext: jest.fn() }));
 jest.mock('../../../lib/config/api', () => ({ API_BASE_URL: 'https://api.example.com' }));
 jest.mock('../../../lib/config', () => ({ config: { supabase: { anonKey: 'test-anon-key' } } }));
+jest.mock('../../../lib/services/analytics-service', () => ({
+  // trackEvent is called fire-and-forget with a chained .catch() in the hook
+  // (mockResolvedValue, not a bare jest.fn(), so that .catch() has a real
+  // Promise to call rather than throwing on undefined).
+  analyticsService: { trackEvent: jest.fn().mockResolvedValue(undefined) },
+}));
 
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useConnectPayout } from '../../../hooks/use-connect-payout';
+import { analyticsService } from '../../../lib/services/analytics-service';
 
 const SUCCESS = {
   payoutId: 'po_123',
@@ -244,6 +251,115 @@ describe('useConnectPayout', () => {
 
     expect(global.fetch).not.toHaveBeenCalled();
     expect(result.current.error?.code).toBe('not_authenticated');
+  });
+
+  it('tracks payout_initiated before the request and payout_success on completion', async () => {
+    mockFetch({ ok: true, json: () => Promise.resolve(SUCCESS) });
+    const { result } = renderHook(() => useConnectPayout());
+
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+    });
+
+    const eventNames = (analyticsService.trackEvent as jest.Mock).mock.calls.map(c => c[0]);
+    expect(eventNames).toEqual(['payout_initiated', 'payout_success']);
+  });
+
+  it('tracks payout_already_pending, not payout_failed, when a withdrawal is already in flight', async () => {
+    mockFetch({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          code: 'withdrawal_already_in_progress',
+          error: 'You already have a withdrawal of $96.00 on its way to your bank.',
+          pendingAmount: 96,
+          stripeAttempted: false,
+        }),
+    });
+    const { result } = renderHook(() => useConnectPayout());
+
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+    });
+
+    await waitFor(() => expect(result.current.phase).toBe('failed'));
+    const calls = (analyticsService.trackEvent as jest.Mock).mock.calls;
+    const eventNames = calls.map(c => c[0]);
+    expect(eventNames).toContain('payout_already_pending');
+    expect(eventNames).not.toContain('payout_failed');
+    const rejectionCall = calls.find(c => c[0] === 'payout_already_pending');
+    expect(rejectionCall?.[1]).toMatchObject({
+      code: 'withdrawal_already_in_progress',
+      stripeAttempted: false,
+      pendingAmount: 96,
+    });
+  });
+
+  it('tracks payout_rejected, not payout_failed, for a pre-flight business-rule rejection', async () => {
+    mockFetch({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          code: 'insufficient_balance',
+          error: 'That is more than you have available to withdraw.',
+        }),
+    });
+    const { result } = renderHook(() => useConnectPayout());
+
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 999999, method: 'standard' });
+    });
+
+    await waitFor(() => expect(result.current.phase).toBe('failed'));
+    const eventNames = (analyticsService.trackEvent as jest.Mock).mock.calls.map(c => c[0]);
+    expect(eventNames).toContain('payout_rejected');
+    expect(eventNames).not.toContain('payout_failed');
+  });
+
+  it('tracks payout_failed, not payout_rejected, when the server response has no code at all', async () => {
+    // Regression: a missing `code` must not be defaulted to the literal
+    // string 'payout_failed' before classification — that made every
+    // uncoded server error look like a truthy business-rule code and get
+    // misclassified as payout_rejected instead of payout_failed.
+    mockFetch({
+      ok: false,
+      json: () => Promise.resolve({ error: 'Something went wrong on the server.' }),
+    });
+    const { result } = renderHook(() => useConnectPayout());
+
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+    });
+
+    await waitFor(() => expect(result.current.phase).toBe('failed'));
+    const eventNames = (analyticsService.trackEvent as jest.Mock).mock.calls.map(c => c[0]);
+    expect(eventNames).toContain('payout_failed');
+    expect(eventNames).not.toContain('payout_rejected');
+    // The UI-facing PayoutError.code still gets a safe display fallback.
+    expect(result.current.error?.code).toBe('payout_failed');
+  });
+
+  it('tracks payout_failed for a genuine Stripe-attempt failure (stripeAttempted: true)', async () => {
+    mockFetch({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          code: 'transfer_failed',
+          error: 'The transfer could not be completed.',
+          stripeAttempted: true,
+        }),
+    });
+    const { result } = renderHook(() => useConnectPayout());
+
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+    });
+
+    await waitFor(() => expect(result.current.phase).toBe('failed'));
+    const eventNames = (analyticsService.trackEvent as jest.Mock).mock.calls.map(c => c[0]);
+    expect(eventNames).toContain('payout_failed');
+    expect(eventNames).not.toContain('payout_rejected');
+    expect(eventNames).not.toContain('payout_already_pending');
   });
 
   it('reset clears state for a fresh attempt', async () => {

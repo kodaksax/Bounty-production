@@ -1,7 +1,20 @@
-// app/(admin)/support/feedback.tsx - Admin Feedback Form
+// app/(admin)/support/feedback.tsx - Operator feedback
+//
+// The submit handler was `await new Promise(r => setTimeout(r, 1000))` followed
+// by "Thank you for your feedback! Our team will review it shortly." Nothing
+// was ever sent anywhere; every report an operator filed was discarded.
+//
+// It now goes through the app's existing feedbackService, which writes to
+// `feedback_reports` (bug reports) or `feature_requests` (feature ideas) --
+// the same tables the in-app feedback flow already uses, so admin reports land
+// in the same queue instead of a second, invented one.
+// Original header: - Admin Feedback Form
 import { MaterialIcons } from '@expo/vector-icons';
+import { feedbackService } from '../../../lib/services/feedback-service';
+import { useAppTheme } from '../../../hooks/use-app-theme';
+import type { AppTheme } from '../../../lib/themes/types';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
 
@@ -15,21 +28,27 @@ interface FeedbackOption {
   color?: string;
 }
 
-const feedbackTypes: FeedbackOption[] = [
-  { id: 'bug', label: 'Bug Report', icon: 'bug-report', color: '#f44336' },
-  { id: 'feature', label: 'Feature Request', icon: 'lightbulb', color: '#2196F3' },
-  { id: 'improvement', label: 'Improvement', icon: 'trending-up', color: '#4caf50' },
-  { id: 'other', label: 'Other', icon: 'help', color: '#9e9e9e' },
+// Built from the theme rather than hardcoded hex, so the option chips follow
+// light/dark like the rest of the console.
+const buildFeedbackTypes = (theme: AppTheme): FeedbackOption[] => [
+  { id: 'bug', label: 'Bug Report', icon: 'bug-report', color: theme.error },
+  { id: 'feature', label: 'Feature Request', icon: 'lightbulb', color: theme.info },
+  { id: 'improvement', label: 'Improvement', icon: 'trending-up', color: theme.success },
+  { id: 'other', label: 'Other', icon: 'help', color: theme.textDisabled },
 ];
 
-const priorities: FeedbackOption[] = [
-  { id: 'low', label: 'Low', icon: 'arrow-downward', color: '#9e9e9e' },
-  { id: 'medium', label: 'Medium', icon: 'remove', color: '#ffc107' },
-  { id: 'high', label: 'High', icon: 'arrow-upward', color: '#ff9800' },
-  { id: 'critical', label: 'Critical', icon: 'priority-high', color: '#f44336' },
+const buildPriorities = (theme: AppTheme): FeedbackOption[] => [
+  { id: 'low', label: 'Low', icon: 'arrow-downward', color: theme.textDisabled },
+  { id: 'medium', label: 'Medium', icon: 'remove', color: theme.warning },
+  { id: 'high', label: 'High', icon: 'arrow-upward', color: theme.warning },
+  { id: 'critical', label: 'Critical', icon: 'priority-high', color: theme.error },
 ];
 
 export default function AdminFeedbackScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const feedbackTypes = useMemo(() => buildFeedbackTypes(theme), [theme]);
+  const priorities = useMemo(() => buildPriorities(theme), [theme]);
   const router = useRouter();
   const [type, setType] = useState<FeedbackType>('bug');
   const [priority, setPriority] = useState<Priority>('medium');
@@ -40,30 +59,59 @@ export default function AdminFeedbackScreen() {
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a title for your feedback.');
+      Alert.alert('Title required', 'Please enter a short title for your feedback.');
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Error', 'Please provide a description.');
+      Alert.alert('Description required', 'Please describe what happened or what you need.');
       return;
     }
 
     setIsSubmitting(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setIsSubmitting(false);
-    Alert.alert(
-      'Feedback Submitted',
-      'Thank you for your feedback! Our team will review it shortly.',
-      [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
-      ]
-    );
+    try {
+      // Priority and the steps-to-reproduce field are not columns on
+      // feedback_reports, so they are folded into the description rather than
+      // silently dropped.
+      const body = [
+        description.trim(),
+        stepsToReproduce.trim() ? `\n\nSteps to reproduce:\n${stepsToReproduce.trim()}` : '',
+        `\n\n— Submitted from the admin console (type: ${type}, priority: ${priority})`,
+      ].join('');
+
+      const result =
+        type === 'feature'
+          ? await feedbackService.submitFeatureRequest({
+              title: title.trim(),
+              description: body,
+            })
+          : await feedbackService.submitBugReport({
+              subject: `[${type}] ${title.trim()}`,
+              description: body,
+            });
+
+      if (!result.success) {
+        Alert.alert(
+          'Not submitted',
+          result.error ?? 'Your feedback could not be sent. Please try again.'
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Feedback submitted',
+        type === 'feature'
+          ? 'Your feature request has been recorded.'
+          : 'Your report has been recorded and will appear in the feedback queue.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } catch (err) {
+      Alert.alert(
+        'Not submitted',
+        err instanceof Error ? err.message : 'Your feedback could not be sent.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -95,7 +143,7 @@ export default function AdminFeedbackScreen() {
                   <MaterialIcons 
                     name={item.icon} 
                     size={24} 
-                    color={type === item.id ? item.color : 'rgba(255,254,245,0.6)'} 
+                    color={type === item.id ? item.color : theme.textSecondary} 
                   />
                   <Text 
                     style={[
@@ -127,7 +175,7 @@ export default function AdminFeedbackScreen() {
                   <MaterialIcons 
                     name={item.icon} 
                     size={16} 
-                    color={priority === item.id ? item.color : 'rgba(255,254,245,0.5)'} 
+                    color={priority === item.id ? item.color : theme.textDisabled} 
                   />
                   <Text 
                     style={[
@@ -148,7 +196,7 @@ export default function AdminFeedbackScreen() {
             <TextInput
               style={styles.textInput}
               placeholder="Brief summary of your feedback"
-              placeholderTextColor="rgba(255,254,245,0.4)"
+              placeholderTextColor={theme.textDisabled}
               value={title}
               onChangeText={setTitle}
               maxLength={100}
@@ -162,7 +210,7 @@ export default function AdminFeedbackScreen() {
             <TextInput
               style={[styles.textInput, styles.textArea]}
               placeholder="Provide detailed information about your feedback..."
-              placeholderTextColor="rgba(255,254,245,0.4)"
+              placeholderTextColor={theme.textDisabled}
               value={description}
               onChangeText={setDescription}
               multiline
@@ -178,7 +226,7 @@ export default function AdminFeedbackScreen() {
               <TextInput
                 style={[styles.textInput, styles.textArea]}
                 placeholder="1. Go to...&#10;2. Click on...&#10;3. Observe that..."
-                placeholderTextColor="rgba(255,254,245,0.4)"
+                placeholderTextColor={theme.textDisabled}
                 value={stepsToReproduce}
                 onChangeText={setStepsToReproduce}
                 multiline
@@ -190,7 +238,7 @@ export default function AdminFeedbackScreen() {
 
           {/* Info Box */}
           <View style={styles.infoBox}>
-            <MaterialIcons name="info-outline" size={20} color="#00dc50" />
+            <MaterialIcons name="info-outline" size={20} color={theme.primary} />
             <Text style={styles.infoText}>
               Your feedback will be reviewed by the development team. You may be contacted 
               for additional information if needed.
@@ -207,7 +255,7 @@ export default function AdminFeedbackScreen() {
               <Text style={styles.submitButtonText}>Submitting...</Text>
             ) : (
               <>
-                <MaterialIcons name="send" size={20} color="#fffef5" />
+                <MaterialIcons name="send" size={20} color={theme.text} />
                 <Text style={styles.submitButtonText}>Submit Feedback</Text>
               </>
             )}
@@ -221,10 +269,11 @@ export default function AdminFeedbackScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   keyboardView: {
     flex: 1,
@@ -241,7 +290,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -253,7 +302,7 @@ const styles = StyleSheet.create({
   },
   typeCard: {
     width: '48%',
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -267,7 +316,7 @@ const styles = StyleSheet.create({
   typeLabel: {
     fontSize: 13,
     fontWeight: '500',
-    color: 'rgba(255,254,245,0.7)',
+    color: theme.textSecondary,
   },
   priorityRow: {
     flexDirection: 'row',
@@ -278,7 +327,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -292,16 +341,16 @@ const styles = StyleSheet.create({
   priorityLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   textInput: {
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     fontSize: 15,
-    color: '#fffef5',
+    color: theme.text,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
+    borderColor: theme.border,
   },
   textArea: {
     minHeight: 120,
@@ -309,7 +358,7 @@ const styles = StyleSheet.create({
   },
   charCount: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.4)',
+    color: theme.textDisabled,
     textAlign: 'right',
     marginTop: 4,
   },
@@ -326,14 +375,14 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 13,
-    color: 'rgba(255,254,245,0.7)',
+    color: theme.textSecondary,
     lineHeight: 18,
   },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
@@ -344,6 +393,6 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
 });

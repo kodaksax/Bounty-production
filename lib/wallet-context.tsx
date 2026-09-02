@@ -16,7 +16,7 @@ import { paymentService } from './services/payment-service';
 import { supabase } from './supabase';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
-import { isPhase2Bounty } from './utils/payment-architecture';
+import { isPhase2Bounty, isV3Bounty } from './utils/payment-architecture';
 import {
     getSecureJSON,
     migrateSecureStorageKeys,
@@ -28,6 +28,7 @@ import {
     safeUnsubscribe,
     SupabaseAuthSubscription,
 } from './utils/supabase-subscription';
+import type { SettlementState, SettlementTone } from './utils/settlement-vocabulary';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -61,6 +62,14 @@ export interface WalletTransactionRecord {
     gross_amount?: number; // Original amount before fees
     platform_fee?: number; // Fee amount deducted
     fee_percentage?: number; // Fee percentage applied
+    // What Stripe can prove about this row, computed server-side by
+    // GET /wallet/transactions. Carried through so the transaction list and
+    // detail modal render the real settlement status instead of the weakest
+    // fallback label. Absent on rows cached before settlement state shipped.
+    settlementState?: SettlementState;
+    settlementLabel?: string;
+    settlementDetail?: string;
+    settlementTone?: SettlementTone;
   };
   disputeStatus?: 'none' | 'pending' | 'resolved';
   escrowStatus?: 'funded' | 'pending' | 'released';
@@ -356,6 +365,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                       method: tx.details?.method,
                       status: tx.details?.status,
                       bounty_id: tx.details?.bounty_id,
+                      // Settlement fields (see WalletTransactionRecord.details).
+                      settlementState: tx.details?.settlementState,
+                      settlementLabel: tx.details?.settlementLabel,
+                      settlementDetail: tx.details?.settlementDetail,
+                      settlementTone: tx.details?.settlementTone,
                     },
                   };
                 }
@@ -820,12 +834,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // fallback amount source for legacy bounties that have no local escrow record.
         const bountyData = await bountyService.getById(bountyId);
 
-        // Phase 2 funds are held by Stripe, not the legacy wallet ledger.
-        // Their authoritative release is the bounty-payments edge function,
-        // which creates the Connect transfer with a Stripe idempotency key.
-        if (isPhase2Bounty(bountyData)) {
+        // Phase 2 and v3 funds are held by Stripe, not the legacy wallet
+        // ledger. Their authoritative release is the bounty-payments edge
+        // function, which creates the Connect transfer with a Stripe
+        // idempotency key. The server branches on the bounty's own
+        // payment_architecture_version.
+        if (isPhase2Bounty(bountyData) || isV3Bounty(bountyData)) {
           const result = await bountyPaymentsService.releaseBountyPayment(bountyIdStr, hunterId);
-          if (!result.released || result.status !== 'released') return false;
+          // v3 settles asynchronously: /release returns 'release_pending' and
+          // only the transfer.created webhook makes it 'released'. Treating
+          // that as failure would tell the poster the payout broke when it is
+          // simply not confirmed yet.
+          const acceptedRelease =
+            result.status === 'released' ||
+            (result.status === 'release_pending' && !!result.transferId);
+          if (!acceptedRelease) return false;
           try {
             const refreshToken = await getAccessToken();
             if (refreshToken) await refreshFromApi(refreshToken, { silent: true });

@@ -221,17 +221,24 @@ export function useAcceptRequest({
         }
       }
 
-      // Funnel: track that the bounty was successfully claimed/accepted.
-      // Emitted as soon as the server confirms the transition; conversation
-      // creation below is best-effort and shouldn't gate the funnel event.
+      // Canonical: the poster accepted this hunter's application and the
+      // server has confirmed the open -> in_progress transition. `work_started`
+      // is emitted immediately after — the same real state change also means
+      // work on the bounty has begun. Conversation creation below is
+      // best-effort and must not gate either event.
       try {
-        await analyticsService.trackEvent('bounty_claimed', {
-          bountyId: bountyId != null ? String(bountyId) : undefined,
-          requestId: String(requestId),
-          hunterId: hunterIdForConv ? String(hunterIdForConv) : undefined,
-          isForHonor: !!(request.bounty as any)?.is_for_honor,
+        const bountyIdStr = bountyId != null ? String(bountyId) : undefined
+        const acceptProps = {
+          role: 'poster' as const,
+          bounty_id: bountyIdStr,
+          application_id: String(requestId),
+          hunter_id: hunterIdForConv ? String(hunterIdForConv) : undefined,
+          is_for_honor: !!(request.bounty as any)?.is_for_honor,
           amount: (request.bounty as any)?.amount ?? undefined,
-        })
+        }
+        await analyticsService.trackEvent('application_accepted', acceptProps)
+        await analyticsService.trackEvent('work_started', acceptProps)
+
         // Also emit the existing `bounty_accepted` event name so downstream
         // dashboards that already query that name keep working.
         await analyticsService.trackEvent('bounty_accepted', {

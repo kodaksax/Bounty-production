@@ -14,6 +14,12 @@ process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY =
   process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || 'test-api-key-12345';
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
+// Node 18 provides Web Crypto through the built-in module but does not expose
+// it as a global, unlike newer Node versions and the Supabase Edge runtime.
+if (!globalThis.crypto) {
+  globalThis.crypto = require('crypto').webcrypto;
+}
+
 // Define __DEV__ global for React Native code
 global.__DEV__ = true;
 
@@ -169,6 +175,9 @@ jest.mock('react-native', () => {
     },
     Dimensions: {
       get: jest.fn().mockReturnValue({ width: 375, height: 812 }),
+    },
+    PanResponder: {
+      create: jest.fn().mockReturnValue({ panHandlers: {} }),
     },
     // Hook form of Dimensions.get('window'), kept in sync with the mock above.
     // Components that size themselves off the viewport (BottomNav,

@@ -26,6 +26,55 @@ function sanitizeText(input: unknown): string {
   return String(input).replace(/[<>]/g, '').trim().slice(0, 1000)
 }
 
+// How far back a "recent" succeeded deposit counts as the same logical deposit.
+// Matches the client idempotency window (lib/services/apple-pay-service.ts).
+const RECENT_DEPOSIT_WINDOW_SECONDS = 60
+
+/**
+ * Find a recent succeeded wallet-deposit PaymentIntent for this user and exact
+ * amount, so a re-tap does not create a second charge. Uses Stripe search,
+ * which is indexed with a short lag; a just-succeeded intent may not appear
+ * yet, which is why the client idempotency key remains the primary guard. Any
+ * search failure returns undefined so payments still work if search is down.
+ */
+async function findRecentSucceededDeposit(
+  stripe: Stripe,
+  userId: string,
+  amount: number,
+): Promise<{ id: string; client_secret: string } | undefined> {
+  // Quote characters would break out of the search query literal.
+  const safeUserId = userId.replace(/['"\\]/g, '')
+  if (!safeUserId) return undefined
+
+  const cutoff = Math.floor(Date.now() / 1000) - RECENT_DEPOSIT_WINDOW_SECONDS
+  try {
+    const query = `status:'succeeded' AND metadata['user_id']:'${safeUserId}' AND metadata['purpose']:'wallet_deposit'`
+    const results = await stripe.paymentIntents.search({ query, limit: 20 })
+    const match = results.data.find((pi) => pi.amount === amount && pi.created >= cutoff)
+    if (!match) return undefined
+
+    let clientSecret = match.client_secret
+    if (!clientSecret) {
+      try {
+        const retrieved = await stripe.paymentIntents.retrieve(match.id)
+        clientSecret = retrieved.client_secret
+      } catch (retrieveError) {
+        console.warn('[apple-pay edge fn] Failed to retrieve matched PaymentIntent client_secret:', retrieveError)
+        return undefined
+      }
+    }
+
+    if (!clientSecret) {
+      return undefined
+    }
+
+    return { id: match.id, client_secret: clientSecret }
+  } catch (error) {
+    console.warn('[apple-pay edge fn] Recent-deposit search failed; proceeding to create:', error)
+    return undefined
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -92,6 +141,22 @@ Deno.serve(async (req: Request) => {
 
       const sanitizedBountyId = bountyId ? sanitizeText(bountyId) : ''
       const sanitizedDescription = description ? sanitizeText(description) : 'BountyExpo Payment'
+
+      // Backstop against duplicate charges: if this user already has a recent
+      // succeeded wallet deposit for the exact same amount, return it instead
+      // of creating a second PaymentIntent. The client idempotency key is the
+      // fast, exact guard for rapid re-taps; this covers the slower cases it
+      // misses (a re-tap that crosses the client time bucket, or a retry from a
+      // new app session). Returning a succeeded intent is safe: the client
+      // confirm then reports the existing charge, and the wallet credit is
+      // idempotent per intent, so no second charge and no double credit.
+      const existing = await findRecentSucceededDeposit(stripe, user.id, validatedAmount)
+      if (existing) {
+        return jsonResponse({
+          clientSecret: existing.client_secret,
+          paymentIntentId: existing.id,
+        })
+      }
 
       const paymentIntent = await stripe.paymentIntents.create({
         amount: validatedAmount,

@@ -287,3 +287,23 @@ describe('connect edge function — route wiring', () => {
     expect(balanceRoute).toContain('stripe.balance.retrieve');
   });
 });
+
+describe('connect edge function — create-account-link capability regression', () => {
+  test('requests both capabilities for new accounts and backfills legacy accounts before creating the account link', () => {
+    const createStart = connectSource.indexOf('stripe.accounts.create({');
+    const updateStart = connectSource.indexOf('stripe.accounts.update(accountId, {');
+    const linkStart = connectSource.indexOf('stripe.accountLinks.create({');
+
+    expect(createStart).toBeGreaterThan(-1);
+    expect(updateStart).toBeGreaterThan(-1);
+    expect(linkStart).toBeGreaterThan(-1);
+    expect(updateStart).toBeLessThan(linkStart);
+
+    const createBlock = connectSource.slice(createStart, updateStart);
+    expect(createBlock).toContain('card_payments: { requested: true }');
+    expect(createBlock).toContain('transfers: { requested: true }');
+
+    const backfillBlock = connectSource.slice(updateStart, linkStart);
+    expect(backfillBlock).toContain('card_payments: { requested: true }');
+  });
+});

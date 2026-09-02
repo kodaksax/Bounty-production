@@ -147,7 +147,57 @@ serve(async (req: Request) => {
     }
 
     const data = await rpcResp.json().catch(() => null);
-    return new Response(JSON.stringify({ success: true, data }), { status: 200 });
+
+    // Payout readiness travels back with the acceptance so the hunter can be
+    // prompted to finish Connect onboarding BEFORE they start work, rather than
+    // discovering after delivery that the money they earned cannot reach a bank
+    // account. On bounty 53656a8b ("Walk my cat") nobody was told at any point.
+    //
+    // Advisory only — ADR 0001 §4.3 (option B3) deliberately does not block
+    // acceptance on this. Blocking would strand 313 of 315 profiles, and a v1
+    // balance credit is recoverable the moment the hunter onboards. A lookup
+    // failure must likewise never fail an otherwise-successful acceptance.
+    let hunterPayoutReady: boolean | null = null;
+    try {
+      const acceptedRow = Array.isArray(data) ? data[0] : data;
+      const hunterId: string | undefined =
+        acceptedRow?.hunter_id ?? acceptedRow?.accepted_by ?? undefined;
+      if (hunterId) {
+        const profileUrl =
+          `${baseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(hunterId)}` +
+          `&select=stripe_connect_account_id,stripe_connect_payouts_enabled`;
+        const profileResp = await fetch(profileUrl, {
+          headers: {
+            apikey: SUPABASE_SERVICE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          },
+        });
+        if (profileResp.ok) {
+          const rows: any = await profileResp.json().catch(() => null);
+          const hp = Array.isArray(rows) ? rows[0] : null;
+          hunterPayoutReady =
+            Boolean(hp?.stripe_connect_account_id) &&
+            hp?.stripe_connect_payouts_enabled === true;
+        }
+      }
+    } catch (readinessError) {
+      console.warn('accept-bounty-request: payout readiness lookup failed', readinessError);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data,
+        hunterPayoutReady,
+        ...(hunterPayoutReady === false
+          ? {
+              hunterPayoutPrompt:
+                'Finish payout setup to receive money for this bounty in your bank account.',
+            }
+          : {}),
+      }),
+      { status: 200 }
+    );
   } catch (e) {
     console.error('Unhandled error in accept-bounty-request', e);
     const message = e instanceof Error ? e.message : String(e);

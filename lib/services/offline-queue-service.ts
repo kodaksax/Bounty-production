@@ -36,6 +36,7 @@ export interface MessageQueueData {
   senderId: string;
   tempId?: string; // Temporary ID for optimistic UI
   isEncrypted?: boolean; // optional flag indicating queued payload is encrypted
+  mediaUrl?: string | null; // public URL of an attachment uploaded before going offline
 }
 
 const QUEUE_KEY = 'offline-queue-v1';
@@ -365,7 +366,12 @@ class OfflineQueueService {
     const data = item.data as MessageQueueData;
     // Import message service dynamically to avoid circular dependency
     const { messageService } = await import('./message-service');
-    await messageService.processQueuedMessage(data.conversationId, data.text, data.senderId);
+    await messageService.processQueuedMessage(
+      data.conversationId,
+      data.text,
+      data.senderId,
+      data.mediaUrl
+    );
   }
 
   /**

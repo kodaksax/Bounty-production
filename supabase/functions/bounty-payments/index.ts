@@ -20,12 +20,12 @@
 // Local type shims so `tsc --noEmit` (Node tooling) doesn't error on Deno
 // runtime imports/globals. Intentionally loose so the repo can typecheck
 // without pulling runtime deps into the monorepo build.
-declare const Deno: any;
-
 // @ts-ignore: Allow runtime URL import for Deno/edge function.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // @ts-ignore: Allow runtime npm import for Deno/edge function.
 import Stripe from 'npm:stripe@14';
+
+declare const Deno: any;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -63,6 +63,10 @@ function sanitizeText(input: unknown): string {
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/;
   return emailRegex.test(email);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Resolve (or lazily create) the poster's Stripe Customer. Mirrors the exact
@@ -270,6 +274,195 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      // ───────────────────────────────────────────────────────────────────
+      // v3 (payment_architecture_version = 3) — per-bounty manual-capture
+      // PaymentIntent. Routing is decided server-side by fn_should_use_v3,
+      // which defaults to off and, when on, is cohort/percentage gated.
+      //
+      // Everything below this block is the untouched v1/v2 path: a poster who
+      // is not in the v3 cohort takes exactly the code that ran before.
+      //
+      // NOTE ON capture_method: the v2 path deliberately uses 'automatic'
+      // because a manual-capture authorization is auto-canceled by Stripe
+      // after ~7 days. v3 accepts that window by design: no completed bounty
+      // has ever taken longer than 2 days (n=18, p90 0.47d), and an expired
+      // authorization is handled as a first-class state (bounty_v3_funding
+      // 'expired' + needs_reauthorization) rather than as a lost payment.
+      // ───────────────────────────────────────────────────────────────────
+      let useV3 = false;
+      try {
+        const { data: v3Flag, error: v3FlagErr } = (await withDbTimeout(
+          supabaseAdmin.rpc('fn_should_use_v3', { p_user_id: userId })
+        )) as any;
+        if (v3FlagErr) {
+          // Fail closed: an unreadable flag must never silently reroute money.
+          console.error('[bounty-payments] fn_should_use_v3 failed; defaulting to v1/v2', {
+            bountyId,
+            userId,
+            v3FlagErr,
+          });
+        } else {
+          useV3 = v3Flag === true;
+        }
+      } catch (flagErr) {
+        console.error('[bounty-payments] fn_should_use_v3 threw; defaulting to v1/v2', {
+          bountyId,
+          flagErr,
+        });
+      }
+
+      if (useV3) {
+        const v3TransferGroup = `bounty_${bountyId}`;
+
+        // Idempotency: reuse a live authorization rather than creating a
+        // second hold on the poster's card.
+        const { data: existingV3 } = (await withDbTimeout(
+          supabaseAdmin
+            .from('bounty_v3_funding')
+            .select('bounty_id, state, stripe_payment_intent_id, amount_cents')
+            .eq('bounty_id', bountyId)
+            .maybeSingle()
+        )) as any;
+
+        if (
+          existingV3 &&
+          ['authorizing', 'authorized'].includes(existingV3.state) &&
+          existingV3.stripe_payment_intent_id
+        ) {
+          try {
+            const existingPi = await stripe.paymentIntents.retrieve(
+              existingV3.stripe_payment_intent_id
+            );
+            if (!['canceled', 'succeeded'].includes(existingPi.status)) {
+              return jsonResponse({
+                bountyPaymentId: bountyId,
+                paymentIntentId: existingPi.id,
+                clientSecret: existingPi.client_secret,
+                status: existingV3.state,
+                amount,
+                architectureVersion: 3,
+                reused: true,
+              });
+            }
+          } catch (piErr: any) {
+            if (piErr?.code !== 'resource_missing') throw piErr;
+          }
+        }
+
+        const v3Customer = await resolveStripeCustomerForUser({
+          supabaseAdmin,
+          stripe,
+          userId,
+          userEmail,
+        });
+        if (v3Customer.error || !v3Customer.customerId) {
+          return jsonResponse(
+            { error: v3Customer.error ?? 'Unable to create customer profile' },
+            v3Customer.status ?? 400
+          );
+        }
+
+        const v3PaymentIntent = await stripe.paymentIntents.create(
+          {
+            amount: amountCents,
+            currency: 'usd',
+            customer: v3Customer.customerId,
+            capture_method: 'manual',
+            automatic_payment_methods: { enabled: true },
+            transfer_group: v3TransferGroup,
+            metadata: {
+              user_id: userId,
+              bounty_id: bountyId,
+              purpose: 'bounty_escrow_v3',
+              payment_architecture_version: '3',
+            },
+          },
+          // Stripe-level idempotency: a retried publish cannot create a
+          // second authorization for the same bounty.
+          { idempotencyKey: `v3_bounty_authorize_${bountyId}` }
+        );
+
+        // Roll the authorization back if we cannot record it. An unrecorded
+        // hold on a real card is the one outcome worth failing loudly for.
+        const rollbackV3 = async (reason: string, detail: unknown) => {
+          console.error(`[bounty-payments] v3 ${reason}`, { bountyId, detail });
+          await stripe.paymentIntents.cancel(v3PaymentIntent.id).catch(() => {});
+        };
+
+        const { error: fundErr } = (await withDbTimeout(
+          supabaseAdmin.from('bounty_v3_funding').upsert(
+            {
+              bounty_id: bountyId,
+              state: 'authorizing',
+              stripe_payment_intent_id: v3PaymentIntent.id,
+              transfer_group: v3TransferGroup,
+              amount_cents: amountCents,
+              last_error_code: null,
+              last_error_message: null,
+              needs_reauthorization: false,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'bounty_id' }
+          )
+        )) as any;
+        if (fundErr) {
+          await rollbackV3('funding row write failed', fundErr);
+          return jsonResponse(
+            { error: 'Failed to record bounty payment. No charge was made.' },
+            500
+          );
+        }
+
+        // The v3 ledger row. v3 writes neither bounty_payments (retired) nor
+        // wallet_transactions (v1-only).
+        const { error: ledgerErr } = (await withDbTimeout(
+          supabaseAdmin.from('ledger_entries').insert({
+            bounty_id: bountyId,
+            transfer_group: v3TransferGroup,
+            leg: 'payment',
+            app_state: 'requested',
+            stripe_state: 'none',
+            amount_cents: amountCents,
+            currency: 'usd',
+            stripe_payment_intent_id: v3PaymentIntent.id,
+            user_id: userId,
+            metadata: {
+              source: 'bounty_payments_v3_create',
+              payment_architecture_version: 3,
+            },
+          })
+        )) as any;
+        if (ledgerErr) {
+          await rollbackV3('ledger write failed', ledgerErr);
+          return jsonResponse(
+            { error: 'Failed to record bounty payment. No charge was made.' },
+            500
+          );
+        }
+
+        const { error: v3VerErr } = (await withDbTimeout(
+          supabaseAdmin
+            .from('bounties')
+            .update({ payment_architecture_version: 3 })
+            .eq('id', bountyId)
+        )) as any;
+        if (v3VerErr) {
+          console.error('[bounty-payments] Failed to set payment_architecture_version=3', {
+            bountyId,
+            v3VerErr,
+          });
+        }
+
+        return jsonResponse({
+          bountyPaymentId: bountyId,
+          paymentIntentId: v3PaymentIntent.id,
+          clientSecret: v3PaymentIntent.client_secret,
+          status: 'authorizing',
+          amount,
+          architectureVersion: 3,
+        });
+      }
+
       // Idempotency: if an active (non-canceled/failed) payment row already
       // exists for this bounty, return its existing PaymentIntent's
       // client_secret instead of creating a duplicate PI.
@@ -332,24 +525,26 @@ Deno.serve(async (req: Request) => {
       // (tracked via bounty_payments.status) until release. Automatic capture
       // is used because real bounties routinely stay open far longer than the
       // 7-day manual-capture auto-cancel window.
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amountCents,
-        currency: 'usd',
-        customer: customerId,
-        capture_method: 'automatic',
-        automatic_payment_methods: { enabled: true },
-        transfer_group: transferGroup,
-        metadata: {
-          user_id: userId,
-          bounty_id: bountyId,
-          purpose: 'bounty_escrow',
+      const paymentIntent = await stripe.paymentIntents.create(
+        {
+          amount: amountCents,
+          currency: 'usd',
+          customer: customerId,
+          capture_method: 'automatic',
+          automatic_payment_methods: { enabled: true },
+          transfer_group: transferGroup,
+          metadata: {
+            user_id: userId,
+            bounty_id: bountyId,
+            purpose: 'bounty_escrow',
+          },
         },
-      });
+        { idempotencyKey: `bounty_payment_create_${bountyId}_${amountCents}` }
+      );
 
-      // Persist the bounty_payments row. There is no unique constraint on
-      // bounty_id (only a plain index), so `.upsert(onConflict:'bounty_id')`
-      // would error. Instead: UPDATE the existing (canceled/failed) row by id,
-      // or INSERT a fresh one.
+      // Persist the bounty_payments row. Existing terminal rows are updated by
+      // id; fresh rows are inserted. The database also enforces one active row
+      // per bounty, so insert conflicts are treated as in-flight replays below.
       const rowPatch = {
         bounty_id: bountyId,
         poster_id: userId,
@@ -391,6 +586,64 @@ Deno.serve(async (req: Request) => {
           supabaseAdmin.from('bounty_payments').insert(rowPatch).select('id').maybeSingle()
         )) as any;
         if (insErr || !inserted) {
+          if ((insErr as { code?: string } | null)?.code === '23505') {
+            let winner: any = null;
+            for (const waitMs of [0, 50, 150]) {
+              if (waitMs > 0) await delay(waitMs);
+
+              const { data: byPaymentIntent } = (await withDbTimeout(
+                supabaseAdmin
+                  .from('bounty_payments')
+                  .select('id, stripe_payment_intent_id, status, amount')
+                  .eq('stripe_payment_intent_id', paymentIntent.id)
+                  .maybeSingle()
+              )) as any;
+
+              if (byPaymentIntent?.id) {
+                winner = byPaymentIntent;
+                break;
+              }
+
+              const { data: byBounty } = (await withDbTimeout(
+                supabaseAdmin
+                  .from('bounty_payments')
+                  .select('id, stripe_payment_intent_id, status, amount')
+                  .eq('bounty_id', bountyId)
+                  .in('status', ACTIVE_BP_STATUSES)
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle()
+              )) as any;
+
+              if (byBounty?.id) {
+                winner = byBounty;
+                break;
+              }
+            }
+
+            if (winner?.id) {
+              return jsonResponse({
+                bountyPaymentId: winner.id,
+                paymentIntentId: winner.stripe_payment_intent_id ?? paymentIntent.id,
+                clientSecret: paymentIntent.client_secret,
+                status: winner.status,
+                amount: Number(winner.amount),
+                reused: true,
+              });
+            }
+
+            return jsonResponse(
+              {
+                error:
+                  'Payment recording is already in progress for this bounty. Please retry shortly.',
+                code: 'payment_record_conflict_in_flight',
+                status: 'pending_payment',
+                reused: true,
+              },
+              409
+            );
+          }
+
           await stripe.paymentIntents.cancel(paymentIntent.id).catch(() => {});
           return jsonResponse(
             { error: 'Failed to record bounty payment. No charge was made.' },
@@ -434,6 +687,410 @@ Deno.serve(async (req: Request) => {
       const hunterIdInput = sanitizeText(body?.hunterId ?? body?.hunter_id);
       if (!bountyId) {
         return jsonResponse({ error: 'bountyId is required.' }, 400);
+      }
+
+      // ───────────────────────────────────────────────────────────────────
+      // v3 release — capture the authorization, then Transfer to the hunter.
+      //
+      // Must run before the bounty_payments lookup below: a v3 bounty has no
+      // bounty_payments row (that table is retired for v3), so the v2 path
+      // would return 404 for every v3 release.
+      // ───────────────────────────────────────────────────────────────────
+      const { data: v3Funding } = (await withDbTimeout(
+        supabaseAdmin.from('bounty_v3_funding').select('*').eq('bounty_id', bountyId).maybeSingle()
+      )) as any;
+
+      if (v3Funding) {
+        const notifyV3 = async (
+          recipientId: string,
+          type: string,
+          title: string,
+          bodyText: string
+        ) => {
+          try {
+            await supabaseAdmin.from('notifications').insert({
+              user_id: recipientId,
+              type,
+              title,
+              body: bodyText,
+              category: 'payments',
+              data: { bountyId, type },
+            });
+            await supabaseAdmin.from('notifications_outbox').insert({
+              recipients: [recipientId],
+              title,
+              body: bodyText,
+              data: { bountyId, type, skipInApp: true },
+              status: 'pending',
+            });
+          } catch (notifyErr) {
+            console.error('[bounty-payments] v3 notify failed (non-fatal)', {
+              bountyId,
+              type,
+              notifyErr,
+            });
+          }
+        };
+
+        // Idempotency. Only transfer.created (reversed=false) makes a v3
+        // bounty released; 'capturing' is a request awaiting confirmation.
+        if (v3Funding.state === 'released' && v3Funding.stripe_transfer_id) {
+          return jsonResponse({
+            released: true,
+            transferId: v3Funding.stripe_transfer_id,
+            status: 'released',
+            architectureVersion: 3,
+            reused: true,
+          });
+        }
+        if (v3Funding.state === 'capturing' && v3Funding.stripe_transfer_id) {
+          return jsonResponse({
+            released: false,
+            transferId: v3Funding.stripe_transfer_id,
+            status: 'release_pending',
+            architectureVersion: 3,
+            reused: true,
+          });
+        }
+
+        const { data: v3Bounty } = (await withDbTimeout(
+          supabaseAdmin
+            .from('bounties')
+            .select('id, user_id, poster_id, accepted_by, amount')
+            .eq('id', bountyId)
+            .maybeSingle()
+        )) as any;
+        if (!v3Bounty) {
+          return jsonResponse({ error: 'Bounty not found.', code: 'not_found' }, 404);
+        }
+        const v3PosterId = v3Bounty.user_id ?? v3Bounty.poster_id;
+        if (v3PosterId !== userId) {
+          return jsonResponse(
+            { error: 'Only the poster can release funds.', code: 'not_poster' },
+            403
+          );
+        }
+
+        if (
+          !['authorized', 'awaiting_hunter_onboarding', 'capture_failed'].includes(v3Funding.state)
+        ) {
+          return jsonResponse(
+            {
+              error: `Cannot release a bounty in funding state "${v3Funding.state}".`,
+              code: 'invalid_funding_state',
+            },
+            409
+          );
+        }
+
+        // Scope: capture only once the work has actually been approved.
+        const { data: v3Submission } = (await withDbTimeout(
+          supabaseAdmin
+            .from('completion_submissions')
+            .select('id, status')
+            .eq('bounty_id', bountyId)
+            .eq('status', 'approved')
+            .limit(1)
+            .maybeSingle()
+        )) as any;
+        if (!v3Submission) {
+          return jsonResponse(
+            { error: 'This bounty has no approved completion yet.', code: 'not_approved' },
+            409
+          );
+        }
+
+        const v3HunterId = v3Bounty.accepted_by;
+        if (!v3HunterId) {
+          return jsonResponse(
+            { error: 'This bounty has no assigned hunter.', code: 'no_hunter' },
+            409
+          );
+        }
+
+        const { data: v3Hunter } = (await withDbTimeout(
+          supabaseAdmin
+            .from('profiles')
+            .select('id, stripe_connect_account_id')
+            .eq('id', v3HunterId)
+            .maybeSingle()
+        )) as any;
+
+        // Hold, never capture, when the hunter cannot receive a payout.
+        const holdForOnboarding = async (reasonCode: string, reasonMessage: string) => {
+          await withDbTimeout(
+            supabaseAdmin
+              .from('bounty_v3_funding')
+              .update({
+                state: 'awaiting_hunter_onboarding',
+                hunter_id: v3HunterId,
+                last_error_code: reasonCode,
+                last_error_message: reasonMessage,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('bounty_id', bountyId)
+          );
+          await notifyV3(
+            v3HunterId,
+            'payout_setup_required',
+            'Finish your payout setup to get paid',
+            'Your work was approved. Finish your payout setup and the payment will be released to you — nothing is lost.'
+          );
+          await notifyV3(
+            v3PosterId,
+            'release_waiting_on_hunter',
+            'Payment is waiting on the hunter',
+            'You approved the work. The payment releases once the hunter finishes their payout setup. Your card has not been charged yet.'
+          );
+        };
+
+        if (!v3Hunter?.stripe_connect_account_id) {
+          await holdForOnboarding(
+            'hunter_not_onboarded',
+            'The hunter has not started Stripe Connect onboarding.'
+          );
+          return jsonResponse(
+            {
+              released: false,
+              status: 'awaiting_hunter_onboarding',
+              architectureVersion: 3,
+              error: 'The hunter has not set up payouts yet. They have been notified.',
+              code: 'hunter_not_onboarded',
+            },
+            409
+          );
+        }
+
+        // The exact gate /connect/transfer uses before moving money: a LIVE
+        // Stripe read, not profiles.stripe_connect_payouts_enabled. The cached
+        // columns are demonstrably stale — Stripe reports 5 of 9 accounts
+        // payouts-enabled where the profile columns report 2.
+        let v3Account: any;
+        try {
+          v3Account = await stripe.accounts.retrieve(v3Hunter.stripe_connect_account_id);
+        } catch (acctErr) {
+          console.error('[bounty-payments] v3 could not retrieve connected account', {
+            bountyId,
+            acctErr,
+          });
+          return jsonResponse(
+            {
+              error:
+                'We could not reach Stripe to check the hunter payout status. No funds have moved — please try again.',
+              code: 'stripe_unavailable',
+            },
+            503
+          );
+        }
+        if (!v3Account?.payouts_enabled) {
+          await holdForOnboarding(
+            'payouts_disabled',
+            `Payouts are not enabled on the hunter account (${
+              v3Account?.requirements?.disabled_reason ?? 'unknown reason'
+            }).`
+          );
+          return jsonResponse(
+            {
+              released: false,
+              status: 'awaiting_hunter_onboarding',
+              architectureVersion: 3,
+              error: 'The hunter cannot receive payouts yet. They have been notified.',
+              code: 'payouts_disabled',
+            },
+            409
+          );
+        }
+
+        const v3AmountCents = Number(v3Funding.amount_cents);
+        // Integer cents throughout — v3 removes the float rounding surface
+        // that v2's dollar arithmetic carries.
+        const v3FeeCents = Math.round((v3AmountCents * PLATFORM_FEE_PERCENT) / 100);
+        const v3HunterCents = v3AmountCents - v3FeeCents;
+        if (v3HunterCents <= 0) {
+          return jsonResponse(
+            { error: 'Computed hunter payout is not positive.', code: 'invalid_payout' },
+            400
+          );
+        }
+
+        const failCapture = async (code: string, message: string, httpStatus: number) => {
+          await withDbTimeout(
+            supabaseAdmin
+              .from('bounty_v3_funding')
+              .update({
+                state: 'capture_failed',
+                hunter_id: v3HunterId,
+                last_error_code: code,
+                last_error_message: message,
+                needs_reauthorization: code === 'capture_failed_expired',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('bounty_id', bountyId)
+          );
+          await supabaseAdmin
+            .from('ledger_entries')
+            .update({
+              app_state: 'failed',
+              stripe_state: 'failed',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('bounty_id', bountyId)
+            .eq('leg', 'capture_release');
+          // The poster gets a retry path; the hunter is told it is delayed,
+          // not lost. Neither party is left with a silently stuck bounty.
+          await notifyV3(
+            v3PosterId,
+            'release_failed',
+            'Payment could not be completed',
+            'We could not charge your card to pay this bounty. Open the bounty to try again — the hunter has been told the payment is delayed, not cancelled.'
+          );
+          await notifyV3(
+            v3HunterId,
+            'release_delayed',
+            'Your payment is delayed',
+            'There was a problem taking payment from the poster. Your payment is delayed, not lost — we have asked them to retry.'
+          );
+          return jsonResponse({ error: message, code, architectureVersion: 3 }, httpStatus);
+        };
+
+        // 1. Capture the full authorized amount.
+        let v3Captured: any;
+        try {
+          v3Captured = await stripe.paymentIntents.capture(
+            v3Funding.stripe_payment_intent_id,
+            {},
+            { idempotencyKey: `v3_capture_${bountyId}` }
+          );
+        } catch (capErr: any) {
+          const expired =
+            capErr?.code === 'payment_intent_unexpected_state' ||
+            capErr?.raw?.code === 'payment_intent_unexpected_state';
+          return await failCapture(
+            expired ? 'capture_failed_expired' : 'capture_failed',
+            expired
+              ? 'The card authorization for this bounty expired and could not be charged.'
+              : (capErr?.message ?? 'The payment could not be captured.'),
+            409
+          );
+        }
+
+        const v3ChargeId =
+          typeof v3Captured?.latest_charge === 'string'
+            ? v3Captured.latest_charge
+            : (v3Captured?.latest_charge?.id ?? null);
+        if (v3Captured?.status !== 'succeeded' || !v3ChargeId) {
+          return await failCapture(
+            'capture_not_settled',
+            'The payment was not captured successfully.',
+            409
+          );
+        }
+
+        await withDbTimeout(
+          supabaseAdmin
+            .from('bounty_v3_funding')
+            .update({
+              stripe_charge_id: v3ChargeId,
+              captured_at: new Date().toISOString(),
+              hunter_id: v3HunterId,
+              platform_fee_cents: v3FeeCents,
+              hunter_amount_cents: v3HunterCents,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('bounty_id', bountyId)
+        );
+
+        // 2. Transfer the after-fee amount, drawn from this exact charge and
+        //    carrying the bounty's transfer_group.
+        let v3Transfer: any;
+        try {
+          v3Transfer = await stripe.transfers.create(
+            {
+              amount: v3HunterCents,
+              currency: 'usd',
+              destination: v3Hunter.stripe_connect_account_id,
+              source_transaction: v3ChargeId,
+              transfer_group: v3Funding.transfer_group ?? `bounty_${bountyId}`,
+              metadata: {
+                bounty_id: bountyId,
+                hunter_id: v3HunterId,
+                purpose: 'bounty_release_v3',
+                payment_architecture_version: '3',
+              },
+            },
+            { idempotencyKey: `v3_release_${bountyId}` }
+          );
+        } catch (trErr: any) {
+          // Captured but not transferred: the money is sitting on the platform
+          // balance, so this must be loud rather than silent.
+          console.error('[bounty-payments] v3 transfer failed AFTER capture', {
+            bountyId,
+            chargeId: v3ChargeId,
+            trErr,
+          });
+          return await failCapture(
+            'transfer_failed_after_capture',
+            trErr?.message ?? 'The payment was captured but could not be sent to the hunter.',
+            502
+          );
+        }
+
+        // 3. Ledger. app_state='succeeded' because Stripe accepted both
+        //    requests. stripe_state stays 'pending' — only transfer.created
+        //    with reversed=false promotes it to 'confirmed'. A 200 from the
+        //    API is never proof; this is the rule v1 withdrawals enforce.
+        const { error: v3RelLedgerErr } = (await withDbTimeout(
+          supabaseAdmin.from('ledger_entries').insert({
+            bounty_id: bountyId,
+            transfer_group: v3Funding.transfer_group ?? `bounty_${bountyId}`,
+            leg: 'capture_release',
+            app_state: 'succeeded',
+            stripe_state: 'pending',
+            amount_cents: v3HunterCents,
+            currency: 'usd',
+            stripe_payment_intent_id: v3Funding.stripe_payment_intent_id,
+            stripe_charge_id: v3ChargeId,
+            stripe_transfer_id: v3Transfer.id,
+            user_id: v3HunterId,
+            metadata: {
+              source: 'bounty_payments_v3_release',
+              payment_architecture_version: 3,
+              platform_fee_cents: v3FeeCents,
+              gross_amount_cents: v3AmountCents,
+            },
+          })
+        )) as any;
+        if (v3RelLedgerErr) {
+          console.error('[bounty-payments] v3 release ledger insert failed', {
+            bountyId,
+            transferId: v3Transfer.id,
+            v3RelLedgerErr,
+          });
+        }
+
+        await withDbTimeout(
+          supabaseAdmin
+            .from('bounty_v3_funding')
+            .update({
+              state: 'capturing',
+              stripe_transfer_id: v3Transfer.id,
+              last_error_code: null,
+              last_error_message: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('bounty_id', bountyId)
+        );
+
+        return jsonResponse({
+          released: false,
+          transferId: v3Transfer.id,
+          hunterId: v3HunterId,
+          amount: v3AmountCents / 100,
+          platformFee: v3FeeCents / 100,
+          hunterAmount: v3HunterCents / 100,
+          status: 'release_pending',
+          architectureVersion: 3,
+        });
       }
 
       const { data: bp, error: bpErr } = (await withDbTimeout(

@@ -1,7 +1,7 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
-import { isPhase2Bounty } from 'lib/utils/payment-architecture';
-import type { BountyDispute, LocalDisputeEvidence } from '../types';
+import { isPhase2Bounty, isStripeNativeBounty, isV3Bounty } from 'lib/utils/payment-architecture';
+import type { BountyDispute, DisputeEvidence, LocalDisputeEvidence } from '../types';
 import { analyticsService } from './analytics-service';
 import { bountyPaymentsService } from './bounty-payments-service';
 import { bountyService } from './bounty-service';
@@ -114,6 +114,28 @@ function normalizeDisputeIdParam(id: string | number): number | string {
 /**
  * Service for handling bounty dispute lifecycle
  */
+
+/**
+ * `bounty_disputes.evidence_json` is a text column, and these mappers used a
+ * bare `JSON.parse` on it. A single malformed row would throw and blank the
+ * whole dispute list rather than degrading that one record, so parsing is
+ * isolated per row.
+ */
+function parseEvidenceJson(raw: unknown): DisputeEvidence[] | undefined {
+  if (typeof raw !== 'string' || raw.trim() === '') return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    // The column has held both a bare array and, in older rows, a single
+    // object. Anything else is not usable evidence.
+    if (Array.isArray(parsed)) return parsed as DisputeEvidence[];
+    if (parsed && typeof parsed === 'object') return [parsed as DisputeEvidence];
+    return undefined;
+  } catch {
+    logger.error('Unparseable evidence_json on a dispute row; leaving it undefined');
+    return undefined;
+  }
+}
+
 export const disputeService = {
   /**
    * Create a dispute from a cancellation request
@@ -214,13 +236,14 @@ export const disputeService = {
       // and the cancellation has been linked, so we only count fully-formed
       // disputes (not rolled-back orphan inserts).
       try {
-        await analyticsService.trackEvent('dispute_opened', {
-          disputeId: String(data.id),
-          bountyId: String(data.bounty_id),
-          cancellationId: String(cancellationId),
-          initiatorId: String(initiatorId),
-          hasEvidence: !!(evidence && evidence.length > 0),
-          evidenceCount: evidence?.length || 0,
+        await analyticsService.trackEvent('dispute_started', {
+          dispute_id: String(data.id),
+          bounty_id: String(data.bounty_id),
+          cancellation_id: String(cancellationId),
+          initiator_id: String(initiatorId),
+          stage: 'cancellation',
+          has_evidence: !!(evidence && evidence.length > 0),
+          evidence_count: evidence?.length || 0,
         });
       } catch {
         /* analytics is best-effort */
@@ -566,6 +589,7 @@ export const disputeService = {
       // either the legacy payment_intent_id field or bounty_payments, never
       // both).
       const isPhase2 = !!bounty && !isHonorBounty && isPhase2Bounty(bounty);
+      const isStripeNative = !!bounty && !isHonorBounty && isStripeNativeBounty(bounty);
 
       // Map the winner to the new application-level resolution status and
       // atomically release the balance_on_hold via fn_close_dispute_hold.
@@ -584,7 +608,7 @@ export const disputeService = {
       // would cause, which would double-charge the poster (once via Stripe, once via wallet).
       // The dispute row's status is corrected to resolvedStatus by the update() call below.
       const holdReleaseStatus =
-        winner === 'hunter' && (hasStripeEscrow || isPhase2) ? 'resolved' : resolvedStatus;
+        winner === 'hunter' && (hasStripeEscrow || isStripeNative) ? 'resolved' : resolvedStatus;
 
       const _pDisputeId = normalizeDisputeIdParam(disputeId);
       const { error: holdRpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
@@ -626,7 +650,7 @@ export const disputeService = {
           resolvedStatus,
           isHonorBounty: !!isHonorBounty,
           hasStripeEscrow: !!hasStripeEscrow,
-          paymentArchitectureVersion: isPhase2 ? 2 : 1,
+          paymentArchitectureVersion: isV3Bounty(bounty) ? 3 : isPhase2 ? 2 : 1,
         });
       } catch {
         /* analytics is best-effort */
@@ -646,7 +670,7 @@ export const disputeService = {
         try {
           await analyticsService.trackEvent('payment_architecture_routed', {
             bountyId: String(dispute.bountyId),
-            version: isPhase2 ? 2 : 1,
+            version: isV3Bounty(bounty) ? 3 : isPhase2 ? 2 : 1,
             context: 'dispute_resolution',
           });
         } catch {
@@ -662,7 +686,7 @@ export const disputeService = {
                 escrowActionExecuted = true;
                 await analyticsService.trackEvent('escrow_released', {
                   bountyId: String(dispute.bountyId),
-                  architecture: 'v2',
+                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   via: 'dispute_resolution',
                 });
               } catch (releaseErr) {
@@ -673,7 +697,7 @@ export const disputeService = {
                 });
                 await analyticsService.trackEvent('payment_failed', {
                   bountyId: String(dispute.bountyId),
-                  architecture: 'v2',
+                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   stage: 'dispute_release',
                 });
               }
@@ -683,7 +707,7 @@ export const disputeService = {
                 escrowActionExecuted = true;
                 await analyticsService.trackEvent('escrow_refunded', {
                   bountyId: String(dispute.bountyId),
-                  architecture: 'v2',
+                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   via: 'dispute_resolution',
                 });
               } catch (refundErr) {
@@ -694,7 +718,7 @@ export const disputeService = {
                 });
                 await analyticsService.trackEvent('payment_failed', {
                   bountyId: String(dispute.bountyId),
-                  architecture: 'v2',
+                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   stage: 'dispute_cancel',
                 });
               }
@@ -910,7 +934,7 @@ export const disputeService = {
         bountyId: String(item.bounty_id),
         initiatorId: item.initiator_id,
         reason: item.reason,
-        evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
+        evidence: parseEvidenceJson(item.evidence_json),
         status: item.status,
         resolution: item.resolution,
         winner: item.winner || null,
@@ -937,11 +961,15 @@ export const disputeService = {
         throw new Error('Supabase not configured');
       }
 
+      // Bounded: this backs the admin dispute queue and previously had no
+      // LIMIT. Oldest-first is deliberate — the queue is worked in age order,
+      // so a cap keeps the most overdue disputes rather than dropping them.
       const { data, error } = await supabase
         .from('bounty_disputes')
         .select('*')
         .in('status', ['open', 'under_review'])
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(200);
 
       if (error) {
         logger.error('Error fetching active disputes', { error });
@@ -954,7 +982,7 @@ export const disputeService = {
         bountyId: String(item.bounty_id),
         initiatorId: item.initiator_id,
         reason: item.reason,
-        evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
+        evidence: parseEvidenceJson(item.evidence_json),
         status: item.status,
         resolution: item.resolution,
         winner: item.winner || null,
@@ -1763,6 +1791,24 @@ export const disputeService = {
         updatedAt: data.updated_at,
       };
 
+      // Canonical `dispute_started` — workflow-stage dispute (no cancellation).
+      // Previously this path emitted nothing, so in-progress / review-verify
+      // disputes were invisible in analytics. `stage` distinguishes it from
+      // the cancellation-derived dispute above.
+      try {
+        await analyticsService.trackEvent('dispute_started', {
+          dispute_id: String(data.id),
+          bounty_id: String(bountyId),
+          initiator_id: String(initiatorId),
+          respondent_id: String(respondentId),
+          stage,
+          has_evidence: !!(evidence && evidence.length > 0),
+          evidence_count: evidence?.length || 0,
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
+
       // Upload evidence items if provided
       if (evidence && evidence.length > 0) {
         for (const ev of evidence) {
@@ -1902,7 +1948,7 @@ export const disputeService = {
         initiatorId: item.initiator_id,
         respondentId: item.respondent_id || undefined,
         reason: item.reason,
-        evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
+        evidence: parseEvidenceJson(item.evidence_json),
         status: item.status,
         disputeStage: item.dispute_stage || 'cancellation',
         resolution: item.resolution,

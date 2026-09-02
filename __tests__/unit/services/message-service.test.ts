@@ -458,7 +458,9 @@ describe('Message Service - E2E Encryption', () => {
       expect(mockLocalMessaging.sendMessage).toHaveBeenCalledWith(
         'conv-1',
         'Hello',
-        'current-user-id'
+        'current-user-id',
+        // mediaUrl — no attachment on this message
+        undefined
       );
     });
   });

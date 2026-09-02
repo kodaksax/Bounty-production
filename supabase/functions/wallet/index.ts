@@ -9,11 +9,22 @@
 //   POST /wallet/release   (release escrowed funds to hunter on completion)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import Stripe from 'npm:stripe@14';
 import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
+import {
+  describeSettlement,
+  deriveSettlementState,
+  type SettlementState,
+} from '../_shared/settlement-state.ts';
 import {
   resolveReleasePayee,
   type ReleaseBountyLookupClient,
 } from '../_shared/release-authorization.ts';
+import {
+  isPaymentIntentId,
+  verifyDepositPaymentIntent,
+  type DepositPaymentIntent,
+} from '../_shared/deposit-verification.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +37,17 @@ function jsonResponse(data: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// Structured logging for rejected deposit attempts. Mirrors the logCritical
+// convention in supabase/functions/webhooks/index.ts (duplicated rather than
+// imported because the deploy bundler doesn't follow local imports).
+// Never log tokens, Stripe secrets or client secrets — only ids and amounts.
+function logDepositRejected(event: string, context: Record<string, unknown>) {
+  console.warn(
+    `[wallet/deposit] ${event}`,
+    JSON.stringify({ event, ts: new Date().toISOString(), ...context })
+  );
 }
 
 function isApplyDepositResult(obj: unknown): obj is ApplyDepositResult {
@@ -85,6 +107,14 @@ Deno.serve(async (req: Request) => {
       // profiles.balance is updated durably without relying solely on the webhook.
       // Uses the apply_deposit RPC which is idempotent on stripe_payment_intent_id,
       // so a concurrent webhook delivery results in a safe no-op.
+      //
+      // SECURITY: the client is *not* authoritative for anything here. It may
+      // only nominate a PaymentIntent id; the amount, the payment status, the
+      // currency and the ownership of the payment are all read back from
+      // Stripe. This endpoint previously trusted `body.amount` outright, which
+      // let any authenticated caller mint arbitrary balance by POSTing a large
+      // amount with a made-up id. The `amount` field is still accepted (older
+      // shipped builds send it) but is used only to detect and log a mismatch.
       if (req.method === 'POST' && subPath === '/deposit') {
         let body: { amount?: unknown; paymentIntentId?: unknown };
         try {
@@ -93,15 +123,85 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Invalid JSON body' }, 400);
         }
 
-        const amount = typeof body.amount === 'number' ? body.amount : Number(body.amount);
+        const requestedAmount =
+          typeof body.amount === 'number' ? body.amount : Number(body.amount);
         const paymentIntentId =
           typeof body.paymentIntentId === 'string' ? body.paymentIntentId.trim() : '';
 
-        if (!Number.isFinite(amount) || amount <= 0) {
-          return jsonResponse({ error: 'Invalid amount' }, 400);
-        }
         if (!paymentIntentId) {
           return jsonResponse({ error: 'paymentIntentId is required' }, 400);
+        }
+        if (!isPaymentIntentId(paymentIntentId)) {
+          logDepositRejected('deposit_verification_failed', {
+            reason: 'malformed_payment_intent_id',
+            userId,
+            paymentIntentId,
+          });
+          return jsonResponse({ error: 'Invalid paymentIntentId' }, 400);
+        }
+
+        const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+        if (!stripeKey) {
+          console.error('[wallet] STRIPE_SECRET_KEY is not configured');
+          return jsonResponse({ error: 'Payment verification unavailable' }, 503);
+        }
+        const stripe = new Stripe(stripeKey, {
+          apiVersion: '2023-10-16',
+          httpClient: Stripe.createFetchHttpClient(),
+        });
+
+        // A. The PaymentIntent must actually exist in Stripe. A retrieve
+        //    failure is never treated as "close enough" — no credit.
+        let paymentIntent: Stripe.PaymentIntent;
+        try {
+          paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        } catch (stripeErr: unknown) {
+          const code = (stripeErr as { code?: string })?.code;
+          const status = (stripeErr as { statusCode?: number })?.statusCode;
+          logDepositRejected('deposit_verification_failed', {
+            reason: 'payment_intent_not_retrievable',
+            userId,
+            paymentIntentId,
+            stripeCode: code ?? null,
+          });
+          // 404-equivalents are the client's problem; anything else (network,
+          // Stripe outage) is transient and must be retryable.
+          const isMissing = code === 'resource_missing' || status === 404;
+          return jsonResponse(
+            { error: isMissing ? 'Payment not found' : 'Unable to verify payment' },
+            isMissing ? 404 : 502
+          );
+        }
+
+        // B–E. Status, ownership, purpose, currency and amount are all
+        //       decided from the Stripe object by a pure, unit-tested rule set.
+        const verdict = verifyDepositPaymentIntent({
+          callerId: userId,
+          intent: paymentIntent as unknown as DepositPaymentIntent,
+          requestedAmount,
+        });
+
+        if (!verdict.ok) {
+          logDepositRejected(verdict.event, {
+            reason: verdict.reason,
+            userId,
+            paymentIntentId,
+            status: paymentIntent.status,
+          });
+          return jsonResponse({ error: verdict.error }, verdict.status);
+        }
+
+        const amount = verdict.amount;
+
+        if (verdict.amountMismatch) {
+          // Not fatal — Stripe wins either way — but a gap is the exact
+          // signature of an amount-manipulation attempt, so make it visible.
+          logDepositRejected('deposit_amount_mismatch', {
+            userId,
+            paymentIntentId,
+            requestedAmount: verdict.amountMismatch.requested,
+            verifiedAmount: verdict.amountMismatch.verified,
+          });
         }
 
         // Call the atomic apply_deposit function which:
@@ -113,8 +213,10 @@ Deno.serve(async (req: Request) => {
           p_amount: amount,
           p_payment_intent_id: paymentIntentId,
           p_metadata: {
+            ...(paymentIntent.metadata ?? {}),
             payment_intent_id: paymentIntentId,
             created_via: 'client_post_payment',
+            verified_via: 'stripe_payment_intent_retrieve',
           },
         });
 
@@ -137,6 +239,13 @@ Deno.serve(async (req: Request) => {
           tx_id = (candidate as any).tx_id ?? null;
         } else {
           console.warn('[wallet] apply_deposit returned unexpected shape', applyRes);
+        }
+
+        if (!applied) {
+          // Not an error: the webhook (or an earlier retry of this same call)
+          // already credited this PaymentIntent. Recorded so a burst of
+          // duplicates is distinguishable from a genuine double-credit.
+          logDepositRejected('deposit_duplicate', { userId, paymentIntentId });
         }
 
         // Fetch updated balance to return to client
@@ -168,7 +277,9 @@ Deno.serve(async (req: Request) => {
       if (subPath === '/balance') {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('balance, payout_failed_at, payout_failure_code')
+          .select(
+            'balance, payout_failed_at, payout_failure_code, stripe_connect_account_id'
+          )
           .eq('id', userId)
           .maybeSingle();
 
@@ -208,9 +319,178 @@ Deno.serve(async (req: Request) => {
             })
           | null;
 
+        // ─────────────────────────────────────────────────────────────────
+        // v3: spendable balance is the hunter's own Stripe Connect balance,
+        // not a second internally-maintained figure. Applies ONLY to hunters
+        // with no live v1 position; every v1 hunter falls through to the
+        // profiles.balance read above, byte-for-byte as before.
+        //
+        // v1 keeps writing profiles.balance throughout this phase — nothing
+        // here changes what any v1 code path does.
+        // ─────────────────────────────────────────────────────────────────
+        const connectAccountId =
+          (profile as { stripe_connect_account_id?: string | null } | null)
+            ?.stripe_connect_account_id ?? null;
+
+        type StripeBalanceBlock = {
+          availableCents: number;
+          pendingCents: number;
+          currency: string;
+          fetchedAt: string;
+          cached: boolean;
+        };
+        let stripeBalance: StripeBalanceBlock | null = null;
+        let balanceSource: 'v1_ledger' | 'stripe_connect' | 'both' = 'v1_ledger';
+
+        if (connectAccountId) {
+          // "v3-only" = no live v1 position. Either no v1 ledger history at
+          // all, or history that is fully settled and zeroed. An unsettled
+          // row (a pending withdrawal, say) means the hunter still has a real
+          // v1 position and must keep seeing the v1 number.
+          const { count: unsettledCount, error: unsettledErr } = await supabase
+            .from('wallet_transactions')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId)
+            .eq('status', 'pending');
+
+          const { count: anyHistoryCount, error: historyErr } = await supabase
+            .from('wallet_transactions')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId);
+
+          // Fail closed: if we cannot establish the v1 position, keep showing
+          // the v1 number rather than risk presenting a Stripe figure to
+          // someone who still holds custodial funds.
+          const v1PositionKnown = !unsettledErr && !historyErr;
+          const hasLiveV1Position =
+            !v1PositionKnown ||
+            (unsettledCount ?? 0) > 0 ||
+            Number(balance) > 0;
+          const isV3Only =
+            v1PositionKnown && !hasLiveV1Position && ((anyHistoryCount ?? 0) === 0 || Number(balance) === 0);
+
+          // Has this hunter ever been on the receiving end of a v3 bounty?
+          // Without this, every v1 hunter who happens to hold a Connect
+          // account would pay a Stripe round-trip on every wallet load. Pure
+          // v1 hunters must take exactly the path they take today.
+          const { count: v3ActivityCount } = await supabase
+            .from('bounty_v3_funding')
+            .select('bounty_id', { count: 'exact', head: true })
+            .eq('hunter_id', userId);
+          const hasV3Activity = (v3ActivityCount ?? 0) > 0;
+
+          if (isV3Only || hasV3Activity) {
+            const CACHE_TTL_MS = 30_000;
+            const nowMs = Date.now();
+
+            const { data: cached } = await supabase
+              .from('connect_balance_cache')
+              .select('stripe_connect_account_id, available_cents, pending_cents, currency, fetched_at')
+              .eq('user_id', userId)
+              .maybeSingle();
+
+            const cacheFresh =
+              cached &&
+              String(cached.stripe_connect_account_id ?? '') === String(connectAccountId) &&
+              nowMs - new Date(cached.fetched_at as string).getTime() < CACHE_TTL_MS;
+
+            if (cacheFresh) {
+              stripeBalance = {
+                availableCents: Number(cached.available_cents),
+                pendingCents: Number(cached.pending_cents),
+                currency: String(cached.currency ?? 'usd'),
+                fetchedAt: String(cached.fetched_at),
+                cached: true,
+              };
+            } else {
+              const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+              if (stripeKey) {
+                try {
+                  const stripe = new Stripe(stripeKey, {
+                    apiVersion: '2023-10-16',
+                    httpClient: Stripe.createFetchHttpClient(),
+                  });
+                  const liveBalance = await stripe.balance.retrieve({
+                    stripeAccount: connectAccountId,
+                  });
+                  const usdAvailable =
+                    liveBalance.available?.find(b => b.currency === 'usd') ??
+                    liveBalance.available?.[0];
+                  const usdPending =
+                    liveBalance.pending?.find(b => b.currency === 'usd') ??
+                    liveBalance.pending?.[0];
+
+                  const fetchedAtIso = new Date().toISOString();
+                  stripeBalance = {
+                    availableCents: Number(usdAvailable?.amount ?? 0),
+                    pendingCents: Number(usdPending?.amount ?? 0),
+                    currency: String(usdAvailable?.currency ?? 'usd'),
+                    fetchedAt: fetchedAtIso,
+                    cached: false,
+                  };
+
+                  await supabase.from('connect_balance_cache').upsert(
+                    {
+                      user_id: userId,
+                      stripe_connect_account_id: connectAccountId,
+                      available_cents: stripeBalance.availableCents,
+                      pending_cents: stripeBalance.pendingCents,
+                      currency: stripeBalance.currency,
+                      fetched_at: fetchedAtIso,
+                    },
+                    { onConflict: 'user_id' }
+                  );
+                } catch (balErr) {
+                  // A Stripe outage must not blank the wallet screen. Fall
+                  // back to a stale cache entry if we have one; otherwise the
+                  // response simply carries no stripeBalance block and the
+                  // caller keeps the v1 number.
+                  console.error('[wallet] Stripe balance retrieve failed', {
+                    userId,
+                    connectAccountId,
+                    balErr,
+                  });
+                  if (cached) {
+                    stripeBalance = {
+                      availableCents: Number(cached.available_cents),
+                      pendingCents: Number(cached.pending_cents),
+                      currency: String(cached.currency ?? 'usd'),
+                      fetchedAt: String(cached.fetched_at),
+                      cached: true,
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Never sum a pooled ledger figure with a live Stripe figure. When
+        // both are meaningful they are reported separately and the legacy
+        // number stays in `balance`, so existing clients are unchanged.
+        const legacyBalance = Number(balance) || 0;
+        const stripeAvailableDollars = stripeBalance
+          ? stripeBalance.availableCents / 100
+          : 0;
+
+        let reportedBalance = legacyBalance;
+        if (stripeBalance) {
+          if (legacyBalance > 0) {
+            balanceSource = 'both';
+          } else {
+            balanceSource = 'stripe_connect';
+            reportedBalance = stripeAvailableDollars;
+          }
+        }
+
         return jsonResponse({
-          balance,
+          balance: reportedBalance,
           currency: 'USD',
+          // Which figure `balance` came from. 'both' means the two are
+          // reported separately below and were deliberately not combined.
+          balanceSource,
+          legacyBalance,
+          stripeBalance,
           payoutFailedAt: typedProfile?.payout_failed_at ?? null,
           payoutFailureCode: typedProfile?.payout_failure_code ?? null,
         });
@@ -235,18 +515,54 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Failed to fetch transactions' }, 500);
         }
 
-        const formattedTransactions = (transactions ?? []).map((tx: WalletTransaction) => ({
-          id: tx.id,
-          type: tx.type,
-          amount: tx.amount,
-          date: tx.created_at,
-          details: {
-            title: tx.description,
-            method: tx.stripe_payment_intent_id ? 'Stripe' : 'Wallet',
-            status: tx.status ?? 'completed',
-            bounty_id: tx.bounty_id,
-          },
-        }));
+        const formattedTransactions = (transactions ?? []).map((tx: WalletTransaction) => {
+          const row = tx as WalletTransaction & {
+            settlement_state?: SettlementState | null;
+            stripe_payout_id?: string | null;
+            stripe_payout_status?: string | null;
+            stripe_transfer_id?: string | null;
+            stripe_charge_id?: string | null;
+            stripe_refund_id?: string | null;
+          };
+
+          // Prefer the stored column; fall back to deriving from the same
+          // evidence if this row predates the backfill. Both routes use the
+          // identical rule, so the fallback cannot disagree with the column.
+          const settlementState: SettlementState =
+            row.settlement_state ??
+            deriveSettlementState({
+              type: tx.type,
+              stripePayoutId: row.stripe_payout_id,
+              stripePayoutStatus: row.stripe_payout_status,
+              stripeTransferId: row.stripe_transfer_id,
+              stripeChargeId: row.stripe_charge_id,
+              stripePaymentIntentId: tx.stripe_payment_intent_id,
+              stripeRefundId: row.stripe_refund_id,
+            });
+
+          const described = describeSettlement(tx.type, settlementState);
+
+          return {
+            id: tx.id,
+            type: tx.type,
+            amount: tx.amount,
+            date: tx.created_at,
+            details: {
+              title: tx.description,
+              method: tx.stripe_payment_intent_id ? 'Stripe' : 'Wallet',
+              // A null status is not a settled one. This used to default to
+              // 'completed', which rendered an unknown row as a green check —
+              // the most reassuring possible reading of no information.
+              // Mirrors the deliberate opposite choice at connect/index.ts:3027.
+              status: tx.status ?? 'pending',
+              settlementState,
+              settlementLabel: described.label,
+              settlementDetail: described.detail,
+              settlementTone: described.tone,
+              bounty_id: tx.bounty_id,
+            },
+          };
+        });
 
         return jsonResponse({ transactions: formattedTransactions });
       }
@@ -879,6 +1195,45 @@ Deno.serve(async (req: Request) => {
           );
         }
 
+        // Payout readiness for the hunter who was just credited.
+        //
+        // ADR 0001 §4.3 (option B3): this deliberately does NOT block the
+        // release. A v1 credit is recoverable — the hunter onboards later and
+        // withdraws — whereas blocking would strand the poster's escrow and
+        // leave the hunter with nothing for completed work, over a gap that
+        // resolves itself. What was actually missing was that nobody was told.
+        // So: allow, label honestly, and surface the state to both sides.
+        //
+        // Advisory only. A lookup failure must never fail a release that has
+        // already moved money in the ledger.
+        let hunterPayoutReady = false;
+        try {
+          const { data: hunterProfile } = await supabase
+            .from('profiles')
+            .select('stripe_connect_account_id, stripe_connect_payouts_enabled')
+            .eq('id', hunterId)
+            .maybeSingle();
+          const hp = hunterProfile as {
+            stripe_connect_account_id?: string | null;
+            stripe_connect_payouts_enabled?: boolean | null;
+          } | null;
+          hunterPayoutReady =
+            Boolean(hp?.stripe_connect_account_id) && hp?.stripe_connect_payouts_enabled === true;
+        } catch (readinessErr) {
+          console.warn('[wallet] release: hunter payout readiness lookup failed', {
+            bountyId,
+            hunterId,
+            error: readinessErr,
+          });
+        }
+
+        // NOTE: the hunter's "finish payout setup" notification is NOT enqueued
+        // here. It is fired by trg_wallet_tx_notify_unready_payee, an AFTER
+        // INSERT trigger on wallet_transactions, so that it covers every release
+        // path uniformly — including fn_release_wallet_escrow_for_dispute(),
+        // which is PL/pgSQL and never passes through this function. Enqueueing
+        // in both places would double-notify.
+
         const { data: posterProfile, error: posterBalanceErr } = await supabase
           .from('profiles')
           .select('balance')
@@ -901,7 +1256,21 @@ Deno.serve(async (req: Request) => {
             typeof (posterProfile as Profile | null)?.balance === 'number'
               ? (posterProfile as Profile).balance
               : null,
-          message: `$${hunterAmount.toFixed(2)} released to hunter.`,
+          // A v1 release moves nothing outside Postgres — this function does
+          // not import Stripe at all. The honest description is a balance
+          // credit, not a payment. "Released"/"paid" here is what led both
+          // parties on bounty 53656a8b ("Walk my cat") to believe $73.60 had
+          // settled to a hunter who had no Connect account and could not
+          // withdraw a cent of it. See ADR 0001 §2.7.
+          settlementState: 'ledger_only' satisfies SettlementState,
+          hunterPayoutReady,
+          message: `$${hunterAmount.toFixed(2)} added to the hunter's Bounty balance.`,
+          ...(hunterPayoutReady
+            ? {}
+            : {
+                hunterPayoutWarning:
+                  'This hunter has not finished payout setup, so they cannot move these funds to a bank account yet. They keep the balance and can withdraw once onboarding is complete.',
+              }),
         });
       }
 
