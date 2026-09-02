@@ -25,7 +25,13 @@
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import pg from 'pg';
-import { GuardError, loadConfig, resolveEnv } from './lib/env.mjs';
+import {
+  GuardError,
+  expectedRefForAppEnv,
+  loadConfig,
+  resolveDatabaseTarget,
+  resolveEnv,
+} from './lib/env.mjs';
 
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes('--' + f);
@@ -73,19 +79,30 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const refInUrl = (connectionString.match(/([a-z]{20})\.supabase\.(co|com)/) ||
-  connectionString.match(/db\.([a-z]{20})\./) || [])[1];
-if (refInUrl && config.guards.deniedSupabaseRefs.includes(refInUrl)) {
-  console.error(
-    '\n  BLOCKED\n  BOUNTY_SHOAL_DATABASE_URL points at the PRODUCTION project (' + refInUrl + ').\n' +
-      '  The oracle reads and, for seed-race, writes marketplace rows. Refusing.\n',
-  );
-  process.exit(2);
+// Fail-closed: refuses an unidentified database rather than connecting to it. See
+// resolveDatabaseTarget() for why the old host-only matcher was unsafe with pooler URLs.
+let dbTarget;
+try {
+  dbTarget = resolveDatabaseTarget(config, connectionString);
+} catch (err) {
+  if (err instanceof GuardError) {
+    console.error('\n  BLOCKED\n  BOUNTY_SHOAL_DATABASE_URL: ' + err.message + '\n');
+    process.exit(2);
+  }
+  throw err;
 }
-if (refInUrl && !config.guards.allowedSupabaseRefs.includes(refInUrl)) {
+const refInUrl = dbTarget.ref;
+
+// The environment name and the project actually being connected to must agree, so a
+// staging-labelled run can never quietly touch a different project.
+const expectedForEnv = config.environments[target.name]?.appEnv
+  ? expectedRefForAppEnv(config.environments[target.name].appEnv)
+  : null;
+if (expectedForEnv && expectedForEnv !== refInUrl) {
   console.error(
-    '\n  BLOCKED\n  BOUNTY_SHOAL_DATABASE_URL points at an unrecognised project (' + refInUrl +
-      ').\n  Add it to guards.allowedSupabaseRefs only if it is non-production.\n',
+    '\n  BLOCKED\n  --env ' + target.name + ' maps to Supabase project ' + expectedForEnv +
+      ',\n  but BOUNTY_SHOAL_DATABASE_URL connects to ' + refInUrl + '.\n' +
+      '  Refusing: the environment label and the database must agree.\n',
   );
   process.exit(2);
 }
@@ -96,11 +113,43 @@ const bountyId = opt('bounty-id', process.env.BOUNTY_SHOAL_RACE_BOUNTY_ID);
 const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
 await client.connect();
 
-/** One invariant result. `ok:false` is a P0 by construction -- these are integrity rules. */
+/**
+ * Introspect the target's actual schema before asserting anything against it.
+ *
+ * Bounty's environments are NOT schema-identical: production's wallet_transactions
+ * carries completed_at, reference_id, dispute_status and four stripe_* columns that
+ * staging does not have, and no tracked migration creates them. An oracle that assumes
+ * one shape crashes on the other -- and a crashed oracle is indistinguishable from an
+ * oracle that found nothing, which is the failure mode that matters here.
+ */
+const schema = new Map();
+{
+  const rows = (
+    await client.query(
+      "select table_name, column_name from information_schema.columns where table_schema = 'public'",
+    )
+  ).rows;
+  for (const r of rows) {
+    if (!schema.has(r.table_name)) schema.set(r.table_name, new Set());
+    schema.get(r.table_name).add(r.column_name);
+  }
+}
+const hasTable = (t) => schema.has(t);
+const hasCols = (t, ...cols) => schema.has(t) && cols.every((c) => schema.get(t).has(c));
+
+/**
+ * One invariant result. `ok:false` is a P0 by construction -- these are integrity rules.
+ * A check the schema cannot support is recorded as SKIPPED, never as a pass: silently
+ * "passing" a check that never ran is how a guard stops guarding.
+ */
 const results = [];
 function assert(id, ok, detail, severity = 'P0') {
-  results.push({ id, ok, severity: ok ? null : severity, detail });
+  results.push({ id, ok, skipped: false, severity: ok ? null : severity, detail });
   console.log('  ' + (ok ? 'PASS' : 'FAIL') + '  ' + id + (detail ? ' -- ' + detail : ''));
+}
+function skip(id, reason) {
+  results.push({ id, ok: null, skipped: true, severity: null, detail: reason });
+  console.log('  SKIP  ' + id + ' -- ' + reason);
 }
 
 async function raceClaim() {
@@ -233,27 +282,80 @@ async function paymentIntegrity() {
     dupKeys.map((r) => r.idempotency_key + ' x' + r.n).join(', '),
   );
 
-  // Money is never negative, and a completed row must actually be stamped complete.
-  const negative = (
+  // Bounty's ledger is SIGNED, by design: escrow debits the poster and is stored
+  // negative (see apply_escrow / atomic_bounty_escrow_reservation / secure_apply_deposit,
+  // all of which insert `'escrow', -p_amount`, and the Command Center view which reads it
+  // back with ABS()). An earlier version of this oracle asserted "amount >= 0" and
+  // therefore flagged every correct escrow row in the database. What is actually
+  // invariant is the CONVENTION -- so assert that instead.
+  const SIGN = { escrow: 'negative', deposit: 'positive', release: 'positive', refund: 'positive' };
+  const wrongSign = (
     await client.query(
-      'select id, amount, type from wallet_transactions where created_at >= $1 and amount < 0',
-      [since],
-    )
-  ).rows;
-  assert('pay.no-negative-amounts', negative.length === 0, negative.map((r) => r.id).join(', '));
-
-  const unstamped = (
-    await client.query(
-      "select id from wallet_transactions where created_at >= $1 " +
-        "and status::text = 'completed' and completed_at is null",
+      "select id, type::text t, amount from wallet_transactions where created_at >= $1 " +
+        "and ((type::text = 'escrow' and amount > 0) " +
+        "  or (type::text in ('deposit','release','refund') and amount < 0))",
       [since],
     )
   ).rows;
   assert(
-    'pay.completed-rows-are-stamped',
-    unstamped.length === 0,
-    unstamped.map((r) => r.id).join(', '),
+    'pay.ledger-sign-convention',
+    wrongSign.length === 0,
+    wrongSign
+      .map((r) => r.id + ' (' + r.t + ' ' + r.amount + ', expected ' + (SIGN[r.t] ?? '?') + ')')
+      .join(', '),
+  );
+
+  // completed_at exists on production's wallet_transactions but not staging's, and no
+  // tracked migration adds it -- so this check is schema-gated rather than assumed.
+  if (hasCols('wallet_transactions', 'completed_at')) {
+    const unstamped = (
+      await client.query(
+        "select id from wallet_transactions where created_at >= $1 " +
+          "and status::text = 'completed' and completed_at is null",
+        [since],
+      )
+    ).rows;
+    assert(
+      'pay.completed-rows-are-stamped',
+      unstamped.length === 0,
+      unstamped.map((r) => r.id).join(', '),
+      'P1',
+    );
+  } else {
+    skip('pay.completed-rows-are-stamped', 'wallet_transactions.completed_at does not exist here');
+  }
+
+  // A ledger row must belong to somebody. user_id is the owning column -- sender_id and
+  // receiver_id are vestigial (populated on 0 of 150 rows in staging), so requiring one
+  // of the three would be satisfied by a column nothing writes. Scoped to the run window
+  // on purpose: staging carries legacy rows from May-Jul 2026 with a null user_id, which
+  // predate the current RPCs (all of which pass p_user_id) and are not a live defect.
+  const orphaned = (
+    await client.query(
+      'select id, type::text t from wallet_transactions where created_at >= $1 and user_id is null',
+      [since],
+    )
+  ).rows;
+  assert(
+    'pay.ledger-rows-have-an-owner',
+    orphaned.length === 0,
+    orphaned.map((r) => r.id + ' (' + r.t + ')').join(', '),
     'P1',
+  );
+
+  // A ledger row that names a bounty must name one that exists.
+  const danglingBounty = (
+    await client.query(
+      'select t.id, t.bounty_id from wallet_transactions t ' +
+        'where t.created_at >= $1 and t.bounty_id is not null ' +
+        'and not exists (select 1 from bounties b where b.id = t.bounty_id)',
+      [since],
+    )
+  ).rows;
+  assert(
+    'pay.ledger-bounty-references-resolve',
+    danglingBounty.length === 0,
+    danglingBounty.map((r) => r.id + ' -> ' + r.bounty_id).join(', '),
   );
 
   // No balance may go negative, and none may be held beyond what exists.
@@ -319,6 +421,67 @@ async function completionIntegrity() {
     inProgressNoWorker.map((r) => r.id).join(', '),
     'P1',
   );
+
+  // completion_submissions is where proof of work actually lives -- the earlier version
+  // of this oracle never looked at it, so "the hunter submitted proof" was unverifiable.
+  // created_at is in the gate because all three queries below filter on it. Gating only
+  // on the columns named in the SELECT list would let a project that has the table but a
+  // differently-named timestamp reach the query and hard-fail the whole oracle, when the
+  // correct outcome is a recorded SKIP.
+  if (hasCols('completion_submissions', 'bounty_id', 'hunter_id', 'status', 'created_at')) {
+    const orphanProof = (
+      await client.query(
+        'select cs.id, cs.bounty_id from completion_submissions cs ' +
+          'where cs.created_at >= $1 ' +
+          'and not exists (select 1 from bounties b where b.id = cs.bounty_id)',
+        [since],
+      )
+    ).rows;
+    assert(
+      'complete.submissions-reference-real-bounties',
+      orphanProof.length === 0,
+      orphanProof.map((r) => r.id + ' -> ' + r.bounty_id).join(', '),
+    );
+
+    // Proof of work must come from the hunter who actually holds the job. A submission
+    // from anyone else is either a bug or an authorisation hole.
+    const wrongHunter = (
+      await client.query(
+        'select cs.id, cs.hunter_id, b.accepted_by from completion_submissions cs ' +
+          'join bounties b on b.id = cs.bounty_id ' +
+          'where cs.created_at >= $1 and b.accepted_by is not null ' +
+          'and cs.hunter_id is distinct from b.accepted_by',
+        [since],
+      )
+    ).rows;
+    assert(
+      'complete.submission-author-is-the-assigned-hunter',
+      wrongHunter.length === 0,
+      wrongHunter.map((r) => r.id + ': ' + r.hunter_id + ' != ' + r.accepted_by).join('; '),
+    );
+
+    // A bounty cannot be finished if its proof of work is still awaiting review.
+    const closedWithPendingProof = (
+      await client.query(
+        "select b.id, cs.status::text s from bounties b join completion_submissions cs on cs.bounty_id = b.id " +
+          "where b.updated_at >= $1 and b.status::text = 'completed' and cs.status::text = 'pending'",
+        [since],
+      )
+    ).rows;
+    assert(
+      'complete.no-completed-bounty-with-pending-proof',
+      closedWithPendingProof.length === 0,
+      closedWithPendingProof.map((r) => r.id).join(', '),
+      'P1',
+    );
+  } else {
+    skip(
+      'complete.submission-checks',
+      hasTable('completion_submissions')
+        ? 'completion_submissions lacks one of bounty_id/hunter_id/status/created_at here'
+        : 'completion_submissions is not present in this project',
+    );
+  }
 }
 
 /**
@@ -369,19 +532,47 @@ try {
   await client.end();
 }
 
-const failed = results.filter((r) => !r.ok);
+// `ok === null` means skipped, which is neither a pass nor a violation. Only an explicit
+// false is a finding; skips are surfaced separately so a run that checked nothing can
+// never look like a run that found nothing.
+const failed = results.filter((r) => r.ok === false);
+const skipped = results.filter((r) => r.skipped);
+const passed = results.filter((r) => r.ok === true);
+
 const out = opt('out');
 if (out) {
   writeFileSync(
     out,
-    JSON.stringify({ check, env: target.name, since, bountyId, results, failed: failed.length }, null, 2),
+    JSON.stringify(
+      {
+        check,
+        env: target.name,
+        project: refInUrl,
+        since,
+        bountyId,
+        results,
+        passed: passed.length,
+        skipped: skipped.length,
+        failed: failed.length,
+      },
+      null,
+      2,
+    ),
     'utf8',
   );
   console.log('\n  wrote ' + out);
+}
+
+console.log(
+  '\n  ' + passed.length + ' passed · ' + failed.length + ' violated · ' + skipped.length + ' skipped',
+);
+if (skipped.length > 0) {
+  console.log('  skipped checks did NOT run and prove nothing:');
+  for (const s of skipped) console.log('    - ' + s.id + ' (' + s.detail + ')');
 }
 
 if (failed.length > 0) {
   console.error('\n  ' + failed.length + ' invariant(s) violated -- these are ground truth, not agent opinion.\n');
   process.exit(1);
 }
-console.log('\n  all invariants held\n');
+console.log('\n  all invariants that could run held\n');

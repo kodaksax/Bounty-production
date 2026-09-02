@@ -56,6 +56,8 @@
     "qa:shoal:list": "node qa/shoal/bin/run.mjs --list",
     "qa:shoal:oracle": "node qa/shoal/bin/oracle.mjs",
     "qa:shoal:report": "node qa/shoal/bin/report.mjs",
+    "qa:shoal:test": "node --test \"qa/shoal/test/*.test.mjs\"",
+    "qa:shoal:ci-secrets": "node qa/shoal/bin/ci-secrets.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --maxWorkers=2",

@@ -57,6 +57,18 @@ if (has('list')) {
         '  ' + s.strategy.join(',') + (s.requiresAuth ? '  [needs test account]' : ''),
     );
     console.log('    ' + ' '.repeat(22) + s.title);
+    if (s.requiresAuth) {
+      // Operators pick scenarios from this list; a scenario that cannot currently produce
+      // a trustworthy result must say so here, not only in the README.
+      console.log(
+        '    ' + ' '.repeat(22) +
+          'WARNING: authenticated flows currently crash after sign-in in the static-export',
+      );
+      console.log(
+        '    ' + ' '.repeat(22) +
+          "harness (expo-router 'ErrorBoundary' error) -- results are unreliable. See README.",
+      );
+    }
     console.log('');
   }
   process.exit(0);
@@ -148,6 +160,8 @@ if (!existsSync(cli)) {
 
 let url = target.url;
 let racePath = null;
+// Route the agent should navigate to AFTER signing in (authenticated scenarios only).
+let postAuthRoute = null;
 if (scenario.id === 'race-claim' || scenario.strategy.includes('race')) {
   const bountyId = opt('bounty-id', process.env.BOUNTY_SHOAL_RACE_BOUNTY_ID);
   if (!bountyId) {
@@ -161,8 +175,23 @@ if (scenario.id === 'race-claim' || scenario.strategy.includes('race')) {
   }
   racePath = '/bounty/' + bountyId;
   scenario.raceBountyId = bountyId;
-} else if (scenario.path) {
-  url = new URL(scenario.path, target.url).toString();
+} else if (scenario.path && scenario.path !== '/') {
+  // An authenticated scenario must not START on the protected route. Observed in the
+  // composer-adversarial run: agents dropped straight onto /screens/CreateBounty spent
+  // most of their step budget hunting for a way back to a sign-in form. Start them at the
+  // root, where sign-in is reachable, and tell them where to go once they are in.
+  if (scenario.requiresAuth) {
+    postAuthRoute = scenario.path;
+  } else {
+    url = new URL(scenario.path, target.url).toString();
+  }
+}
+
+if (postAuthRoute) {
+  task +=
+    ' Everything above happens on the screen reached from ' + postAuthRoute +
+    ' -- once you are signed in, navigate there first (the address bar works: ' +
+    new URL(postAuthRoute, target.url).toString() + ').';
 }
 
 const swarm = Number(opt('swarm', String(scenario.swarm)));
@@ -238,9 +267,61 @@ writeFileSync(join(runDir, 'run-meta.json'), JSON.stringify(meta, null, 2), 'utf
  * completion signal is `shoal-report.json` appearing in the working directory, written at
  * the end of runSwarm() -- so wait for that, let it settle, then end the process tree.
  */
+/**
+ * Kill a child and everything it spawned. Shoal owns a listening dashboard server plus a
+ * pool of Chromium processes, none of which die just because the parent does -- so a
+ * plain child.kill() leaves browsers resident and the port held.
+ */
+function killTree(pid) {
+  if (!pid) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    try {
+      process.kill(-pid, 'SIGKILL'); // negative pid = the whole process group
+    } catch {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* already gone */
+      }
+    }
+  }
+}
+
+/** Hard ceiling so a wedged swarm can never hang CI until the job timeout. */
+const RUN_TIMEOUT_MS = Number(opt('timeout-ms', String(45 * 60 * 1000)));
+
 async function runSwarm() {
-  const child = spawn(process.execPath, args, { cwd: runDir, stdio: 'inherit', env: process.env });
+  const child = spawn(process.execPath, args, {
+    cwd: runDir,
+    stdio: 'inherit',
+    env: process.env,
+    // Own process group on POSIX so killTree can take the whole tree down at once.
+    detached: process.platform !== 'win32',
+  });
   const reportPath = join(runDir, 'shoal-report.json');
+
+  // Whatever happens to this process -- normal exit, Ctrl+C, SIGTERM from CI, an
+  // unhandled throw -- the swarm must not outlive it.
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    killTree(child.pid);
+  };
+  process.on('exit', cleanup);
+  const onSignal = (sig) => {
+    console.error('\n  received ' + sig + ' -- terminating the swarm and its browsers.');
+    cleanup();
+    process.exit(130);
+  };
+  process.on('SIGINT', () => onSignal('SIGINT'));
+  process.on('SIGTERM', () => onSignal('SIGTERM'));
+  process.on('uncaughtException', (err) => {
+    cleanup();
+    throw err;
+  });
 
   const exited = new Promise((resolve) => child.on('exit', (code) => resolve({ code, killed: false })));
 
@@ -254,19 +335,20 @@ async function runSwarm() {
     child.on('exit', () => clearInterval(poll));
   });
 
-  const result = await Promise.race([exited, reportWritten]);
-  if (result.killed && child.pid) {
-    // The CLI owns a listening server and browser processes; kill the whole tree.
-    if (process.platform === 'win32') {
-      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-    } else {
-      try {
-        process.kill(child.pid, 'SIGTERM');
-      } catch {
-        /* already gone */
-      }
-    }
+  const timedOut = new Promise((resolve) =>
+    setTimeout(() => resolve({ code: 124, killed: true, timedOut: true }), RUN_TIMEOUT_MS),
+  );
+
+  const result = await Promise.race([exited, reportWritten, timedOut]);
+  if (result.timedOut) {
+    console.error(
+      '\n  TIMEOUT: no report after ' + Math.round(RUN_TIMEOUT_MS / 60000) + ' minutes. ' +
+        'Killing the swarm.\n  Raise the ceiling with --timeout-ms if this was legitimate.',
+    );
   }
+  if (result.killed) cleanup();
+  // Give the OS a moment to reap the tree before we report on the artifacts.
+  await new Promise((r) => setTimeout(r, 500));
   return result;
 }
 

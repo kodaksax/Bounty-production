@@ -23,6 +23,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+// The reconciliation decision rules are plain TypeScript with no imports, so
+// they can be executed here directly rather than pattern-matched in source.
+import {
+  isSafeStatusRepair,
+  normalizeStripeStatus,
+} from '../../supabase/functions/reconciliation/reconciliation-logic';
+
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '../../', p), 'utf8');
 
 const connectSource = read('supabase/functions/connect/index.ts');
@@ -177,16 +184,26 @@ describe('invariant: nothing is marked complete unless Stripe completed it', () 
     expect(handler).not.toContain("status: 'completed'");
   });
 
+  // These two rules used to be asserted by slicing reconciliation/index.ts and
+  // matching substrings, which meant a reformat could break them and a genuine
+  // behavioural change could slip past. The rules now live in
+  // reconciliation-logic.ts, which Jest CAN import, so assert the behaviour and
+  // keep only the wiring fact (the compare-and-set) as a source check.
   it('reconciliation only advances a ledger row from pending', () => {
-    expect(reconciliationSource).toContain("if (ledgerStatus !== 'pending') return false");
+    // A row already in a terminal state is a real conflict, never a lag to fix.
+    expect(isSafeStatusRepair('paid', 'completed')).toBe(false);
+    expect(isSafeStatusRepair('paid', 'failed')).toBe(false);
+    expect(isSafeStatusRepair('paid', 'pending')).toBe(true);
+    // The UPDATE must re-assert status='pending' so a concurrent webhook that
+    // already advanced the row cannot be clobbered.
     expect(reconciliationSource).toContain(".eq('status', 'pending')");
   });
 
   it('reconciliation never marks in-flight money as completed', () => {
-    const normalizeIdx = reconciliationSource.indexOf('function normalizeStripeStatus');
-    const block = reconciliationSource.slice(normalizeIdx, normalizeIdx + 500);
-    const inTransitIdx = block.indexOf("case 'in_transit':");
-    expect(block.slice(inTransitIdx, inTransitIdx + 60)).toContain("return 'pending'");
+    expect(normalizeStripeStatus('in_transit')).toBe('pending');
+    expect(normalizeStripeStatus('pending')).toBe('pending');
+    // Only Stripe's own terminal success may become 'completed'.
+    expect(normalizeStripeStatus('paid')).toBe('completed');
   });
 });
 

@@ -23,6 +23,26 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 // @ts-ignore: Allow runtime URL import for Deno/edge function.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// The pure decision logic, imported rather than copied. Supabase bundles the whole
+// function directory, and relative local imports resolve fine -- eight other functions in
+// this repo already use them (e.g. notifications/index.ts imports './handler.ts',
+// connect/index.ts imports '../_shared/types.ts'). An earlier revision kept an inlined
+// duplicate here, guarded by a Jest test that string-matched this file's source; that test
+// could pass while the two copies diverged in behaviour, and broke on reformatting. One
+// implementation, imported, removes both problems.
+import {
+  PAYOUT_PENDING_CRITICAL_HOURS,
+  PAYOUT_PENDING_WARN_HOURS,
+  STALE_PENDING_WARN_HOURS,
+  INVARIANT_GRANDFATHER_CUTOFF_ISO,
+  computeHealth,
+  correlatePayoutToPendingWithdrawal,
+  isSafeStatusRepair,
+  normalizeStripeStatus,
+  splitInvariantViolations,
+  type Health,
+  type Severity,
+} from './reconciliation-logic.ts';
 
 // @ts-ignore: Deno global is not present in the Node typecheck environment.
 declare const Deno: { env: { get(key: string): string | undefined } };
@@ -42,30 +62,22 @@ function jsonResponse(body: unknown, status = 200): Response {
 // ---------------------------------------------------------------------------
 // Thresholds
 // ---------------------------------------------------------------------------
-// Tuned to Stripe's own timings rather than round numbers: a standard payout
+// The staleness thresholds and the Severity/Health vocabularies are imported
+// from ./reconciliation-logic.ts above, so this function and its unit tests
+// agree by construction rather than by a copy staying in sync. They are tuned
+// to Stripe's own timings rather than round numbers: a standard payout
 // legitimately takes 1-2 business days, so 24h pending is normal and only
 // becomes suspicious well beyond that.
-
-/** A payout still not paid after this long is a WARNING. */
-const PAYOUT_PENDING_WARN_HOURS = 24;
-/** A transfer not settled after this long is a WARNING — transfers are near-instant.
- * TODO: not currently checked anywhere in this file — payouts (line ~568) and
- * generic stale-pending withdrawals (line ~757) are, but pending transfers
- * have no dedicated staleness check yet. */
-// deno-lint-ignore no-unused-vars
-const TRANSFER_PENDING_WARN_HOURS = 2;
-/** A ledger withdrawal stuck 'pending' with no Stripe payout at all. */
-const STALE_PENDING_WARN_HOURS = 2;
-/** Beyond this, a stuck payout stops being slow and starts being broken. */
-const PAYOUT_PENDING_CRITICAL_HOURS = 72;
+//
+// TRANSFER_PENDING_WARN_HOURS is defined in that module but deliberately not
+// imported here: nothing in this file checks transfer staleness yet. Payouts
+// and generic stale-pending withdrawals are covered; pending transfers are the
+// remaining gap.
 
 /** How far back each run looks. Generous overlap so nothing falls between runs. */
 const RECONCILE_WINDOW_HOURS = 72;
 
 const HOUR_MS = 60 * 60 * 1000;
-
-type Severity = 'INFO' | 'WARNING' | 'CRITICAL';
-type Health = 'GREEN' | 'YELLOW' | 'RED';
 
 interface Finding {
   findingType: string;
@@ -103,85 +115,6 @@ interface DriftReport {
   paidButNotCompleted: number;
   health: Health;
   unreconciled: UnreconciledEntry[];
-}
-
-/**
- * Projects a Stripe payout status onto ledger vocabulary.
- *
- * in_transit maps to 'pending' deliberately: the money is still in flight.
- * Treating in-flight as settled is the legacy bug this whole migration exists
- * to remove, and re-introducing it here would make reconciliation certify it.
- */
-export function normalizeStripeStatus(stripeStatus: string): string {
-  switch (stripeStatus) {
-    case 'paid':
-      return 'completed';
-    case 'pending':
-    case 'in_transit':
-      return 'pending';
-    case 'failed':
-      return 'failed';
-    case 'canceled':
-      return 'cancelled';
-    default:
-      return stripeStatus;
-  }
-}
-
-/**
- * Whether a ledger row may be moved to match Stripe automatically.
- *
- * Safe means: Stripe has reached a TERMINAL state, the ledger has not caught
- * up, and applying Stripe's state removes information asymmetry without
- * inventing anything. Concretely we only ever advance a 'pending' ledger row
- * to what Stripe already finished doing.
- *
- * Everything else — amount disagreements, orphans, a ledger row that claims
- * completion Stripe does not corroborate — is NOT repairable here. Those
- * indicate we are wrong about something real, and quietly overwriting them
- * would destroy the evidence.
- */
-export function isSafeStatusRepair(
-  stripeStatus: string,
-  ledgerStatus: string,
-  metadata?: Record<string, unknown> | null
-): boolean {
-  // Only ever repair FROM pending. A ledger row already claiming a terminal
-  // state that disagrees with Stripe is a genuine conflict, not a lag.
-  if (ledgerStatus !== 'pending') return false;
-
-  if (stripeStatus === 'paid') return true;
-
-  // Failed/canceled only auto-repair for Connect-native payouts, which never
-  // debited profiles.balance in the first place. Legacy withdrawals need an
-  // atomic balance refund with the status change; reconciliation only reports
-  // those mismatches so a separate repair path can apply both together.
-  if (stripeStatus === 'failed' || stripeStatus === 'canceled') {
-    return metadata?.connect_native === true;
-  }
-
-  return false;
-}
-
-/** Health rolls up from the worst thing seen. */
-export function computeHealth(counts: {
-  mismatched: number;
-  orphanStripe: number;
-  orphanLedger: number;
-  stalePending: number;
-  deltaCents: number;
-  criticalFindings: number;
-}): Health {
-  if (
-    counts.criticalFindings > 0 ||
-    counts.orphanStripe > 0 ||
-    counts.orphanLedger > 0 ||
-    counts.deltaCents !== 0
-  ) {
-    return 'RED';
-  }
-  if (counts.mismatched > 0 || counts.stalePending > 0) return 'YELLOW';
-  return 'GREEN';
 }
 
 /**
@@ -271,8 +204,17 @@ serve(async (req: Request) => {
       .limit(100);
 
     const findings = (openFindings ?? []) as Array<Record<string, unknown>>;
-    const criticalOpen = findings.filter(f => f.severity === 'CRITICAL').length;
-    const warningOpen = findings.filter(f => f.severity === 'WARNING').length;
+    // Severity is stored lowercased — reconciliation_findings carries
+    // CHECK (severity IN ('info','warning','critical')) and every writer
+    // lowercases on the way in. These two filters compared against uppercase
+    // literals, so criticalOpen and warningOpen were ALWAYS 0 and the health
+    // endpoint could never escalate on an open finding: it reported whatever
+    // the last run's report row said, no matter how many critical findings
+    // were sitting unresolved. Found 2026-09-01. Same class of bug as the
+    // findings-insert CHECK violation noted at the persist site below.
+    const sev = (f: Record<string, unknown>) => String(f.severity ?? '').toLowerCase();
+    const criticalOpen = findings.filter(f => sev(f) === 'critical').length;
+    const warningOpen = findings.filter(f => sev(f) === 'warning').length;
 
     const report = latest as Record<string, unknown> | null;
 
@@ -478,6 +420,57 @@ serve(async (req: Request) => {
 
     const seenPayoutIds = new Set<string>();
 
+    // Pending withdrawals that completed hop 1 (transfer) but carry no payout
+    // id. These are the rows an "orphan" Stripe payout is most likely to
+    // actually belong to — see correlatePayoutToPendingWithdrawal.
+    //
+    // Deliberately NOT limited to RECONCILE_WINDOW_HOURS, unlike `ledger`
+    // above. The whole point of this population is that it is stuck: the two
+    // payouts reported as orphans on 2026-08-31 settled 66 hours old against
+    // withdrawals 96 hours old, so a 72-hour ledger window excluded exactly
+    // the rows that explained them. The set is small by construction (a
+    // healthy system has none) and shrinks as rows resolve.
+    const { data: hopTwoRows, error: hopTwoError } = await supabase
+      .from('wallet_transactions')
+      .select('id, user_id, amount, created_at')
+      .eq('type', 'withdrawal')
+      .eq('status', 'pending')
+      .is('stripe_payout_id', null)
+      .not('stripe_transfer_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (hopTwoError) {
+      // Report rather than proceed silently: without this list every stuck
+      // hop-2 settlement is misreported as an unexplained orphan.
+      findings.push({
+        findingType: 'invariant_sweep_failed',
+        severity: 'WARNING',
+        userId: null,
+        details: {
+          stage: 'hop_two_candidates',
+          error: hopTwoError.message,
+          note: 'Could not load pending transfer-only withdrawals; orphan payouts this run may be misclassified.',
+        },
+      });
+    }
+
+    const pendingHopTwoCandidates = ((hopTwoRows ?? []) as Array<Record<string, unknown>>).map(
+      r => ({
+        id: r.id as string,
+        userId: (r.user_id as string) ?? '',
+        amountCents: Math.round(Math.abs(Number(r.amount ?? 0)) * 100),
+        createdAtMs: Date.parse(String(r.created_at ?? '')) || 0,
+        hasPayoutId: false,
+        hasTransferId: true,
+      })
+    );
+
+    // Transaction ids already explained as an unrecorded hop-2 settlement, so
+    // the stale-pending sweep below does not report the same event a second
+    // time under a different name.
+    const correlatedTxIds = new Set<string>();
+
     // -----------------------------------------------------------------
     // Stripe payouts, per connected account.
     // -----------------------------------------------------------------
@@ -512,6 +505,59 @@ serve(async (req: Request) => {
         // --- Orphan Stripe payout: real money moved, we have no record ---
         if (!local) {
           orphanStripe++;
+
+          // Before calling it an orphan, check whether it is the hop-2
+          // settlement of a withdrawal we DO know about whose payout id was
+          // never backfilled. That is a materially different problem with a
+          // different fix (webhook delivery), and reporting it as an orphan
+          // sends an operator hunting for a payout with no owner.
+          const correlation = correlatePayoutToPendingWithdrawal(
+            {
+              userId: acct.id,
+              amountCents: payout.amount,
+              createdAtMs: payout.created * 1000,
+            },
+            pendingHopTwoCandidates
+          );
+
+          if (correlation.kind === 'unique') {
+            correlatedTxIds.add(correlation.transactionId);
+            unreconciled.push({
+              kind: 'payout_id_never_recorded',
+              payoutId: payout.id,
+              transactionId: correlation.transactionId,
+              userId: acct.id,
+              stripeStatus: payout.status,
+              amountCents: payout.amount,
+              ageHours: Math.round(ageH),
+            });
+            findings.push({
+              findingType: 'payout_id_never_recorded',
+              severity: 'CRITICAL',
+              userId: acct.id,
+              details: {
+                payoutId: payout.id,
+                transactionId: correlation.transactionId,
+                accountId: acct.stripe_connect_account_id,
+                amountCents: payout.amount,
+                status: payout.status,
+                ageHours: Math.round(ageH),
+                note:
+                  'Stripe settled this payout but the ledger withdrawal it appears to belong to still has no payout id and is still pending. ' +
+                  'Correlated by user + exact amount + transfer-shape + ordering, UNIQUELY. This is a correlation for human review, NOT a verified link: ' +
+                  'confirm in Stripe that this payout corresponds to this withdrawal before resolving, and never write the payout id from this finding alone. ' +
+                  'Root cause to check first: payout.created/payout.paid webhook delivery for Connect accounts.',
+              },
+            });
+            alert('CRITICAL', 'payout_id_never_recorded', {
+              payoutId: payout.id,
+              transactionId: correlation.transactionId,
+              userId: acct.id,
+              amountCents: payout.amount,
+            });
+            continue;
+          }
+
           unreconciled.push({
             kind: 'orphan_stripe_payout',
             payoutId: payout.id,
@@ -530,7 +576,15 @@ serve(async (req: Request) => {
               amountCents: payout.amount,
               status: payout.status,
               ageHours: Math.round(ageH),
-              note: 'Stripe paid out money with no corresponding ledger row. Do not create one automatically — investigate why it is missing.',
+              // An ambiguous correlation is deliberately NOT resolved. Picking
+              // between two equally-plausible withdrawals is the failure mode
+              // that made amount-matching unsafe in the first place.
+              ambiguousCandidates:
+                correlation.kind === 'ambiguous' ? correlation.transactionIds : undefined,
+              note:
+                correlation.kind === 'ambiguous'
+                  ? 'Stripe paid out money with no corresponding ledger row. More than one pending withdrawal could explain it (see ambiguousCandidates) — resolve by hand; do not guess.'
+                  : 'Stripe paid out money with no corresponding ledger row. Do not create one automatically — investigate why it is missing.',
             },
           });
           alert('CRITICAL', 'orphan_stripe_payout', {
@@ -820,6 +874,14 @@ serve(async (req: Request) => {
       // /connect routes log CRITICAL when payouts.create throws) or the id was
       // never recorded. Fine briefly, a problem if it persists.
       if (status === 'pending' && ageH > STALE_PENDING_WARN_HOURS) {
+        // Already reported as payout_id_never_recorded: Stripe HAS settled a
+        // payout that uniquely matches this row, we simply never recorded the
+        // id. Reporting it again here as "the payout was never created" would
+        // describe the same event twice, with contradictory causes — which is
+        // precisely how one webhook-delivery gap presented as two independent
+        // classes of finding.
+        if (correlatedTxIds.has(row.id as string)) continue;
+
         stalePending++;
         unreconciled.push({
           kind: 'stale_pending_withdrawal',
@@ -878,27 +940,70 @@ serve(async (req: Request) => {
       });
     } else {
       const violations = (invariantRows ?? []) as Array<Record<string, unknown>>;
-      if (violations.length > 0) {
-        const totalCents = violations.reduce(
-          (sum, r) => sum + Math.round(Math.abs(Number(r.amount ?? 0)) * 100),
-          0
-        );
+
+      // Split the known historical set from genuinely new violations.
+      //
+      // Previously this emitted ONE CRITICAL rollup covering both, so the 25
+      // grandfathered rows from the instant-payout fallback incident re-raised
+      // a critical every run, forever — 96 times a day once the 15-minute cron
+      // landed. That is the whole of the "96 completed_withdrawal_without_
+      // payout_total mismatches" in the 2026-08-31 brief: one already-known,
+      // already-decided backlog, recounted every 15 minutes.
+      //
+      // Both halves stay reported. Only a violation NEWER than the cutoff
+      // means the invariant is actively being bypassed, and only that is
+      // CRITICAL. The historical set stays permanently visible as INFO so it
+      // cannot be forgotten, but it no longer competes with live incidents.
+      const split = splitInvariantViolations(
+        violations.map(r => ({
+          row: r,
+          createdAtMs: Date.parse(String(r.created_at ?? '')) || 0,
+        }))
+      );
+
+      const summarise = (entries: Array<{ row: Record<string, unknown> }>) => {
+        const rows = entries.map(e => e.row);
+        return {
+          count: rows.length,
+          totalCents: rows.reduce(
+            (sum, r) => sum + Math.round(Math.abs(Number(r.amount ?? 0)) * 100),
+            0
+          ),
+          oldest: rows[rows.length - 1]?.created_at ?? null,
+          newest: rows[0]?.created_at ?? null,
+          transactionIds: rows.slice(0, 50).map(r => r.id),
+        };
+      };
+
+      if (split.current.length > 0) {
+        const summary = summarise(split.current);
         findings.push({
           findingType: 'completed_withdrawal_without_payout_total',
           severity: 'CRITICAL',
           userId: null,
           details: {
-            count: violations.length,
-            totalCents,
-            oldest: violations[violations.length - 1]?.created_at ?? null,
-            newest: violations[0]?.created_at ?? null,
-            transactionIds: violations.slice(0, 50).map(r => r.id),
-            note: 'Withdrawals marked completed with no Stripe payout id. Rows predating 2026-08-15 are the known historical set from the instant-payout fallback incident (25 rows, $526.65) and are grandfathered by the DB constraint; anything newer means the invariant is being bypassed.',
+            ...summary,
+            grandfatherCutoff: INVARIANT_GRANDFATHER_CUTOFF_ISO,
+            note: 'Withdrawals marked completed with no Stripe payout id, created AFTER the grandfather cutoff. The invariant is being bypassed — a Transfer alone is not payment. Investigate the writer before resolving; never resolve by inventing a payout id.',
           },
         });
         alert('CRITICAL', 'completed_withdrawal_without_payout_total', {
-          count: violations.length,
-          totalCents,
+          count: summary.count,
+          totalCents: summary.totalCents,
+        });
+      }
+
+      if (split.grandfathered.length > 0) {
+        const summary = summarise(split.grandfathered);
+        findings.push({
+          findingType: 'completed_withdrawal_without_payout_grandfathered',
+          severity: 'INFO',
+          userId: null,
+          details: {
+            ...summary,
+            grandfatherCutoff: INVARIANT_GRANDFATHER_CUTOFF_ISO,
+            note: 'Known historical set from the instant-payout fallback incident, predating the DB CHECK constraint and grandfathered by it. These are real unverified-payment records and still need a per-row decision, but they are a standing backlog, not a live incident — reported as INFO so they do not mask a new violation. Tracked in docs/withdrawals/.',
+          },
         });
       }
     }
@@ -1173,22 +1278,69 @@ serve(async (req: Request) => {
     // separate run_withdrawal_reconciliation() DB function, which masked it.
     // Found 2026-08-16 while verifying that the new invariant sweep actually
     // recorded anything.
+    //
+    // IDEMPOTENT since 2026-09-01. This was a plain INSERT, and production runs
+    // this function every 15 minutes (cron `stripe-payout-reconciliation-15min`),
+    // so every unresolved problem wrote 96 rows a day. The "288 critical
+    // financial mismatches" in the 2026-08-31 brief was 96 runs x 3 underlying
+    // issues; the 08-28 -> 08-31 "climb" was the cron reaching a full day. The
+    // backlog counter was measuring the schedule, not the system.
+    //
+    // record_reconciliation_finding() keys each finding on the durable
+    // identity of the problem and UPDATEs on repeat, bumping last_seen_at and
+    // occurrence_count. The critical-alert trigger is AFTER INSERT only, so an
+    // operator is paged when a problem APPEARS and not every 15 minutes while
+    // it stays open. See migration 20260901140000.
+    //
+    // Persisted in ONE round trip. This was a per-finding loop, i.e. one
+    // sequential PostgREST call each — the cost scaled with the size of the
+    // backlog the sweep exists to find, inside a function with a 55s cron
+    // timeout. record_reconciliation_findings() applies each element in its own
+    // subtransaction, so a single malformed finding still cannot discard the
+    // rest, and per-element failures come back in `errors` rather than raising.
     if (findings.length > 0) {
-      const { error: findingsError } = await supabase.from('reconciliation_findings').insert(
-        findings.map(f => ({
-          finding_type: f.findingType,
-          severity: f.severity.toLowerCase(),
-          user_id: f.userId,
-          details: f.details,
-          auto_repaired: f.findingType === 'ledger_status_repaired',
-        }))
+      let persisted = 0;
+      const persistErrors: string[] = [];
+
+      const { data: persistResult, error: batchError } = await supabase.rpc(
+        'record_reconciliation_findings',
+        {
+          p_findings: findings.map(f => ({
+            finding_type: f.findingType,
+            severity: f.severity.toLowerCase(),
+            user_id: f.userId,
+            details: f.details,
+            auto_repaired: f.findingType === 'ledger_status_repaired',
+          })),
+        }
       );
-      if (findingsError) {
+
+      if (batchError) {
+        // The whole call failed (permissions, function missing, transport).
+        // Report every finding as unpersisted so the alert below is accurate.
+        persistErrors.push(...findings.map(f => `${f.findingType}: ${batchError.message}`));
+      } else {
+        const result = (persistResult ?? {}) as {
+          recorded?: number;
+          errors?: Array<{ finding_type?: string; error?: string }>;
+        };
+        persisted = result.recorded ?? 0;
+        for (const e of result.errors ?? []) {
+          persistErrors.push(`${e.finding_type ?? 'unknown'}: ${e.error ?? 'unknown error'}`);
+        }
+      }
+
+      if (persistErrors.length > 0) {
         // Loud: a reconciliation run whose findings vanish is worse than one
         // that did not run, because it looks like a clean pass.
         console.error(
           '[reconciliation-alert][CRITICAL] findings_persist_failed',
-          JSON.stringify({ error: findingsError.message, findingCount: findings.length })
+          JSON.stringify({
+            errors: persistErrors.slice(0, 10),
+            failed: persistErrors.length,
+            persisted,
+            findingCount: findings.length,
+          })
         );
       }
     }

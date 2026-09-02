@@ -27,6 +27,9 @@ never see it.
 | `bin/run.mjs` | The only supported entry point: guard -> swarm -> oracle -> report |
 | `bin/oracle.mjs` | Server-side invariant checks against the database (the ground truth) |
 | `bin/report.mjs` | Shoal findings -> Bounty P0-P3 / funnel / area format |
+| `bin/seed.mjs` | Provisions the staging test accounts and marketplace state (idempotent) |
+| `bin/ci-secrets.mjs` | Inventories and uploads the GitHub Actions secrets the workflow needs |
+| `test/env-guard.test.mjs` | Regression tests for the production guards (`npm run qa:shoal:test`) |
 | `artifacts/` | Per-run output (gitignored) |
 
 ---
@@ -102,6 +105,7 @@ npm run qa:shoal:web -- --skip-build    # re-serve an existing export, instantly
 Then run a scenario:
 
 ```bash
+npm run qa:shoal:test                                   # guard regression tests, no network
 npm run qa:shoal:smoke                                  # Phase 1 smoke, 2 agents
 npm run qa:shoal:list                                   # every scenario
 npm run qa:shoal:run -- poster-rage-quit                # where posters abandon
@@ -149,9 +153,18 @@ them and drives payment UI. Pointed at production it would do all of that for re
 4. Any `pk_live_` Stripe key visible in the bundle refuses the run. Stripe test mode only.
 5. An unreachable target is refused, never assumed safe.
 
-`bin/oracle.mjs` applies the same rule to `BOUNTY_SHOAL_DATABASE_URL`, which is a separate
-variable from `DATABASE_URL` precisely so that a stale shell export cannot point it at
-production by accident.
+`bin/oracle.mjs` and `bin/seed.mjs` apply the same rule to `BOUNTY_SHOAL_DATABASE_URL`,
+which is a separate variable from `DATABASE_URL` precisely so that a stale shell export
+cannot point it at production by accident. `resolveDatabaseTarget()`:
+
+* extracts the project ref from **every** documented URL shape, including the pooler
+  username (`postgres.<ref>@...`) — an earlier host-only matcher found nothing in pooler
+  URLs and therefore **failed open** on exactly the form that connects;
+* **refuses** any connection string whose project it cannot identify, rather than
+  proceeding (`BOUNTY_SHOAL_DB_PROJECT_REF` declares it explicitly if ever needed);
+* refuses when the `--env` label and the connected project disagree.
+
+All of that is covered by `npm run qa:shoal:test`.
 
 Steps 2–4 can be relaxed with
 `BOUNTY_SHOAL_I_UNDERSTAND_THIS_IS_PRODUCTION=yes-really`. There is no legitimate routine
@@ -191,12 +204,34 @@ around throwaway accounts on non-production projects.
 
 ### Test accounts
 
-Create these by hand, once, on the target project:
+Provisioned by `bin/seed.mjs`, not by hand — it is idempotent, so re-running it is safe
+and it doubles as the CI setup step:
 
-* **Poster** — completed onboarding, some wallet balance in Stripe test mode, at least one
-  posted bounty (needed by `poster-review`, `completion`, `state-breaker`).
-* **Hunter** — completed onboarding, not the same person as the poster (needed by
-  `hunter-conversion`, `hunter-rage-quit`, `race-claim`).
+```bash
+export BOUNTY_SHOAL_DATABASE_URL='postgresql://postgres.<ref>:<pw>@aws-1-<region>.pooler.supabase.com:5432/postgres'
+export BOUNTY_SHOAL_SERVICE_ROLE_KEY=$(grep '^SUPABASE_SERVICE_ROLE_KEY=' .env.staging | cut -d= -f2-)
+
+node qa/shoal/bin/seed.mjs accounts --env staging   # poster + hunter, onboarded, funded
+node qa/shoal/bin/seed.mjs bounty   --env staging   # an open "[shoal] ..." bounty to act on
+node qa/shoal/bin/seed.mjs status   --env staging   # what exists right now
+```
+
+It creates a **poster** (onboarded, balance >= 500 test funds) and a **hunter**
+(onboarded), prints the passwords once, and never writes them to a file. Everything it
+creates is identifiable: accounts use `qa+shoal-*@bountyfinder.test`, bounties are titled
+`[shoal] ...`.
+
+Writing to `profiles` goes through the sanctioned transaction-local
+`app.bypass_profile_guard` GUC (see
+`supabase/migrations/20260719120000_fix_profile_guard_blocks_trusted_writes.sql`), because
+`trg_prevent_client_writes_to_protected_profile_columns` rejects direct writes to
+protected columns. The guard itself is never weakened.
+
+> **Connecting to Supabase Postgres:** the `db.<ref>.supabase.co` host in `.env.staging`
+> no longer resolves — Supabase retired direct connections. Use the **pooler**:
+> `postgresql://postgres.<ref>:<pw>@aws-1-<region>.pooler.supabase.com:5432/postgres`.
+> The project ref lives in the *username*, which is why `resolveDatabaseTarget()` parses
+> it there and refuses any URL whose project it cannot identify.
 
 Shoal has no way to inject an authenticated browser context, so scenarios that need a
 session hand the agent the credentials **inside the task text**. `bin/run.mjs` redacts the
@@ -264,6 +299,30 @@ This is exactly why the guard inspects the **served bundle** rather than trustin
 files. Check the `[guard] supabase refs in served bundle` line it prints on every run —
 that line is the actual evidence about which backend the swarm is about to hit.
 
+**Authenticated flows currently crash in the static-export harness.** Signing in
+succeeds (the Supabase token is issued), but the client-side navigation that follows
+throws
+
+```
+Cannot destructure property 'ErrorBoundary' of 'undefined' as it is undefined
+```
+
+and the error screen's own "Try Again" is dead, so the agent is stranded. It reproduces
+deterministically, and it is *not* caused by a missing asset (that was a separate
+`serve.mjs` bug, now fixed and regression-tested in `test/static-server.test.mjs`).
+
+`ErrorBoundary` destructuring is **expo-router internal**, and a full page load of `/`
+works fine while the post-sign-in client transition does not — so the leading hypothesis
+is an artifact of `web.output: "static"` route loading rather than a product defect. It
+has **not** been confirmed against the Metro dev server or a native build, because
+`expo start --web` does not run on this machine (see below).
+
+**Until this is resolved, every `requiresAuth` scenario is unreliable**: the agents spend
+their budget on the crash screen rather than the flow under test. Unauthenticated
+scenarios (`smoke`, `poster-conversion`, `poster-rage-quit`, `trust-audit`) are
+unaffected. Resolving this is the top priority for this layer — see the report's next
+actions.
+
 **`expo start --web` crashes here.** On Windows it dies with `EMFILE: too many open files`
 during source-map generation for the static-render bundle, after ~8 minutes of bundling.
 `bin/serve.mjs` uses `expo export` instead, which does not hit that path.
@@ -294,3 +353,27 @@ during source-map generation for the static-render bundle, after ~8 minutes of b
 `.github/workflows/shoal.yml`. Manual dispatch and a nightly schedule, staging only, never
 on production. PRs are deliberately **not** wired to run a swarm: it costs money per run
 and is far slower than the Playwright suite that already gates PRs.
+
+### Secrets
+
+Ten secrets are required (an eleventh, `SHOAL_POSTER_ID`, is only used by the `race` job,
+which is `if: false`). Rather than pasting them by hand, use:
+
+```bash
+npm run qa:shoal:ci-secrets -- list          # what is needed and whether it resolves (values masked)
+npm run qa:shoal:ci-secrets -- set --dry-run # the exact gh commands, still no values
+gh auth login                                # once
+npm run qa:shoal:ci-secrets -- set           # upload
+```
+
+It reads each value from where it already lives (`.env.staging`, your shell) and pipes it
+to `gh secret set` over **stdin**, so no secret reaches argv, a process list, shell
+history, or your clipboard. It refuses to upload a `pk_live_` Stripe key, a database URL
+whose project is not staging, and any placeholder password.
+
+`SHOAL_ANTHROPIC_API_KEY` must come from your shell (`ANTHROPIC_API_KEY`) or
+console.anthropic.com — CI cannot use `--provider subscription`, which needs a Claude Code
+login on the runner.
+
+Secrets live at **Settings → Secrets and variables → Actions → Repository secrets**
+(`https://github.com/kodaksax/Bounty-production/settings/secrets/actions`).

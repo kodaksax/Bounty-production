@@ -20,10 +20,11 @@
  *                               [--max-workers <n>] [--no-ssg] [--dev]
  */
 import { spawnSync } from 'node:child_process';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { extname, join, normalize } from 'node:path';
+import { join } from 'node:path';
 import { loadConfig, REPO_ROOT, shoalHome } from './lib/env.mjs';
+import { isNavigationRequest, mimeFor, resolveFile } from './lib/static-server.mjs';
 
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes('--' + f);
@@ -76,59 +77,55 @@ if (!existsSync(join(outDir, 'index.html'))) {
   process.exit(1);
 }
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.map': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.webp': 'image/webp',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-};
-
-/** Resolve a request path against a static export: file, route.html, route/index.html, SPA root. */
-function resolveFile(urlPath) {
-  const clean = decodeURIComponent(urlPath.split('?')[0].split('#')[0]);
-  // Refuse to escape the export directory.
-  const rel = normalize(clean).replace(/^([/\\])+/, '');
-  if (rel.includes('..')) return null;
-
-  const candidates = [
-    join(outDir, rel),
-    join(outDir, rel + '.html'),
-    join(outDir, rel, 'index.html'),
-    join(outDir, 'index.html'),
-  ];
-  for (const c of candidates) {
-    if (existsSync(c) && statSync(c).isFile()) return c;
-  }
-  return null;
-}
-
-createServer((req, res) => {
-  const file = resolveFile(req.url || '/');
+const server = createServer((req, res) => {
+  const navigation = isNavigationRequest(req);
+  const file = resolveFile(outDir, req.url || '/', navigation);
   if (!file) {
+    // Log asset misses loudly: silently 404ing a chunk produces a blank app, and a
+    // swarm will report that as a product bug rather than a harness one.
+    if (!navigation) console.warn('  404 asset: ' + req.url);
     res.writeHead(404, { 'content-type': 'text/plain' });
     res.end('not found');
     return;
   }
   res.writeHead(200, {
-    'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'content-type': mimeFor(file),
     'cache-control': 'no-store',
   });
   createReadStream(file).pipe(res);
-}).listen(port, () => {
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      '\n  Port ' + port + ' is already in use -- most likely an earlier qa:shoal:web that was\n' +
+        '  backgrounded and never stopped. Free it, or serve elsewhere with --port <n>.\n',
+    );
+    process.exit(1);
+  }
+  throw err;
+});
+
+server.listen(port, () => {
   console.log('\n  Bounty web app (static export, APP_ENV=' + appEnv + ')');
   console.log('  serving ' + outDir);
   console.log('  http://localhost:' + port + '\n');
-  console.log('  Now, in another terminal:  npm run qa:shoal:smoke\n');
+  console.log('  Now, in another terminal:  npm run qa:shoal:smoke');
+  console.log('  Stop with Ctrl+C (the port is released on exit).\n');
 });
+
+// Release the port deterministically instead of relying on the parent shell. Without
+// this, a backgrounded server keeps :8090 held after the terminal that started it moves
+// on, and the next run fails with EADDRINUSE.
+let closing = false;
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(sig, () => {
+    if (closing) return;
+    closing = true;
+    console.log('\n  ' + sig + ' -- closing the server and releasing port ' + port + '.');
+    server.close(() => process.exit(0));
+    // Sockets held open by a browser would otherwise keep close() pending forever.
+    server.closeAllConnections?.();
+    setTimeout(() => process.exit(0), 2000).unref();
+  });
+}

@@ -76,13 +76,16 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-shoal
 
+      - name: Guard regression tests (cheap, fails fast)
+        run: npm run qa:shoal:test
+
       - name: Set up Shoal
         run: npm run qa:shoal:setup
 
       - name: Build and serve the web app
         run: |
           nohup npm run qa:shoal:web > web.log 2>&1 &
-          for i in $(seq 1 90); do
+          for i in $(seq 1 180); do
             curl -sf http://localhost:8090 >/dev/null && break
             sleep 10
           done
@@ -91,6 +94,18 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SHOAL_STAGING_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SHOAL_STAGING_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.SHOAL_STAGING_STRIPE_PUBLISHABLE_KEY }}
+
+      - name: Seed staging test accounts and a contended bounty
+        run: |
+          node qa/shoal/bin/seed.mjs accounts --env staging
+          node qa/shoal/bin/seed.mjs bounty --env staging
+        env:
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_SERVICE_ROLE_KEY: ${{ secrets.SHOAL_STAGING_SERVICE_ROLE_KEY }}
+          BOUNTY_SHOAL_TEST_EMAIL: ${{ secrets.SHOAL_TEST_EMAIL }}
+          BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
+          BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
+          BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
 
       - name: Run scenario
         run: |
@@ -160,13 +175,16 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-shoal
 
+      - name: Guard regression tests (cheap, fails fast)
+        run: npm run qa:shoal:test
+
       - name: Set up Shoal
         run: npm run qa:shoal:setup
 
       - name: Build and serve the web app
         run: |
           nohup npm run qa:shoal:web > web.log 2>&1 &
-          for i in $(seq 1 90); do
+          for i in $(seq 1 180); do
             curl -sf http://localhost:8090 >/dev/null && break
             sleep 10
           done
@@ -175,6 +193,16 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SHOAL_STAGING_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SHOAL_STAGING_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.SHOAL_STAGING_STRIPE_PUBLISHABLE_KEY }}
+
+      - name: Seed staging test accounts
+        run: node qa/shoal/bin/seed.mjs accounts --env staging
+        env:
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_SERVICE_ROLE_KEY: ${{ secrets.SHOAL_STAGING_SERVICE_ROLE_KEY }}
+          BOUNTY_SHOAL_TEST_EMAIL: ${{ secrets.SHOAL_TEST_EMAIL }}
+          BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
+          BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
+          BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
 
       - name: Run ${{ matrix.scenario }}
         run: node qa/shoal/bin/run.mjs ${{ matrix.scenario }}

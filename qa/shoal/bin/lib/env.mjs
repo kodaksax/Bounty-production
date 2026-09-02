@@ -48,6 +48,109 @@ export function shoalHome(config) {
 
 export class GuardError extends Error {}
 
+/**
+ * The canonical APP_ENV -> Supabase project map the app itself uses
+ * (app.config.js and lib/config/env-guard.ts both import this file). Reused rather than
+ * duplicated so the QA layer can never drift from the app's own idea of which project an
+ * environment means.
+ */
+export function supabaseRefs() {
+  return JSON.parse(readFileSync(join(REPO_ROOT, 'lib', 'config', 'supabase-refs.json'), 'utf8'));
+}
+
+export function expectedRefForAppEnv(appEnv) {
+  const ref = supabaseRefs().byAppEnv[appEnv];
+  if (!ref) {
+    throw new GuardError(
+      'No Supabase project mapped to APP_ENV="' + appEnv + '" in lib/config/supabase-refs.json.',
+    );
+  }
+  return ref;
+}
+
+/** A Supabase project ref is exactly 20 lowercase letters. */
+const REF = '[a-z]{20}';
+
+/**
+ * Pull every Supabase project ref out of a Postgres connection string.
+ *
+ * Supabase has retired the direct `db.<ref>.supabase.co` host; the working form is now the
+ * pooler, where the ref lives in the USERNAME (`postgres.<ref>@aws-1-us-east-2.pooler...`)
+ * and not in the host at all. A host-only matcher silently finds nothing there, which is
+ * how a guard that only warns on a match ends up failing OPEN on the one URL shape that
+ * actually connects. Match every documented shape, and let the caller refuse when the
+ * result is empty.
+ */
+export function parseDbProjectRefs(connectionString) {
+  const patterns = [
+    new RegExp('://postgres\\.(' + REF + ')[:@]'), // pooler username
+    new RegExp('\\bdb\\.(' + REF + ')\\.supabase\\.(?:co|com)\\b'), // legacy direct host
+    new RegExp('\\b(' + REF + ')\\.supabase\\.(?:co|com)\\b'), // any *.supabase.co host
+    new RegExp('\\b(' + REF + ')\\.pooler\\.supabase\\.com\\b'), // per-project pooler host
+    new RegExp('[?&]options=[^&]*project(?:%3D|=)(' + REF + ')'), // ?options=project%3D<ref>
+  ];
+  const found = new Set();
+  for (const p of patterns) {
+    const m = connectionString.match(p);
+    if (m) found.add(m[1]);
+  }
+  return [...found];
+}
+
+/**
+ * Decide whether a database connection string may be used, and against which project.
+ *
+ * Fails CLOSED: an unparseable connection string is refused rather than allowed, because
+ * `seed-race` writes rows and the cost of guessing wrong is production data. The operator
+ * can name the project explicitly with BOUNTY_SHOAL_DB_PROJECT_REF, but an explicit ref
+ * that contradicts the URL is itself an error.
+ */
+export function resolveDatabaseTarget(config, connectionString, explicitRef) {
+  const g = config.guards;
+  const parsed = parseDbProjectRefs(connectionString);
+
+  if (parsed.length > 1) {
+    throw new GuardError(
+      'The connection string names more than one Supabase project (' + parsed.join(', ') +
+        '). Refusing rather than guessing which one it connects to.',
+    );
+  }
+
+  const declared = explicitRef || process.env.BOUNTY_SHOAL_DB_PROJECT_REF;
+  if (declared && parsed.length === 1 && declared !== parsed[0]) {
+    throw new GuardError(
+      'BOUNTY_SHOAL_DB_PROJECT_REF="' + declared + '" contradicts the connection string, ' +
+        'which points at "' + parsed[0] + '".',
+    );
+  }
+
+  const ref = parsed[0] || declared;
+  if (!ref) {
+    throw new GuardError(
+      'Could not determine which Supabase project this connection string reaches.\n' +
+        '  Supabase pooler URLs carry the project ref in the username\n' +
+        '  (postgresql://postgres.<ref>@aws-1-<region>.pooler.supabase.com:5432/postgres).\n' +
+        '  If yours has no ref at all, declare it explicitly:\n' +
+        '    BOUNTY_SHOAL_DB_PROJECT_REF=<ref>\n' +
+        '  Refusing to connect to an unidentified database.',
+    );
+  }
+
+  if (g.deniedSupabaseRefs.includes(ref)) {
+    throw new GuardError(
+      'This connection string points at the PRODUCTION project (' + ref + ').\n' +
+        '  The oracle reads and, for seed-race, WRITES marketplace rows. Refusing.',
+    );
+  }
+  if (!g.allowedSupabaseRefs.includes(ref)) {
+    throw new GuardError(
+      'This connection string points at an unrecognised project (' + ref + ').\n' +
+        '  Add it to guards.allowedSupabaseRefs only if it is non-production.',
+    );
+  }
+  return { ref, source: parsed.length ? 'connection-string' : 'BOUNTY_SHOAL_DB_PROJECT_REF' };
+}
+
 function hostOf(url) {
   try {
     return new URL(url).hostname.toLowerCase();
