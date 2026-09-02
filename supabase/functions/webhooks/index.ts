@@ -2791,6 +2791,23 @@ Deno.serve(async (req: Request) => {
         break;
       }
 
+      case 'payout.closed': {
+        // Stripe uses payout.closed for terminal closures that are not always
+        // accompanied by payout.failed. Treat it as a failed delivery so the
+        // withdrawal is reconciled and funds are restored, never completed.
+        const payout = event.data.object as Stripe.Payout;
+        const closedAccountId = (event as any).account as string | undefined;
+        if (!closedAccountId) {
+          console.warn('[webhooks] payout.closed is missing the connected account', {
+            eventId: event.id,
+            payoutId: payout.id,
+          });
+          break;
+        }
+        await handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed');
+        break;
+      }
+
       case 'charge.dispute.created': {
         const dispute = event.data.object as Stripe.Dispute;
         const disputePaymentIntentId =

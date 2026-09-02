@@ -525,6 +525,8 @@ const toHeyCatchProperties = (
     if (value === undefined) continue;
     if (Array.isArray(value)) {
       result[key] = value.join(',');
+    } else if (value instanceof Error) {
+      result[key] = String(value);
     } else if (
       typeof value === 'string' ||
       typeof value === 'number' ||
@@ -533,7 +535,11 @@ const toHeyCatchProperties = (
     ) {
       result[key] = value;
     } else {
-      result[key] = String(value);
+      try {
+        result[key] = JSON.stringify(value) ?? '[unserializable]';
+      } catch {
+        result[key] = '[unserializable]';
+      }
     }
   }
   return result;
