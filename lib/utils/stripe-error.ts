@@ -5,6 +5,8 @@ export interface SerializedStripeError {
   message: string;
   request_id?: string;
   object_id?: string;
+  payment_intent_id?: string;
+  charge_id?: string;
 }
 
 /**
@@ -38,7 +40,13 @@ export function serializeStripeError(error: unknown): SerializedStripeError {
     ...(typeof raw.decline_code === 'string' && { decline_code: raw.decline_code }),
     message,
     ...(requestId && { request_id: requestId }),
-    ...(typeof raw.payment_intent === 'string' && { object_id: raw.payment_intent }),
-    ...(typeof raw.charge === 'string' && { object_id: raw.charge }),
+    ...(typeof raw.payment_intent === 'string' && {
+      object_id: raw.payment_intent,
+      payment_intent_id: raw.payment_intent,
+    }),
+    ...(typeof raw.charge === 'string' && {
+      ...(!(typeof raw.payment_intent === 'string') && { object_id: raw.charge }),
+      charge_id: raw.charge,
+    }),
   };
 }

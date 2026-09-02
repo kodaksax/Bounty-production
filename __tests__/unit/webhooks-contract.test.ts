@@ -80,6 +80,7 @@ describe("case 'payout.paid'", () => {
       expect(nextCase).toBeGreaterThan(start);
       const body = webhooksSource.slice(start, nextCase);
       expect(body).toContain("handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed')");
+      expect(body).toContain("payout.closed is missing the connected account");
     });
   });
 });

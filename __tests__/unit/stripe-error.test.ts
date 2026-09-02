@@ -25,4 +25,20 @@ describe('serializeStripeError', () => {
     expect(serialized.message).not.toBe('[object Object]');
     expect(serialized).toMatchObject({ type: 'StripeError', message: 'Unknown Stripe error' });
   });
+
+  test('preserves the useful string representation of Error instances', () => {
+    expect(serializeStripeError(new Error('card declined')).message).toBe('Error: card declined');
+  });
+
+  test('preserves both payment intent and charge identifiers', () => {
+    expect(
+      serializeStripeError({
+        raw: { payment_intent: 'pi_123', charge: 'ch_123' },
+      })
+    ).toMatchObject({
+      object_id: 'pi_123',
+      payment_intent_id: 'pi_123',
+      charge_id: 'ch_123',
+    });
+  });
 });

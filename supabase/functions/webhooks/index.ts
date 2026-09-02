@@ -2816,9 +2816,14 @@ Deno.serve(async (req: Request) => {
         // withdrawal is reconciled and funds are restored, never completed.
         const payout = event.data.object as Stripe.Payout;
         const closedAccountId = (event as any).account as string | undefined;
-        if (closedAccountId) {
-          await handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed');
+        if (!closedAccountId) {
+          console.warn('[webhooks] payout.closed is missing the connected account', {
+            eventId: event.id,
+            payoutId: payout.id,
+          });
+          break;
         }
+        await handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed');
         break;
       }
 
