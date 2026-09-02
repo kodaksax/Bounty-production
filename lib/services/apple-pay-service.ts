@@ -23,6 +23,7 @@ export interface ApplePayPaymentRequest {
   amount: number; // in dollars
   description: string;
   bountyId?: string;
+  attemptId?: string;
 }
 
 export interface ApplePayResult {
@@ -31,6 +32,22 @@ export interface ApplePayResult {
   error?: string;
   errorCode?: string;
 }
+
+/**
+ * Window that collapses rapid re-taps of the same deposit into one Stripe
+ * idempotency key. A confirm failure makes the user tap Pay again within
+ * seconds (a duplicate $1.00 charge 17 seconds apart is the case that
+ * motivated this), so the key must stay stable across that retry loop.
+ * Kept short (60s) so legitimate back-to-back deposits are not blocked.
+ */
+const IDEMPOTENCY_WINDOW_MS = 60 * 1000;
+
+/** PaymentIntent statuses that mean the charge will never complete. */
+const TERMINAL_FAILURE_STATUSES = new Set(['requires_payment_method', 'canceled']);
+
+/** Bounded status poll used after an indeterminate confirm error. */
+const STATUS_POLL_MAX_ATTEMPTS = 4;
+const STATUS_POLL_DELAY_MS = 1000;
 
 class ApplePayService {
   /**
@@ -73,12 +90,90 @@ class ApplePayService {
   }
 
   /**
-   * Generate idempotency key for payment request
+   * Build the Stripe idempotency key for a deposit attempt.
+   *
+   * The key is derived from the user, the amount, and either a client-supplied
+   * attemptId or a short time bucket — NOT from Date.now(). A per-timestamp key
+   * gave every tap a new key and therefore a brand-new PaymentIntent, so a
+   * second tap after a confirm error created a second charge. With this key,
+   * re-taps of the same deposit inside one attempt/window share a key, so Stripe
+   * returns the first PaymentIntent instead of charging again.
+   *
+   * The user scope prevents two people on the same device (or a missing user
+   * id) from ever sharing a key. Without a user id we fall back to a unique
+   * per-call key: no dedup, but no cross-user collision either.
    */
-  private generateIdempotencyKey(request: ApplePayPaymentRequest): string {
-    const timestamp = Date.now();
+  private generateIdempotencyKey(request: ApplePayPaymentRequest, userId?: string): string {
     const amountKey = Math.round(request.amount * 100);
-    return `apple_pay_${amountKey}_${timestamp}`;
+    if (!userId) {
+      return `apple_pay_${amountKey}_${Date.now()}`;
+    }
+    if (request.attemptId) {
+      const safeAttemptId = request.attemptId.replace(/[^a-zA-Z0-9_-]/g, '');
+      return `apple_pay_${userId}_${amountKey}_${safeAttemptId}`;
+    }
+    const bucket = Math.floor(Date.now() / IDEMPOTENCY_WINDOW_MS);
+    return `apple_pay_${userId}_${amountKey}_${bucket}`;
+  }
+
+  /**
+   * Ask the backend for the current PaymentIntent status. Returns true only
+   * once the charge has succeeded, false while it is still pending, and the
+   * terminal status so the caller can stop polling a dead intent.
+   */
+  private async fetchIntentStatus(
+    paymentIntentId: string,
+    token: string,
+    bountyId?: string
+  ): Promise<{ succeeded: boolean; status?: string }> {
+    const response = await fetch(`${API_BASE_URL}/apple-pay/confirm`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ paymentIntentId, bountyId }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to read payment status');
+    }
+
+    const result = await response.json();
+    return { succeeded: result.success === true, status: result.status };
+  }
+
+  /**
+   * Poll the intent status after an indeterminate confirm error. A non-cancel
+   * error from the native confirm call does NOT prove the charge failed — the
+   * PaymentIntent may already be `succeeded` (for example when the key was
+   * reused and the first tap already went through). Returns true if the charge
+   * completed, so the caller never reports a false failure that invites a
+   * duplicate charge.
+   */
+  private async pollIntentSucceeded(
+    paymentIntentId: string,
+    token: string,
+    bountyId?: string
+  ): Promise<boolean> {
+    for (let attempt = 1; attempt <= STATUS_POLL_MAX_ATTEMPTS; attempt++) {
+      try {
+        const { succeeded, status } = await this.fetchIntentStatus(paymentIntentId, token, bountyId);
+        if (succeeded) {
+          return true;
+        }
+        if (status && TERMINAL_FAILURE_STATUSES.has(status)) {
+          return false;
+        }
+      } catch (error) {
+        console.warn(`[ApplePay] Status poll attempt ${attempt}/${STATUS_POLL_MAX_ATTEMPTS} failed:`, error);
+      }
+
+      if (attempt < STATUS_POLL_MAX_ATTEMPTS) {
+        await new Promise(resolve => setTimeout(resolve, STATUS_POLL_DELAY_MS * attempt));
+      }
+    }
+    return false;
   }
 
   /**
@@ -133,12 +228,12 @@ class ApplePayService {
     }
 
     try {
-      const idempotencyKey = this.generateIdempotencyKey(request);
+      const { token, userId } = await getAuthContext(authToken);
+      const idempotencyKey = this.generateIdempotencyKey(request, userId);
 
       // Step 1: Create PaymentIntent on backend (with retry)
       const { clientSecret, paymentIntentId } = await this.retryRequest(async () => {
         const endpoint = `${API_BASE_URL}/apple-pay/payment-intent`
-        const token = authToken || await getAuthToken()
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -192,6 +287,10 @@ class ApplePayService {
         },
       });
 
+      let paymentSucceeded: boolean;
+      let failureMessage: string | undefined;
+      let failureCode: string | undefined;
+
       if (confirmError) {
         // Dismissing the sheet is a normal user action, not a fault — return
         // before logging at error level or emitting a payment_failed event, so
@@ -205,48 +304,47 @@ class ApplePayService {
           };
         }
 
-        logger.error('[ApplePay] Confirmation error', { error: confirmError, ...getDiagnosticContext() });
-        try {
-          await analyticsService.trackEvent('payment_failed', {
-            method: 'apple_pay',
-            stage: 'confirm',
-            errorCode: confirmError.code,
-            ...getDiagnosticContext(),
-          });
-        } catch {
-          /* analytics is best-effort */
-        }
-        return {
-          success: false,
-          error: confirmError.message,
+        // A non-cancel confirm error is INDETERMINATE, not a failure. The
+        // charge may already have gone through — for example the idempotency
+        // key was reused and the PaymentIntent is already `succeeded`, which
+        // makes the native confirm call reject. Reporting failure here is what
+        // invited the re-tap that double-charged, so poll the intent status
+        // before deciding.
+        logger.warning('[ApplePay] Confirm returned an error; polling intent status before failing', {
           errorCode: confirmError.code,
-        };
+          ...getDiagnosticContext(),
+        });
+        paymentSucceeded = await this.pollIntentSucceeded(paymentIntentId, token, request.bountyId);
+        failureMessage = confirmError.message;
+        failureCode = confirmError.code;
+      } else {
+        // Step 3: Verify payment on backend (with retry)
+        const confirmResult = await this.retryRequest(async () => {
+          const confirmEndpoint = `${API_BASE_URL}/apple-pay/confirm`
+          const confirmResponse = await fetch(confirmEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              paymentIntentId,
+              bountyId: request.bountyId,
+            }),
+          });
+
+          if (!confirmResponse.ok) {
+            throw new Error('Failed to confirm payment on backend');
+          }
+
+          return await confirmResponse.json();
+        }, 3, 1000);
+
+        paymentSucceeded = confirmResult.success === true;
+        failureMessage = confirmResult.error;
       }
 
-      // Step 3: Verify payment on backend (with retry)
-      const confirmResult = await this.retryRequest(async () => {
-        const confirmEndpoint = `${API_BASE_URL}/apple-pay/confirm`
-        const token = authToken || await getAuthToken()
-        const confirmResponse = await fetch(confirmEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            paymentIntentId,
-            bountyId: request.bountyId,
-          }),
-        });
-
-        if (!confirmResponse.ok) {
-          throw new Error('Failed to confirm payment on backend');
-        }
-
-        return await confirmResponse.json();
-      }, 3, 1000);
-
-      if (confirmResult.success) {
+      if (paymentSucceeded) {
         try {
           await analyticsService.trackEvent('payment_completed', {
             method: 'apple_pay',
@@ -261,10 +359,15 @@ class ApplePayService {
           paymentIntentId,
         };
       } else {
+        logger.error('[ApplePay] Payment did not complete', {
+          errorCode: failureCode,
+          ...getDiagnosticContext(),
+        });
         try {
           await analyticsService.trackEvent('payment_failed', {
             method: 'apple_pay',
-            stage: 'backend_confirm',
+            stage: confirmError ? 'confirm' : 'backend_confirm',
+            errorCode: failureCode,
             ...getDiagnosticContext(),
           });
         } catch {
@@ -272,7 +375,8 @@ class ApplePayService {
         }
         return {
           success: false,
-          error: confirmResult.error || 'Payment confirmation failed',
+          error: failureMessage || 'Payment confirmation failed',
+          errorCode: failureCode,
         };
       }
 
@@ -301,16 +405,21 @@ class ApplePayService {
 // Export singleton
 export const applePayService = new ApplePayService();
 
-// Helper function to get auth token from Supabase session storage
-async function getAuthToken(): Promise<string> {
+// Read the auth token and user id from the Supabase session. The user id scopes
+// the idempotency key so a reused key can never map one user's tap onto another
+// user's PaymentIntent. A caller-supplied token still wins for the token itself.
+async function getAuthContext(authToken?: string): Promise<{ token: string; userId?: string }> {
   try {
     // supabase.auth.getSession() returns { data: { session } }
     const { data } = await supabase.auth.getSession();
     const session = (data as any)?.session ?? (data as any);
-    return session?.access_token ?? '';
+    return {
+      token: authToken || session?.access_token || '',
+      userId: session?.user?.id,
+    };
   } catch (err) {
-    console.error('[ApplePay] failed to read auth token from supabase storage', err);
-    return '';
+    console.error('[ApplePay] failed to read auth context from supabase storage', err);
+    return { token: authToken || '' };
   }
 }
 

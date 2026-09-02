@@ -29,6 +29,13 @@ export interface CreateBountyPaymentResult {
   amount: number;
   /** True when an existing PaymentIntent was returned instead of creating a new one. */
   reused?: boolean;
+  /**
+   * Which architecture the server actually routed this bounty to. 3 means a
+   * manual-capture authorization, so a successful client confirmation lands on
+   * 'requires_capture' rather than 'succeeded'. Absent means the legacy v2
+   * automatic-capture path ran.
+   */
+  architectureVersion?: 2 | 3;
 }
 
 export interface ReleaseBountyPaymentResult {
@@ -49,6 +56,8 @@ export interface CancelBountyPaymentResult {
   status: string;
   reused?: boolean;
 }
+
+const TERMINAL_CANCEL_STATUSES = new Set(['canceled', 'refunded']);
 
 /** Error thrown when the edge function returns a non-2xx response. Carries the
  *  server's machine-readable `code` (e.g. 'hunter_not_onboarded') and message. */
@@ -131,7 +140,18 @@ export async function releaseBountyPayment(
  * states; rejects if funds were already released to the hunter.
  */
 export async function cancelBountyPayment(bountyId: string): Promise<CancelBountyPaymentResult> {
-  return postBountyPayments<CancelBountyPaymentResult>('/cancel', { bountyId });
+  const result = await postBountyPayments<CancelBountyPaymentResult>('/cancel', { bountyId });
+  const status = String(result?.status ?? '').toLowerCase();
+
+  if (!TERMINAL_CANCEL_STATUSES.has(status)) {
+    throw new BountyPaymentError(
+      `Bounty payment cancellation is still pending (${status || 'unknown'}).`,
+      409,
+      'cancel_pending'
+    );
+  }
+
+  return result;
 }
 
 export const bountyPaymentsService = {

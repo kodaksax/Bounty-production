@@ -76,7 +76,7 @@ export default function OnboardingWelcome() {
   const handleSelectIntent = (intent: 'poster' | 'hunter') => {
     hapticFeedback.light();
     setCtaStopped(true);
-    analyticsService.trackEvent('onboarding_role_selected', { role: intent });
+    analyticsService.trackEvent('role_selected', { role: intent, surface: 'onboarding' });
     trackCtaTapped(intent);
     updateData({ intent });
     router.replace('/onboarding/username');

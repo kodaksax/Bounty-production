@@ -104,6 +104,7 @@ jest.mock('lib/stripe-context', () => ({
 
 jest.mock('lib/utils/payment-architecture', () => ({
   shouldFundNewBountiesWithPhase2: jest.fn(() => false),
+  shouldUseStripeNativeFunding: jest.fn(() => false),
 }));
 
 jest.mock('lib/services/analytics-service', () => ({
@@ -511,18 +512,18 @@ describe('CreateBountyFlow — post_step_viewed fires once per step entry', () =
     expect(viewed).not.toHaveProperty('step');
   });
 
-  it('emits post_started with a single canonical resumed_draft spelling', () => {
+  it('emits bounty_started with a single canonical resumed_draft spelling', () => {
     render(<CreateBountyFlow />);
     fireEvent(screen.getByLabelText('stub-title-input'), 'focus');
 
-    const started = lastEventNamed('post_started') as Record<string, unknown>;
+    const started = lastEventNamed('bounty_started') as Record<string, unknown>;
     expect(started).toHaveProperty('resumed_draft');
     expect(started).not.toHaveProperty('resumedDraft');
     expect(started).not.toHaveProperty('resumeddraft');
   });
 });
 
-// `deliberateTap` gates post_flow_started (a screen defaulting to showing the
+// `deliberateTap` gates composer_opened (a screen defaulting to showing the
 // composer, or a bare bottom-nav tab focus, must NOT count as a funnel start —
 // see the property's doc comment on CreateBountyFlowProps). post_field_focused
 // is the companion composer-engagement signal and must fire regardless of it.
@@ -541,29 +542,29 @@ describe('CreateBountyFlow — deliberateTap gating', () => {
     jest.restoreAllMocks();
   });
 
-  it('fires post_flow_started when deliberateTap is true', () => {
+  it('fires composer_opened when deliberateTap is true', () => {
     render(<CreateBountyFlow deliberateTap />);
 
-    expect(eventsNamed('post_flow_started')).toHaveLength(1);
-    expect(lastEventNamed('post_flow_started')).toMatchObject({ deliberate_entry: true });
-    // A deliberate tab press is still not composer intent — post_started is
+    expect(eventsNamed('composer_opened')).toHaveLength(1);
+    expect(lastEventNamed('composer_opened')).toMatchObject({ deliberate_entry: true });
+    // A deliberate tab press is still not composer intent — bounty_started is
     // gated on interaction, not on how the poster arrived.
-    expect(eventsNamed('post_started')).toHaveLength(0);
+    expect(eventsNamed('bounty_started')).toHaveLength(0);
   });
 
-  it('does not fire post_flow_started when deliberateTap is false (the default)', () => {
+  it('does not fire composer_opened when deliberateTap is false (the default)', () => {
     render(<CreateBountyFlow />);
 
-    expect(eventsNamed('post_flow_started')).toHaveLength(0);
-    expect(eventsNamed('post_started')).toHaveLength(0);
+    expect(eventsNamed('composer_opened')).toHaveLength(0);
+    expect(eventsNamed('bounty_started')).toHaveLength(0);
   });
 
-  it('does not retroactively fire post_flow_started if deliberateTap flips true on a later re-render', () => {
+  it('does not retroactively fire composer_opened if deliberateTap flips true on a later re-render', () => {
     const { rerender } = render(<CreateBountyFlow deliberateTap={false} />);
-    expect(eventsNamed('post_flow_started')).toHaveLength(0);
+    expect(eventsNamed('composer_opened')).toHaveLength(0);
 
     rerender(<CreateBountyFlow deliberateTap={true} />);
-    expect(eventsNamed('post_flow_started')).toHaveLength(0);
+    expect(eventsNamed('composer_opened')).toHaveLength(0);
   });
 
   it('fires post_field_focused exactly once on the title field\'s first focus when deliberateTap is true', () => {
@@ -594,20 +595,20 @@ describe('CreateBountyFlow — deliberateTap gating', () => {
     });
   });
 
-  it('includes entry_point on post_field_focused, matching post_flow_started', () => {
+  it('includes entry_point on post_field_focused, matching composer_opened', () => {
     render(<CreateBountyFlow deliberateTap entryPoint="need_help_tab" />);
 
     fireEvent(screen.getByLabelText('stub-title-input'), 'focus');
 
     expect(lastEventNamed('post_field_focused')).toMatchObject({ entry_point: 'need_help_tab' });
-    expect(lastEventNamed('post_flow_started')).toMatchObject({ entry_point: 'need_help_tab' });
+    expect(lastEventNamed('composer_opened')).toMatchObject({ entry_point: 'need_help_tab' });
   });
 });
 
 // ---------------------------------------------------------------------------
-// post_started must mean COMPOSER INTENT, not composer render.
+// bounty_started must mean COMPOSER INTENT, not composer render.
 //
-// The regression these pin: post_started used to fire from the flow's mount
+// The regression these pin: bounty_started used to fire from the flow's mount
 // effect. The host screen (app/tabs/bounty-app.tsx) mounts this component
 // whenever the Post tab is selected and unmounts it on leaving, so every pass
 // through the tab bar minted a start/abandon pair. Production over the 30 days
@@ -618,7 +619,7 @@ describe('CreateBountyFlow — deliberateTap gating', () => {
 // Mount/unmount here is the faithful simulation of a tab switch: it is
 // literally what the host screen does.
 // ---------------------------------------------------------------------------
-describe('CreateBountyFlow — post_started means composer intent, not navigation', () => {
+describe('CreateBountyFlow — bounty_started means composer intent, not navigation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockNow = 0;
@@ -633,10 +634,10 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
     jest.restoreAllMocks();
   });
 
-  describe('does NOT fire post_started', () => {
+  describe('does NOT fire bounty_started', () => {
     it('on plain mount (the Post tab being selected)', () => {
       render(<CreateBountyFlow deliberateTap entryPoint="need_help_tab" />);
-      expect(eventsNamed('post_started')).toHaveLength(0);
+      expect(eventsNamed('bounty_started')).toHaveLength(0);
     });
 
     it('on mount once the draft load settles', () => {
@@ -645,7 +646,7 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
       mockIsLoading = false;
       rerender(<CreateBountyFlow />);
 
-      expect(eventsNamed('post_started')).toHaveLength(0);
+      expect(eventsNamed('bounty_started')).toHaveLength(0);
     });
 
     it('on re-render', () => {
@@ -653,7 +654,7 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
       rerender(<CreateBountyFlow />);
       rerender(<CreateBountyFlow />);
 
-      expect(eventsNamed('post_started')).toHaveLength(0);
+      expect(eventsNamed('bounty_started')).toHaveLength(0);
     });
 
     it('on an app background/foreground cycle while the composer is visible', () => {
@@ -662,7 +663,7 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
       advance(30_000);
       setAppState('active');
 
-      expect(eventsNamed('post_started')).toHaveLength(0);
+      expect(eventsNamed('bounty_started')).toHaveLength(0);
     });
 
     it('when the poster switches away and back to the Post tab without composing', () => {
@@ -673,11 +674,11 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
         unmount();
       }
 
-      expect(eventsNamed('post_started')).toHaveLength(0);
+      expect(eventsNamed('bounty_started')).toHaveLength(0);
       expect(eventsNamed('post_abandoned')).toHaveLength(0);
       // The mount-level funnel still sees all ten, so no data is lost —
       // they are just correctly labelled as never-engaged.
-      expect(eventsNamed('post_flow_started')).toHaveLength(10);
+      expect(eventsNamed('composer_opened')).toHaveLength(10);
       expect(eventsNamed('post_step_abandoned')).toHaveLength(10);
       eventsNamed('post_step_abandoned').forEach(e => {
         expect(e).toMatchObject({ composer_started: false });
@@ -685,13 +686,13 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
     });
   });
 
-  describe('DOES fire post_started', () => {
+  describe('DOES fire bounty_started', () => {
     it('exactly once when the poster focuses the title field', () => {
       render(<CreateBountyFlow deliberateTap entryPoint="need_help_tab" />);
       fireEvent(screen.getByLabelText('stub-title-input'), 'focus');
 
-      expect(eventsNamed('post_started')).toHaveLength(1);
-      expect(lastEventNamed('post_started')).toMatchObject({
+      expect(eventsNamed('bounty_started')).toHaveLength(1);
+      expect(lastEventNamed('bounty_started')).toMatchObject({
         surface: 'create_flow',
         trigger: 'field_focus',
         entry_point: 'need_help_tab',
@@ -704,8 +705,8 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
       const input = screen.getByLabelText('stub-title-input');
       ['W', 'Wa', 'Wal', 'Walk', 'Walk my dog'].forEach(t => fireEvent.changeText(input, t));
 
-      expect(eventsNamed('post_started')).toHaveLength(1);
-      expect(lastEventNamed('post_started')).toMatchObject({ trigger: 'draft_edit' });
+      expect(eventsNamed('bounty_started')).toHaveLength(1);
+      expect(lastEventNamed('bounty_started')).toMatchObject({ trigger: 'draft_edit' });
     });
 
     it('exactly once across focus, typing and advancing in one composition', () => {
@@ -715,17 +716,17 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
       fireEvent.changeText(input, 'Walk my dog');
       fireEvent.press(screen.getByLabelText('stub-next'));
 
-      expect(eventsNamed('post_started')).toHaveLength(1);
+      expect(eventsNamed('bounty_started')).toHaveLength(1);
       // The earliest boundary wins — a later trigger must not re-fire it.
-      expect(lastEventNamed('post_started')).toMatchObject({ trigger: 'field_focus' });
+      expect(lastEventNamed('bounty_started')).toMatchObject({ trigger: 'field_focus' });
     });
 
     it('when a resumed draft is advanced without the field ever being focused', () => {
       render(<CreateBountyFlow />);
       fireEvent.press(screen.getByLabelText('stub-next'));
 
-      expect(eventsNamed('post_started')).toHaveLength(1);
-      expect(lastEventNamed('post_started')).toMatchObject({ trigger: 'step_advance' });
+      expect(eventsNamed('bounty_started')).toHaveLength(1);
+      expect(lastEventNamed('bounty_started')).toMatchObject({ trigger: 'step_advance' });
     });
 
     it('reports resumed_draft from arrival state, not from what the poster typed', () => {
@@ -733,7 +734,7 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
       // mockDraft carries a title, so this poster genuinely arrived resumed.
       fireEvent.changeText(screen.getByLabelText('stub-title-input'), 'Edited');
 
-      expect(lastEventNamed('post_started')).toMatchObject({ resumed_draft: true });
+      expect(lastEventNamed('bounty_started')).toMatchObject({ resumed_draft: true });
     });
 
     it('does not survive navigation — a fresh composer can start again', () => {
@@ -747,7 +748,7 @@ describe('CreateBountyFlow — post_started means composer intent, not navigatio
 
       // Two deliberate compositions are two starts — repeated genuine
       // sessions must stay countable.
-      expect(eventsNamed('post_started')).toHaveLength(2);
+      expect(eventsNamed('bounty_started')).toHaveLength(2);
       expect(eventsNamed('post_abandoned')).toHaveLength(2);
     });
   });
@@ -858,13 +859,13 @@ describe('CreateBountyFlow — abandonment is not the only way out', () => {
       fireEvent.press(screen.getByLabelText('stub-next')); // StepPay CTA publishes
     });
 
-    expect(eventsNamed('post_published')).toHaveLength(1);
+    expect(eventsNamed('bounty_published')).toHaveLength(1);
 
     unmount();
 
     // One genuine start, a publish, and no abandon — a successful post must
     // never land in the abandonment bucket.
-    expect(eventsNamed('post_started')).toHaveLength(1);
+    expect(eventsNamed('bounty_started')).toHaveLength(1);
     expect(eventsNamed('post_abandoned')).toHaveLength(0);
     expect(eventsNamed('post_step_abandoned')).toHaveLength(0);
   });

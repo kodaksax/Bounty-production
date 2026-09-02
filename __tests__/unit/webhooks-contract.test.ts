@@ -71,4 +71,29 @@ describe("case 'payout.paid'", () => {
     expect(body).toContain('shouldReconcileInstantFee');
     expect(body).toContain('reconcileInstantPayoutFee');
   });
+
+  describe("case 'payout.closed'", () => {
+    test('handles terminal closures through the failed payout reconciliation path', () => {
+      const start = webhooksSource.indexOf("case 'payout.closed':");
+      expect(start).toBeGreaterThan(-1);
+      const nextCase = webhooksSource.indexOf("case 'charge.dispute.created':", start);
+      expect(nextCase).toBeGreaterThan(start);
+      const body = webhooksSource.slice(start, nextCase);
+      expect(body).toContain("handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed')");
+      expect(body).toContain("payout.closed is missing the connected account");
+    });
+  });
+});
+
+describe('webhook event finalization', () => {
+  test('fails closed when the processed marker cannot be written', () => {
+    const start = webhooksSource.indexOf('const { error: markError } = await supabase');
+    const end = webhooksSource.indexOf('return jsonResponse({ received: true });', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const block = webhooksSource.slice(start, end);
+    expect(block).toMatch(
+      /if\s*\(\s*markError\s*\)\s*{[\s\S]*?logCritical\([\s\S]*?event handled but could not be marked processed[\s\S]*?throw new Error\([\s\S]*?could not be marked processed[\s\S]*?\)/
+    );
+  });
 });

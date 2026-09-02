@@ -312,17 +312,6 @@ export function PaymentElementWrapper({
         </Text>
       </View>
 
-      {/* Payment Method Icons */}
-      <View style={styles.methodIconsContainer}>
-        <MaterialIcons name="credit-card" size={32} color={theme.textSecondary} />
-        {Platform.OS === 'ios' && showApplePay && (
-          <MaterialIcons name="apple" size={32} color={theme.text} style={styles.methodIcon} />
-        )}
-        {Platform.OS === 'android' && showGooglePay && (
-          <MaterialIcons name="g-mobiledata" size={32} color="#4285F4" style={styles.methodIcon} />
-        )}
-      </View>
-
       {/* Error Display */}
       {error && (
         <View style={styles.errorBanner}>
@@ -427,18 +416,6 @@ function makeStyles(theme: AppTheme) {
       fontSize: 14,
       color: theme.primary,
       marginLeft: 8,
-    },
-    methodIconsContainer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 24,
-      paddingVertical: 16,
-      backgroundColor: theme.surfaceSecondary,
-      borderRadius: theme.radius.lg,
-    },
-    methodIcon: {
-      marginLeft: 16,
     },
     errorBanner: {
       flexDirection: 'row',

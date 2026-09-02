@@ -93,7 +93,7 @@ export function StepWhen({ draft, onUpdate, onNext, onBack, isSaving = false, st
 
   const pickedDateLabel =
     selected === 'custom' && draft.startDate
-      ? new Date(draft.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      ? new Date(draft.startDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
       : null;
 
   return (

@@ -13,6 +13,11 @@ import {
 } from '../_shared/bounty-payment-settlement-state.ts';
 import { decidePayoutEventAction } from '../_shared/payout-state.ts';
 import type { WalletTransaction } from '../_shared/types.ts';
+import {
+    collectWebhookSecrets,
+    verifyStripeSignature,
+    WEBHOOK_SECRET_ENV_VARS,
+} from '../_shared/webhook-signature.ts';
 
 // Module scope, once per server bundle — see the HeyCatch RN/server install
 // guide. Business events fired below (payment_completed, payout_success,
@@ -198,6 +203,61 @@ async function syncConnectAccountToProfile(
       accountId: account.id,
       error: updateError,
     });
+  }
+
+  // v3 re-check: a hunter who finished onboarding may have approved bounties
+  // parked in awaiting_hunter_onboarding. Move them back to 'authorized' so
+  // the poster can release, and tell both sides.
+  //
+  // Deliberately does NOT auto-capture. Capturing here would charge the
+  // poster's card from a webhook with nobody present; that is a product
+  // decision, not an implementation detail. The authorization is still live,
+  // so nothing is lost by waiting for the poster.
+  if (account.payouts_enabled) {
+    try {
+      const { data: waiting } = await supabase
+        .from('bounty_v3_funding')
+        .select('bounty_id')
+        .eq('hunter_id', userId)
+        .eq('state', 'awaiting_hunter_onboarding');
+
+      if (waiting && waiting.length > 0) {
+        const nowIso = new Date().toISOString();
+        const { error: unblockErr } = await supabase
+          .from('bounty_v3_funding')
+          .update({
+            state: 'authorized',
+            last_error_code: null,
+            last_error_message: null,
+            updated_at: nowIso,
+          })
+          .eq('hunter_id', userId)
+          .eq('state', 'awaiting_hunter_onboarding');
+
+        if (unblockErr) {
+          console.error('[webhooks] v3 onboarding re-check failed to unblock', {
+            userId,
+            error: unblockErr,
+          });
+        } else {
+          console.log(
+            `[webhooks] v3 onboarding re-check unblocked ${waiting.length} bounty(ies) for hunter ${userId}`
+          );
+          await enqueuePushEmailFanout(supabase, {
+            userId,
+            type: 'payout_setup_complete',
+            title: 'Payout setup complete',
+            body: `Your payout setup is done. ${
+              waiting.length === 1 ? 'A payment is' : `${waiting.length} payments are`
+            } ready to be released to you.`,
+            data: { bountyIds: waiting.map((w: { bounty_id: string }) => w.bounty_id) },
+          });
+        }
+      }
+    } catch (recheckErr) {
+      // Never fail Connect sync because of the v3 re-check.
+      console.error('[webhooks] v3 onboarding re-check threw (non-fatal)', recheckErr);
+    }
   }
 }
 
@@ -818,6 +878,11 @@ async function handlePayoutStatusUpdate(
     .from('wallet_transactions')
     .update({
       stripe_payout_id: payout.id,
+      // Stripe's own status, copied verbatim to a first-class column. This is
+      // the only input permitted to promote settlement_state to
+      // 'stripe_settled' (ADR 0001 §2.3). The metadata copy below is kept for
+      // the refund-once guard in decidePayoutEventAction, which reads it.
+      stripe_payout_status: payout.status,
       metadata: {
         ...candidateMetadata,
         payout_status: payout.status,
@@ -1285,9 +1350,16 @@ Deno.serve(async (req: Request) => {
   }
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
-  const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
-  if (!stripeKey || !webhookSecret) {
-    console.error('[webhooks] Missing STRIPE_SECRET_KEY or STRIPE_WEBHOOK_SECRET');
+  // Two Stripe endpoints (platform + Connect) post to this same URL, each with
+  // its own signing secret — see _shared/webhook-signature.ts for the incident
+  // this fixes. Reading only STRIPE_WEBHOOK_SECRET meant one of the two could
+  // never verify.
+  const webhookSecrets = collectWebhookSecrets(name => Deno.env.get(name));
+  if (!stripeKey || webhookSecrets.length === 0) {
+    console.error(
+      '[webhooks] Missing STRIPE_SECRET_KEY or every webhook signing secret ' +
+        `(checked ${WEBHOOK_SECRET_ENV_VARS.join(', ')})`
+    );
     return jsonResponse({ error: 'Webhook not configured' }, 500);
   }
 
@@ -1308,76 +1380,28 @@ Deno.serve(async (req: Request) => {
 
   let event: Stripe.Event;
 
-  function hex(buffer: ArrayBuffer) {
-    const bytes = new Uint8Array(buffer);
-    return Array.from(bytes)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  async function computeHmacSha256(key: string, data: string) {
-    const enc = new TextEncoder();
-    const keyData = enc.encode(key);
-    const msgData = enc.encode(data);
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    const sig = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
-    return hex(sig);
-  }
-
-  function safeCompare(a: string, b: string) {
-    if (a.length !== b.length) return false;
-    let res = 0;
-    for (let i = 0; i < a.length; i++) {
-      res |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return res === 0;
-  }
-
-  async function verifyStripeSignature(payload: string, header: string | null, secret: string) {
-    if (!header) return false;
-    // header like: t=timestamp,v1=signature[,v1=...]
-    const headerParts = header.split(',').map(part => part.trim());
-    const headerKeyValues: Record<string, string[]> = {};
-    for (const part of headerParts) {
-      const [key, value] = part.split('=');
-      if (!headerKeyValues[key]) headerKeyValues[key] = [];
-      headerKeyValues[key].push(value);
-    }
-    const t = headerKeyValues['t']?.[0];
-    const signatures = headerKeyValues['v1'] ?? [];
-    if (!t || signatures.length === 0) return false;
-
-    const signedPayload = `${t}.${payload}`;
-    const expected = await computeHmacSha256(secret, signedPayload);
-
-    for (const s of signatures) {
-      if (safeCompare(s, expected)) {
-        // optional: validate timestamp skew (5 minutes)
-        const ts = Number(t);
-        if (Number.isFinite(ts)) {
-          const now = Math.floor(Date.now() / 1000);
-          if (Math.abs(now - ts) > 5 * 60) return false;
-        }
-        return true;
-      }
-    }
-    return false;
-  }
-
   try {
-    const verified = await verifyStripeSignature(rawBody, sig, webhookSecret);
-    if (!verified) {
-      console.error('[webhooks] Signature verification failed (manual):', {
+    const verification = await verifyStripeSignature(rawBody, sig, webhookSecrets);
+    if (!verification.verified) {
+      // `reason` distinguishes a genuinely forged/corrupt payload from the two
+      // operational causes that look identical in a log without it: a secret
+      // this deployment does not hold (`no_match` — the 2026-09-02 Connect
+      // outage), and a replayed capture (`timestamp_skew`).
+      console.error('[webhooks] Signature verification failed', {
         timestamp: new Date().toISOString(),
+        reason: verification.reason,
         rawBodyLength: typeof rawBody === 'string' ? rawBody.length : undefined,
+        configuredSecretCount: webhookSecrets.length,
       });
       return jsonResponse({ error: `Webhook signature verification failed` }, 400);
+    }
+    if (verification.secretIndex > 0) {
+      // Signed by a non-primary secret (the Connect endpoint, or a rotation
+      // key). Worth seeing so a stale secret can be retired deliberately
+      // rather than discovered by an outage. Index only — never the secret.
+      console.log('[webhooks] Verified with non-primary signing secret', {
+        secretIndex: verification.secretIndex,
+      });
     }
 
     // signature verified — parse event
@@ -1389,16 +1413,69 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Log event for tracking — upsert on stripe_event_id to safely handle retries
-    await supabase.from('stripe_events').upsert(
-      {
-        stripe_event_id: event.id,
-        event_type: event.type,
-        event_data: event.data.object,
-        processed: false,
-      },
-      { onConflict: 'stripe_event_id' }
-    );
+    // Claim the event before doing any work.
+    //
+    // This used to be an unconditional
+    //   upsert({ ..., processed: false }, { onConflict: 'stripe_event_id' })
+    // followed by running the handler regardless. `stripe_events` looked like a
+    // dedupe table but never deduped anything: a Stripe redelivery of an event
+    // that had already been processed reset `processed` back to false and then
+    // re-ran the full handler, re-crediting balances and re-writing ledger rows
+    // for every handler that did not happen to carry its own idempotency key.
+    //
+    // claim_stripe_event() does the insert-or-take atomically and only hands the
+    // event over when it is not already processed, so a redelivery is a no-op.
+    const { data: claimed, error: claimError } = await supabase.rpc('claim_stripe_event', {
+      p_stripe_event_id: event.id,
+      p_event_type: event.type,
+      p_event_data: event.data.object,
+    });
+
+    if (claimError) {
+      // Could not establish whether this is a duplicate. Fail loudly so Stripe
+      // retries rather than silently processing an event twice.
+      //
+      // PGRST202 means the RPC itself is absent from the database — i.e. this
+      // function was deployed ahead of its migration. That is a total webhook
+      // outage, not a transient error, and Stripe's retries will never clear
+      // it, so it is logged as CRITICAL with the remedy attached. This is
+      // exactly what happened on 2026-08-31: webhooks v76 shipped while
+      // `claim_stripe_event` had never been applied to production.
+      const claimCode = (claimError as { code?: string }).code;
+      if (claimCode === 'PGRST202') {
+        logCritical('claim_stripe_event RPC is missing — ALL webhook processing is down', {
+          eventId: event.id,
+          eventType: event.type,
+          remedy:
+            'apply supabase/migrations/*_stripe_event_claim_lease.sql, then reload the PostgREST schema cache',
+        });
+      } else {
+        console.error('[webhooks] Failed to claim event — asking Stripe to retry', {
+          eventId: event.id,
+          error: claimError,
+        });
+      }
+      return jsonResponse({ error: 'Could not claim webhook event' }, 500);
+    }
+
+    if (claimed === false) {
+      console.log('[webhooks] Duplicate delivery ignored', { eventId: event.id, type: event.type });
+      return jsonResponse({ received: true, duplicate: true });
+    }
+
+    // Record the signature-verified delivery in the canonical event ledger.
+    // This is the ONLY provenance the Command Center treats as Stripe
+    // confirmation (`source='webhook'`); our own wallet rows are `source='app'`.
+    // Best-effort by design: observability must never fail a webhook.
+    try {
+      await supabase.rpc('record_stripe_webhook_event', {
+        p_stripe_event_id: event.id,
+        p_event_type: event.type,
+        p_object: event.data.object,
+      });
+    } catch (ledgerErr) {
+      console.error('[webhooks] Failed to record ledger event (non-fatal)', { ledgerErr });
+    }
 
     // stripe@14's Event.type union doesn't include every event name this
     // endpoint legitimately receives (e.g. legacy transfer.paid/failed and
@@ -1647,6 +1724,119 @@ Deno.serve(async (req: Request) => {
               : `[webhooks] bounty_escrow PI ${paymentIntent.id} canceled — no pending row to update (idempotent no-op)`
           );
         }
+
+        // v3: a manual-capture authorization that was released. Stripe sets
+        // cancellation_reason 'automatic' when it auto-cancels an uncaptured
+        // authorization at the end of the ~7-day window; anything else is a
+        // deliberate cancel. Expiry is an expected state for a long-open
+        // bounty, not an error, so it is recorded as 'expired' and flagged for
+        // re-authorization rather than being treated as a payment failure.
+        if (paymentIntent.metadata?.purpose === 'bounty_escrow_v3') {
+          const expired = paymentIntent.cancellation_reason === 'automatic';
+          const v3State = expired ? 'expired' : 'canceled';
+
+          const { error: v3CancelErr } = await supabase
+            .from('bounty_v3_funding')
+            .update({
+              state: v3State,
+              needs_reauthorization: expired,
+              last_error_code: expired ? 'authorization_expired' : 'canceled',
+              last_error_message: expired
+                ? 'The card authorization expired before the bounty was completed.'
+                : `PaymentIntent canceled (${paymentIntent.cancellation_reason ?? 'unspecified'}).`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .in('state', ['authorizing', 'authorized']);
+          if (v3CancelErr) {
+            console.error('[webhooks] v3 funding cancel update failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: v3CancelErr,
+            });
+            throw v3CancelErr;
+          }
+
+          const { error: v3LedgerErr } = await supabase
+            .from('ledger_entries')
+            .update({
+              app_state: 'failed',
+              stripe_state: 'failed',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .eq('leg', 'payment');
+          if (v3LedgerErr) {
+            console.error('[webhooks] v3 ledger cancel update failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: v3LedgerErr,
+            });
+            throw v3LedgerErr;
+          }
+
+          console.log(
+            `[webhooks] v3 bounty authorization ${v3State} for intent ${paymentIntent.id}`
+          );
+        }
+        break;
+      }
+
+      // v3 only. Stripe has no 'payment_intent.requires_capture' event —
+      // requires_capture is a PaymentIntent *status*. The event that fires
+      // when a manual-capture intent becomes capturable is this one.
+      case 'payment_intent.amount_capturable_updated': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        if (paymentIntent.metadata?.purpose !== 'bounty_escrow_v3') break;
+        if ((paymentIntent.amount_capturable ?? 0) <= 0) break;
+
+        const authorizedAt = new Date();
+        // Informational only — Stripe's payment_intent.canceled is the
+        // authority on when a hold actually lapses.
+        const expiresAt = new Date(authorizedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        const { error: v3AuthErr } = await supabase
+          .from('bounty_v3_funding')
+          .update({
+            state: 'authorized',
+            authorized_at: authorizedAt.toISOString(),
+            authorization_expires_at: expiresAt.toISOString(),
+            needs_reauthorization: false,
+            last_error_code: null,
+            last_error_message: null,
+            updated_at: authorizedAt.toISOString(),
+          })
+          .eq('stripe_payment_intent_id', paymentIntent.id)
+          .eq('state', 'authorizing');
+        if (v3AuthErr) {
+          console.error('[webhooks] v3 funding authorize update failed — letting Stripe retry', {
+            paymentIntentId: paymentIntent.id,
+            error: v3AuthErr,
+          });
+          throw v3AuthErr;
+        }
+
+        // app_state 'succeeded' = we asked Stripe to authorize and it did.
+        // stripe_state stays 'pending' because the money has not moved: the
+        // charge is authorized, not captured. Only capture (Phase 3) confirms.
+        const { error: v3AuthLedgerErr } = await supabase
+          .from('ledger_entries')
+          .update({
+            app_state: 'succeeded',
+            stripe_state: 'pending',
+            updated_at: authorizedAt.toISOString(),
+          })
+          .eq('stripe_payment_intent_id', paymentIntent.id)
+          .eq('leg', 'payment');
+        if (v3AuthLedgerErr) {
+          console.error('[webhooks] v3 ledger authorize update failed — letting Stripe retry', {
+            paymentIntentId: paymentIntent.id,
+            error: v3AuthLedgerErr,
+          });
+          throw v3AuthLedgerErr;
+        }
+
+        console.log(
+          `[webhooks] v3 bounty authorized: ${paymentIntent.id} (${paymentIntent.amount_capturable} capturable)`
+        );
         break;
       }
 
@@ -1657,6 +1847,50 @@ Deno.serve(async (req: Request) => {
 
         console.log(`[webhooks] PaymentIntent failed: ${paymentIntent.id} for user ${userId}`);
         console.log(`[webhooks] Failure reason: ${error?.code} - ${error?.message}`);
+
+        // v3: the authorization itself failed (declined card, 3DS abandoned).
+        // The bounty is left in place but explicitly unfunded, so it can never
+        // sit in a paid-but-unusable state and the poster can re-authorize.
+        if (paymentIntent.metadata?.purpose === 'bounty_escrow_v3') {
+          const { error: v3FailErr } = await supabase
+            .from('bounty_v3_funding')
+            .update({
+              state: 'failed',
+              needs_reauthorization: true,
+              last_error_code: error?.code ?? 'authorization_failed',
+              last_error_message:
+                error?.message ?? 'The card could not be authorized for this bounty.',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .in('state', ['authorizing', 'authorized']);
+          if (v3FailErr) {
+            console.error('[webhooks] v3 funding failure update failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: v3FailErr,
+            });
+            throw v3FailErr;
+          }
+
+          const { error: v3FailLedgerErr } = await supabase
+            .from('ledger_entries')
+            .update({
+              app_state: 'failed',
+              stripe_state: 'failed',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .eq('leg', 'payment');
+          if (v3FailLedgerErr) {
+            console.error('[webhooks] v3 ledger failure update failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: v3FailLedgerErr,
+            });
+            throw v3FailLedgerErr;
+          }
+
+          console.log(`[webhooks] v3 bounty authorization failed for intent ${paymentIntent.id}`);
+        }
 
         await supabase
           .from('stripe_events')
@@ -2002,6 +2236,57 @@ Deno.serve(async (req: Request) => {
         // there), then UPDATE that specific row by id with an optimistic-lock guard.
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer created: ${transfer.id}`);
+
+        // v3 MUST be checked before the Phase 2 branch below: v3 transfers
+        // also carry metadata.bounty_id, so they would otherwise be routed
+        // into reconcilePhase2Transfer, which expects a bounty_payments row
+        // that no v3 bounty has.
+        //
+        // This is the only place a v3 release becomes confirmed. reversed=false
+        // is required: a transfer that arrives already reversed has not paid
+        // anyone, and an API 200 alone never counts as confirmation.
+        if (transfer.metadata?.purpose === 'bounty_release_v3') {
+          const v3BountyId = transfer.metadata?.bounty_id;
+          if (transfer.reversed === true) {
+            console.warn(
+              `[webhooks] v3 transfer ${transfer.id} arrived already reversed — not confirming`
+            );
+            break;
+          }
+
+          const nowIso = new Date().toISOString();
+          const { error: v3RelErr } = await supabase
+            .from('bounty_v3_funding')
+            .update({ state: 'released', released_at: nowIso, updated_at: nowIso })
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('state', 'capturing');
+          if (v3RelErr) {
+            console.error('[webhooks] v3 funding release update failed — letting Stripe retry', {
+              transferId: transfer.id,
+              error: v3RelErr,
+            });
+            throw v3RelErr;
+          }
+
+          const { error: v3LedgerConfirmErr } = await supabase
+            .from('ledger_entries')
+            .update({ stripe_state: 'confirmed', updated_at: nowIso })
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('leg', 'capture_release');
+          if (v3LedgerConfirmErr) {
+            console.error('[webhooks] v3 ledger confirm failed — letting Stripe retry', {
+              transferId: transfer.id,
+              error: v3LedgerConfirmErr,
+            });
+            throw v3LedgerConfirmErr;
+          }
+
+          console.log(
+            `[webhooks] v3 release confirmed for bounty ${v3BountyId} via transfer ${transfer.id}`
+          );
+          break;
+        }
+
         // Phase 2 transfers carry bounty_id in metadata and are recorded
         // synchronously by /bounty-payments/release (stripe_transfer_id +
         // status='released' set at creation time). Skip the legacy
@@ -2093,6 +2378,55 @@ Deno.serve(async (req: Request) => {
         // account) was pulled back. See handleTransferSetback's docstring
         // for why this always requires manual review.
         const transfer = event.data.object as Stripe.Transfer;
+
+        // v3 first, for the same reason as transfer.created: v3 transfers
+        // carry metadata.bounty_id and would otherwise be misrouted into the
+        // Phase 2 handler. A reversal un-confirms the release — the hunter was
+        // not paid — so the ledger must never be left claiming otherwise.
+        if (transfer.metadata?.purpose === 'bounty_release_v3') {
+          const nowIso = new Date().toISOString();
+          const { error: v3RevErr } = await supabase
+            .from('bounty_v3_funding')
+            .update({
+              state: 'capture_failed',
+              released_at: null,
+              last_error_code: 'transfer_reversed',
+              last_error_message:
+                'The transfer to the hunter was reversed by Stripe. This needs manual review.',
+              updated_at: nowIso,
+            })
+            .eq('stripe_transfer_id', transfer.id);
+          if (v3RevErr) {
+            console.error('[webhooks] v3 funding reversal update failed — letting Stripe retry', {
+              transferId: transfer.id,
+              error: v3RevErr,
+            });
+            throw v3RevErr;
+          }
+
+          const { error: v3RevLedgerErr } = await supabase
+            .from('ledger_entries')
+            .update({ app_state: 'failed', stripe_state: 'failed', updated_at: nowIso })
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('leg', 'capture_release');
+          if (v3RevLedgerErr) {
+            console.error('[webhooks] v3 ledger reversal update failed — letting Stripe retry', {
+              transferId: transfer.id,
+              error: v3RevLedgerErr,
+            });
+            throw v3RevLedgerErr;
+          }
+
+          console.error(
+            `[webhooks] v3 transfer REVERSED for bounty ${transfer.metadata?.bounty_id} (${transfer.id}) — manual review required`
+          );
+          // v3 is tracked through bounty_v3_funding + ledger_entries, not the
+          // wallet_transactions path used by legacy/Phase 2 transfers. Do not
+          // invoke handleTransferSetback here or it would incorrectly mutate
+          // wallet rows for a v3 release.
+          break;
+        }
+
         if (transfer.metadata?.bounty_id) {
           await reconcilePhase2Transfer(supabase, transfer, 'reversed');
           break;
@@ -2354,6 +2688,10 @@ Deno.serve(async (req: Request) => {
                   .update({
                     status: 'completed',
                     stripe_payout_id: payout.id,
+                    // The single write in the entire codebase that may promote
+                    // a withdrawal to settlement_state='stripe_settled'. The
+                    // derive trigger reads this column and nothing else.
+                    stripe_payout_status: 'paid',
                     completed_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     metadata: {
@@ -2450,6 +2788,23 @@ Deno.serve(async (req: Request) => {
         if (canceledAccountId) {
           await handleUndeliveredPayout(supabase, payout, canceledAccountId, 'canceled');
         }
+        break;
+      }
+
+      case 'payout.closed': {
+        // Stripe uses payout.closed for terminal closures that are not always
+        // accompanied by payout.failed. Treat it as a failed delivery so the
+        // withdrawal is reconciled and funds are restored, never completed.
+        const payout = event.data.object as Stripe.Payout;
+        const closedAccountId = (event as any).account as string | undefined;
+        if (!closedAccountId) {
+          console.warn('[webhooks] payout.closed is missing the connected account', {
+            eventId: event.id,
+            payoutId: payout.id,
+          });
+          break;
+        }
+        await handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed');
         break;
       }
 
@@ -2966,6 +3321,26 @@ Deno.serve(async (req: Request) => {
         // that's the only signal distinguishing which Stripe balance changed.
         const accountId = (event as any).account as string | undefined;
         if (accountId) {
+          // Invalidate the v3 balance cache for this connected account before
+          // anything else. Deleting the row (rather than rewriting it) means
+          // the next GET /wallet/balance refetches from Stripe, so a hunter
+          // never sees a stale number after their balance actually moved.
+          // Best-effort: a cache-eviction failure must not fail the webhook.
+          try {
+            const { error: cacheEvictErr } = await supabase
+              .from('connect_balance_cache')
+              .delete()
+              .eq('stripe_connect_account_id', accountId);
+            if (cacheEvictErr) {
+              console.error('[webhooks] connect_balance_cache eviction failed (non-fatal)', {
+                accountId,
+                error: cacheEvictErr,
+              });
+            }
+          } catch (evictErr) {
+            console.error('[webhooks] connect_balance_cache eviction threw (non-fatal)', evictErr);
+          }
+
           const ownerUserId = await findUserIdByConnectAccountId(supabase, accountId);
           if (ownerUserId) {
             await compareConnectAccountBalance(stripe, supabase, ownerUserId, accountId);
@@ -3404,10 +3779,13 @@ Deno.serve(async (req: Request) => {
             }
             posterId = (racedId as string | null) ?? null;
             if (!posterId) {
-              console.error('[webhooks] Could not create or resolve a poster account — createUser returned 422 but re-resolve also found no user', {
-                sessionId: session.id,
-                createErr,
-              });
+              console.error(
+                '[webhooks] Could not create or resolve a poster account — createUser returned 422 but re-resolve also found no user',
+                {
+                  sessionId: session.id,
+                  createErr,
+                }
+              );
               await recordCheckoutFailure(
                 'account_creation_failed: re-resolve returned no user after 422 conflict'
               );
@@ -3555,11 +3933,25 @@ Deno.serve(async (req: Request) => {
         console.log(`[webhooks] Unhandled event type: ${event.type}`);
     }
 
-    // Mark event as processed
-    await supabase
+    // Mark event as processed. This releases the claim lease taken above, so a
+    // failure here is not cosmetic: the row stays `processing`, monitoring
+    // reads it as an unprocessed event, and — worse — the handler's work is
+    // done but nothing records it, so a Stripe redelivery after the lease
+    // expires would re-enter the handler. The result was previously discarded
+    // entirely; check it and escalate.
+    const { error: markError } = await supabase
       .from('stripe_events')
       .update({ processed: true, processed_at: new Date().toISOString(), status: 'processed' })
       .eq('stripe_event_id', event.id);
+
+    if (markError) {
+      logCritical('event handled but could not be marked processed — replay risk', {
+        eventId: event.id,
+        eventType: event.type,
+        error: markError,
+      });
+      throw new Error('Webhook event handled but could not be marked processed');
+    }
 
     return jsonResponse({ received: true });
   } catch (error: unknown) {

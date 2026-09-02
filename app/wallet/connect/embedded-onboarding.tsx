@@ -138,11 +138,30 @@ export default function ConnectOnboardingScreen() {
       verifyingRef.current = true;
       lastBrowserResultRef.current = browserResultType;
 
+      // Emits the single terminal-outcome event for this attempt. Best-effort,
+      // like every other analytics call on this screen.
+      const trackOutcome = async (
+        outcomeValue: ConnectOnboardingOutcome,
+        detail?: Record<string, unknown>
+      ) => {
+        try {
+          await analyticsService.trackEvent('identity_onboarding_outcome', {
+            source: 'stripe_connect_onboarding',
+            outcome: outcomeValue,
+            browserResult: browserResultType ?? 'opened',
+            ...detail,
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
+      };
+
       const token = session?.access_token;
       if (!token) {
         verifyingRef.current = false;
         setOutcome('verify_error');
         setPhase('result');
+        await trackOutcome('verify_error', { reason: 'no_session' });
         return;
       }
 
@@ -185,19 +204,30 @@ export default function ConnectOnboardingScreen() {
         setRequirementsCurrentlyDue(currentlyDue);
         setDisabledReason(body.disabledReason ?? null);
         if (!body.onboarded && session?.user?.id) {
-          await momentsService.enqueue(session.user.id, 'stripe_connect_onboarding');
+          try {
+            await momentsService.enqueue(session.user.id, 'stripe_connect_onboarding');
+          } catch (err) {
+            console.warn('[connect-onboarding] moments enqueue failed', err);
+          }
         }
-        setOutcome(
-          deriveOutcome({
-            browserResultType,
-            onboarded: !!body.onboarded,
-            detailsSubmitted: !!body.detailsSubmitted,
-            currentlyDue,
-          })
-        );
+        const derivedOutcome = deriveOutcome({
+          browserResultType,
+          onboarded: !!body.onboarded,
+          detailsSubmitted: !!body.detailsSubmitted,
+          currentlyDue,
+        });
+        setOutcome(derivedOutcome);
+        await trackOutcome(derivedOutcome, {
+          chargesEnabled: !!body.chargesEnabled,
+          payoutsEnabled: !!body.payoutsEnabled,
+          detailsSubmitted: !!body.detailsSubmitted,
+          requirementsCurrentlyDueCount: currentlyDue.length,
+          disabledReason: body.disabledReason ?? null,
+        });
       } catch (err) {
         console.warn('[connect-onboarding] verify-onboarding failed', err);
         setOutcome('verify_error');
+        await trackOutcome('verify_error', { reason: 'verify_request_failed' });
       } finally {
         clearTimeout(timeoutId);
         verifyingRef.current = false;
@@ -215,9 +245,19 @@ export default function ConnectOnboardingScreen() {
       return;
     }
 
+    let launchFailureReason = 'launch_failed';
+
     try {
       setError(null);
       setPhase('starting');
+
+      try {
+        await analyticsService.trackEvent('identity_onboarding_started', {
+          source: 'stripe_connect_onboarding',
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
 
       // 1. Ask our edge function for a fresh, short-lived Stripe Account Link.
       const linkRes = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
@@ -234,6 +274,7 @@ export default function ConnectOnboardingScreen() {
       });
 
       if (!linkRes.ok) {
+        launchFailureReason = 'create_account_link_failed';
         let message = `Couldn't start Stripe onboarding (${linkRes.status}).`;
         try {
           const body = (await linkRes.json()) as { error?: string };
@@ -246,6 +287,7 @@ export default function ConnectOnboardingScreen() {
 
       const { url } = (await linkRes.json()) as { url?: string };
       if (!url || typeof url !== 'string') {
+        launchFailureReason = 'missing_account_link_url';
         throw new Error("Stripe didn't return an onboarding URL. Please try again.");
       }
 
@@ -253,11 +295,17 @@ export default function ConnectOnboardingScreen() {
       //    Chrome Custom Tab. The OS dismisses automatically when Stripe
       //    redirects to our universal link.
       setPhase('in_browser');
-      const result = await WebBrowser.openAuthSessionAsync(url, CONNECT_RETURN_URL, {
-        // Sharing cookies gives users a smoother flow if they've already
-        // authenticated with Stripe or their bank in Safari/Chrome.
-        preferEphemeralSession: false,
-      });
+      let result;
+      try {
+        result = await WebBrowser.openAuthSessionAsync(url, CONNECT_RETURN_URL, {
+          // Sharing cookies gives users a smoother flow if they've already
+          // authenticated with Stripe or their bank in Safari/Chrome.
+          preferEphemeralSession: false,
+        });
+      } catch (err) {
+        launchFailureReason = 'open_auth_session_failed';
+        throw err;
+      }
 
       // Track the funnel step regardless of final verification outcome —
       // reaching the return URL means the user submitted identity/KYC info.
@@ -290,6 +338,16 @@ export default function ConnectOnboardingScreen() {
           ? err.message
           : 'Something went wrong starting Stripe onboarding. Please try again.';
       console.warn('[connect-onboarding] launch failed', err);
+      try {
+        await analyticsService.trackEvent('identity_onboarding_outcome', {
+          source: 'stripe_connect_onboarding',
+          outcome: 'verify_error',
+          browserResult: lastBrowserResultRef.current ?? 'opened',
+          reason: launchFailureReason,
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
       setError(message);
       setPhase('error');
     }

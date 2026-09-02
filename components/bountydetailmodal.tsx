@@ -26,6 +26,7 @@ import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { bountyService } from '../lib/services/bounty-service'
+import { markHunterActivated } from '../lib/analytics/lifecycle'
 import { analyticsService } from '../lib/services/analytics-service'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { storageService } from '../lib/services/storage-service'
@@ -411,14 +412,16 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     triggerHaptic('medium') // Medium haptic for apply action
 
     const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
-      analyticsService.trackEvent('bounty_claim_failed', {
+      analyticsService.trackEvent('application_failed', {
+        role: 'hunter',
         bounty_id: String(bounty.id),
         reason,
         is_onboarding_demo: false,
       })
     }
 
-    analyticsService.trackEvent('bounty_claim_started', {
+    analyticsService.trackEvent('application_started', {
+      role: 'hunter',
       bounty_id: String(bounty.id),
       amount: typeof bounty.price === 'number' ? bounty.price : undefined,
       is_for_honor: Boolean(bounty.is_for_honor),
@@ -471,12 +474,25 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
       // Handle structured result from service
       if (result && (result as any).success) {
-        analyticsService.trackEvent('bounty_claim_submitted', {
+        const applicationId =
+          (result as any)?.request?.id != null ? String((result as any).request.id) : undefined
+        analyticsService.trackEvent('application_submitted', {
+          role: 'hunter',
           bounty_id: String(bounty.id),
+          application_id: applicationId,
+          amount: typeof bounty.price === 'number' ? bounty.price : undefined,
+          is_for_honor: Boolean(bounty.is_for_honor),
+          source: 'modal',
           is_onboarding_demo: false,
           seconds_from_view_to_submit: Math.max(0, Math.round((Date.now() - viewedAtRef.current) / 1000)),
           had_message: applicationMessage.trim().length > 0,
           attachment_count: 0,
+        })
+        // Hunter-activation milestone — first application submitted on this
+        // device (see lib/analytics/lifecycle.ts).
+        void markHunterActivated(currentUserId, {
+          bounty_id: String(bounty.id),
+          application_id: applicationId,
         })
         setHasApplied(true)
         setIsApplying(false)

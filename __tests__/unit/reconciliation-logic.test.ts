@@ -173,20 +173,28 @@ describe('age-based severities', () => {
   });
 });
 
-describe('reconciliation edge function contract (inlined logic stays in sync)', () => {
+/**
+ * Wiring assertions, not logic assertions.
+ *
+ * normalizeStripeStatus / isSafeStatusRepair are exercised directly at the top
+ * of this file. index.ts now imports them from ./reconciliation-logic.ts rather
+ * than carrying a copy, so "do the two implementations agree?" is no longer a
+ * question that can be asked — there is one. What remains here are facts about
+ * how the edge function is assembled, which Jest cannot reach any other way:
+ * index.ts is a Deno module importing `https://` URLs and cannot be loaded.
+ */
+describe('reconciliation edge function wiring', () => {
   const indexSource = fs.readFileSync(
     path.join(__dirname, '../../supabase/functions/reconciliation/index.ts'),
     'utf8'
   );
 
-  it('inlines the same in_transit mapping', () => {
-    expect(indexSource).toContain("case 'in_transit':");
-    expect(indexSource).toContain("return 'pending'");
-  });
-
-  it('inlines the same safe-repair rule', () => {
-    expect(indexSource).toContain("if (ledgerStatus !== 'pending') return false");
-    expect(indexSource).toContain("metadata?.connect_native === true");
+  it('imports the status/repair rules rather than redefining them', () => {
+    expect(indexSource).toMatch(/from '\.\/reconciliation-logic\.ts'/);
+    expect(indexSource).toMatch(/normalizeStripeStatus/);
+    expect(indexSource).toMatch(/isSafeStatusRepair/);
+    expect(indexSource).not.toMatch(/^(export )?function normalizeStripeStatus/m);
+    expect(indexSource).not.toMatch(/^(export )?function isSafeStatusRepair/m);
   });
 
   it('only ever repairs a row that is still pending (compare-and-set)', () => {

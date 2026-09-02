@@ -202,9 +202,17 @@ export const reportService = {
   async getAllReports(filters?: {
     status?: 'pending' | 'reviewed' | 'resolved' | 'dismissed';
     content_type?: 'bounty' | 'profile' | 'message';
+    /** Rows to return. Bounded so the moderation queue stays usable as the
+     *  platform grows; this query previously had no LIMIT at all. */
+    limit?: number;
   }): Promise<{ success: boolean; reports?: any[]; error?: string }> {
     try {
-      let query = supabase.from('reports').select('*').order('created_at', { ascending: false });
+      const limit = Math.max(1, Math.min(filters?.limit ?? 200, 500));
+      let query = supabase
+        .from('reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
       if (filters?.status) {
         query = query.eq('status', filters.status);

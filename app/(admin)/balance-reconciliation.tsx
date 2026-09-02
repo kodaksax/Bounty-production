@@ -9,7 +9,9 @@
 // as a combined "what needs attention" view.
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -70,17 +72,23 @@ async function callAdminWithdrawals(body: Record<string, unknown>) {
   return data;
 }
 
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#f44336',
-  warning: '#f5a623',
-  info: 'rgba(255,254,245,0.6)',
-};
+/** Severity accents, derived from the theme rather than hardcoded hex. */
+function severityColors(theme: AppTheme): Record<string, string> {
+  return {
+    critical: theme.error,
+    warning: theme.warning,
+    info: theme.textSecondary,
+  };
+}
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
 export default function BalanceReconciliationScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const SEVERITY_COLOR = useMemo(() => severityColors(theme), [theme]);
   const [findings, setFindings] = useState<ReconciliationFinding[]>([]);
   const [snapshots, setSnapshots] = useState<BalanceSnapshot[]>([]);
   const [failedEvents, setFailedEvents] = useState<FailedWebhookEvent[]>([]);
@@ -155,7 +163,7 @@ export default function BalanceReconciliationScreen() {
       <AdminHeader title="Balance Reconciliation" />
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor="#00dc50" />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}
       >
         <Text style={styles.sectionTitle}>Stripe ↔ Wallet Sync</Text>
         <AdminCard>
@@ -179,7 +187,7 @@ export default function BalanceReconciliationScreen() {
               <Text
                 style={[
                   styles.platformValue,
-                  { color: Math.abs(latestPlatformSnapshot.drift_cents) > 100 ? '#f44336' : '#00dc50' },
+                  { color: Math.abs(latestPlatformSnapshot.drift_cents) > 100 ? theme.error : theme.primary },
                 ]}
               >
                 {formatCents(latestPlatformSnapshot.drift_cents)}
@@ -190,18 +198,18 @@ export default function BalanceReconciliationScreen() {
             </View>
           )}
           <TouchableOpacity style={[styles.button, running && styles.buttonDisabled]} onPress={runSyncNow} disabled={running}>
-            {running ? <ActivityIndicator color="#fffef5" /> : <Text style={styles.buttonText}>Run Sync Now</Text>}
+            {running ? <ActivityIndicator color={theme.text} /> : <Text style={styles.buttonText}>Run Sync Now</Text>}
           </TouchableOpacity>
         </AdminCard>
 
         <View style={styles.logHeaderRow}>
           <Text style={styles.sectionTitle}>Unacknowledged Findings ({unacknowledged.length})</Text>
           <TouchableOpacity onPress={load}>
-            <MaterialIcons name="refresh" size={22} color="#00dc50" />
+            <MaterialIcons name="refresh" size={22} color={theme.primary} />
           </TouchableOpacity>
         </View>
         {loading && findings.length === 0 ? (
-          <ActivityIndicator color="#00dc50" style={{ marginTop: 12 }} />
+          <ActivityIndicator color={theme.primary} style={{ marginTop: 12 }} />
         ) : unacknowledged.length === 0 ? (
           <Text style={styles.hint}>Nothing outstanding.</Text>
         ) : (
@@ -215,7 +223,7 @@ export default function BalanceReconciliationScreen() {
               </View>
               {finding.user_id && <Text style={styles.logMeta}>user: {finding.user_id}</Text>}
               {finding.auto_repaired && (
-                <Text style={[styles.logMeta, { color: '#00dc50' }]}>✓ auto-repaired: {finding.resolution}</Text>
+                <Text style={[styles.logMeta, { color: theme.primary }]}>✓ auto-repaired: {finding.resolution}</Text>
               )}
               <Text style={styles.logMeta} numberOfLines={4}>
                 {JSON.stringify(finding.details)}
@@ -227,7 +235,7 @@ export default function BalanceReconciliationScreen() {
                 disabled={acknowledging === finding.id}
               >
                 {acknowledging === finding.id ? (
-                  <ActivityIndicator color="#fffef5" size="small" />
+                  <ActivityIndicator color={theme.text} size="small" />
                 ) : (
                   <Text style={styles.buttonText}>Acknowledge</Text>
                 )}
@@ -281,38 +289,39 @@ export default function BalanceReconciliationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a3d2e' },
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.background },
   content: { padding: 16 },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
     marginTop: 8,
     marginBottom: 8,
   },
   hint: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginBottom: 12,
     lineHeight: 17,
   },
   button: {
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fffef5', fontSize: 14, fontWeight: '700' },
+  buttonText: { color: theme.text, fontSize: 14, fontWeight: '700' },
   ackButton: {
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
     marginTop: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.4)',
+    borderColor: theme.primary,
   },
   logHeaderRow: {
     flexDirection: 'row',
@@ -324,16 +333,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 6,
   },
-  logAction: { color: '#00dc50', fontWeight: '700', fontSize: 13 },
+  logAction: { color: theme.primary, fontWeight: '700', fontSize: 13 },
   severityBadge: { fontWeight: '700', fontSize: 12 },
-  logMeta: { color: 'rgba(255,254,245,0.7)', fontSize: 12, marginBottom: 2 },
-  logDate: { color: 'rgba(255,254,245,0.5)', fontSize: 11, marginTop: 4 },
+  logMeta: { color: theme.textSecondary, fontSize: 12, marginBottom: 2 },
+  logDate: { color: theme.textDisabled, fontSize: 11, marginTop: 4 },
   platformRow: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
   },
-  platformLabel: { color: 'rgba(255,254,245,0.6)', fontSize: 11, marginTop: 4 },
-  platformValue: { color: '#fffef5', fontSize: 16, fontWeight: '700' },
+  platformLabel: { color: theme.textSecondary, fontSize: 11, marginTop: 4 },
+  platformValue: { color: theme.text, fontSize: 16, fontWeight: '700' },
 });

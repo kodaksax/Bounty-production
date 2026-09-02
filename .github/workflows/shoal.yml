@@ -1,0 +1,269 @@
+name: Shoal swarm QA
+
+# Swarm testing against a NON-PRODUCTION Bounty environment.
+#
+# Deliberately NOT wired to pull_request: every agent step is a metered vision API call,
+# so a swarm on every PR is expensive and far slower than the Playwright suite that
+# already gates PRs. Manual dispatch for targeted investigation, nightly for the standing
+# suite. Escalate to PRs only once a run's cost and duration are known and accepted.
+#
+# The runner itself refuses to start against production (qa/shoal/bin/lib/env.mjs): it
+# inspects the served bundle and rejects the production Supabase ref or a live Stripe key.
+# The secrets below must therefore only ever hold staging/development values.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Scenario id (see qa/shoal/scenarios/scenarios.json), or "smoke"'
+        required: true
+        default: smoke
+        type: string
+      swarm:
+        description: 'Override swarm size'
+        required: false
+        type: string
+      model:
+        description: 'Model id'
+        required: false
+        default: claude-opus-5
+        type: string
+  schedule:
+    # 03:20 UTC nightly -- off-peak for the shared API rate pool.
+    - cron: '20 3 * * *'
+
+concurrency:
+  group: shoal-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Manual dispatch: one scenario, small swarm.
+  # ---------------------------------------------------------------------------
+  dispatch:
+    if: github.event_name == 'workflow_dispatch'
+    name: ${{ inputs.scenario }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BOUNTY_SHOAL_ENV: staging
+      BOUNTY_SHOAL_HOME: ${{ github.workspace }}/.shoal
+      APP_ENV: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      # The Shoal checkout is content-addressed by the pinned commit, so the cache key is
+      # exactly the pin: bumping it in shoal.config.json invalidates the cache correctly.
+      - name: Cache Shoal checkout
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.shoal
+          key: shoal-${{ hashFiles('qa/shoal/shoal.config.json', 'qa/shoal/personas/bounty-personas.yaml') }}
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-shoal
+
+      - name: Guard regression tests (cheap, fails fast)
+        run: npm run qa:shoal:test
+
+      - name: Set up Shoal
+        run: npm run qa:shoal:setup
+
+      - name: Build and serve the web app
+        run: |
+          nohup npm run qa:shoal:web > web.log 2>&1 &
+          for i in $(seq 1 180); do
+            curl -sf http://localhost:8090 >/dev/null && break
+            sleep 10
+          done
+          curl -sf http://localhost:8090 >/dev/null || { tail -50 web.log; exit 1; }
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SHOAL_STAGING_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SHOAL_STAGING_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.SHOAL_STAGING_STRIPE_PUBLISHABLE_KEY }}
+
+      - name: Seed staging test accounts and a contended bounty
+        run: |
+          node qa/shoal/bin/seed.mjs accounts --env staging
+          node qa/shoal/bin/seed.mjs bounty --env staging
+        env:
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_SERVICE_ROLE_KEY: ${{ secrets.SHOAL_STAGING_SERVICE_ROLE_KEY }}
+          BOUNTY_SHOAL_TEST_EMAIL: ${{ secrets.SHOAL_TEST_EMAIL }}
+          BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
+          BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
+          BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
+
+      - name: Run scenario
+        run: |
+          node qa/shoal/bin/run.mjs "${{ inputs.scenario }}" \
+            ${{ inputs.swarm && format('--swarm {0}', inputs.swarm) || '' }} \
+            --model "${{ inputs.model }}"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.SHOAL_ANTHROPIC_API_KEY }}
+          BOUNTY_SHOAL_TEST_EMAIL: ${{ secrets.SHOAL_TEST_EMAIL }}
+          BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
+          BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
+          BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shoal-${{ inputs.scenario }}-${{ github.run_id }}
+          path: qa/shoal/artifacts/
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Nightly: the standing suite. Each scenario is its own job so one failure does
+  # not hide the rest, and so a swarm that hangs does not burn the whole budget.
+  # ---------------------------------------------------------------------------
+  nightly:
+    if: github.event_name == 'schedule'
+    name: nightly ${{ matrix.scenario }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        scenario:
+          - smoke
+          - poster-conversion
+          - poster-rage-quit
+          - composer-adversarial
+          - state-breaker
+          - trust-audit
+          - auth
+    env:
+      BOUNTY_SHOAL_ENV: staging
+      BOUNTY_SHOAL_HOME: ${{ github.workspace }}/.shoal
+      APP_ENV: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Cache Shoal checkout
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.shoal
+          key: shoal-${{ hashFiles('qa/shoal/shoal.config.json', 'qa/shoal/personas/bounty-personas.yaml') }}
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-shoal
+
+      - name: Guard regression tests (cheap, fails fast)
+        run: npm run qa:shoal:test
+
+      - name: Set up Shoal
+        run: npm run qa:shoal:setup
+
+      - name: Build and serve the web app
+        run: |
+          nohup npm run qa:shoal:web > web.log 2>&1 &
+          for i in $(seq 1 180); do
+            curl -sf http://localhost:8090 >/dev/null && break
+            sleep 10
+          done
+          curl -sf http://localhost:8090 >/dev/null || { tail -50 web.log; exit 1; }
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SHOAL_STAGING_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SHOAL_STAGING_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.SHOAL_STAGING_STRIPE_PUBLISHABLE_KEY }}
+
+      - name: Seed staging test accounts
+        run: node qa/shoal/bin/seed.mjs accounts --env staging
+        env:
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_SERVICE_ROLE_KEY: ${{ secrets.SHOAL_STAGING_SERVICE_ROLE_KEY }}
+          BOUNTY_SHOAL_TEST_EMAIL: ${{ secrets.SHOAL_TEST_EMAIL }}
+          BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
+          BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
+          BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
+
+      - name: Run ${{ matrix.scenario }}
+        run: node qa/shoal/bin/run.mjs ${{ matrix.scenario }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.SHOAL_ANTHROPIC_API_KEY }}
+          BOUNTY_SHOAL_TEST_EMAIL: ${{ secrets.SHOAL_TEST_EMAIL }}
+          BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
+          BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
+          BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shoal-nightly-${{ matrix.scenario }}-${{ github.run_id }}
+          path: qa/shoal/artifacts/
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Scheduled stress / race. Kept out of the nightly matrix because it mutates
+  # marketplace rows (seeds a contended bounty) and needs its own oracle pass.
+  # Enable by adding a second cron above once the staging test accounts exist.
+  # ---------------------------------------------------------------------------
+  race:
+    if: false # flip to a schedule/dispatch condition once staging test accounts are seeded
+    name: race -- concurrent bounty claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BOUNTY_SHOAL_ENV: staging
+      BOUNTY_SHOAL_HOME: ${{ github.workspace }}/.shoal
+      APP_ENV: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npm run qa:shoal:setup
+      - name: Seed the contended bounty
+        run: |
+          node qa/shoal/bin/oracle.mjs seed-race --env staging \
+            --out seed.json --poster-id "$BOUNTY_SHOAL_POSTER_ID"
+        env:
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_POSTER_ID: ${{ secrets.SHOAL_POSTER_ID }}
+      - name: Race
+        run: |
+          node qa/shoal/bin/run.mjs race-claim --swarm 10 \
+            --bounty-id "$(node -p "require('./seed.json').results[0].detail")"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.SHOAL_ANTHROPIC_API_KEY }}
+          BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
+          BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shoal-race-${{ github.run_id }}
+          path: qa/shoal/artifacts/
+          retention-days: 14

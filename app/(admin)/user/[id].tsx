@@ -1,471 +1,490 @@
 // app/(admin)/user/[id].tsx - Admin User Detail
+//
+// Fixed here:
+//  - "Activity Stats" and "Financial Summary" rendered five hardcoded zeros
+//    for every user, because they were read from `profiles.bounties_posted`,
+//    `.total_spent` etc. — columns that have never existed. They now come from
+//    a real server-side aggregate, and show "—" if that aggregate is
+//    unavailable rather than reintroducing the fake zeros.
+//  - The screen was a dead end: no route to the user's bounties, ledger or
+//    disputes. All three are now links.
+//  - "Send Warning" called sendWarning(), which selected a non-existent
+//    `profiles.is_admin` column and therefore failed on every invocation.
+//    (Fixed in lib/admin/adminDataClient.ts.)
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { AdminCard } from '../../../components/admin/AdminCard';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
-import { AdminStatRow } from '../../../components/admin/AdminStatRow';
 import { AdminStatusBadge } from '../../../components/admin/AdminStatusBadge';
+import {
+  AdminBadge,
+  AdminButton,
+  AdminError,
+  AdminLinkRow,
+  AdminLoading,
+  AdminPanel,
+  AdminRow,
+  AdminScreen,
+  AdminSection,
+  formatDateTime,
+  formatMoney,
+  shortId,
+} from '../../../components/admin/AdminUI';
+import { useAppTheme } from '../../../hooks/use-app-theme';
 import type { ViolationType } from '../../../lib/admin/adminDataClient';
 import { adminDataClient } from '../../../lib/admin/adminDataClient';
+import { ROUTES } from '../../../lib/routes';
 import type { AdminUserSummary } from '../../../lib/types-admin';
+
+const VIOLATION_OPTIONS: { label: string; value: ViolationType }[] = [
+  { label: 'Spam', value: 'spam' },
+  { label: 'Harassment', value: 'harassment' },
+  { label: 'Inappropriate Content', value: 'inappropriate_content' },
+  { label: 'Fraud / Scam', value: 'fraud' },
+  { label: 'Guideline Violation', value: 'guideline_violation' },
+  { label: 'Other', value: 'other' },
+];
+
+// Every account_status change requires a reason, written to admin_action_log
+// for audit purposes -- see 20260726000000_enforce_account_status.sql.
+const STATUS_CHANGE_REASONS = [
+  'Spam',
+  'Harassment',
+  'Fraud / Scam',
+  'Inappropriate Content',
+  'Guideline Violation',
+  'Other',
+];
 
 export default function AdminUserDetailScreen() {
   const router = useRouter();
+  const { theme } = useAppTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
+
   const [user, setUser] = useState<AdminUserSummary | null>(null);
+  const [breakdown, setBreakdown] = useState<{
+    posted: number;
+    hunting: number;
+    activeAsPoster: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  const [isActing, setIsActing] = useState(false);
-
-  const loadUser = async () => {
-    if (!id) return;
+  const loadUser = useCallback(async () => {
+    if (!id) {
+      setError('No user id was provided.');
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const data = await adminDataClient.fetchAdminUserById(id);
       setUser(data);
+      if (data) {
+        adminDataClient
+          .fetchUserBountyBreakdown(id)
+          .then(setBreakdown)
+          .catch(() => setBreakdown(null));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load user');
-      console.error('Error loading user:', err);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadUser();
   }, [id]);
 
-    const handleSendWarning = () => {
-      if (!user) return;
-      const violationOptions: { label: string; value: ViolationType }[] = [
-        { label: 'Spam', value: 'spam' },
-        { label: 'Harassment', value: 'harassment' },
-        { label: 'Inappropriate Content', value: 'inappropriate_content' },
-        { label: 'Fraud / Scam', value: 'fraud' },
-        { label: 'Guideline Violation', value: 'guideline_violation' },
-        { label: 'Other', value: 'other' },
-      ];
-      Alert.alert(
-        'Send Warning',
-        `Select reason to warn @${user.username}:`,
-        [
-          ...violationOptions.map(({ label, value }) => ({
-            text: label,
-            onPress: () => submitWarning(value, label),
-          })),
-          { text: 'Cancel', style: 'cancel' as const },
-        ]
-      );
-    };
+  useEffect(() => {
+    void loadUser();
+  }, [loadUser]);
 
-    const submitWarning = async (violationType: ViolationType, reasonLabel: string) => {
+  const submitWarning = useCallback(
+    async (violationType: ViolationType, reasonLabel: string) => {
       if (!user) return;
-      setIsActing(true);
+      setPendingAction('warn');
       try {
         await adminDataClient.sendWarning({
           userId: user.id,
           violationType,
           message: `Your account has received a warning for: ${reasonLabel}. Please review our community guidelines to avoid further action.`,
         });
-        Alert.alert('Warning Sent', `A warning has been sent to @${user.username}.`);
+        Alert.alert('Warning sent', `A warning was recorded against @${user.username}.`);
       } catch (err) {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send warning');
+        Alert.alert(
+          'Warning not sent',
+          err instanceof Error ? err.message : 'The warning could not be recorded.'
+        );
       } finally {
-        setIsActing(false);
+        setPendingAction(null);
       }
-    };
+    },
+    [user]
+  );
 
-    // Every account_status change now requires a reason (written to
-    // admin_action_log for audit purposes -- see
-    // 20260726000000_enforce_account_status.sql). Canned options mirror the
-    // violation-type picker already used by handleSendWarning above, rather
-    // than a free-text prompt.
-    const STATUS_CHANGE_REASONS: { label: string; value: string }[] = [
-      { label: 'Spam', value: 'Spam' },
-      { label: 'Harassment', value: 'Harassment' },
-      { label: 'Fraud / Scam', value: 'Fraud / Scam' },
-      { label: 'Inappropriate Content', value: 'Inappropriate Content' },
-      { label: 'Guideline Violation', value: 'Guideline Violation' },
-      { label: 'Other', value: 'Other' },
-    ];
+  const handleSendWarning = useCallback(() => {
+    if (!user) return;
+    Alert.alert('Send warning', `Select a reason to warn @${user.username}:`, [
+      ...VIOLATION_OPTIONS.map(({ label, value }) => ({
+        text: label,
+        onPress: () => void submitWarning(value, label),
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, [user, submitWarning]);
 
-    const submitStatusChange = async (
-      status: 'suspended' | 'banned' | 'active',
-      reason: string,
-      successVerb: string
-    ) => {
+  const submitStatusChange = useCallback(
+    async (status: AdminUserSummary['status'], reason: string, verb: string) => {
       if (!user) return;
-      setIsActing(true);
+      setPendingAction(status);
       try {
         await adminDataClient.updateUserStatus(user.id, status, reason);
-        setUser({ ...user, status });
-        Alert.alert(`User ${successVerb}`, `@${user.username} has been ${successVerb.toLowerCase()}.`);
+        // Only reflect the new status once the server confirmed it -- an
+        // optimistic flip here would leave an operator believing a ban landed
+        // when the Edge Function rejected it.
+        setUser((prev) => (prev ? { ...prev, status } : prev));
+        Alert.alert(`User ${verb}`, `@${user.username} has been ${verb.toLowerCase()}.`);
       } catch (err) {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update user status');
+        Alert.alert(
+          'Action failed',
+          err instanceof Error ? err.message : 'The account status could not be changed.'
+        );
       } finally {
-        setIsActing(false);
+        setPendingAction(null);
       }
-    };
+    },
+    [user]
+  );
 
-    const handleSuspendUser = () => {
+  const promptStatusChange = useCallback(
+    (status: AdminUserSummary['status'], title: string, body: string, verb: string) => {
       if (!user) return;
-      Alert.alert(
-        'Suspend User',
-        `Select a reason to suspend @${user.username}. They will lose access until restored.`,
-        [
-          ...STATUS_CHANGE_REASONS.map(({ label, value }) => ({
-            text: label,
-            onPress: () => submitStatusChange('suspended', value, 'Suspended'),
-          })),
-          { text: 'Cancel', style: 'cancel' as const },
-        ]
-      );
-    };
-
-    const handleBanUser = () => {
-      if (!user) return;
-      Alert.alert(
-        'Ban User',
-        `Select a reason to permanently ban @${user.username}. This is a severe action.`,
-        [
-          ...STATUS_CHANGE_REASONS.map(({ label, value }) => ({
-            text: label,
-            onPress: () => submitStatusChange('banned', value, 'Banned'),
-          })),
-          { text: 'Cancel', style: 'cancel' as const },
-        ]
-      );
-    };
-
-    const handleRestoreUser = () => {
-      if (!user) return;
-      Alert.alert(
-        'Restore User',
-        `Restore @${user.username} to active status?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Restore',
-            onPress: () => submitStatusChange('active', 'Reinstated after admin review', 'Restored'),
-          },
-        ]
-      );
-    };
+      Alert.alert(title, body, [
+        ...STATUS_CHANGE_REASONS.map((reason) => ({
+          text: reason,
+          onPress: () => void submitStatusChange(status, reason, verb),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]);
+    },
+    [user, submitStatusChange]
+  );
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
-        <AdminHeader title="User Detail" onBack={() => router.back()} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00dc50" />
-        </View>
-      </View>
+      <AdminScreen>
+        <AdminHeader title="User" showBack backFallback={ROUTES.ADMIN.USERS} />
+        <AdminLoading label="Loading user…" />
+      </AdminScreen>
     );
   }
 
   if (error || !user) {
     return (
-      <View style={styles.container}>
-        <AdminHeader title="User Detail" onBack={() => router.back()} />
-        <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.3)" />
-          <Text style={styles.errorTitle}>Failed to load user</Text>
-          <Text style={styles.errorText}>{error || 'User not found'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={loadUser}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <AdminScreen>
+        <AdminHeader title="User" showBack backFallback={ROUTES.ADMIN.USERS} />
+        <AdminError
+          title={error ? "Couldn't load this user" : 'User not found'}
+          message={
+            error
+              ? 'The account could not be read. This is served by the admin-profiles function, which requires an admin session.'
+              : `No account exists with id ${shortId(id)}.`
+          }
+          detail={error}
+          onRetry={error ? loadUser : undefined}
+        />
+      </AdminScreen>
     );
   }
 
+  const busy = pendingAction != null;
+  const verified = user.verificationStatus === 'verified' || user.verificationStatus === 'trusted';
+  const stat = (value: number) => (user.statsLoaded ? value.toLocaleString() : '—');
+  const money = (value: number) => (user.statsLoaded ? formatMoney(value) : '—');
+
   return (
-    <View style={styles.container}>
-      <AdminHeader title="User Detail" onBack={() => router.back()} />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        {/* Status */}
-        <View style={styles.statusSection}>
+    <AdminScreen>
+      <AdminHeader
+        title="User"
+        subtitle={user.username}
+        showBack
+        backFallback={ROUTES.ADMIN.USERS}
+      />
+      <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: 48 }}>
+        <View style={[styles.badgeRow, { marginBottom: theme.spacing.lg }]}>
           <AdminStatusBadge status={user.status} type="user" />
-          {user.verificationStatus && (
-            <View style={styles.verificationBadge}>
-              <MaterialIcons
-                name={(user.verificationStatus === 'verified' || user.verificationStatus === 'trusted') ? 'verified' : 'pending'}
-                size={16}
-                color={(user.verificationStatus === 'verified' || user.verificationStatus === 'trusted') ? '#4caf50' : '#ffc107'}
+          <AdminBadge
+            label={user.verificationStatus ?? 'unverified'}
+            tone={verified ? 'success' : 'warning'}
+            icon={verified ? 'verified' : 'pending'}
+          />
+          {user.balanceFrozen ? <AdminBadge label="Balance frozen" tone="info" icon="ac-unit" /> : null}
+          {user.deletedAt ? <AdminBadge label="Deleted" tone="error" icon="delete" /> : null}
+        </View>
+
+        <Text style={{ fontSize: 24, fontWeight: '700', color: theme.text }}>{user.username}</Text>
+        {user.displayName && user.displayName !== user.username ? (
+          <Text style={{ fontSize: 15, color: theme.textSecondary, marginTop: 2 }}>
+            {user.displayName}
+          </Text>
+        ) : null}
+        {user.email ? (
+          <Text style={{ fontSize: 14, color: theme.textSecondary, marginTop: 2 }}>{user.email}</Text>
+        ) : null}
+
+        {user.restrictionReason ? (
+          <View
+            style={{
+              marginTop: theme.spacing.lg,
+              padding: theme.spacing.md,
+              borderRadius: theme.radius.md,
+              backgroundColor: theme.surfaceSecondary,
+              borderLeftWidth: 3,
+              borderLeftColor: theme.warning,
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: theme.warning }}>RESTRICTED</Text>
+            <Text style={{ fontSize: 14, color: theme.text, marginTop: 4 }}>
+              {user.restrictionReason}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* ── Activity ────────────────────────────────────────────────── */}
+        <AdminSection title="Activity" style={{ marginTop: theme.spacing.xl }}>
+          {!user.statsLoaded ? (
+            <View style={{ marginBottom: theme.spacing.sm }}>
+              <Text style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 18 }}>
+                Activity totals are unavailable for this environment. They are computed by the
+                admin_user_stats database function; if it has not been deployed here, these show as
+                em dashes rather than zeros.
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.statGrid}>
+            <StatCard icon="post-add" value={stat(user.bountiesPosted)} label="Posted" />
+            <StatCard icon="assignment-turned-in" value={stat(user.bountiesAccepted)} label="Accepted" />
+            <StatCard icon="check-circle" value={stat(user.bountiesCompleted)} label="Completed" />
+          </View>
+        </AdminSection>
+
+        {/* ── Money ───────────────────────────────────────────────────── */}
+        <AdminSection title="Financials">
+          <AdminPanel>
+            <AdminRow label="Current balance" value={formatMoney(user.balance)} icon="account-balance-wallet" />
+            <AdminRow label="On hold" value={formatMoney(user.balanceOnHold)} icon="lock" />
+            <AdminRow label="Total spent" value={money(user.totalSpent)} icon="trending-down" />
+            <AdminRow label="Total earned" value={money(user.totalEarned)} icon="trending-up" />
+            <AdminRow
+              label="Payouts enabled"
+              value={user.payoutsEnabled == null ? '—' : user.payoutsEnabled ? 'Yes' : 'No'}
+              icon="payments"
+            />
+            <AdminRow
+              label="Stripe account"
+              value={user.stripeConnectAccountId ?? 'Not connected'}
+              icon="link"
+              mono={!!user.stripeConnectAccountId}
+              last
+            />
+          </AdminPanel>
+        </AdminSection>
+
+        {/* ── Related records — the screen used to have none of these ─── */}
+        <AdminSection title="Related records">
+          <AdminPanel style={{ paddingVertical: 0 }}>
+            <AdminLinkRow
+              icon="work"
+              label="Bounties posted"
+              detail={
+                breakdown
+                  ? `${breakdown.activeAsPoster} currently active`
+                  : 'Bounties this user posted'
+              }
+              count={breakdown?.posted}
+              onPress={() =>
+                router.push(`${ROUTES.ADMIN.BOUNTIES}?posterId=${user.id}` as never)
+              }
+              disabledHint="This user has never posted a bounty"
+            />
+            <AdminLinkRow
+              icon="handyman"
+              label="Bounties hunting"
+              detail="Bounties this user was accepted for"
+              count={breakdown?.hunting}
+              onPress={() =>
+                router.push(`${ROUTES.ADMIN.BOUNTIES}?hunterId=${user.id}` as never)
+              }
+              disabledHint="This user has never been accepted for a bounty"
+            />
+            <AdminLinkRow
+              icon="receipt-long"
+              label="Transactions"
+              detail="Every ledger entry on either side"
+              onPress={() =>
+                router.push(`${ROUTES.ADMIN.TRANSACTIONS}?userId=${user.id}` as never)
+              }
+            />
+            <AdminLinkRow
+              icon="gavel"
+              label="Disputes"
+              detail="Disputes involving this user"
+              onPress={() => router.push(ROUTES.ADMIN.DISPUTES as never)}
+            />
+            <AdminLinkRow
+              icon="history"
+              label="Audit trail"
+              detail="Admin actions taken on this account"
+              onPress={() => router.push(ROUTES.ADMIN.AUDIT_LOGS as never)}
+              last
+            />
+          </AdminPanel>
+        </AdminSection>
+
+        {/* ── Account ─────────────────────────────────────────────────── */}
+        <AdminSection title="Account">
+          <AdminPanel>
+            <AdminRow label="User ID" value={user.id} icon="tag" mono />
+            <AdminRow label="Joined" value={formatDateTime(user.joinDate)} icon="event" />
+            <AdminRow label="Last seen" value={formatDateTime(user.lastSeenAt)} icon="schedule" />
+            <AdminRow label="Status" value={user.status} icon="badge" last />
+          </AdminPanel>
+        </AdminSection>
+
+        {/* ── Moderation ──────────────────────────────────────────────── */}
+        <AdminSection title="Moderation">
+          <View style={styles.actions}>
+            <AdminButton
+              label="Send warning"
+              icon="warning"
+              variant="secondary"
+              loading={pendingAction === 'warn'}
+              disabled={busy && pendingAction !== 'warn'}
+              onPress={handleSendWarning}
+              style={styles.actionButton}
+            />
+            {user.status === 'active' ? (
+              <AdminButton
+                label="Suspend"
+                icon="pause-circle-filled"
+                variant="warning"
+                loading={pendingAction === 'suspended'}
+                disabled={busy && pendingAction !== 'suspended'}
+                onPress={() =>
+                  promptStatusChange(
+                    'suspended',
+                    'Suspend user',
+                    `Select a reason to suspend @${user.username}. They lose access until restored.`,
+                    'Suspended'
+                  )
+                }
+                style={styles.actionButton}
               />
-              <Text style={styles.verificationText}>{user.verificationStatus}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* User Info */}
-        <View style={styles.section}>
-          <Text style={styles.username}>{user.username}</Text>
-          {user.email && <Text style={styles.email}>{user.email}</Text>}
-        </View>
-
-        {/* Stats Overview */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Activity Stats</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <MaterialIcons name="post-add" size={32} color="#00dc50" />
-              <Text style={styles.statCardValue}>{user.bountiesPosted}</Text>
-              <Text style={styles.statCardLabel}>Posted</Text>
-            </View>
-            <View style={styles.statCard}>
-              <MaterialIcons name="assignment-turned-in" size={32} color="#00dc50" />
-              <Text style={styles.statCardValue}>{user.bountiesAccepted}</Text>
-              <Text style={styles.statCardLabel}>Accepted</Text>
-            </View>
-            <View style={styles.statCard}>
-              <MaterialIcons name="check-circle" size={32} color="#00dc50" />
-              <Text style={styles.statCardValue}>{user.bountiesCompleted}</Text>
-              <Text style={styles.statCardLabel}>Completed</Text>
-            </View>
+            ) : null}
+            {user.status !== 'banned' ? (
+              <AdminButton
+                label="Ban"
+                icon="block"
+                variant="danger"
+                loading={pendingAction === 'banned'}
+                disabled={busy && pendingAction !== 'banned'}
+                onPress={() =>
+                  promptStatusChange(
+                    'banned',
+                    'Ban user',
+                    `Select a reason to ban @${user.username}. This permanently blocks their access.`,
+                    'Banned'
+                  )
+                }
+                style={styles.actionButton}
+              />
+            ) : null}
+            {user.status === 'suspended' || user.status === 'banned' ? (
+              <AdminButton
+                label="Restore"
+                icon="restore"
+                variant="primary"
+                loading={pendingAction === 'active'}
+                disabled={busy && pendingAction !== 'active'}
+                onPress={() =>
+                  promptStatusChange(
+                    'active',
+                    'Restore user',
+                    `Select a reason to restore @${user.username} to full access.`,
+                    'Restored'
+                  )
+                }
+                style={styles.actionButton}
+              />
+            ) : null}
           </View>
-        </View>
-
-        {/* Financial Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Financial Summary</Text>
-          <AdminCard>
-            <AdminStatRow label="Current Balance" value={`$${user.balance.toFixed(2)}`} />
-            <AdminStatRow label="Total Spent" value={`$${user.totalSpent.toFixed(2)}`} />
-            <AdminStatRow label="Total Earned" value={`$${user.totalEarned.toFixed(2)}`} />
-          </AdminCard>
-        </View>
-
-        {/* Account Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Information</Text>
-          <AdminCard>
-            <AdminStatRow label="User ID" value={user.id} />
-            <AdminStatRow label="Join Date" value={formatDate(user.joinDate)} />
-            <AdminStatRow label="Account Status" value={user.status} />
-          </AdminCard>
-        </View>
-
-          {/* Moderation Actions */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Moderation Actions</Text>
-            <View style={styles.moderationGrid}>
-              {/* Send Warning — always available */}
-              <TouchableOpacity
-                style={[styles.modButton, styles.warnButton]}
-                onPress={handleSendWarning}
-                disabled={isActing}
-              >
-                {isActing ? (
-                  <ActivityIndicator size="small" color="#fffef5" />
-                ) : (
-                  <>
-                    <MaterialIcons name="warning" size={22} color="#fffef5" />
-                    <Text style={styles.modButtonText}>Send Warning</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Suspend — only if active */}
-              {user.status === 'active' && (
-                <TouchableOpacity
-                  style={[styles.modButton, styles.suspendButton]}
-                  onPress={handleSuspendUser}
-                  disabled={isActing}
-                >
-                  <MaterialIcons name="pause-circle-filled" size={22} color="#fffef5" />
-                  <Text style={styles.modButtonText}>Suspend User</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Ban — if not already banned */}
-              {user.status !== 'banned' && (
-                <TouchableOpacity
-                  style={[styles.modButton, styles.banButton]}
-                  onPress={handleBanUser}
-                  disabled={isActing}
-                >
-                  <MaterialIcons name="block" size={22} color="#fffef5" />
-                  <Text style={styles.modButtonText}>Ban User</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Restore — if suspended or banned */}
-              {(user.status === 'suspended' || user.status === 'banned') && (
-                <TouchableOpacity
-                  style={[styles.modButton, styles.restoreButton]}
-                  onPress={handleRestoreUser}
-                  disabled={isActing}
-                >
-                  <MaterialIcons name="restore" size={22} color="#fffef5" />
-                  <Text style={styles.modButtonText}>Restore User</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-        {/* Bottom padding */}
-        <View style={{ height: 40 }} />
+          <Text
+            style={{
+              fontSize: 12,
+              color: theme.textSecondary,
+              marginTop: theme.spacing.sm,
+              lineHeight: 18,
+            }}
+          >
+            Every status change requires a reason and is recorded in the admin action log. The
+            change is applied by a service-role function that re-verifies your admin role
+            server-side.
+          </Text>
+        </AdminSection>
       </ScrollView>
+    </AdminScreen>
+  );
+}
+
+function StatCard({
+  icon,
+  value,
+  label,
+}: {
+  icon: keyof typeof MaterialIcons.glyphMap;
+  value: string;
+  label: string;
+}) {
+  const { theme } = useAppTheme();
+  return (
+    <View
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        backgroundColor: theme.surface,
+        borderRadius: theme.radius.lg,
+        borderWidth: 1,
+        borderColor: theme.border,
+        paddingVertical: theme.spacing.lg,
+        gap: 6,
+      }}
+    >
+      <MaterialIcons name={icon} size={26} color={theme.primary} />
+      <Text style={{ fontSize: 20, fontWeight: '700', color: theme.text }}>{value}</Text>
+      <Text style={{ fontSize: 11, color: theme.textSecondary }}>{label}</Text>
     </View>
   );
 }
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a3d2e',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fffef5',
-    marginTop: 16,
-  },
-  errorText: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#00912C',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 24,
-  },
-  retryButtonText: {
-    color: '#fffef5',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  statusSection: {
+  badgeRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
-  },
-  verificationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(76,175,80,0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(76,175,80,0.4)',
-  },
-  verificationText: {
-    fontSize: 11,
-    color: '#4caf50',
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fffef5',
-    marginBottom: 12,
-  },
-  username: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#fffef5',
-    marginBottom: 8,
-  },
-  email: {
-    fontSize: 15,
-    color: 'rgba(255,254,245,0.7)',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#2d5240',
-    borderRadius: 12,
-    padding: 16,
     alignItems: 'center',
     gap: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
+    flexWrap: 'wrap',
   },
-  statCardValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#00dc50',
+  statGrid: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  statCardLabel: {
-    fontSize: 11,
-    color: 'rgba(255,254,245,0.6)',
-    textTransform: 'uppercase',
+  actions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-    moderationGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 12,
-    },
-    modButton: {
-      flex: 1,
-      minWidth: '45%',
-      borderRadius: 12,
-      padding: 16,
-      alignItems: 'center',
-      gap: 8,
-      borderWidth: 1,
-    },
-    modButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: '#fffef5',
-    },
-    warnButton: {
-      backgroundColor: '#e67e22',
-      borderColor: 'rgba(230,126,34,0.4)',
-    },
-    suspendButton: {
-      backgroundColor: '#8e44ad',
-      borderColor: 'rgba(142,68,173,0.4)',
-    },
-    banButton: {
-      backgroundColor: '#c0392b',
-      borderColor: 'rgba(192,57,43,0.4)',
-    },
-    restoreButton: {
-      backgroundColor: '#00912C',
-      borderColor: 'rgba(0,145,44,0.4)',
-    },
+  actionButton: {
+    flexGrow: 1,
+    flexBasis: '46%',
+  },
 });

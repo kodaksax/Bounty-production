@@ -1,7 +1,10 @@
 // app/(admin)/blocked-users.tsx - Admin Blocked Users Management
 import { MaterialIcons } from '@expo/vector-icons';
+import { withAlpha } from '../../components/admin/AdminUI';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -32,9 +35,19 @@ interface BlockedUserRelationship {
   };
 }
 
+/**
+ * Rows to load. Block relationships are reviewed case by case rather than
+ * scrolled in bulk, so a bounded page with an explicit "showing N of M" is
+ * more useful than an unbounded list that degrades as the platform grows.
+ */
+const BLOCK_LIST_LIMIT = 100;
+
 export default function AdminBlockedUsersScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const [blocks, setBlocks] = useState<BlockedUserRelationship[]>([]);
+  const [totalBlocks, setTotalBlocks] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,21 +55,28 @@ export default function AdminBlockedUsersScreen() {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await supabase
+      // Bounded, with an exact count: this query previously returned every
+      // block relationship on the platform with no LIMIT, and rendered them
+      // all through a .map() inside a ScrollView.
+      const { data, error: fetchError, count } = await supabase
         .from('blocked_users')
         .select(
           `
           *,
           blocker:profiles!blocked_users_blocker_id_fkey(id, username, avatar),
           blocked:profiles!blocked_users_blocked_id_fkey(id, username, avatar)
-        `
+        `,
+          { count: 'exact' }
         )
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(BLOCK_LIST_LIMIT);
 
       if (fetchError) {
         setError(fetchError.message);
       } else {
-        setBlocks((data || []) as any);
+        const rows = (data || []) as any[];
+        setBlocks(rows);
+        setTotalBlocks(count ?? rows.length);
       }
     } catch (err) {
       console.error('Error fetching blocked users:', err);
@@ -110,7 +130,7 @@ export default function AdminBlockedUsersScreen() {
       <View style={styles.container}>
         <AdminHeader title="Blocked Users" onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={48} color={theme.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchBlockedUsers}>
             <Text style={styles.retryButtonText}>Retry</Text>
@@ -128,17 +148,17 @@ export default function AdminBlockedUsersScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={fetchBlockedUsers} tintColor="#10b981" />
+          <RefreshControl refreshing={isLoading} onRefresh={fetchBlockedUsers} tintColor={theme.success} />
         }
       >
         {isLoading && blocks.length === 0 ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10b981" />
+            <ActivityIndicator size="large" color={theme.success} />
             <Text style={styles.loadingText}>Loading blocked users...</Text>
           </View>
         ) : blocks.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <MaterialIcons name="check-circle" size={64} color="#10b981" />
+            <MaterialIcons name="check-circle" size={64} color={theme.success} />
             <Text style={styles.emptyText}>No Blocked Users</Text>
             <Text style={styles.emptySubtext}>
               There are currently no active block relationships in the system.
@@ -152,7 +172,7 @@ export default function AdminBlockedUsersScreen() {
                 <View style={styles.userSection}>
                   <Text style={styles.sectionLabel}>Blocker</Text>
                   <View style={styles.userInfo}>
-                    <MaterialIcons name="person" size={20} color="#a7f3d0" />
+                    <MaterialIcons name="person" size={20} color={theme.primaryLight} />
                     <Text style={styles.username}>
                       {block.blocker?.username || 'Unknown User'}
                     </Text>
@@ -161,14 +181,14 @@ export default function AdminBlockedUsersScreen() {
 
                 {/* Blocked Icon */}
                 <View style={styles.iconSection}>
-                  <MaterialIcons name="block" size={32} color="#ef4444" />
+                  <MaterialIcons name="block" size={32} color={theme.error} />
                 </View>
 
                 {/* Blocked Info */}
                 <View style={styles.userSection}>
                   <Text style={styles.sectionLabel}>Blocked</Text>
                   <View style={styles.userInfo}>
-                    <MaterialIcons name="person" size={20} color="#a7f3d0" />
+                    <MaterialIcons name="person" size={20} color={theme.primaryLight} />
                     <Text style={styles.username}>
                       {block.blocked?.username || 'Unknown User'}
                     </Text>
@@ -189,22 +209,39 @@ export default function AdminBlockedUsersScreen() {
                   style={styles.unblockButton}
                   onPress={() => handleUnblock(block.blocker_id, block.blocked_id)}
                 >
-                  <MaterialIcons name="check" size={16} color="#10b981" />
+                  <MaterialIcons name="check" size={16} color={theme.success} />
                   <Text style={styles.unblockButtonText}>Remove Block</Text>
                 </TouchableOpacity>
               </View>
             </AdminCard>
           ))
         )}
+
+        {/* Says plainly when the list is truncated, so an operator is never
+            left assuming they are looking at everything. */}
+        {blocks.length > 0 && (
+          <Text style={styles.listFooterText}>
+            {totalBlocks > blocks.length
+              ? `Showing the ${blocks.length} most recent of ${totalBlocks.toLocaleString()} block relationships.`
+              : `Showing all ${blocks.length.toLocaleString()} block relationship${blocks.length === 1 ? '' : 's'}.`}
+          </Text>
+        )}
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    listFooterText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      paddingVertical: 16,
+    },
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: theme.primary, // emerald-600
   },
   scrollView: {
     flex: 1,
@@ -222,7 +259,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
   },
   errorContainer: {
     flex: 1,
@@ -232,7 +269,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: '#ef4444',
+    color: theme.error,
     textAlign: 'center',
     marginTop: 16,
     marginBottom: 24,
@@ -240,13 +277,13 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: theme.success,
     borderRadius: 8,
   },
   retryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#065f46',
+    color: theme.primary,
   },
   emptyContainer: {
     flex: 1,
@@ -262,7 +299,7 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     textAlign: 'center',
     marginTop: 8,
     paddingHorizontal: 32,
@@ -275,7 +312,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     fontWeight: '500',
     textTransform: 'uppercase',
   },
@@ -297,11 +334,11 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#047857',
+    borderTopColor: theme.primary,
   },
   dateLabel: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     fontWeight: '500',
   },
   dateValue: {
@@ -314,13 +351,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    backgroundColor: '#10b98120',
+    backgroundColor: withAlpha(theme.success, 0.125),
     borderRadius: 8,
     marginTop: 8,
   },
   unblockButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#10b981',
+    color: theme.success,
   },
 });

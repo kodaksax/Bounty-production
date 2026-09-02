@@ -153,6 +153,33 @@ export function canTransition(from: LedgerStatus | string, to: LedgerStatus | st
 }
 
 /**
+ * The one audited exception to `failed` being absorbing: an admin re-opening a
+ * failed withdrawal for another attempt via `admin-withdrawals` `force_retry`.
+ *
+ * This is deliberately NOT expressed as a `failed -> pending` entry in
+ * ALLOWED_TRANSITIONS. That table governs what *webhooks* may do, and its whole
+ * value is that terminal states absorb replayed, duplicate and out-of-order
+ * deliveries. Making `failed` non-terminal there would let a late
+ * `payout.failed`/`payout.paid` pair start moving a resolved row again — a much
+ * larger hole than the one being opened here.
+ *
+ * So the escape hatch is a separate, explicitly-named predicate that only the
+ * admin path calls, and every call is written to admin_action_log.
+ *
+ * `force_retry` previously performed `failed -> completed` directly, consulting
+ * no state machine at all and recording a Transfer as proof of payment. The
+ * legal move is `failed -> pending`: a new payout has been created and nothing
+ * is settled until `payout.paid` says so.
+ */
+export function mayAdminReopenFailedWithdrawal(args: {
+  currentStatus: LedgerStatus | string;
+  hasConnectAccount: boolean;
+}): boolean {
+  if (args.currentStatus !== 'failed') return false;
+  return args.hasConnectAccount;
+}
+
+/**
  * Whether a withdrawal row may legally be written as `completed`.
  *
  * This is the invariant in function form, and the assertion the application

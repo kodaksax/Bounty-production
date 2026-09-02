@@ -1,0 +1,5 @@
+# Shoal run artifacts — never commit generated output (screenshots may contain
+# session state, and the JSON is large and churny). CI keeps them as build
+# artifacts instead; see .github/workflows/shoal.yml.
+artifacts/
+*.log

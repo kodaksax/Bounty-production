@@ -274,7 +274,23 @@ export const cancellationService = {
       const refundPercentage = cancellation.refundPercentage ?? 100;
       const refundAmount = (bounty.amount * refundPercentage) / 100;
 
-      // Update the cancellation record
+      // Process the wallet refund FIRST, before mutating any record. The refund
+      // signals failure by returning false or throwing; either way the bounty
+      // must stay active, or accepting the cancellation would strand the money.
+      if (walletRefundCallback) {
+        let refunded = false;
+        try {
+          refunded = await walletRefundCallback(cancellation.bountyId, bounty.title, refundPercentage);
+        } catch (walletError) {
+          logger.error('Error processing wallet refund', { error: walletError, cancellationId });
+        }
+        if (!refunded) {
+          logger.error('Wallet refund did not complete; leaving bounty active', { cancellationId });
+          return false;
+        }
+      }
+
+      // Refund succeeded — record the accepted cancellation.
       const { error: updateError } = await supabase
         .from('bounty_cancellations')
         .update({
@@ -291,20 +307,10 @@ export const cancellationService = {
         throw updateError;
       }
 
-      // Update bounty status to 'cancelled'
+      // Cancel the bounty.
       await bountyService.update(cancellation.bountyId, {
         status: 'cancelled',
       });
-
-      // Process wallet refund if callback provided
-      if (walletRefundCallback) {
-        try {
-          await walletRefundCallback(cancellation.bountyId, bounty.title, refundPercentage);
-        } catch (walletError) {
-          logger.error('Error processing wallet refund', { error: walletError, cancellationId });
-          // Don't fail the entire operation if wallet refund fails
-        }
-      }
 
       // Update requester's stats
       await this.updateUserStats(cancellation.requesterId, 

@@ -4,10 +4,13 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
 import { useCallback, useMemo, useRef, useState } from "react"
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { Image } from "expo-image"
+import { ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { AttachmentViewerModal } from "../../components/attachment-viewer-modal"
+import { EmojiPicker } from "../../components/EmojiPicker"
 import { MessageActions } from "../../components/MessageActions"
 import { MessageBubble } from "../../components/MessageBubble"
 import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
@@ -21,8 +24,9 @@ import { useValidUserId } from '../../hooks/useValidUserId'
 import { getBottomNavKeyboardOffset } from "../../lib/constants/navigation"
 import { blockingService } from "../../lib/services/blocking-service"
 import { generateInitials } from "../../lib/services/supabase-messaging"
-import type { Conversation, Message } from "../../lib/types"
+import type { Attachment, Conversation, Message } from "../../lib/types"
 import { getValidAvatarUrl } from "../../lib/utils/avatar-utils"
+import { getMediaKind, getMediaMimeType, mediaFileName } from "../../lib/utils/message-media"
  
 interface ChatDetailScreenProps {
   conversation: Conversation
@@ -54,6 +58,11 @@ export function ChatDetailScreen({
   const [showActions, setShowActions] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [inputText, setInputText] = useState('')
+  // Attachment staged in the composer: already uploaded, not yet sent, so the
+  // user can add a caption (or back out) before it goes to the thread.
+  const [pendingAttachment, setPendingAttachment] = useState<Attachment | null>(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [viewerAttachment, setViewerAttachment] = useState<Attachment | null>(null)
   const listRef = useRef<FlatList<Message>>(null)
   const hasScrolledToBottom = useRef(false)
   const typingUsersRef = useTypingIndicator(conversation.id)
@@ -96,27 +105,65 @@ export function ChatDetailScreen({
 
   const { pickAttachment, isPicking, isUploading } = useAttachmentUpload({
     bucket: 'bounty-attachments',
+    folder: 'messages',
     allowsMultiple: false,
+    // A device-local cache key can't be opened by the recipient, so never send
+    // one as an attachment.
+    requireRemote: true,
   })
 
-  const handlePickAndSendAttachment = async () => {
+  const handlePickAttachment = async () => {
+    setShowEmojiPicker(false)
+    const uploaded = await pickAttachment()
+    if (!uploaded || uploaded.length === 0) return
+    // Stage it in the composer rather than firing it off immediately, so a
+    // caption can be attached and the wrong photo can be removed.
+    setPendingAttachment(uploaded[0])
+  }
+
+  const handleSend = async () => {
+    const textToSend = inputText.trim()
+    const attachment = pendingAttachment
+    // Only ever send the remote URL — `requireRemote` guarantees one exists on
+    // a staged attachment, and a local file:// path would be a dead link for
+    // the recipient.
+    const mediaUrl = attachment?.remoteUri ?? null
+    if (!textToSend && !mediaUrl) return
+
+    setInputText('')
+    setPendingAttachment(null)
+    setShowEmojiPicker(false)
     try {
-      const uploaded = await pickAttachment()
-      if (!uploaded || uploaded.length === 0) return
-      const att = uploaded[0]
-      const previousInput = inputText
-      const textToSend = previousInput.trim()
-      try {
-        await handleSendMessage(textToSend, att.remoteUri || att.uri)
-        setInputText('')
-      } catch (err) {
-        setInputText(previousInput)
-        throw err
-      }
-    } catch (e) {
-      // ignore; the hook shows alerts on failure
+      await handleSendMessage(textToSend, mediaUrl)
+    } catch {
+      // Restore the composer so nothing the user typed or picked is lost.
+      setInputText(inputText)
+      setPendingAttachment(attachment)
     }
   }
+
+  const handleInsertEmoji = useCallback((emoji: string) => {
+    setInputText(prev => prev + emoji)
+  }, [])
+
+  const handleToggleEmojiPicker = useCallback(() => {
+    setShowEmojiPicker(prev => {
+      // Close the system keyboard first; otherwise it and the picker stack and
+      // push the composer off-screen.
+      if (!prev) Keyboard.dismiss()
+      return !prev
+    })
+  }, [])
+
+  const handleMediaPress = useCallback((mediaUrl: string) => {
+    setViewerAttachment({
+      id: mediaUrl,
+      name: mediaFileName(mediaUrl),
+      uri: mediaUrl,
+      remoteUri: mediaUrl,
+      mimeType: getMediaMimeType(mediaUrl),
+    })
+  }, [])
 
   // Stable identity: this is a dependency of the memoized `renderMessage`
   // below, which in turn is passed as `onRetry` to every memoized
@@ -192,14 +239,16 @@ export function ChatDetailScreen({
       <MessageBubble
         id={message.id}
         text={message.text}
+        mediaUrl={message.mediaUrl}
         isUser={currentUserId !== null && message.senderId === currentUserId}
         status={message.status}
         isPinned={message.isPinned}
         onLongPress={handleLongPress}
         onRetry={handleRetry}
+        onMediaPress={handleMediaPress}
       />
     )
-  }, [handleLongPress, handleRetry, currentUserId])
+  }, [handleLongPress, handleRetry, handleMediaPress, currentUserId])
 
   // Stable identity so ListFooterComponent isn't remounted by FlatList on
   // every render (e.g. every keystroke in the composer).
@@ -209,14 +258,10 @@ export function ChatDetailScreen({
     return <TypingIndicator userName={conversation.name} />
   }, [typingUsersRef, conversation.name])
 
-  const getItemLayout = (_: any, index: number) => ({
-    length: 80,
-    offset: 80 * index,
-    index,
-  })
-
   const selectedMessage = messages.find(m => m.id === selectedMessageId)
-  const trimmedInputText = inputText.trim()
+  // A staged attachment is enough on its own — an image with no caption is a
+  // perfectly valid message.
+  const canSend = inputText.trim().length > 0 || !!pendingAttachment?.remoteUri
 
   return (
     <View style={[s.container, { paddingBottom: Math.max(insets.bottom || 0, bottomNavOffset + 8) }]}>
@@ -301,7 +346,9 @@ export function ChatDetailScreen({
               initialNumToRender={15}
               windowSize={10}
               removeClippedSubviews={true}
-              getItemLayout={getItemLayout}
+              /* No getItemLayout: rows are variable height (multi-line text and
+                 image attachments), so a fixed estimate mis-positions
+                 scrollToIndex. onScrollToIndexFailed handles the retry. */
               onLayout={() => {
                 if (!hasScrolledToBottom.current) {
                   listRef.current?.scrollToEnd({ animated: false })
@@ -322,11 +369,42 @@ export function ChatDetailScreen({
               }}
             />
             {/* Message Input */}
-            <View style={[s.inputContainer, { paddingBottom: Math.max(insets.bottom || 0, 12) }]}>
+            <View style={[s.inputContainer, { paddingBottom: showEmojiPicker ? 12 : Math.max(insets.bottom || 0, 12) }]}>
+              {/* Staged attachment preview */}
+              {pendingAttachment && (
+                <View style={s.pendingRow}>
+                  <View style={s.pendingPreview}>
+                    {isPreviewableImage(pendingAttachment) ? (
+                      <Image
+                        source={{ uri: pendingAttachment.uri || pendingAttachment.remoteUri }}
+                        style={s.pendingImage}
+                        contentFit="cover"
+                        accessibilityIgnoresInvertColors
+                      />
+                    ) : (
+                      <View style={s.pendingFileIcon}>
+                        <MaterialIcons name="insert-drive-file" size={22} color={theme.textSecondary} />
+                      </View>
+                    )}
+                  </View>
+                  <Text style={s.pendingName} numberOfLines={1}>
+                    {pendingAttachment.name}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setPendingAttachment(null)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove attachment"
+                  >
+                    <MaterialIcons name="close" size={20} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              )}
               <View style={s.inputRow}>
                 <TouchableOpacity
                   style={s.attachButton}
-                  onPress={handlePickAndSendAttachment}
+                  onPress={handlePickAttachment}
+                  disabled={isPicking || isUploading}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityRole="button"
                   accessibilityLabel="Add attachment"
@@ -337,11 +415,26 @@ export function ChatDetailScreen({
                     <MaterialIcons name="attach-file" size={20} color={theme.textDisabled} />
                   )}
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.emojiButton}
+                  onPress={handleToggleEmojiPicker}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showEmojiPicker ? 'Hide emoji picker' : 'Add emoji'}
+                  accessibilityState={{ expanded: showEmojiPicker }}
+                >
+                  <MaterialIcons
+                    name={showEmojiPicker ? 'keyboard' : 'emoji-emotions'}
+                    size={20}
+                    color={showEmojiPicker ? theme.primary : theme.textDisabled}
+                  />
+                </TouchableOpacity>
                 <TextInput
                   style={s.inlineTextInput}
                   value={inputText}
                   onChangeText={setInputText}
-                  placeholder="Type a message..."
+                  onFocus={() => setShowEmojiPicker(false)}
+                  placeholder={pendingAttachment ? 'Add a caption...' : 'Type a message...'}
                   placeholderTextColor={theme.textSecondary}
                   multiline
                   textAlignVertical="center"
@@ -349,28 +442,25 @@ export function ChatDetailScreen({
                   accessibilityHint="Enter your message to send"
                 />
                 <TouchableOpacity
-                  style={[s.sendButton, !trimmedInputText && s.sendButtonDisabled]}
-                  onPress={async () => {
-                    if (trimmedInputText.length === 0) return
-                    const previousInput = inputText
-                    const textToSend = previousInput.trim()
-                    try {
-                      await handleSendMessage(textToSend)
-                      setInputText('')
-                    } catch (err) {
-                      setInputText(previousInput)
-                    }
-                  }}
-                  disabled={!trimmedInputText}
+                  style={[s.sendButton, !canSend && s.sendButtonDisabled]}
+                  onPress={handleSend}
+                  disabled={!canSend}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityRole="button"
                   accessibilityLabel="Send message"
-                  accessibilityState={{ disabled: !trimmedInputText }}
+                  accessibilityState={{ disabled: !canSend }}
                 >
                   <MaterialIcons name="send" size={20} color={theme.primary} />
                 </TouchableOpacity>
               </View>
             </View>
+            {/* Rendered outside the composer so it spans the full width. */}
+            <EmojiPicker
+              visible={showEmojiPicker}
+              onSelect={handleInsertEmoji}
+              onClose={() => setShowEmojiPicker(false)}
+              bottomInset={insets.bottom || 0}
+            />
           </View>
         )}
       </KeyboardAvoidingView>
@@ -385,6 +475,13 @@ export function ChatDetailScreen({
         onBlockUser={handleBlockUser}
         showBlockOption={!conversation.isGroup && !!otherUserId}
         isPinned={selectedMessage?.isPinned}
+      />
+
+      {/* Attachment viewer */}
+      <AttachmentViewerModal
+        visible={viewerAttachment !== null}
+        attachment={viewerAttachment}
+        onClose={() => setViewerAttachment(null)}
       />
 
       {/* Report Modal */}
@@ -403,6 +500,13 @@ export function ChatDetailScreen({
 }
 
 export default ChatDetailScreen
+
+/** True when the staged attachment can be shown as a thumbnail in the composer. */
+function isPreviewableImage(attachment: Attachment): boolean {
+  const mime = attachment.mimeType || attachment.mime
+  if (mime) return mime.startsWith('image/')
+  return getMediaKind(attachment.remoteUri || attachment.uri) === 'image'
+}
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
@@ -508,6 +612,44 @@ function makeStyles(t: AppTheme) {
       marginRight: 8,
       marginBottom: 2,
       alignSelf: 'flex-end',
+    },
+    emojiButton: {
+      marginRight: 8,
+      marginBottom: 2,
+      alignSelf: 'flex-end',
+    },
+    pendingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 8,
+      padding: 8,
+      borderRadius: 12,
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    pendingPreview: {
+      width: 44,
+      height: 44,
+      borderRadius: 8,
+      overflow: 'hidden',
+      backgroundColor: t.background,
+    },
+    pendingImage: {
+      width: '100%',
+      height: '100%',
+    },
+    pendingFileIcon: {
+      width: '100%',
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pendingName: {
+      flex: 1,
+      fontSize: 13,
+      color: t.text,
     },
     inlineTextInput: {
       flex: 1,

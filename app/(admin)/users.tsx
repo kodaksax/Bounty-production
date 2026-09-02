@@ -1,330 +1,246 @@
 // app/(admin)/users.tsx - Admin Users List
+//
+// Fixed here:
+//  - The status filter chips never refiltered the list (see
+//    hooks/useAdminList.ts for the root cause).
+//  - No search. Finding one user among 343 profiles meant scrolling, and the
+//    query returned every profile row with no LIMIT.
+//  - The per-user "Posted / Completed" counters were read from
+//    `profiles.bounties_posted` / `.bounties_completed`, columns that do not
+//    exist, so every user showed 0. They are now real aggregates; when the
+//    aggregate is unavailable the row shows "—" rather than a fake zero.
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminStatusBadge } from '../../components/admin/AdminStatusBadge';
+import {
+  AdminEmpty,
+  AdminError,
+  AdminErrorBanner,
+  AdminFilterChips,
+  AdminListFooter,
+  AdminLoading,
+  AdminScreen,
+  AdminSearchBar,
+  formatMoney,
+  formatRelative,
+} from '../../components/admin/AdminUI';
+import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
 import { ROUTES } from '../../lib/routes';
-import type { AdminUserFilters, AdminUserSummary } from '../../lib/types-admin';
+import { ADMIN_USER_STATUSES, type AdminUserStatus, type AdminUserSummary } from '../../lib/types-admin';
 
-const AdminUserRow = React.memo(function AdminUserRow({
+const STATUS_OPTIONS = ['all', ...ADMIN_USER_STATUSES] as const;
+type StatusOption = (typeof STATUS_OPTIONS)[number];
+
+export default function AdminUsersScreen() {
+  const router = useRouter();
+  const { theme } = useAppTheme();
+
+  const [status, setStatus] = useState<StatusOption>('all');
+  const [search, setSearch] = useState('');
+
+  const filters = useMemo(
+    () => ({
+      status: status === 'all' ? ('all' as const) : (status as AdminUserStatus),
+      search: search.trim() || undefined,
+    }),
+    [status, search]
+  );
+
+  const { users, total, isLoading, isLoadingMore, isRefreshing, error, hasMore, refetch, loadMore } =
+    useAdminUsers(filters);
+
+  const openUser = useCallback(
+    (id: string) => router.push(ROUTES.ADMIN.USER_DETAIL(id) as never),
+    [router]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: AdminUserSummary }) => <UserRow item={item} onPress={openUser} />,
+    [openUser]
+  );
+
+  const keyExtractor = useCallback((item: AdminUserSummary) => item.id, []);
+  const showFullError = !!error && users.length === 0 && !isLoading;
+
+  return (
+    <AdminScreen>
+      <AdminHeader title="Users" showBack backFallback={ROUTES.ADMIN.INDEX} />
+
+      <AdminSearchBar
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search username, name or email…"
+      />
+
+      <View style={{ marginTop: theme.spacing.sm }}>
+        <AdminFilterChips options={STATUS_OPTIONS} value={status} onChange={setStatus} />
+      </View>
+
+      {error && users.length > 0 ? <AdminErrorBanner message={error} onRetry={refetch} /> : null}
+
+      {showFullError ? (
+        <AdminError
+          title="Couldn't load users"
+          message="The user directory could not be read. This is served by the admin-profiles function, which requires an admin session."
+          detail={error}
+          onRetry={refetch}
+        />
+      ) : isLoading && users.length === 0 ? (
+        <AdminLoading label="Loading users…" />
+      ) : (
+        <FlatList
+          data={users}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: 40 }}
+          refreshing={isRefreshing}
+          onRefresh={refetch}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListEmptyComponent={
+            <AdminEmpty
+              icon="person-search"
+              title="No users found"
+              description={
+                search.trim()
+                  ? `No account matches "${search.trim()}"${status !== 'all' ? ` with status ${status}` : ''}.`
+                  : status !== 'all'
+                    ? `No accounts currently have the status "${status}".`
+                    : 'No accounts exist yet.'
+              }
+              actionLabel={search.trim() || status !== 'all' ? 'Clear filters' : 'Refresh'}
+              onAction={() => {
+                if (search.trim() || status !== 'all') {
+                  setSearch('');
+                  setStatus('all');
+                } else {
+                  void refetch();
+                }
+              }}
+            />
+          }
+          ListFooterComponent={
+            <AdminListFooter
+              shown={users.length}
+              total={total}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={loadMore}
+              noun="users"
+            />
+          }
+        />
+      )}
+    </AdminScreen>
+  );
+}
+
+const UserRow = React.memo(function UserRow({
   item,
   onPress,
 }: {
   item: AdminUserSummary;
   onPress: (id: string) => void;
 }) {
+  const { theme } = useAppTheme();
+  const verified = item.verificationStatus === 'verified' || item.verificationStatus === 'trusted';
+  // An em dash rather than 0 when the aggregate could not be computed — a
+  // fabricated zero is worse than an honest gap.
+  const stat = (value: number) => (item.statsLoaded ? value.toLocaleString() : '—');
+
   return (
-    <TouchableOpacity style={styles.userCard} onPress={() => onPress(item.id)}>
-      <View style={styles.userHeader}>
-        <View style={styles.userInfo}>
-          <Text style={styles.username}>{item.username}</Text>
-          {item.email && <Text style={styles.email}>{item.email}</Text>}
+    <TouchableOpacity
+      style={{
+        backgroundColor: theme.surface,
+        borderRadius: theme.radius.lg,
+        padding: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.border,
+      }}
+      onPress={() => onPress(item.id)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.username}, ${item.status}`}
+    >
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text }} numberOfLines={1}>
+            {item.username}
+          </Text>
+          {item.email ? (
+            <Text style={{ fontSize: 13, color: theme.textSecondary, marginTop: 2 }} numberOfLines={1}>
+              {item.email}
+            </Text>
+          ) : null}
         </View>
         <AdminStatusBadge status={item.status} type="user" />
       </View>
-      <View style={styles.userStats}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{item.bountiesPosted}</Text>
-          <Text style={styles.statLabel}>Posted</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{item.bountiesCompleted}</Text>
-          <Text style={styles.statLabel}>Completed</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>${item.balance.toFixed(0)}</Text>
-          <Text style={styles.statLabel}>Balance</Text>
-        </View>
+
+      <View style={[styles.stats, { borderColor: theme.border, marginTop: theme.spacing.md }]}>
+        <Stat label="Posted" value={stat(item.bountiesPosted)} />
+        <Stat label="Completed" value={stat(item.bountiesCompleted)} />
+        <Stat label="Balance" value={formatMoney(item.balance)} />
       </View>
-      <View style={styles.userFooter}>
-        {item.verificationStatus && (
-          <View style={styles.verificationBadge}>
-            <MaterialIcons
-              name={(item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') ? 'verified' : 'pending'}
-              size={14}
-              color={(item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') ? '#4caf50' : '#ffc107'}
-            />
-            <Text style={styles.verificationText}>{item.verificationStatus}</Text>
+
+      <View style={[styles.footer, { marginTop: theme.spacing.md }]}>
+        <View style={styles.metaItem}>
+          <MaterialIcons
+            name={verified ? 'verified' : 'pending'}
+            size={14}
+            color={verified ? theme.success : theme.warning}
+          />
+          <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+            {item.verificationStatus ?? 'unverified'}
+          </Text>
+        </View>
+        {item.balanceFrozen ? (
+          <View style={styles.metaItem}>
+            <MaterialIcons name="ac-unit" size={14} color={theme.info} />
+            <Text style={{ fontSize: 12, color: theme.info, fontWeight: '600' }}>Frozen</Text>
           </View>
-        )}
-        <Text style={styles.joinDate}>Joined {formatDate(item.joinDate)}</Text>
+        ) : null}
+        <Text style={{ fontSize: 12, color: theme.textDisabled, marginLeft: 'auto' }}>
+          Joined {formatRelative(item.joinDate)}
+        </Text>
       </View>
     </TouchableOpacity>
   );
 });
 
-export default function AdminUsersScreen() {
-  const router = useRouter();
-  const [filters, setFilters] = useState<AdminUserFilters>({ status: 'all' });
-  const { users, isLoading, error, refetch } = useAdminUsers(filters);
-
-  const statusOptions: AdminUserFilters['status'][] = ['all', 'active', 'suspended', 'banned'];
-
-  const handleUserPress = useCallback(
-    (id: string) => router.push(ROUTES.ADMIN.USER_DETAIL(id)),
-    [router]
-  );
-
-  const renderUserItem = useCallback(
-    ({ item }: { item: AdminUserSummary }) => (
-      <AdminUserRow item={item} onPress={handleUserPress} />
-    ),
-    [handleUserPress]
-  );
-
-  const keyExtractorUser = useCallback((item: AdminUserSummary) => item.id, []);
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <MaterialIcons name="people-outline" size={64} color="rgba(255,254,245,0.3)" />
-      <Text style={styles.emptyTitle}>No users found</Text>
-      <Text style={styles.emptyText}>
-        {filters.status !== 'all' ? `No ${filters.status} users` : 'No users match this filter'}
-      </Text>
-      <TouchableOpacity style={styles.refreshButton} onPress={refetch}>
-        <Text style={styles.refreshButtonText}>Refresh</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderErrorState = () => (
-    <View style={styles.errorContainer}>
-      <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.3)" />
-      <Text style={styles.errorTitle}>Failed to load users</Text>
-      <Text style={styles.errorText}>{error}</Text>
-      <TouchableOpacity style={styles.retryButton} onPress={refetch}>
-        <Text style={styles.retryButtonText}>Retry</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
+function Stat({ label, value }: { label: string; value: string }) {
+  const { theme } = useAppTheme();
   return (
-    <View style={styles.container}>
-      <AdminHeader title="Users" onBack={() => router.back()} />
-
-      {/* Filters */}
-      <View style={styles.filtersContainer}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={statusOptions}
-          keyExtractor={(item) => item || 'all'}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.filterChip, filters.status === item && styles.filterChipActive]}
-              onPress={() => setFilters({ ...filters, status: item })}
-            >
-              <Text style={[styles.filterText, filters.status === item && styles.filterTextActive]}>
-                {item === 'all' ? 'All' : item}
-              </Text>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.filtersContent}
-        />
-      </View>
-
-      {/* List */}
-      {error && !users.length ? (
-        renderErrorState()
-      ) : (
-        <FlatList
-          data={users}
-          renderItem={renderUserItem}
-          keyExtractor={keyExtractorUser}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={isLoading ? null : renderEmptyState}
-          refreshing={isLoading}
-          onRefresh={refetch}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={7}
-          initialNumToRender={10}
-        />
-      )}
+    <View style={{ flex: 1, alignItems: 'center' }}>
+      <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>{value}</Text>
+      <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>{label}</Text>
     </View>
   );
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 30) return `${diffDays}d ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
-  return `${Math.floor(diffDays / 365)}y ago`;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a3d2e',
-  },
-  filtersContainer: {
-    backgroundColor: '#1a3d2e',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,145,44,0.2)',
-  },
-  filtersContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginRight: 8,
-  },
-  filterChipActive: {
-    backgroundColor: '#00912C',
-  },
-  filterText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,254,245,0.8)',
-    textTransform: 'capitalize',
-  },
-  filterTextActive: {
-    color: '#fffef5',
-  },
-  listContent: {
-    padding: 16,
-  },
-  userCard: {
-    backgroundColor: '#2d5240',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
-  },
-  userHeader: {
+  header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
     gap: 12,
   },
-  userInfo: {
-    flex: 1,
-  },
-  username: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fffef5',
-    marginBottom: 4,
-  },
-  email: {
-    fontSize: 13,
-    color: 'rgba(255,254,245,0.6)',
-  },
-  userStats: {
+  stats: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    marginBottom: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#00dc50',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: 'rgba(255,254,245,0.6)',
-    textTransform: 'uppercase',
-  },
-  userFooter: {
+  footer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
   },
-  verificationBadge: {
+  metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  verificationText: {
-    fontSize: 12,
-    color: 'rgba(255,254,245,0.7)',
-    textTransform: 'capitalize',
-  },
-  joinDate: {
-    fontSize: 12,
-    color: 'rgba(255,254,245,0.5)',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    minHeight: 400,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fffef5',
-    marginTop: 16,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  refreshButton: {
-    backgroundColor: '#00912C',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 24,
-  },
-  refreshButtonText: {
-    color: '#fffef5',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fffef5',
-    marginTop: 16,
-  },
-  errorText: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#00912C',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 24,
-  },
-  retryButtonText: {
-    color: '#fffef5',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

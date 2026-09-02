@@ -19,6 +19,7 @@ import { supabase } from '../supabase';
 import type { Conversation, Message } from '../types';
 import { getAccountStatusErrorMessage } from '../utils/account-status-errors';
 import { EventEmitter } from '../utils/event-emitter';
+import { mediaPreviewLabel } from '../utils/message-media';
 import { logClientError } from './monitoring';
 
 // Storage keys for local cache. Conversation list cache is scoped per user so
@@ -268,7 +269,7 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     const lastMessagesPromises = conversations.map(conv =>
       supabase
         .from('messages')
-        .select('conversation_id, text, created_at')
+        .select('conversation_id, text, created_at, media_url')
         .eq('conversation_id', conv.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -334,7 +335,11 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
         isGroup: conv.is_group,
         name,
         avatar,
-        lastMessage: lastMsg?.text,
+        // Attachment-only messages have empty text; show a media label so the
+        // conversation row isn't blank.
+        lastMessage: lastMsg
+          ? lastMsg.text?.trim() || (lastMsg.media_url ? mediaPreviewLabel(lastMsg.media_url) : '')
+          : undefined,
         updatedAt: conv.updated_at,
         participantIds,
         unread: unreadCount,
@@ -378,7 +383,9 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
       text: msg.text,
       createdAt: msg.created_at,
       status: 'sent',
-      mediaUrl: msg.media_url,
+      // Older rows (and some environments) store the attachment under
+      // `attachment_url` instead of `media_url`.
+      mediaUrl: msg.media_url ?? msg.attachment_url ?? undefined,
       replyTo: msg.reply_to,
       isPinned: msg.is_pinned,
     }));
@@ -457,6 +464,12 @@ export async function sendMessage(
     const resolvedText =
       inserted.text ?? inserted.body ?? inserted.message ?? inserted.content ?? '';
 
+    // Echo the attachment back on the returned message. Callers replace their
+    // optimistic copy with this one, so dropping it here made a just-sent image
+    // disappear from the thread until the next refetch.
+    const resolvedMedia =
+      inserted.media_url ?? inserted.media ?? inserted.attachment_url ?? mediaUrl ?? undefined;
+
     const message: Message = {
       id: inserted.id,
       conversationId: inserted.conversation_id,
@@ -464,6 +477,9 @@ export async function sendMessage(
       text: resolvedText,
       createdAt: inserted.created_at,
       status: 'sent',
+      mediaUrl: resolvedMedia ?? undefined,
+      replyTo: inserted.reply_to ?? undefined,
+      isPinned: inserted.is_pinned ?? undefined,
     };
 
     // Emit event for local UI update
@@ -806,7 +822,7 @@ export function subscribeToMessages(
             text: payload.new.text,
             createdAt: payload.new.created_at,
             status: 'sent',
-            mediaUrl: payload.new.media_url,
+            mediaUrl: payload.new.media_url ?? payload.new.attachment_url ?? undefined,
             replyTo: payload.new.reply_to,
             isPinned: payload.new.is_pinned,
           };

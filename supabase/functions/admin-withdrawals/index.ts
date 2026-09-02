@@ -30,6 +30,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
+import { mayAdminReopenFailedWithdrawal } from '../_shared/payout-state.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -759,6 +760,37 @@ Deno.serve(async (req: Request) => {
 
     const amount = Math.abs(t.amount);
 
+    // The state machine, consulted explicitly rather than assumed. `failed` is
+    // an absorbing state for webhooks; this admin path is its single audited
+    // exception, and the only legal destination is 'pending' — never
+    // 'completed'. See _shared/payout-state.ts.
+    if (
+      !mayAdminReopenFailedWithdrawal({
+        // `?? ''` rather than a cast: an absent status is not 'failed', so the
+        // guard correctly refuses it instead of being coerced past the check.
+        currentStatus: t.status ?? '',
+        hasConnectAccount: Boolean(p.stripe_connect_account_id),
+      })
+    ) {
+      await logAdminAction(supabase, {
+        adminUserId: adminUser.id,
+        actionType: 'force_retry_withdrawal',
+        targetUserId,
+        targetTransactionId: transactionId,
+        amount,
+        reason,
+        result: 'failure',
+        metadata: { error: 'illegal_transition', fromStatus: t.status },
+      });
+      return jsonResponse(
+        {
+          error: `A withdrawal in status '${t.status}' cannot be retried.`,
+          code: 'illegal_transition',
+        },
+        409
+      );
+    }
+
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
     if (!stripeKey) {
       return jsonResponse({ error: 'Stripe not configured' }, 500);
@@ -911,22 +943,96 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
     }
 
-    await supabase
+    // ─── Hop two ─────────────────────────────────────────────────────────────
+    // The Transfer above is hop one of two: it moves money from the platform
+    // balance into the connected account. It puts nothing in a hunter's bank.
+    //
+    // This route used to stop here and write status:'completed' with a transfer
+    // id and no payout id — the exact shape of the 2026-08-13 incident, and the
+    // reason 25 rows totalling $526.65 sit outside the reach of payout.paid,
+    // payout.failed and the reconciliation sweep, all of which key off
+    // stripe_payout_id. The 2026-08-16 CHECK constraint did not stop it either:
+    // its grandfathering clause tests the ROW's created_at, so this write
+    // succeeded silently on exactly the legacy rows this endpoint targets.
+    //
+    // Now: create the Payout ourselves, record its id, and leave the row
+    // 'pending'. Only payout.paid may promote it. Same discipline as
+    // /connect/transfer.
+    let retryPayout: Stripe.Payout | null = null;
+    let retryPayoutError: string | null = null;
+    try {
+      retryPayout = await stripe.payouts.create(
+        {
+          amount: Math.round(amount * 100),
+          currency: 'usd',
+          method: 'standard',
+          metadata: {
+            user_id: targetUserId,
+            purpose: 'admin_force_retry',
+            transfer_id: transfer.id,
+            retry_of_transaction: transactionId,
+            admin_user_id: adminUser.id,
+          },
+        },
+        {
+          stripeAccount: p.stripe_connect_account_id,
+          // Deterministic: a repeated retry at the same count replays rather
+          // than paying twice.
+          idempotencyKey: `admin_retry_payout_${transactionId}_${retryCount + 1}`,
+        }
+      );
+    } catch (payoutCreateError) {
+      // The transfer landed, so the funds are in the connected account and a
+      // balance refund would be wrong. Completing would also be wrong: nothing
+      // was delivered. The row stays 'pending' with no payout id and
+      // reconciliation raises it as CRITICAL — the loud failure the old silent
+      // success denied us.
+      const pcInfo = payoutCreateError as { code?: string; message?: string };
+      retryPayoutError = pcInfo?.code ?? pcInfo?.message ?? 'unknown';
+      logCritical(
+        'admin force-retry: transfer landed but payout creation failed — funds are in the connected account with no payout, manual reconciliation required',
+        { targetUserId, transactionId, transferId: transfer.id, amount, error: retryPayoutError }
+      );
+    }
+
+    const { error: retryUpdateError } = await supabase
       .from('wallet_transactions')
       .update({
         stripe_transfer_id: transfer.id,
-        status: 'completed',
+        stripe_payout_id: retryPayout?.id ?? null,
+        // NOT 'completed'. Only the payout.paid webhook may write that, and
+        // only once Stripe says the money landed.
+        status: 'pending',
+        payout_method: 'standard',
         metadata: {
           ...t.metadata,
           retry_count: retryCount + 1,
           retried_at: new Date().toISOString(),
           retried_by_admin: adminUser.id,
+          transfer_id: transfer.id,
+          payout_id: retryPayout?.id ?? null,
+          ...(retryPayoutError ? { payout_creation_failed: retryPayoutError } : {}),
           destination_bank_account_id: destinationAccount.id,
           destination_bank_last4: destinationAccount.last4 ?? null,
           destination_bank_name: destinationAccount.bank_name ?? null,
         },
       })
       .eq('id', transactionId);
+
+    if (retryUpdateError) {
+      // A payout may already exist at this point, so there is real money in
+      // flight with no ledger row describing it. Never swallow this.
+      logCritical(
+        'admin force-retry: ledger update failed after transfer/payout — manual reconciliation required',
+        {
+          targetUserId,
+          transactionId,
+          transferId: transfer.id,
+          payoutId: retryPayout?.id ?? null,
+          error: retryUpdateError,
+        }
+      );
+    }
 
     await logAdminAction(supabase, {
       adminUserId: adminUser.id,
@@ -943,7 +1049,21 @@ Deno.serve(async (req: Request) => {
       `[admin-withdrawals] Admin ${adminUser.id} force-retried transaction ${transactionId}: transfer ${transfer.id}`
     );
 
-    return jsonResponse({ success: true, transferId: transfer.id, transactionId });
+    return jsonResponse({
+      success: true,
+      transferId: transfer.id,
+      payoutId: retryPayout?.id ?? null,
+      transactionId,
+      // 'pending', never 'completed' — the admin needs to know this is in
+      // flight rather than delivered, or the tool re-teaches the very
+      // assumption that caused the incident.
+      status: 'pending',
+      settlementState: retryPayout ? 'stripe_pending' : 'ledger_only',
+      message: retryPayout
+        ? 'Retry submitted. The withdrawal completes when Stripe confirms the payout landed (typically 1-2 business days).'
+        : 'Transfer succeeded but the payout could not be created. Funds are in the connected account and this row needs manual reconciliation.',
+      ...(retryPayoutError ? { warning: `payout_creation_failed: ${retryPayoutError}` } : {}),
+    });
   }
 
   // ─── manual_adjustment ───────────────────────────────────────────────────────

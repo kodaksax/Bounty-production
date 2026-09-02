@@ -7,7 +7,16 @@
 //
 // Deliberately fire-and-forget: `capture()` in lib/posthog.ts already queues
 // and flushes in the background, so nothing here blocks the UI thread.
-import { capture as posthogCapture } from '../posthog';
+//
+// Alongside the app's own `screen_viewed` taxonomy event, this also mirrors
+// every navigation into PostHog's native `$screen` event (via `screen()`,
+// which sets $screen_name and fires the SDK's built-in screen call). Nothing
+// else emits $screen — autocapture's captureScreens is off (see
+// app/_layout.tsx) because expo-router exposes no NavigationContainer ref for
+// it to hook. Without this mirror, PostHog surfaces that key off $screen
+// (native path analysis, the replay event overlay, web-analytics-style
+// summaries) render empty even though screen_viewed is being captured fine.
+import { capture as posthogCapture, screen as posthogScreen } from '../posthog';
 
 export type NavigationSource = 'tab' | 'push' | 'deep_link' | 'back' | 'notification';
 
@@ -69,13 +78,16 @@ export function trackScreenView(
   state.screenName = screenName;
   state.viewedAt = now;
 
-  posthogCapture('screen_viewed', {
+  const eventProperties = {
     screen_name: screenName,
     ...(previousScreen ? { previous_screen: previousScreen } : {}),
     navigation_source: source,
     ...(secondsOnPrevious !== undefined ? { seconds_on_previous_screen: secondsOnPrevious } : {}),
     ...opts.properties,
-  });
+  };
+
+  posthogCapture('screen_viewed', eventProperties);
+  posthogScreen(screenName, eventProperties);
 }
 
 /** Test-only: clears module state so specs don't leak into one another. */

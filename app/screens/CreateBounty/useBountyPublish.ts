@@ -12,7 +12,7 @@ import {
   validateBalance,
 } from 'lib/utils/bounty-validation';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
-import { shouldFundNewBountiesWithPhase2 } from 'lib/utils/payment-architecture';
+import { shouldUseStripeNativeFunding } from 'lib/utils/payment-architecture';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 
@@ -29,7 +29,18 @@ import { Alert, Platform } from 'react-native';
 export interface PublishedBountyMeta {
   amountCents: number;
   category: string;
-  architecture: 1 | 2;
+  architecture: 1 | 2 | 3;
+  /** Canonical `bounty_published` payload fields. The surface layer emits the
+   * single terminal event (see app/screens/CreateBounty/index.tsx onPublished);
+   * this hook no longer emits it itself, to avoid the historical duplicate
+   * where post_published AND bounty_published both fired per publish. */
+  surface: string;
+  bountyId: string;
+  amountDollars: number;
+  isForHonor: boolean;
+  funded: boolean;
+  workType?: string;
+  queuedOffline: boolean;
 }
 
 /** Props matching InsufficientBalanceScreen/AddMoneyScreen exactly, so
@@ -125,16 +136,27 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     reset: resetSubmitError,
   } = useFormSubmission(
     async () => {
+      // Canonical `bounty_submitted` — the poster committed a publish attempt.
+      // Fires once per create attempt (including a retry) BEFORE the
+      // create/escrow round-trip, so bounty_published ÷ bounty_submitted is
+      // the publish success rate.
+      analyticsService.trackEvent('bounty_submitted', {
+        surface,
+        role: 'poster',
+        is_for_honor: draft.isForHonor,
+        amount: draft.isForHonor ? 0 : draft.amount,
+      });
+
       if (!canPostBounties) {
         throw new Error(
           'Please verify your email address before posting bounties. Check your inbox for the verification link.'
         );
       }
 
-      const useV2Payments =
-        !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
+      const useStripeNativePayments =
+        !draft.isForHonor && draft.amount > 0 && shouldUseStripeNativeFunding();
 
-      if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
+      if (!useStripeNativePayments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
         analyticsService.trackEvent('post_amount_blocked_by_balance', {
           surface,
           attemptedAmount: draft.amount,
@@ -146,37 +168,44 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       }
 
       const { bounty: createdBounty, created } = await bountyService.createBounty(draft);
+      let paymentArchitectureVersion: 1 | 2 | 3 = 1;
 
       if (!createdBounty) {
         throw new Error('Failed to create bounty');
       }
 
       if (created && !draft.isForHonor && draft.amount > 0) {
-        try {
-          await analyticsService.trackEvent('payment_architecture_routed', {
-            bountyId: String(createdBounty.id),
-            version: useV2Payments ? 2 : 1,
-            context: 'funding',
-          });
-        } catch {
-          /* analytics is best-effort */
-        }
-
-        if (useV2Payments) {
+        if (useStripeNativePayments) {
           try {
+            const paymentResult = await bountyPaymentsService.createBountyPayment(
+              String(createdBounty.id)
+            );
+            paymentArchitectureVersion =
+              ((paymentResult as { architectureVersion?: number }).architectureVersion ?? 2) === 3
+                ? 3
+                : ((paymentResult as { architectureVersion?: number }).architectureVersion ?? 2) === 2
+                  ? 2
+                  : 1;
+
             try {
-              await analyticsService.trackEvent('payment_initiated', {
+              await analyticsService.trackEvent('payment_architecture_routed', {
                 bountyId: String(createdBounty.id),
-                architecture: 'v2',
-                amount: draft.amount,
+                version: paymentArchitectureVersion,
+                context: 'funding',
               });
             } catch {
               /* analytics is best-effort */
             }
 
-            const paymentResult = await bountyPaymentsService.createBountyPayment(
-              String(createdBounty.id)
-            );
+            try {
+              await analyticsService.trackEvent('payment_initiated', {
+                bountyId: String(createdBounty.id),
+                architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
+                amount: draft.amount,
+              });
+            } catch {
+              /* analytics is best-effort */
+            }
 
             const paymentMethodId = paymentMethods[0]?.id;
             if (!paymentMethodId) {
@@ -188,14 +217,23 @@ export function useBountyPublish(params: UseBountyPublishParams) {
               undefined,
               { userId: sessionUserId }
             );
-            if (confirmedIntent.status !== 'succeeded') {
+            // v2 captures immediately, so a confirmed intent lands on
+            // 'succeeded'. v3 authorizes without capturing, so a *successful*
+            // v3 confirmation lands on 'requires_capture' — treating that as a
+            // failure would roll back and delete every v3 bounty ever posted.
+            // The server tells us which path actually ran.
+            const isV3Payment = paymentArchitectureVersion === 3;
+            const acceptableStatuses = isV3Payment
+              ? ['requires_capture', 'succeeded']
+              : ['succeeded'];
+            if (!acceptableStatuses.includes(confirmedIntent.status)) {
               throw new Error('Payment was not completed. Please try again.');
             }
 
             try {
               await analyticsService.trackEvent('escrow_funded', {
                 bountyId: String(createdBounty.id),
-                architecture: 'v2',
+                architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
                 amount: draft.amount,
               });
             } catch {
@@ -267,25 +305,25 @@ export function useBountyPublish(params: UseBountyPublishParams) {
 
       if (created) {
         publishedRef.current = true;
-        analyticsService.trackEvent('post_published', {
-          surface,
-          bountyId: String(createdBounty.id),
-          amount: draft.isForHonor ? 0 : draft.amount,
-          isForHonor: draft.isForHonor,
-          funded: !draft.isForHonor && draft.amount > 0,
-          category: draft.category || 'none',
-          workType: draft.workType,
-          architecture: useV2Payments ? 2 : 1,
-          queuedOffline: !isOnline,
-        });
       }
 
       await clearDraft();
 
+      // The single canonical `bounty_published` is emitted by the surface layer
+      // (index.tsx onPublished) from this meta plus its own flow-timing props —
+      // see PublishedBountyMeta. This hook deliberately no longer emits a
+      // terminal event of its own.
       const meta: PublishedBountyMeta = {
         amountCents: toCents(draft.isForHonor ? 0 : draft.amount),
         category: draft.category || 'other',
-        architecture: useV2Payments ? 2 : 1,
+        architecture: paymentArchitectureVersion,
+        surface,
+        bountyId: String(createdBounty.id),
+        amountDollars: draft.isForHonor ? 0 : draft.amount,
+        isForHonor: draft.isForHonor,
+        funded: !draft.isForHonor && draft.amount > 0,
+        workType: draft.workType,
+        queuedOffline: !isOnline,
       };
       const finish = () => onPublished(createdBounty.id.toString(), meta);
 
@@ -335,10 +373,10 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // instead of the throw/Alert error path (submit's own check stays as a
   // safety net for anything that reaches it despite this gate).
   const publish = () => {
-    const useV2Payments =
-      !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
+    const useStripeNativePayments =
+      !draft.isForHonor && draft.amount > 0 && shouldUseStripeNativeFunding();
 
-    if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
+    if (!useStripeNativePayments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
       analyticsService.trackEvent('post_amount_blocked_by_balance', {
         surface,
         attemptedAmount: draft.amount,

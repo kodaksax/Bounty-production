@@ -614,16 +614,35 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  -- Processing lease. Must stay above the Edge Function wall-clock limit.
+  c_lease_seconds constant integer := 300;
   v_claimed uuid;
 BEGIN
-  INSERT INTO public.stripe_events (stripe_event_id, event_type, event_data, processed, status)
-  VALUES (p_stripe_event_id, p_event_type, p_event_data, false, 'processing')
+  IF p_stripe_event_id IS NULL OR length(p_stripe_event_id) = 0 THEN
+    RAISE EXCEPTION 'claim_stripe_event: p_stripe_event_id is required';
+  END IF;
+
+  INSERT INTO public.stripe_events (
+    stripe_event_id, event_type, event_data, processed, status, last_retry_at
+  )
+  VALUES (p_stripe_event_id, p_event_type, p_event_data, false, 'processing', now())
   ON CONFLICT (stripe_event_id) DO UPDATE
     SET status        = 'processing',
         last_retry_at = now(),
         retry_count   = COALESCE(public.stripe_events.retry_count, 0) + 1,
         event_data    = COALESCE(EXCLUDED.event_data, public.stripe_events.event_data)
     WHERE public.stripe_events.processed IS DISTINCT FROM true
+      -- Lease predicate, added 2026-09-02 and kept byte-identical to
+      -- 20260902210000_stripe_event_claim_lease.sql so that whichever of the
+      -- two migrations is applied last leaves the same function behind.
+      -- Gating on `processed` alone only deduped COMPLETED events: two
+      -- deliveries arriving while the first was still in flight both claimed
+      -- the event and both ran the handler.
+      AND (
+        public.stripe_events.status IS DISTINCT FROM 'processing'
+        OR public.stripe_events.last_retry_at IS NULL
+        OR public.stripe_events.last_retry_at < now() - make_interval(secs => c_lease_seconds)
+      )
   RETURNING id INTO v_claimed;
 
   RETURN v_claimed IS NOT NULL;

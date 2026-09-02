@@ -11,7 +11,6 @@ import {
     useState,
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { navigationIntent } from '../services/navigation-intent';
 import { resolveNotificationDeepLink } from '../services/notification-deep-links';
 import { notificationService } from '../services/notification-service';
 import { isNotificationsChannelConnected, subscribeToNotifications } from '../services/notification-realtime';
@@ -134,8 +133,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (action.kind === 'route') {
         router.push(action.path as any);
       } else if (action.kind === 'conversation') {
-        await navigationIntent.setPendingConversationId(action.conversationId);
-        router.push('/tabs/bounty-app?screen=messages');
+        router.push(`/tabs/messenger/${encodeURIComponent(action.conversationId)}` as any);
       } else if (data.senderId) {
         // Legacy fallback for payloads that predate the `type` field.
         router.push(`/profile/${data.senderId}` as any);
@@ -300,21 +298,29 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Re-register the push token whenever the signed-in user changes while the
-  // app stays foregrounded (e.g. sign out then sign back in as a different
-  // account without backgrounding). The mount-time and foreground-resume
-  // registrations above miss this case entirely — NotificationProvider lives
-  // at the app root and never remounts on account switch — so without this,
-  // a device's push token can stay associated with the previous user (or
-  // never get associated with the new one) until the app is restarted.
+  // React to the signed-in user changing while the app stays foregrounded
+  // (e.g. sign out then sign back in as a different account without
+  // backgrounding). NotificationProvider lives at the app root and never
+  // remounts on account switch, so without this the previous account's
+  // notifications and badge stay on screen until a realtime insert or a
+  // pull-to-refresh forces a fetch.
   useEffect(() => {
+    // Drop the previous account's notifications and badge from state right
+    // away, including on sign-out (userId → null).
+    setNotifications([]);
+    setUnreadCount(0);
+
     if (!userId) return;
+
+    // Refetch for the newly signed-in user and re-register the push token so
+    // the device's token isn't left associated with the previous user.
+    fetchNotifications();
     notificationService.requestPermissionsAndRegisterToken().catch(error => {
       if (__DEV__) {
         console.warn('[NotificationContext] re-registration on user change failed:', error);
       }
     });
-  }, [userId]);
+  }, [userId, fetchNotifications]);
 
   // Realtime subscription to notifications table so unread count and list
   // update immediately when a new notification is inserted for this user.

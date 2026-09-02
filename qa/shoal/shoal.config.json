@@ -1,0 +1,46 @@
+{
+  "$comment": "Bounty-owned configuration for the Shoal swarm-testing layer. Shoal itself is NOT configured by a file (its CLI takes flags only) — this file is read by qa/shoal/bin/*.mjs, which translates it into real Shoal CLI flags. Do not put secrets here.",
+
+  "shoal": {
+    "repo": "https://github.com/kodaksax/shoal.git",
+    "commit": "771aad1fb3cacea6ff4303cb286fd0afa18cb868",
+    "$commitNote": "Pinned. Shoal is not published to npm and has no tags; a moving HEAD would silently change agent behaviour between runs. Bump deliberately, then re-run `npm run qa:shoal:setup`."
+  },
+
+  "environments": {
+    "local": {
+      "label": "Local Expo web (metro dev server)",
+      "url": "http://localhost:8090",
+      "appEnv": "staging",
+      "$note": "`npm run web:pw` / `APP_ENV=staging npx expo start --web --port 8090`. Points at the STAGING Supabase project, not production."
+    },
+    "staging": {
+      "label": "Staging Supabase project via local web build",
+      "url": "http://localhost:8090",
+      "appEnv": "staging",
+      "$note": "Bounty has no hosted staging web deployment (the product ships as an Expo native app; the web target exists for Playwright). Until one exists, `staging` and `local` target the same locally-served bundle wired to the staging backend."
+    }
+  },
+
+  "guards": {
+    "defaultEnv": "local",
+    "allowedSupabaseRefs": ["gwumwpoomwvkjyibdmpj", "ajsbkocnixpwbrjokvnq"],
+    "$allowedRefsNote": "staging + development refs from lib/config/supabase-refs.json. The production ref is deliberately absent.",
+    "deniedSupabaseRefs": ["xwlwqzzphmmhghiqvkeu"],
+    "deniedHosts": [
+      "bountyfinder.app",
+      "www.bountyfinder.app",
+      "xwlwqzzphmmhghiqvkeu.supabase.co"
+    ],
+    "requireStripeTestMode": true,
+    "overrideEnvVar": "BOUNTY_SHOAL_I_UNDERSTAND_THIS_IS_PRODUCTION"
+  },
+
+  "defaults": {
+    "provider": "anthropic",
+    "model": "claude-opus-5",
+    "effort": "medium",
+    "maxSteps": 30,
+    "port": 4321
+  }
+}

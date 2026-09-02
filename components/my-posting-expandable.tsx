@@ -11,6 +11,7 @@ import { staleBountyService } from 'lib/services/stale-bounty-service';
 import { userProfileService } from 'lib/services/userProfile';
 import type { Attachment, Conversation } from 'lib/types';
 import { getCurrentUserId } from 'lib/utils/data-utils';
+import { bountyHoldsUnreleasedEscrow } from 'lib/utils/payment-architecture';
 import { useEffect, useMemo, useReducer, useState } from 'react';
 import {
   ActivityIndicator,
@@ -1843,6 +1844,17 @@ export function MyPostingExpandable({
                         style={[styles.actionButton, styles.deleteButton]}
                         onPress={async () => {
                           if (!bounty) return;
+                          // Do not delete a bounty that still holds escrowed
+                          // funds — this path does not refund, so deleting would
+                          // strand the money. Route to cancellation.
+                          if (bountyHoldsUnreleasedEscrow(bounty)) {
+                            Alert.alert(
+                              'Cannot Delete',
+                              'This bounty still holds escrowed funds. Cancel it first to refund your money, then delete it.',
+                              [{ text: 'OK' }]
+                            );
+                            return;
+                          }
                           Alert.alert(
                             'Delete Bounty',
                             'Permanently delete this bounty? This cannot be undone.',
