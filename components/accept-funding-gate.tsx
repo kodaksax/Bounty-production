@@ -53,12 +53,12 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
         walletBalance={balance}
         bountyAmount={amount}
         onAddFunds={gate.onAddFunds}
-        // There is no amount to edit here — the reward was locked the moment
-        // hunters started applying (see the price freeze in
-        // fn_bounties_enforce_funding_before_work). Backing out to hunter
-        // selection is the honest alternative action.
         onEditAmount={gate.onCancel}
         onCancel={gate.onCancel}
+        title="Add Funds to Accept"
+        subtitle="Add funds to hold this bounty in escrow before selecting this hunter."
+        editAmountLabel="Back to Applicants"
+        editAmountAccessibilityLabel="Back to applicants"
       />
     );
   }

@@ -167,8 +167,18 @@ export function useAcceptRequest({
         if (recovered) {
           try {
             result = await bountyRequestService.acceptRequest(requestId)
-          } catch (retryErr) {
+          } catch (retryErr: any) {
             console.error('Accept request retry failed for', requestId, retryErr)
+            const retryStatus = retryErr?.status || null
+            if (retryStatus === 409) {
+              Alert.alert('Conflict', 'This bounty was updated elsewhere. Refresh and try again.')
+            } else if (retryStatus === 403) {
+              Alert.alert('Not authorized', 'You are not allowed to accept this request.')
+            } else if (retryStatus === 400) {
+              Alert.alert('Invalid request', 'The accept request was invalid. Please refresh and try again.')
+            } else {
+              Alert.alert('Accept Failed', 'Funding was updated, but selecting this hunter still failed. Please try again.')
+            }
             result = null
           }
         }

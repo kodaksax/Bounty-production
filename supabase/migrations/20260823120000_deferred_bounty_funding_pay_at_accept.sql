@@ -97,13 +97,15 @@ COMMENT ON COLUMN public.bounties.funding_mode IS
   'asking for ''at_accept'' is a request, not a grant, and the column is immutable '
   'after insert.';
 
--- Hard, race-proof cap for the "first bounty only" scope. Two concurrent inserts
--- cannot both win an at_accept grant, because the unique index arbitrates after
--- the eligibility check. Covers deleted rows on purpose: a poster gets exactly
--- one deferred bounty, ever, and cannot recycle the grant by deleting it.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_bounties_one_deferred_per_poster
+-- Hard, race-proof cap for LIVE deferred bounties. Two concurrent inserts cannot
+-- both win an at_accept grant, because this unique index arbitrates after the
+-- eligibility check. Completed/archived/deleted rows do not keep a poster
+-- permanently ineligible when rollout scope is widened to all_bounties.
+DROP INDEX IF EXISTS public.uq_bounties_one_deferred_per_poster;
+CREATE UNIQUE INDEX uq_bounties_one_deferred_per_poster
   ON public.bounties (poster_id)
-  WHERE funding_mode = 'at_accept';
+  WHERE funding_mode = 'at_accept'
+    AND status::text IN ('open', 'in_progress', 'cancellation_requested');
 
 -- Supports fn_can_defer_bounty_funding's "has this poster ever posted?" probe.
 CREATE INDEX IF NOT EXISTS idx_bounties_poster_id_created_at
@@ -224,7 +226,10 @@ $$;
 -- screen, whether this poster will be granted deferred funding. Advisory only —
 -- the grant itself is re-decided server-side at INSERT (below), so a stale or
 -- forged client answer changes nothing.
-GRANT EXECUTE ON FUNCTION public.fn_can_defer_bounty_funding(uuid, numeric) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_can_defer_bounty_funding(uuid, numeric) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_can_defer_bounty_funding(uuid, numeric) FROM anon;
+REVOKE ALL ON FUNCTION public.fn_can_defer_bounty_funding(uuid, numeric) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_can_defer_bounty_funding(uuid, numeric) TO service_role;
 
 -- Convenience wrapper bound to the caller's own identity, so a client can never
 -- probe another user's eligibility.
@@ -279,6 +284,20 @@ BEGIN
         )
   THEN
     NEW.funding_mode := 'at_post';
+  END IF;
+
+  -- Deferred rows must be created open/unassigned; the acceptance RPC is the
+  -- only path that can move them into a work state after escrow is reserved.
+  IF NEW.funding_mode = 'at_accept' THEN
+    IF COALESCE(NEW.status::text, 'open') <> 'open' THEN
+      RAISE EXCEPTION 'bounty_deferred_insert_must_be_open'
+        USING ERRCODE = '23514';
+    END IF;
+
+    IF NEW.accepted_by IS NOT NULL OR NEW.accepted_request_id IS NOT NULL THEN
+      RAISE EXCEPTION 'bounty_deferred_insert_must_be_unassigned'
+        USING ERRCODE = '23514';
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -642,7 +661,11 @@ EXCEPTION
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.fn_accept_bounty_request(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_accept_bounty_request(text) FROM anon;
+REVOKE ALL ON FUNCTION public.fn_accept_bounty_request(text) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_accept_bounty_request(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_accept_bounty_request(text) TO service_role;
 
 -- --- accept_bounty_request(uuid) — the second, jsonb-returning acceptance RPC
 -- Nothing in the app calls it today, but it is granted and live, so it gets the
@@ -734,7 +757,11 @@ begin
 end;
 $$;
 
+REVOKE ALL ON FUNCTION public.accept_bounty_request(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.accept_bounty_request(uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.accept_bounty_request(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.accept_bounty_request(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.accept_bounty_request(uuid) TO service_role;
 
 -- ---------------------------------------------------------------------------
 -- 8. Read model for the client's pay-at-accept gate

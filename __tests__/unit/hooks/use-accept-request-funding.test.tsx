@@ -13,6 +13,7 @@
 //   * a legacy (already-escrowed) bounty is completely unaffected.
 
 import { act, renderHook } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 const mockAcceptRequest = jest.fn();
 const mockTrackEvent = jest.fn();
@@ -246,6 +247,7 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
   });
 
   test('a failure that keeps failing does not loop the money path', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     mockAcceptRequest.mockRejectedValue(
       Object.assign(new Error('insufficient_funds_for_escrow'), { status: 402 })
     );
@@ -264,6 +266,11 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     expect(mockAcceptRequest).toHaveBeenCalledTimes(2);
     expect(eventNames()).not.toContain('bounty_claimed');
     expect(eventNames()).not.toContain('bounty_work_started');
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Accept Failed',
+      'Funding was updated, but selecting this hunter still failed. Please try again.'
+    );
+    alertSpy.mockRestore();
   });
 
   test('an unrecovered failure never claims the bounty was accepted', async () => {

@@ -24,6 +24,14 @@ interface InsufficientBalanceScreenProps {
   onEditAmount: () => void;
   /** Exit the posting flow. The draft is preserved regardless. */
   onCancel: () => void;
+  /** Optional context-specific title for non-posting flows. */
+  title?: string;
+  /** Optional context-specific subtitle for non-posting flows. */
+  subtitle?: string;
+  /** Optional context-specific secondary action label. */
+  editAmountLabel?: string;
+  /** Optional context-specific accessibility label for the secondary action. */
+  editAmountAccessibilityLabel?: string;
 }
 
 /**
@@ -41,6 +49,10 @@ export function InsufficientBalanceScreen({
   onAddFunds,
   onEditAmount,
   onCancel,
+  title = 'Add Funds to Post',
+  subtitle = "Your wallet needs a bit more — funds stay in escrow until the job's done.",
+  editAmountLabel = 'Edit Amount',
+  editAmountAccessibilityLabel = 'Edit Bounty Amount',
 }: InsufficientBalanceScreenProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
@@ -70,10 +82,10 @@ export function InsufficientBalanceScreen({
           </View>
 
           <Text style={styles.title} accessibilityRole="header">
-            Add Funds to Post
+            {title}
           </Text>
           <Text style={styles.subtitle}>
-            Your wallet needs a bit more — funds stay in escrow until the job's done.
+            {subtitle}
           </Text>
         </Animated.View>
 
@@ -118,11 +130,11 @@ export function InsufficientBalanceScreen({
           <TouchableOpacity
             onPress={onEditAmount}
             accessibilityRole="button"
-            accessibilityLabel="Edit Bounty Amount"
+            accessibilityLabel={editAmountAccessibilityLabel}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={styles.secondaryLink}
           >
-            <Text style={styles.secondaryLinkText}>Edit Amount</Text>
+            <Text style={styles.secondaryLinkText}>{editAmountLabel}</Text>
           </TouchableOpacity>
           <View style={styles.secondaryDivider} />
           <TouchableOpacity
