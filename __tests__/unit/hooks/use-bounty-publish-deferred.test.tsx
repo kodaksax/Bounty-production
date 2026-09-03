@@ -56,6 +56,7 @@ jest.mock('lib/services/offline-queue-service', () => ({
 }));
 jest.mock('lib/utils/payment-architecture', () => ({
   shouldFundNewBountiesWithPhase2: () => false,
+  shouldUseStripeNativeFunding: () => false,
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -146,7 +147,7 @@ describe('useBountyPublish — deferred funding', () => {
     });
 
     test('a funded post asks for at_post and escrows at post time', async () => {
-      const { result } = await setup({ balance: 100 });
+      const { result, onPublished } = await setup({ balance: 100 });
       await act(async () => {
         await result.current.publish();
       });
@@ -154,7 +155,7 @@ describe('useBountyPublish — deferred funding', () => {
       expect(mockCreateBounty).toHaveBeenCalledWith(DRAFT, { fundingMode: 'at_post' });
       expect(mockCreateEscrow).toHaveBeenCalledWith('b1', 50, 'Walk my dog', 'poster-1');
       expect(eventNames()).not.toContain('bounty_posted_unfunded');
-      expect(propsFor('post_published')).toMatchObject({ funded: true, fundingMode: 'at_post' });
+      expect(onPublished).toHaveBeenCalledWith('b1', expect.objectContaining({ funded: true }));
     });
   });
 
@@ -182,7 +183,7 @@ describe('useBountyPublish — deferred funding', () => {
     });
 
     test('emits the unfunded-post funnel step with a bucketed amount', async () => {
-      const { result } = await setup({ balance: 0 });
+      const { result, onPublished } = await setup({ balance: 0 });
       await act(async () => {
         await result.current.publish();
       });
@@ -196,8 +197,8 @@ describe('useBountyPublish — deferred funding', () => {
         amountBucket: '50_99',
       });
       expect(JSON.stringify(props)).not.toContain('"amount"');
-      // post_published must report the real funding state, not "paid == funded".
-      expect(propsFor('post_published')).toMatchObject({ funded: false, fundingMode: 'at_accept' });
+      // Published metadata must report the real funding state, not "paid == funded".
+      expect(onPublished).toHaveBeenCalledWith('b1', expect.objectContaining({ funded: false }));
     });
 
     test('tells the poster they will be charged when they choose someone', async () => {
@@ -242,13 +243,13 @@ describe('useBountyPublish — deferred funding', () => {
         bounty: { id: 'b1', funding_mode: 'at_post' },
         created: true,
       });
-      const { result } = await setup({ balance: 100 });
+      const { result, onPublished } = await setup({ balance: 100 });
       await act(async () => {
         await result.current.publish();
       });
 
       expect(eventNames()).not.toContain('bounty_posted_unfunded');
-      expect(propsFor('post_published')).toMatchObject({ funded: true, fundingMode: 'at_post' });
+      expect(onPublished).toHaveBeenCalledWith('b1', expect.objectContaining({ funded: true }));
       const [, message] = (Alert.alert as jest.Mock).mock.calls[0];
       expect(message).not.toMatch(/only be charged when you choose someone/i);
     });
