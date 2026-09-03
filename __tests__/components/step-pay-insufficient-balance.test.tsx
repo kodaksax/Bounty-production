@@ -68,7 +68,11 @@ describe('StepPay — insufficient balance routing', () => {
     alertSpy.mockRestore();
   });
 
-  it('selects the tapped preset and routes to the top-up gate when balance is insufficient', () => {
+  it('selects a preset the balance cannot cover WITHOUT routing to the top-up gate', () => {
+    // Pay-at-accept: posting is publishing an offer and debits nothing, so an
+    // amount the poster cannot currently afford is a perfectly valid choice.
+    // Diverting to top-up here would rebuild, on the amount step, the exact
+    // activation barrier deferring the charge exists to remove.
     mockBalance = 5;
     const onUpdate = jest.fn();
     const onInsufficientBalance = jest.fn();
@@ -87,13 +91,11 @@ describe('StepPay — insufficient balance routing', () => {
 
     fireEvent.press(getByLabelText('Pay $20'));
 
-    // The amount is selected immediately — the poster isn't blocked from
-    // picking it, just routed to fund it.
     expect(onUpdate).toHaveBeenCalledWith({ amount: 20, isForHonor: false });
-    expect(onInsufficientBalance).toHaveBeenCalledWith(20);
-    expect(mockTrackEvent).toHaveBeenCalledWith(
+    expect(onInsufficientBalance).not.toHaveBeenCalled();
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
       'post_amount_blocked_by_balance',
-      expect.objectContaining({ attemptedAmount: 20, balance: 5, method: 'preset' })
+      expect.anything()
     );
   });
 
@@ -120,7 +122,10 @@ describe('StepPay — insufficient balance routing', () => {
     expect(onInsufficientBalance).not.toHaveBeenCalled();
   });
 
-  it('routes to the top-up gate on Continue when a custom-typed amount exceeds balance, instead of silently advancing', () => {
+  it('advances on Continue with an amount over balance instead of gating the post', () => {
+    // The reckoning moves to acceptance, not away: the poster is charged when
+    // they select a hunter. The publish path still holds the real gate for the
+    // cases that DO charge at insert (kill switch off, or v2 Stripe-native).
     mockBalance = 10;
     const onNext = jest.fn();
     const onInsufficientBalance = jest.fn();
@@ -139,11 +144,11 @@ describe('StepPay — insufficient balance routing', () => {
 
     fireEvent.press(getByLabelText('Continue'));
 
-    expect(onInsufficientBalance).toHaveBeenCalledWith(35);
-    expect(onNext).not.toHaveBeenCalled();
-    expect(mockTrackEvent).toHaveBeenCalledWith(
+    expect(onNext).toHaveBeenCalled();
+    expect(onInsufficientBalance).not.toHaveBeenCalled();
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
       'post_amount_blocked_by_balance',
-      expect.objectContaining({ attemptedAmount: 35, balance: 10, method: 'continue' })
+      expect.anything()
     );
   });
 

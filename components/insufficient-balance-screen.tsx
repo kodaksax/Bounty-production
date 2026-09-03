@@ -1,9 +1,13 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Button } from 'components/ui/button';
 import { useEffect, useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  getBottomNavContentGap,
+  getBottomNavOccludedHeight,
+} from '../lib/constants/navigation';
 import { hapticFeedback } from '../lib/haptic-feedback';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
@@ -20,6 +24,14 @@ interface InsufficientBalanceScreenProps {
   onEditAmount: () => void;
   /** Exit the posting flow. The draft is preserved regardless. */
   onCancel: () => void;
+  /** Optional context-specific title for non-posting flows. */
+  title?: string;
+  /** Optional context-specific subtitle for non-posting flows. */
+  subtitle?: string;
+  /** Optional context-specific secondary action label. */
+  editAmountLabel?: string;
+  /** Optional context-specific accessibility label for the secondary action. */
+  editAmountAccessibilityLabel?: string;
 }
 
 /**
@@ -37,10 +49,21 @@ export function InsufficientBalanceScreen({
   onAddFunds,
   onEditAmount,
   onCancel,
+  title = 'Add Funds to Post',
+  subtitle = "Your wallet needs a bit more — funds stay in escrow until the job's done.",
+  editAmountLabel = 'Edit Amount',
+  editAmountAccessibilityLabel = 'Edit Bounty Amount',
 }: InsufficientBalanceScreenProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+
+  // Everything below the CTA has to clear the floating BottomNav, which
+  // overhangs its own bar (see getBottomNavOccludedHeight). Derived from the
+  // live viewport + insets, so it tracks the device instead of assuming one.
+  const footerClearance =
+    getBottomNavOccludedHeight(insets.bottom, windowWidth) + getBottomNavContentGap(windowHeight);
   const needed = getAmountNeeded(bountyAmount, walletBalance);
 
   useEffect(() => {
@@ -59,10 +82,10 @@ export function InsufficientBalanceScreen({
           </View>
 
           <Text style={styles.title} accessibilityRole="header">
-            Add Funds to Post
+            {title}
           </Text>
           <Text style={styles.subtitle}>
-            Your wallet needs a bit more — funds stay in escrow until the job's done.
+            {subtitle}
           </Text>
         </Animated.View>
 
@@ -83,9 +106,15 @@ export function InsufficientBalanceScreen({
         </Animated.View>
       </ScrollView>
 
+      {/* The floating BottomNav is position:absolute and overlays this screen
+          (both hosts render the funding gate full-bleed), so the footer has to
+          reserve the bar's full occluded height itself. insets.bottom alone put
+          the CTA under the bar; the bar box alone still left the centered
+          "Edit Amount | Cancel" row under the crosshair, which is lifted clear
+          of the bar and sits dead center — exactly where that row is. */}
       <Animated.View
         entering={FadeInDown.delay(100).duration(220)}
-        style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}
+        style={[styles.footer, { paddingBottom: footerClearance }]}
       >
         <Button
           variant="default"
@@ -101,11 +130,11 @@ export function InsufficientBalanceScreen({
           <TouchableOpacity
             onPress={onEditAmount}
             accessibilityRole="button"
-            accessibilityLabel="Edit Bounty Amount"
+            accessibilityLabel={editAmountAccessibilityLabel}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={styles.secondaryLink}
           >
-            <Text style={styles.secondaryLinkText}>Edit Amount</Text>
+            <Text style={styles.secondaryLinkText}>{editAmountLabel}</Text>
           </TouchableOpacity>
           <View style={styles.secondaryDivider} />
           <TouchableOpacity

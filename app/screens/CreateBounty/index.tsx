@@ -359,6 +359,11 @@ export function CreateBountyFlow({
     // realistic path here already went through handleNext.
     markComposerStarted('publish');
     publishedDraftRef.current = draft;
+    // handlePublish is synchronous: deferred-funding eligibility is prefetched
+    // when the amount is chosen, precisely so the tap does not wait on a
+    // round-trip before showing either the funding gate or the submit spinner.
+    // Failures inside the submit it kicks off are surfaced by useBountyPublish's
+    // onError / ErrorBanner.
     handlePublish();
   };
 

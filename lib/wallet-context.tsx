@@ -90,7 +90,15 @@ interface WalletContextValue {
   ) => Promise<boolean>; // false if insufficient
   setBalance: (amount: number) => void;
   refresh: () => Promise<void>;
-  refreshFromApi: (accessToken?: string, options?: { silent?: boolean }) => Promise<void>; // Refresh from API with auth token; pass { silent: true } for background refreshes that must not toggle the loading flag
+  // Refresh from API with auth token. Pass { silent: true } for background
+  // refreshes that must not toggle the loading flag. Pass { force: true } only
+  // when the SERVER is known to have just moved money (e.g. escrow reserved
+  // during acceptance) — it bypasses the optimistic-deposit guard so a
+  // legitimate DECREASE cannot be masked by a recent optimistic increase.
+  refreshFromApi: (
+    accessToken?: string,
+    options?: { silent?: boolean; force?: boolean }
+  ) => Promise<void>;
   transactions: WalletTransactionRecord[];
   logTransaction: (
     tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }
@@ -181,7 +189,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Refresh wallet data from the API (fetches real transaction history and balance)
   // Defined before useEffect so it can be called on mount for initial API sync.
   const refreshFromApi = useCallback(
-    async (accessToken?: string, options?: { silent?: boolean }) => {
+    async (accessToken?: string, options?: { silent?: boolean; force?: boolean }) => {
       if (!accessToken) {
         return;
       }
@@ -247,7 +255,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // Use a 5-minute window (up from 60s) to cover slow webhook processing
           // and, critically, persisted timestamps that survive cold restarts.
           const OPTIMISTIC_WINDOW_MS = 5 * 60 * 1000;
+          // `force` short-circuits the guard. The guard's whole purpose is to stop
+          // a webhook-lagged API read from clobbering a just-made optimistic
+          // deposit — it assumes the local value may be NEWER than the server's.
+          // After a server-side debit (escrow reserved during acceptance) that
+          // assumption is inverted: the server value is newer by construction,
+          // and honouring the guard would hold a stale, too-high balance on
+          // screen for up to five minutes right after the poster was charged.
           const hasRecentOptimisticDeposit =
+            !options?.force &&
             lastOptimisticDepositRef.current !== null &&
             now - lastOptimisticDepositRef.current < OPTIMISTIC_WINDOW_MS;
 

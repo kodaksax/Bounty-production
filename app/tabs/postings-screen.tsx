@@ -36,8 +36,11 @@ import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
 import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
+import { getBountyFundingRequirement } from '../../lib/services/bounty-funding-service'
 import { useAuthContext } from '../../hooks/use-auth-context'
+import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
+import { AcceptFundingGate } from '../../components/accept-funding-gate'
 import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
   IN_PROGRESS_FILTERS,
@@ -104,7 +107,7 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
 })
 
 export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyPosted, onBountyAccepted, setShowBottomNav }: PostingsScreenProps) {
-  const { isEmailVerified } = useAuthContext()
+  const { isEmailVerified, session: walletSession } = useAuthContext()
   const rawUserId = useValidUserId()
   const currentUserId = rawUserId ?? undefined
   const router = useRouter()
@@ -138,7 +141,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const BOTTOM_ACTIONS_HEIGHT = 64 // compact height to free more scroll space
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
-  const { balance, deposit, createEscrow, refundEscrow } = useWallet()
+  const { balance, deposit, createEscrow, refundEscrow, refreshFromApi } = useWallet()
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
   // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
@@ -415,6 +418,22 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
 
   // ---- Accept/Reject request handlers (extracted to hooks) ----
+  // Owns the pay-at-accept gate. Rendered as a full-screen early return below,
+  // so the poster can never be looking at an "in progress" list while a
+  // payment sheet is open.
+  // Pull the authoritative balance the moment a pay-at-accept acceptance
+  // charges the poster. `force` because the server just debited us: a recent
+  // optimistic top-up (very likely here — the poster may have just topped up
+  // inside the funding gate) would otherwise keep the pre-charge figure on
+  // screen. `silent` so the wallet updates in place instead of blanking.
+  const refreshWalletBalance = React.useCallback(async () => {
+    const token = walletSession?.access_token
+    if (!token) return
+    await refreshFromApi(token, { silent: true, force: true })
+  }, [walletSession?.access_token, refreshFromApi])
+
+  const { gate: acceptFundingGate, ensureFunded, handleAcceptFailure } = useAcceptFunding()
+
   const { handleAcceptRequest } = useAcceptRequest({
     currentUserId,
     bountyRequests,
@@ -429,6 +448,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     loadRequestsForMyBounties,
     onBountyAccepted,
     setActiveScreen,
+    ensureFunded,
+    refreshWallet: refreshWalletBalance,
+    handleAcceptFailure,
   })
 
   const { handleRejectRequest } = useRejectRequest({
@@ -552,8 +574,29 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             if (deletingBountyIdsRef.current.has(deleteKey)) return
             deletingBountyIdsRef.current.add(deleteKey)
             try {
-              // Process refund FIRST for paid bounties before any other operations
-              if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
+              // Process refund FIRST for paid bounties before any other operations.
+              //
+              // ...but only when there is actually something to refund. Under
+              // pay-at-accept an OPEN bounty has normally never been funded —
+              // the poster is charged when they select a hunter, not at post —
+              // so the old unconditional refund would fail on a bounty that was
+              // never debited and then hit the `return` below, making the
+              // posting undeletable. Before this flow existed, an open paid
+              // bounty always had escrow, so the situation could not arise.
+              //
+              // Asked of the SERVER rather than inferred from funding_mode: an
+              // escrow can exist on an open at_accept bounty (e.g. one created
+              // by an older build), and refusing to refund that would strand
+              // real money. getBountyFundingRequirement reports already_funded
+              // from the canonical wallet_transactions row, and its documented
+              // fallback when the RPC is unavailable is already_funded=true —
+              // i.e. attempt the refund exactly as this code always has.
+              const needsRefund =
+                bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open'
+                  ? (await getBountyFundingRequirement(bounty.id)).alreadyFunded
+                  : false
+
+              if (needsRefund) {
                 const useV2 = isPhase2Bounty(bounty)
                 const useV3 = isV3Bounty(bounty)
                 try {
@@ -844,6 +887,13 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
   if (alternateScreen) {
     return alternateScreen
+  }
+
+  // The pay-at-accept gate takes over the whole screen while it is open. It is
+  // only ever active for a bounty that was posted unfunded and still needs
+  // escrow — every legacy bounty resolves it instantly and invisibly.
+  if (acceptFundingGate.active) {
+    return <AcceptFundingGate gate={acceptFundingGate} />
   }
 
   return (

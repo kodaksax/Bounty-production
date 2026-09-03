@@ -1011,6 +1011,26 @@ export const bountyRequestService = {
             (err as any).rpc = rpcError;
             throw err;
           }
+          // Pay-at-accept ("post first, pay at accept") funding failures. The
+          // acceptance transaction rolled back in full, so the bounty is still
+          // 'open' and the request still 'pending' — nothing has been charged
+          // and no hunter has been assigned. 402 Payment Required is used so
+          // callers can distinguish "needs money" from the 409 state conflicts
+          // above; useAcceptFunding classifies these by message and reopens the
+          // top-up gate. See
+          // supabase/migrations/20260823120000_deferred_bounty_funding_pay_at_accept.sql.
+          if (
+            msg.includes('insufficient_funds_for_escrow') ||
+            msg.includes('bounty_not_funded') ||
+            msg.includes('_locked_by_') ||
+            msg.includes('bounty_funding_mode_is_immutable')
+          ) {
+            const err = new Error(msg);
+            (err as any).status = 402;
+            (err as any).code = (rpcError as any)?.code;
+            (err as any).rpc = rpcError;
+            throw err;
+          }
           // A suspended/banned poster hits this via assert_account_active()
           // inside fn_accept_bounty_request (see
           // 20260726000000_enforce_account_status.sql).

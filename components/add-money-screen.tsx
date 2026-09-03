@@ -38,7 +38,7 @@ const clamp = (value: number, min: number, max: number) => Math.round(Math.min(m
 
 /**
  * Derives the amount/keypad/action sizes from the viewport instead of
- * hardcoding them, mirroring BottomNav's `getCenterMetrics`. The same layout
+ * hardcoding them, mirroring `getBottomNavCenterMetrics`. The same layout
  * has to fit a 320pt SE and a 430pt Pro Max: fixed 52pt keys plus a fixed 42pt
  * amount pushed the action buttons past the bottom of a short screen, while on
  * a tall one everything sat clustered in the middle.

@@ -5,8 +5,11 @@ import { Animated, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { A11Y, SIZING } from "../../lib/constants/accessibility";
 import {
+  BOTTOM_NAV_CENTER_ACTIVE_SCALE,
+  BOTTOM_NAV_ITEM_LIFT,
   BOTTOM_NAV_OFFSET,
   getBottomNavBarHeight,
+  getBottomNavCenterMetrics,
   getBottomNavSafeAreaPadding,
 } from "../../lib/constants/navigation";
 import { theme as legacyTheme } from "../../lib/theme";
@@ -28,29 +31,9 @@ interface BottomNavProps {
 const NAV_ICON_SIZE = 26;        // Standard nav icons
 const CENTER_ICON_SIZE = 32;     // Larger center GPS icon for emphasis
 
-// The center button scales up to this factor while the bounty tab is active.
-// The center column must reserve room for the *scaled* width, otherwise the
-// grown crosshair spills sideways over the Wallet/Post buttons.
-const CENTER_ACTIVE_SCALE = 1.15;
-// Horizontal breathing room between the center column and the side sections.
-const CENTER_GUTTER = 8;
 // Caps how far OS Dynamic Type can inflate the tab labels. Unbounded scaling at
 // the largest accessibility sizes is the other way these buttons collide.
 const NAV_LABEL_MAX_FONT_SCALE = 1.2;
-
-/**
- * Derives the center button size from the viewport width instead of hardcoding
- * it, so the crosshair keeps the same visual weight from a 320pt SE up to a
- * 430pt Pro Max. Clamped at both ends: below ~56 the icon crowds its border,
- * above ~72 it dominates the bar.
- */
-function getCenterMetrics(windowWidth: number) {
-  const buttonSize = Math.round(Math.min(72, Math.max(56, windowWidth * 0.17)));
-  // Reserve the scaled footprint plus a gutter so the side sections can never
-  // be laid out underneath the active (enlarged) button.
-  const sectionWidth = Math.ceil(buttonSize * CENTER_ACTIVE_SCALE) + CENTER_GUTTER;
-  return { buttonSize, sectionWidth };
-}
 
 export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBountyTabRepress, unreadMessageCount = 0 }: BottomNavProps) {
   const centerButtonScale = useRef(new Animated.Value(1)).current;
@@ -60,7 +43,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { buttonSize: centerButtonSize, sectionWidth: centerSectionWidth } = useMemo(
-    () => getCenterMetrics(windowWidth),
+    () => getBottomNavCenterMetrics(windowWidth),
     [windowWidth]
   );
   const styles = useMemo(
@@ -93,7 +76,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
     if (activeScreen === "bounty") {
       Animated.parallel([
         Animated.timing(centerButtonScale, {
-          toValue: 1.15,
+          toValue: BOTTOM_NAV_CENTER_ACTIVE_SCALE,
           duration: A11Y.ANIMATION_NORMAL,
           useNativeDriver: true,
         }),
@@ -349,7 +332,7 @@ function makeStyles(
       minHeight: SIZING.MIN_TOUCH_TARGET,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: -28,
+      marginTop: -BOTTOM_NAV_ITEM_LIFT,
     },
     navLabel: {
       fontSize: 10,
@@ -396,7 +379,7 @@ function makeStyles(
       borderRadius: centerButtonSize / 2,
       alignItems: "center",
       justifyContent: "center",
-      marginTop: -28,
+      marginTop: -BOTTOM_NAV_ITEM_LIFT,
       ...legacyTheme.shadows.emerald,
       overflow: 'hidden',
     },

@@ -26,8 +26,10 @@ import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isLocalBounty, rankNearbyBounties } from '../../lib/onboarding/hunter-discovery';
 import { makeOnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
+import { useDeferredFundingVariant } from '../../lib/experiments/deferred-funding-variant';
 import { markPosterActivated } from '../../lib/analytics/lifecycle';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { amountBucket, canDeferBountyFunding } from '../../lib/services/bounty-funding-service';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { bountyRequestService } from '../../lib/services/bounty-request-service';
 import { bountyService } from '../../lib/services/bounty-service';
@@ -143,6 +145,12 @@ export default function DetailsScreen() {
   // Poster-flow-only state
   const [posting, setPosting] = useState(false);
   const [posterStep, setPosterStep] = useState<'task' | 'funding'>('task');
+  // "Post first, pay at accept" arm for this device, and whether the server
+  // actually granted the deferral for the bounty currently being posted. A ref
+  // rather than state because createBountyNow reads it immediately after the
+  // async eligibility check that sets it.
+  const { variant: fundingVariant } = useDeferredFundingVariant();
+  const deferredGrantRef = useRef(false);
   // AddMoneyScreen calls onAddMoney then immediately onBack on a successful
   // deposit. This ref (synchronous, unlike state) lets our onBack handler
   // detect that case and skip resetting posterStep back to 'task' while the
@@ -813,6 +821,34 @@ export default function DetailsScreen() {
       schedule: onboardingData.schedule ?? 'none',
     });
 
+    // "Post first, pay at accept": when this poster qualifies, skip the funding
+    // step entirely and publish straight away. This is the surface where it
+    // matters most — the bounty being composed here is by definition the
+    // poster's first, and the funding step is where the "Post as For Honor
+    // instead" link (the sharpest known cause of $0 bounties, see
+    // handleSkipFunding) sits.
+    // Re-decided on every attempt: a grant that applied to a previous tap must
+    // not leak into a later one whose amount (or eligibility) has changed.
+    deferredGrantRef.current = false;
+
+    if (fundingVariant === 'deferred') {
+      void (async () => {
+        let deferred = false;
+        try {
+          deferred = await canDeferBountyFunding(amount);
+        } catch {
+          deferred = false;
+        }
+        if (deferred) {
+          deferredGrantRef.current = true;
+          await createBountyNow(false);
+          return;
+        }
+        setPosterStep('funding');
+      })();
+      return;
+    }
+
     setPosterStep('funding');
   };
 
@@ -836,6 +872,12 @@ export default function DetailsScreen() {
 
     setPosting(true);
     try {
+      // Only ever 'at_accept' when handlePostBounty already confirmed the grant
+      // with the server. The BEFORE INSERT trigger re-decides regardless, so a
+      // stale ref can only cost this poster the old flow, never produce an
+      // unfunded bounty the server did not authorise.
+      const deferFunding = !isForHonor && amount > 0 && deferredGrantRef.current;
+
       const result = await bountyCreationService.createBounty({
         title,
         description,
@@ -855,7 +897,15 @@ export default function DetailsScreen() {
             : onboardingData.schedule === 'flexible'
               ? 'Flexible'
               : undefined,
-      });
+      }, { fundingMode: deferFunding ? 'at_accept' : 'at_post' });
+
+      // Read back what the server GRANTED, not what we asked for — see the
+      // same note in app/screens/CreateBounty/useBountyPublish.ts.
+      const grantedFundingMode =
+        (result.bounty as { funding_mode?: string | null }).funding_mode ??
+        (deferFunding ? 'at_accept' : 'at_post');
+      const postedUnfunded = grantedFundingMode === 'at_accept';
+
       analyticsService.trackEvent('onboarding_bounty_posted', { isForHonor, amount });
       // Canonical `bounty_published` — same terminal funnel event as the main
       // composer, split by `surface`. `funded` is the headline metric: did this
@@ -867,7 +917,9 @@ export default function DetailsScreen() {
         bounty_id: String(result.bounty.id),
         amount: isForHonor ? 0 : amount,
         is_for_honor: isForHonor,
-        funded: !isForHonor && amount > 0,
+        funded: !isForHonor && amount > 0 && !postedUnfunded,
+        fundingMode: grantedFundingMode,
+        variant: fundingVariant,
         category: 'none',
         work_type: 'in_person',
         architecture: 1,
@@ -879,6 +931,19 @@ export default function DetailsScreen() {
         amount: isForHonor ? 0 : amount,
         surface: 'onboarding',
       });
+
+      if (postedUnfunded) {
+        analyticsService.trackEvent('bounty_posted_unfunded', {
+          surface: 'onboarding',
+          bountyId: String(result.bounty.id),
+          amountBucket: amountBucket(amount),
+          fundingMode: 'at_accept',
+          variant: fundingVariant,
+          firstBounty: true,
+          category: 'none',
+          workType: 'in_person',
+        });
+      }
       updateOnboardingData({
         firstBountyPostedId: String(result.bounty.id),
         firstBountyPostedTitle: result.bounty.title,
