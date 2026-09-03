@@ -57,8 +57,16 @@ jest.mock('lib/storage', () => ({
 }));
 
 const mockReplace = jest.fn();
+const mockPush = jest.fn();
+const mockBack = jest.fn();
+const mockCanGoBack = jest.fn(() => true);
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ replace: mockReplace, push: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({
+    replace: mockReplace,
+    push: mockPush,
+    back: mockBack,
+    canGoBack: mockCanGoBack,
+  }),
 }));
 
 jest.mock('expo-image', () => ({ Image: 'Image' }));
@@ -128,7 +136,28 @@ describe('sign-in recovery after a failed attempt', () => {
     store.clear();
     signInWithPassword.mockReset();
     mockReplace.mockClear();
+    mockPush.mockClear();
+    mockBack.mockClear();
+    mockCanGoBack.mockClear();
+    mockCanGoBack.mockReturnValue(true);
     profileSingle.mockClear();
+  });
+
+  it('sends "Create an account" to the sign-up form, not the onboarding landing page', () => {
+    const utils = render(<SignInForm />);
+
+    fireEvent.press(utils.getByLabelText('Create an account'));
+
+    expect(mockPush).toHaveBeenCalledWith('/auth/sign-up-form');
+    expect(mockPush).not.toHaveBeenCalledWith('/onboarding/welcome');
+  });
+
+  it('gives a back control that leaves the auth flow', () => {
+    const utils = render(<SignInForm />);
+
+    fireEvent.press(utils.getByLabelText('Go back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
   it('executes a second real request after a wrong password', async () => {
