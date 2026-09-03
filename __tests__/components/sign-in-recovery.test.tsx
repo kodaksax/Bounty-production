@@ -18,6 +18,7 @@
 
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
+import { Platform } from 'react-native';
 
 const signInWithPassword = jest.fn();
 const mfaLevel = jest.fn().mockResolvedValue({
@@ -147,6 +148,31 @@ describe('sign-in recovery after a failed attempt', () => {
 
     await waitFor(() => expect(signInWithPassword).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+  });
+
+  it('does not enable Google sign-in on Android from an iOS client ID', () => {
+    const originalOs = Platform.OS;
+    const originalIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+    const originalAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+    const originalWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = 'ios-client.apps.googleusercontent.com';
+    delete process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+    delete process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
+    try {
+      const utils = render(<SignInForm />);
+      expect(utils.getByLabelText('Google sign-in unavailable')).toBeTruthy();
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
+      if (originalIosClientId === undefined) delete process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+      else process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = originalIosClientId;
+      if (originalAndroidClientId === undefined) delete process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+      else process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID = originalAndroidClientId;
+      if (originalWebClientId === undefined) delete process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+      else process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = originalWebClientId;
+    }
   });
 
   it('keeps executing requests across repeated wrong passwords', async () => {
