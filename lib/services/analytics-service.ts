@@ -315,6 +315,11 @@ export type AnalyticsEvent =
   // Canonical: composer reached on purpose (was `post_flow_started`).
   | 'composer_opened'
   | 'post_field_focused'
+  // Fired when a poster opens a contextual help tooltip in the composer (e.g.
+  // the marketplace-term tooltips on the Task step). Carries `surface`,
+  // `step_index`, and `term` so help engagement can be paired with the shared
+  // `post_step_viewed` step funnel WITHOUT adding a step to it.
+  | 'post_help_opened'
   | 'post_step_completed'
   | 'post_step_abandoned'
   | 'post_title_typed'

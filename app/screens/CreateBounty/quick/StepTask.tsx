@@ -6,6 +6,7 @@ import { analyticsService } from '../../../../lib/services/analytics-service';
 import { validateTitle } from '../../../../lib/utils/bounty-validation';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
+import { InfoTooltip } from '../../../../components/ui/tooltip';
 import { QuickStepLayout } from './QuickStepLayout';
 import { SuggestionPlaceholder } from './SuggestionPlaceholder';
 
@@ -82,6 +83,16 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSte
     onUpdate({ title: value });
   };
 
+  // Records which marketplace term a poster looked up. Rides alongside the
+  // shared post_step_viewed funnel rather than adding a step to it.
+  const handleHelpOpen = (term: string) => {
+    analyticsService.trackEvent('post_help_opened', {
+      surface: 'create_flow',
+      step_index: step,
+      term,
+    });
+  };
+
   const handleTemplate = (template: TaskTemplate) => {
     onFieldFocus?.();
     onUpdate({
@@ -115,6 +126,26 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSte
       ctaDisabled={!!error}
       onCta={onNext}
     >
+      <View style={styles.introRow}>
+        <Text style={styles.introText}>New to Bounty?</Text>
+        <InfoTooltip
+          title="How a bounty works"
+          content="A bounty is a task you post. A nearby Hunter accepts it and does the work. You set the price and details on the next steps."
+          iconSize={16}
+          onOpen={() => handleHelpOpen('bounty')}
+        />
+      </View>
+
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionLabel}>Popular tasks</Text>
+        <InfoTooltip
+          title="About these prices"
+          content="Each price is a suggested start, not a fixed fee. It is the amount you pay the Hunter who finishes the task. You can change it on the next step."
+          iconSize={15}
+          onOpen={() => handleHelpOpen('price')}
+        />
+      </View>
+
       <View style={styles.grid}>
         {TASK_TEMPLATES.map((template) => (
           <TouchableOpacity
@@ -190,6 +221,28 @@ export default StepTask;
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
+    introRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 14,
+    },
+    introText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.textSecondary,
+    },
+    sectionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    sectionLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
     grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',

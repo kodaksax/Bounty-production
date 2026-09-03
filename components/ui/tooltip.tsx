@@ -135,6 +135,9 @@ interface InfoTooltipProps {
   iconSize?: number
   /** Defaults to the theme's primary brand color when omitted. */
   iconColor?: string
+  /** Fired when the poster opens the tooltip. Lets a call site measure which
+   * help a poster reads. Optional so existing call sites need no change. */
+  onOpen?: () => void
 }
 
 export const InfoTooltip: React.FC<InfoTooltipProps> = ({
@@ -142,6 +145,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
   content,
   iconSize = 18,
   iconColor,
+  onOpen,
 }) => {
   const [isOpen, setIsOpen] = React.useState(false)
   const { theme } = useAppThemeContext()
@@ -153,6 +157,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
       <TouchableOpacity
         onPress={() => {
           setIsOpen(true)
+          onOpen?.()
           AccessibilityInfo.announceForAccessibility(title)
         }}
         accessibilityLabel={`Help: ${title}`}
