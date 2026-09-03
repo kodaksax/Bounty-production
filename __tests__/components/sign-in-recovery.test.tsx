@@ -152,11 +152,19 @@ describe('sign-in recovery after a failed attempt', () => {
 
   it('does not enable Google sign-in on Android from an iOS client ID', () => {
     const originalOs = Platform.OS;
+    // The react-native jest preset ships the iOS Platform mock, whose
+    // `select` hardcodes the `.ios` branch and never consults `Platform.OS`.
+    // The component gates Google config through `Platform.select`, so without
+    // a select() that honors the overridden OS this test can't exercise the
+    // Android path at all.
+    const originalSelect = Platform.select;
     const originalIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
     const originalAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
     const originalWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    Platform.select = (spec: Record<string, unknown>) =>
+      (Platform.OS in spec ? spec[Platform.OS] : spec.default ?? spec.native);
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = 'ios-client.apps.googleusercontent.com';
     delete process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
     delete process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
@@ -166,6 +174,7 @@ describe('sign-in recovery after a failed attempt', () => {
       expect(utils.getByLabelText('Google sign-in unavailable')).toBeTruthy();
     } finally {
       Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
+      Platform.select = originalSelect;
       if (originalIosClientId === undefined) delete process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
       else process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = originalIosClientId;
       if (originalAndroidClientId === undefined) delete process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;

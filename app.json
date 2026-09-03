@@ -2,7 +2,7 @@
   "expo": {
     "name": "BOUNTY",
     "slug": "BOUNTYExpo",
-    "version": "2.0.8",
+    "version": "2.0.9",
     "platforms": ["ios", "android", "web"],
     "orientation": "portrait",
     "icon": "./assets/images/brandmark-design (3).png",
