@@ -490,7 +490,11 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       }
     },
     {
-      debounceMs: 1000,
+      // No post-completion cooldown. The in-flight guard (submitInProgressRef,
+      // always on) already blocks a concurrent second publish; a cooldown
+      // measured from completion would instead swallow the poster's next tap
+      // after a fast local failure (e.g. the email-verification check) with no
+      // error and no spinner — presenting as a dead Post Bounty button.
       onError: error => {
         const userError = getUserFriendlyError(error);
         console.error('[CreateBounty] bounty_create failed:', error?.message ?? error);
