@@ -56,10 +56,13 @@ export function useSocialAuth() {
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || 'placeholder-android-client-id';
   const webGoogleClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'placeholder-web-client-id';
+  const googleClientIdForPlatform = Platform.select({
+    ios: iosGoogleClientId,
+    android: androidGoogleClientId,
+    default: webGoogleClientId,
+  });
   const isGoogleConfigured = Boolean(
-    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
-    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+    googleClientIdForPlatform && !googleClientIdForPlatform.includes('placeholder')
   );
 
   // See app/auth/sign-in-form.tsx for why no custom redirectUri is passed here.
