@@ -25,6 +25,10 @@ import {
   verifyDepositPaymentIntent,
   type DepositPaymentIntent,
 } from '../_shared/deposit-verification.ts';
+import {
+  resolvePostTimeEscrow,
+  type PostTimeEscrowBountyRow,
+} from '../_shared/post-time-escrow-guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -596,6 +600,60 @@ Deno.serve(async (req: Request) => {
 
         const effectiveKey = idempotencyKey || `escrow_${bountyId}_${userId}`;
         const description = title ? `Escrow for bounty: ${title}` : `Escrow for bounty ${bountyId}`;
+
+        // Pay-at-accept bounties are funded when a hunter is selected, never
+        // here. apply_escrow itself is funding_mode-blind (it only dedupes on
+        // an existing escrow row, and a deferred bounty has none yet), so
+        // without this check any client that calls /wallet/escrow right after
+        // creating a bounty debits the poster at post time — which is exactly
+        // what deferred funding exists to prevent, and what every app build
+        // predating the feature still does. See _shared/post-time-escrow-guard.ts.
+        const { data: escrowBounty, error: escrowBountyErr } = await supabase
+          .from('bounties')
+          .select('funding_mode, poster_id, user_id')
+          .eq('id', bountyId)
+          .maybeSingle();
+
+        if (escrowBountyErr) {
+          console.error('[wallet] escrow bounty lookup failed:', escrowBountyErr);
+        }
+
+        const escrowDecision = resolvePostTimeEscrow({
+          callerId: userId,
+          bounty: (escrowBounty as PostTimeEscrowBountyRow | null) ?? null,
+          lookupFailed: Boolean(escrowBountyErr),
+        });
+
+        if (escrowDecision.action === 'reject') {
+          return jsonResponse(
+            { error: escrowDecision.error, code: escrowDecision.code },
+            escrowDecision.status
+          );
+        }
+
+        if (escrowDecision.action === 'skip') {
+          // No debit, no transaction row. Report the caller's *actual* balance
+          // so a legacy client — which otherwise falls back to
+          // `balance - amount` when newBalance is absent — does not paint a
+          // phantom drawdown the server never performed.
+          const { data: skipProfile } = await supabase
+            .from('profiles')
+            .select('balance')
+            .eq('id', userId)
+            .maybeSingle();
+
+          return jsonResponse(
+            {
+              error: escrowDecision.error,
+              code: escrowDecision.code,
+              transactionId: null,
+              amount,
+              newBalance: (skipProfile as { balance?: number } | null)?.balance ?? null,
+              fundingMode: 'at_accept',
+            },
+            escrowDecision.status
+          );
+        }
 
         // apply_escrow is a SECURITY DEFINER RPC that atomically:
         //   1. Returns applied=false if a completed escrow already exists (idempotent).
