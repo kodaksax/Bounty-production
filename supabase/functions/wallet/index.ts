@@ -616,6 +616,7 @@ Deno.serve(async (req: Request) => {
 
         if (escrowBountyErr) {
           console.error('[wallet] escrow bounty lookup failed:', escrowBountyErr);
+          return jsonResponse({ error: 'Unable to verify bounty funding' }, 500);
         }
 
         const escrowDecision = resolvePostTimeEscrow({
@@ -636,11 +637,16 @@ Deno.serve(async (req: Request) => {
           // so a legacy client — which otherwise falls back to
           // `balance - amount` when newBalance is absent — does not paint a
           // phantom drawdown the server never performed.
-          const { data: skipProfile } = await supabase
+          const { data: skipProfile, error: skipProfileErr } = await supabase
             .from('profiles')
             .select('balance')
             .eq('id', userId)
             .maybeSingle();
+          const skipBalance = (skipProfile as { balance?: unknown } | null)?.balance;
+          if (skipProfileErr || typeof skipBalance !== 'number' || !Number.isFinite(skipBalance)) {
+            console.error('[wallet] unable to read balance for deferred escrow:', skipProfileErr);
+            return jsonResponse({ error: 'Unable to verify wallet balance' }, 500);
+          }
 
           return jsonResponse(
             {
@@ -648,7 +654,7 @@ Deno.serve(async (req: Request) => {
               code: escrowDecision.code,
               transactionId: null,
               amount,
-              newBalance: (skipProfile as { balance?: number } | null)?.balance ?? null,
+              newBalance: skipBalance,
               fundingMode: 'at_accept',
             },
             escrowDecision.status
@@ -753,7 +759,7 @@ Deno.serve(async (req: Request) => {
         // Verify the caller is the bounty owner (user_id is the canonical owner column)
         const { data: bountyRow, error: bountyErr } = await supabase
           .from('bounties')
-          .select('user_id')
+          .select('user_id, funding_mode')
           .eq('id', bountyId)
           .single();
         if (bountyErr || !bountyRow) return jsonResponse({ error: 'Bounty not found' }, 404);
@@ -847,7 +853,20 @@ Deno.serve(async (req: Request) => {
           .eq('bounty_id', bountyId)
           .eq('type', 'escrow')
           .eq('status', 'completed')
-          .single();
+          .maybeSingle();
+        if (
+          !escrowErr &&
+          !escrowTx &&
+          (bountyRow as { funding_mode?: string }).funding_mode === 'at_accept'
+        ) {
+          return jsonResponse(
+            {
+              error: 'No post-time escrow exists for this deferred-funding bounty',
+              code: 'deferred_funding_noop',
+            },
+            409
+          );
+        }
         if (escrowErr || !escrowTx)
           return jsonResponse({ error: 'Escrow transaction not found' }, 404);
 

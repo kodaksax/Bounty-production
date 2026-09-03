@@ -765,7 +765,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 type: 'escrow',
                 amount: -amount,
                 details: { title, bounty_id: bountyIdStr, status: 'pending' },
-                escrowStatus: 'funded',
+                escrowStatus: (errData as any).fundingMode === 'at_accept' ? 'released' : 'funded',
               });
               return dupRecord;
             }
@@ -1126,6 +1126,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
+          if ((errData as any).code === 'deferred_funding_noop') {
+            setTransactions(prev => {
+              const next = prev.filter(tx => tx.id !== escrowTx.id);
+              persistTransactions(next);
+              return next;
+            });
+            return true;
+          }
           console.error('[wallet] Server refund failed:', (errData as any).error);
           return false;
         }
