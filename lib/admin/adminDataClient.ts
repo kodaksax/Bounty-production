@@ -460,6 +460,20 @@ export const adminDataClient = {
     if (data?.error) throw new Error(data.error);
   },
 
+  // Grant or revoke a user's `admin` role. `role: 'admin'` grants; `role:
+  // 'user'` revokes. The role claim lives in the GoTrue user's app_metadata
+  // (what every admin RLS policy and admin-* function checks), so this routes
+  // through the service-role admin-profiles function -- the client cannot
+  // touch auth.users. The target must re-authenticate for the new claim to
+  // take effect. Every change is audited in admin_action_log (reason required).
+  async updateUserRole(id: string, role: 'admin' | 'user', reason: string): Promise<void> {
+    const { data, error } = await supabase.functions.invoke('admin-profiles', {
+      body: { action: 'updateRole', id, role, reason },
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+  },
+
   // Send a guideline warning to a user
   async sendWarning(params: SendWarningParams): Promise<void> {
     const { data: sessionData } = await supabase.auth.getSession();

@@ -12,7 +12,8 @@
 // service-role path instead. Same auth pattern as admin-withdrawals /
 // admin-review-id / admin-verifications-list (JWT `app_metadata.role` check).
 //
-// POST body: { action: 'list' | 'getById' | 'updateStatus', id?, status?, verificationStatus? }
+// POST body: { action: 'list' | 'getById' | 'updateStatus' | 'updateRole'
+//              | 'listAccountStatusLog', id?, status?, role?, verificationStatus?, reason? }
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -129,6 +130,7 @@ Deno.serve(async (req: Request) => {
     action?: string;
     id?: string;
     status?: string;
+    role?: string;
     verificationStatus?: string;
     reason?: string;
     search?: string;
@@ -286,16 +288,93 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ id: data.id, status: data.account_status });
   }
 
+  // ─── updateRole ─────────────────────────────────────────────────────────
+  // Grant or revoke the `admin` role. The role that every admin RLS policy
+  // and every admin-* Edge Function checks lives in the GoTrue user's
+  // app_metadata (auth.jwt() -> app_metadata ->> 'role') -- NOT profiles.role,
+  // which is dead and always NULL in prod. Service-role
+  // auth.admin.updateUserById is the only supported write path for it.
+  //
+  //   role: 'admin' -> grants;  role: 'user' -> revokes (clears the claim).
+  //
+  // The caller cannot change their own role: that removes the only in-band
+  // way to accidentally self-lock-out (or re-escalate a deliberately
+  // downgraded session). Every change is written to admin_action_log with a
+  // required `reason`, exactly like updateStatus.
+  if (action === 'updateRole') {
+    const { id, role, reason } = body;
+    if (!id) {
+      return jsonResponse({ error: 'id is required' }, 400);
+    }
+    if (role !== 'admin' && role !== 'user') {
+      return jsonResponse({ error: "role must be one of 'admin', 'user'" }, 400);
+    }
+    if (!reason || !reason.trim()) {
+      return jsonResponse({ error: 'reason is required' }, 400);
+    }
+    if (id === adminUser.id) {
+      return jsonResponse({ error: 'You cannot change your own role' }, 400);
+    }
+
+    const { data: target, error: targetError } = await supabase.auth.admin.getUserById(id);
+    if (targetError || !target?.user) {
+      console.error('[admin-profiles] updateRole: target user not found', { id, error: targetError });
+      return jsonResponse({ error: 'User not found' }, 404);
+    }
+
+    const oldRole = (target.user.app_metadata?.role as string | undefined) ?? null;
+    // GoTrue shallow-merges app_metadata on update and drops keys set to null,
+    // so provider/providers and anything else on the record are preserved.
+    const newRole = role === 'admin' ? 'admin' : null;
+
+    const { error: updateError } = await supabase.auth.admin.updateUserById(id, {
+      app_metadata: { role: newRole },
+    });
+
+    if (updateError) {
+      console.error('[admin-profiles] updateRole failed', { id, role, error: updateError });
+      await supabase.from('admin_action_log').insert({
+        admin_user_id: adminUser.id,
+        action_type: 'role_change',
+        target_user_id: id,
+        reason: reason.trim(),
+        result: 'failure',
+        metadata: { old_role: oldRole, new_role: newRole, error: updateError.message },
+      });
+      return jsonResponse({ error: 'Failed to update user role' }, 500);
+    }
+
+    const { error: logError } = await supabase.from('admin_action_log').insert({
+      admin_user_id: adminUser.id,
+      action_type: 'role_change',
+      target_user_id: id,
+      reason: reason.trim(),
+      result: 'success',
+      metadata: { old_role: oldRole, new_role: newRole },
+    });
+    if (logError) {
+      // Non-blocking: the role change already succeeded. Log loudly so a
+      // missing audit row doesn't go unnoticed.
+      console.error('[admin-profiles] updateRole: audit log insert failed', { id, role, error: logError });
+    }
+
+    console.log('[admin-profiles] role updated', { targetUserId: id, role, adminUserId: adminUser.id });
+    // The target must obtain a fresh JWT (re-login or token refresh) before
+    // the new claim takes effect in RLS / function checks.
+    return jsonResponse({ id, role, requiresReauth: true });
+  }
+
   // ─── listAccountStatusLog ───────────────────────────────────────────────
   // Real (non-mock) read path for the admin audit-log screen's 'user'
   // category -- see lib/services/audit-log-service.ts, which previously
   // returned 100% hardcoded mock rows for every category. This surfaces the
-  // account_status_change rows written above.
+  // account_status_change rows written above, plus the role_change rows from
+  // updateRole -- both are user-account mutations an operator audits together.
   if (action === 'listAccountStatusLog') {
     const { data, error } = await supabase
       .from('admin_action_log')
-      .select('id, admin_user_id, target_user_id, reason, result, metadata, created_at')
-      .eq('action_type', 'account_status_change')
+      .select('id, admin_user_id, target_user_id, action_type, reason, result, metadata, created_at')
+      .in('action_type', ['account_status_change', 'role_change'])
       .order('created_at', { ascending: false })
       .limit(200);
 
