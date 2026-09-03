@@ -179,7 +179,10 @@ describe('useBountyPublish — deferred funding', () => {
       expect(mockCreateBounty).toHaveBeenCalledWith(DRAFT, { fundingMode: 'at_accept' });
       // The whole point: no money is taken at post time.
       expect(mockCreateEscrow).not.toHaveBeenCalled();
-      expect(onPublished).toHaveBeenCalledWith('b1', expect.objectContaining({ amountCents: 5000 }));
+      expect(onPublished).toHaveBeenCalledWith(
+        'b1',
+        expect.objectContaining({ amountCents: 5000 })
+      );
     });
 
     test('emits the unfunded-post funnel step with a bucketed amount', async () => {
@@ -277,16 +280,18 @@ describe('useBountyPublish — deferred funding', () => {
     });
 
     test('a for-honor draft is never deferred', async () => {
-      const { result } = await setup({ balance: 0, draft: { ...DRAFT, isForHonor: true, amount: 0 } });
+      const { result } = await setup({
+        balance: 0,
+        draft: { ...DRAFT, isForHonor: true, amount: 0 },
+      });
       await act(async () => {
         await result.current.publish();
       });
 
       expect(mockCanDefer).not.toHaveBeenCalled();
-      expect(mockCreateBounty).toHaveBeenCalledWith(
-        expect.objectContaining({ isForHonor: true }),
-        { fundingMode: 'at_post' }
-      );
+      expect(mockCreateBounty).toHaveBeenCalledWith(expect.objectContaining({ isForHonor: true }), {
+        fundingMode: 'at_post',
+      });
     });
   });
 });
