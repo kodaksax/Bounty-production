@@ -24,14 +24,29 @@ import Stripe from 'npm:stripe@14'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 }
 
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
+function generateRequestId(prefix = 'payments'): string {
+  try {
+    return `${prefix}_${crypto.randomUUID()}`
+  } catch {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  }
+}
+
+function jsonResponse(data: unknown, status = 200, requestId?: string) {
+  const body = requestId && data && typeof data === 'object' && !Array.isArray(data)
+    ? { ...(data as Record<string, unknown>), requestId }
+    : data
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      ...(requestId ? { 'X-Request-Id': requestId } : {}),
+    },
   })
 }
 
@@ -221,6 +236,8 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const requestId = req.headers.get('x-request-id')?.slice(0, 120) || generateRequestId()
+  const reply = (data: Record<string, unknown>, status = 200) => jsonResponse(data, status, requestId)
   const url = new URL(req.url)
   // pathname starts with /functions/v1/payments/...
   // Extract the sub-path after /payments
@@ -229,7 +246,7 @@ Deno.serve(async (req: Request) => {
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
   if (!stripeKey) {
-    return jsonResponse({ error: 'Stripe not configured' }, 500)
+    return reply({ error: 'Payment service is not configured.', code: 'stripe_not_configured' }, 500)
   }
   const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16', httpClient: Stripe.createFetchHttpClient() })
 
@@ -242,8 +259,8 @@ Deno.serve(async (req: Request) => {
   // Authenticate user from Authorization header
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    console.warn('[payments edge fn] missing Authorization header')
-    return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
+    console.warn('[payments edge fn] missing Authorization header', { requestId })
+    return reply({ error: 'Authentication required. Please sign in to continue.', code: 'authentication_required' }, 401)
   }
   const token = authHeader.substring(7)
   let authResult: Awaited<ReturnType<typeof supabaseAdmin.auth.getUser>>
@@ -251,7 +268,7 @@ Deno.serve(async (req: Request) => {
     authResult = await withDbTimeout(supabaseAdmin.auth.getUser(token))
   } catch (e: any) {
     if (e?.code === 'DB_TIMEOUT') {
-      return jsonResponse({ error: 'Service temporarily unavailable. Please try again shortly.' }, 503)
+      return reply({ error: 'Service temporarily unavailable. Please try again shortly.', code: 'db_timeout', retryable: true }, 503)
     }
     throw e
   }
@@ -261,13 +278,14 @@ Deno.serve(async (req: Request) => {
     // Common causes: wrong SUPABASE_URL/SERVICE_ROLE_KEY secret, auth service cold
     // start, or a token from a different Supabase project.
     console.warn('[payments edge fn] invalid or expired token', JSON.stringify({
+      requestId,
       hasUser: !!user,
       errorName: authError?.name,
       errorMessage: (authError as any)?.message,
       errorStatus: (authError as any)?.status,
       errorCode: (authError as any)?.code,
     }))
-    return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
+    return reply({ error: 'Authentication required. Please sign in to continue.', code: 'authentication_required' }, 401)
   }
   const userId = user.id
   const userEmail = sanitizeText(user.email ?? '')
@@ -301,21 +319,21 @@ Deno.serve(async (req: Request) => {
       try {
         validatedAmount = sanitizePositiveNumber(amountCents)
       } catch {
-        return jsonResponse({ error: 'Invalid amount. Must be a positive number in cents.' }, 400)
+        return reply({ error: 'Invalid amount. Must be a positive number in cents.', code: 'invalid_amount' }, 400)
       }
 
       // Stripe requires an integer number of the smallest currency unit (e.g. cents).
       // Enforce a minimum of 50 cents to avoid Stripe validation errors.
       if (!Number.isInteger(validatedAmount) || validatedAmount < 50) {
-        return jsonResponse(
-          { error: 'Invalid amount. Must be an integer number of cents and at least 50 cents.' },
+        return reply(
+          { error: 'Invalid amount. Must be an integer number of cents and at least 50 cents.', code: 'invalid_amount' },
           400,
         )
       }
 
       const validatedCurrency = sanitizeText(currency).toLowerCase()
       if (!['usd', 'eur', 'gbp'].includes(validatedCurrency)) {
-        return jsonResponse({ error: 'Invalid currency. Supported: usd, eur, gbp.' }, 400)
+        return reply({ error: 'Invalid currency. Supported: usd, eur, gbp.', code: 'invalid_currency' }, 400)
       }
 
       const customerResult = await resolveStripeCustomerForUser({
@@ -325,7 +343,7 @@ Deno.serve(async (req: Request) => {
         userEmail,
       })
       if (customerResult.error || !customerResult.customerId) {
-        return jsonResponse({ error: customerResult.error ?? 'Unable to create customer profile' }, customerResult.status ?? 400)
+        return reply({ error: customerResult.error ?? 'Unable to create customer profile', code: 'customer_resolution_failed' }, customerResult.status ?? 400)
       }
       const customerId = customerResult.customerId
 
@@ -343,8 +361,8 @@ Deno.serve(async (req: Request) => {
 
       if (isAch) {
         if (!paymentMethodId || typeof paymentMethodId !== 'string') {
-          return jsonResponse(
-            { error: 'paymentMethodId is required for us_bank_account deposits.' },
+          return reply(
+            { error: 'paymentMethodId is required for us_bank_account deposits.', code: 'payment_method_required' },
             400,
           )
         }
@@ -359,14 +377,14 @@ Deno.serve(async (req: Request) => {
         ) as any
 
         if (!pmRow || pmRow.user_id !== userId) {
-          return jsonResponse({ error: 'Bank account not found for this user.' }, 403)
+          return reply({ error: 'Bank account not found for this user.', code: 'payment_method_not_found' }, 403)
         }
         if (pmRow.type && pmRow.type !== 'us_bank_account') {
-          return jsonResponse({ error: 'Selected payment method is not a bank account.' }, 400)
+          return reply({ error: 'Selected payment method is not a bank account.', code: 'invalid_payment_method_type' }, 400)
         }
         if (pmRow.verification_status === 'failed') {
-          return jsonResponse(
-            { error: 'This bank account failed verification. Please re-link your bank.' },
+          return reply(
+            { error: 'This bank account failed verification. Please re-link your bank.', code: 'bank_verification_failed' },
             400,
           )
         }
@@ -416,7 +434,7 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        return jsonResponse({
+        return reply({
           clientSecret: paymentIntent.client_secret,
           paymentIntentId: paymentIntent.id,
           status: paymentIntent.status,
@@ -438,7 +456,7 @@ Deno.serve(async (req: Request) => {
       }
       const paymentIntent = await stripe.paymentIntents.create(piParams, stripeRequestOptions)
 
-      return jsonResponse({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id })
+      return reply({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id })
     }
 
     // POST /payments/create-setup-intent
@@ -1053,16 +1071,16 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Not found' }, 404)
   } catch (error: unknown) {
     const err = error as { type?: string; code?: string; decline_code?: string; message?: string }
-    console.error('[payments edge fn] Error:', err)
+    console.error('[payments edge fn] Error:', { requestId, err })
     if ((err as any)?.code === 'DB_TIMEOUT') {
-      return jsonResponse({ error: 'Service temporarily unavailable. Please try again shortly.' }, 503)
+      return reply({ error: 'Service temporarily unavailable. Please try again shortly.', code: 'db_timeout', retryable: true }, 503)
     }
     if (err.type === 'StripeCardError') {
-      return jsonResponse({ error: err.message, code: err.code, decline_code: err.decline_code }, 400)
+      return reply({ error: err.message, code: err.code ?? 'card_error', decline_code: err.decline_code }, 400)
     }
     if (err.code === 'resource_missing') {
-      return jsonResponse({ error: 'Payment method not found' }, 404)
+      return reply({ error: 'Payment method not found', code: 'resource_missing' }, 404)
     }
-    return jsonResponse({ error: err.message ?? 'Internal server error' }, 500)
+    return reply({ error: 'Payment service temporarily unavailable. Please try again.', code: err.code ?? 'payment_service_error', retryable: true }, 500)
   }
 })

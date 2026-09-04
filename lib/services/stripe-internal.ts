@@ -53,6 +53,24 @@ export interface InvokePaymentsOptions {
   accessToken?: string;
 }
 
+function generatePaymentRequestId(): string {
+  try {
+    const maybeCrypto = globalThis.crypto as { randomUUID?: () => string } | undefined;
+    if (typeof maybeCrypto?.randomUUID === 'function') {
+      return `payments_${maybeCrypto.randomUUID()}`;
+    }
+  } catch {
+    /* fall through */
+  }
+  return `payments_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function getHeaderValue(headers: unknown, name: string): string | undefined {
+  const getter = (headers as { get?: (key: string) => string | null | undefined } | undefined)?.get;
+  if (typeof getter !== 'function') return undefined;
+  return getter.call(headers, name) ?? getter.call(headers, name.toLowerCase()) ?? undefined;
+}
+
 function getExtraValue(key: string): string {
   try {
     const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
@@ -95,6 +113,7 @@ export async function fetchEdgeFunction<T>(
 ): Promise<T> {
   const hasBody = body !== undefined;
   if (hasBody) headers['Content-Type'] = 'application/json';
+  const requestId = headers['x-request-id'] ?? headers['X-Request-Id'];
 
   try {
     const fetchController = new AbortController();
@@ -130,7 +149,7 @@ export async function fetchEdgeFunction<T>(
     }
 
     // response.headers may be absent on lightweight test mocks — guard defensively.
-    if (response.headers?.get?.('X-Deprecated') === 'true') {
+    if (getHeaderValue(response.headers, 'X-Deprecated') === 'true') {
       // eslint-disable-next-line no-console
       console.warn(
         `[API] Received X-Deprecated header on ${method} ${url} — this server surface is deprecated. ` +
@@ -141,12 +160,20 @@ export async function fetchEdgeFunction<T>(
 
     if (!response.ok) {
       const status = response.status;
+      const responseRequestId =
+        (parsedBody && typeof parsedBody.requestId === 'string' ? parsedBody.requestId : undefined) ??
+        getHeaderValue(response.headers, 'X-Request-Id') ??
+        requestId;
+      const backendCode =
+        parsedBody && typeof parsedBody.code === 'string' ? parsedBody.code : undefined;
       const errorMsgFromBody =
         (parsedBody && (parsedBody.error || parsedBody.message)) || responseText;
       const errorMsg = errorMsgFromBody ? String(errorMsgFromBody) : `HTTP ${status}`;
       throw {
         type: 'api_error',
-        code: String(status),
+        code: backendCode ?? String(status),
+        status,
+        requestId: responseRequestId,
         message: `Request failed (${status}): ${errorMsg}`,
       };
     }
@@ -157,7 +184,7 @@ export async function fetchEdgeFunction<T>(
     if (err && (err.type === 'api_error' || err.type === 'network_error')) throw err;
     // Raw network-level failure (offline, DNS, AbortError).
     const message = getNetworkErrorMessage(err as Error);
-    throw { type: 'network_error', code: 'NETWORK_ERROR', message };
+    throw { type: 'network_error', code: 'NETWORK_ERROR', requestId, message };
   }
 }
 
@@ -167,6 +194,7 @@ export async function invokePayments<T>(
 ): Promise<T> {
   const url = `${FINANCIAL_API_BASE_URL}/${subPath}`;
   const method = options.method ?? 'POST';
+  const requestId = options.headers?.['x-request-id'] ?? options.headers?.['X-Request-Id'] ?? generatePaymentRequestId();
 
   // ── Preferred path: direct fetch with explicit auth headers ─────────────────
   //
@@ -238,6 +266,7 @@ export async function invokePayments<T>(
 
     const headers: Record<string, string> = {
       ...(options.headers ?? {}),
+      'x-request-id': requestId,
       apikey: supabaseAnonKey,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
@@ -281,6 +310,7 @@ export async function invokePayments<T>(
           tokenExpiresIn: tokenExp ? tokenExp - nowSec : undefined,
           tokenIss,
           tokenSub,
+          requestId,
           url,
         });
       } catch {
@@ -305,6 +335,7 @@ export async function invokePayments<T>(
       body: options.body,
     };
     const mergedHeaders: Record<string, string> = { ...(options.headers ?? {}) };
+    mergedHeaders['x-request-id'] = requestId;
     if (options.accessToken) mergedHeaders['Authorization'] = `Bearer ${options.accessToken}`;
     if (Object.keys(mergedHeaders).length > 0) invokeOptions.headers = mergedHeaders;
 
@@ -326,6 +357,8 @@ export async function invokePayments<T>(
     if (error) {
       const status: number = (error as any).context?.status ?? 0;
       let errorMsg = '';
+      let backendCode: string | undefined;
+      let parsedRequestId: string | undefined;
       try {
         const parsed: Record<string, unknown> | null = await (error as any).context
           ?.json?.()
@@ -334,12 +367,16 @@ export async function invokePayments<T>(
           (parsed?.error as string) ||
           (parsed?.message as string) ||
           String((error as Error).message);
+        backendCode = typeof parsed?.code === 'string' ? parsed.code : undefined;
+        parsedRequestId = typeof parsed?.requestId === 'string' ? parsed.requestId : undefined;
       } catch {
         errorMsg = String((error as Error).message);
       }
       throw {
         type: 'api_error',
-        code: String(status),
+        code: backendCode ?? String(status),
+        status,
+        requestId: parsedRequestId ?? requestId,
         message: `Request failed (${status}): ${errorMsg}`,
       };
     }
@@ -347,7 +384,7 @@ export async function invokePayments<T>(
   }
 
   // ── Last resort: unauthenticated fetch (legacy Node server) ──────────────────
-  return fetchEdgeFunction<T>(url, method, { ...(options.headers ?? {}) }, options.body);
+  return fetchEdgeFunction<T>(url, method, { ...(options.headers ?? {}), 'x-request-id': requestId }, options.body);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

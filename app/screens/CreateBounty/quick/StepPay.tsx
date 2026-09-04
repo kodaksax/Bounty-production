@@ -221,12 +221,12 @@ export function StepPay({
           <Text style={styles.infoTitle}>
             {draft.isForHonor
               ? 'This is a for-honor bounty.'
-              : "You'll only pay when the job is completed."}
+              : "You're charged when you accept a hunter."}
           </Text>
           <Text style={styles.infoBody}>
             {draft.isForHonor
               ? 'No payment is involved. Someone helps out voluntarily.'
-              : "Flat-rate payment. Hunters know exactly what they'll earn."}
+              : "The amount is held then, and released to the hunter when you approve their work. Flat rate — they know exactly what they'll earn."}
           </Text>
         </View>
       </View>

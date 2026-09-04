@@ -9,11 +9,12 @@
  * Amounts are in cents throughout, matching Stripe and useConnectBalance.
  */
 import { useCallback, useRef, useState } from 'react';
-import { useAuthContext } from './use-auth-context';
 import { config } from '../lib/config';
 import { API_BASE_URL } from '../lib/config/api';
 import { analyticsService } from '../lib/services/analytics-service';
+import { logger } from '../lib/utils/error-logger';
 import { classifyPayoutFailure } from '../lib/utils/payout-analytics';
+import { useAuthContext } from './use-auth-context';
 
 export type PayoutMethod = 'instant' | 'standard';
 
@@ -31,6 +32,7 @@ export interface PayoutResult {
   remainingAvailableCents: number | null;
   duplicate: boolean;
   message: string;
+  requestId?: string;
 }
 
 export interface PayoutError {
@@ -38,6 +40,7 @@ export interface PayoutError {
   message: string;
   /** True when retrying the same request could plausibly succeed. */
   retryable: boolean;
+  requestId?: string;
 }
 
 export interface UseConnectPayoutResult {
@@ -160,6 +163,10 @@ export function useConnectPayout(): UseConnectPayoutResult {
         });
 
         const data = await response.json().catch(() => ({}));
+        const requestId =
+          typeof data?.requestId === 'string'
+            ? data.requestId
+            : (response.headers?.get?.('x-request-id') ?? undefined);
 
         if (!response.ok) {
           // rawCode is what actually came back from the server — kept as
@@ -182,6 +189,7 @@ export function useConnectPayout(): UseConnectPayoutResult {
                 ? data.error
                 : 'We could not complete your withdrawal. Please try again.',
             retryable: !NON_RETRYABLE_CODES.has(code),
+            requestId,
           };
           // A non-retryable failure means this attempt is closed; drop the key
           // so a corrected attempt is treated as genuinely new.
@@ -191,10 +199,14 @@ export function useConnectPayout(): UseConnectPayoutResult {
             .trackEvent(eventName, {
               amount: input.amountCents / 100,
               currency: 'usd',
-              method: input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
+              method:
+                input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
               code,
               stripeAttempted,
-              ...(typeof data?.pendingAmount === 'number' ? { pendingAmount: data.pendingAmount } : {}),
+              requestId,
+              ...(typeof data?.pendingAmount === 'number'
+                ? { pendingAmount: data.pendingAmount }
+                : {}),
               reason: payoutError.message.slice(0, 200),
             })
             .catch(() => {
@@ -205,8 +217,44 @@ export function useConnectPayout(): UseConnectPayoutResult {
           return null;
         }
 
+        if (typeof data?.payoutId !== 'string' || !data.payoutId) {
+          const responseStatus = typeof data?.status === 'string' ? data.status : 'missing';
+          logger.critical('Malformed payout success response', {
+            operation: 'connect_native_payout',
+            code: 'malformed_payout_success_response',
+            payoutMethod: input.method,
+            responseStatus,
+            hasPayoutId: typeof data?.payoutId === 'string' && !!data.payoutId,
+            duplicate: data?.duplicate === true,
+            requestId,
+          });
+          void analyticsService
+            .trackEvent('payout_failed', {
+              amount: input.amountCents / 100,
+              currency: 'usd',
+              method:
+                input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
+              code: 'malformed_payout_success_response',
+              reason: 'server_returned_success_without_payout_id',
+              responseStatus,
+              requestId,
+            })
+            .catch(() => {
+              /* analytics is best-effort */
+            });
+          setError({
+            code: 'unknown_payout_state',
+            message:
+              'Your withdrawal status is being verified. Do not submit it again — retrying will safely check the same request.',
+            retryable: true,
+            requestId,
+          });
+          setPhase('failed');
+          return null;
+        }
+
         const payoutResult: PayoutResult = {
-          payoutId: typeof data.payoutId === 'string' ? data.payoutId : null,
+          payoutId: data.payoutId,
           payoutMethod: data.payoutMethod === 'instant' ? 'instant' : 'standard',
           status: typeof data.status === 'string' ? data.status : 'pending',
           amountCents:
@@ -217,6 +265,7 @@ export function useConnectPayout(): UseConnectPayoutResult {
             typeof data.remainingAvailableCents === 'number' ? data.remainingAvailableCents : null,
           duplicate: data.duplicate === true,
           message: typeof data.message === 'string' ? data.message : 'Withdrawal sent.',
+          requestId,
         };
 
         idempotencyKeyRef.current = null;
@@ -226,6 +275,7 @@ export function useConnectPayout(): UseConnectPayoutResult {
             currency: payoutResult.currency,
             method: input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
             payoutId: payoutResult.payoutId ?? undefined,
+            requestId,
           })
           .catch(() => {
             /* analytics is best-effort */

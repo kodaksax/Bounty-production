@@ -15,10 +15,16 @@ jest.mock('../../../lib/services/analytics-service', () => ({
   // Promise to call rather than throwing on undefined).
   analyticsService: { trackEvent: jest.fn().mockResolvedValue(undefined) },
 }));
+jest.mock('../../../lib/utils/error-logger', () => ({
+  logger: {
+    critical: jest.fn(),
+  },
+}));
 
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useConnectPayout } from '../../../hooks/use-connect-payout';
 import { analyticsService } from '../../../lib/services/analytics-service';
+import { logger } from '../../../lib/utils/error-logger';
 
 const SUCCESS = {
   payoutId: 'po_123',
@@ -29,6 +35,7 @@ const SUCCESS = {
   arrivalDate: 1785110400,
   remainingAvailableCents: 0,
   message: 'Withdrawal sent.',
+  requestId: 'connect_req_123',
 };
 
 function mockFetch(response: { ok: boolean; json?: () => Promise<unknown> }) {
@@ -118,6 +125,7 @@ describe('useConnectPayout', () => {
     expect(result.current.result?.amountCents).toBe(1250);
     expect(result.current.result?.status).toBe('pending');
     expect(result.current.result?.arrivalDate).toBe(1785110400);
+    expect(result.current.result?.requestId).toBe('connect_req_123');
   });
 
   it('ignores a second concurrent submission', async () => {
@@ -238,6 +246,40 @@ describe('useConnectPayout', () => {
 
     await waitFor(() => expect(result.current.phase).toBe('completed'));
     expect(result.current.result?.duplicate).toBe(true);
+  });
+
+  it('does not mark a malformed success response as completed', async () => {
+    mockFetch({
+      ok: true,
+      json: () => Promise.resolve({ ...SUCCESS, payoutId: null, message: 'Withdrawal sent.' }),
+    });
+    const { result } = renderHook(() => useConnectPayout());
+
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+    });
+
+    await waitFor(() => expect(result.current.phase).toBe('failed'));
+    expect(result.current.result).toBeNull();
+    expect(result.current.error).toMatchObject({
+      code: 'unknown_payout_state',
+      retryable: true,
+      requestId: 'connect_req_123',
+    });
+    expect(result.current.error?.message).toMatch(/Do not submit it again/i);
+    expect(logger.critical).toHaveBeenCalledWith(
+      'Malformed payout success response',
+      expect.objectContaining({
+        operation: 'connect_native_payout',
+        code: 'malformed_payout_success_response',
+        payoutMethod: 'standard',
+        requestId: 'connect_req_123',
+      })
+    );
+    expect(analyticsService.trackEvent).toHaveBeenCalledWith(
+      'payout_failed',
+      expect.objectContaining({ code: 'malformed_payout_success_response' })
+    );
   });
 
   it('fails safely when there is no session', async () => {

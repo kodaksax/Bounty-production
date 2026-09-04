@@ -197,6 +197,13 @@ describe('handleConnectNativePayout — audit trail', () => {
     expect(handlerBody).toContain('balanceInstantAvailableCents: balance.instantAvailableCents');
   });
 
+  test('threads a request id through native payout logs and responses', () => {
+    expect(handlerBody).toContain('requestId');
+    expect(handlerBody).toContain('const reply =');
+    expect(connectSource).toContain("req.headers.get('x-request-id')");
+    expect(connectSource).toContain("'X-Request-Id': requestId");
+  });
+
   test('audit writes never block the payout', () => {
     const auditBody = extractFunctionBody(connectSource, 'writePayoutAudit');
     expect(auditBody).toContain('try {');
