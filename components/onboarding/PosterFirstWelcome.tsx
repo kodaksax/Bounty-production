@@ -20,6 +20,7 @@ interface PosterFirstWelcomeProps {
   onPosterPress: () => void;
   onHunterPress: () => void;
   onLoginPress: () => void;
+  onHowItWorksPress: () => void;
 }
 
 export function PosterFirstWelcome({
@@ -31,6 +32,7 @@ export function PosterFirstWelcome({
   onPosterPress,
   onHunterPress,
   onLoginPress,
+  onHowItWorksPress,
 }: PosterFirstWelcomeProps) {
   const styles = makeStyles(theme);
 
@@ -82,6 +84,16 @@ export function PosterFirstWelcome({
           accessibilityLabel="Log in to an existing account"
         >
           <Text style={styles.loginButtonText}>Log In</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.howItWorksButton}
+          onPress={onHowItWorksPress}
+          activeOpacity={0.7}
+          accessibilityRole="link"
+          accessibilityLabel="How Bounty works — fees, escrow and disputes"
+        >
+          <Text style={styles.howItWorksText}>How it works — fees, escrow &amp; disputes</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -162,6 +174,18 @@ function makeStyles(theme: AppTheme) {
       color: theme.text,
       fontSize: 16,
       fontWeight: '600',
+    },
+    howItWorksButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      marginHorizontal: 24,
+    },
+    howItWorksText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+      textDecorationLine: 'underline',
     },
   });
 }

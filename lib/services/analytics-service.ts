@@ -131,6 +131,7 @@ export type AnalyticsEvent =
   | 'first_screen_viewed'
   | 'first_screen_proof_impression'
   | 'first_screen_cta_tapped'
+  | 'first_screen_how_it_works_tapped'
   // Historical only — fired by the "Get started" CTA of the now-deleted
   // 'onboarding-skip-role-selection' test arm. No longer emitted; kept so
   // past events remain queryable under this type.

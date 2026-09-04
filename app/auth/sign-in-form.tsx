@@ -1287,7 +1287,7 @@ export function SignInForm() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => router.push('/onboarding/welcome')}
+                onPress={() => router.push('/auth/sign-up-form')}
                 accessibilityRole="button"
                 accessibilityLabel="Create an account"
               >
