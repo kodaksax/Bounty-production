@@ -18,6 +18,8 @@
  *   --effort <level>        low|medium|high|xhigh|max   (anthropic)
  *   --max-steps <n>         override the scenario's step cap
  *   --bounty-id <uuid>      the contended bounty (required by the race-claim scenario)
+ *   --race-title <text>     that bounty's exact title, so agents can find it by searching
+ *                           (no address bar is available to them -- see the race branch below)
  *   --headed                show the browser windows
  *   --open                  open Shoal's dashboard in a browser (default: do not)
  *   --no-verify             skip Shoal's verify pass over findings
@@ -81,7 +83,8 @@ if (has('list')) {
 // The scenario is the first bare positional argument. Walk the argv skipping flags and
 // the values that belong to them, so `--swarm 8 smoke` and `smoke --swarm 8` both work.
 const VALUE_FLAGS = new Set([
-  'env', 'swarm', 'provider', 'model', 'effort', 'max-steps', 'bounty-id', 'port', 'scenario',
+  'env', 'swarm', 'provider', 'model', 'effort', 'max-steps', 'bounty-id', 'race-title', 'port',
+  'scenario',
 ]);
 function findScenarioId() {
   if (argv.includes('--scenario')) return argv[argv.indexOf('--scenario') + 1];
@@ -200,6 +203,41 @@ if (scenario.id === 'race-claim' || scenario.strategy.includes('race')) {
   }
   racePath = '/bounty/' + bountyId;
   scenario.raceBountyId = bountyId;
+  // Shoal's own race mode navigates every agent's browser straight to
+  // new URL(racePath, opts.url) BEFORE any sign-in happens (orchestrator.ts:
+  // `targetUrl = racePath ? new URL(racePath, opts.url) : opts.url`) -- run.mjs has no
+  // say in that first navigation, only in --race-path itself. For a requiresAuth
+  // scenario that means every agent starts signed OUT on a protected bounty-detail
+  // route, which the app (confirmed live) redirects to the generic landing screen with
+  // no return-to-intended-page behaviour after sign-in -- the deep link is simply lost.
+  //
+  // The obvious fix -- "navigate back to the URL once you're signed in" -- does not
+  // work here. Confirmed live (2026-09-04, two consecutive staging runs): Shoal's agent
+  // has exactly three tools (computer, report_finding, task_result); "computer" is
+  // click/type/scroll/screenshot only (packages/core/src/anthropicDriver.ts), and a
+  // Playwright screenshot never includes browser chrome -- there IS no address bar for
+  // an agent to type into, in any scenario. Every OTHER requiresAuth scenario's
+  // postAuthRoute happens to be a top-level tab (Postings, Wallet) an agent can click,
+  // so the same false "the address bar works" phrasing there is harmless in practice;
+  // race-claim's target is one specific bounty by id, which has no such shortcut, so
+  // eight agents spent their whole budget hunting for a UI element that cannot exist,
+  // and zero of them ever reached the contended bounty at all.
+  //
+  // So: tell the agent what it can actually act on -- find the listing by its own
+  // title through the app's real search/feed, which other scenarios' agents were
+  // separately observed to use successfully. Pass the exact title with --race-title
+  // (seed.mjs bounty prints it); without one, fall back to a generic description.
+  if (scenario.requiresAuth) {
+    const title = opt('race-title', process.env.BOUNTY_SHOAL_RACE_BOUNTY_TITLE);
+    task +=
+      ' Everything above is about ONE specific job: ' +
+      (title
+        ? 'the one titled exactly "' + title + '"'
+        : 'a job posted moments ago by a test account, so it should be near the top of the feed') +
+      '. Once you are signed in, find that exact listing yourself using the feed or the ' +
+      'app\'s own search -- do NOT try to type a URL or look for a browser address bar; ' +
+      'this browser does not show you one and typing will not go anywhere.';
+  }
 } else if (scenario.path && scenario.path !== '/') {
   // An authenticated scenario must not START on the protected route. Observed in the
   // composer-adversarial run: agents dropped straight onto /screens/CreateBounty spent

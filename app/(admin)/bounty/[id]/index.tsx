@@ -36,7 +36,7 @@ import {
 } from '../../../../components/admin/AdminUI';
 import { useAppTheme } from '../../../../hooks/use-app-theme';
 import type { ViolationType } from '../../../../lib/admin/adminDataClient';
-import { adminDataClient } from '../../../../lib/admin/adminDataClient';
+import { AdminModerationError, adminDataClient } from '../../../../lib/admin/adminDataClient';
 import {
   commandCenterClient,
   financialStatusMeta,
@@ -155,7 +155,7 @@ export default function AdminBountyDetailScreen() {
 
   const applyStatus = useCallback(
     async (next: AdminBountyStatus) => {
-      if (!bounty) return;
+      if (!bounty || pendingAction != null) return;
       setPendingAction(next);
       try {
         const updated = await adminDataClient.updateBountyStatus(bounty.id, next);
@@ -168,11 +168,14 @@ export default function AdminBountyDetailScreen() {
           'Update failed',
           err instanceof Error ? err.message : 'The status could not be changed.'
         );
+        if (err instanceof AdminModerationError && err.code === 'BOUNTY_NOT_FOUND') {
+          router.back();
+        }
       } finally {
         setPendingAction(null);
       }
     },
-    [bounty]
+    [bounty, pendingAction, router]
   );
 
   const confirmStatusChange = useCallback(
@@ -197,12 +200,18 @@ export default function AdminBountyDetailScreen() {
   );
 
   const executeRemove = useCallback(
-    async (violationType: ViolationType, warnPoster: boolean) => {
-      if (!bounty) return;
+    async (violationType: ViolationType, violationLabel: string, warnPoster: boolean) => {
+      // `busy` (driven by pendingAction) already disables the trigger button
+      // while a removal is in flight; this guard also blocks a stray
+      // re-entrant call from firing a second mutation for the same click.
+      if (!bounty || pendingAction != null) return;
       setPendingAction('remove');
       try {
-        await adminDataClient.removeBountyForViolation(bounty.id);
-        setBounty((prev) => (prev ? { ...prev, status: 'archived' } : prev));
+        const result = await adminDataClient.removeBountyForViolation(
+          bounty.id,
+          `Community guideline violation: ${violationLabel}`
+        );
+        setBounty((prev) => (prev ? { ...prev, status: result.bountyStatus } : prev));
 
         let warnFailed: string | null = null;
         if (warnPoster) {
@@ -222,25 +231,37 @@ export default function AdminBountyDetailScreen() {
           }
         }
 
+        const alreadyRemoved = result.status === 'already_removed';
         Alert.alert(
-          warnFailed ? 'Removed, warning failed' : 'Bounty removed',
+          warnFailed ? 'Removed, warning failed' : alreadyRemoved ? 'Already removed' : 'Bounty removed',
           warnFailed
             ? `The bounty was removed, but the warning to the poster failed: ${warnFailed}`
-            : warnPoster
-              ? 'The bounty has been removed and a warning was sent to the poster.'
-              : 'The bounty has been removed.',
+            : alreadyRemoved
+              ? 'This bounty was already removed — likely by another admin session. No changes were needed.'
+              : warnPoster
+                ? 'The bounty has been removed and a warning was sent to the poster.'
+                : 'The bounty has been removed.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
       } catch (err) {
-        Alert.alert(
-          'Removal failed',
-          err instanceof Error ? err.message : 'The bounty could not be removed.'
-        );
+        // AdminModerationError carries a safe, specific message per failure
+        // mode (not admin / bounty gone / DB error); anything else falls back
+        // to a generic message rather than leaking raw error text.
+        const message =
+          err instanceof AdminModerationError || err instanceof Error
+            ? err.message
+            : 'The bounty could not be removed.';
+        Alert.alert('Removal failed', message);
+        // A genuinely missing bounty means this screen's own record is
+        // stale — nothing left here to act on.
+        if (err instanceof AdminModerationError && err.code === 'BOUNTY_NOT_FOUND') {
+          router.back();
+        }
       } finally {
         setPendingAction(null);
       }
     },
-    [bounty, router]
+    [bounty, pendingAction, router]
   );
 
   const handleRemove = useCallback(() => {
@@ -254,11 +275,11 @@ export default function AdminBountyDetailScreen() {
             `Remove this bounty for "${label}"? It will be archived and hidden from the marketplace.`,
             [
               { text: 'Cancel', style: 'cancel' as const },
-              { text: 'Remove + warn poster', onPress: () => void executeRemove(value, true) },
+              { text: 'Remove + warn poster', onPress: () => void executeRemove(value, label, true) },
               {
                 text: 'Remove only',
                 style: 'destructive' as const,
-                onPress: () => void executeRemove(value, false),
+                onPress: () => void executeRemove(value, label, false),
               },
             ]
           ),
@@ -296,6 +317,11 @@ export default function AdminBountyDetailScreen() {
 
   const transitions = STATUS_TRANSITIONS[bounty.status] ?? [];
   const busy = pendingAction != null;
+  // `removeBountyForViolation` drives bounties.status to 'archived' or
+  // 'deleted' depending on what the live enum permits (see
+  // _moderation_takedown_status in the moderation migration) — both mean the
+  // same thing for this button's purposes: nothing left to remove.
+  const isRemoved = bounty.status === 'archived' || bounty.status === 'deleted';
 
   return (
     <AdminScreen>
@@ -544,11 +570,11 @@ export default function AdminBountyDetailScreen() {
         {/* ── Moderation ─────────────────────────────────────────────── */}
         <AdminSection title="Community guidelines">
           <AdminButton
-            label={bounty.status === 'archived' ? 'Already removed' : 'Remove for violation'}
+            label={isRemoved ? 'Already removed' : 'Remove for violation'}
             icon="gavel"
             variant="danger"
             loading={pendingAction === 'remove'}
-            disabled={busy || bounty.status === 'archived'}
+            disabled={busy || isRemoved}
             onPress={handleRemove}
           />
         </AdminSection>

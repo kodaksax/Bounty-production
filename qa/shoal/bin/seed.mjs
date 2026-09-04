@@ -298,15 +298,17 @@ async function seedBounty() {
     process.exit(1);
   }
   const ids = [];
+  let firstTitle;
   for (let i = 0; i < count; i++) {
     const id = randomUUID();
+    const title = '[shoal] Help me move a couch ' + new Date().toISOString().slice(0, 19);
     await client.query(
       'insert into bounties (id, title, description, amount, location, poster_id, user_id, status, ' +
         'is_for_honor, created_at, updated_at) ' +
         "values ($1, $2, $3, $4, $5, $6, $6, 'open', false, now(), now())",
       [
         id,
-        '[shoal] Help me move a couch ' + new Date().toISOString().slice(0, 16),
+        title,
         'Seeded by qa/shoal/bin/seed.mjs for swarm testing. Two flights of stairs, about an hour. Safe to delete.',
         45,
         'Petworth',
@@ -314,10 +316,19 @@ async function seedBounty() {
       ],
     );
     ids.push(id);
-    console.log('  seeded open bounty ' + id);
+    firstTitle = firstTitle ?? title;
+    console.log('  seeded open bounty ' + id + '  "' + title + '"');
   }
+  // --race-title matters: Shoal's agent has no address-bar/navigate capability (only
+  // click/type/scroll/screenshot -- see run.mjs's race branch), so it can only reach
+  // this specific bounty by finding it through the app's own search/feed, which means
+  // it needs to know what to look for. Passing the exact title is what makes that
+  // findable instead of a guess.
   console.log('\n  Race against one of them:');
-  console.log('    npm run qa:shoal:race -- --bounty-id ' + ids[0] + ' --swarm 10\n');
+  console.log(
+    '    npm run qa:shoal:race -- --bounty-id ' + ids[0] +
+      ' --race-title ' + JSON.stringify(firstTitle) + ' --swarm 10\n',
+  );
 }
 
 /**
@@ -517,15 +528,11 @@ async function seedState() {
   );
   console.log('  per slot: 1 open+applied bounty, 1 in_progress bounty with a completion submission');
 
-  const race = (
-    await client.query(
-      "select id from bounties where title like '[shoal]%' and status::text = 'open' order by created_at desc limit 1",
-    )
-  ).rows[0];
-  if (race) {
-    console.log('\n  Race against one of them:');
-    console.log('    npm run qa:shoal:race -- --bounty-id ' + race.id + ' --swarm 8\n');
-  }
+  console.log(
+    '\n  Note: these per-slot bounties already carry an application each -- fine for' +
+      ' poster-review/completion, but a race needs a bounty with ZERO applications.' +
+      ' Seed a dedicated one:\n    node qa/shoal/bin/seed.mjs bounty --env ' + target.name + '\n',
+  );
 }
 
 async function status() {

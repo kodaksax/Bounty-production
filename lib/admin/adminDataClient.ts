@@ -44,6 +44,35 @@ export interface SendWarningParams {
 }
 
 /**
+ * Typed outcomes for an admin moderation action, so the UI can show accurate
+ * copy instead of one generic "failed" message. Mirrors the error codes
+ * `admin_moderation_transition` raises server-side:
+ *  - 42501 (insufficient_privilege, from admin_assert_role())    -> NOT_ADMIN
+ *  - P0002 (no_data_found, the bounty row does not exist)        -> BOUNTY_NOT_FOUND
+ *  - anything else (illegal transition, connection failure, ...) -> DATABASE_ERROR
+ */
+export type AdminModerationErrorCode = 'NOT_ADMIN' | 'BOUNTY_NOT_FOUND' | 'DATABASE_ERROR';
+
+export class AdminModerationError extends Error {
+  code: AdminModerationErrorCode;
+  constructor(code: AdminModerationErrorCode, message: string) {
+    super(message);
+    this.name = 'AdminModerationError';
+    this.code = code;
+  }
+}
+
+export interface RemoveBountyResult {
+  /**
+   * 'already_removed' when the bounty was already in the 'removed'
+   * moderation state -- a repeat click against a stale admin list, or a race
+   * with another admin session. Treated as a success, not a failure.
+   */
+  status: 'removed' | 'already_removed';
+  bountyStatus: AdminBountyStatus;
+}
+
+/**
  * PostgREST rejects unescaped commas/parens inside an `or(...)` group, and a
  * `%` or `,` typed into an admin search box would otherwise either error the
  * request or silently widen the match. Strip the characters PostgREST treats
@@ -383,33 +412,85 @@ export const adminDataClient = {
     };
   },
 
-  // Update bounty status (admin override)
-  async updateBountyStatus(id: string, status: AdminBounty['status']): Promise<AdminBounty> {
-    const { data, error } = await supabase
-      .from('bounties')
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .maybeSingle();
+  /**
+   * Update a bounty's lifecycle status (admin override -- Archive, Cancel,
+   * Mark completed, Reopen, etc.).
+   *
+   * Was the same shape of bug as removeBountyForViolation: a direct
+   * `.from('bounties').update({ status }).eq('id', id)` gated only by the
+   * ownership-only UPDATE policy, so it silently failed for any admin who
+   * was not also the bounty's poster. Routed through admin_set_bounty_status()
+   * instead -- a SECURITY DEFINER RPC that re-checks admin role server-side
+   * and validates the transition itself (not just which button the UI
+   * happened to render). See
+   * 20260904020000_admin_bounty_status_authorization_fix.sql.
+   */
+  async updateBountyStatus(id: string, status: AdminBounty['status'], reason?: string): Promise<AdminBounty> {
+    const { data, error } = await supabase.rpc('admin_set_bounty_status', {
+      p_bounty_id: id,
+      p_status: status,
+      p_reason: reason ?? null,
+    });
 
-    if (error) throw new Error(error.message);
-    // No returned row means RLS filtered the update out -- surface that rather
-    // than reporting success for a write that never landed.
-    if (!data) throw new Error('Bounty not found, or you do not have permission to update it');
+    if (error) {
+      if (error.code === '42501') {
+        throw new AdminModerationError('NOT_ADMIN', "You don't have permission to perform this action.");
+      }
+      if (error.code === 'P0002') {
+        throw new AdminModerationError('BOUNTY_NOT_FOUND', 'This bounty no longer exists.');
+      }
+      console.error('[adminDataClient.updateBountyStatus]', error);
+      throw new AdminModerationError('DATABASE_ERROR', "We couldn't update this bounty. Please try again.");
+    }
+
     return mapBounty(data);
   },
 
-  // Remove a bounty for community guidelines violation (archives the bounty)
-  async removeBountyForViolation(id: string): Promise<void> {
-    const { data, error } = await supabase
-      .from('bounties')
-      .update({ status: 'archived', updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .maybeSingle();
+  /**
+   * Remove a bounty for a community guidelines violation.
+   *
+   * Was a direct `.from('bounties').update({ status: 'archived' }).eq('id', id)`
+   * gated only by RLS -- and the only UPDATE policy on `bounties` is "the
+   * poster can update their own bounty" (auth.uid() = poster_id). For any
+   * admin who was not also the bounty's poster, RLS silently dropped the row,
+   * PostgREST returned zero rows with no error, and `.maybeSingle()` saw
+   * `data: null` -- surfaced as "not found or no permission" even though the
+   * bounty existed and the caller genuinely was an admin. Routed through
+   * admin_moderation_transition() instead: a SECURITY DEFINER RPC that
+   * re-checks admin role server-side (not RLS ownership) and is the
+   * established, audited path every other moderation action already uses.
+   */
+  async removeBountyForViolation(
+    id: string,
+    reason: string,
+    notes?: string
+  ): Promise<RemoveBountyResult> {
+    const { data, error } = await supabase.rpc('admin_moderation_transition', {
+      p_bounty_id: id,
+      p_new_state: 'removed',
+      p_reason: reason,
+      p_notes: notes ?? null,
+    });
 
-    if (error) throw new Error(error.message);
-    if (!data) throw new Error('Bounty not found, or you do not have permission to remove it');
+    if (error) {
+      if (error.code === '42501') {
+        throw new AdminModerationError('NOT_ADMIN', "You don't have permission to perform this action.");
+      }
+      if (error.code === 'P0002') {
+        throw new AdminModerationError('BOUNTY_NOT_FOUND', 'This bounty no longer exists.');
+      }
+      // Illegal transition, connection failure, etc. -- log the technical
+      // detail for debugging and surface a safe, generic message. The raw
+      // Postgres/RLS error text never reaches the admin UI.
+      console.error('[adminDataClient.removeBountyForViolation]', error);
+      throw new AdminModerationError('DATABASE_ERROR', "We couldn't remove this bounty. Please try again.");
+    }
+
+    const result = (data ?? {}) as { idempotent?: boolean; bounty_status?: string };
+    return {
+      status: result.idempotent === true ? 'already_removed' : 'removed',
+      bountyStatus: (result.bounty_status ?? 'archived') as AdminBountyStatus,
+    };
   },
 
   // Fetch users with filtering, search and pagination.
@@ -477,23 +558,18 @@ export const adminDataClient = {
   // Send a guideline warning to a user
   async sendWarning(params: SendWarningParams): Promise<void> {
     const { data: sessionData } = await supabase.auth.getSession();
-    const adminId = sessionData?.session?.user?.id;
+    const session = sessionData?.session;
+    const adminId = session?.user?.id;
     if (!adminId) throw new Error('Not authenticated');
 
-    // Explicitly verify that the authenticated user has admin privileges
-    const { data: adminProfile, error: adminProfileError } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('id', adminId)
-      .single();
-
-    if (adminProfileError) {
-      throw new Error(adminProfileError.message);
-    }
-
-    const isAdmin = (adminProfile as any)?.role === 'admin';
-
-    if (!isAdmin) {
+    // Admin role lives in the JWT's app_metadata claim, not profiles.role --
+    // profiles.role is NULL for every row in prod, so a check against it
+    // (the previous implementation) rejected every real admin. The
+    // authoritative check is the admin_warnings RLS policy, which verifies
+    // the same claim server-side; this is a fast client-side fail for a
+    // clearer error message before the round trip.
+    const role = (session?.user?.app_metadata as { role?: string } | undefined)?.role;
+    if (role !== 'admin') {
       throw new Error('Insufficient privileges: admin access required');
     }
     const { error: insertError } = await supabase

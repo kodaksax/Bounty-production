@@ -11,7 +11,7 @@
 //    `bounties.flagged_count` column that does not exist, so it never showed.
 //    Replaced with the stale flag the expiry sweeper actually writes.
 import { MaterialIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
@@ -90,6 +90,16 @@ export default function AdminBountiesScreen() {
     refetch,
     loadMore,
   } = useAdminBounties(filters);
+
+  // Refetch on focus (matches app/(admin)/moderation.tsx): this screen keeps
+  // its own fetch state rather than a shared cache, so without this a bounty
+  // removed on the detail screen would linger here, unchanged, until a manual
+  // pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch])
+  );
 
   const openBounty = useCallback(
     (id: string) => router.push(ROUTES.ADMIN.BOUNTY_DETAIL(id) as never),
