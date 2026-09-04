@@ -170,8 +170,11 @@ export default function UsernameScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <OnboardingProgressDots total={totalSteps} activeIndex={0} style={styles.dotsContainer} />
 
-      <Text style={styles.heading}>Sign in — one tap, no password</Text>
-      <Text style={styles.subheading}>We never post or share anything without asking.</Text>
+      <Text style={styles.heading}>Sign in in seconds</Text>
+      <Text style={styles.subheading}>
+        Use Apple or Google for one-tap, password-free sign-in — or continue with email. We never post
+        or share anything without asking.
+      </Text>
 
       <View style={styles.nextUpCard}>
         <MaterialIcons name="lock-open" size={16} color={theme.textSecondary} />
