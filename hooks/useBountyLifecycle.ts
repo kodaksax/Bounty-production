@@ -40,6 +40,8 @@ export interface BountyLifecycleContext {
   hasDispute: boolean;
   disputeId: string | null;
   hasCancellationRequest: boolean;
+  /** Which role opened the pending cancellation request, when there is one. */
+  cancellationRequestedByRole: 'poster' | 'hunter' | null;
   isLoading: boolean;
   /** Set only when the bounty itself failed to load. */
   error: string | null;
@@ -65,6 +67,9 @@ export function useBountyLifecycle(
   const [hasDispute, setHasDispute] = useState(false);
   const [disputeId, setDisputeId] = useState<string | null>(null);
   const [hasCancellationRequest, setHasCancellationRequest] = useState(false);
+  const [cancellationRequestedByRole, setCancellationRequestedByRole] = useState<
+    'poster' | 'hunter' | null
+  >(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -208,9 +213,16 @@ export function useBountyLifecycle(
         (async () => {
           try {
             const cancellation = await cancellationService.getCancellationByBountyId(id);
-            if (!isStale()) setHasCancellationRequest(cancellation?.status === 'pending');
+            const pending = cancellation?.status === 'pending';
+            if (!isStale()) {
+              setHasCancellationRequest(pending);
+              setCancellationRequestedByRole(pending ? cancellation!.requesterType : null);
+            }
           } catch {
-            if (!isStale()) setHasCancellationRequest(false);
+            if (!isStale()) {
+              setHasCancellationRequest(false);
+              setCancellationRequestedByRole(null);
+            }
           }
         })(),
       ]);
@@ -258,7 +270,7 @@ export function useBountyLifecycle(
 
   const state = bounty
     ? resolveBountyLifecycle({
-        bounty: bounty as any,
+        bounty,
         role,
         requestStatus,
         submissionStatus: submission?.status ?? null,
@@ -267,8 +279,9 @@ export function useBountyLifecycle(
         applicationCount,
         hasDispute,
         hasCancellationRequest,
+        cancellationRequestedByRole,
         otherPartyName: otherParty.name,
-        paymentState: bountyHoldsUnreleasedEscrow(bounty as any) ? 'held' : 'released',
+        paymentState: bountyHoldsUnreleasedEscrow(bounty) ? 'held' : 'released',
       })
     : null;
 
@@ -284,6 +297,7 @@ export function useBountyLifecycle(
     hasDispute,
     disputeId,
     hasCancellationRequest,
+    cancellationRequestedByRole,
     isLoading,
     error,
     notFound,

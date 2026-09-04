@@ -100,7 +100,7 @@ export function BountyStatusPanel({
 
   if (variant === 'inline') {
     return (
-      <View style={styles.inlineRow} accessibilityRole="summary">
+      <View style={styles.inlineRow}>
         <View style={[styles.dot, { backgroundColor: accent }]} />
         <Text style={styles.inlineText} numberOfLines={2}>
           <Text style={[styles.inlineStrong, { color: accent }]}>
@@ -115,7 +115,6 @@ export function BountyStatusPanel({
   return (
     <View
       style={[styles.card, { backgroundColor: tint, borderColor: withAlpha(accent, 0.35) }]}
-      accessibilityRole="summary"
       accessibilityLabel={`${state.headline}. ${state.explanation} ${state.nextStep}`}
     >
       <View style={styles.headRow}>

@@ -196,6 +196,18 @@ export function useBountyStatusFilters({
     return m
   }, [hunterRequests])
 
+  // resolveBountyLifecycle is called for every bounty from several places in
+  // one render (the display-status filter, section grouping, the review
+  // counts, the attention counts), so without caching the same bounty gets
+  // resolved — with its formatting and branching — several times over. The
+  // cache is rebuilt only when an input that could change the result changes,
+  // and is keyed by (variant, id) since the same bounty resolves differently
+  // per role.
+  const lifecycleCache = React.useMemo(
+    () => new Map<string, BountyLifecycleState>(),
+    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
+  )
+
   /**
    * The full lifecycle state for a row — the same resolver the detail screens
    * use, so a card that a list files under "Needs your attention" opens onto a
@@ -203,9 +215,13 @@ export function useBountyStatusFilters({
    */
   const getLifecycle = React.useCallback(
     (b: Bounty, variant: 'owner' | 'hunter'): BountyLifecycleState => {
+      const cacheKey = `${variant}:${String(b.id)}`
+      const cached = lifecycleCache.get(cacheKey)
+      if (cached) return cached
+
       const submission = submissionsByBounty.get(String(b.id))
-      return resolveBountyLifecycle({
-        bounty: b as any,
+      const state = resolveBountyLifecycle({
+        bounty: b,
         role: variant === 'owner' ? 'poster' : 'hunter',
         requestStatus: variant === 'hunter' ? requestStatusMap.get(String(b.id)) ?? null : null,
         submissionStatus: submission?.status ?? null,
@@ -214,8 +230,10 @@ export function useBountyStatusFilters({
         applicationCount:
           variant === 'owner' ? applicationCounts?.get(String(b.id)) ?? 0 : 0,
       })
+      lifecycleCache.set(cacheKey, state)
+      return state
     },
-    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
+    [lifecycleCache, submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
   )
 
   /**

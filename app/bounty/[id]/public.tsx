@@ -139,7 +139,7 @@ export default function PublicBountyDetail() {
   const lifecycle = useMemo(() => {
     if (!bounty) return null;
     return resolveBountyLifecycle({
-      bounty: bounty as any,
+      bounty,
       role: viewerRole,
       requestStatus: hasApplied ? 'pending' : null,
     });

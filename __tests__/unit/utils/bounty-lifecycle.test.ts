@@ -270,22 +270,45 @@ describe('resolveBountyLifecycle — overlays outrank the normal flow', () => {
     }
   });
 
-  it('a pending cancellation outranks in-progress work for both sides', () => {
-    const s = resolveBountyLifecycle({
+  it('a pending cancellation outranks in-progress work, and is only "on you" for whoever must respond', () => {
+    // The poster requested the cancellation, so the hunter must respond — the
+    // poster is waiting on the hunter, not the other way around.
+    const requester = resolveBountyLifecycle({
       bounty: bounty({ status: 'in_progress' }),
       role: 'poster',
       hasCancellationRequest: true,
+      cancellationRequestedByRole: 'poster',
     });
-    expect(s.status).toBe('cancellation_requested');
-    expect(s.primaryAction?.key).toBe('respond_cancellation');
+    expect(requester.status).toBe('cancellation_requested');
+    expect(requester.waitingOn).toBe('other');
+    expect(requester.needsAttention).toBe(false);
+    expect(requester.primaryAction?.key).not.toBe('respond_cancellation');
 
-    const fromColumn = resolveBountyLifecycle({
+    const responder = resolveBountyLifecycle({
       bounty: bounty({ status: 'cancellation_requested' }),
       role: 'hunter',
       requestStatus: 'accepted',
+      hasCancellationRequest: true,
+      cancellationRequestedByRole: 'poster',
     });
-    expect(fromColumn.status).toBe('cancellation_requested');
-    expect(fromColumn.needsAttention).toBe(true);
+    expect(responder.status).toBe('cancellation_requested');
+    expect(responder.waitingOn).toBe('you');
+    expect(responder.needsAttention).toBe(true);
+    expect(responder.primaryAction?.key).toBe('respond_cancellation');
+  });
+
+  it('a pending cancellation with no known requester tells neither side it is on them', () => {
+    for (const role of ['poster', 'hunter'] as const) {
+      const s = resolveBountyLifecycle({
+        bounty: bounty({ status: 'cancellation_requested' }),
+        role,
+        hasCancellationRequest: true,
+      });
+      expect(s.status).toBe('cancellation_requested');
+      expect(s.waitingOn).toBe('support');
+      expect(s.needsAttention).toBe(false);
+      expect(s.primaryAction?.key).not.toBe('respond_cancellation');
+    }
   });
 });
 

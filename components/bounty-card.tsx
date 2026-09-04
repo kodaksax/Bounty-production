@@ -10,6 +10,7 @@ import {
   BOUNTY_DISPLAY_STATUS_LABELS,
 } from 'lib/utils/bounty-display-status';
 import { resolveBountyLifecycle } from 'lib/utils/bounty-lifecycle';
+import { isBountyPoster } from 'lib/utils/poster-bounty-dashboard';
 import { isBountyDeadlinePassed } from 'lib/utils/schedule-utils';
 import { shareBounty } from 'lib/utils/share-utils';
 import { useMemo } from 'react';
@@ -88,7 +89,10 @@ export function BountyCard({
   applicationCount = 0,
   showNextStep = true,
 }: BountyCardProps) {
-  const isOwner = currentUserId === bounty.user_id;
+  // Ownership follows the same rule as isBountyPoster (poster_id is canonical,
+  // user_id is the backwards-compatible alias) so this never disagrees with the
+  // poster-only screens. When `role` is passed explicitly, it wins.
+  const isOwner = role ? role === 'poster' : isBountyPoster(bounty, currentUserId ?? null);
   const router = useRouter();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);

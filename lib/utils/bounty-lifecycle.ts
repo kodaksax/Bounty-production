@@ -151,6 +151,13 @@ export interface BountyLifecycleInput {
   hasDispute?: boolean;
   /** A cancellation request is pending a response. */
   hasCancellationRequest?: boolean;
+  /**
+   * Which role opened the pending cancellation request, when known. The
+   * *other* role is the one who must respond — a requester is waiting on the
+   * other party, not on themselves. Leave unset when this isn't known yet;
+   * the overlay then falls back to "support" rather than guessing.
+   */
+  cancellationRequestedByRole?: 'poster' | 'hunter' | null;
   /** Display name of the other party, used to make copy concrete. */
   otherPartyName?: string | null;
   /** Settlement state of the escrow, when known. */
@@ -264,6 +271,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
     applicationCount = 0,
     hasDispute = false,
     hasCancellationRequest = false,
+    cancellationRequestedByRole = null,
     otherPartyName = null,
     paymentState = null,
   } = input;
@@ -303,19 +311,35 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
 
   // ── Overlay: a cancellation request is waiting on someone ────────────────
   if (hasCancellationRequest || bounty.status === 'cancellation_requested') {
+    // The requester is waiting on the *other* role to respond — never on
+    // themselves. When the requester isn't known, don't guess: fall back to
+    // "support" rather than telling both the poster and the hunter it's on
+    // them, which is what happened when this overlay always said 'you'.
+    const respondingRole: 'poster' | 'hunter' | null =
+      cancellationRequestedByRole === 'poster'
+        ? 'hunter'
+        : cancellationRequestedByRole === 'hunter'
+          ? 'poster'
+          : null;
+    const viewerMustRespond = respondingRole !== null && role === respondingRole;
+
     return finalize({
       status: 'cancellation_requested',
       headline: 'Cancellation requested',
       explanation: isPoster
         ? `A request to cancel this bounty is open. ${reward} stays in escrow until it's settled.`
         : 'A request to cancel this bounty is open. Nothing else can move until it is settled.',
-      nextStep: 'Respond to the request, or open a dispute if you disagree.',
-      waitingOn: 'you',
-      needsAttention: true,
+      nextStep: viewerMustRespond
+        ? 'Respond to the request, or open a dispute if you disagree.'
+        : "We'll let you know as soon as it's settled.",
+      waitingOn: viewerMustRespond ? 'you' : respondingRole !== null ? 'other' : 'support',
+      needsAttention: viewerMustRespond,
       tone: 'warning',
       stageIndex: 1,
-      primaryAction: action('respond_cancellation'),
-      secondaryActions: [action('message'), action('open_dispute')],
+      primaryAction: viewerMustRespond ? action('respond_cancellation') : action('message'),
+      secondaryActions: viewerMustRespond
+        ? [action('message'), action('open_dispute')]
+        : [action('open_dispute')],
     });
   }
 
