@@ -90,11 +90,12 @@ export default function ReviewAndVerifyScreen() {
         throw new Error('Bounty not found');
       }
 
-      // Check ownership
+      // Not the poster: hand off to the bounty router, which sends them to the
+      // surface that IS theirs (hunter hub or the public view). The previous
+      // "Access Denied" alert plus router.back() dead-ended anyone who reached
+      // this URL from a notification or a shared link.
       if (!isBountyPoster(data, currentUserId)) {
-        Alert.alert('Access Denied', 'You can only review your own bounties.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        router.replace({ pathname: '/bounty/[id]', params: { id } });
         return;
       }
 

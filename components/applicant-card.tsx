@@ -80,13 +80,25 @@ export function ApplicantCard({
     }
   };
 
+  const applicantName = request.profile?.username || 'this hunter';
+  const isForHonor = !!request.bounty?.is_for_honor;
+  const amount = typeof request.bounty?.amount === 'number' ? request.bounty.amount : 0;
+
   const handleAccept = () => {
+    // Accepting is the moment money moves under pay-at-accept, so the
+    // confirmation says so plainly instead of the old generic "are you sure":
+    // a poster should never be surprised by a charge they just authorised.
+    const moneyLine =
+      isForHonor || amount <= 0
+        ? 'This bounty is for honor, so no payment is taken.'
+        : `$${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2)} is held in escrow now and released to them only when you approve the finished work.`;
+
     Alert.alert(
-      'Accept Request?',
-      'Accepting this applicant starts the bounty and removes competing requests. Are you sure you want to continue?',
+      `Choose ${applicantName}?`,
+      `They start work right away and the other applicants are declined. ${moneyLine}`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Accept', style: 'default', onPress: runAccept },
+        { text: 'Choose hunter', style: 'default', onPress: runAccept },
       ],
       { cancelable: true }
     );
@@ -94,11 +106,11 @@ export function ApplicantCard({
 
   const handleReject = () => {
     Alert.alert(
-      'Reject Request?',
-      'Rejecting will remove this application from your requests list. Are you sure you want to continue?',
+      'Decline this application?',
+      `${applicantName} is told they weren't selected. Your bounty stays open for other hunters.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Reject', style: 'destructive', onPress: runReject },
+        { text: 'Decline', style: 'destructive', onPress: runReject },
       ],
       { cancelable: true }
     );
@@ -221,48 +233,60 @@ export function ApplicantCard({
           </View>
         ) : null}
 
-        {/* Action buttons */}
+        {/* Actions. Choosing a hunter is the decision this screen exists for,
+            so it is a full-width primary; declining is a quieter secondary
+            beneath it rather than a same-sized button competing with it. */}
         <View style={s.actions}>
           <TouchableOpacity
-            style={[s.button, s.rejectButton]}
-            onPress={handleReject}
-            disabled={isProcessing || request.status !== 'pending'}
-          >
-            {isProcessing && actionType === 'reject' ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <MaterialIcons name="close" size={18} color="#fff" />
-                <Text style={s.buttonText}>Reject</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {onRequestMoreInfo && (
-            <TouchableOpacity
-              style={[s.button, s.infoButton]}
-              onPress={handleRequestInfo}
-              disabled={isProcessing || request.status !== 'pending'}
-            >
-              <MaterialIcons name="chat" size={18} color={theme.primary} />
-              <Text style={[s.buttonText, s.infoButtonText]}>Ask</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={[s.button, s.acceptButton]}
+            style={[s.primaryAction, (isProcessing || request.status !== 'pending') && s.actionDisabled]}
             onPress={handleAccept}
             disabled={isProcessing || request.status !== 'pending'}
+            accessibilityRole="button"
+            accessibilityLabel={`Choose ${applicantName} for this bounty`}
+            accessibilityHint="Starts the bounty with this hunter and declines the others"
           >
             {isProcessing && actionType === 'accept' ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <MaterialIcons name="check" size={18} color="#fff" />
-                <Text style={s.buttonText}>Accept</Text>
-              </View>
+              <>
+                <MaterialIcons name="check-circle" size={18} color="#fff" />
+                <Text style={s.primaryActionText}>Choose this hunter</Text>
+              </>
             )}
           </TouchableOpacity>
+
+          <View style={s.secondaryRow}>
+            {onRequestMoreInfo && (
+              <TouchableOpacity
+                style={[s.secondaryAction, (isProcessing || request.status !== 'pending') && s.actionDisabled]}
+                onPress={handleRequestInfo}
+                disabled={isProcessing || request.status !== 'pending'}
+                accessibilityRole="button"
+                accessibilityLabel={`Ask ${applicantName} a question`}
+              >
+                <MaterialIcons name="chat" size={16} color={theme.textSecondary} />
+                <Text style={s.secondaryActionText}>Ask a question</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[s.secondaryAction, (isProcessing || request.status !== 'pending') && s.actionDisabled]}
+              onPress={handleReject}
+              disabled={isProcessing || request.status !== 'pending'}
+              accessibilityRole="button"
+              accessibilityLabel={`Decline ${applicantName}'s application`}
+              accessibilityHint="Removes this application; your bounty stays open"
+            >
+              {isProcessing && actionType === 'reject' ? (
+                <ActivityIndicator size="small" color={theme.textSecondary} />
+              ) : (
+                <>
+                  <MaterialIcons name="close" size={16} color={theme.error} />
+                  <Text style={[s.secondaryActionText, { color: theme.error }]}>Decline</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Status badge for non-pending requests */}
@@ -410,8 +434,47 @@ function makeStyles(t: AppTheme) {
       fontSize: 12,
     },
     actions: {
+      gap: 10,
+    },
+    primaryAction: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: t.primary,
+      paddingVertical: 14,
+      borderRadius: 12,
+      minHeight: 48,
+    },
+    primaryActionText: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    secondaryRow: {
       flexDirection: 'row',
       gap: 8,
+    },
+    secondaryAction: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surfaceSecondary,
+      minHeight: 44,
+    },
+    secondaryActionText: {
+      color: t.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    actionDisabled: {
+      opacity: 0.5,
     },
     button: {
       flex: 1,

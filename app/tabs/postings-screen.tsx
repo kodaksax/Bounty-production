@@ -41,14 +41,16 @@ import { useAuthContext } from '../../hooks/use-auth-context'
 import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
 import { AcceptFundingGate } from '../../components/accept-funding-gate'
-import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
+import type { BountyListRow, InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
   IN_PROGRESS_FILTERS,
   IN_PROGRESS_FILTER_LABELS,
   MY_POSTINGS_FILTERS,
   MY_POSTINGS_FILTER_LABELS,
+  toBountyListRows,
   useBountyStatusFilters,
 } from '../../hooks/useBountyStatusFilters'
+import { BountySectionHeader } from '../../components/ui/bounty-section-header'
 import { useBountyForm } from '../../hooks/useBountyForm'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { useWallet } from '../../lib/wallet-context'
@@ -83,9 +85,11 @@ type MyPostingRowProps = {
   isListScrolling?: boolean
   onExpandedLayout?: () => void
   onRefresh?: () => void
+  /** Unreviewed applications on this bounty (poster side). */
+  applicationCount?: number
 }
 
-export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onDiscard, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }) {
+export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onDiscard, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh, applicationCount }) {
   return (
     <MyPostingExpandable
       bounty={bounty}
@@ -102,6 +106,7 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
       isListScrolling={isListScrolling}
       onExpandedLayout={onExpandedLayout}
       onRefresh={onRefresh}
+      applicationCount={applicationCount}
     />
   )
 })
@@ -348,6 +353,19 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     () => bountyRequests.filter((r) => r.status === 'pending').length,
     [bountyRequests]
   )
+
+  // Unreviewed applications per posting — an open bounty with applications is
+  // the poster's most common "needs your attention" state, and it cannot be
+  // read off the bounty row itself.
+  const applicationCounts = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of bountyRequests) {
+      if (r.status !== 'pending') continue
+      const key = String(r.bounty_id)
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [bountyRequests])
 
   // Rearm deliberateTapRef whenever the New Bounty tab isn't active, so a
   // later return to it (whether by re-tapping the pill or the "Post a
@@ -787,7 +805,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
   // ---- Optimized FlatList callbacks ----
   // Memoized keyExtractor functions
-  const keyExtractorBounty = React.useCallback((item: Bounty) => item.id.toString(), []);
+  // Rows are either a section header or a bounty; toBountyListRows namespaces
+  // header ids so they can never collide with a bounty id.
+  const keyExtractorRow = React.useCallback((item: BountyListRow) => item.id, []);
   const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
 
   // NOTE: Do NOT provide getItemLayout for expandable / variable-height rows.
@@ -802,7 +822,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   }), []);
 
   // Memoized render functions for better performance
-  const renderMyPostingItem = React.useCallback(({ item: bounty, index }: { item: Bounty; index: number }) => (
+  const renderMyPostingItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
+    if (row.kind === 'section') {
+      return <BountySectionHeader label={row.label} count={row.count} group={row.group} />
+    }
+    const bounty = row.bounty
+    return (
     <View
       ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
       collapsable={false}
@@ -820,11 +845,18 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         variant={'owner'}
         isListScrolling={isListScrolling}
         onRefresh={refreshAll}
+        applicationCount={applicationCounts.get(String(bounty.id)) ?? 0}
       />
     </View>
-  ), [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, refreshAll, bountiesWithPendingRequestsSet]);
+    )
+  }, [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, refreshAll, bountiesWithPendingRequestsSet, applicationCounts]);
 
-  const renderInProgressItem = React.useCallback(({ item: bounty, index }: { item: Bounty; index: number }) => (
+  const renderInProgressItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
+    if (row.kind === 'section') {
+      return <BountySectionHeader label={row.label} count={row.count} group={row.group} />
+    }
+    const bounty = row.bounty
+    return (
     <View
       ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
       collapsable={false}
@@ -842,7 +874,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         onRefresh={refreshAll}
       />
     </View>
-  ), [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
+    )
+  }, [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
 
   // Memoized styles that must be called unconditionally (before any early returns)
   const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
@@ -856,8 +889,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const {
     displayedInProgress,
     displayedMyPostings,
+    inProgressSections,
+    myPostingsSections,
     inProgressReviewCount,
     myPostingsReviewCount,
+    inProgressAttentionCount,
+    myPostingsAttentionCount,
   } = useBountyStatusFilters({
     currentUserId,
     myBounties,
@@ -865,14 +902,25 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     hunterRequests,
     statusFilterInProgress,
     statusFilterMyPostings,
+    applicationCounts,
   })
 
+  const inProgressRows = React.useMemo(
+    () => toBountyListRows(inProgressSections, displayedInProgress),
+    [inProgressSections, displayedInProgress]
+  )
+  const myPostingsRows = React.useMemo(
+    () => toBountyListRows(myPostingsSections, displayedMyPostings),
+    [myPostingsSections, displayedMyPostings]
+  )
+
+  // Badges count everything blocked on this user, not just submitted work.
   const getTabBadgeCount = React.useCallback((tabId: string) => {
     if (tabId === 'requests') return pendingRequestCount
-    if (tabId === 'inProgress') return inProgressReviewCount
-    if (tabId === 'myPostings') return myPostingsReviewCount
+    if (tabId === 'inProgress') return inProgressAttentionCount
+    if (tabId === 'myPostings') return myPostingsAttentionCount
     return 0
-  }, [inProgressReviewCount, myPostingsReviewCount, pendingRequestCount])
+  }, [inProgressAttentionCount, myPostingsAttentionCount, pendingRequestCount])
 
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
@@ -1090,8 +1138,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               activeTab === "inProgress" ? (
                 <FlatList
                   ref={inProgressListRef}
-                  data={displayedInProgress}
-                  keyExtractor={keyExtractorBounty}
+                  data={inProgressRows}
+                  keyExtractor={keyExtractorRow}
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>
@@ -1245,8 +1293,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               ) : activeTab === "myPostings" ? (
                 <FlatList
                   ref={myPostingsListRef}
-                  data={displayedMyPostings}
-                  keyExtractor={keyExtractorBounty}
+                  data={myPostingsRows}
+                  keyExtractor={keyExtractorRow}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>

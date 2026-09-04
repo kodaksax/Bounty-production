@@ -7,7 +7,7 @@
  * has been submitted for review. Filtering on `bounty.status` alone is what put
  * REJECTED and SUBMITTED FOR REVIEW cards under the "In Progress" chip and plain
  * IN PROGRESS cards under "Review". Everything here resolves the *displayed*
- * status via getBountyDisplayStatus so the chips and the badges cannot disagree.
+ * status via resolveBountyLifecycle so the chips and the badges cannot disagree.
  *
  * It lives in a hook rather than in each screen because the two screens are
  * near-identical clones — duplicating the logic is how they drifted apart.
@@ -18,7 +18,11 @@ import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
 import { supabase } from 'lib/supabase'
 import type { BountyDisplayStatus } from 'lib/utils/bounty-display-status'
-import { getBountyDisplayStatus } from 'lib/utils/bounty-display-status'
+import type { BountyAttentionGroup, BountyLifecycleState } from 'lib/utils/bounty-lifecycle'
+import {
+  BOUNTY_ATTENTION_GROUP_LABELS,
+  resolveBountyLifecycle,
+} from 'lib/utils/bounty-lifecycle'
 import * as React from 'react'
 import { useEffect, useState } from 'react'
 
@@ -89,7 +93,23 @@ interface UseBountyStatusFiltersArgs {
   hunterRequests: BountyRequestWithDetails[]
   statusFilterInProgress: InProgressStatusFilter
   statusFilterMyPostings: MyPostingsStatusFilter
+  /**
+   * Unreviewed applications per bounty id (poster side). An open posting with
+   * applications is the poster's most common "needs attention" state, and it is
+   * invisible from the bounty row alone.
+   */
+  applicationCounts?: Map<string, number>
 }
+
+/** One "Needs your attention" / "In progress" / … block in a management list. */
+export interface BountySection {
+  key: BountyAttentionGroup
+  label: string
+  data: Bounty[]
+}
+
+/** Order the sections are shown in: most urgent first, history last. */
+const SECTION_ORDER: BountyAttentionGroup[] = ['attention', 'active', 'waiting', 'past']
 
 export function useBountyStatusFilters({
   currentUserId,
@@ -98,6 +118,7 @@ export function useBountyStatusFilters({
   hunterRequests,
   statusFilterInProgress,
   statusFilterMyPostings,
+  applicationCounts,
 }: UseBountyStatusFiltersArgs) {
   // Latest completion submission per in-progress bounty across both lists. The
   // badge for in-progress work depends on it ("SUBMITTED FOR REVIEW" for the
@@ -176,29 +197,65 @@ export function useBountyStatusFilters({
   }, [hunterRequests])
 
   /**
-   * The status a bounty's card actually displays, resolved exactly the way
-   * BountyCard resolves it.
+   * The full lifecycle state for a row — the same resolver the detail screens
+   * use, so a card that a list files under "Needs your attention" opens onto a
+   * screen that says exactly the same thing.
    */
-  const getDisplayStatus = React.useCallback(
-    (b: Bounty, variant: 'owner' | 'hunter'): BountyDisplayStatus => {
+  const getLifecycle = React.useCallback(
+    (b: Bounty, variant: 'owner' | 'hunter'): BountyLifecycleState => {
       const submission = submissionsByBounty.get(String(b.id))
-      const hasPendingSubmission = b.status === 'in_progress' && submission?.status === 'pending'
-      return getBountyDisplayStatus({
-        bounty: b,
-        // Poster side: a hunter's work is waiting on this user's review.
-        reviewNeeded: variant === 'owner' && hasPendingSubmission,
-        // Hunter side: only *this* hunter's own submission counts — a bounty
-        // someone else is delivering must not read as submitted for review.
-        submittedForReview:
-          variant === 'hunter' &&
-          hasPendingSubmission &&
-          !!currentUserId &&
-          String(submission?.hunter_id) === String(currentUserId),
-        // The poster has no application of their own on their bounty.
+      return resolveBountyLifecycle({
+        bounty: b as any,
+        role: variant === 'owner' ? 'poster' : 'hunter',
         requestStatus: variant === 'hunter' ? requestStatusMap.get(String(b.id)) ?? null : null,
+        submissionStatus: submission?.status ?? null,
+        submissionIsMine:
+          !!currentUserId && !!submission && String(submission.hunter_id) === String(currentUserId),
+        applicationCount:
+          variant === 'owner' ? applicationCounts?.get(String(b.id)) ?? 0 : 0,
       })
     },
-    [submissionsByBounty, requestStatusMap, currentUserId]
+    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
+  )
+
+  /**
+   * The badge a bounty's card shows. Derived from the lifecycle rather than
+   * from getBountyDisplayStatus directly, because the lifecycle applies
+   * overlays the raw resolver can't see — most importantly that a hunter whose
+   * application is still `pending` on an already-claimed bounty was passed
+   * over. Resolving them separately is how a chip labelled "In Progress" ended
+   * up listing cards that read something else.
+   */
+  const getDisplayStatus = React.useCallback(
+    (b: Bounty, variant: 'owner' | 'hunter'): BountyDisplayStatus =>
+      getLifecycle(b, variant).status,
+    [getLifecycle]
+  )
+
+
+  /**
+   * Splits a list into ordered attention sections. Empty sections are dropped,
+   * and a list that resolves to a single section is returned unsectioned — a
+   * lone "In progress" header above one card is noise, not structure.
+   */
+  const buildSections = React.useCallback(
+    (list: Bounty[], variant: 'owner' | 'hunter'): BountySection[] => {
+      if (list.length === 0) return []
+      const buckets = new Map<BountyAttentionGroup, Bounty[]>()
+      for (const b of list) {
+        const group = getLifecycle(b, variant).group
+        const bucket = buckets.get(group)
+        if (bucket) bucket.push(b)
+        else buckets.set(group, [b])
+      }
+      const sections = SECTION_ORDER.filter((g) => (buckets.get(g)?.length ?? 0) > 0).map((g) => ({
+        key: g,
+        label: BOUNTY_ATTENTION_GROUP_LABELS[g],
+        data: buckets.get(g)!,
+      }))
+      return sections.length > 1 ? sections : []
+    },
+    [getLifecycle]
   )
 
   // Predicates for the "Review" chips — centralized so the chip count, the
@@ -237,11 +294,81 @@ export function useBountyStatusFilters({
     [myBounties, needsPosterReview]
   )
 
+  // Grouping only applies to the unfiltered list: once a chip has narrowed the
+  // list to one displayed status, section headers restate the chip.
+  const inProgressSections = React.useMemo(
+    () => (statusFilterInProgress === 'all' ? buildSections(displayedInProgress, 'hunter') : []),
+    [statusFilterInProgress, displayedInProgress, buildSections]
+  )
+
+  const myPostingsSections = React.useMemo(
+    () => (statusFilterMyPostings === 'all' ? buildSections(displayedMyPostings, 'owner') : []),
+    [statusFilterMyPostings, displayedMyPostings, buildSections]
+  )
+
+  /**
+   * Everything actually blocked on this user — broader than the "Review" chip,
+   * which only counts submitted work. This is what the tab badge should show:
+   * a poster with three applications waiting has something to do even though
+   * nothing has been submitted for review.
+   */
+  const inProgressAttentionCount = React.useMemo(
+    () => inProgressBounties.filter((b) => getLifecycle(b, 'hunter').needsAttention).length,
+    [inProgressBounties, getLifecycle]
+  )
+
+  const myPostingsAttentionCount = React.useMemo(
+    () => myBounties.filter((b) => getLifecycle(b, 'owner').needsAttention).length,
+    [myBounties, getLifecycle]
+  )
+
   return {
     getDisplayStatus,
+    getLifecycle,
     displayedInProgress,
     displayedMyPostings,
+    inProgressSections,
+    myPostingsSections,
     inProgressReviewCount,
     myPostingsReviewCount,
+    inProgressAttentionCount,
+    myPostingsAttentionCount,
   }
+}
+
+/**
+ * A row in a grouped management list: either a section header or a bounty.
+ *
+ * The lists are FlatLists (not SectionLists) because their rows are expandable
+ * and variable-height, and swapping the list type would have meant re-deriving
+ * the scroll/measure behaviour those rows depend on. Flattening keeps one list
+ * implementation and one renderer.
+ */
+export type BountyListRow =
+  | { kind: 'section'; id: string; label: string; count: number; group: BountyAttentionGroup }
+  | { kind: 'bounty'; id: string; bounty: Bounty }
+
+/**
+ * Flattens sections into list rows. With no sections (a filter chip is active,
+ * or everything falls in one group) the bounties are returned ungrouped, so the
+ * caller always renders the same list either way.
+ */
+export function toBountyListRows(sections: BountySection[], fallback: Bounty[]): BountyListRow[] {
+  if (sections.length === 0) {
+    return fallback.map((b) => ({ kind: 'bounty' as const, id: String(b.id), bounty: b }))
+  }
+  const rows: BountyListRow[] = []
+  for (const section of sections) {
+    rows.push({
+      kind: 'section',
+      id: `section:${section.key}`,
+      label: section.label,
+      count: section.data.length,
+      group: section.key,
+    })
+    for (const b of section.data) {
+      rows.push({ kind: 'bounty', id: String(b.id), bounty: b })
+    }
+  }
+  return rows
 }

@@ -22,6 +22,12 @@ import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
+import {
+  BOUNTY_DISPLAY_STATUS_COLORS,
+  BOUNTY_DISPLAY_STATUS_LABELS,
+} from '../../../lib/utils/bounty-display-status';
+import { resolveBountyLifecycle } from '../../../lib/utils/bounty-lifecycle';
 
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
@@ -113,35 +119,31 @@ export default function PublicBountyDetail() {
     }
   };
 
-  const getStatusBadgeColor = (status?: string) => {
-    switch (status) {
-      case 'open':
-        return '#059669'; // emerald-500
-      case 'in_progress':
-        return '#fbbf24'; // amber-400
-      case 'completed':
-        return '#6366f1'; // indigo-500
-      case 'archived':
-        return '#6b7280'; // gray-500
-      default:
-        return '#059669';
-    }
-  };
+  /**
+   * The badge and the explanation below it come from the same resolve, so this
+   * screen can never disagree with the card the visitor tapped to get here or
+   * with the hub they land on after applying. It replaced a local
+   * status→label/color switch that knew nothing about deadlines, the viewer's
+   * own application, or cancellations.
+   */
+  const viewerRole = useMemo(() => {
+    if (!bounty) return 'visitor' as const;
+    const isPoster =
+      !!currentUserId &&
+      (String(bounty.user_id) === String(currentUserId) ||
+        String(bounty.poster_id) === String(currentUserId));
+    if (isPoster) return 'poster' as const;
+    return hasApplied ? ('hunter' as const) : ('visitor' as const);
+  }, [bounty, currentUserId, hasApplied]);
 
-  const getStatusLabel = (status?: string) => {
-    switch (status) {
-      case 'open':
-        return 'OPEN';
-      case 'in_progress':
-        return 'IN PROGRESS';
-      case 'completed':
-        return 'COMPLETED';
-      case 'archived':
-        return 'ARCHIVED';
-      default:
-        return 'OPEN';
-    }
-  };
+  const lifecycle = useMemo(() => {
+    if (!bounty) return null;
+    return resolveBountyLifecycle({
+      bounty: bounty as any,
+      role: viewerRole,
+      requestStatus: hasApplied ? 'pending' : null,
+    });
+  }, [bounty, viewerRole, hasApplied]);
 
   const formatTimeAgo = (dateString?: string) => {
     if (!dateString) return '';
@@ -268,13 +270,36 @@ export default function PublicBountyDetail() {
   }
 
   if (error || !bounty) {
+    // Says what happened and what to do about it, rather than surfacing the
+    // raw service message with a single backwards exit.
+    const isMissing = /not found/i.test(error ?? '') || !bounty;
     return (
       <SafeAreaView style={s.errorContainer}>
-        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
-        <Text style={s.errorText}>{error || 'Failed to load bounty'}</Text>
-        <TouchableOpacity style={s.backButton} onPress={() => router.back()}>
+        <MaterialIcons name={isMissing ? 'search-off' : 'cloud-off'} size={48} color="#ef4444" />
+        <Text style={s.errorText}>
+          {isMissing
+            ? "This bounty isn't available anymore. It may have been completed, cancelled or removed."
+            : "We couldn't load this bounty. You're offline or the connection dropped — nothing has changed."}
+        </Text>
+        {!isMissing && (
+          <TouchableOpacity
+            style={s.backButton}
+            onPress={() => routeBountyId && loadBounty(routeBountyId)}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
+            <MaterialIcons name="refresh" size={20} color={theme.primaryLight} />
+            <Text style={s.backButtonText}>Try again</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={s.backButton}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <MaterialIcons name="arrow-back" size={20} color={theme.primaryLight} />
-          <Text style={s.backButtonText}>Go Back</Text>
+          <Text style={s.backButtonText}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -314,8 +339,19 @@ export default function PublicBountyDetail() {
             />
             
             <View style={s.heroTopRow}>
-              <View style={[s.statusBadge, { backgroundColor: getStatusBadgeColor(bounty.status) }]}>
-                <Text style={s.statusBadgeText}>{getStatusLabel(bounty.status)}</Text>
+              <View
+                style={[
+                  s.statusBadge,
+                  {
+                    backgroundColor: lifecycle
+                      ? BOUNTY_DISPLAY_STATUS_COLORS[lifecycle.status]
+                      : theme.primary,
+                  },
+                ]}
+              >
+                <Text style={s.statusBadgeText}>
+                  {lifecycle ? BOUNTY_DISPLAY_STATUS_LABELS[lifecycle.status] : 'OPEN'}
+                </Text>
               </View>
               <Text style={s.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
             </View>
@@ -350,6 +386,13 @@ export default function PublicBountyDetail() {
               </View>
             </View>
           </View>
+
+          {/* What this state means for the person reading it. No action button
+              here: the sticky Apply / View-your-application control below is
+              already this screen's single primary action. */}
+          {lifecycle && (
+            <BountyStatusPanel state={lifecycle} role={viewerRole} variant="banner" />
+          )}
 
           {/* Details Section */}
           <View style={s.detailsCard}>

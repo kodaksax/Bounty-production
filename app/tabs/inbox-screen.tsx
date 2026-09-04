@@ -31,14 +31,16 @@ import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
 import { AcceptFundingGate } from '../../components/accept-funding-gate'
-import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
+import type { BountyListRow, InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
   IN_PROGRESS_FILTERS,
   IN_PROGRESS_FILTER_LABELS,
   MY_POSTINGS_FILTERS,
   MY_POSTINGS_FILTER_LABELS,
+  toBountyListRows,
   useBountyStatusFilters,
 } from '../../hooks/useBountyStatusFilters'
+import { BountySectionHeader } from '../../components/ui/bounty-section-header'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { getBountyFundingRequirement } from '../../lib/services/bounty-funding-service'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -253,6 +255,19 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     () => bountyRequests.filter((r) => r.status === 'pending').length,
     [bountyRequests]
   )
+
+  // Unreviewed applications per posting. An open bounty with applications is
+  // the poster's most common "needs your attention" state and cannot be seen
+  // from the bounty row alone, so the grouping needs it explicitly.
+  const applicationCounts = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of bountyRequests) {
+      if (r.status !== 'pending') continue
+      const key = String(r.bounty_id)
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [bountyRequests])
 
   // Fetch data from the API
   useEffect(() => {
@@ -646,7 +661,9 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   // ---- Optimized FlatList callbacks ----
   // Memoized keyExtractor functions
-  const keyExtractorBounty = React.useCallback((item: Bounty) => item.id.toString(), []);
+  // Rows are either a section header or a bounty; ids are namespaced by
+  // toBountyListRows so a header can never collide with a bounty id.
+  const keyExtractorRow = React.useCallback((item: BountyListRow) => item.id, []);
   const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
 
   // NOTE: Do NOT provide getItemLayout for expandable / variable-height rows.
@@ -661,7 +678,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   }), []);
 
   // Memoized render functions for better performance
-  const renderMyPostingItem = React.useCallback(({ item: bounty }: { item: Bounty; index: number }) => (
+  const renderMyPostingItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
+    if (row.kind === 'section') {
+      return <BountySectionHeader label={row.label} count={row.count} group={row.group} />
+    }
+    const bounty = row.bounty
+    return (
     <View
       ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
       collapsable={false}
@@ -679,11 +701,18 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         variant={'owner'}
         isListScrolling={isListScrolling}
         onRefresh={refreshAll}
+        applicationCount={applicationCounts.get(String(bounty.id)) ?? 0}
       />
     </View>
-  ), [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, refreshAll, bountiesWithPendingRequestsSet]);
+    )
+  }, [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, refreshAll, bountiesWithPendingRequestsSet, applicationCounts]);
 
-  const renderInProgressItem = React.useCallback(({ item: bounty }: { item: Bounty; index: number }) => (
+  const renderInProgressItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
+    if (row.kind === 'section') {
+      return <BountySectionHeader label={row.label} count={row.count} group={row.group} />
+    }
+    const bounty = row.bounty
+    return (
     <View
       ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
       collapsable={false}
@@ -701,7 +730,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         onRefresh={refreshAll}
       />
     </View>
-  ), [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
+    )
+  }, [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
 
   // Memoized styles that must be called unconditionally (before any early returns)
   const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
@@ -715,8 +745,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const {
     displayedInProgress,
     displayedMyPostings,
+    inProgressSections,
+    myPostingsSections,
     inProgressReviewCount,
     myPostingsReviewCount,
+    inProgressAttentionCount,
+    myPostingsAttentionCount,
   } = useBountyStatusFilters({
     currentUserId,
     myBounties,
@@ -724,14 +758,29 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     hunterRequests,
     statusFilterInProgress,
     statusFilterMyPostings,
+    applicationCounts,
   })
 
+  // Section headers are interleaved into the same FlatList as the cards — see
+  // toBountyListRows for why these lists aren't SectionLists.
+  const inProgressRows = React.useMemo(
+    () => toBountyListRows(inProgressSections, displayedInProgress),
+    [inProgressSections, displayedInProgress]
+  )
+  const myPostingsRows = React.useMemo(
+    () => toBountyListRows(myPostingsSections, displayedMyPostings),
+    [myPostingsSections, displayedMyPostings]
+  )
+
+  // Badges count everything actually blocked on this user, not just submitted
+  // work: a poster with applications waiting has something to do even though
+  // nothing has been submitted for review yet.
   const getTabBadgeCount = React.useCallback((tabId: string) => {
     if (tabId === 'requests') return pendingRequestCount
-    if (tabId === 'inProgress') return inProgressReviewCount
-    if (tabId === 'myPostings') return myPostingsReviewCount
+    if (tabId === 'inProgress') return inProgressAttentionCount
+    if (tabId === 'myPostings') return myPostingsAttentionCount
     return 0
-  }, [inProgressReviewCount, myPostingsReviewCount, pendingRequestCount])
+  }, [inProgressAttentionCount, myPostingsAttentionCount, pendingRequestCount])
 
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
@@ -911,8 +960,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             {activeTab === "inProgress" ? (
               <FlatList
                 ref={inProgressListRef}
-                data={displayedInProgress}
-                keyExtractor={keyExtractorBounty}
+                data={inProgressRows}
+                keyExtractor={keyExtractorRow}
                 extraData={{ inProgressBounties, expandedMap }}
                 ListHeaderComponent={(
                   <View>
@@ -1066,8 +1115,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             ) : (
               <FlatList
                 ref={myPostingsListRef}
-                data={displayedMyPostings}
-                keyExtractor={keyExtractorBounty}
+                data={myPostingsRows}
+                keyExtractor={keyExtractorRow}
                 extraData={{ myBounties, expandedMap }}
                 ListHeaderComponent={(
                   <View>

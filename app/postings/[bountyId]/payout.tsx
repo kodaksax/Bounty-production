@@ -23,6 +23,7 @@ import { getHoursSinceClaimed } from '../../../lib/services/bounty-request-servi
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
 import {
   bountyHoldsUnreleasedEscrow,
   isPhase2Bounty,
@@ -67,11 +68,12 @@ export default function PayoutScreen() {
         throw new Error('Bounty not found');
       }
 
-      // Check ownership
-      if (data.user_id !== currentUserId) {
-        Alert.alert('Access Denied', 'You can only manage payout for your own bounties.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+      // Ownership via the shared helper: this compared `user_id` alone, so a
+      // bounty carrying a distinct `poster_id` locked its real poster out of
+      // their own payout screen. Non-posters are routed to the surface that is
+      // theirs rather than alerted and bounced backwards.
+      if (!isBountyPoster(data, currentUserId)) {
+        router.replace({ pathname: '/bounty/[id]', params: { id } });
         return;
       }
 

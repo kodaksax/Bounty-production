@@ -85,9 +85,10 @@ export default function HunterPayoutScreen() {
       });
 
       if (requests.length === 0) {
-        Alert.alert('No Application', 'You have not applied to this bounty.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        // No application on this bounty: send them to the read-only view where
+        // they can actually apply. The old alert + router.back() dead-ended
+        // anyone who arrived from a notification or a shared link.
+        router.replace({ pathname: '/bounty/[id]/public', params: { id } });
         return;
       }
 
@@ -97,7 +98,7 @@ export default function HunterPayoutScreen() {
       // If not accepted yet, go back to apply screen
       if (hunterRequest.status !== 'accepted') {
         router.replace({
-          pathname: '/in-progress/[bountyId]/hunter/apply',
+          pathname: '/in-progress/[bountyId]/hunter',
           params: { bountyId: id },
         });
         return;

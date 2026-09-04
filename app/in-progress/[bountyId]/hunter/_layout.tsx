@@ -1,39 +1,39 @@
 /**
  * Hunter Flow Layout
- * Stack navigator for hunter in-progress bounty workflow
- * 
- * Uses the BackgroundColorContext to ensure the safe area colors match
- * the dark green background (#0B0F14) used in hunter screens.
+ * Stack navigator for the hunter's in-progress bounty workflow.
+ *
+ * The safe-area color follows the app theme rather than a hardcoded
+ * near-black: the hunter hub (index) is themed like the rest of the app, so
+ * pinning the group to one dark value put a black band above a light-theme
+ * screen. The remaining step screens still paint their own dark surfaces, and
+ * are unaffected.
  */
 
 import { Stack } from 'expo-router';
 import React, { useEffect } from 'react';
 import { useBackgroundColor } from '../../../../lib/context/BackgroundColorContext';
-
-/** Dark green background color used in all hunter in-progress screens */
-const HUNTER_BG_COLOR = '#0B0F14';
+import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 
 export default function HunterFlowLayout() {
   const { pushColor, popColor } = useBackgroundColor();
+  const { theme } = useAppThemeContext();
 
   useEffect(() => {
-    // Push the hunter background color when this layout mounts
-    pushColor(HUNTER_BG_COLOR);
-    
+    pushColor(theme.background);
     return () => {
-      // Pop the color when unmounting to restore previous color
-      popColor(HUNTER_BG_COLOR);
+      popColor(theme.background);
     };
-  }, [pushColor, popColor]);
+  }, [pushColor, popColor, theme.background]);
 
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: HUNTER_BG_COLOR },
+        contentStyle: { backgroundColor: theme.background },
         animation: 'slide_from_right',
       }}
     >
+      <Stack.Screen name="index" />
       <Stack.Screen name="apply" />
       <Stack.Screen name="work-in-progress" />
       <Stack.Screen name="review-and-verify" />

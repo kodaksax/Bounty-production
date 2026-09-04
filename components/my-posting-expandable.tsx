@@ -12,6 +12,7 @@ import { userProfileService } from 'lib/services/userProfile';
 import type { Attachment, Conversation } from 'lib/types';
 import { getCurrentUserId } from 'lib/utils/data-utils';
 import { bountyHoldsUnreleasedEscrow } from 'lib/utils/payment-architecture';
+import { getBountyStages } from 'lib/utils/bounty-lifecycle';
 import { useEffect, useMemo, useReducer, useState } from 'react';
 import {
   ActivityIndicator,
@@ -63,14 +64,17 @@ type Props = {
   isListScrolling?: boolean;
   onExpandedLayout?: () => void;
   onRefresh?: () => void;
+  /**
+   * Unreviewed applications on this bounty. Supplied by the list screens, which
+   * batch-load requests for every open posting; without it the card's next-step
+   * line would tell a poster with applications waiting that nobody has applied.
+   */
+  applicationCount?: number;
 };
 
-const STAGES = [
-  { id: 'apply_work', label: 'Apply & Work', icon: 'work' },
-  { id: 'working_progress', label: 'Working Progress', icon: 'trending-up' },
-  { id: 'review_verify', label: 'Review & Verify', icon: 'rate-review' },
-  { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
-];
+// Stage ids are shared with lib/utils/bounty-lifecycle.ts; the labels come from
+// getBountyStages so they read from the viewer's side ("Your review" for a
+// poster, "In review" for a hunter) instead of one ambiguous label for both.
 const EMPTY_CONVERSATION_NAME = '';
 
 type ProofDraftItem = {
@@ -98,6 +102,7 @@ export function MyPostingExpandable({
   isListScrolling,
   onExpandedLayout,
   onRefresh,
+  applicationCount,
 }: Props) {
   const router = useRouter();
   type UIState = {
@@ -945,10 +950,15 @@ export function MyPostingExpandable({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const stages = useMemo(
+    () => getBountyStages(variant === 'owner' ? 'poster' : 'hunter'),
+    [variant]
+  );
+
   const currentStageIndex = useMemo(() => {
     const stageToUse = localStageOverride || currentStage;
-    return STAGES.findIndex(s => s.id === stageToUse);
-  }, [currentStage, localStageOverride]);
+    return stages.findIndex(s => s.id === stageToUse);
+  }, [currentStage, localStageOverride, stages]);
 
   const awaitingPosterAction =
     !isOwner && bounty.status === 'in_progress' && (submissionPending || hasSubmission);
@@ -1113,6 +1123,8 @@ export function MyPostingExpandable({
         }
         requestStatus={requestStatus}
         onWithdrawApplication={onWithdrawApplication}
+        role={variant === 'owner' ? 'poster' : 'hunter'}
+        applicationCount={applicationCount}
       />
       {/* Tap-to-expand hint — shown only when collapsed */}
       {!expanded && (
@@ -1183,7 +1195,7 @@ export function MyPostingExpandable({
           </View>
 
           {/* Timeline bubbles - using new Stepper component */}
-          <Stepper stages={STAGES} activeIndex={currentStageIndex} variant="compact" />
+          <Stepper stages={stages} activeIndex={currentStageIndex} variant="compact" />
 
           {/* Pre-acceptance info when open */}
           {bounty.status === 'open' && (
