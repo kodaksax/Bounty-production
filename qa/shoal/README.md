@@ -192,8 +192,9 @@ reason to set it.
 | `BOUNTY_SHOAL_URL` | optional | Override the target URL for the chosen env |
 | `BOUNTY_SHOAL_HOME` | optional | Where the Shoal checkout lives (set this in CI for caching) |
 | `BOUNTY_SHOAL_PROVIDER` / `_MODEL` | optional | Defaults for provider/model |
-| `BOUNTY_SHOAL_TEST_EMAIL` / `_PASSWORD` | auth scenarios | Dedicated poster-side test account |
-| `BOUNTY_SHOAL_HUNTER_EMAIL` / `_PASSWORD` | hunter scenarios | Dedicated hunter-side test account |
+| `BOUNTY_SHOAL_POOL_SECRET` | **auth scenarios** | Derives every per-agent account password. Seeding and running must use the same value |
+| `BOUNTY_SHOAL_TEST_EMAIL` / `_PASSWORD` | manual inspection | The shared poster account. No longer handed to agents |
+| `BOUNTY_SHOAL_HUNTER_EMAIL` / `_PASSWORD` | manual inspection | The shared hunter account. No longer handed to agents |
 | `BOUNTY_SHOAL_DATABASE_URL` | oracles | Postgres URL for the **non-production** target project |
 | `BOUNTY_SHOAL_POSTER_ID` | `seed-race` | The test poster who owns the seeded bounty |
 | `BOUNTY_SHOAL_RACE_BOUNTY_ID` | race scenario | The contended bounty |
@@ -202,7 +203,7 @@ reason to set it.
 credential, or a real user's credentials in any of these. Everything here is designed
 around throwaway accounts on non-production projects.
 
-### Test accounts
+### Test accounts — one per agent
 
 Provisioned by `bin/seed.mjs`, not by hand — it is idempotent, so re-running it is safe
 and it doubles as the CI setup step:
@@ -210,16 +211,64 @@ and it doubles as the CI setup step:
 ```bash
 export BOUNTY_SHOAL_DATABASE_URL='postgresql://postgres.<ref>:<pw>@aws-1-<region>.pooler.supabase.com:5432/postgres'
 export BOUNTY_SHOAL_SERVICE_ROLE_KEY=$(grep '^SUPABASE_SERVICE_ROLE_KEY=' .env.staging | cut -d= -f2-)
+export BOUNTY_SHOAL_POOL_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")
 
-node qa/shoal/bin/seed.mjs accounts --env staging   # poster + hunter, onboarded, funded
+node qa/shoal/bin/seed.mjs accounts --env staging   # shared pair + the per-agent pool
 node qa/shoal/bin/seed.mjs bounty   --env staging   # an open "[shoal] ..." bounty to act on
-node qa/shoal/bin/seed.mjs status   --env staging   # what exists right now
+node qa/shoal/bin/seed.mjs status   --env staging   # what exists right now, incl. pool coverage
 ```
 
-It creates a **poster** (onboarded, balance >= 500 test funds) and a **hunter**
-(onboarded), prints the passwords once, and never writes them to a file. Everything it
-creates is identifiable: accounts use `qa+shoal-*@bountyfinder.test`, bounties are titled
-`[shoal] ...`.
+**Keep `BOUNTY_SHOAL_POOL_SECRET`.** Every per-agent password is
+`HMAC-SHA256(secret, email)`, so `seed.mjs` and `run.mjs` agree on the whole pool from
+that one value and there is no credential file to write, commit or rotate. Changing it
+rotates every pool password at the next seed; losing it means re-seeding with a new one.
+
+`accounts` creates:
+
+* the **shared pair** — `qa+shoal-poster@…` and `qa+shoal-hunter@…`, passwords printed
+  once. These are no longer given to agents; they are there for you to sign into by hand.
+* the **per-agent pool** — `qa+shoal-<role>-NN@bountyfinder.test` for both roles, sized by
+  default to the largest authenticated scenario's swarm (`--pool <n>` to override). Slot
+  `00` is reserved for manual inspection and is never handed to an agent; agents get
+  `01..N`. Poster-side accounts are onboarded and funded to 500 test units; hunter-side
+  are onboarded.
+
+Everything it creates is identifiable: accounts use `qa+shoal-*@bountyfinder.test`,
+bounties are titled `[shoal] ...`.
+
+#### Why one account per agent
+
+Until this existed, every agent in an authenticated swarm was handed the *same* account
+in the shared `--task` string. Five or eight concurrent sessions on one user post, apply,
+fund and cancel over each other's rows, so an agent reporting "my draft vanished" or
+"there is a posting I never made" could not be distinguished from another agent's writes
+— the state-breaker, composer-adversarial and completion scenarios could not produce a
+trustworthy finding at all. (It also poisoned the `duplicate-bounties` oracle, which
+groups by `poster_id`: five agents each posting the same seeded errand once looks exactly
+like one agent double-submitting.)
+
+Shoal has no `storageState` equivalent, so credentials still have to reach the agent as
+text — but the delivery channel is now the **persona**, not the task:
+
+* `pickPersonas(n, ids)` assigns personas to swarm slots by cycling the selected list
+  (`pool[i % pool.length]`), so N distinct ids across a swarm of N is a guaranteed 1:1
+  binding;
+* `persona.profile` is interpolated verbatim into exactly that one agent's system prompt.
+
+So `bin/run.mjs` clones the scenario's personas once per slot, appends that slot's
+account to each clone's profile, and installs them as a marked block in Shoal's persona
+library for the duration of the run (`bin/lib/run-personas.mjs`). The clones keep the
+base persona's **name**, because both Shoal's report and `bin/report.mjs` count reach by
+distinct persona name — unique names would inflate "3 personas hit this" into "8".
+
+The block is removed on every exit path (normal, `--dry-run`, throw, SIGINT/SIGTERM), and
+a block left by a killed run is stripped before a new one is written. Because that library
+is a single shared file inside the Shoal checkout, **do not run two authenticated swarms
+against the same checkout at once** (they would also collide on the dashboard port).
+
+The task text now contains no credentials at all, so they no longer reach Shoal's report
+or the live dashboard, and no agent sees another agent's password. `run.mjs` still redacts
+every pool password from what it writes, as a second line of defence.
 
 Writing to `profiles` goes through the sanctioned transaction-local
 `app.bypass_profile_guard` GUC (see
@@ -233,10 +282,8 @@ protected columns. The guard itself is never weakened.
 > The project ref lives in the *username*, which is why `resolveDatabaseTarget()` parses
 > it there and refuses any URL whose project it cannot identify.
 
-Shoal has no way to inject an authenticated browser context, so scenarios that need a
-session hand the agent the credentials **inside the task text**. `bin/run.mjs` redacts the
-password from the written report afterwards, but it is visible in the live dashboard
-stream while the run is in flight. Use accounts you would be happy to throw away.
+These are throwaway accounts on a non-production project, and nothing else. Treat the
+pool secret like any other CI secret.
 
 ---
 
@@ -299,29 +346,33 @@ This is exactly why the guard inspects the **served bundle** rather than trustin
 files. Check the `[guard] supabase refs in served bundle` line it prints on every run —
 that line is the actual evidence about which backend the swarm is about to hit.
 
-**Authenticated flows currently crash in the static-export harness.** Signing in
-succeeds (the Supabase token is issued), but the client-side navigation that follows
-throws
+**`Alert.alert` is a no-op on react-native-web — shimmed, do not remove.**
+react-native-web ships `class Alert { static alert() {} }`. This app calls
+`Alert.alert(...)` ~509 times, and that is where it reports nearly every failure and asks
+nearly every confirmation: validation errors, payment failures, "are you sure you want to
+cancel this bounty", sign-in errors. Unshimmed, **every one of them is silently swallowed
+on web**, which has two consequences for this layer:
 
-```
-Cannot destructure property 'ErrorBoundary' of 'undefined' as it is undefined
-```
+* error-path findings are impossible to produce — the swarm cannot report a message it
+  was never shown;
+* genuine silent failures are indistinguishable from suppressed ones. The
+  `trust-audit` P0 *"'Post Bounty' button silently does nothing"* is exactly this shape:
+  the button may well have been telling the agent what was wrong.
 
-and the error screen's own "Try Again" is dead, so the agent is stranded. It reproduces
-deterministically, and it is *not* caused by a missing asset (that was a separate
-`serve.mjs` bug, now fixed and regression-tested in `test/static-server.test.mjs`).
+`metro.config.cjs` therefore substitutes `stubs/react-native-web-alert.web.js` on web (see
+`stubs/web-stub-resolver.cjs`). It renders a real `role="alertdialog"` with working
+buttons, serializes alerts the way native does, and logs each one to
+`window.__BOUNTY_ALERTS__` for the harness. Behaviour is pinned by
+`__tests__/unit/web-alert-shim.test.ts`; the wiring by
+`__tests__/unit/metro-web-stubs.test.ts`. Native builds never see it.
 
-`ErrorBoundary` destructuring is **expo-router internal**, and a full page load of `/`
-works fine while the post-sign-in client transition does not — so the leading hypothesis
-is an artifact of `web.output: "static"` route loading rather than a product defect. It
-has **not** been confirmed against the Metro dev server or a native build, because
-`expo start --web` does not run on this machine (see below).
-
-**Until this is resolved, every `requiresAuth` scenario is unreliable**: the agents spend
-their budget on the crash screen rather than the flow under test. Unauthenticated
-scenarios (`smoke`, `poster-conversion`, `poster-rage-quit`, `trust-audit`) are
-unaffected. Resolving this is the top priority for this layer — see the report's next
-actions.
+**The post-sign-in `ErrorBoundary` crash is resolved.** Authenticated flows used to die
+after sign-in with `Cannot destructure property 'ErrorBoundary' of 'undefined'`. That was
+expo-router surfacing a native-only package throwing during route-module evaluation, and
+it is fixed by the web stubs in `stubs/web-stub-resolver.cjs`. The 2026-09-03
+`state-breaker` and `hunter-conversion` runs signed in and reached the wallet and feed
+with no trace of it. Keep the stub list in mind when adding a native-only dependency: a
+new one reintroduces exactly this crash, one frame removed from its cause.
 
 **`expo start --web` crashes here.** On Windows it dies with `EMFILE: too many open files`
 during source-map generation for the static-render bundle, after ~8 minutes of bundling.
@@ -339,8 +390,9 @@ during source-map generation for the static-render bundle, after ~8 minutes of b
   (`playwright.config.ts`).
 * **No custom persona/strategy file path.** Both libraries load from fixed paths inside
   the package; hence the merge in `setup.mjs`.
-* **No authenticated-context injection.** No `storageState` equivalent, so credentials go
-  in the task text (see above).
+* **No authenticated-context injection.** No `storageState` equivalent, so credentials
+  must reach the agent as prompt text. They go in the **persona**, one account per swarm
+  slot, rather than in the shared task — see *Test accounts — one per agent* above.
 * **Race ground truth is demo-only.** Shoal's server-verified race oracle is wired to its
   bundled bait shop, not to arbitrary targets — `bin/oracle.mjs` supplies Bounty's.
 * **Reports are written to `process.cwd()`** with fixed filenames, so `run.mjs` runs each

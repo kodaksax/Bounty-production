@@ -26,8 +26,8 @@ import * as path from 'path';
 // The reconciliation decision rules are plain TypeScript with no imports, so
 // they can be executed here directly rather than pattern-matched in source.
 import {
-  isSafeStatusRepair,
-  normalizeStripeStatus,
+    isSafeStatusRepair,
+    normalizeStripeStatus,
 } from '../../supabase/functions/reconciliation/reconciliation-logic';
 
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '../../', p), 'utf8');
@@ -73,6 +73,63 @@ describe('invariant: one financial event produces one ledger event', () => {
     // Reconciliation observes and may advance a status; inventing a ledger row
     // would manufacture a financial event that never happened.
     expect(reconciliationSource).not.toMatch(/from\('wallet_transactions'\)[\s\S]{0,80}\.insert\(/);
+  });
+});
+
+describe('wallet edge function error contract', () => {
+  it('returns request ids on JSON responses for incident correlation', () => {
+    expect(walletSource).toContain('function generateRequestId');
+    expect(walletSource).toContain("'X-Request-Id': requestId");
+    expect(walletSource).toContain('requestId }');
+  });
+
+  it('classifies escrow failures without exposing database internals', () => {
+    for (const code of [
+      'bounty_id_required',
+      'invalid_amount',
+      'insufficient_balance',
+      'escrow_create_failed',
+      'duplicate_transaction',
+    ]) {
+      expect(walletSource).toContain(`'${code}'`);
+    }
+  });
+
+  it('classifies refund failures and pending-refund recovery failures', () => {
+    for (const code of [
+      'bounty_not_found',
+      'not_bounty_owner',
+      'pending_refund_recovery_failed',
+      'refund_create_failed',
+      'refund_finalize_failed',
+    ]) {
+      expect(walletSource).toContain(`'${code}'`);
+    }
+  });
+
+  it('classifies release failures and pending-release recovery failures', () => {
+    for (const code of [
+      'settlement_state_validation_failed',
+      'pending_release_recovery_failed',
+      'poster_balance_validation_failed',
+      'poster_balance_update_failed',
+      'release_create_failed',
+      'release_finalize_failed',
+    ]) {
+      expect(walletSource).toContain(`'${code}'`);
+    }
+  });
+
+  it('marks duplicate settlements as non-retryable instead of bare failures', () => {
+    const duplicateCount = (
+      walletSource.match(/code: 'duplicate_transaction',[\s\S]{0,80}retryable: false/g) ?? []
+    ).length;
+    expect(duplicateCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('describes duplicate settlement type explicitly so clients do not parse messages', () => {
+    expect(walletSource).toContain('settlementType: settlement.type');
+    expect(walletSource).toContain('settlementStatus: settlement.status');
   });
 });
 

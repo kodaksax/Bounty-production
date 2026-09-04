@@ -174,7 +174,14 @@ export default QuickStepLayout;
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: theme.background },
+    // `overflow: 'hidden'` clips the entrance slide below. The animated body
+    // mounts translated ~28% of the screen width to one side (see
+    // SLIDE_DISTANCE) and eases to 0. On native that offset is already clipped
+    // by the screen bounds, but on react-native-web nothing clips it, so the
+    // document's scrollWidth grows by that offset for the duration of the
+    // animation — a transient horizontal overflow on the composer at phone
+    // width. Clipping here contains the slide to the layout on every platform.
+    root: { flex: 1, backgroundColor: theme.background, overflow: 'hidden' },
     progressRow: {
       flexDirection: 'row',
       alignItems: 'center',

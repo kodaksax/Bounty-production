@@ -694,6 +694,21 @@ export const bountyRequestService = {
               );
             }
           }
+          // Target bounty is no longer open (claimed, cancelled or completed
+          // between the detail page rendering and this insert). The DB rejects
+          // this via the bounty_requests BEFORE INSERT trigger. Surface it as a
+          // normal failure with the real reason rather than a generic throw.
+          if (/no longer accepting applications|not open|does not exist/i.test(detailedMessage)) {
+            logger.error('Bounty request rejected: target bounty not open', {
+              bountyId: normalizedRequest.bounty_id,
+              hunterId: normalizedRequest.hunter_id,
+              error: detailedMessage,
+            });
+            return {
+              success: false,
+              error: 'This bounty is no longer accepting applications.',
+            };
+          }
           // Log Supabase error details for better diagnostics
           logger.error('Supabase error creating bounty request', {
             request: normalizedRequest,

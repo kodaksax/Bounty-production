@@ -19,6 +19,7 @@
  * the current design.
  */
 
+import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -90,6 +91,12 @@ export default function OnboardingWelcome() {
     router.push('/auth/sign-in-form');
   };
 
+  const handleHowItWorks = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('first_screen_how_it_works_tapped', { variant: 'poster_first' });
+    router.push('/legal/how-it-works' as Href);
+  };
+
   // Signed-in (or still-resolving) visitors are redirected by the effect
   // above and must never see the pre-auth CTAs even for one frame.
   if (authLoading || isLoggedIn) {
@@ -114,6 +121,7 @@ export default function OnboardingWelcome() {
       onPosterPress={() => handleSelectIntent('poster')}
       onHunterPress={() => handleSelectIntent('hunter')}
       onLoginPress={handleLogIn}
+      onHowItWorksPress={handleHowItWorks}
     />
   );
 }

@@ -10,32 +10,45 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
-import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
 import {
-  describeSettlement,
-  deriveSettlementState,
-  type SettlementState,
-} from '../_shared/settlement-state.ts';
+    isPaymentIntentId,
+    verifyDepositPaymentIntent,
+    type DepositPaymentIntent,
+} from '../_shared/deposit-verification.ts';
 import {
-  resolveReleasePayee,
-  type ReleaseBountyLookupClient,
+    resolveReleasePayee,
+    type ReleaseBountyLookupClient,
 } from '../_shared/release-authorization.ts';
 import {
-  isPaymentIntentId,
-  verifyDepositPaymentIntent,
-  type DepositPaymentIntent,
-} from '../_shared/deposit-verification.ts';
+    deriveSettlementState,
+    describeSettlement,
+    type SettlementState,
+} from '../_shared/settlement-state.ts';
+import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-request-id',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
+function generateRequestId(prefix = 'wallet'): string {
+  try {
+    return `${prefix}_${crypto.randomUUID()}`;
+  } catch {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+function jsonResponse(data: unknown, status = 200, requestId = generateRequestId()) {
+  const body =
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? { ...(data as Record<string, unknown>), requestId }
+      : data;
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-Id': requestId },
   });
 }
 
@@ -56,6 +69,10 @@ function isApplyDepositResult(obj: unknown): obj is ApplyDepositResult {
   return typeof o.applied === 'boolean';
 }
 
+function errorPayload(error: string, code: string, retryable = false) {
+  return { error, code, retryable };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -66,7 +83,7 @@ Deno.serve(async (req: Request) => {
   // propagating to Deno's default handler (which returns text/plain; 500).
   try {
     if (req.method !== 'GET' && req.method !== 'POST') {
-      return jsonResponse({ error: 'Method not allowed' }, 405);
+      return jsonResponse(errorPayload('Method not allowed', 'method_not_allowed'), 405);
     }
 
     const url = new URL(req.url);
@@ -83,7 +100,13 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       console.warn('[wallet edge fn] missing Authorization header');
-      return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401);
+      return jsonResponse(
+        errorPayload(
+          'Authentication required. Please sign in to continue.',
+          'authentication_required'
+        ),
+        401
+      );
     }
     const token = authHeader.substring(7);
 
@@ -92,13 +115,26 @@ Deno.serve(async (req: Request) => {
       const { data, error: authError } = await supabase.auth.getUser(token);
       if (authError || !data?.user) {
         console.warn('[wallet edge fn] invalid or expired token', authError || 'no user');
-        return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401);
+        return jsonResponse(
+          errorPayload(
+            'Authentication required. Please sign in to continue.',
+            'authentication_required'
+          ),
+          401
+        );
       }
       userId = data.user.id;
     } catch (authException: unknown) {
       const msg = authException instanceof Error ? authException.message : String(authException);
       console.error('[wallet edge fn] getUser threw unexpectedly:', msg);
-      return jsonResponse({ error: 'Authentication service unavailable. Please try again.' }, 503);
+      return jsonResponse(
+        errorPayload(
+          'Authentication service unavailable. Please try again.',
+          'authentication_unavailable',
+          true
+        ),
+        503
+      );
     }
 
     try {
@@ -120,16 +156,25 @@ Deno.serve(async (req: Request) => {
         try {
           body = await req.json();
         } catch {
-          return jsonResponse({ error: 'Invalid JSON body' }, 400);
+          return jsonResponse(
+            { error: 'Invalid JSON body', code: 'invalid_json', retryable: false },
+            400
+          );
         }
 
-        const requestedAmount =
-          typeof body.amount === 'number' ? body.amount : Number(body.amount);
+        const requestedAmount = typeof body.amount === 'number' ? body.amount : Number(body.amount);
         const paymentIntentId =
           typeof body.paymentIntentId === 'string' ? body.paymentIntentId.trim() : '';
 
         if (!paymentIntentId) {
-          return jsonResponse({ error: 'paymentIntentId is required' }, 400);
+          return jsonResponse(
+            {
+              error: 'paymentIntentId is required',
+              code: 'payment_intent_required',
+              retryable: false,
+            },
+            400
+          );
         }
         if (!isPaymentIntentId(paymentIntentId)) {
           logDepositRejected('deposit_verification_failed', {
@@ -137,13 +182,27 @@ Deno.serve(async (req: Request) => {
             userId,
             paymentIntentId,
           });
-          return jsonResponse({ error: 'Invalid paymentIntentId' }, 400);
+          return jsonResponse(
+            {
+              error: 'Invalid paymentIntentId',
+              code: 'invalid_payment_intent_id',
+              retryable: false,
+            },
+            400
+          );
         }
 
         const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
         if (!stripeKey) {
           console.error('[wallet] STRIPE_SECRET_KEY is not configured');
-          return jsonResponse({ error: 'Payment verification unavailable' }, 503);
+          return jsonResponse(
+            {
+              error: 'Payment verification unavailable',
+              code: 'payment_verification_unavailable',
+              retryable: true,
+            },
+            503
+          );
         }
         const stripe = new Stripe(stripeKey, {
           apiVersion: '2023-10-16',
@@ -168,7 +227,11 @@ Deno.serve(async (req: Request) => {
           // Stripe outage) is transient and must be retryable.
           const isMissing = code === 'resource_missing' || status === 404;
           return jsonResponse(
-            { error: isMissing ? 'Payment not found' : 'Unable to verify payment' },
+            {
+              error: isMissing ? 'Payment not found' : 'Unable to verify payment',
+              code: isMissing ? 'payment_intent_not_found' : 'payment_verification_failed',
+              retryable: !isMissing,
+            },
             isMissing ? 404 : 502
           );
         }
@@ -188,7 +251,10 @@ Deno.serve(async (req: Request) => {
             paymentIntentId,
             status: paymentIntent.status,
           });
-          return jsonResponse({ error: verdict.error }, verdict.status);
+          return jsonResponse(
+            { error: verdict.error, code: verdict.reason, retryable: false },
+            verdict.status
+          );
         }
 
         const amount = verdict.amount;
@@ -222,7 +288,10 @@ Deno.serve(async (req: Request) => {
 
         if (applyErr) {
           console.error('[wallet] apply_deposit error:', applyErr);
-          return jsonResponse({ error: 'Failed to record deposit' }, 500);
+          return jsonResponse(
+            { error: 'Failed to record deposit', code: 'deposit_record_failed', retryable: true },
+            500
+          );
         }
 
         // Normalize possible shapes: RPC may return an object or an array with a single row.
@@ -263,6 +332,8 @@ Deno.serve(async (req: Request) => {
               tx_id,
               balance: null,
               warning: 'Deposit recorded, but failed to fetch updated balance',
+              code: 'deposit_recorded_balance_refresh_failed',
+              retryable: true,
             },
             500
           );
@@ -277,15 +348,16 @@ Deno.serve(async (req: Request) => {
       if (subPath === '/balance') {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select(
-            'balance, payout_failed_at, payout_failure_code, stripe_connect_account_id'
-          )
+          .select('balance, payout_failed_at, payout_failure_code, stripe_connect_account_id')
           .eq('id', userId)
           .maybeSingle();
 
         if (error) {
           console.error('[wallet] Error fetching balance:', error);
-          return jsonResponse({ error: 'Failed to fetch balance' }, 500);
+          return jsonResponse(
+            errorPayload('Failed to fetch balance', 'balance_fetch_failed', true),
+            500
+          );
         }
 
         // profiles.balance is the sole source of truth for the current balance.
@@ -363,11 +435,11 @@ Deno.serve(async (req: Request) => {
           // someone who still holds custodial funds.
           const v1PositionKnown = !unsettledErr && !historyErr;
           const hasLiveV1Position =
-            !v1PositionKnown ||
-            (unsettledCount ?? 0) > 0 ||
-            Number(balance) > 0;
+            !v1PositionKnown || (unsettledCount ?? 0) > 0 || Number(balance) > 0;
           const isV3Only =
-            v1PositionKnown && !hasLiveV1Position && ((anyHistoryCount ?? 0) === 0 || Number(balance) === 0);
+            v1PositionKnown &&
+            !hasLiveV1Position &&
+            ((anyHistoryCount ?? 0) === 0 || Number(balance) === 0);
 
           // Has this hunter ever been on the receiving end of a v3 bounty?
           // Without this, every v1 hunter who happens to hold a Connect
@@ -385,7 +457,9 @@ Deno.serve(async (req: Request) => {
 
             const { data: cached } = await supabase
               .from('connect_balance_cache')
-              .select('stripe_connect_account_id, available_cents, pending_cents, currency, fetched_at')
+              .select(
+                'stripe_connect_account_id, available_cents, pending_cents, currency, fetched_at'
+              )
               .eq('user_id', userId)
               .maybeSingle();
 
@@ -469,9 +543,7 @@ Deno.serve(async (req: Request) => {
         // both are meaningful they are reported separately and the legacy
         // number stays in `balance`, so existing clients are unchanged.
         const legacyBalance = Number(balance) || 0;
-        const stripeAvailableDollars = stripeBalance
-          ? stripeBalance.availableCents / 100
-          : 0;
+        const stripeAvailableDollars = stripeBalance ? stripeBalance.availableCents / 100 : 0;
 
         let reportedBalance = legacyBalance;
         if (stripeBalance) {
@@ -512,7 +584,10 @@ Deno.serve(async (req: Request) => {
 
         if (error) {
           console.error('[wallet] Error fetching transactions:', error);
-          return jsonResponse({ error: 'Failed to fetch transactions' }, 500);
+          return jsonResponse(
+            errorPayload('Failed to fetch transactions', 'transactions_fetch_failed', true),
+            500
+          );
         }
 
         const formattedTransactions = (transactions ?? []).map((tx: WalletTransaction) => {
@@ -581,7 +656,7 @@ Deno.serve(async (req: Request) => {
         try {
           body = await req.json();
         } catch {
-          return jsonResponse({ error: 'Invalid JSON body' }, 400);
+          return jsonResponse(errorPayload('Invalid JSON body', 'invalid_json'), 400);
         }
 
         const bountyId = typeof body.bountyId === 'string' ? body.bountyId.trim() : '';
@@ -590,9 +665,10 @@ Deno.serve(async (req: Request) => {
         const idempotencyKey =
           typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : undefined;
 
-        if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
+        if (!bountyId)
+          return jsonResponse(errorPayload('bountyId is required', 'bounty_id_required'), 400);
         if (!Number.isFinite(amount) || amount <= 0)
-          return jsonResponse({ error: 'Invalid amount' }, 400);
+          return jsonResponse(errorPayload('Invalid amount', 'invalid_amount'), 400);
 
         const effectiveKey = idempotencyKey || `escrow_${bountyId}_${userId}`;
         const description = title ? `Escrow for bounty: ${title}` : `Escrow for bounty ${bountyId}`;
@@ -623,10 +699,13 @@ Deno.serve(async (req: Request) => {
           const errMsg: string = (escrowErr as { message?: string }).message ?? '';
           // SQLSTATE 23514 is raised by update_balance() when balance would go negative.
           if (escrowErr.code === '23514' || errMsg.toLowerCase().includes('insufficient')) {
-            return jsonResponse({ error: 'Insufficient balance' }, 400);
+            return jsonResponse(errorPayload('Insufficient balance', 'insufficient_balance'), 400);
           }
           console.error('[wallet] apply_escrow RPC error:', escrowErr);
-          return jsonResponse({ error: 'Failed to create escrow transaction' }, 500);
+          return jsonResponse(
+            errorPayload('Failed to create escrow transaction', 'escrow_create_failed', true),
+            500
+          );
         }
 
         const { applied, transaction_id, new_balance } = escrowResult as {
@@ -646,6 +725,7 @@ Deno.serve(async (req: Request) => {
             {
               error: 'Escrow already exists for this bounty',
               code: 'duplicate_transaction',
+              retryable: false,
               transactionId: transaction_id,
               amount,
               newBalance: new_balance,
@@ -675,7 +755,7 @@ Deno.serve(async (req: Request) => {
         try {
           body = await req.json();
         } catch {
-          return jsonResponse({ error: 'Invalid JSON body' }, 400);
+          return jsonResponse(errorPayload('Invalid JSON body', 'invalid_json'), 400);
         }
 
         const bountyId = typeof body.bountyId === 'string' ? body.bountyId.trim() : '';
@@ -690,7 +770,8 @@ Deno.serve(async (req: Request) => {
           typeof body.refundPercentage === 'number' ? body.refundPercentage : 100;
         const refundPercentage = Math.min(100, Math.max(0, rawRefundPct));
 
-        if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
+        if (!bountyId)
+          return jsonResponse(errorPayload('bountyId is required', 'bounty_id_required'), 400);
 
         // Verify the caller is the bounty owner (user_id is the canonical owner column)
         const { data: bountyRow, error: bountyErr } = await supabase
@@ -698,9 +779,13 @@ Deno.serve(async (req: Request) => {
           .select('user_id')
           .eq('id', bountyId)
           .single();
-        if (bountyErr || !bountyRow) return jsonResponse({ error: 'Bounty not found' }, 404);
+        if (bountyErr || !bountyRow)
+          return jsonResponse(errorPayload('Bounty not found', 'bounty_not_found'), 404);
         if ((bountyRow as { user_id: string }).user_id !== userId) {
-          return jsonResponse({ error: 'Unauthorized to refund funds' }, 403);
+          return jsonResponse(
+            errorPayload('Unauthorized to refund funds', 'not_bounty_owner'),
+            403
+          );
         }
 
         // Prevent double-refund / double-release.
@@ -738,7 +823,11 @@ Deno.serve(async (req: Request) => {
             if (recoveryErr) {
               console.error('[wallet] recovery: apply_refund_tx RPC error:', recoveryErr);
               return jsonResponse(
-                { error: 'Failed to finalize pending refund during recovery' },
+                errorPayload(
+                  'Failed to finalize pending refund during recovery',
+                  'pending_refund_recovery_failed',
+                  true
+                ),
                 500
               );
             }
@@ -777,6 +866,9 @@ Deno.serve(async (req: Request) => {
                 ? `A ${verb} transaction for this bounty is already pending`
                 : `Escrow already ${verb} for this bounty`,
               code: 'duplicate_transaction',
+              retryable: false,
+              settlementType: settlement.type,
+              settlementStatus: settlement.status,
             },
             409
           );
@@ -791,7 +883,10 @@ Deno.serve(async (req: Request) => {
           .eq('status', 'completed')
           .single();
         if (escrowErr || !escrowTx)
-          return jsonResponse({ error: 'Escrow transaction not found' }, 404);
+          return jsonResponse(
+            errorPayload('Escrow transaction not found', 'escrow_not_found'),
+            404
+          );
 
         const escrowAmount = Math.abs((escrowTx as WalletTransaction).amount);
         const refundAmount = Math.round(((escrowAmount * refundPercentage) / 100) * 100) / 100;
@@ -825,7 +920,10 @@ Deno.serve(async (req: Request) => {
           .single();
         if (refundTxErr) {
           console.error('[wallet] create refund tx error:', refundTxErr);
-          return jsonResponse({ error: 'Failed to create refund transaction' }, 500);
+          return jsonResponse(
+            errorPayload('Failed to create refund transaction', 'refund_create_failed', true),
+            500
+          );
         }
 
         // Atomically credit the poster's balance and promote the transaction to
@@ -833,14 +931,11 @@ Deno.serve(async (req: Request) => {
         // the lost-update race of a separate read-balance/write-balance round trip, and
         // the window where a process crash between separate calls would leave a pending
         // transaction with an already-credited balance (which would double-credit on retry).
-        const { data: refundResult, error: refundRpcErr } = await supabase.rpc(
-          'apply_refund_tx',
-          {
-            p_tx_id: (refundTxRow as WalletTransaction).id,
-            p_user_id: userId,
-            p_amount: refundAmount,
-          }
-        );
+        const { data: refundResult, error: refundRpcErr } = await supabase.rpc('apply_refund_tx', {
+          p_tx_id: (refundTxRow as WalletTransaction).id,
+          p_user_id: userId,
+          p_amount: refundAmount,
+        });
         if (refundRpcErr) {
           console.error('[wallet] apply_refund_tx RPC error:', refundRpcErr);
           // Roll back the pending transaction so the caller can retry cleanly.
@@ -848,7 +943,10 @@ Deno.serve(async (req: Request) => {
             .from('wallet_transactions')
             .delete()
             .eq('id', (refundTxRow as WalletTransaction).id);
-          return jsonResponse({ error: 'Failed to finalize refund transaction' }, 500);
+          return jsonResponse(
+            errorPayload('Failed to finalize refund transaction', 'refund_finalize_failed', true),
+            500
+          );
         }
 
         const refundApplied = Array.isArray(refundResult)
@@ -880,14 +978,15 @@ Deno.serve(async (req: Request) => {
         try {
           body = await req.json();
         } catch {
-          return jsonResponse({ error: 'Invalid JSON body' }, 400);
+          return jsonResponse(errorPayload('Invalid JSON body', 'invalid_json'), 400);
         }
 
         const bountyId = typeof body.bountyId === 'string' ? body.bountyId.trim() : '';
         const idempotencyKey =
           typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : undefined;
 
-        if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
+        if (!bountyId)
+          return jsonResponse(errorPayload('bountyId is required', 'bounty_id_required'), 400);
 
         // Single authorization gate: confirms the caller owns the bounty and
         // resolves the payee from bounties.accepted_by. Everything below this
@@ -910,7 +1009,10 @@ Deno.serve(async (req: Request) => {
               requestedHunterId: body.hunterId,
             });
           }
-          return jsonResponse({ error: auth.error, code: auth.code }, auth.status);
+          return jsonResponse(
+            { error: auth.error, code: auth.code, retryable: false },
+            auth.status
+          );
         }
         // Both derived server-side. Neither is ever taken from the request body.
         const hunterId = auth.hunterId;
@@ -932,7 +1034,14 @@ Deno.serve(async (req: Request) => {
             hunterId,
             error: existingSettlementErr,
           });
-          return jsonResponse({ error: 'Failed to validate existing settlement state' }, 500);
+          return jsonResponse(
+            errorPayload(
+              'Failed to validate existing settlement state',
+              'settlement_state_validation_failed',
+              true
+            ),
+            500
+          );
         }
         // We intentionally cap at 2 rows to avoid fetching unnecessary data while
         // still detecting duplicate settlement history:
@@ -950,6 +1059,7 @@ Deno.serve(async (req: Request) => {
             {
               error: 'A settlement transaction for this bounty is already in progress',
               code: 'duplicate_transaction',
+              retryable: false,
             },
             409
           );
@@ -977,7 +1087,11 @@ Deno.serve(async (req: Request) => {
             if (recoveryErr) {
               console.error('[wallet] recovery: apply_release_tx RPC error:', recoveryErr);
               return jsonResponse(
-                { error: 'Failed to finalize pending release during recovery' },
+                errorPayload(
+                  'Failed to finalize pending release during recovery',
+                  'pending_release_recovery_failed',
+                  true
+                ),
                 500
               );
             }
@@ -1019,6 +1133,9 @@ Deno.serve(async (req: Request) => {
                 ? `A ${verb} transaction for this bounty is already pending`
                 : `Escrow already ${verb} for this bounty`,
               code: 'duplicate_transaction',
+              retryable: false,
+              settlementType: settlement.type,
+              settlementStatus: settlement.status,
             },
             409
           );
@@ -1061,7 +1178,14 @@ Deno.serve(async (req: Request) => {
               posterId,
               error: legacyDebitErr,
             });
-            return jsonResponse({ error: 'Failed to validate poster balance state' }, 500);
+            return jsonResponse(
+              errorPayload(
+                'Failed to validate poster balance state',
+                'poster_balance_validation_failed',
+                true
+              ),
+              500
+            );
           }
 
           if (legacyDebitTx) {
@@ -1076,7 +1200,10 @@ Deno.serve(async (req: Request) => {
                 '[wallet] No escrow record and no valid bounty amount for release:',
                 bountyId
               );
-              return jsonResponse({ error: 'Escrow transaction not found' }, 404);
+              return jsonResponse(
+                errorPayload('Escrow transaction not found', 'escrow_not_found'),
+                404
+              );
             }
 
             const { data: escrowResult, error: escrowErr } = await supabase
@@ -1097,14 +1224,24 @@ Deno.serve(async (req: Request) => {
             if (escrowErr) {
               const errMsg = (escrowErr as { message?: string }).message ?? '';
               if (escrowErr.code === '23514' || errMsg.toLowerCase().includes('insufficient')) {
-                return jsonResponse({ error: 'Insufficient balance' }, 400);
+                return jsonResponse(
+                  errorPayload('Insufficient balance', 'insufficient_balance'),
+                  400
+                );
               }
               console.error('[wallet] apply_escrow RPC error during release:', {
                 bountyId,
                 posterId,
                 error: escrowErr,
               });
-              return jsonResponse({ error: 'Failed to update poster balance' }, 500);
+              return jsonResponse(
+                errorPayload(
+                  'Failed to update poster balance',
+                  'poster_balance_update_failed',
+                  true
+                ),
+                500
+              );
             }
 
             const appliedEscrow = escrowResult as {
@@ -1158,7 +1295,10 @@ Deno.serve(async (req: Request) => {
           .single();
         if (releaseTxErr) {
           console.error('[wallet] create release tx error:', releaseTxErr);
-          return jsonResponse({ error: 'Failed to create release transaction' }, 500);
+          return jsonResponse(
+            errorPayload('Failed to create release transaction', 'release_create_failed', true),
+            500
+          );
         }
 
         // Atomically credit the hunter's balance and promote the transaction to
@@ -1181,7 +1321,10 @@ Deno.serve(async (req: Request) => {
             .from('wallet_transactions')
             .delete()
             .eq('id', (releaseTxRow as WalletTransaction).id);
-          return jsonResponse({ error: 'Failed to finalize release transaction' }, 500);
+          return jsonResponse(
+            errorPayload('Failed to finalize release transaction', 'release_finalize_failed', true),
+            500
+          );
         }
 
         const releaseApplied = Array.isArray(releaseResult)
@@ -1274,15 +1417,18 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      return jsonResponse({ error: 'Not found' }, 404);
+      return jsonResponse(errorPayload('Not found', 'route_not_found'), 404);
     } catch (error: unknown) {
       const err = error as { message?: string };
       console.error('[wallet edge fn] Error:', err);
-      return jsonResponse({ error: err.message ?? 'Internal server error' }, 500);
+      return jsonResponse(
+        errorPayload('Internal server error', 'wallet_unhandled_error', true),
+        500
+      );
     }
   } catch (outerError: unknown) {
     const err = outerError as { message?: string };
     console.error('[wallet edge fn] Outer unhandled error:', err);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+    return jsonResponse(errorPayload('Internal server error', 'wallet_unhandled_error', true), 500);
   }
 });

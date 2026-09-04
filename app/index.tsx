@@ -1,5 +1,5 @@
 import type { Href } from 'expo-router';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import 'react-native-get-random-values'; // must run before using tweetnacl
@@ -29,8 +29,23 @@ import { markInitialNavigationDone } from './initial-navigation/initialNavigatio
  * Password recovery is checked before the onboarding route since it is a
  * special override that should always take precedence.
  */
+/**
+ * Where to send a just-authenticated user, when they arrived here because the
+ * /tabs group guard (app/tabs/_layout.tsx) bounced a logged-out deep link.
+ * Only accepts an in-app "/tabs/…" path — anything with a scheme, host,
+ * backslash or "//" is rejected so this can't be turned into an open redirect.
+ */
+function safeRedirectTarget(raw: unknown): string | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string' || !value) return null;
+  if (!value.startsWith('/tabs/')) return null;
+  if (value.includes('//') || value.includes('\\') || value.includes(':')) return null;
+  return value;
+}
+
 export default function Index() {
   const bootstrap = useAppBootstrap();
+  const { redirect_to: redirectToParam } = useLocalSearchParams<{ redirect_to?: string }>();
   const {
     isPasswordRecovery,
     accountBlockedReason,
@@ -218,7 +233,15 @@ export default function Index() {
 
     // Authenticated — onboardingComplete is already known (resolved by the
     // hook), so this navigation is synchronous with no further async work.
-    const dest = bootstrap.onboardingComplete ? ROUTES.TABS.BOUNTY_APP : '/onboarding';
+    // A returning user who deep-linked to a /tabs screen while logged out was
+    // sent here by app/tabs/_layout.tsx with ?redirect_to=<that path>; honour
+    // it now that they have a session instead of dropping them on the feed.
+    // Onboarding still takes precedence — an unfinished account has no
+    // meaningful tab to land on.
+    const redirectTarget = safeRedirectTarget(redirectToParam);
+    const dest = bootstrap.onboardingComplete
+      ? (redirectTarget ?? ROUTES.TABS.BOUNTY_APP)
+      : '/onboarding';
 
     if (__DEV__) {
       console.log('[index] Routing decision:', {
@@ -248,6 +271,7 @@ export default function Index() {
     isAuthStale,
     router,
     confirmedReturningUser,
+    redirectToParam,
   ]);
 
   if (isAuthStale) {

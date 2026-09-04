@@ -170,8 +170,11 @@ export default function UsernameScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <OnboardingProgressDots total={totalSteps} activeIndex={0} style={styles.dotsContainer} />
 
-      <Text style={styles.heading}>Sign in — one tap, no password</Text>
-      <Text style={styles.subheading}>We never post or share anything without asking.</Text>
+      <Text style={styles.heading}>Sign in in seconds</Text>
+      <Text style={styles.subheading}>
+        Use Apple or Google for one-tap, password-free sign-in — or continue with email. We never post
+        or share anything without asking.
+      </Text>
 
       <View style={styles.nextUpCard}>
         <MaterialIcons name="lock-open" size={16} color={theme.textSecondary} />
@@ -201,25 +204,28 @@ export default function UsernameScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
-          style={styles.googleButton}
-          onPress={handleGooglePress}
-          disabled={!isGoogleConfigured || !googleRequest || loading}
-          accessibilityRole="button"
-          accessibilityLabel={isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
-          accessibilityState={{ disabled: !isGoogleConfigured || !googleRequest || loading, busy: loading }}
-        >
-          {loading ? (
-            <ActivityIndicator color="#000000" style={styles.buttonIcon} />
-          ) : (
-            <View style={styles.buttonIcon}>
-              <GoogleLogo size={18} />
-            </View>
-          )}
-          <Text style={styles.googleButtonText}>
-            {isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
-          </Text>
-        </TouchableOpacity>
+        {/* Only render Google when it's actually configured for this build.
+            An unconfigured button is inert and, on web, exposes no
+            disabled/aria-disabled — assistive tech reads it as actionable. */}
+        {isGoogleConfigured && (
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={handleGooglePress}
+            disabled={!googleRequest || loading}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+            accessibilityState={{ disabled: !googleRequest || loading, busy: loading }}
+          >
+            {loading ? (
+              <ActivityIndicator color="#000000" style={styles.buttonIcon} />
+            ) : (
+              <View style={styles.buttonIcon}>
+                <GoogleLogo size={18} />
+              </View>
+            )}
+            <Text style={styles.googleButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.emailButton}

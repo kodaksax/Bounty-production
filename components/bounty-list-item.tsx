@@ -33,6 +33,11 @@ export interface BountyListItemProps {
   end_date?: string | null;
   duration_minutes?: number | null;
   is_time_sensitive?: boolean;
+  /** Listing is missing scope / location / timing — badge it and (in the feed)
+   * rank it below complete ones. See lib/utils/bounty-completeness.ts. */
+  incomplete?: boolean;
+  /** Compact "No location or timing" summary shown next to the badge. */
+  missingSummary?: string;
 }
 
 function BountyListItemComponent({
@@ -52,6 +57,8 @@ function BountyListItemComponent({
   end_date,
   duration_minutes,
   is_time_sensitive,
+  incomplete,
+  missingSummary,
 }: BountyListItemProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -167,6 +174,15 @@ function BountyListItemComponent({
             </Text>
           ) : null}
 
+          {incomplete && (
+            <View style={s.limitedBadge} accessibilityRole="text">
+              <MaterialIcons name="info-outline" size={14} color={theme.textSecondary} />
+              <Text style={s.limitedBadgeText} numberOfLines={1}>
+                Limited details{missingSummary ? ` · ${missingSummary}` : ''}
+              </Text>
+            </View>
+          )}
+
           <View style={s.locationRow}>
             <MaterialIcons
               name={work_type === 'online' ? 'wifi' : 'near-me'}
@@ -219,7 +235,7 @@ function BountyListItemComponent({
             onPress={handleBountyPress}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel={`Apply to bounty: ${title}`}
+            accessibilityLabel={`View bounty: ${title}`}
           >
             <Text style={s.applyButtonText}>View & Apply</Text>
             <MaterialIcons name="arrow-forward" size={18} color="#fff" />
@@ -267,7 +283,9 @@ export const BountyListItem = React.memo(
     prev.start_date === next.start_date &&
     prev.end_date === next.end_date &&
     prev.duration_minutes === next.duration_minutes &&
-    prev.is_time_sensitive === next.is_time_sensitive
+    prev.is_time_sensitive === next.is_time_sensitive &&
+    prev.incomplete === next.incomplete &&
+    prev.missingSummary === next.missingSummary
 );
 
 function makeStyles(t: AppTheme) {
@@ -403,6 +421,24 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+    },
+    limitedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      backgroundColor: t.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',
+      borderWidth: 1,
+      borderColor: t.isDark ? 'rgba(245,158,11,0.32)' : 'rgba(245,158,11,0.28)',
+    },
+    limitedBadgeText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: t.textSecondary,
+      flexShrink: 1,
     },
     locationText: {
       fontSize: 13,

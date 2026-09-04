@@ -43,7 +43,9 @@ describe('handleConnectNativePayout — Stripe is the only balance source', () =
   test('never selects profiles.balance', () => {
     // The profile select must not pull the ledger columns at all: not reading
     // them is what stops a future change from quietly gating on them again.
-    const selectMatch = handlerBody.match(/\.select\(\s*'([^']*stripe_connect_account_id[^']*)'\s*\)/);
+    const selectMatch = handlerBody.match(
+      /\.select\(\s*'([^']*stripe_connect_account_id[^']*)'\s*\)/
+    );
     expect(selectMatch).not.toBeNull();
     expect(selectMatch![1]).not.toContain('balance');
   });
@@ -111,7 +113,9 @@ describe('handleConnectNativePayout — instant vs standard balance selection', 
     // fees are enabled — the user cannot pay out the gross figure.
     const readBalanceBody = extractFunctionBody(connectSource, 'readConnectBalance');
     expect(readBalanceBody).toContain('net_available');
-    expect(readBalanceBody).not.toMatch(/instant_available[\s\S]{0,120}\.amount\s*\?\?\s*0[\s\S]{0,40}\)\s*;/);
+    expect(readBalanceBody).not.toMatch(
+      /instant_available[\s\S]{0,120}\.amount\s*\?\?\s*0[\s\S]{0,40}\)\s*;/
+    );
   });
 });
 
@@ -195,6 +199,13 @@ describe('handleConnectNativePayout — audit trail', () => {
   test('records the balance the decision was made against', () => {
     expect(handlerBody).toContain('balanceAvailableCents: balance.availableCents');
     expect(handlerBody).toContain('balanceInstantAvailableCents: balance.instantAvailableCents');
+  });
+
+  test('threads a request id through native payout logs and responses', () => {
+    expect(handlerBody).toContain('requestId');
+    expect(handlerBody).toContain('const reply =');
+    expect(connectSource).toContain("req.headers.get('x-request-id')");
+    expect(connectSource).toContain("'X-Request-Id': requestId");
   });
 
   test('audit writes never block the payout', () => {

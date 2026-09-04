@@ -2,20 +2,15 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+import { logger } from '../../../../lib/utils/error-logger';
+import { classifyError } from '../../../../lib/utils/error-messages';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
@@ -49,6 +44,75 @@ export default function HunterApplyScreen() {
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [bountyId]);
 
+  const loadData = React.useCallback(
+    async (id: string) => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Load bounty
+        const bountyData = await bountyService.getById(id);
+        if (!bountyData) {
+          throw new Error('Bounty not found');
+        }
+
+        setBounty(bountyData);
+
+        // Check if hunter has a request for this bounty
+        const requests = await bountyRequestService.getAll({
+          bountyId: id,
+          userId: currentUserId,
+        });
+
+        if (requests.length === 0) {
+          // No request found - redirect back
+          Alert.alert('No Application', 'You have not applied to this bounty.', [
+            { text: 'OK', onPress: () => router.back() },
+          ]);
+          return;
+        }
+
+        const hunterRequest = requests[0];
+        setRequest(hunterRequest);
+
+        // If request is accepted, advance to work in progress
+        if (hunterRequest.status === 'accepted') {
+          router.replace({
+            pathname: '/in-progress/[bountyId]/hunter/work-in-progress',
+            params: { bountyId: id },
+          });
+          return;
+        }
+
+        // If rejected, notify and go back
+        if (hunterRequest.status === 'rejected') {
+          Alert.alert(
+            'Application Not Selected',
+            'The poster has selected another hunter for this bounty.',
+            [{ text: 'OK', onPress: () => router.back() }]
+          );
+          return;
+        }
+      } catch (err) {
+        const classified = classifyError(err);
+        logger.error('Hunter application screen failed to load', {
+          operation: 'hunter_apply_load',
+          bountyId: id,
+          userId: currentUserId,
+          code: classified.code,
+          severity: classified.severity,
+          recoverability: classified.recoverability,
+          retryable: classified.retryable,
+          error: err,
+        });
+        setError(classified.message);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentUserId, router]
+  );
+
   useEffect(() => {
     if (!routeBountyId) {
       setError('Invalid bounty id');
@@ -56,63 +120,7 @@ export default function HunterApplyScreen() {
       return;
     }
     loadData(routeBountyId);
-  }, [routeBountyId]);
-
-  const loadData = async (id: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Load bounty
-      const bountyData = await bountyService.getById(id);
-      if (!bountyData) {
-        throw new Error('Bounty not found');
-      }
-
-      setBounty(bountyData);
-
-      // Check if hunter has a request for this bounty
-      const requests = await bountyRequestService.getAll({
-        bountyId: id,
-        userId: currentUserId,
-      });
-
-      if (requests.length === 0) {
-        // No request found - redirect back
-        Alert.alert('No Application', 'You have not applied to this bounty.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-        return;
-      }
-
-      const hunterRequest = requests[0];
-      setRequest(hunterRequest);
-
-      // If request is accepted, advance to work in progress
-      if (hunterRequest.status === 'accepted') {
-        router.replace({
-          pathname: '/in-progress/[bountyId]/hunter/work-in-progress',
-          params: { bountyId: id },
-        });
-        return;
-      }
-
-      // If rejected, notify and go back
-      if (hunterRequest.status === 'rejected') {
-        Alert.alert(
-          'Application Not Selected',
-          'The poster has selected another hunter for this bounty.',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
-        return;
-      }
-    } catch (err) {
-      console.error('Error loading data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [loadData, routeBountyId]);
 
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -149,8 +157,8 @@ export default function HunterApplyScreen() {
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.backButton} 
+        <TouchableOpacity
+          style={styles.backButton}
           onPress={() => router.back()}
           accessibilityRole="button"
           accessibilityLabel="Go back"
@@ -166,16 +174,23 @@ export default function HunterApplyScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backIcon} 
+        <TouchableOpacity
+          style={styles.backIcon}
           onPress={() => router.back()}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           accessibilityHint="Returns to previous screen"
         >
-          <MaterialIcons name="arrow-back" size={24} color="#fff" accessibilityElementsHidden={true} />
+          <MaterialIcons
+            name="arrow-back"
+            size={24}
+            color="#fff"
+            accessibilityElementsHidden={true}
+          />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} accessibilityRole="header">Hunter Dashboard</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">
+          Hunter Dashboard
+        </Text>
       </View>
 
       <ScrollView
@@ -184,7 +199,7 @@ export default function HunterApplyScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Bounty Header Card */}
-        <View 
+        <View
           style={styles.bountyCard}
           accessible={true}
           accessibilityRole="text"
@@ -192,21 +207,29 @@ export default function HunterApplyScreen() {
         >
           <View style={styles.bountyHeader}>
             <View style={styles.avatarPlaceholder}>
-              <MaterialIcons name="person" size={32} color="#6ee7b7" accessibilityElementsHidden={true} />
+              <MaterialIcons
+                name="person"
+                size={32}
+                color="#6ee7b7"
+                accessibilityElementsHidden={true}
+              />
             </View>
             <View style={styles.bountyInfo}>
               <Text style={styles.bountyTitle} numberOfLines={2}>
                 {bounty.title}
               </Text>
-              <Text style={styles.postedTime}>
-                Posted {formatTimeAgo(bounty.created_at)}
-              </Text>
+              <Text style={styles.postedTime}>Posted {formatTimeAgo(bounty.created_at)}</Text>
             </View>
           </View>
           <View style={styles.amountContainer}>
             {bounty.is_for_honor ? (
               <View style={styles.honorBadge}>
-                <MaterialIcons name="favorite" size={16} color="#fff" accessibilityElementsHidden={true} />
+                <MaterialIcons
+                  name="favorite"
+                  size={16}
+                  color="#fff"
+                  accessibilityElementsHidden={true}
+                />
                 <Text style={styles.honorText}>For Honor</Text>
               </View>
             ) : (
@@ -217,7 +240,9 @@ export default function HunterApplyScreen() {
 
         {/* Timeline */}
         <View style={styles.timelineContainer}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Progress Timeline</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            Progress Timeline
+          </Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -226,12 +251,18 @@ export default function HunterApplyScreen() {
           >
             {HUNTER_STAGES.map((stage, index) => {
               const isActive = stage.id === currentStage;
-              const stageIndex = HUNTER_STAGES.findIndex((s) => s.id === stage.id);
-              const currentIndex = HUNTER_STAGES.findIndex((s) => s.id === currentStage);
+              const stageIndex = HUNTER_STAGES.findIndex(s => s.id === stage.id);
+              const currentIndex = HUNTER_STAGES.findIndex(s => s.id === currentStage);
               const isCompleted = stageIndex < currentIndex;
               const isAccessible = stageIndex <= currentIndex;
-              
-              const stageStatus = isCompleted ? 'completed' : isActive ? 'current' : !isAccessible ? 'locked' : 'upcoming';
+
+              const stageStatus = isCompleted
+                ? 'completed'
+                : isActive
+                  ? 'current'
+                  : !isAccessible
+                    ? 'locked'
+                    : 'upcoming';
 
               return (
                 <View
@@ -269,8 +300,15 @@ export default function HunterApplyScreen() {
 
         {/* Waiting Room Panel */}
         <View style={styles.waitingPanel}>
-          <MaterialIcons name="hourglass-empty" size={32} color="#6ee7b7" accessibilityElementsHidden={true} />
-          <Text style={styles.waitingTitle} accessibilityRole="header">Waiting for Selection</Text>
+          <MaterialIcons
+            name="hourglass-empty"
+            size={32}
+            color="#6ee7b7"
+            accessibilityElementsHidden={true}
+          />
+          <Text style={styles.waitingTitle} accessibilityRole="header">
+            Waiting for Selection
+          </Text>
           <Text style={styles.waitingText}>
             Your application has been submitted. The poster is reviewing applications and will
             select a hunter soon. You

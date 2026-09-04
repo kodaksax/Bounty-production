@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
+import { type Href, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { analyticsService } from '../../../../lib/services/analytics-service';
@@ -59,6 +60,7 @@ export function StepPay({
   ctaLabel = 'Continue',
   isSubmitting = false,
 }: StepPayProps) {
+  const router = useRouter();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const { balance } = useWallet();
@@ -221,13 +223,22 @@ export function StepPay({
           <Text style={styles.infoTitle}>
             {draft.isForHonor
               ? 'This is a for-honor bounty.'
-              : "You'll only pay when the job is completed."}
+              : "You're charged when you accept a hunter."}
           </Text>
           <Text style={styles.infoBody}>
             {draft.isForHonor
               ? 'No payment is involved. Someone helps out voluntarily.'
-              : "Flat-rate payment. Hunters know exactly what they'll earn."}
+              : "The amount is held then, and released to the hunter when you approve their work. Flat rate — they know exactly what they'll earn."}
           </Text>
+          {draft.isForHonor ? null : (
+            <TouchableOpacity
+              onPress={() => router.push('/legal/how-it-works' as Href)}
+              accessibilityRole="link"
+              accessibilityLabel="How payments and escrow work"
+            >
+              <Text style={styles.infoLink}>How payments &amp; escrow work</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -305,6 +316,13 @@ function makeStyles(theme: AppTheme) {
     infoTextWrap: { flex: 1 },
     infoTitle: { fontSize: 14, fontWeight: '700', color: theme.text },
     infoBody: { marginTop: 3, fontSize: 13, lineHeight: 17, color: theme.textSecondary },
+    infoLink: {
+      marginTop: 6,
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.primary,
+      textDecorationLine: 'underline',
+    },
     honorRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center' },
     checkbox: {
       width: 22,
