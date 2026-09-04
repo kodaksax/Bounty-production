@@ -204,25 +204,28 @@ export default function UsernameScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
-          style={styles.googleButton}
-          onPress={handleGooglePress}
-          disabled={!isGoogleConfigured || !googleRequest || loading}
-          accessibilityRole="button"
-          accessibilityLabel={isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
-          accessibilityState={{ disabled: !isGoogleConfigured || !googleRequest || loading, busy: loading }}
-        >
-          {loading ? (
-            <ActivityIndicator color="#000000" style={styles.buttonIcon} />
-          ) : (
-            <View style={styles.buttonIcon}>
-              <GoogleLogo size={18} />
-            </View>
-          )}
-          <Text style={styles.googleButtonText}>
-            {isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
-          </Text>
-        </TouchableOpacity>
+        {/* Only render Google when it's actually configured for this build.
+            An unconfigured button is inert and, on web, exposes no
+            disabled/aria-disabled — assistive tech reads it as actionable. */}
+        {isGoogleConfigured && (
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={handleGooglePress}
+            disabled={!googleRequest || loading}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+            accessibilityState={{ disabled: !googleRequest || loading, busy: loading }}
+          >
+            {loading ? (
+              <ActivityIndicator color="#000000" style={styles.buttonIcon} />
+            ) : (
+              <View style={styles.buttonIcon}>
+                <GoogleLogo size={18} />
+              </View>
+            )}
+            <Text style={styles.googleButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.emailButton}

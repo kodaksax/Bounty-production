@@ -9,6 +9,11 @@ import type { Bounty } from '../lib/services/database.types'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { BOUNTY_CATEGORIES, getBountyCategoryDef } from '../lib/constants/bounty-categories'
+import {
+  getBountyCompleteness,
+  summarizeMissingDetails,
+  type BountyCompleteness,
+} from '../lib/utils/bounty-completeness'
 import { BountyFeaturedItem } from './bounty-featured-item'
 import { BountyGridItem, GRID_CARD_WIDTH } from './bounty-grid-item'
 
@@ -41,15 +46,29 @@ type GridRow             = FeaturedCarouselRow | PairRow
 
 const FEATURED_COUNT = 3
 
-function buildGridRows(bounties: Bounty[]): GridRow[] {
+function buildGridRows(
+  bounties: Bounty[],
+  completenessById: Map<string, BountyCompleteness>
+): GridRow[] {
   // Sort globally: highest price first, honor (no price) last
-  const sorted = [...bounties].sort((a, b) => {
+  const byPrice = [...bounties].sort((a, b) => {
     const aHonor = Boolean(a.is_for_honor)
     const bHonor = Boolean(b.is_for_honor)
     if (aHonor && !bHonor) return 1
     if (!aHonor && bHonor) return -1
     return Number(b.amount || 0) - Number(a.amount || 0)
   })
+
+  // Then sink incomplete listings (missing scope / location / timing) below
+  // complete ones — a barebones "$10, Location TBD" card is not something a
+  // hunter can act on, and must not take a featured slot. Stable partition so
+  // the price order is preserved within each group.
+  const isIncomplete = (b: Bounty) =>
+    completenessById.get(String(b.id))?.isComplete === false
+  const sorted = [
+    ...byPrice.filter(b => !isIncomplete(b)),
+    ...byPrice.filter(b => isIncomplete(b)),
+  ]
 
   const featured = sorted.slice(0, FEATURED_COUNT)
   const rest     = sorted.slice(FEATURED_COUNT)
@@ -119,9 +138,26 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
 
-  const rows = useMemo(() => buildGridRows(bounties), [bounties])
+  // scope / where / when presence per bounty — drives the "Limited details"
+  // badge on the cards and the demotion in buildGridRows.
+  const completenessById = useMemo(() => {
+    const m = new Map<string, BountyCompleteness>()
+    bounties.forEach(b => m.set(String(b.id), getBountyCompleteness(b)))
+    return m
+  }, [bounties])
+
+  const rows = useMemo(
+    () => buildGridRows(bounties, completenessById),
+    [bounties, completenessById]
+  )
 
   const renderRow = useCallback(({ item, index }: { item: GridRow; index: number }) => {
+    const incompleteProps = (b: Bounty) => {
+      const c = completenessById.get(String(b.id))
+      return c && !c.isComplete
+        ? { incomplete: true, missingSummary: summarizeMissingDetails(c.missing) }
+        : { incomplete: false, missingSummary: '' }
+    }
     let content: React.ReactNode
 
     if (item.type === 'featuredCarousel') {
@@ -150,6 +186,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
                   poster_avatar={b.poster_avatar ?? undefined}
                   categoryColor={def.color}
                   categoryLabel={def.label}
+                  {...incompleteProps(b)}
                   attachments_json={b.attachments_json}
                   schedule_type={b.schedule_type}
                   start_date={b.start_date}
@@ -183,6 +220,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
             end_date={left.end_date ?? left.deadline}
             categoryColor={leftDef.color}
             categoryLabel={leftDef.label}
+            {...incompleteProps(left)}
           />
           {right ? (
             <BountyGridItem
@@ -200,6 +238,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
               end_date={right.end_date ?? right.deadline}
               categoryColor={rightDef?.color}
               categoryLabel={rightDef?.label}
+              {...incompleteProps(right)}
             />
           ) : (
             <View style={{ width: GRID_CARD_WIDTH }} />
@@ -213,7 +252,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
         {content}
       </AnimatedRow>
     )
-  }, [bountyDistances, s])
+  }, [bountyDistances, s, completenessById])
 
   return (
     <FlatList

@@ -33,6 +33,10 @@ export interface BountyGridItemProps {
   /** Category accent (same palette as the featured carousel cards). */
   categoryColor?: string;
   categoryLabel?: string;
+  /** Listing is missing scope / location / timing. See
+   * lib/utils/bounty-completeness.ts. */
+  incomplete?: boolean;
+  missingSummary?: string;
 }
 
 function BountyGridItemComponent({
@@ -50,6 +54,8 @@ function BountyGridItemComponent({
   end_date,
   categoryColor,
   categoryLabel,
+  incomplete,
+  missingSummary,
 }: BountyGridItemProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -188,6 +194,15 @@ function BountyGridItemComponent({
                 {description}
               </Text>
             ) : null}
+
+            {incomplete ? (
+              <View style={s.limitedBadge}>
+                <MaterialIcons name="info-outline" size={11} color={theme.textSecondary} />
+                <Text style={s.limitedText} numberOfLines={1}>
+                  {missingSummary || 'Limited details'}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* ── Footer: price / honor + View button ─────────── */}
@@ -241,7 +256,9 @@ export const BountyGridItem = React.memo(
     prev.work_type === next.work_type &&
     prev.poster_avatar === next.poster_avatar &&
     prev.end_date === next.end_date &&
-    prev.categoryColor === next.categoryColor
+    prev.categoryColor === next.categoryColor &&
+    prev.incomplete === next.incomplete &&
+    prev.missingSummary === next.missingSummary
 );
 
 function makeStyles(t: AppTheme) {
@@ -343,6 +360,25 @@ function makeStyles(t: AppTheme) {
       color: t.textSecondary,
       lineHeight: 17,
       marginBottom: 6,
+    },
+    limitedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 3,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 999,
+      backgroundColor: t.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',
+      borderWidth: 1,
+      borderColor: t.isDark ? 'rgba(245,158,11,0.32)' : 'rgba(245,158,11,0.28)',
+      marginBottom: 6,
+    },
+    limitedText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: t.textSecondary,
+      flexShrink: 1,
     },
 
     // Footer

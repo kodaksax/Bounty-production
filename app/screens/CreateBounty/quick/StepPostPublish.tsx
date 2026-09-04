@@ -4,6 +4,11 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
+import {
+  describeMissingDetails,
+  getDraftCompleteness,
+  type MissingDetail,
+} from '../../../../lib/utils/bounty-completeness';
 import { QuickStepLayout } from './QuickStepLayout';
 
 /** Which optional detail a row edits — maps to the step screen to open. */
@@ -74,6 +79,22 @@ export function StepPostPublish({
   const locationValue =
     draft.workType === 'online' ? 'Online' : draft.location || 'Not added yet';
 
+  // Scope / where / when are what a hunter reads to decide whether a job is
+  // worth taking. The feed badges listings missing any of them as "Limited
+  // details" and ranks them below complete ones, so surface that here while
+  // the poster can still fix it in a couple of taps.
+  const { isComplete, missing } = useMemo(() => getDraftCompleteness(draft), [draft]);
+  // Which summary row each missing piece maps to, so those rows can be
+  // highlighted rather than sitting quietly among the optional ones.
+  const missingRowKeys = useMemo(() => {
+    const map: Record<MissingDetail, string> = {
+      scope: 'photos',
+      location: 'location',
+      timing: 'date',
+    };
+    return new Set(missing.map(m => map[m]));
+  }, [missing]);
+
   const rows: {
     key: string;
     icon: keyof typeof MaterialIcons.glyphMap;
@@ -130,37 +151,58 @@ export function StepPostPublish({
         <Text style={styles.liveText}>Posted and visible in the feed</Text>
       </View>
 
+      {!isComplete && (
+        <View style={styles.gapCallout}>
+          <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#fcd34d' : '#92400e'} />
+          <Text style={styles.gapCalloutText}>
+            Hunters can&apos;t see {describeMissingDetails(missing)} yet. Until you add{' '}
+            {missing.length > 1 ? 'these' : 'this'}, your bounty shows a “Limited details” tag and
+            ranks below complete listings.
+          </Text>
+        </View>
+      )}
+
       <Text style={styles.sectionLabel}>Add more details to your bounty</Text>
 
       <View style={styles.card}>
-        {rows.map((row, index) => (
-          <View
-            key={row.key}
-            style={[styles.row, index < rows.length - 1 ? styles.rowDivider : null]}
-          >
-            <View style={styles.iconCircle}>
-              <MaterialIcons name={row.icon} size={20} color={theme.primary} />
-            </View>
+        {rows.map((row, index) => {
+          const flagged = missingRowKeys.has(row.key);
+          return (
+            <View
+              key={row.key}
+              style={[styles.row, index < rows.length - 1 ? styles.rowDivider : null]}
+            >
+              <View style={[styles.iconCircle, flagged && styles.iconCircleFlagged]}>
+                <MaterialIcons
+                  name={row.icon}
+                  size={20}
+                  color={flagged ? (theme.isDark ? '#fcd34d' : '#92400e') : theme.primary}
+                />
+              </View>
 
-            <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>{row.label}</Text>
-              <Text style={styles.rowValue} numberOfLines={2}>
-                {row.value}
-              </Text>
-            </View>
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>{row.label}</Text>
+                <Text
+                  style={[styles.rowValue, flagged && styles.rowValueFlagged]}
+                  numberOfLines={2}
+                >
+                  {row.value}
+                </Text>
+              </View>
 
-            {row.target ? (
-              <TouchableOpacity
-                onPress={() => onAddDetail(row.target!)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityRole="button"
-                accessibilityLabel={`Add ${row.label}`}
-              >
-                <Text style={styles.add}>Add</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        ))}
+              {row.target ? (
+                <TouchableOpacity
+                  onPress={() => onAddDetail(row.target!)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add ${row.label}`}
+                >
+                  <Text style={[styles.add, flagged && styles.addFlagged]}>Add</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          );
+        })}
       </View>
     </QuickStepLayout>
   );
@@ -212,6 +254,28 @@ function makeStyles(theme: AppTheme) {
     rowText: { flex: 1 },
     rowLabel: { fontSize: 15, color: theme.textSecondary },
     rowValue: { marginTop: 3, fontSize: 17, fontWeight: '700', color: theme.text },
+    rowValueFlagged: { color: theme.isDark ? '#fcd34d' : '#92400e' },
     add: { fontSize: 16, fontWeight: '600', color: theme.primary },
+    addFlagged: { color: theme.isDark ? '#fcd34d' : '#92400e' },
+    iconCircleFlagged: {
+      backgroundColor: theme.isDark ? 'rgba(245,158,11,0.22)' : 'rgba(245,158,11,0.14)',
+    },
+    gapCallout: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      marginTop: 14,
+      padding: 14,
+      borderRadius: 14,
+      backgroundColor: theme.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(245,158,11,0.32)' : 'rgba(245,158,11,0.28)',
+    },
+    gapCalloutText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 19,
+      color: theme.text,
+    },
   });
 }

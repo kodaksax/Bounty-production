@@ -58,6 +58,11 @@ import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import {
+    getBountyCompleteness,
+    summarizeMissingDetails,
+    type BountyCompleteness,
+} from '../lib/utils/bounty-completeness';
 import { logger } from '../lib/utils/error-logger';
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
@@ -246,6 +251,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     return distances;
   }, [bounties, calculateDistance]);
 
+  // Whether each loaded bounty carries scope / where / when — the fields a
+  // hunter needs to say yes. Listings missing any of them get a "Limited
+  // details" badge on the card and are ranked below complete ones.
+  const bountyCompleteness = useMemo(() => {
+    const m = new Map<string, BountyCompleteness>();
+    bounties.forEach(b => m.set(String(b.id), getBountyCompleteness(b)));
+    return m;
+  }, [bounties]);
+
   const filteredBounties = useMemo(() => {
     let list = [...bounties];
     // Hide bounties whose deadline has passed — they're still visible to the
@@ -265,6 +279,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     // whatever list it's given, so featured stays highest-priced even when a
     // specific category chip is active.
     list.sort((a, b) => {
+      // Complete listings first — an incomplete one is something a hunter
+      // can't act on, so it belongs below everything they can, regardless of
+      // distance. Unknown (not yet evaluated) counts as complete so a row
+      // never sinks just because its completeness map entry is missing.
+      const aIncomplete = bountyCompleteness.get(String(a.id))?.isComplete === false;
+      const bIncomplete = bountyCompleteness.get(String(b.id))?.isComplete === false;
+      if (aIncomplete !== bIncomplete) return aIncomplete ? 1 : -1;
+
       const distA = bountyDistances.get(String(a.id));
       const distB = bountyDistances.get(String(b.id));
       if (distA == null && distB == null) return 0;
@@ -273,7 +295,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       return (distA ?? Infinity) - (distB ?? Infinity);
     });
     return list;
-  }, [bounties, activeCategory, bountyDistances, appliedBountyIds]);
+  }, [bounties, activeCategory, bountyDistances, appliedBountyIds, bountyCompleteness]);
 
   // bounty_list_viewed — fires once the feed's actual result set for the
   // current filters is known (skeleton fully resolved), including the
@@ -651,6 +673,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     ({ item }: { item: Bounty }) => {
       const distance =
         bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '');
+      const completeness = bountyCompleteness.get(String(item.id));
+      const incomplete = completeness?.isComplete === false;
       const props = {
         id: item.id,
         title: item.title,
@@ -672,6 +696,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         end_date: item.end_date,
         duration_minutes: item.duration_minutes,
         is_time_sensitive: item.is_time_sensitive,
+        incomplete,
+        missingSummary: incomplete ? summarizeMissingDetails(completeness!.missing) : '',
       };
       if (isCompact) {
         return <BountyCompactItem {...props} />;
@@ -682,7 +708,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         </View>
       );
     },
-    [bountyDistances, calculateDistance, listHeight, isCompact]
+    [bountyDistances, calculateDistance, listHeight, isCompact, bountyCompleteness]
   );
 
   const handleEndReached = useCallback(() => {

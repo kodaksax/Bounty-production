@@ -171,7 +171,9 @@ describe('sign-in recovery after a failed attempt', () => {
 
     try {
       const utils = render(<SignInForm />);
-      expect(utils.getByLabelText('Google sign-in unavailable')).toBeTruthy();
+      // Unconfigured Google is hidden entirely, not shown as an inert button.
+      expect(utils.queryByLabelText('Continue with Google')).toBeNull();
+      expect(utils.queryByLabelText('Google sign-in unavailable')).toBeNull();
     } finally {
       Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
       Platform.select = originalSelect;
