@@ -32,6 +32,13 @@ export const FEED_SAFE_BOUNTY_COLUMNS = [
   'approx_latitude', 'approx_longitude', 'neighborhood',
 ].join(', ');
 
+// Statuses a hunter can meaningfully browse. Used as the fallback when a search
+// carries no explicit status filter, so an empty/omitted selection can never
+// widen the query to `cancelled` / `deleted` / `disputed` / `archived` rows the
+// search UI offers no chip for and a hunter cannot act on.
+// See app/tabs/search.tsx (status chips) — this list must stay a superset of them.
+export const BROWSABLE_BOUNTY_STATUSES = ['open', 'in_progress', 'completed'];
+
 // Lazy-load wsAdapter to avoid circular dependencies
 // Type for wsAdapter interface
 interface WsAdapter {
@@ -424,7 +431,9 @@ export const bountyService = {
         if (filters.status && filters.status.length > 0) {
           query = query.in('status', filters.status);
         } else {
-          query = query.neq('status', 'archived');
+          // No explicit selection: restrict to browsable statuses rather than
+          // `!= archived`, which also leaked `cancelled` / `deleted` rows.
+          query = query.in('status', BROWSABLE_BOUNTY_STATUSES);
         }
 
         if (filters.keywords) {
@@ -497,7 +506,7 @@ export const bountyService = {
             if (filters.status && filters.status.length > 0) {
               queryNoJoin = queryNoJoin.in('status', filters.status);
             } else {
-              queryNoJoin = queryNoJoin.neq('status', 'archived');
+              queryNoJoin = queryNoJoin.in('status', BROWSABLE_BOUNTY_STATUSES);
             }
 
             if (filters.keywords) {

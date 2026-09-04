@@ -1084,7 +1084,13 @@ export default function EnhancedSearchScreen() {
                       const newStatus = currentStatus.includes(option.value)
                         ? currentStatus.filter(s => s !== option.value)
                         : [...currentStatus, option.value];
-                      setFilters({ ...filters, status: newStatus });
+                      // Never allow an empty selection: an empty status array is
+                      // treated as "no filter" downstream and widens the query to
+                      // cancelled/deleted bounties. Re-default to Open instead.
+                      setFilters({
+                        ...filters,
+                        status: newStatus.length > 0 ? newStatus : ['open'],
+                      });
                     }}
                   >
                     <Text
