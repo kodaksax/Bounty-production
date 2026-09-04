@@ -43,7 +43,9 @@ describe('handleConnectNativePayout — Stripe is the only balance source', () =
   test('never selects profiles.balance', () => {
     // The profile select must not pull the ledger columns at all: not reading
     // them is what stops a future change from quietly gating on them again.
-    const selectMatch = handlerBody.match(/\.select\(\s*'([^']*stripe_connect_account_id[^']*)'\s*\)/);
+    const selectMatch = handlerBody.match(
+      /\.select\(\s*'([^']*stripe_connect_account_id[^']*)'\s*\)/
+    );
     expect(selectMatch).not.toBeNull();
     expect(selectMatch![1]).not.toContain('balance');
   });
@@ -111,7 +113,9 @@ describe('handleConnectNativePayout — instant vs standard balance selection', 
     // fees are enabled — the user cannot pay out the gross figure.
     const readBalanceBody = extractFunctionBody(connectSource, 'readConnectBalance');
     expect(readBalanceBody).toContain('net_available');
-    expect(readBalanceBody).not.toMatch(/instant_available[\s\S]{0,120}\.amount\s*\?\?\s*0[\s\S]{0,40}\)\s*;/);
+    expect(readBalanceBody).not.toMatch(
+      /instant_available[\s\S]{0,120}\.amount\s*\?\?\s*0[\s\S]{0,40}\)\s*;/
+    );
   });
 });
 

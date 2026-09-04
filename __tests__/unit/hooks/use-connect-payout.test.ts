@@ -190,7 +190,10 @@ describe('useConnectPayout', () => {
     mockFetch({
       ok: false,
       json: () =>
-        Promise.resolve({ code: 'insufficient_balance', error: 'That is more than you have available to withdraw.' }),
+        Promise.resolve({
+          code: 'insufficient_balance',
+          error: 'That is more than you have available to withdraw.',
+        }),
     });
     const { result } = renderHook(() => useConnectPayout());
 
@@ -223,7 +226,10 @@ describe('useConnectPayout', () => {
   });
 
   it('treats an unrecognised server error as retryable', async () => {
-    mockFetch({ ok: false, json: () => Promise.resolve({ code: 'stripe_unavailable', error: 'Stripe down' }) });
+    mockFetch({
+      ok: false,
+      json: () => Promise.resolve({ code: 'stripe_unavailable', error: 'Stripe down' }),
+    });
     const { result } = renderHook(() => useConnectPayout());
 
     await act(async () => {

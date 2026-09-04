@@ -28,7 +28,7 @@ describe('bounty-payments edge function request/error contract', () => {
   const cancelRoute = extractRoute(
     bountyPaymentsSource,
     "if (req.method === 'POST' && subPath === '/cancel')",
-    'return reply({ error: \'Not found\''
+    "return reply({ error: 'Not found'"
   );
 
   it('accepts and returns a request id for bounty payment diagnostics', () => {

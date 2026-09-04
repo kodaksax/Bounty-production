@@ -28,13 +28,13 @@
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
-import type { Profile, WalletTransaction } from '../_shared/types.ts';
 import {
-  buildNativePayoutIdempotencyKey,
-  buildPayoutIdempotencyKey,
-  buildTransferIdempotencyKey,
-  isRecoverableInstantPayoutError,
+    buildNativePayoutIdempotencyKey,
+    buildPayoutIdempotencyKey,
+    buildTransferIdempotencyKey,
+    isRecoverableInstantPayoutError,
 } from '../_shared/payout-state.ts';
+import type { Profile, WalletTransaction } from '../_shared/types.ts';
 
 // stripe@14's bundled types for Balance.InstantAvailable omit `net_available`,
 // even though the live API returns it (see
@@ -47,7 +47,8 @@ type InstantAvailableWithNet = Stripe.Balance.InstantAvailable & {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-request-id',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 };
 
@@ -60,9 +61,10 @@ function generateRequestId(prefix = 'connect'): string {
 }
 
 function jsonResponse(data: unknown, status = 200, requestId?: string) {
-  const body = requestId && data && typeof data === 'object' && !Array.isArray(data)
-    ? { ...(data as Record<string, unknown>), requestId }
-    : data;
+  const body =
+    requestId && data && typeof data === 'object' && !Array.isArray(data)
+      ? { ...(data as Record<string, unknown>), requestId }
+      : data;
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -692,7 +694,8 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
   const { stripe, supabase, userId, body, method, requestId } = params;
   const currency = 'usd';
   const log = `[connect/native-payout:${method}:${requestId}]`;
-  const reply = (data: Record<string, unknown>, status = 200) => jsonResponse(data, status, requestId);
+  const reply = (data: Record<string, unknown>, status = 200) =>
+    jsonResponse(data, status, requestId);
 
   const validation = validateWithdrawalRequest(
     body as Parameters<typeof validateWithdrawalRequest>[0]
@@ -1336,7 +1339,10 @@ function resolveInstantDestination(
 // Instant-specific limits — see the identical, documented copy in
 // ./instant-payout-validation.ts for the full rationale. Keep in sync.
 const INSTANT_PAYOUT_MAX_USD = readEnvNumberForInstantPayout('INSTANT_PAYOUT_MAX_USD', 9999);
-const MAX_INSTANT_PAYOUTS_PER_DAY = readEnvNumberForInstantPayout('MAX_INSTANT_PAYOUTS_PER_DAY', 10);
+const MAX_INSTANT_PAYOUTS_PER_DAY = readEnvNumberForInstantPayout(
+  'MAX_INSTANT_PAYOUTS_PER_DAY',
+  10
+);
 
 type InstantLimitResult = { ok: true } | { ok: false; error: string; code: string };
 
@@ -2296,7 +2302,10 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
-      const reservedWithdrawal = reservation as { tx_id?: string | null; new_balance?: number | null } | null;
+      const reservedWithdrawal = reservation as {
+        tx_id?: string | null;
+        new_balance?: number | null;
+      } | null;
       const transactionId = reservedWithdrawal?.tx_id ?? null;
       const newBalance =
         typeof reservedWithdrawal?.new_balance === 'number' ? reservedWithdrawal.new_balance : null;
@@ -2378,7 +2387,10 @@ Deno.serve(async (req: Request) => {
           );
         }
         const mapped = mapStripeTransferError(errInfo);
-        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
+        return jsonResponse(
+          { error: mapped.error, code: mapped.code, stripeAttempted: true },
+          mapped.status
+        );
       }
 
       console.log('[connect/transfer] Stripe transfer created', {
@@ -2685,15 +2697,20 @@ Deno.serve(async (req: Request) => {
             p_transaction_id: transactionId,
             p_user_id: userId,
             p_stripe_transfer_id: t.stripe_transfer_id ?? null,
-            p_stripe_payout_id: (t as WalletTransaction & { stripe_payout_id?: string | null })
-              .stripe_payout_id ?? null,
+            p_stripe_payout_id:
+              (t as WalletTransaction & { stripe_payout_id?: string | null }).stripe_payout_id ??
+              null,
             p_metadata_patch: {
               ...((t.metadata as Record<string, unknown> | null) ?? {}),
-              retry_transfer_failed: retryErrInfo?.code ?? retryErrInfo?.message ?? 'transfer_failed',
+              retry_transfer_failed:
+                retryErrInfo?.code ?? retryErrInfo?.message ?? 'transfer_failed',
             },
           })
           .single();
-        if (retryRefundError || !(rollbackResult as { refunded?: boolean | null } | null)?.refunded) {
+        if (
+          retryRefundError ||
+          !(rollbackResult as { refunded?: boolean | null } | null)?.refunded
+        ) {
           logCritical(
             'balance refund after failed retry transfer also failed — manual reconciliation required',
             {
@@ -2718,7 +2735,10 @@ Deno.serve(async (req: Request) => {
         const mapped = mapStripeTransferError(
           stripeError as { code?: string; type?: string; message?: string }
         );
-        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
+        return jsonResponse(
+          { error: mapped.error, code: mapped.code, stripeAttempted: true },
+          mapped.status
+        );
       }
 
       // Same two-hop rule as the primary /transfer path: the retry re-ran hop
@@ -3419,7 +3439,10 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
-      const reservedWithdrawal = reservation as { tx_id?: string | null; new_balance?: number | null } | null;
+      const reservedWithdrawal = reservation as {
+        tx_id?: string | null;
+        new_balance?: number | null;
+      } | null;
       const transactionId = reservedWithdrawal?.tx_id ?? null;
       const newBalance =
         typeof reservedWithdrawal?.new_balance === 'number' ? reservedWithdrawal.new_balance : null;
@@ -3501,7 +3524,10 @@ Deno.serve(async (req: Request) => {
           );
         }
         const mapped = mapStripeTransferError(errInfo);
-        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
+        return jsonResponse(
+          { error: mapped.error, code: mapped.code, stripeAttempted: true },
+          mapped.status
+        );
       }
 
       console.log('[connect/instant-payout] platform transfer created', {

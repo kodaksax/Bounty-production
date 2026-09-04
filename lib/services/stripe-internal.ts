@@ -161,7 +161,9 @@ export async function fetchEdgeFunction<T>(
     if (!response.ok) {
       const status = response.status;
       const responseRequestId =
-        (parsedBody && typeof parsedBody.requestId === 'string' ? parsedBody.requestId : undefined) ??
+        (parsedBody && typeof parsedBody.requestId === 'string'
+          ? parsedBody.requestId
+          : undefined) ??
         getHeaderValue(response.headers, 'X-Request-Id') ??
         requestId;
       const backendCode =
@@ -194,7 +196,10 @@ export async function invokePayments<T>(
 ): Promise<T> {
   const url = `${FINANCIAL_API_BASE_URL}/${subPath}`;
   const method = options.method ?? 'POST';
-  const requestId = options.headers?.['x-request-id'] ?? options.headers?.['X-Request-Id'] ?? generatePaymentRequestId();
+  const requestId =
+    options.headers?.['x-request-id'] ??
+    options.headers?.['X-Request-Id'] ??
+    generatePaymentRequestId();
 
   // ── Preferred path: direct fetch with explicit auth headers ─────────────────
   //
@@ -384,7 +389,12 @@ export async function invokePayments<T>(
   }
 
   // ── Last resort: unauthenticated fetch (legacy Node server) ──────────────────
-  return fetchEdgeFunction<T>(url, method, { ...(options.headers ?? {}), 'x-request-id': requestId }, options.body);
+  return fetchEdgeFunction<T>(
+    url,
+    method,
+    { ...(options.headers ?? {}), 'x-request-id': requestId },
+    options.body
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

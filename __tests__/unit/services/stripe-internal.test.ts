@@ -463,7 +463,9 @@ describe('stripe-internal: invokePayments', () => {
 
     const result = await invokePayments<{ ok: boolean }>('payments/err', { body: {} });
     expect(result).toEqual({ ok: true });
-    expect((global.fetch as jest.Mock).mock.calls[0][1].headers['x-request-id']).toMatch(/^payments_/);
+    expect((global.fetch as jest.Mock).mock.calls[0][1].headers['x-request-id']).toMatch(
+      /^payments_/
+    );
   });
 
   it('falls back to supabase.functions.invoke when no anon key is configured', async () => {
@@ -489,7 +491,9 @@ describe('stripe-internal: invokePayments', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer tok' }),
       })
     );
-    expect((supabase.functions.invoke as jest.Mock).mock.calls[0][1].headers['x-request-id']).toMatch(/^payments_/);
+    expect(
+      (supabase.functions.invoke as jest.Mock).mock.calls[0][1].headers['x-request-id']
+    ).toMatch(/^payments_/);
   });
 
   it('surfaces error from supabase.functions.invoke as api_error', async () => {
@@ -499,7 +503,11 @@ describe('stripe-internal: invokePayments', () => {
     const fakeErr: any = new Error('boom');
     fakeErr.context = {
       status: 500,
-      json: async () => ({ error: 'internal', code: 'stripe_unavailable', requestId: 'edge_req_1' }),
+      json: async () => ({
+        error: 'internal',
+        code: 'stripe_unavailable',
+        requestId: 'edge_req_1',
+      }),
     };
 
     (supabase.functions.invoke as jest.Mock).mockResolvedValue({

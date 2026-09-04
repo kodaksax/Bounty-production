@@ -29,7 +29,8 @@ declare const Deno: any;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-request-id',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -42,9 +43,10 @@ function generateRequestId(prefix = 'bounty_payments'): string {
 }
 
 function jsonResponse(data: unknown, status = 200, requestId?: string) {
-  const body = requestId && data && typeof data === 'object' && !Array.isArray(data)
-    ? { ...(data as Record<string, unknown>), requestId }
-    : data;
+  const body =
+    requestId && data && typeof data === 'object' && !Array.isArray(data)
+      ? { ...(data as Record<string, unknown>), requestId }
+      : data;
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -190,14 +192,18 @@ Deno.serve(async (req: Request) => {
   }
 
   const requestId = req.headers.get('x-request-id')?.slice(0, 120) || generateRequestId();
-  const reply = (data: Record<string, unknown>, status = 200) => jsonResponse(data, status, requestId);
+  const reply = (data: Record<string, unknown>, status = 200) =>
+    jsonResponse(data, status, requestId);
   const url = new URL(req.url);
   const pathParts = url.pathname.split('/bounty-payments');
   const subPath = pathParts.length > 1 ? pathParts[1] : '/';
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
   if (!stripeKey) {
-    return reply({ error: 'Payment service is not configured.', code: 'stripe_not_configured' }, 500);
+    return reply(
+      { error: 'Payment service is not configured.', code: 'stripe_not_configured' },
+      500
+    );
   }
   const stripe = new Stripe(stripeKey, {
     apiVersion: '2023-10-16',
@@ -213,7 +219,13 @@ Deno.serve(async (req: Request) => {
   // Authenticate the caller from the Authorization header.
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return reply({ error: 'Authentication required. Please sign in to continue.', code: 'authentication_required' }, 401);
+    return reply(
+      {
+        error: 'Authentication required. Please sign in to continue.',
+        code: 'authentication_required',
+      },
+      401
+    );
   }
   const token = authHeader.substring(7);
   let authResult: any;
@@ -222,7 +234,11 @@ Deno.serve(async (req: Request) => {
   } catch (e: any) {
     if (e?.code === 'DB_TIMEOUT') {
       return reply(
-        { error: 'Service temporarily unavailable. Please try again shortly.', code: 'db_timeout', retryable: true },
+        {
+          error: 'Service temporarily unavailable. Please try again shortly.',
+          code: 'db_timeout',
+          retryable: true,
+        },
         503
       );
     }
@@ -238,7 +254,13 @@ Deno.serve(async (req: Request) => {
       errorStatus: authError?.status,
       errorCode: authError?.code,
     });
-    return reply({ error: 'Authentication required. Please sign in to continue.', code: 'authentication_required' }, 401);
+    return reply(
+      {
+        error: 'Authentication required. Please sign in to continue.',
+        code: 'authentication_required',
+      },
+      401
+    );
   }
   const userId = user.id;
   const userEmail = sanitizeText(user.email ?? '');
@@ -267,7 +289,10 @@ Deno.serve(async (req: Request) => {
       )) as any;
 
       if (bountyErr) {
-        return reply({ error: 'Failed to load bounty.', code: 'bounty_load_failed', retryable: true }, 500);
+        return reply(
+          { error: 'Failed to load bounty.', code: 'bounty_load_failed', retryable: true },
+          500
+        );
       }
       if (!bounty) {
         return reply({ error: 'Bounty not found.', code: 'bounty_not_found' }, 404);
@@ -275,10 +300,7 @@ Deno.serve(async (req: Request) => {
 
       const posterId = bounty.poster_id ?? bounty.user_id;
       if (posterId !== userId) {
-        return reply(
-          { error: 'Only the poster can fund this bounty.', code: 'not_poster' },
-          403
-        );
+        return reply({ error: 'Only the poster can fund this bounty.', code: 'not_poster' }, 403);
       }
       if (bounty.is_for_honor) {
         return reply({ error: 'Honor bounties are not funded.', code: 'is_for_honor' }, 400);
@@ -384,7 +406,10 @@ Deno.serve(async (req: Request) => {
         });
         if (v3Customer.error || !v3Customer.customerId) {
           return reply(
-            { error: v3Customer.error ?? 'Unable to create customer profile', code: 'customer_resolution_failed' },
+            {
+              error: v3Customer.error ?? 'Unable to create customer profile',
+              code: 'customer_resolution_failed',
+            },
             v3Customer.status ?? 400
           );
         }
@@ -436,7 +461,11 @@ Deno.serve(async (req: Request) => {
         if (fundErr) {
           await rollbackV3('funding row write failed', fundErr);
           return reply(
-            { error: 'Failed to record bounty payment. No charge was made.', code: 'payment_record_failed', retryable: true },
+            {
+              error: 'Failed to record bounty payment. No charge was made.',
+              code: 'payment_record_failed',
+              retryable: true,
+            },
             500
           );
         }
@@ -464,7 +493,11 @@ Deno.serve(async (req: Request) => {
         if (ledgerErr) {
           await rollbackV3('ledger write failed', ledgerErr);
           return reply(
-            { error: 'Failed to record bounty payment. No charge was made.', code: 'payment_record_failed', retryable: true },
+            {
+              error: 'Failed to record bounty payment. No charge was made.',
+              code: 'payment_record_failed',
+              retryable: true,
+            },
             500
           );
         }
@@ -542,7 +575,10 @@ Deno.serve(async (req: Request) => {
       });
       if (customerResult.error || !customerResult.customerId) {
         return reply(
-          { error: customerResult.error ?? 'Unable to create customer profile', code: 'customer_resolution_failed' },
+          {
+            error: customerResult.error ?? 'Unable to create customer profile',
+            code: 'customer_resolution_failed',
+          },
           customerResult.status ?? 400
         );
       }
@@ -607,7 +643,11 @@ Deno.serve(async (req: Request) => {
           // don't leave an orphaned, chargeable intent behind.
           await stripe.paymentIntents.cancel(paymentIntent.id).catch(() => {});
           return reply(
-            { error: 'Failed to record bounty payment. No charge was made.', code: 'payment_record_failed', retryable: true },
+            {
+              error: 'Failed to record bounty payment. No charge was made.',
+              code: 'payment_record_failed',
+              retryable: true,
+            },
             500
           );
         }
@@ -677,7 +717,11 @@ Deno.serve(async (req: Request) => {
 
           await stripe.paymentIntents.cancel(paymentIntent.id).catch(() => {});
           return reply(
-            { error: 'Failed to record bounty payment. No charge was made.', code: 'payment_record_failed', retryable: true },
+            {
+              error: 'Failed to record bounty payment. No charge was made.',
+              code: 'payment_record_failed',
+              retryable: true,
+            },
             500
           );
         }
@@ -798,10 +842,7 @@ Deno.serve(async (req: Request) => {
         }
         const v3PosterId = v3Bounty.user_id ?? v3Bounty.poster_id;
         if (v3PosterId !== userId) {
-          return reply(
-            { error: 'Only the poster can release funds.', code: 'not_poster' },
-            403
-          );
+          return reply({ error: 'Only the poster can release funds.', code: 'not_poster' }, 403);
         }
 
         if (
@@ -835,10 +876,7 @@ Deno.serve(async (req: Request) => {
 
         const v3HunterId = v3Bounty.accepted_by;
         if (!v3HunterId) {
-          return reply(
-            { error: 'This bounty has no assigned hunter.', code: 'no_hunter' },
-            409
-          );
+          return reply({ error: 'This bounty has no assigned hunter.', code: 'no_hunter' }, 409);
         }
 
         const { data: v3Hunter } = (await withDbTimeout(
@@ -984,7 +1022,10 @@ Deno.serve(async (req: Request) => {
             'Your payment is delayed',
             'There was a problem taking payment from the poster. Your payment is delayed, not lost — we have asked them to retry.'
           );
-          return reply({ error: message, code, architectureVersion: 3, retryable: true }, httpStatus);
+          return reply(
+            { error: message, code, architectureVersion: 3, retryable: true },
+            httpStatus
+          );
         };
 
         // 1. Capture the full authorized amount.
@@ -1135,19 +1176,16 @@ Deno.serve(async (req: Request) => {
         supabaseAdmin.from('bounty_payments').select('*').eq('bounty_id', bountyId).maybeSingle()
       )) as any;
       if (bpErr) {
-        return reply({ error: 'Failed to load bounty payment.', code: 'payment_load_failed', retryable: true }, 500);
+        return reply(
+          { error: 'Failed to load bounty payment.', code: 'payment_load_failed', retryable: true },
+          500
+        );
       }
       if (!bp) {
-        return reply(
-          { error: 'No payment record for this bounty.', code: 'no_payment' },
-          404
-        );
+        return reply({ error: 'No payment record for this bounty.', code: 'no_payment' }, 404);
       }
       if (bp.poster_id !== userId) {
-        return reply(
-          { error: 'Only the poster can release funds.', code: 'not_poster' },
-          403
-        );
+        return reply({ error: 'Only the poster can release funds.', code: 'not_poster' }, 403);
       }
 
       // Idempotent: only the Stripe transfer.created webhook makes a Phase 2
@@ -1202,10 +1240,7 @@ Deno.serve(async (req: Request) => {
         hunterId = bountyRow?.accepted_by ?? null;
       }
       if (!hunterId) {
-        return reply(
-          { error: 'No hunter is assigned to this bounty.', code: 'no_hunter' },
-          400
-        );
+        return reply({ error: 'No hunter is assigned to this bounty.', code: 'no_hunter' }, 400);
       }
 
       // Verify the hunter is payout-ready on Stripe Connect.
@@ -1217,7 +1252,14 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
       )) as any;
       if (hunterErr) {
-        return reply({ error: 'Failed to load hunter payout profile.', code: 'hunter_profile_load_failed', retryable: true }, 500);
+        return reply(
+          {
+            error: 'Failed to load hunter payout profile.',
+            code: 'hunter_profile_load_failed',
+            retryable: true,
+          },
+          500
+        );
       }
       if (!hunterProfile?.stripe_connect_account_id) {
         return reply(
@@ -1387,13 +1429,13 @@ Deno.serve(async (req: Request) => {
         supabaseAdmin.from('bounty_payments').select('*').eq('bounty_id', bountyId).maybeSingle()
       )) as any;
       if (bpErr) {
-        return reply({ error: 'Failed to load bounty payment.', code: 'payment_load_failed', retryable: true }, 500);
+        return reply(
+          { error: 'Failed to load bounty payment.', code: 'payment_load_failed', retryable: true },
+          500
+        );
       }
       if (!bp) {
-        return reply(
-          { error: 'No payment record for this bounty.', code: 'no_payment' },
-          404
-        );
+        return reply({ error: 'No payment record for this bounty.', code: 'no_payment' }, 404);
       }
       if (bp.poster_id !== userId) {
         return reply(
@@ -1475,7 +1517,12 @@ Deno.serve(async (req: Request) => {
             { idempotencyKey: `bounty_refund_${bp.id}` }
           );
         } catch (refundErr: any) {
-          console.error('[bounty-payments] Refund failed', { bountyId, requestId, bpId: bp.id, refundErr });
+          console.error('[bounty-payments] Refund failed', {
+            bountyId,
+            requestId,
+            bpId: bp.id,
+            refundErr,
+          });
           return reply(
             {
               error: 'Refund could not be processed. Please try again.',
@@ -1525,11 +1572,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-  return reply({ error: 'Not found', code: 'not_found' }, 404);
+    return reply({ error: 'Not found', code: 'not_found' }, 404);
   } catch (err: any) {
     if (err?.code === 'DB_TIMEOUT') {
       return reply(
-        { error: 'Service temporarily unavailable. Please try again shortly.', code: 'db_timeout', retryable: true },
+        {
+          error: 'Service temporarily unavailable. Please try again shortly.',
+          code: 'db_timeout',
+          retryable: true,
+        },
         503
       );
     }

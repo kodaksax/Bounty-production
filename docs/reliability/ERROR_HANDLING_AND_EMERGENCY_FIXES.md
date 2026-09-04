@@ -6,13 +6,13 @@ This runbook describes the production reliability contract for Bounty. It is int
 
 All app and backend errors should be handled as one of these classes:
 
-| Class | Examples | User experience | Retry policy |
-| --- | --- | --- | --- |
-| Recoverable | Offline, timeout, temporary Supabase or Stripe outage | Say the account or funds are safe, offer Retry | Bounded retry only for idempotent reads or explicitly idempotent writes |
-| User-actionable | Invalid input, incomplete onboarding, insufficient balance, unavailable bounty | Tell the user what to fix next | Do not retry automatically |
-| Authentication/session | Expired JWT, sign-out during request, auth startup race | Ask the user to sign in again without looping navigation | Do not retry with the same token |
-| Payment-critical | Deposit, funding, payout, escrow release/refund, webhook/reconciliation drift | Never imply money moved until the backend or Stripe confirms the authoritative state | Retry only with an idempotency key or reconciliation check |
-| Unexpected/system | Malformed API response, null state, unexpected enum, database constraint failure | Show a safe fallback and capture diagnostics | Treat as retryable only if repeating cannot duplicate state |
+| Class                  | Examples                                                                         | User experience                                                                      | Retry policy                                                            |
+| ---------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Recoverable            | Offline, timeout, temporary Supabase or Stripe outage                            | Say the account or funds are safe, offer Retry                                       | Bounded retry only for idempotent reads or explicitly idempotent writes |
+| User-actionable        | Invalid input, incomplete onboarding, insufficient balance, unavailable bounty   | Tell the user what to fix next                                                       | Do not retry automatically                                              |
+| Authentication/session | Expired JWT, sign-out during request, auth startup race                          | Ask the user to sign in again without looping navigation                             | Do not retry with the same token                                        |
+| Payment-critical       | Deposit, funding, payout, escrow release/refund, webhook/reconciliation drift    | Never imply money moved until the backend or Stripe confirms the authoritative state | Retry only with an idempotency key or reconciliation check              |
+| Unexpected/system      | Malformed API response, null state, unexpected enum, database constraint failure | Show a safe fallback and capture diagnostics                                         | Treat as retryable only if repeating cannot duplicate state             |
 
 ## Runtime Contract
 
@@ -66,17 +66,17 @@ For `/bounty-payments/create`, `/bounty-payments/release`, and `/bounty-payments
 
 Use these in order during a production fix:
 
-| Scope | Command |
-| --- | --- |
-| Payout hook | `npx jest __tests__/unit/hooks/use-connect-payout.test.ts --runInBand` |
-| Connect payout contract | `npx jest __tests__/unit/connect-native-payout-contract.test.ts --runInBand` |
-| Payment helper and Edge contract | `npx jest __tests__/unit/services/stripe-internal.test.ts __tests__/unit/payments-edge-function-contract.test.ts --runInBand` |
-| Bounty payment Edge contract | `npx jest __tests__/unit/bounty-payments-edge-function-contract.test.ts __tests__/unit/bounty-payment-settlement-state.test.ts --runInBand` |
-| Unit suite | `npm run test:unit` |
-| TypeScript | `npx tsc --noEmit` |
-| Environment | `npm run env:check` |
-| OTA guardrails | `npm run update:production:check` |
-| Supabase function deploy | `npm run deploy:functions:production` |
+| Scope                            | Command                                                                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Payout hook                      | `npx jest __tests__/unit/hooks/use-connect-payout.test.ts --runInBand`                                                                      |
+| Connect payout contract          | `npx jest __tests__/unit/connect-native-payout-contract.test.ts --runInBand`                                                                |
+| Payment helper and Edge contract | `npx jest __tests__/unit/services/stripe-internal.test.ts __tests__/unit/payments-edge-function-contract.test.ts --runInBand`               |
+| Bounty payment Edge contract     | `npx jest __tests__/unit/bounty-payments-edge-function-contract.test.ts __tests__/unit/bounty-payment-settlement-state.test.ts --runInBand` |
+| Unit suite                       | `npm run test:unit`                                                                                                                         |
+| TypeScript                       | `npx tsc --noEmit`                                                                                                                          |
+| Environment                      | `npm run env:check`                                                                                                                         |
+| OTA guardrails                   | `npm run update:production:check`                                                                                                           |
+| Supabase function deploy         | `npm run deploy:functions:production`                                                                                                       |
 
 ## Remaining High-Risk Audit Targets
 
