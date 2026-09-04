@@ -1339,10 +1339,7 @@ function resolveInstantDestination(
 // Instant-specific limits — see the identical, documented copy in
 // ./instant-payout-validation.ts for the full rationale. Keep in sync.
 const INSTANT_PAYOUT_MAX_USD = readEnvNumberForInstantPayout('INSTANT_PAYOUT_MAX_USD', 9999);
-const MAX_INSTANT_PAYOUTS_PER_DAY = readEnvNumberForInstantPayout(
-  'MAX_INSTANT_PAYOUTS_PER_DAY',
-  10
-);
+const MAX_INSTANT_PAYOUTS_PER_DAY = readEnvNumberForInstantPayout('MAX_INSTANT_PAYOUTS_PER_DAY', 10);
 
 type InstantLimitResult = { ok: true } | { ok: false; error: string; code: string };
 

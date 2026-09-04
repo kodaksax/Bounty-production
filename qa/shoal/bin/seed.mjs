@@ -478,6 +478,25 @@ async function seedState() {
       await client.query('select 1 from completion_submissions where bounty_id = $1', [wipId])
     ).rows.length;
     if (!hasSub) {
+      // Shape MUST match lib/services/completion-service.ts's ProofItem exactly
+      // ({id, type: 'image'|'file', name, url, uri, size, mimeType}) -- the review UI
+      // (components/poster-review-modal.tsx handleAttachmentPress) has no defensive
+      // handling for anything else: no url/uri renders "0 KB" and errors "This
+      // attachment is missing a file reference" on click. An earlier version of this
+      // seeder used an invented {type:'note', value} shape and that produced exactly
+      // that error -- four P0 "proof of work missing" findings that were an artifact
+      // of the seed data, not a real defect. Point at a real, stable public image so
+      // the review screen has something genuine to render and a swarm judges the
+      // actual review experience instead of a malformed-data error path.
+      const proofItem = {
+        id: randomUUID(),
+        type: 'image',
+        name: 'proof.jpg',
+        url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800',
+        uri: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800',
+        size: 245_000,
+        mimeType: 'image/jpeg',
+      };
       await client.query(
         'insert into completion_submissions (id, bounty_id, hunter_id, message, proof_items, ' +
           "status, submitted_at, created_at, updated_at) values ($1,$2,$3,$4,$5,'pending',now(),now(),now())",
@@ -486,7 +505,7 @@ async function seedState() {
           wipId,
           hunterId,
           'Done — boxes are in the hallway as agreed.',
-          JSON.stringify([{ type: 'note', value: 'Seeded proof of work for swarm testing.' }]),
+          JSON.stringify([proofItem]),
         ],
       );
     }

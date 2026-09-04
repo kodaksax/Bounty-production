@@ -1026,8 +1026,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             // 409 duplicate release — the release is already settled or in progress (idempotent success).
             if (
               response.status === 409 &&
-              errCode === 'duplicate_transaction' &&
-              settlementType === 'release'
+              errCode === 'duplicate_transaction' && settlementType === 'release'
             ) {
               console.warn(
                 '[wallet] Escrow already released for bounty (idempotent):',
@@ -1192,8 +1191,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             typeof errData.settlementType === 'string' ? errData.settlementType : undefined;
           if (
             response.status === 409 &&
-            errCode === 'duplicate_transaction' &&
-            settlementType === 'refund'
+            errCode === 'duplicate_transaction' && settlementType === 'refund'
           ) {
             logger.warning('Wallet refund already settled on server', {
               operation: 'wallet_refund',
