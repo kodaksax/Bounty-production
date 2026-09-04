@@ -1559,11 +1559,17 @@ app.post('/api/bounty-requests', async (req, res) => {
 
     // Lookup bounty to determine poster_id (the user who posted the bounty).
     // Also select legacy user_id as a safe fallback in case poster_id was not backfilled.
-    const [bountyRows] = await conn.execute('SELECT poster_id, user_id FROM bounties WHERE id = ?', [bounty_id]);
+    const [bountyRows] = await conn.execute('SELECT poster_id, user_id, status, title FROM bounties WHERE id = ?', [bounty_id]);
     if (!bountyRows || bountyRows.length === 0) {
       return res.status(404).json({ error: 'Bounty not found' });
     }
     const bountyRow = bountyRows[0];
+    // Only open bounties accept applications. Mirrors the bounty_requests
+    // BEFORE INSERT trigger on the Supabase path (a stale client detail page
+    // can still POST here for a bounty that was claimed or cancelled).
+    if (String(bountyRow.status || '').toLowerCase() !== 'open') {
+      return res.status(409).json({ error: 'This bounty is no longer accepting applications' });
+    }
     // Prefer canonical poster_id; if missing, fall back to legacy user_id (and log the fallback).
     let posterId = bountyRow.poster_id || null;
     if (!posterId && bountyRow.user_id) {

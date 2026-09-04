@@ -95,3 +95,38 @@ describe('Bounty Requests API (MySQL fallback) - ratings aggregation', () => {
     expect(first.profile.averageRating).toBeCloseTo(4.5)
   })
 })
+
+describe('Bounty Requests API (MySQL fallback) - only open bounties accept applications', () => {
+  const bountyLookup = (status: string) =>
+    jest.fn(async (sql: string) => {
+      if (/FROM bounties WHERE id/i.test(sql)) {
+        return [[{ poster_id: 'poster1', user_id: 'poster1', status, title: 'Test Bounty' }]]
+      }
+      if (/INSERT INTO bounty_requests/i.test(sql)) return [{ insertId: 'req1' }]
+      if (/FROM bounty_requests/i.test(sql)) {
+        return [[{ id: 'req1', bounty_id: 'b1', hunter_id: 'hunter1', status: 'pending' }]]
+      }
+      return [[]]
+    })
+
+  const post = () =>
+    request(app).post('/api/bounty-requests').send({ bounty_id: 'b1', hunter_id: 'hunter1' })
+
+  beforeEach(() => jest.resetAllMocks())
+
+  it.each(['cancelled', 'completed', 'in_progress'])(
+    'rejects an application to a %s bounty with 409',
+    async (status) => {
+      ;(mockConnectFactory as any).mockResolvedValue({ execute: bountyLookup(status), end: jest.fn() })
+      const res = await post()
+      expect(res.status).toBe(409)
+      expect(res.body.error).toMatch(/no longer accepting applications/i)
+    }
+  )
+
+  it('accepts an application to an open bounty', async () => {
+    ;(mockConnectFactory as any).mockResolvedValue({ execute: bountyLookup('open'), end: jest.fn() })
+    const res = await post()
+    expect(res.status).toBe(201)
+  })
+})
