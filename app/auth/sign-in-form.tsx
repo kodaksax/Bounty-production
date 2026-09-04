@@ -895,6 +895,14 @@ export function SignInForm() {
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
+            <TouchableOpacity
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/onboarding/welcome'))}
+              className="self-start p-2 mb-4"
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <MaterialIcons name="arrow-back" size={24} color={theme.text} />
+            </TouchableOpacity>
             <View className="flex-row items-center justify-center mb-10">
               <Image
                 source={
