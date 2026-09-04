@@ -14,6 +14,7 @@ import { bountyPaymentsService } from './services/bounty-payments-service';
 import { bountyService } from './services/bounty-service';
 import { paymentService } from './services/payment-service';
 import { supabase } from './supabase';
+import { logger } from './utils/error-logger';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
 import { isPhase2Bounty, isV3Bounty } from './utils/payment-architecture';
@@ -23,12 +24,12 @@ import {
     SecureKeys,
     setSecureJSON,
 } from './utils/secure-storage';
+import type { SettlementState, SettlementTone } from './utils/settlement-vocabulary';
 import {
     resolveSupabaseAuthSubscription,
     safeUnsubscribe,
     SupabaseAuthSubscription,
 } from './utils/supabase-subscription';
-import type { SettlementState, SettlementTone } from './utils/settlement-vocabulary';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -123,6 +124,55 @@ interface WalletContextValue {
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
+
+type WalletApiErrorBody = {
+  error?: unknown;
+  code?: unknown;
+  retryable?: unknown;
+  requestId?: unknown;
+  settlementType?: unknown;
+  settlementStatus?: unknown;
+  newBalance?: unknown;
+};
+
+async function readWalletApiError(response: Response): Promise<WalletApiErrorBody> {
+  try {
+    const data = await response.json();
+    return data && typeof data === 'object' ? (data as WalletApiErrorBody) : {};
+  } catch {
+    return {};
+  }
+}
+
+function walletApiCode(data: WalletApiErrorBody): string | undefined {
+  return typeof data.code === 'string' ? data.code : undefined;
+}
+
+function walletApiRequestId(response: Response, data: WalletApiErrorBody): string | undefined {
+  return typeof data.requestId === 'string'
+    ? data.requestId
+    : (response.headers?.get?.('x-request-id') ?? undefined);
+}
+
+function walletApiMessage(data: WalletApiErrorBody, fallback: string): string {
+  return typeof data.error === 'string' && data.error.trim().length > 0 ? data.error : fallback;
+}
+
+function logWalletApiFailure(
+  operation: string,
+  response: Response,
+  data: WalletApiErrorBody,
+  context: Record<string, unknown> = {}
+) {
+  logger.warning('Wallet API request failed', {
+    operation,
+    status: response.status,
+    code: walletApiCode(data),
+    retryable: typeof data.retryable === 'boolean' ? data.retryable : undefined,
+    requestId: walletApiRequestId(response, data),
+    ...context,
+  });
+}
 
 // Use SecureStore for sensitive wallet data (balance and transactions)
 // Start with 0 balance for production readiness - balance comes from API or deposits
@@ -744,7 +794,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           });
 
           if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
+            const errData = await readWalletApiError(response);
             // 409 duplicate_transaction is *not* an error after the bounty
             // INSERT trigger landed (see migration 20260518): the trigger
             // reserves escrow atomically with the bounty row, so by the time
@@ -753,11 +803,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             // newBalance (or fall back to a derived value) and continue.  If
             // we threw here, the caller (useBountyForm) would mistakenly
             // delete a bounty whose funds are already correctly held.
-            const errCode = (errData as any).code;
+            const errCode = walletApiCode(errData);
             if (response.status === 409 && errCode === 'duplicate_transaction') {
               const dupBalance =
-                typeof (errData as any).newBalance === 'number'
-                  ? (errData as any).newBalance
+                typeof errData.newBalance === 'number'
+                  ? errData.newBalance
                   : Math.max(0, balance - amount);
               setBalance(dupBalance);
               await persist(dupBalance);
@@ -769,7 +819,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               });
               return dupRecord;
             }
-            throw new Error((errData as any).error || 'Failed to create escrow on server');
+            logWalletApiFailure('wallet_escrow_create', response, errData, {
+              bountyId: bountyIdStr,
+            });
+            throw new Error(walletApiMessage(errData, 'Failed to create escrow on server'));
           }
 
           const apiData = await response.json();
@@ -896,23 +949,29 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const releaseResult = await paymentService.releaseEscrow(bountyData.payment_intent_id);
 
           if (!releaseResult.success) {
-            const stripeErrMsg = releaseResult.error?.message ?? '';
+            const releaseErrorCode = releaseResult.error?.code;
             // Treat "already captured/released" as an idempotent success — the funds have
             // already been settled via Stripe, so the approval flow can continue.
-            if (/already (released|captured)|funds already/i.test(stripeErrMsg)) {
+            if (releaseErrorCode === 'escrow_already_settled') {
               console.warn(
                 '[wallet] Stripe escrow already captured for bounty (idempotent):',
                 bountyIdStr
               );
               platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
               netAmount = grossAmount - platformFee;
-            } else if (/payout account|connect account/i.test(stripeErrMsg)) {
+            } else if (releaseErrorCode === 'connect_not_onboarded') {
               // Hunter has not set up their Stripe Connect account.
               throw new Error(
                 'The hunter has not set up their payout account. Funds remain in escrow — please contact support.'
               );
             } else {
-              console.error('Failed to release escrow via Stripe:', stripeErrMsg);
+              logger.warning('Failed to release legacy Stripe escrow', {
+                operation: 'legacy_stripe_escrow_release',
+                bountyId: bountyIdStr,
+                paymentIntentId: bountyData.payment_intent_id,
+                code: releaseErrorCode,
+                retryable: releaseResult.error?.retryable,
+              });
               return false;
             }
           } else {
@@ -959,27 +1018,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           });
 
           if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            const errMsg: string = (errData as any).error ?? '';
+            const errData = await readWalletApiError(response);
+            const errCode = walletApiCode(errData);
+            const settlementType =
+              typeof errData.settlementType === 'string' ? errData.settlementType : undefined;
 
-            // 409 "already released/refunded" — escrow is already settled (idempotent success).
-            if (response.status === 409 && /already (released|refunded)/i.test(errMsg)) {
+            // 409 duplicate release — the release is already settled or in progress (idempotent success).
+            if (
+              response.status === 409 &&
+              errCode === 'duplicate_transaction' &&
+              settlementType === 'release'
+            ) {
               console.warn(
                 '[wallet] Escrow already released for bounty (idempotent):',
                 bountyIdStr
               );
               platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
               netAmount = grossAmount - platformFee;
-            } else if (response.status === 409 && /duplicate/i.test(errMsg)) {
-              // 409 "Duplicate request detected" from idempotency key check — the first
-              // request was already processed, treat as success.
-              console.warn(
-                '[wallet] Duplicate release request detected (idempotent):',
-                bountyIdStr
-              );
-              platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
-              netAmount = grossAmount - platformFee;
-            } else if (response.status === 400 && /payout account|connect account/i.test(errMsg)) {
+            } else if (response.status === 400 && errCode === 'connect_not_onboarded') {
               // Hunter has not set up a payout account — user-actionable failure.
               throw new Error(
                 'The hunter has not set up their payout account. Funds remain in escrow — please contact support.'
@@ -990,7 +1046,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 'Authorization error releasing funds. Please sign out and sign back in, then try again.'
               );
             } else {
-              console.error('[wallet] Server release failed:', errMsg || `HTTP ${response.status}`);
+              logWalletApiFailure('wallet_release', response, errData, {
+                bountyId: bountyIdStr,
+                hunterId,
+                settlementType,
+                settlementStatus: errData.settlementStatus,
+              });
               return false;
             }
           } else {
@@ -1125,9 +1186,30 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
 
         if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          console.error('[wallet] Server refund failed:', (errData as any).error);
-          return false;
+          const errData = await readWalletApiError(response);
+          const errCode = walletApiCode(errData);
+          const settlementType =
+            typeof errData.settlementType === 'string' ? errData.settlementType : undefined;
+          if (
+            response.status === 409 &&
+            errCode === 'duplicate_transaction' &&
+            settlementType === 'refund'
+          ) {
+            logger.warning('Wallet refund already settled on server', {
+              operation: 'wallet_refund',
+              bountyId: bountyIdStr,
+              requestId: walletApiRequestId(response, errData),
+              settlementType,
+              settlementStatus: errData.settlementStatus,
+            });
+          } else {
+            logWalletApiFailure('wallet_refund', response, errData, {
+              bountyId: bountyIdStr,
+              settlementType,
+              settlementStatus: errData.settlementStatus,
+            });
+            return false;
+          }
         }
       } catch (error) {
         console.error('[wallet] Error calling refund API:', error);

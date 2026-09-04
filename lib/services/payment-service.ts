@@ -9,10 +9,8 @@ import {
     PAYMENT_SECURITY_CONFIG,
     validatePaymentSecurity,
 } from '../security/payment-security-config';
-import {
-    PaymentMethodResponse
-} from '../types/payment-types';
-import { MIN_ESCROW_CENTS, MAX_ESCROW_CENTS } from '../utils/bounty-validation';
+import { PaymentMethodResponse } from '../types/payment-types';
+import { MAX_ESCROW_CENTS, MIN_ESCROW_CENTS } from '../utils/bounty-validation';
 import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
 import { StripePaymentMethod, stripeService } from './stripe-service';
@@ -90,14 +88,62 @@ export interface EscrowReleaseResult {
   paymentIntentId?: string;
   hunterAmount?: number; // Amount transferred to hunter (after fees)
   platformFee?: number; // Platform fee deducted
-  error?: { message: string };
+  error?: {
+    message: string;
+    code?: string;
+    retryable?: boolean;
+    requestId?: string;
+    status?: number;
+  };
 }
 
 export interface EscrowRefundResult {
   success: boolean;
   paymentIntentId?: string;
   refundAmount?: number;
-  error?: { message: string };
+  error?: {
+    message: string;
+    code?: string;
+    retryable?: boolean;
+    requestId?: string;
+    status?: number;
+  };
+}
+
+function classifyLegacyEscrowError(
+  error: any,
+  fallbackMessage: string
+): { message: string; code: string; retryable: boolean; requestId?: string; status?: number } {
+  const message = error?.message || fallbackMessage;
+  const existingCode = typeof error?.code === 'string' ? error.code : undefined;
+  const requestId = typeof error?.requestId === 'string' ? error.requestId : undefined;
+  const status = typeof error?.status === 'number' ? error.status : undefined;
+  const retryable = typeof error?.retryable === 'boolean' ? error.retryable : undefined;
+  const normalized = String(message).toLowerCase();
+
+  if (/already (released|captured|refunded|canceled)|funds already/.test(normalized)) {
+    return { message, code: 'escrow_already_settled', retryable: false, requestId, status };
+  }
+
+  if (/payout account|connect account|connected account/.test(normalized)) {
+    return { message, code: 'connect_not_onboarded', retryable: false, requestId, status };
+  }
+
+  if (existingCode === 'network_error' || /network|timeout|failed to fetch/.test(normalized)) {
+    return { message, code: 'network_error', retryable: true, requestId, status };
+  }
+
+  if (existingCode && !/^\d+$/.test(existingCode)) {
+    return { message, code: existingCode, retryable: retryable ?? false, requestId, status };
+  }
+
+  return {
+    message,
+    code: 'legacy_escrow_failed',
+    retryable: retryable ?? false,
+    requestId,
+    status,
+  };
 }
 
 /**
@@ -108,10 +154,7 @@ class PaymentService {
   /**
    * Create a new payment with security validations
    */
-  async createPayment(
-    options: CreatePaymentOptions,
-    authToken?: string
-  ): Promise<PaymentResult> {
+  async createPayment(options: CreatePaymentOptions, authToken?: string): Promise<PaymentResult> {
     try {
       // Validate security requirements
       const securityCheck = validatePaymentSecurity({
@@ -302,7 +345,9 @@ class PaymentService {
               requiresAction: true,
               error: {
                 type: err?.type || 'authentication_error',
-                message: err?.message || 'Failed to complete authentication. Please try again or use a different payment method.',
+                message:
+                  err?.message ||
+                  'Failed to complete authentication. Please try again or use a different payment method.',
                 code: err?.code,
               },
             };
@@ -346,20 +391,19 @@ class PaymentService {
    * - Validates escrowId is non-empty before calling server
    * - Logs a warning if ID format looks unexpected (not pi_ prefix)
    */
-  async releaseEscrow(
-    escrowId: string,
-    authToken?: string
-  ): Promise<EscrowReleaseResult> {
+  async releaseEscrow(escrowId: string, authToken?: string): Promise<EscrowReleaseResult> {
     try {
       if (!escrowId) {
         return {
           success: false,
-          error: { message: 'escrowId is required' },
+          error: { message: 'escrowId is required', code: 'escrow_id_required', retryable: false },
         };
       }
 
       if (!escrowId.startsWith('pi_')) {
-        logger.warning('[PaymentService] releaseEscrow called with unexpected escrowId format', { escrowId });
+        logger.warning('[PaymentService] releaseEscrow called with unexpected escrowId format', {
+          escrowId,
+        });
       }
 
       const res = await stripeService.releaseEscrow(escrowId, authToken);
@@ -372,7 +416,7 @@ class PaymentService {
       logger.error('[PaymentService] Error releasing escrow:', { error: error });
       return {
         success: false,
-        error: { message: error.message || 'Failed to release escrow' },
+        error: classifyLegacyEscrowError(error, 'Failed to release escrow'),
       };
     }
   }
@@ -384,20 +428,19 @@ class PaymentService {
    * - Validates escrowId is non-empty before calling server
    * - Logs a warning if ID format looks unexpected (not pi_ prefix)
    */
-  async refundEscrow(
-    escrowId: string,
-    authToken?: string
-  ): Promise<EscrowRefundResult> {
+  async refundEscrow(escrowId: string, authToken?: string): Promise<EscrowRefundResult> {
     try {
       if (!escrowId) {
         return {
           success: false,
-          error: { message: 'escrowId is required' },
+          error: { message: 'escrowId is required', code: 'escrow_id_required', retryable: false },
         };
       }
 
       if (!escrowId.startsWith('pi_')) {
-        logger.warning('[PaymentService] refundEscrow called with unexpected escrowId format', { escrowId });
+        logger.warning('[PaymentService] refundEscrow called with unexpected escrowId format', {
+          escrowId,
+        });
       }
 
       const res = await stripeService.refundEscrow(escrowId, authToken);
@@ -410,7 +453,7 @@ class PaymentService {
       logger.error('[PaymentService] Error refunding escrow:', { error: error });
       return {
         success: false,
-        error: { message: error.message || 'Failed to refund escrow' },
+        error: classifyLegacyEscrowError(error, 'Failed to refund escrow'),
       };
     }
   }
@@ -418,10 +461,7 @@ class PaymentService {
   /**
    * Confirm a payment with proper error handling
    */
-  async confirmPayment(
-    options: ConfirmPaymentOptions,
-    authToken?: string
-  ): Promise<PaymentResult> {
+  async confirmPayment(options: ConfirmPaymentOptions, authToken?: string): Promise<PaymentResult> {
     try {
       // Confirm payment using secure method with retry
       const result = await stripeService.confirmPaymentSecure(
@@ -572,9 +612,7 @@ class PaymentService {
   /**
    * Save a new payment method (Setup Intent flow)
    */
-  async savePaymentMethod(
-    authToken?: string
-  ): Promise<{
+  async savePaymentMethod(authToken?: string): Promise<{
     success: boolean;
     clientSecret?: string;
     error?: { message: string };

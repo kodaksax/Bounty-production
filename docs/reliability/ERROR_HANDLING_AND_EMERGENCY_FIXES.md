@@ -26,6 +26,8 @@ The expected flow is:
 
 Do not expose raw Supabase, Postgres, Stripe, JavaScript stack traces, tokens, secrets, or unnecessary PII to clients.
 
+Client code should use `classifyError` from `lib/utils/error-messages.ts` when a flow needs both safe user copy and diagnostic metadata. It returns a stable `code`, `severity`, `recoverability`, and retry flag. Current shared mappings include payment-critical errors and stale bounty application failures (`bounty_not_accepting_applications`), so UI code does not need to parse Postgres or Supabase messages.
+
 ## Payments Rule
 
 Never report a financial operation as successful from a client-side assumption.
@@ -35,6 +37,14 @@ For withdrawals, a successful HTTP response must include a Stripe payout id. If 
 The Connect-native payout Edge Function includes an `X-Request-Id` header and `requestId` response field for the native payout paths. The shared `invokePayments` client helper also sends `x-request-id` on payment Edge Function calls and preserves backend `code`, `status`, and `requestId` on thrown API errors. Use those values to join user reports, PostHog events, Sentry events, Supabase function logs, payout audit rows, and Stripe objects.
 
 For `/payments/create-payment-intent`, validation failures return stable codes such as `invalid_amount`, `invalid_currency`, `payment_method_required`, and `bank_verification_failed`. The outer payment handler returns sanitized failure copy with a request id; raw provider/database messages should stay in logs, not user-facing responses.
+
+For `/wallet/*`, every JSON response now carries an `X-Request-Id` header and `requestId` body field. Deposit verification and persistence failures return stable codes such as `invalid_payment_intent_id`, `payment_verification_failed`, `payment_intent_not_found`, `deposit_record_failed`, and `deposit_recorded_balance_refresh_failed`, plus a retryability hint. Escrow/refund/release failures also return stable codes such as `escrow_create_failed`, `pending_refund_recovery_failed`, `settlement_state_validation_failed`, and `release_finalize_failed`. Duplicate settlements are explicit `duplicate_transaction` responses with `retryable: false`. The client deposit hook logs those fields after a confirmed Stripe or Apple Pay payment so support can join the mobile report to Supabase function logs without exposing Stripe internals to the user.
+
+Wallet clients must branch on stable response fields, not English error messages. `WalletContext` treats a duplicate release as idempotent success only when the response is `code: duplicate_transaction` and `settlementType: release`; duplicate refunds require `settlementType: refund`. If the server reports a different settlement type, the client leaves the operation failed so a release cannot be mistaken for a refund or vice versa.
+
+The legacy Stripe PaymentIntent release path follows the same rule. `paymentService.releaseEscrow()` classifies known outcomes before returning to UI code: `escrow_already_settled` is idempotent success, `connect_not_onboarded` is user-actionable, and `network_error` is retryable. `WalletContext` branches on those codes rather than parsing Stripe/backend message text.
+
+The lower-level `escrowService` preserves backend JSON from non-OK `/payments/escrows/*` responses before normalizing with `handleStripeError`. Error objects retain `code`, HTTP `status`, `requestId`, and `retryable`, and `paymentService.releaseEscrow()` / `paymentService.refundEscrow()` forward those fields to callers. This is the trace path for legacy PaymentIntent escrow incidents.
 
 For `/bounty-payments/create`, `/bounty-payments/release`, and `/bounty-payments/cancel`, every in-handler response goes through the request-aware reply helper. PaymentIntent, Transfer, Refund, and ledger metadata include `request_id` where that operation writes metadata. Critical release/refund failures are retryable, sanitized for users, and leave the payment in a recoverable state rather than reporting settlement as complete.
 
@@ -68,6 +78,12 @@ Use these in order during a production fix:
 
 | Scope                            | Command                                                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Error taxonomy                   | `npx jest __tests__/unit/utils/error-messages.test.ts --runInBand`                                                                          |
+| Wallet deposit contract          | `npx jest __tests__/unit/wallet-deposit-stripe-verification.test.ts --runInBand`                                                            |
+| Wallet client duplicate handling | `npx jest __tests__/unit/atomic-bounty-escrow.test.ts --runInBand`                                                                          |
+| Wallet financial invariants      | `npx jest __tests__/unit/financial-invariants.test.ts --runInBand`                                                                          |
+| Legacy payment service guards    | `npx jest __tests__/unit/pipeline-safeguards.test.ts --runInBand`                                                                           |
+| Legacy escrow service contract   | `npx jest __tests__/unit/services/escrow-service.test.ts --runInBand`                                                                       |
 | Payout hook                      | `npx jest __tests__/unit/hooks/use-connect-payout.test.ts --runInBand`                                                                      |
 | Connect payout contract          | `npx jest __tests__/unit/connect-native-payout-contract.test.ts --runInBand`                                                                |
 | Payment helper and Edge contract | `npx jest __tests__/unit/services/stripe-internal.test.ts __tests__/unit/payments-edge-function-contract.test.ts --runInBand`               |

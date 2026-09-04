@@ -38,6 +38,13 @@ import {
   resolveEnv,
   shoalHome,
 } from './lib/env.mjs';
+import {
+  POOL_SECRET_ENV,
+  derivePassword,
+  poolAccounts,
+  requirePoolSecret,
+} from './lib/accounts.mjs';
+import { installRunPersonas, removeRunPersonas } from './lib/run-personas.mjs';
 
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes('--' + f);
@@ -58,15 +65,12 @@ if (has('list')) {
     );
     console.log('    ' + ' '.repeat(22) + s.title);
     if (s.requiresAuth) {
-      // Operators pick scenarios from this list; a scenario that cannot currently produce
-      // a trustworthy result must say so here, not only in the README.
+      // Operators pick scenarios from this list; anything that must be true before the
+      // run can produce a trustworthy result belongs here, not only in the README.
       console.log(
         '    ' + ' '.repeat(22) +
-          'WARNING: authenticated flows currently crash after sign-in in the static-export',
-      );
-      console.log(
-        '    ' + ' '.repeat(22) +
-          "harness (expo-router 'ErrorBoundary' error) -- results are unreliable. See README.",
+          'needs ' + s.swarm + ' seeded pool account(s) + ' + POOL_SECRET_ENV +
+          '  (seed.mjs accounts)',
       );
     }
     console.log('');
@@ -117,37 +121,58 @@ try {
 }
 printEvidence(evidence);
 
-// --- Credentials ----------------------------------------------------------
+// --- Credentials: one account per agent -----------------------------------
 // Shoal has no way to inject an authenticated browser context (no storageState flag), so
-// a scenario that needs a session hands the agent throwaway credentials inside the task
-// text. That text is echoed into Shoal's own report, so we redact it afterwards -- and
-// these must only ever be a dedicated test account on a non-production project.
-const creds = {
-  email: process.env.BOUNTY_SHOAL_TEST_EMAIL,
-  password: process.env.BOUNTY_SHOAL_TEST_PASSWORD,
-  hunterEmail: process.env.BOUNTY_SHOAL_HUNTER_EMAIL,
-  hunterPassword: process.env.BOUNTY_SHOAL_HUNTER_PASSWORD,
-};
+// a scenario that needs a session has to hand the agent credentials in text.
+//
+// It used to put ONE account into the shared --task string, which every agent in the
+// swarm then signed into at the same time. Six agents on one user post, apply, fund and
+// cancel over each other's rows, so "my draft vanished" and "there are bounties I never
+// posted" become indistinguishable from another agent's writes -- every state finding was
+// confounded, and the duplicate-bounties oracle (which groups by poster_id) could not
+// tell five agents posting once from one agent posting five times.
+//
+// So each agent now gets its OWN pool account. The delivery mechanism is the persona,
+// not the task: Shoal assigns personas to swarm slots by cycling the selected list
+// (pickPersonas -> pool[i % pool.length]), so N distinct persona ids across a swarm of N
+// is a guaranteed 1:1 binding, and persona.profile goes verbatim into exactly that one
+// agent's system prompt. The task text carries no credentials at all any more, which
+// also keeps them out of Shoal's report and out of every other agent's context.
+const swarm = Number(opt('swarm', String(scenario.swarm)));
+if (!Number.isInteger(swarm) || swarm < 1) {
+  console.error('\n  --swarm must be a positive integer, got "' + opt('swarm') + '".\n');
+  process.exit(1);
+}
+
+/** Passwords to strip from anything this run writes to disk. */
+const secrets = [];
+let agentAccounts = null;
 
 let task = scenario.task;
 if (scenario.requiresAuth) {
   const wantsHunter = /hunter/.test(scenario.id) || scenario.id === 'race-claim';
-  const email = (wantsHunter && creds.hunterEmail) || creds.email;
-  const password = (wantsHunter && creds.hunterPassword) || creds.password;
-  if (!email || !password) {
+  const role = wantsHunter ? 'hunter' : 'poster';
+  let secret;
+  try {
+    secret = requirePoolSecret();
+  } catch (err) {
     console.error(
-      '\n  Scenario "' + scenario.id + '" needs a signed-in account.\n' +
-        '  Set BOUNTY_SHOAL_TEST_EMAIL and BOUNTY_SHOAL_TEST_PASSWORD (and, for hunter-side\n' +
-        '  scenarios, BOUNTY_SHOAL_HUNTER_EMAIL / BOUNTY_SHOAL_HUNTER_PASSWORD) to a dedicated\n' +
-        '  test account on the target project. Never a real user. See qa/shoal/README.md.\n',
+      '\n  Scenario "' + scenario.id + '" needs one signed-in account per agent.\n  ' +
+        err.message + '\n',
     );
     process.exit(1);
   }
+  agentAccounts = poolAccounts(role, swarm).map((a) => ({
+    ...a,
+    password: derivePassword(secret, a.email),
+  }));
+  secrets.push(...agentAccounts.map((a) => a.password));
   task =
-    'First sign in to the existing test account: email ' + email + ', password ' + password +
-    '. If a sign-in form is not on screen, find the way to it. Once you are signed in, do this: ' +
+    'You already have an account on this site; its email address and password are in your ' +
+    'persona above. Sign in with those first -- if a sign-in form is not on screen, find ' +
+    'the way to it. Do not create a new account, and do not use any other credentials. ' +
+    'Once you are signed in, do this: ' +
     task;
-  creds.active = password;
 }
 
 // --- Scenario -> real Shoal flags -----------------------------------------
@@ -194,7 +219,6 @@ if (postAuthRoute) {
     new URL(postAuthRoute, target.url).toString() + ').';
 }
 
-const swarm = Number(opt('swarm', String(scenario.swarm)));
 const provider = opt('provider', process.env.BOUNTY_SHOAL_PROVIDER || config.defaults.provider);
 const defaultModel = provider === 'subscription' ? 'claude-haiku-4-5' : config.defaults.model;
 
@@ -210,7 +234,43 @@ const args = [
   '--effort', opt('effort', config.defaults.effort),
   '--port', opt('port', String(config.defaults.port)),
 ];
-if (scenario.personas?.length) args.push('--personas', scenario.personas.join(','));
+// Authenticated scenarios select the ephemeral per-agent personas installed below;
+// everything else selects the scenario's personas straight from the merged library.
+let runPersonas = null;
+if (agentAccounts) {
+  runPersonas = installRunPersonas(home, {
+    basePersonaIds: scenario.personas ?? [],
+    accounts: agentAccounts,
+    scenarioId: scenario.id,
+    stamp: process.pid + '-' + Date.now().toString(36),
+  });
+  args.push('--personas', runPersonas.ids.join(','));
+
+  // Those personas carry this run's account passwords, inside Shoal's own checkout.
+  // Take them out again however this process ends -- normal exit, --dry-run's early
+  // exit, an uncaught throw, or a signal. Registered here rather than alongside the
+  // swarm's own handlers because the window opens the moment the file is written.
+  let personasRemoved = false;
+  const cleanupPersonas = () => {
+    if (personasRemoved) return;
+    personasRemoved = true;
+    try {
+      removeRunPersonas(home);
+    } catch (err) {
+      console.error('  !! could not restore ' + runPersonas.path + ': ' + err.message);
+      console.error('     Remove the "BEGIN shoal per-run agent personas" block by hand.');
+    }
+  };
+  process.on('exit', cleanupPersonas);
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(sig, () => {
+      cleanupPersonas();
+      process.exit(130);
+    });
+  }
+} else if (scenario.personas?.length) {
+  args.push('--personas', scenario.personas.join(','));
+}
 if (racePath) {
   args.push('--race', '--race-path', racePath);
 } else if (scenario.strategy?.length) {
@@ -227,8 +287,13 @@ if (!/^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(host)) args.push('--allow-domai
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const runDir = join(QA_ROOT, 'artifacts', stamp + '-' + scenario.id);
 
-const redact = (s) =>
-  creds.active && typeof s === 'string' ? s.split(creds.active).join('***REDACTED***') : s;
+/** Strip every pool password this run handed out, not just one. */
+const redact = (s) => {
+  if (typeof s !== 'string') return s;
+  let out = s;
+  for (const secret of secrets) out = out.split(secret).join('***REDACTED***');
+  return out;
+};
 
 const meta = {
   scenario: scenario.id,
@@ -239,6 +304,9 @@ const meta = {
   swarm,
   strategy: racePath ? ['race'] : scenario.strategy,
   personas: scenario.personas,
+  // The accounts, not the passwords: enough to attribute a state finding to a user and
+  // to go and look at that user's rows afterwards.
+  agentAccounts: agentAccounts ? agentAccounts.map((a) => ({ slot: a.slot, email: a.email })) : null,
   tags: scenario.tags,
   raceBountyId: scenario.raceBountyId ?? null,
   guard: evidence,

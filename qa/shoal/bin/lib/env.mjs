@@ -72,6 +72,13 @@ export function expectedRefForAppEnv(appEnv) {
 const REF = '[a-z]{20}';
 
 /**
+ * A string unique to stubs/react-native-web-alert.web.js and stable under minification:
+ * it is a CSS class name inside a template literal, so the bundler keeps it verbatim.
+ * Its presence in the served bundle proves the Alert no-op was actually replaced.
+ */
+export const ALERT_SHIM_MARKER = 'bwa-backdrop';
+
+/**
  * Pull every Supabase project ref out of a Postgres connection string.
  *
  * Supabase has retired the direct `db.<ref>.supabase.co` host; the working form is now the
@@ -232,7 +239,14 @@ export async function assertSafeTarget(config, target, opts = {}) {
   const host = hostOf(target.url);
   const g = config.guards;
   const override = overrideActive(config);
-  const evidence = { host, env: target.name, probed: false, refsSeen: [], stripeKeys: [] };
+  const evidence = {
+    host,
+    env: target.name,
+    probed: false,
+    refsSeen: [],
+    stripeKeys: [],
+    alertShim: null,
+  };
 
   if (g.deniedHosts.some((d) => host === d || host.endsWith('.' + d))) {
     if (!override) {
@@ -287,6 +301,31 @@ export async function assertSafeTarget(config, target, opts = {}) {
     );
   }
 
+  // Is the web Alert shim in the served bundle?
+  //
+  // react-native-web's Alert is `static alert() {}` -- a no-op. This app reports nearly
+  // every failure and asks nearly every confirmation through Alert.alert, so an export
+  // built without the metro.config.cjs substitution shows the swarm NOTHING on any error
+  // path: error-path findings become impossible, and a real silent failure is
+  // indistinguishable from a suppressed message. A run against such a bundle is not
+  // wrong, but its silence about errors means nothing, so say so loudly and record it in
+  // the run's evidence rather than letting a reader assume the error paths were clean.
+  //
+  // This is a warning, not a refusal: the unauthenticated scenarios still measure what
+  // they are for, and refusing would strand an operator whose only fault is a stale
+  // export.
+  evidence.alertShim = sources.includes(ALERT_SHIM_MARKER);
+  if (!evidence.alertShim) {
+    console.warn(
+      '  !! The served bundle does NOT contain the web Alert shim\n' +
+        '     (stubs/react-native-web-alert.web.js, wired in metro.config.cjs).\n' +
+        "     react-native-web's Alert is a no-op, so every Alert.alert(...) in the app --\n" +
+        '     validation errors, payment failures, confirmations -- is invisible to the swarm.\n' +
+        '     Findings from this run CANNOT distinguish "no error shown" from "error swallowed".\n' +
+        '     Rebuild the export:  npm run qa:shoal:web',
+    );
+  }
+
   const stripeKeys = new Set([...sources.matchAll(/pk_(?:live|test)_[A-Za-z0-9]{6}/g)].map((m) => m[0]));
   evidence.stripeKeys = [...stripeKeys].map((k) => k.slice(0, 12) + '...');
   const live = [...stripeKeys].filter((k) => k.startsWith('pk_live_'));
@@ -305,5 +344,11 @@ export function printEvidence(evidence) {
   if (evidence.probed) {
     console.log('          supabase refs in served bundle: ' + (evidence.refsSeen.join(', ') || '(none found)'));
     console.log('          stripe publishable keys: ' + (evidence.stripeKeys.join(', ') || '(none found)'));
+    console.log(
+      '          web Alert shim: ' +
+        (evidence.alertShim
+          ? 'present (error dialogs are visible to the swarm)'
+          : 'MISSING -- Alert.alert is a no-op, error paths are invisible'),
+    );
   }
 }

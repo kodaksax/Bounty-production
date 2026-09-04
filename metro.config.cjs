@@ -29,11 +29,14 @@ try {
 
   // Custom resolver: on web, route a handful of native-only packages (Stripe,
   // react-native-maps + its clustering wrapper, the url-polyfill auto-installer) to
-  // local web stubs. The mapping lives in stubs/web-stub-resolver.cjs so it can be
-  // unit-tested without booting Metro. Non-web platforms fall straight through.
+  // local web stubs, plus react-native-web's own no-op Alert. The mapping lives in
+  // stubs/web-stub-resolver.cjs so it can be unit-tested without booting Metro.
+  // `originModulePath` is passed through because the Alert rule is keyed on the
+  // importing package, not just the imported id (react-native-web reaches it by a
+  // relative import). Non-web platforms fall straight through.
   const resolveRequest = (context, realModuleName, platform, moduleName) => {
     const targetName = realModuleName || moduleName;
-    const webStub = resolveWebStub(targetName, platform, projectRoot);
+    const webStub = resolveWebStub(targetName, platform, projectRoot, context.originModulePath);
     if (webStub) return webStub;
 
     return originalResolver(context, realModuleName, platform, moduleName);

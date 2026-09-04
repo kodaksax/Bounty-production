@@ -10,6 +10,8 @@
  *  - Auth header forwarding.
  */
 
+import { escrowService } from '../../../lib/services/escrow-service';
+
 jest.mock('../../../lib/config/api', () => ({
   API_BASE_URL: 'https://api.test',
   FINANCIAL_API_BASE_URL: 'https://api.test',
@@ -32,8 +34,6 @@ jest.mock('../../../lib/services/stripe-sdk', () => ({
     initialize: jest.fn().mockResolvedValue(undefined),
   },
 }));
-
-import { escrowService } from '../../../lib/services/escrow-service';
 
 describe('escrowService', () => {
   beforeEach(() => {
@@ -218,6 +218,30 @@ describe('escrowService', () => {
       });
       await expect(escrowService.releaseEscrow('esc_missing')).rejects.toBeDefined();
     });
+
+    it('preserves backend release error metadata', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 409,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === 'x-request-id' ? 'hdr_req_1' : null),
+        },
+        json: async () => ({
+          error: 'Escrow already released for this bounty',
+          code: 'escrow_already_settled',
+          requestId: 'body_req_1',
+          retryable: false,
+        }),
+      });
+
+      await expect(escrowService.releaseEscrow('esc_settled')).rejects.toMatchObject({
+        message: 'Escrow already released for this bounty',
+        code: 'escrow_already_settled',
+        status: 409,
+        requestId: 'body_req_1',
+        retryable: false,
+      });
+    });
   });
 
   // ── refundEscrow ─────────────────────────────────────────────────────────
@@ -265,6 +289,29 @@ describe('escrowService', () => {
         json: async () => ({}),
       });
       await expect(escrowService.refundEscrow('esc')).rejects.toBeDefined();
+    });
+
+    it('preserves backend refund request id from response headers when body omits it', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 503,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === 'x-request-id' ? 'hdr_refund_req' : null),
+        },
+        json: async () => ({
+          error: 'Refund service unavailable',
+          code: 'refund_finalize_failed',
+          retryable: true,
+        }),
+      });
+
+      await expect(escrowService.refundEscrow('esc')).rejects.toMatchObject({
+        message: 'Refund service unavailable',
+        code: 'refund_finalize_failed',
+        status: 503,
+        requestId: 'hdr_refund_req',
+        retryable: true,
+      });
     });
 
     it('wraps raw fetch failure', async () => {

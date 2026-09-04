@@ -657,9 +657,18 @@ export function handleStripeError(
     const defaultMessage = 'Payment service temporarily unavailable. Please try again.';
     const message =
       error.message && error.message !== defaultMessage ? error.message : defaultMessage;
-    const stripeError = new Error(message) as Error & { type?: string; code?: string };
+    const stripeError = new Error(message) as Error & {
+      type?: string;
+      code?: string;
+      status?: number;
+      requestId?: string;
+      retryable?: boolean;
+    };
     stripeError.type = 'api_error';
     stripeError.code = error.code;
+    stripeError.status = error.status;
+    stripeError.requestId = error.requestId;
+    stripeError.retryable = error.retryable;
     return stripeError;
   }
 
@@ -685,9 +694,11 @@ export function handleStripeError(
   if (error?.type === 'network_error') {
     const stripeError = new Error(
       error.message || 'Unable to connect to payment service. Check your connection and try again.'
-    ) as Error & { type?: string; code?: string };
+    ) as Error & { type?: string; code?: string; requestId?: string; retryable?: boolean };
     stripeError.type = 'network_error';
     stripeError.code = error.code;
+    stripeError.requestId = error.requestId;
+    stripeError.retryable = true;
     return stripeError;
   }
 
@@ -707,10 +718,16 @@ export function handleStripeError(
       type?: string;
       code?: string;
       decline_code?: string;
+      status?: number;
+      requestId?: string;
+      retryable?: boolean;
     };
     stripeError.type = error.type;
     stripeError.code = error.decline_code || error.code;
     stripeError.decline_code = error.decline_code;
+    stripeError.status = error.status;
+    stripeError.requestId = error.requestId;
+    stripeError.retryable = error.retryable;
     return stripeError;
   }
 
