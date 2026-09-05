@@ -184,32 +184,7 @@ export const ratingsService = {
           };
         }
 
-        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
-        const canFallback =
-          primaryError.includes('relation') ||
-          primaryError.includes('does not exist') ||
-          primaryError.includes('column') ||
-          primaryError.includes('schema cache');
-
-        if (!canFallback) throw error;
-
-        const { data: legacyData, error: legacyError } = await supabase.rpc(
-          'get_user_rating_stats',
-          { target_user_id: userId }
-        );
-
-        if (legacyError) throw legacyError;
-        if (
-          legacyData &&
-          typeof legacyData === 'object' &&
-          'average_rating' in legacyData &&
-          'rating_count' in legacyData
-        ) {
-          return {
-            averageRating: Number((legacyData as any).average_rating) || 0,
-            ratingCount: Number((legacyData as any).rating_count) || 0,
-          };
-        }
+        throw error;
       }
 
       // Fallback: fetch all ratings and compute locally

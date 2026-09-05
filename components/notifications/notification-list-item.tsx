@@ -1,4 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
+import { useNormalizedProfile } from 'hooks/useNormalizedProfile';
 import { categoryForNotificationType } from 'lib/config/notification-taxonomy';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
@@ -21,6 +23,11 @@ const CATEGORY_ICON: Record<NotificationCategory, keyof typeof MaterialIcons.gly
   followers: 'favorite',
   marketing: 'campaign',
 };
+
+// Categories with a real personal "sender" whose identity is worth showing —
+// payments/security/verification/marketing notifications have no individual
+// actor, so they keep the generic category icon.
+const CATEGORIES_WITH_ACTOR: NotificationCategory[] = ['messages', 'marketplace', 'followers'];
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -49,6 +56,11 @@ export function NotificationListItem({ notification, onPress, onLongPress, onTog
   const category = notification.category ?? categoryForNotificationType(notification.type);
   const unread = !notification.read;
   const count = notification.count ?? 1;
+
+  const actorId =
+    notification.data?.senderId ?? notification.data?.userId ?? notification.data?.followerId;
+  const showActorAvatar = CATEGORIES_WITH_ACTOR.includes(category) && !!actorId;
+  const { profile: actorProfile } = useNormalizedProfile(actorId, { enabled: showActorAvatar });
 
   const renderLeftActions = (progress: SharedValue<number>) => {
     const style = useAnimatedStyleFromProgress(progress);
@@ -102,9 +114,18 @@ export function NotificationListItem({ notification, onPress, onLongPress, onTog
         onLongPress={() => onLongPress(notification)}
         activeOpacity={0.7}
       >
-        <View style={s.iconBadge}>
-          <MaterialIcons name={CATEGORY_ICON[category]} size={18} color={theme.primaryLight ?? theme.primary} />
-        </View>
+        {showActorAvatar && actorProfile?.avatar ? (
+          <Avatar style={s.actorAvatar}>
+            <AvatarImage src={actorProfile.avatar} alt={actorProfile.username || actorProfile.display_name || 'User'} />
+            <AvatarFallback style={s.actorAvatarFallback}>
+              <MaterialIcons name={CATEGORY_ICON[category]} size={16} color={theme.primaryLight ?? theme.primary} />
+            </AvatarFallback>
+          </Avatar>
+        ) : (
+          <View style={s.iconBadge}>
+            <MaterialIcons name={CATEGORY_ICON[category]} size={18} color={theme.primaryLight ?? theme.primary} />
+          </View>
+        )}
         <View style={s.textBlock}>
           <View style={s.titleRow}>
             <Text style={[s.title, unread && s.titleUnread]} numberOfLines={1}>
@@ -153,6 +174,21 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surfaceSecondary,
       marginRight: 12,
       marginTop: 2,
+    },
+    actorAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      marginRight: 12,
+      marginTop: 2,
+    },
+    actorAvatarFallback: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.surfaceSecondary,
     },
     textBlock: { flex: 1 },
     titleRow: {

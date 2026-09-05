@@ -125,3 +125,62 @@ export function deriveVerificationStatus(
 
   return 'unverified';
 }
+
+/**
+ * Marketplace-activity milestone badges — a distinct concept from the
+ * identity-verification badges above. These are earned from real, deterministic
+ * marketplace activity (via get_profile_activity_stats + ratings), not
+ * identity/KYC state. Kept as a small, meaningful set rather than decorative
+ * gamification — see the profile-overhaul plan for the "don't create
+ * meaningless badges" guidance this follows.
+ */
+export type MilestoneBadgeId = 'first_bounty_posted' | 'bounties_completed_5' | 'top_rated';
+
+export interface MilestoneBadgeInput {
+  bounties_posted?: number;
+  bounties_completed?: number;
+  average_rating?: number;
+  rating_count?: number;
+}
+
+export interface MilestoneBadge {
+  id: MilestoneBadgeId;
+  label: string;
+  description: string;
+  earned: boolean;
+}
+
+/**
+ * Badge criteria:
+ * - First Bounty Posted : bounties_posted >= 1
+ * - 5 Bounties Completed: bounties_completed >= 5
+ * - Top Rated           : average_rating >= 4.5 with rating_count >= 5
+ *                         (a minimum sample size so a single 5-star rating
+ *                         can't earn it)
+ */
+export function getMilestoneBadges(input: MilestoneBadgeInput): MilestoneBadge[] {
+  const postedEarned = (input.bounties_posted ?? 0) >= 1;
+  const completed5Earned = (input.bounties_completed ?? 0) >= 5;
+  const topRatedEarned = (input.average_rating ?? 0) >= 4.5 && (input.rating_count ?? 0) >= 5;
+
+  return [
+    {
+      id: 'first_bounty_posted',
+      label: 'First Bounty Posted',
+      description: 'Posted their first bounty on Bounty.',
+      earned: postedEarned,
+    },
+    {
+      id: 'bounties_completed_5',
+      label: '5 Bounties Completed',
+      description: 'Successfully completed 5 or more posted bounties.',
+      earned: completed5Earned,
+    },
+    {
+      id: 'top_rated',
+      label: 'Top Rated',
+      description: 'Maintains a 4.5+ average rating across 5 or more reviews.',
+      earned: topRatedEarned,
+    },
+  ];
+}

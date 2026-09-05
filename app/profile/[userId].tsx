@@ -26,15 +26,20 @@ import {
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
+import { ProfileBountyHistorySection } from "../../components/profile-bounty-history-section";
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
 import { BrandingLogo } from "../../components/ui/branding-logo";
+import { MilestoneBadgeChips } from "../../components/ui/milestone-badge-chips";
+import { ProfileCompletionMeter } from "../../components/ui/profile-completion-meter";
 import { ScreenHeader } from "../../components/ui/screen-header";
 import { UserProfileScreenSkeleton } from "../../components/ui/skeleton-loaders";
+import { VerificationBadgeChips } from "../../components/ui/verification-badge-chips";
+import { useProfileActivityStats } from "../../hooks/useProfileActivityStats";
+import { useRatings } from "../../hooks/useRatings";
 import { authProfileService } from "../../lib/services/auth-profile-service";
 import { blockingService } from "../../lib/services/blocking-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
-import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
 import { navigationIntent } from "../../lib/services/navigation-intent";
 ;
@@ -114,12 +119,9 @@ export default function UserProfileScreen() {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([]);
-  const [stats, setStats] = useState({
-    jobsAccepted: 0,
-    jobsCompleted: 0,
-    bountiesPosted: 0,
-    isLoading: true,
-  });
+  const { stats: activityStats } = useProfileActivityStats(userId);
+  const { stats: ratingStats } = useRatings(userId);
+  const [jobsAccepted, setJobsAccepted] = useState(0);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   const isOwnProfile = userId === currentUserId;
@@ -163,26 +165,24 @@ export default function UserProfileScreen() {
     checkBlockStatus();
   }, [userId, isOwnProfile]);
 
-  // Fetch statistics for the user
+  // Hunter-side "jobs accepted" — distinct from activityStats (poster-side
+  // posted/completed, via useProfileActivityStats).
   useEffect(() => {
-    const fetchStats = async () => {
-      if (!userId) return;
-      try {
-        const postedBounties = await bountyService.getByUserId(userId);
-        const requests = await bountyRequestService.getByUserId(userId);
-        const acceptedJobs = requests.filter((req) => req.status === 'accepted');
-        setStats({
-          jobsAccepted: acceptedJobs.length,
-          jobsCompleted: 0,
-          bountiesPosted: postedBounties.length,
-          isLoading: false,
-        });
-      } catch (error) {
-        console.error('[UserProfileScreen] Error fetching profile statistics:', error);
-        setStats(prev => ({ ...prev, isLoading: false }));
-      }
+    let cancelled = false;
+    if (!userId) return;
+    bountyRequestService
+      .getByUserId(userId)
+      .then((requests) => {
+        if (!cancelled) {
+          setJobsAccepted(requests.filter((req) => req.status === 'accepted').length);
+        }
+      })
+      .catch((error) => {
+        console.error('[UserProfileScreen] Error fetching accepted jobs:', error);
+      });
+    return () => {
+      cancelled = true;
     };
-    fetchStats();
   }, [userId]);
 
   // Load skills for the user
@@ -224,8 +224,10 @@ export default function UserProfileScreen() {
           profileSkills.push({ id: 'location', icon: 'location-on', text: `Based in ${location}` });
         }
 
-        // Add verified contact if phone is set
-        if (raw && raw.phone) {
+        // Add verified contact only if the phone number is actually verified,
+        // not merely present (raw.phone truthy previously conflated "entered
+        // a phone number" with "verified it").
+        if (raw && raw.phone_verified === true) {
           profileSkills.push({ id: 'verified', icon: 'verified-user', text: 'Verified contact' });
         }
 
@@ -320,7 +322,7 @@ export default function UserProfileScreen() {
       name: profile?.name || profile?.display_name || undefined,
       username: profile?.username || undefined,
       about: profile?.bio || undefined,
-      completedCount: stats.jobsCompleted,
+      completedCount: activityStats.bountiesCompleted,
     });
   };
 
@@ -538,8 +540,9 @@ export default function UserProfileScreen() {
           hideActions={true}
           hideFollowButton={true}
           activityStats={{
-            jobsCompleted: stats.jobsCompleted,
-            bountiesPosted: stats.bountiesPosted,
+            jobsAccepted,
+            jobsCompleted: activityStats.bountiesCompleted,
+            bountiesPosted: activityStats.bountiesPosted,
           }}
         />
 
@@ -621,6 +624,54 @@ export default function UserProfileScreen() {
           </View>
         )}
 
+        {/* Profile completion meter — own profile only, encourages personalization */}
+        {isOwnProfile && (
+          <View style={styles.section}>
+            <ProfileCompletionMeter
+              input={{
+                username: profile.username,
+                display_name: profile.display_name,
+                avatar_url: profile.avatar,
+                bio: profile.bio,
+                location: profile.location,
+                banner_url: profile.banner_url,
+              }}
+            />
+          </View>
+        )}
+
+        {/* Verification + Milestone Badges */}
+        <View style={styles.section}>
+          <VerificationBadgeChips
+            input={{
+              email_confirmed: profile.email_confirmed,
+              phone_verified: profile.phone_verified,
+              id_verification_status: profile.id_verification_status,
+              selfie_submitted_at: profile.selfie_submitted_at,
+              age_verified: profile.age_verified,
+              stripe_identity_status: profile.stripe_identity_status as
+                | 'unstarted'
+                | 'requires_input'
+                | 'processing'
+                | 'verified'
+                | 'canceled'
+                | undefined,
+              username: profile.username,
+              display_name: profile.display_name,
+              avatar_url: profile.avatar,
+              bio: profile.bio,
+            }}
+          />
+          <MilestoneBadgeChips
+            input={{
+              bounties_posted: activityStats.bountiesPosted,
+              bounties_completed: activityStats.bountiesCompleted,
+              average_rating: ratingStats.averageRating,
+              rating_count: ratingStats.ratingCount,
+            }}
+          />
+        </View>
+
         {/* Skillsets */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Skillsets</Text>
@@ -629,6 +680,9 @@ export default function UserProfileScreen() {
 
         {/* Portfolio */}
         <PortfolioSection userId={userId} isOwnProfile={isOwnProfile} />
+
+        {/* Bounty history — respects moderation/removal via the RPC-backed stats hook's underlying query filter */}
+        <ProfileBountyHistorySection userId={userId} isOwnProfile={isOwnProfile} />
       </ScrollView>
 
       {/* Report Modal */}

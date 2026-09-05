@@ -19,6 +19,7 @@ import {
     ActiveHuntersPill,
     MIN_ACTIVE_HUNTERS_TO_SHOW,
 } from '../../components/ui/active-hunters-pill';
+import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { EmptyState } from '../../components/ui/empty-state';
 import {
     SEARCH_FIELD_MAX_FONT_SCALE,
@@ -588,6 +589,14 @@ export default function EnhancedSearchScreen() {
           accessibilityHint="Opens user profile"
         >
           <View style={s.cardHeader}>
+            <Avatar style={s.userAvatar}>
+              <AvatarImage src={item.avatar || "/placeholder.svg?height=32&width=32"} alt={item.username} />
+              <AvatarFallback style={s.userAvatarFallback}>
+                <Text style={s.userAvatarFallbackText}>
+                  {item.username?.slice(0, 2).toUpperCase()}
+                </Text>
+              </AvatarFallback>
+            </Avatar>
             <Text style={s.cardTitle}>{item.username}</Text>
             {(item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') && (
               <MaterialIcons
@@ -1356,6 +1365,25 @@ function makeStyles(t: AppTheme) {
       fontSize: 15,
       fontWeight: '600',
       flex: 1,
+    },
+    userAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      marginRight: 10,
+    },
+    userAvatarFallback: {
+      backgroundColor: t.surfaceSecondary,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    userAvatarFallbackText: {
+      color: t.primaryLight,
+      fontSize: 11,
+      fontWeight: '700',
     },
     cardDesc: {
       color: t.textSecondary,
