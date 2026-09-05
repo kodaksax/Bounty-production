@@ -44,11 +44,11 @@ describe('StepTask template tap contract', () => {
       />
     );
 
-    fireEvent.press(getByLabelText('Assemble furniture, suggested $40'));
+    fireEvent.press(getByLabelText('Assemble my furniture, suggested $40'));
 
     expect(onFieldFocus).toHaveBeenCalledTimes(1);
     expect(onUpdate).toHaveBeenCalledWith({
-      title: 'Assemble furniture',
+      title: 'Assemble my furniture',
       category: 'labor',
       amount: 40,
       isForHonor: false,
