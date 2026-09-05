@@ -1,5 +1,6 @@
 "use client"
 
+import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { MaterialIcons } from "@expo/vector-icons"
 // DateTimePicker removed from inline usage; dedicated screen handles picking
 import { CreateBountyFlow } from "app/screens/CreateBounty"
@@ -686,9 +687,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               // Refresh to ensure consistency
               await loadMyBounties()
             } catch (err: any) {
-              // Error handling - no rollback needed since we didn't optimistically update
-              setError(err.message || "Failed to delete posting")
-              Alert.alert('Error', err.message || 'Failed to delete bounty. Please try again.')
+              // Error handling - no rollback needed since we didn't optimistically
+              // update. Classified so a raw PostgREST/Supabase string never
+              // reaches the user.
+              const friendly = getUserFriendlyError(err)
+              setError(friendly.message)
+              Alert.alert(friendly.title, friendly.message)
             } finally {
               deletingBountyIdsRef.current.delete(deleteKey)
             }
@@ -762,7 +766,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               Alert.alert("Success", "Your application has been withdrawn.")
             } catch (err: any) {
               console.error("Error withdrawing application:", err)
-              Alert.alert("Error", err.message || "Failed to withdraw application")
+              const friendly = getUserFriendlyError(err)
+              Alert.alert(friendly.title, friendly.message)
             }
           },
         },

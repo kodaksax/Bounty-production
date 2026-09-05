@@ -1,3 +1,4 @@
+import { sanitizeErrorMessage } from '../../../../lib/utils/error-messages';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useMemo, useRef, useState } from 'react';
@@ -58,7 +59,7 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, 
         onUpdate({ attachments: next });
       },
       onError: (error) => {
-        Alert.alert('Upload Error', error.message);
+        Alert.alert("Couldn't add that photo", sanitizeErrorMessage(error));
       },
     });
 

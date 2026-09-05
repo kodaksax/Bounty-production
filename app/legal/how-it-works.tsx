@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SettingsScreenHeader } from '../../components/ui/settings-screen-header';
+import { PLATFORM_FEE_DISPLAY } from '../../lib/constants/fees';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -31,7 +32,7 @@ const SECTIONS: Section[] = [
     icon: 'sell',
     title: 'Posting is free',
     body:
-      'Creating a bounty costs nothing, and you are not charged when you post. Bounty may charge a service fee on a bounty; any fee is shown to you before you are charged. The amount you name is the amount the hunter is quoted.',
+      `Creating a bounty costs nothing, and you are not charged when you post. You are charged the amount you named when you accept a hunter. A ${PLATFORM_FEE_DISPLAY} service fee is deducted from that amount when it is released, so the hunter takes home the rest — both of you see the exact numbers before you commit.`,
     terms: 'Terms §30 (Payments & Escrow)',
   },
   {
@@ -56,6 +57,20 @@ const SECTIONS: Section[] = [
     terms: 'Terms §7 (Refunds) and §30 (Cancellation & Refunds)',
   },
   {
+    icon: 'payments',
+    title: 'Getting paid as a hunter',
+    body:
+      `When you apply, nothing is owed to you yet. Once the poster accepts you, their money is already held in escrow — it is committed before you start work. You submit the finished work in the app, the poster approves it, and the bounty amount less the ${PLATFORM_FEE_DISPLAY} service fee lands in your Bounty wallet. Every bounty shows you what you take home before you apply.`,
+    terms: 'Terms §30 (Payments & Escrow)',
+  },
+  {
+    icon: 'account-balance',
+    title: 'Cashing out',
+    body:
+      'Money in your Bounty wallet is yours. Cash out to a linked bank account or debit card from the Wallet tab. Before your first cash-out you verify your identity with Stripe, which is what lets money be sent to you at all. Payout timing and limits are set by Stripe and the receiving bank.',
+    terms: 'Terms §30 (Stripe Connect and Payouts)',
+  },
+  {
     icon: 'gavel',
     title: 'If something goes wrong',
     body:
@@ -74,8 +89,8 @@ export default function HowItWorksRoute() {
       <SettingsScreenHeader icon="shield" title="How Bounty works" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={s.content}>
         <Text style={s.intro}>
-          Bounty is a way to pay someone nearby to do a small job. Here is what happens to your
-          money and what protects you, before you create an account.
+          Bounty is a way to pay someone nearby to do a small job — or to get paid for doing one.
+          Here is exactly what happens to the money, and what protects you on either side.
         </Text>
 
         {SECTIONS.map(section => (

@@ -1,3 +1,4 @@
+import { sanitizeErrorMessage } from '../lib/utils/error-messages'
 import { MaterialIcons } from '@expo/vector-icons'
 import { useMemo, useState } from 'react'
 import {
@@ -84,7 +85,7 @@ export function WorkflowDisputeModal({
       setEvidenceItems((prev) => [...prev, evidence])
     },
     onError: (error) => {
-      Alert.alert('Upload Error', error.message)
+      Alert.alert("Couldn't upload that file", sanitizeErrorMessage(error))
     },
   })
 

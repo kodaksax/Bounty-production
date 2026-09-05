@@ -3,6 +3,7 @@
  * Manages 2FA, password, and security preferences for users
  */
 
+import { sanitizeErrorMessage } from '../../lib/utils/error-messages';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -120,7 +121,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
       }
     } catch (error: any) {
       console.error('[security-settings] Error enabling 2FA:', error);
-      Alert.alert('Error', error.message || 'Failed to enable 2FA. Please try again.');
+      Alert.alert("Couldn't enable two-factor authentication", sanitizeErrorMessage(error) || 'Please try again.');
       setIsEnabling2FA(false);
     }
   };

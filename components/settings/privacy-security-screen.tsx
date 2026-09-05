@@ -1,3 +1,4 @@
+import { sanitizeErrorMessage } from '../../lib/utils/error-messages';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ThemedButton } from 'components/themed/ThemedButton';
 import { ThemedInput } from 'components/themed/ThemedInput';
@@ -134,7 +135,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       });
 
       if (error) {
-        Alert.alert('Error', error.message || 'Failed to update password.');
+        Alert.alert("Couldn't update your password", sanitizeErrorMessage(error) || 'Please try again.');
         return;
       }
 

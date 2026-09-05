@@ -1,3 +1,4 @@
+import { sanitizeErrorMessage } from '../../../../lib/utils/error-messages';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -83,7 +84,7 @@ export default function HunterReviewAndVerifyScreen() {
       setProofItems((prev) => [...prev, proofItem]);
     },
     onError: (error) => {
-      Alert.alert('Upload Error', error.message);
+      Alert.alert("Couldn't upload that file", sanitizeErrorMessage(error));
     },
   });
 

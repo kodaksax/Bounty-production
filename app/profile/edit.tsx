@@ -1,3 +1,4 @@
+import { sanitizeErrorMessage } from '../../lib/utils/error-messages';
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuthProfile } from "hooks/useAuthProfile";
@@ -103,7 +104,7 @@ export default function EditProfileScreen() {
       setAvatarUrl(attachment.remoteUri || attachment.uri);
     },
     onError: (error) => {
-      Alert.alert('Avatar Upload Error', error.message);
+      Alert.alert("Couldn't update your photo", sanitizeErrorMessage(error));
     },
   });
 
@@ -120,7 +121,7 @@ export default function EditProfileScreen() {
       setBannerUrl(attachment.remoteUri || attachment.uri);
     },
     onError: (error) => {
-      Alert.alert('Banner Upload Error', error.message);
+      Alert.alert("Couldn't update your banner", sanitizeErrorMessage(error));
     },
   });
 

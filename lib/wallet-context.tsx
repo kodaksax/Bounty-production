@@ -30,11 +30,17 @@ import {
     safeUnsubscribe,
     SupabaseAuthSubscription,
 } from './utils/supabase-subscription';
+import { PLATFORM_FEE_RATE, effectiveFeePercent } from './constants/fees';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
 // NOT at withdrawal - this ensures transparency and consistency
-export const PLATFORM_FEE_PERCENTAGE = 0.1; // 10% platform fee on bounty completion
+//
+// The rate itself lives in lib/constants/fees.ts, which mirrors the server's
+// PLATFORM_FEE_PERCENT. This re-export is kept so existing importers (and the
+// FAQ copy, which derives its "% service fee" line from it) keep working.
+export { PLATFORM_FEE_PERCENT, PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from './constants/fees';
+export const PLATFORM_FEE_PERCENTAGE = PLATFORM_FEE_RATE;
 export const CANCELLATION_FEE_EARLY = 0.05; // 5% fee for early cancellation
 export const CANCELLATION_FEE_AFTER_WORK = 0.15; // 15% fee for cancellation after work started
 
@@ -1091,7 +1097,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           details: {
             title: 'Platform Service Fee',
             bounty_id: bountyIdStr,
-            fee_percentage: PLATFORM_FEE_PERCENTAGE * 100,
+            // Derived from the fee that was ACTUALLY applied to this release,
+            // not from the client's estimate — the server's rate is
+            // env-configurable, so a hardcoded constant here would print a
+            // percentage on the user's receipt that does not match the money
+            // that moved.
+            fee_percentage: effectiveFeePercent(grossAmount, platformFee),
             status: 'completed',
           },
         });

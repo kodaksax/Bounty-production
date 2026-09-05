@@ -1,6 +1,8 @@
 import { SettingsRow } from 'components/ui/settings-row';
 import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
 import { SettingsSection } from 'components/ui/settings-section';
+import type { Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import React, { useMemo } from 'react';
@@ -21,6 +23,7 @@ export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({
   onNavigateFAQ,
 }) => {
   const { theme } = useAppThemeContext();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
@@ -31,6 +34,16 @@ export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({
         contentContainerStyle={[s.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]}
       >
         <SettingsSection>
+          {/* The plain-language explainer of fees, escrow, verification and
+              disputes. It existed only behind pre-auth onboarding and the
+              poster's price step, so a signed-in hunter had no route to it at
+              all — they could not find out how or when they get paid. */}
+          <SettingsRow
+            icon="shield"
+            label="How Bounty works"
+            description="Fees, escrow, getting paid, and what happens if something goes wrong."
+            onPress={() => router.push('/legal/how-it-works' as Href)}
+          />
           <SettingsRow
             icon="support-agent"
             label="Contact Support"

@@ -117,7 +117,11 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel={unreadMessageCount > 0 ? `My Bounties, ${unreadMessageCount} unread` : "View your bounties"}
+            accessibilityLabel={
+              unreadMessageCount > 0
+                ? `My Bounties, ${unreadMessageCount} unread message${unreadMessageCount === 1 ? '' : 's'}`
+                : 'View your bounties'
+            }
             accessibilityState={{ selected: activeScreen === "messages" }}
           >
             <View style={styles.iconWrapper}>

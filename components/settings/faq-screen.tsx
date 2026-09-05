@@ -5,21 +5,43 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { PLATFORM_FEE_PERCENTAGE } from 'lib/wallet-context';
+import { PLATFORM_FEE_DISPLAY } from 'lib/constants/fees';
 
 interface FAQScreenProps { onBack: () => void }
 
-// Derive the fee display from the source-of-truth constant used at completion
-// time so the FAQ copy can never drift from the actual deduction.
-const PLATFORM_FEE_DISPLAY = `${(PLATFORM_FEE_PERCENTAGE * 100).toFixed(
-  Number.isInteger(PLATFORM_FEE_PERCENTAGE * 100) ? 0 : 1
-)}%`;
-
+// PLATFORM_FEE_DISPLAY is derived from lib/constants/fees.ts, which mirrors
+// the server's PLATFORM_FEE_PERCENT, so this copy cannot drift from the
+// deduction that actually happens. (It previously derived from a client-only
+// constant that had drifted to twice the real rate.)
 const FAQS = [
-  { q: 'How does escrow work?', a: 'Funds are reserved when a bounty is accepted and released on completion.' },
-  { q: 'Can I cancel a bounty?', a: 'Open bounties may be archived. Funded disputes will have a formal flow later.' },
-  { q: 'What fees apply?', a: `A ${PLATFORM_FEE_DISPLAY} platform service fee is deducted from the bounty amount when funds are released to the hunter on completion. Standard Stripe processing fees (typically 2.9% + $0.30 on card transactions) may also apply when funding your wallet. The exact totals are shown before you confirm.` },
-  { q: 'How do I report abuse?', a: 'Use Contact Support with detailed information. Our moderation team reviews all reports promptly.' },
+  {
+    q: 'What is a bounty?',
+    a: 'A bounty is a small job someone needs done. The person who needs it is the poster; the person who does it is the hunter. You can be either, on different bounties, with the same account.',
+  },
+  {
+    q: 'How does escrow work?',
+    a: 'When a poster accepts a hunter, the bounty amount is taken from the poster and held by Bounty — not paid out yet, and not still spendable by the poster. It is released to the hunter when the poster approves the finished work.',
+  },
+  {
+    q: 'What fees apply?',
+    a: `A ${PLATFORM_FEE_DISPLAY} service fee is deducted from the bounty amount when funds are released to the hunter on completion — so on a $100 bounty the poster pays $100 and the hunter takes home the amount shown on the bounty before they apply. Standard Stripe processing fees (typically 2.9% + $0.30 on card transactions) may also apply when adding money to your wallet. Exact totals are shown before you confirm.`,
+  },
+  {
+    q: 'When do I get paid for work I finished?',
+    a: 'As soon as the poster approves your submitted work, the money moves from escrow into your Bounty wallet. From there you can cash out to a bank account or debit card from the Wallet tab. You verify your identity with Stripe once, before your first cash-out.',
+  },
+  {
+    q: 'What if the poster never approves my work?',
+    a: 'Message them first from the bounty — most cases are a misunderstanding. If that goes nowhere, open a dispute from the bounty and Bounty reviews it and decides how the escrowed money is handled. The money stays held while a dispute is open; it does not go back to the poster automatically.',
+  },
+  {
+    q: 'Can I cancel a bounty?',
+    a: 'Yes. An open bounty with no one accepted can be cancelled outright and any held funds are returned. Once a hunter is working, cancelling sends them a request rather than cancelling unilaterally, and an unresolved disagreement goes to dispute review.',
+  },
+  {
+    q: 'How do I report abuse?',
+    a: 'Report the bounty or the person from their profile, or use Contact Support with details. Our moderation team reviews all reports. You can also block someone, which stops them messaging you.',
+  },
 ];
 
 export const FAQScreen: React.FC<FAQScreenProps> = ({ onBack }) => {

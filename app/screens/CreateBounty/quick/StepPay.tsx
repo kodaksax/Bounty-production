@@ -4,6 +4,7 @@ import { type Href, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { analyticsService } from '../../../../lib/services/analytics-service';
+import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { validateAmount, validateBalance } from '../../../../lib/utils/bounty-validation';
@@ -228,7 +229,9 @@ export function StepPay({
           <Text style={styles.infoBody}>
             {draft.isForHonor
               ? 'No payment is involved. Someone helps out voluntarily.'
-              : "The amount is held then, and released to the hunter when you approve their work. Flat rate — they know exactly what they'll earn."}
+              : `You pay $${draft.amount || 0}. It is held then, and released when you approve the work. Bounty takes a ${PLATFORM_FEE_DISPLAY} service fee out of it, so the hunter takes home $${calculateHunterEarnings(
+                  draft.amount
+                ).net.toFixed(2)} — and they see that number before they apply.`}
           </Text>
           {draft.isForHonor ? null : (
             <TouchableOpacity

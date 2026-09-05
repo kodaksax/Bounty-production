@@ -1,5 +1,6 @@
 "use client"
 
+import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
@@ -20,6 +21,7 @@ import { ApplicantCard } from "../../components/applicant-card"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { getBottomNavContentPadding } from "../../lib/constants/navigation"
+import { useConversations } from '../../hooks/useConversations'
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
@@ -94,6 +96,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   const insets = useSafeAreaInsets()
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
+  const { totalUnreadCount: unreadMessageCount } = useConversations()
   const { refundEscrow, refreshFromApi } = useWallet()
   const { session: walletSession } = useAuthContext()
   const { theme } = useAppThemeContext()
@@ -576,9 +579,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               // Refresh to ensure consistency
               await loadMyBounties()
             } catch (err: any) {
-              // Error handling - no rollback needed since we didn't optimistically update
-              setError(err.message || "Failed to delete posting")
-              Alert.alert('Error', err.message || 'Failed to delete bounty. Please try again.')
+              // Error handling - no rollback needed since we didn't optimistically update.
+              // The raw service message can be a PostgREST/Supabase string, so
+              // it is classified before it reaches the user.
+              const friendly = getUserFriendlyError(err)
+              setError(friendly.message)
+              Alert.alert(friendly.title, friendly.message)
             } finally {
               deletingBountyIdsRef.current.delete(deleteKey)
             }
@@ -650,7 +656,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               Alert.alert("Success", "Your application has been withdrawn.")
             } catch (err: any) {
               console.error("Error withdrawing application:", err)
-              Alert.alert("Error", err.message || "Failed to withdraw application")
+              const friendly = getUserFriendlyError(err)
+              Alert.alert(friendly.title, friendly.message)
             }
           },
         },
@@ -841,6 +848,40 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             <View className="flex-row items-center" style={styles.translateY2}>
               {/* Balance pill sits to the left, bookmark to the right */}
               <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
+              {/* Messages. The conversation list at /tabs/messenger had no
+                  entry point anywhere in the app — every route into messaging
+                  was a deep link to ONE conversation from a bounty screen or a
+                  push notification, so there was no way to see who had written
+                  to you. The bottom nav meanwhile showed an unread-message
+                  badge on this tab, which rendered Work/Posts/Requests and no
+                  messages at all. This is the missing door. */}
+              <TouchableOpacity
+                className="ml-3 p-2 touch-target-min"
+                onPress={() => router.push('/tabs/messenger' as never)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  unreadMessageCount > 0
+                    ? `Messages, ${unreadMessageCount} unread`
+                    : 'Messages'
+                }
+                accessibilityHint="Opens your conversations"
+              >
+                <View>
+                  <MaterialIcons
+                    name="chat-bubble-outline"
+                    size={20}
+                    color={theme.text}
+                    accessibilityElementsHidden={true}
+                  />
+                  {unreadMessageCount > 0 && (
+                    <View style={styles.headerBadge}>
+                      <Text style={styles.headerBadgeText}>
+                        {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 className="ml-3 p-2 touch-target-min"
                 onPress={() => setShowArchivedBounties(true)}
@@ -1237,6 +1278,24 @@ export default InboxScreen;
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     translateY2: { transform: [{ translateY: 2 }] },
+    headerBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -8,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      paddingHorizontal: 3,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.error,
+    },
+    headerBadgeText: {
+      color: '#fff',
+      fontSize: 9,
+      fontWeight: '700',
+      lineHeight: 12,
+    },
     titleText: { fontSize: 20, color: theme.text },
     errorBox: { marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
     errorText: { color: theme.text, fontSize: 14 },
