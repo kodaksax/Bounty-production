@@ -857,7 +857,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                   messages at all. This is the missing door. */}
               <TouchableOpacity
                 className="ml-3 p-2 touch-target-min"
-                onPress={() => router.push('/tabs/messenger' as never)}
+                onPress={() => router.push(ROUTES.TABS.MESSENGER as never)}
                 accessibilityRole="button"
                 accessibilityLabel={
                   unreadMessageCount > 0
