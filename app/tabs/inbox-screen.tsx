@@ -1,5 +1,6 @@
 "use client"
 
+import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
@@ -20,6 +21,7 @@ import { ApplicantCard } from "../../components/applicant-card"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { getBottomNavContentPadding } from "../../lib/constants/navigation"
+import { useConversations } from '../../hooks/useConversations'
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
@@ -31,14 +33,16 @@ import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
 import { AcceptFundingGate } from '../../components/accept-funding-gate'
-import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
+import type { BountyListRow, InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
   IN_PROGRESS_FILTERS,
   IN_PROGRESS_FILTER_LABELS,
   MY_POSTINGS_FILTERS,
   MY_POSTINGS_FILTER_LABELS,
+  toBountyListRows,
   useBountyStatusFilters,
 } from '../../hooks/useBountyStatusFilters'
+import { BountySectionHeader } from '../../components/ui/bounty-section-header'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { getBountyFundingRequirement } from '../../lib/services/bounty-funding-service'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -92,6 +96,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   const insets = useSafeAreaInsets()
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
+  const { totalUnreadCount: unreadMessageCount } = useConversations()
   const { refundEscrow, refreshFromApi } = useWallet()
   const { session: walletSession } = useAuthContext()
   const { theme } = useAppThemeContext()
@@ -253,6 +258,19 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     () => bountyRequests.filter((r) => r.status === 'pending').length,
     [bountyRequests]
   )
+
+  // Unreviewed applications per posting. An open bounty with applications is
+  // the poster's most common "needs your attention" state and cannot be seen
+  // from the bounty row alone, so the grouping needs it explicitly.
+  const applicationCounts = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of bountyRequests) {
+      if (r.status !== 'pending') continue
+      const key = String(r.bounty_id)
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [bountyRequests])
 
   // Fetch data from the API
   useEffect(() => {
@@ -561,9 +579,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               // Refresh to ensure consistency
               await loadMyBounties()
             } catch (err: any) {
-              // Error handling - no rollback needed since we didn't optimistically update
-              setError(err.message || "Failed to delete posting")
-              Alert.alert('Error', err.message || 'Failed to delete bounty. Please try again.')
+              // Error handling - no rollback needed since we didn't optimistically update.
+              // The raw service message can be a PostgREST/Supabase string, so
+              // it is classified before it reaches the user.
+              const friendly = getUserFriendlyError(err)
+              setError(friendly.message)
+              Alert.alert(friendly.title, friendly.message)
             } finally {
               deletingBountyIdsRef.current.delete(deleteKey)
             }
@@ -635,7 +656,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               Alert.alert("Success", "Your application has been withdrawn.")
             } catch (err: any) {
               console.error("Error withdrawing application:", err)
-              Alert.alert("Error", err.message || "Failed to withdraw application")
+              const friendly = getUserFriendlyError(err)
+              Alert.alert(friendly.title, friendly.message)
             }
           },
         },
@@ -646,7 +668,9 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   // ---- Optimized FlatList callbacks ----
   // Memoized keyExtractor functions
-  const keyExtractorBounty = React.useCallback((item: Bounty) => item.id.toString(), []);
+  // Rows are either a section header or a bounty; ids are namespaced by
+  // toBountyListRows so a header can never collide with a bounty id.
+  const keyExtractorRow = React.useCallback((item: BountyListRow) => item.id, []);
   const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
 
   // NOTE: Do NOT provide getItemLayout for expandable / variable-height rows.
@@ -661,7 +685,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   }), []);
 
   // Memoized render functions for better performance
-  const renderMyPostingItem = React.useCallback(({ item: bounty }: { item: Bounty; index: number }) => (
+  const renderMyPostingItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
+    if (row.kind === 'section') {
+      return <BountySectionHeader label={row.label} count={row.count} group={row.group} />
+    }
+    const bounty = row.bounty
+    return (
     <View
       ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
       collapsable={false}
@@ -679,11 +708,18 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         variant={'owner'}
         isListScrolling={isListScrolling}
         onRefresh={refreshAll}
+        applicationCount={applicationCounts.get(String(bounty.id)) ?? 0}
       />
     </View>
-  ), [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, refreshAll, bountiesWithPendingRequestsSet]);
+    )
+  }, [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, refreshAll, bountiesWithPendingRequestsSet, applicationCounts]);
 
-  const renderInProgressItem = React.useCallback(({ item: bounty }: { item: Bounty; index: number }) => (
+  const renderInProgressItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
+    if (row.kind === 'section') {
+      return <BountySectionHeader label={row.label} count={row.count} group={row.group} />
+    }
+    const bounty = row.bounty
+    return (
     <View
       ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
       collapsable={false}
@@ -701,7 +737,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         onRefresh={refreshAll}
       />
     </View>
-  ), [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
+    )
+  }, [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
 
   // Memoized styles that must be called unconditionally (before any early returns)
   const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
@@ -715,8 +752,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const {
     displayedInProgress,
     displayedMyPostings,
+    inProgressSections,
+    myPostingsSections,
     inProgressReviewCount,
     myPostingsReviewCount,
+    inProgressAttentionCount,
+    myPostingsAttentionCount,
   } = useBountyStatusFilters({
     currentUserId,
     myBounties,
@@ -724,14 +765,29 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     hunterRequests,
     statusFilterInProgress,
     statusFilterMyPostings,
+    applicationCounts,
   })
 
+  // Section headers are interleaved into the same FlatList as the cards — see
+  // toBountyListRows for why these lists aren't SectionLists.
+  const inProgressRows = React.useMemo(
+    () => toBountyListRows(inProgressSections, displayedInProgress),
+    [inProgressSections, displayedInProgress]
+  )
+  const myPostingsRows = React.useMemo(
+    () => toBountyListRows(myPostingsSections, displayedMyPostings),
+    [myPostingsSections, displayedMyPostings]
+  )
+
+  // Badges count everything actually blocked on this user, not just submitted
+  // work: a poster with applications waiting has something to do even though
+  // nothing has been submitted for review yet.
   const getTabBadgeCount = React.useCallback((tabId: string) => {
     if (tabId === 'requests') return pendingRequestCount
-    if (tabId === 'inProgress') return inProgressReviewCount
-    if (tabId === 'myPostings') return myPostingsReviewCount
+    if (tabId === 'inProgress') return inProgressAttentionCount
+    if (tabId === 'myPostings') return myPostingsAttentionCount
     return 0
-  }, [inProgressReviewCount, myPostingsReviewCount, pendingRequestCount])
+  }, [inProgressAttentionCount, myPostingsAttentionCount, pendingRequestCount])
 
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
@@ -792,6 +848,40 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             <View className="flex-row items-center" style={styles.translateY2}>
               {/* Balance pill sits to the left, bookmark to the right */}
               <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
+              {/* Messages. The conversation list at /tabs/messenger had no
+                  entry point anywhere in the app — every route into messaging
+                  was a deep link to ONE conversation from a bounty screen or a
+                  push notification, so there was no way to see who had written
+                  to you. The bottom nav meanwhile showed an unread-message
+                  badge on this tab, which rendered Work/Posts/Requests and no
+                  messages at all. This is the missing door. */}
+              <TouchableOpacity
+                className="ml-3 p-2 touch-target-min"
+                onPress={() => router.push('/tabs/messenger' as never)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  unreadMessageCount > 0
+                    ? `Messages, ${unreadMessageCount} unread`
+                    : 'Messages'
+                }
+                accessibilityHint="Opens your conversations"
+              >
+                <View>
+                  <MaterialIcons
+                    name="chat-bubble-outline"
+                    size={20}
+                    color={theme.text}
+                    accessibilityElementsHidden={true}
+                  />
+                  {unreadMessageCount > 0 && (
+                    <View style={styles.headerBadge}>
+                      <Text style={styles.headerBadgeText}>
+                        {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 className="ml-3 p-2 touch-target-min"
                 onPress={() => setShowArchivedBounties(true)}
@@ -911,8 +1001,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             {activeTab === "inProgress" ? (
               <FlatList
                 ref={inProgressListRef}
-                data={displayedInProgress}
-                keyExtractor={keyExtractorBounty}
+                data={inProgressRows}
+                keyExtractor={keyExtractorRow}
                 extraData={{ inProgressBounties, expandedMap }}
                 ListHeaderComponent={(
                   <View>
@@ -1066,8 +1156,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             ) : (
               <FlatList
                 ref={myPostingsListRef}
-                data={displayedMyPostings}
-                keyExtractor={keyExtractorBounty}
+                data={myPostingsRows}
+                keyExtractor={keyExtractorRow}
                 extraData={{ myBounties, expandedMap }}
                 ListHeaderComponent={(
                   <View>
@@ -1188,6 +1278,24 @@ export default InboxScreen;
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     translateY2: { transform: [{ translateY: 2 }] },
+    headerBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -8,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      paddingHorizontal: 3,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.error,
+    },
+    headerBadgeText: {
+      color: '#fff',
+      fontSize: 9,
+      fontWeight: '700',
+      lineHeight: 12,
+    },
     titleText: { fontSize: 20, color: theme.text },
     errorBox: { marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
     errorText: { color: theme.text, fontSize: 14 },

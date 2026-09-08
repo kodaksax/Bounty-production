@@ -20,6 +20,8 @@ export interface AuthProfile {
   username: string;
   email?: string;
   avatar?: string;
+  /** Nullable so it can be explicitly cleared (banner removal), distinct from "unchanged" (omitted key). */
+  banner_url?: string | null;
   about?: string;
   phone?: string;
   title?: string; // Professional title/role
@@ -230,7 +232,7 @@ export class AuthProfileService {
           // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
           // to a camelCase property so the app can read `displayName` safely.
           .select(
-            'id,username,displayName:display_name,avatar,location,stripe_identity_status,verified_since'
+            'id,username,displayName:display_name,avatar,banner_url,location,stripe_identity_status,verified_since'
           )
           .eq('id', userId)
           .maybeSingle();
@@ -276,6 +278,7 @@ export class AuthProfileService {
         username: data.username,
         email: data.email || undefined,
         avatar: data.avatar || data.avatar_url || undefined,
+        banner_url: data.banner_url || undefined,
         about: data.about || undefined,
         phone: data.phone || undefined,
         title: data.title || undefined,
@@ -580,6 +583,7 @@ export class AuthProfileService {
           username: data.username,
           email: data.email,
           avatar: data.avatar || data.avatar_url || undefined,
+          banner_url: data.banner_url || undefined,
           about: data.about,
           phone: data.phone,
           title: data.title || undefined,
@@ -758,6 +762,7 @@ export class AuthProfileService {
           username: data.username,
           email: data.email,
           avatar: data.avatar || data.avatar_url || undefined,
+          banner_url: data.banner_url || undefined,
           about: data.about,
           phone: data.phone,
           title: data.title || undefined,
@@ -893,6 +898,7 @@ export class AuthProfileService {
         username: freshRow.username,
         email: freshRow.email,
         avatar: freshRow.avatar || freshRow.avatar_url || undefined,
+        banner_url: freshRow.banner_url || undefined,
         about: freshRow.about,
         phone: freshRow.phone,
         title: freshRow.title || undefined,

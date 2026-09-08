@@ -17,6 +17,7 @@ import { bountyService } from '../../../../lib/services/bounty-service';
 import { bountyHoldsUnreleasedEscrow } from '../../../../lib/utils/payment-architecture';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
 import { useWallet } from '../../../../lib/wallet-context';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
@@ -85,9 +86,10 @@ export default function HunterPayoutScreen() {
       });
 
       if (requests.length === 0) {
-        Alert.alert('No Application', 'You have not applied to this bounty.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        // No application on this bounty: send them to the read-only view where
+        // they can actually apply. The old alert + router.back() dead-ended
+        // anyone who arrived from a notification or a shared link.
+        router.replace({ pathname: '/bounty/[id]/public', params: { id } });
         return;
       }
 
@@ -97,7 +99,7 @@ export default function HunterPayoutScreen() {
       // If not accepted yet, go back to apply screen
       if (hunterRequest.status !== 'accepted') {
         router.replace({
-          pathname: '/in-progress/[bountyId]/hunter/apply',
+          pathname: '/in-progress/[bountyId]/hunter',
           params: { bountyId: id },
         });
         return;
@@ -310,10 +312,13 @@ export default function HunterPayoutScreen() {
             <MaterialIcons name="hourglass-empty" size={32} color="#fbbf24" />
             <Text style={styles.waitingTitle}>Waiting for Payout Release</Text>
             <Text style={styles.waitingText}>
-              Your work has been submitted for review. The poster will verify your work and release
-              the payment. You
-              {"'"}
-              ll be notified when the payout is ready.
+              {bounty.is_for_honor
+                ? "Your work is with the poster for review. You'll be notified as soon as they approve it — nothing to do until then."
+                : `Your work is with the poster for review. When they approve it, $${calculateHunterEarnings(
+                    bounty.amount
+                  ).net.toFixed(
+                    2
+                  )} is released from escrow into your wallet. You'll be notified — nothing to do until then.`}
             </Text>
             <View style={styles.statusBadge}>
               <MaterialIcons name="pending" size={16} color="#fbbf24" />
@@ -331,8 +336,13 @@ export default function HunterPayoutScreen() {
               </Text>
               {!bounty.is_for_honor && (
                 <View style={styles.payoutAmountCard}>
-                  <Text style={styles.payoutLabel}>Payout Amount</Text>
-                  <Text style={styles.payoutAmount}>${bounty.amount}</Text>
+                  <Text style={styles.payoutLabel}>Paid to you</Text>
+                  {/* The NET, not the bounty amount. This card used to print
+                      the gross and call it "Added to your wallet balance",
+                      which disagreed with the wallet by the service fee. */}
+                  <Text style={styles.payoutAmount}>
+                    ${calculateHunterEarnings(bounty.amount).net.toFixed(2)}
+                  </Text>
                   <Text style={styles.payoutSubtext}>Added to your wallet balance</Text>
                 </View>
               )}
@@ -368,8 +378,22 @@ export default function HunterPayoutScreen() {
                   <Text style={styles.receiptValue}>{bounty.title}</Text>
                 </View>
                 <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Amount</Text>
-                  <Text style={styles.receiptValue}>${bounty.amount}</Text>
+                  <Text style={styles.receiptLabel}>Bounty amount</Text>
+                  <Text style={styles.receiptValue}>
+                    ${calculateHunterEarnings(bounty.amount).gross.toFixed(2)}
+                  </Text>
+                </View>
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Service fee ({PLATFORM_FEE_DISPLAY})</Text>
+                  <Text style={styles.receiptValue}>
+                    −${calculateHunterEarnings(bounty.amount).fee.toFixed(2)}
+                  </Text>
+                </View>
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Paid to you</Text>
+                  <Text style={styles.receiptValue}>
+                    ${calculateHunterEarnings(bounty.amount).net.toFixed(2)}
+                  </Text>
                 </View>
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Date</Text>

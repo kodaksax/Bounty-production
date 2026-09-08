@@ -3,10 +3,12 @@
  * Tests validation, idempotency guards, and error recovery at each stage
  */
 
+import { paymentService } from '../../lib/services/payment-service';
+import { stripeService } from '../../lib/services/stripe-service';
 import {
-  toCents,
-  validateEscrowAmount,
-  isValidPaymentIntentId,
+    isValidPaymentIntentId,
+    toCents,
+    validateEscrowAmount,
 } from '../../lib/utils/bounty-validation';
 
 // ─── bounty-validation.ts helpers ───────────────────────────────────
@@ -20,7 +22,7 @@ describe('toCents', () => {
 
   it('should handle fractional dollars', () => {
     expect(toCents(19.99)).toBe(1999);
-    expect(toCents(0.50)).toBe(50);
+    expect(toCents(0.5)).toBe(50);
     expect(toCents(99.01)).toBe(9901);
   });
 
@@ -40,8 +42,8 @@ describe('toCents', () => {
 
 describe('validateEscrowAmount', () => {
   it('should accept valid escrow amounts', () => {
-    expect(validateEscrowAmount(100)).toBeNull();       // $1.00
-    expect(validateEscrowAmount(500)).toBeNull();       // $5.00
+    expect(validateEscrowAmount(100)).toBeNull(); // $1.00
+    expect(validateEscrowAmount(500)).toBeNull(); // $5.00
     expect(validateEscrowAmount(1_000_000)).toBeNull(); // $10,000.00 max
   });
 
@@ -118,8 +120,6 @@ jest.mock('../../lib/security/payment-security-config', () => ({
   validatePaymentSecurity: jest.fn().mockReturnValue({ valid: true, errors: [], warnings: [] }),
 }));
 
-import { paymentService } from '../../lib/services/payment-service';
-
 describe('PaymentService.createEscrow validation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -156,7 +156,7 @@ describe('PaymentService.createEscrow validation', () => {
   it('should reject amount below $1', async () => {
     const result = await paymentService.createEscrow({
       bountyId: 'b1',
-      amount: 0.50,
+      amount: 0.5,
       posterId: 'poster1',
       hunterId: 'hunter1',
       userId: 'poster1',
@@ -183,11 +183,79 @@ describe('PaymentService.createEscrow validation', () => {
 });
 
 describe('PaymentService.releaseEscrow validation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('should reject empty escrowId', async () => {
     const result = await paymentService.releaseEscrow('');
 
     expect(result.success).toBe(false);
     expect(result.error?.message).toMatch(/required/i);
+    expect(result.error?.code).toBe('escrow_id_required');
+  });
+
+  it('classifies already-captured escrow as a stable idempotent code', async () => {
+    (stripeService.releaseEscrow as jest.Mock).mockRejectedValue(
+      new Error('Payment already captured')
+    );
+
+    const result = await paymentService.releaseEscrow('pi_already_captured');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatchObject({
+      code: 'escrow_already_settled',
+      retryable: false,
+    });
+  });
+
+  it('preserves backend request metadata on structured release failures', async () => {
+    (stripeService.releaseEscrow as jest.Mock).mockRejectedValue({
+      type: 'api_error',
+      code: 'release_finalize_failed',
+      status: 500,
+      requestId: 'release_req_1',
+      retryable: true,
+      message: 'Failed to finalize release transaction',
+    });
+
+    const result = await paymentService.releaseEscrow('pi_release_failed');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatchObject({
+      code: 'release_finalize_failed',
+      status: 500,
+      requestId: 'release_req_1',
+      retryable: true,
+    });
+  });
+
+  it('classifies missing payout account as a stable user-actionable code', async () => {
+    (stripeService.releaseEscrow as jest.Mock).mockRejectedValue(
+      new Error('Hunter payout account is not configured')
+    );
+
+    const result = await paymentService.releaseEscrow('pi_missing_connect');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatchObject({
+      code: 'connect_not_onboarded',
+      retryable: false,
+    });
+  });
+
+  it('classifies network failures as retryable without requiring message parsing by callers', async () => {
+    const err = new Error('Network request failed') as Error & { code?: string };
+    err.code = 'network_error';
+    (stripeService.releaseEscrow as jest.Mock).mockRejectedValue(err);
+
+    const result = await paymentService.releaseEscrow('pi_network_error');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatchObject({
+      code: 'network_error',
+      retryable: true,
+    });
   });
 });
 
@@ -197,5 +265,27 @@ describe('PaymentService.refundEscrow validation', () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.message).toMatch(/required/i);
+    expect(result.error?.code).toBe('escrow_id_required');
+  });
+
+  it('preserves backend request metadata on structured refund failures', async () => {
+    (stripeService.refundEscrow as jest.Mock).mockRejectedValue({
+      type: 'api_error',
+      code: 'refund_finalize_failed',
+      status: 503,
+      requestId: 'refund_req_1',
+      retryable: true,
+      message: 'Failed to finalize refund transaction',
+    });
+
+    const result = await paymentService.refundEscrow('pi_refund_failed');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatchObject({
+      code: 'refund_finalize_failed',
+      status: 503,
+      requestId: 'refund_req_1',
+      retryable: true,
+    });
   });
 });

@@ -65,7 +65,13 @@ describe('PaymentService.refundEscrow', () => {
 
     expect(result).toEqual({
       success: false,
-      error: { message: 'Stripe API error' },
+      error: {
+        message: 'Stripe API error',
+        code: 'legacy_escrow_failed',
+        retryable: false,
+        requestId: undefined,
+        status: undefined,
+      },
     });
   });
 
@@ -76,7 +82,13 @@ describe('PaymentService.refundEscrow', () => {
 
     expect(result).toEqual({
       success: false,
-      error: { message: 'Failed to refund escrow' },
+      error: {
+        message: 'Failed to refund escrow',
+        code: 'legacy_escrow_failed',
+        retryable: false,
+        requestId: undefined,
+        status: undefined,
+      },
     });
   });
 });

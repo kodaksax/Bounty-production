@@ -895,6 +895,14 @@ export function SignInForm() {
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
+            <TouchableOpacity
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/onboarding/welcome'))}
+              className="self-start p-2 mb-4"
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <MaterialIcons name="arrow-back" size={24} color={theme.text} />
+            </TouchableOpacity>
             <View className="flex-row items-center justify-center mb-10">
               <Image
                 source={
@@ -1253,41 +1261,40 @@ export function SignInForm() {
                 </View>
               )}
 
-              <TouchableOpacity
-                disabled={!isGoogleConfigured || isSubmitting || !request || socialAuthLoading}
-                onPress={() => {
-                  setSocialAuthError(null);
-                  setSocialAuthLoading(true);
-                  socialLoginStartMsRef.current = Date.now();
-                  promptAsync();
-                }}
-                className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'
-                }
-                accessibilityState={{
-                  disabled: !isGoogleConfigured || isSubmitting || !request || socialAuthLoading,
-                }}
-              >
-                {socialAuthLoading ? (
-                  <ActivityIndicator color="#000" />
-                ) : (
-                  <>
-                    {isGoogleConfigured && (
+              {/* Only render Google when it's actually configured for this build.
+                  An unconfigured button is inert and, on web, exposes no
+                  disabled/aria-disabled — assistive tech reads it as actionable. */}
+              {isGoogleConfigured && (
+                <TouchableOpacity
+                  disabled={isSubmitting || !request || socialAuthLoading}
+                  onPress={() => {
+                    setSocialAuthError(null);
+                    setSocialAuthLoading(true);
+                    socialLoginStartMsRef.current = Date.now();
+                    promptAsync();
+                  }}
+                  className="w-full rounded py-3 items-center flex-row justify-center mt-2 bg-white"
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue with Google"
+                  accessibilityState={{
+                    disabled: isSubmitting || !request || socialAuthLoading,
+                  }}
+                >
+                  {socialAuthLoading ? (
+                    <ActivityIndicator color="#000" />
+                  ) : (
+                    <>
                       <View style={{ marginRight: 8 }}>
                         <GoogleLogo size={18} />
                       </View>
-                    )}
-                    <Text className="text-black font-medium">
-                      {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+                      <Text className="text-black font-medium">Continue with Google</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
-                onPress={() => router.push('/onboarding/welcome')}
+                onPress={() => router.push('/auth/sign-up-form')}
                 accessibilityRole="button"
                 accessibilityLabel="Create an account"
               >

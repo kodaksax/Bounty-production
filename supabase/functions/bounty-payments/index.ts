@@ -29,14 +29,31 @@ declare const Deno: any;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-request-id',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
+function generateRequestId(prefix = 'bounty_payments'): string {
+  try {
+    return `${prefix}_${crypto.randomUUID()}`;
+  } catch {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+function jsonResponse(data: unknown, status = 200, requestId?: string) {
+  const body =
+    requestId && data && typeof data === 'object' && !Array.isArray(data)
+      ? { ...(data as Record<string, unknown>), requestId }
+      : data;
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      ...(requestId ? { 'X-Request-Id': requestId } : {}),
+    },
   });
 }
 
@@ -174,13 +191,19 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const requestId = req.headers.get('x-request-id')?.slice(0, 120) || generateRequestId();
+  const reply = (data: Record<string, unknown>, status = 200) =>
+    jsonResponse(data, status, requestId);
   const url = new URL(req.url);
   const pathParts = url.pathname.split('/bounty-payments');
   const subPath = pathParts.length > 1 ? pathParts[1] : '/';
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
   if (!stripeKey) {
-    return jsonResponse({ error: 'Stripe not configured' }, 500);
+    return reply(
+      { error: 'Payment service is not configured.', code: 'stripe_not_configured' },
+      500
+    );
   }
   const stripe = new Stripe(stripeKey, {
     apiVersion: '2023-10-16',
@@ -196,7 +219,13 @@ Deno.serve(async (req: Request) => {
   // Authenticate the caller from the Authorization header.
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401);
+    return reply(
+      {
+        error: 'Authentication required. Please sign in to continue.',
+        code: 'authentication_required',
+      },
+      401
+    );
   }
   const token = authHeader.substring(7);
   let authResult: any;
@@ -204,8 +233,12 @@ Deno.serve(async (req: Request) => {
     authResult = await withDbTimeout(supabaseAdmin.auth.getUser(token));
   } catch (e: any) {
     if (e?.code === 'DB_TIMEOUT') {
-      return jsonResponse(
-        { error: 'Service temporarily unavailable. Please try again shortly.' },
+      return reply(
+        {
+          error: 'Service temporarily unavailable. Please try again shortly.',
+          code: 'db_timeout',
+          retryable: true,
+        },
         503
       );
     }
@@ -213,7 +246,21 @@ Deno.serve(async (req: Request) => {
   }
   const { data: { user } = { user: null }, error: authError } = authResult as any;
   if (authError || !user) {
-    return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401);
+    console.warn('[bounty-payments] invalid or expired token', {
+      requestId,
+      hasUser: !!user,
+      errorName: authError?.name,
+      errorMessage: authError?.message,
+      errorStatus: authError?.status,
+      errorCode: authError?.code,
+    });
+    return reply(
+      {
+        error: 'Authentication required. Please sign in to continue.',
+        code: 'authentication_required',
+      },
+      401
+    );
   }
   const userId = user.id;
   const userEmail = sanitizeText(user.email ?? '');
@@ -228,7 +275,7 @@ Deno.serve(async (req: Request) => {
       const body = await req.json().catch(() => ({}));
       const bountyId = sanitizeText(body?.bountyId ?? body?.bounty_id);
       if (!bountyId) {
-        return jsonResponse({ error: 'bountyId is required.' }, 400);
+        return reply({ error: 'bountyId is required.', code: 'bounty_id_required' }, 400);
       }
 
       // Look up the bounty. NOTE: we auth against poster_id (100% populated,
@@ -242,33 +289,33 @@ Deno.serve(async (req: Request) => {
       )) as any;
 
       if (bountyErr) {
-        return jsonResponse({ error: 'Failed to load bounty.' }, 500);
+        return reply(
+          { error: 'Failed to load bounty.', code: 'bounty_load_failed', retryable: true },
+          500
+        );
       }
       if (!bounty) {
-        return jsonResponse({ error: 'Bounty not found.', code: 'bounty_not_found' }, 404);
+        return reply({ error: 'Bounty not found.', code: 'bounty_not_found' }, 404);
       }
 
       const posterId = bounty.poster_id ?? bounty.user_id;
       if (posterId !== userId) {
-        return jsonResponse(
-          { error: 'Only the poster can fund this bounty.', code: 'not_poster' },
-          403
-        );
+        return reply({ error: 'Only the poster can fund this bounty.', code: 'not_poster' }, 403);
       }
       if (bounty.is_for_honor) {
-        return jsonResponse({ error: 'Honor bounties are not funded.', code: 'is_for_honor' }, 400);
+        return reply({ error: 'Honor bounties are not funded.', code: 'is_for_honor' }, 400);
       }
 
       const amount = Number(bounty.amount);
       if (!isFinite(amount) || amount <= 0) {
-        return jsonResponse(
+        return reply(
           { error: 'Bounty amount must be greater than zero.', code: 'invalid_amount' },
           400
         );
       }
       const amountCents = Math.round(amount * 100);
       if (amountCents < 50) {
-        return jsonResponse(
+        return reply(
           { error: 'Bounty amount must be at least $0.50.', code: 'amount_too_small' },
           400
         );
@@ -299,6 +346,7 @@ Deno.serve(async (req: Request) => {
           console.error('[bounty-payments] fn_should_use_v3 failed; defaulting to v1/v2', {
             bountyId,
             userId,
+            requestId,
             v3FlagErr,
           });
         } else {
@@ -307,6 +355,7 @@ Deno.serve(async (req: Request) => {
       } catch (flagErr) {
         console.error('[bounty-payments] fn_should_use_v3 threw; defaulting to v1/v2', {
           bountyId,
+          requestId,
           flagErr,
         });
       }
@@ -334,7 +383,7 @@ Deno.serve(async (req: Request) => {
               existingV3.stripe_payment_intent_id
             );
             if (!['canceled', 'succeeded'].includes(existingPi.status)) {
-              return jsonResponse({
+              return reply({
                 bountyPaymentId: bountyId,
                 paymentIntentId: existingPi.id,
                 clientSecret: existingPi.client_secret,
@@ -356,8 +405,11 @@ Deno.serve(async (req: Request) => {
           userEmail,
         });
         if (v3Customer.error || !v3Customer.customerId) {
-          return jsonResponse(
-            { error: v3Customer.error ?? 'Unable to create customer profile' },
+          return reply(
+            {
+              error: v3Customer.error ?? 'Unable to create customer profile',
+              code: 'customer_resolution_failed',
+            },
             v3Customer.status ?? 400
           );
         }
@@ -375,6 +427,7 @@ Deno.serve(async (req: Request) => {
               bounty_id: bountyId,
               purpose: 'bounty_escrow_v3',
               payment_architecture_version: '3',
+              request_id: requestId,
             },
           },
           // Stripe-level idempotency: a retried publish cannot create a
@@ -385,7 +438,7 @@ Deno.serve(async (req: Request) => {
         // Roll the authorization back if we cannot record it. An unrecorded
         // hold on a real card is the one outcome worth failing loudly for.
         const rollbackV3 = async (reason: string, detail: unknown) => {
-          console.error(`[bounty-payments] v3 ${reason}`, { bountyId, detail });
+          console.error(`[bounty-payments] v3 ${reason}`, { bountyId, requestId, detail });
           await stripe.paymentIntents.cancel(v3PaymentIntent.id).catch(() => {});
         };
 
@@ -407,8 +460,12 @@ Deno.serve(async (req: Request) => {
         )) as any;
         if (fundErr) {
           await rollbackV3('funding row write failed', fundErr);
-          return jsonResponse(
-            { error: 'Failed to record bounty payment. No charge was made.' },
+          return reply(
+            {
+              error: 'Failed to record bounty payment. No charge was made.',
+              code: 'payment_record_failed',
+              retryable: true,
+            },
             500
           );
         }
@@ -429,13 +486,18 @@ Deno.serve(async (req: Request) => {
             metadata: {
               source: 'bounty_payments_v3_create',
               payment_architecture_version: 3,
+              request_id: requestId,
             },
           })
         )) as any;
         if (ledgerErr) {
           await rollbackV3('ledger write failed', ledgerErr);
-          return jsonResponse(
-            { error: 'Failed to record bounty payment. No charge was made.' },
+          return reply(
+            {
+              error: 'Failed to record bounty payment. No charge was made.',
+              code: 'payment_record_failed',
+              retryable: true,
+            },
             500
           );
         }
@@ -449,11 +511,12 @@ Deno.serve(async (req: Request) => {
         if (v3VerErr) {
           console.error('[bounty-payments] Failed to set payment_architecture_version=3', {
             bountyId,
+            requestId,
             v3VerErr,
           });
         }
 
-        return jsonResponse({
+        return reply({
           bountyPaymentId: bountyId,
           paymentIntentId: v3PaymentIntent.id,
           clientSecret: v3PaymentIntent.client_secret,
@@ -488,7 +551,7 @@ Deno.serve(async (req: Request) => {
           const existingPi = await stripe.paymentIntents.retrieve(
             existing.stripe_payment_intent_id
           );
-          return jsonResponse({
+          return reply({
             bountyPaymentId: existing.id,
             paymentIntentId: existingPi.id,
             clientSecret: existingPi.client_secret,
@@ -511,8 +574,11 @@ Deno.serve(async (req: Request) => {
         userEmail,
       });
       if (customerResult.error || !customerResult.customerId) {
-        return jsonResponse(
-          { error: customerResult.error ?? 'Unable to create customer profile' },
+        return reply(
+          {
+            error: customerResult.error ?? 'Unable to create customer profile',
+            code: 'customer_resolution_failed',
+          },
           customerResult.status ?? 400
         );
       }
@@ -537,6 +603,7 @@ Deno.serve(async (req: Request) => {
             user_id: userId,
             bounty_id: bountyId,
             purpose: 'bounty_escrow',
+            request_id: requestId,
           },
         },
         { idempotencyKey: `bounty_payment_create_${bountyId}_${amountCents}` }
@@ -575,8 +642,12 @@ Deno.serve(async (req: Request) => {
           // The PI was created but the row write failed — cancel the PI so we
           // don't leave an orphaned, chargeable intent behind.
           await stripe.paymentIntents.cancel(paymentIntent.id).catch(() => {});
-          return jsonResponse(
-            { error: 'Failed to record bounty payment. No charge was made.' },
+          return reply(
+            {
+              error: 'Failed to record bounty payment. No charge was made.',
+              code: 'payment_record_failed',
+              retryable: true,
+            },
             500
           );
         }
@@ -622,7 +693,7 @@ Deno.serve(async (req: Request) => {
             }
 
             if (winner?.id) {
-              return jsonResponse({
+              return reply({
                 bountyPaymentId: winner.id,
                 paymentIntentId: winner.stripe_payment_intent_id ?? paymentIntent.id,
                 clientSecret: paymentIntent.client_secret,
@@ -632,7 +703,7 @@ Deno.serve(async (req: Request) => {
               });
             }
 
-            return jsonResponse(
+            return reply(
               {
                 error:
                   'Payment recording is already in progress for this bounty. Please retry shortly.',
@@ -645,8 +716,12 @@ Deno.serve(async (req: Request) => {
           }
 
           await stripe.paymentIntents.cancel(paymentIntent.id).catch(() => {});
-          return jsonResponse(
-            { error: 'Failed to record bounty payment. No charge was made.' },
+          return reply(
+            {
+              error: 'Failed to record bounty payment. No charge was made.',
+              code: 'payment_record_failed',
+              retryable: true,
+            },
             500
           );
         }
@@ -665,11 +740,12 @@ Deno.serve(async (req: Request) => {
       if (verErr) {
         console.error('[bounty-payments] Failed to set payment_architecture_version=2', {
           bountyId,
+          requestId,
           verErr,
         });
       }
 
-      return jsonResponse({
+      return reply({
         bountyPaymentId,
         paymentIntentId: paymentIntent.id,
         clientSecret: paymentIntent.client_secret,
@@ -686,7 +762,7 @@ Deno.serve(async (req: Request) => {
       const bountyId = sanitizeText(body?.bountyId ?? body?.bounty_id);
       const hunterIdInput = sanitizeText(body?.hunterId ?? body?.hunter_id);
       if (!bountyId) {
-        return jsonResponse({ error: 'bountyId is required.' }, 400);
+        return reply({ error: 'bountyId is required.', code: 'bounty_id_required' }, 400);
       }
 
       // ───────────────────────────────────────────────────────────────────
@@ -726,6 +802,7 @@ Deno.serve(async (req: Request) => {
           } catch (notifyErr) {
             console.error('[bounty-payments] v3 notify failed (non-fatal)', {
               bountyId,
+              requestId,
               type,
               notifyErr,
             });
@@ -735,7 +812,7 @@ Deno.serve(async (req: Request) => {
         // Idempotency. Only transfer.created (reversed=false) makes a v3
         // bounty released; 'capturing' is a request awaiting confirmation.
         if (v3Funding.state === 'released' && v3Funding.stripe_transfer_id) {
-          return jsonResponse({
+          return reply({
             released: true,
             transferId: v3Funding.stripe_transfer_id,
             status: 'released',
@@ -744,7 +821,7 @@ Deno.serve(async (req: Request) => {
           });
         }
         if (v3Funding.state === 'capturing' && v3Funding.stripe_transfer_id) {
-          return jsonResponse({
+          return reply({
             released: false,
             transferId: v3Funding.stripe_transfer_id,
             status: 'release_pending',
@@ -761,20 +838,17 @@ Deno.serve(async (req: Request) => {
             .maybeSingle()
         )) as any;
         if (!v3Bounty) {
-          return jsonResponse({ error: 'Bounty not found.', code: 'not_found' }, 404);
+          return reply({ error: 'Bounty not found.', code: 'bounty_not_found' }, 404);
         }
         const v3PosterId = v3Bounty.user_id ?? v3Bounty.poster_id;
         if (v3PosterId !== userId) {
-          return jsonResponse(
-            { error: 'Only the poster can release funds.', code: 'not_poster' },
-            403
-          );
+          return reply({ error: 'Only the poster can release funds.', code: 'not_poster' }, 403);
         }
 
         if (
           !['authorized', 'awaiting_hunter_onboarding', 'capture_failed'].includes(v3Funding.state)
         ) {
-          return jsonResponse(
+          return reply(
             {
               error: `Cannot release a bounty in funding state "${v3Funding.state}".`,
               code: 'invalid_funding_state',
@@ -794,7 +868,7 @@ Deno.serve(async (req: Request) => {
             .maybeSingle()
         )) as any;
         if (!v3Submission) {
-          return jsonResponse(
+          return reply(
             { error: 'This bounty has no approved completion yet.', code: 'not_approved' },
             409
           );
@@ -802,10 +876,7 @@ Deno.serve(async (req: Request) => {
 
         const v3HunterId = v3Bounty.accepted_by;
         if (!v3HunterId) {
-          return jsonResponse(
-            { error: 'This bounty has no assigned hunter.', code: 'no_hunter' },
-            409
-          );
+          return reply({ error: 'This bounty has no assigned hunter.', code: 'no_hunter' }, 409);
         }
 
         const { data: v3Hunter } = (await withDbTimeout(
@@ -849,7 +920,7 @@ Deno.serve(async (req: Request) => {
             'hunter_not_onboarded',
             'The hunter has not started Stripe Connect onboarding.'
           );
-          return jsonResponse(
+          return reply(
             {
               released: false,
               status: 'awaiting_hunter_onboarding',
@@ -871,9 +942,10 @@ Deno.serve(async (req: Request) => {
         } catch (acctErr) {
           console.error('[bounty-payments] v3 could not retrieve connected account', {
             bountyId,
+            requestId,
             acctErr,
           });
-          return jsonResponse(
+          return reply(
             {
               error:
                 'We could not reach Stripe to check the hunter payout status. No funds have moved — please try again.',
@@ -889,7 +961,7 @@ Deno.serve(async (req: Request) => {
               v3Account?.requirements?.disabled_reason ?? 'unknown reason'
             }).`
           );
-          return jsonResponse(
+          return reply(
             {
               released: false,
               status: 'awaiting_hunter_onboarding',
@@ -907,7 +979,7 @@ Deno.serve(async (req: Request) => {
         const v3FeeCents = Math.round((v3AmountCents * PLATFORM_FEE_PERCENT) / 100);
         const v3HunterCents = v3AmountCents - v3FeeCents;
         if (v3HunterCents <= 0) {
-          return jsonResponse(
+          return reply(
             { error: 'Computed hunter payout is not positive.', code: 'invalid_payout' },
             400
           );
@@ -950,7 +1022,10 @@ Deno.serve(async (req: Request) => {
             'Your payment is delayed',
             'There was a problem taking payment from the poster. Your payment is delayed, not lost — we have asked them to retry.'
           );
-          return jsonResponse({ error: message, code, architectureVersion: 3 }, httpStatus);
+          return reply(
+            { error: message, code, architectureVersion: 3, retryable: true },
+            httpStatus
+          );
         };
 
         // 1. Capture the full authorized amount.
@@ -1016,6 +1091,7 @@ Deno.serve(async (req: Request) => {
                 hunter_id: v3HunterId,
                 purpose: 'bounty_release_v3',
                 payment_architecture_version: '3',
+                request_id: requestId,
               },
             },
             { idempotencyKey: `v3_release_${bountyId}` }
@@ -1025,6 +1101,7 @@ Deno.serve(async (req: Request) => {
           // balance, so this must be loud rather than silent.
           console.error('[bounty-payments] v3 transfer failed AFTER capture', {
             bountyId,
+            requestId,
             chargeId: v3ChargeId,
             trErr,
           });
@@ -1055,6 +1132,7 @@ Deno.serve(async (req: Request) => {
             metadata: {
               source: 'bounty_payments_v3_release',
               payment_architecture_version: 3,
+              request_id: requestId,
               platform_fee_cents: v3FeeCents,
               gross_amount_cents: v3AmountCents,
             },
@@ -1063,6 +1141,7 @@ Deno.serve(async (req: Request) => {
         if (v3RelLedgerErr) {
           console.error('[bounty-payments] v3 release ledger insert failed', {
             bountyId,
+            requestId,
             transferId: v3Transfer.id,
             v3RelLedgerErr,
           });
@@ -1081,7 +1160,7 @@ Deno.serve(async (req: Request) => {
             .eq('bounty_id', bountyId)
         );
 
-        return jsonResponse({
+        return reply({
           released: false,
           transferId: v3Transfer.id,
           hunterId: v3HunterId,
@@ -1097,26 +1176,23 @@ Deno.serve(async (req: Request) => {
         supabaseAdmin.from('bounty_payments').select('*').eq('bounty_id', bountyId).maybeSingle()
       )) as any;
       if (bpErr) {
-        return jsonResponse({ error: 'Failed to load bounty payment.' }, 500);
+        return reply(
+          { error: 'Failed to load bounty payment.', code: 'payment_load_failed', retryable: true },
+          500
+        );
       }
       if (!bp) {
-        return jsonResponse(
-          { error: 'No payment record for this bounty.', code: 'no_payment' },
-          404
-        );
+        return reply({ error: 'No payment record for this bounty.', code: 'no_payment' }, 404);
       }
       if (bp.poster_id !== userId) {
-        return jsonResponse(
-          { error: 'Only the poster can release funds.', code: 'not_poster' },
-          403
-        );
+        return reply({ error: 'Only the poster can release funds.', code: 'not_poster' }, 403);
       }
 
       // Idempotent: only the Stripe transfer.created webhook makes a Phase 2
       // payment released. A transfer request is intentionally represented
       // separately until webhook reconciliation confirms it.
       if (bp.status === 'released' && bp.stripe_transfer_id) {
-        return jsonResponse({
+        return reply({
           released: true,
           transferId: bp.stripe_transfer_id,
           status: 'released',
@@ -1125,7 +1201,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (bp.status === 'release_pending' && bp.stripe_transfer_id) {
-        return jsonResponse(
+        return reply(
           {
             error: 'Transfer requested. Waiting for Stripe confirmation.',
             released: false,
@@ -1144,7 +1220,7 @@ Deno.serve(async (req: Request) => {
       // Stripe's prior failed response forever. Other terminal states remain
       // non-releasable.
       if (!['authorized', 'captured', 'failed'].includes(bp.status)) {
-        return jsonResponse(
+        return reply(
           {
             error: `Cannot release a bounty payment in status "${bp.status}".`,
             code: 'invalid_status',
@@ -1164,10 +1240,7 @@ Deno.serve(async (req: Request) => {
         hunterId = bountyRow?.accepted_by ?? null;
       }
       if (!hunterId) {
-        return jsonResponse(
-          { error: 'No hunter is assigned to this bounty.', code: 'no_hunter' },
-          400
-        );
+        return reply({ error: 'No hunter is assigned to this bounty.', code: 'no_hunter' }, 400);
       }
 
       // Verify the hunter is payout-ready on Stripe Connect.
@@ -1179,10 +1252,17 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
       )) as any;
       if (hunterErr) {
-        return jsonResponse({ error: 'Failed to load hunter payout profile.' }, 500);
+        return reply(
+          {
+            error: 'Failed to load hunter payout profile.',
+            code: 'hunter_profile_load_failed',
+            retryable: true,
+          },
+          500
+        );
       }
       if (!hunterProfile?.stripe_connect_account_id) {
-        return jsonResponse(
+        return reply(
           {
             error: 'The hunter has not completed payout onboarding yet.',
             code: 'hunter_not_onboarded',
@@ -1191,7 +1271,7 @@ Deno.serve(async (req: Request) => {
         );
       }
       if (hunterProfile.stripe_connect_payouts_enabled !== true) {
-        return jsonResponse(
+        return reply(
           { error: 'The hunter cannot receive payouts yet.', code: 'hunter_payouts_disabled' },
           400
         );
@@ -1205,7 +1285,7 @@ Deno.serve(async (req: Request) => {
           const pi = await stripe.paymentIntents.retrieve(bp.stripe_payment_intent_id);
           chargeId = (pi.latest_charge as string) ?? null;
           if (pi.status !== 'succeeded') {
-            return jsonResponse(
+            return reply(
               {
                 error: 'The bounty payment has not been captured yet. Try again shortly.',
                 code: 'not_captured',
@@ -1218,7 +1298,7 @@ Deno.serve(async (req: Request) => {
         }
       }
       if (!chargeId) {
-        return jsonResponse(
+        return reply(
           {
             error: 'Could not resolve the settled charge for this bounty. Try again shortly.',
             code: 'no_charge',
@@ -1232,7 +1312,7 @@ Deno.serve(async (req: Request) => {
       const hunterAmount = Math.round((amount - platformFee) * 100) / 100;
       const hunterAmountCents = Math.round(hunterAmount * 100);
       if (hunterAmountCents <= 0) {
-        return jsonResponse(
+        return reply(
           { error: 'Computed hunter payout is not positive.', code: 'invalid_payout' },
           400
         );
@@ -1260,6 +1340,7 @@ Deno.serve(async (req: Request) => {
               bounty_id: bountyId,
               hunter_id: hunterId,
               poster_id: bp.poster_id,
+              request_id: requestId,
             },
           },
           { idempotencyKey: transferIdempotencyKey }
@@ -1270,15 +1351,16 @@ Deno.serve(async (req: Request) => {
         // funds are lost — they remain on the platform balance.
         console.error('[bounty-payments] Transfer failed after capture', {
           bountyId,
+          requestId,
           bpId: bp.id,
           transferErr,
         });
-        return jsonResponse(
+        return reply(
           {
             error:
               'Payment is held safely but the transfer to the hunter failed. No funds were lost — please retry.',
             code: 'transfer_failed',
-            detail: transferErr?.message ?? null,
+            retryable: true,
           },
           502
         );
@@ -1305,22 +1387,24 @@ Deno.serve(async (req: Request) => {
         // reconciliation rather than silently succeeding.
         console.error('[bounty-payments] CRITICAL: transfer created but row update failed', {
           bountyId,
+          requestId,
           bpId: bp.id,
           transferId: transfer.id,
           updErr,
         });
-        return jsonResponse(
+        return reply(
           {
             error:
               'Stripe accepted the transfer but its record could not be updated. Retrying is safe and reconciliation will repair it.',
             code: 'record_update_failed',
             transferId: transfer.id,
+            retryable: true,
           },
           500
         );
       }
 
-      return jsonResponse({
+      return reply({
         released: false,
         transferId: transfer.id,
         hunterId,
@@ -1338,23 +1422,23 @@ Deno.serve(async (req: Request) => {
       const body = await req.json().catch(() => ({}));
       const bountyId = sanitizeText(body?.bountyId ?? body?.bounty_id);
       if (!bountyId) {
-        return jsonResponse({ error: 'bountyId is required.' }, 400);
+        return reply({ error: 'bountyId is required.', code: 'bounty_id_required' }, 400);
       }
 
       const { data: bp, error: bpErr } = (await withDbTimeout(
         supabaseAdmin.from('bounty_payments').select('*').eq('bounty_id', bountyId).maybeSingle()
       )) as any;
       if (bpErr) {
-        return jsonResponse({ error: 'Failed to load bounty payment.' }, 500);
-      }
-      if (!bp) {
-        return jsonResponse(
-          { error: 'No payment record for this bounty.', code: 'no_payment' },
-          404
+        return reply(
+          { error: 'Failed to load bounty payment.', code: 'payment_load_failed', retryable: true },
+          500
         );
       }
+      if (!bp) {
+        return reply({ error: 'No payment record for this bounty.', code: 'no_payment' }, 404);
+      }
       if (bp.poster_id !== userId) {
-        return jsonResponse(
+        return reply(
           { error: 'Only the poster can cancel this bounty payment.', code: 'not_poster' },
           403
         );
@@ -1362,10 +1446,10 @@ Deno.serve(async (req: Request) => {
 
       // Idempotent terminal states.
       if (bp.status === 'canceled') {
-        return jsonResponse({ canceled: true, status: 'canceled', reused: true });
+        return reply({ canceled: true, status: 'canceled', reused: true });
       }
       if (bp.status === 'refunded' || bp.status === 'refund_pending') {
-        return jsonResponse({
+        return reply({
           refunded: true,
           status: bp.status,
           refundId: bp.stripe_refund_id ?? null,
@@ -1373,7 +1457,7 @@ Deno.serve(async (req: Request) => {
         });
       }
       if (bp.status === 'released') {
-        return jsonResponse(
+        return reply(
           {
             error: 'Funds have already been released to the hunter and cannot be canceled here.',
             code: 'already_released',
@@ -1402,21 +1486,22 @@ Deno.serve(async (req: Request) => {
             .eq('id', bp.id)
         )) as any;
         if (updErr) {
-          return jsonResponse(
+          return reply(
             {
               error: 'Payment intent canceled but the record could not be updated.',
               code: 'record_update_failed',
+              retryable: true,
             },
             500
           );
         }
-        return jsonResponse({ canceled: true, status: 'canceled' });
+        return reply({ canceled: true, status: 'canceled' });
       }
 
       // Post-capture: issue a real refund.
       if (bp.status === 'captured') {
         if (!bp.stripe_payment_intent_id) {
-          return jsonResponse(
+          return reply(
             { error: 'Missing payment intent; cannot refund.', code: 'no_payment_intent' },
             500
           );
@@ -1424,16 +1509,25 @@ Deno.serve(async (req: Request) => {
         let refund: any;
         try {
           refund = await stripe.refunds.create(
-            { payment_intent: bp.stripe_payment_intent_id, reason: 'requested_by_customer' },
+            {
+              payment_intent: bp.stripe_payment_intent_id,
+              reason: 'requested_by_customer',
+              metadata: { bounty_id: bountyId, request_id: requestId },
+            },
             { idempotencyKey: `bounty_refund_${bp.id}` }
           );
         } catch (refundErr: any) {
-          console.error('[bounty-payments] Refund failed', { bountyId, bpId: bp.id, refundErr });
-          return jsonResponse(
+          console.error('[bounty-payments] Refund failed', {
+            bountyId,
+            requestId,
+            bpId: bp.id,
+            refundErr,
+          });
+          return reply(
             {
               error: 'Refund could not be processed. Please try again.',
               code: 'refund_failed',
-              detail: refundErr?.message ?? null,
+              retryable: true,
             },
             502
           );
@@ -1453,21 +1547,22 @@ Deno.serve(async (req: Request) => {
         if (updErr) {
           console.error('[bounty-payments] Refund created but row update failed', {
             bountyId,
+            requestId,
             bpId: bp.id,
             refundId: refund.id,
             updErr,
           });
-          return jsonResponse({
+          return reply({
             refunded: true,
             status: newStatus,
             refundId: refund.id,
             warning: 'record_update_failed',
           });
         }
-        return jsonResponse({ refunded: true, status: newStatus, refundId: refund.id });
+        return reply({ refunded: true, status: newStatus, refundId: refund.id });
       }
 
-      return jsonResponse(
+      return reply(
         {
           error: `Cannot cancel a bounty payment in status "${bp.status}".`,
           code: 'invalid_status',
@@ -1477,24 +1572,32 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    return jsonResponse({ error: 'Not found' }, 404);
+    return reply({ error: 'Not found', code: 'not_found' }, 404);
   } catch (err: any) {
     if (err?.code === 'DB_TIMEOUT') {
-      return jsonResponse(
-        { error: 'Service temporarily unavailable. Please try again shortly.' },
+      return reply(
+        {
+          error: 'Service temporarily unavailable. Please try again shortly.',
+          code: 'db_timeout',
+          retryable: true,
+        },
         503
       );
     }
     console.error('[bounty-payments] Unhandled error', {
+      requestId,
       subPath,
       message: err?.message,
       type: err?.type,
+      code: err?.code,
     });
-    // Surface Stripe's own message when present (already user-safe), else generic.
-    const message =
-      err?.type?.startsWith?.('Stripe') && err?.message
-        ? err.message
-        : 'An unexpected error occurred. Please try again.';
-    return jsonResponse({ error: message }, 500);
+    return reply(
+      {
+        error: 'Payment service temporarily unavailable. Please try again.',
+        code: err?.code ?? 'bounty_payment_service_error',
+        retryable: true,
+      },
+      500
+    );
   }
 });

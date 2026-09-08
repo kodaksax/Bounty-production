@@ -28,13 +28,13 @@
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
-import type { Profile, WalletTransaction } from '../_shared/types.ts';
 import {
-  buildNativePayoutIdempotencyKey,
-  buildPayoutIdempotencyKey,
-  buildTransferIdempotencyKey,
-  isRecoverableInstantPayoutError,
+    buildNativePayoutIdempotencyKey,
+    buildPayoutIdempotencyKey,
+    buildTransferIdempotencyKey,
+    isRecoverableInstantPayoutError,
 } from '../_shared/payout-state.ts';
+import type { Profile, WalletTransaction } from '../_shared/types.ts';
 
 // stripe@14's bundled types for Balance.InstantAvailable omit `net_available`,
 // even though the live API returns it (see
@@ -47,14 +47,31 @@ type InstantAvailableWithNet = Stripe.Balance.InstantAvailable & {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-request-id',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 };
 
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
+function generateRequestId(prefix = 'connect'): string {
+  try {
+    return `${prefix}_${crypto.randomUUID()}`;
+  } catch {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+function jsonResponse(data: unknown, status = 200, requestId?: string) {
+  const body =
+    requestId && data && typeof data === 'object' && !Array.isArray(data)
+      ? { ...(data as Record<string, unknown>), requestId }
+      : data;
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      ...(requestId ? { 'X-Request-Id': requestId } : {}),
+    },
   });
 }
 
@@ -649,6 +666,7 @@ interface NativePayoutParams {
   userId: string;
   body: Record<string, unknown>;
   method: 'instant' | 'standard';
+  requestId: string;
 }
 
 /**
@@ -673,16 +691,18 @@ interface NativePayoutParams {
  * mapping cannot drift apart between instant and standard withdrawals.
  */
 async function handleConnectNativePayout(params: NativePayoutParams): Promise<Response> {
-  const { stripe, supabase, userId, body, method } = params;
+  const { stripe, supabase, userId, body, method, requestId } = params;
   const currency = 'usd';
-  const log = `[connect/native-payout:${method}]`;
+  const log = `[connect/native-payout:${method}:${requestId}]`;
+  const reply = (data: Record<string, unknown>, status = 200) =>
+    jsonResponse(data, status, requestId);
 
   const validation = validateWithdrawalRequest(
     body as Parameters<typeof validateWithdrawalRequest>[0]
   );
   if (!validation.ok) {
-    console.warn(`${log} validation failed`, { userId, code: validation.code });
-    return jsonResponse({ error: validation.error, code: validation.code }, 400);
+    console.warn(`${log} validation failed`, { userId, code: validation.code, requestId });
+    return reply({ error: validation.error, code: validation.code }, 400);
   }
   const amount = validation.amount;
   const amountCents = validation.amountCents;
@@ -690,7 +710,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
   if (method === 'instant') {
     const instantAmountCheck = validateInstantAmount(amount);
     if (!instantAmountCheck.ok) {
-      return jsonResponse({ error: instantAmountCheck.error, code: instantAmountCheck.code }, 400);
+      return reply({ error: instantAmountCheck.error, code: instantAmountCheck.code }, 400);
     }
   }
 
@@ -735,8 +755,8 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
         stripe_payout_id?: string | null;
         payout_method?: string;
       };
-      console.log(`${log} idempotent replay`, { userId, transactionId: e.id });
-      return jsonResponse({
+      console.log(`${log} idempotent replay`, { userId, transactionId: e.id, requestId });
+      return reply({
         payoutId: e.stripe_payout_id ?? null,
         payoutMethod: e.payout_method ?? method,
         status: e.status ?? 'pending',
@@ -760,7 +780,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     .single();
 
   if (!profile) {
-    return jsonResponse({ error: 'Profile not found' }, 404);
+    return reply({ error: 'Profile not found', code: 'profile_not_found' }, 404);
   }
   const p = profile as Profile;
 
@@ -775,7 +795,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       idempotencyKey,
       errorCode: accountEligibility.code,
     });
-    return jsonResponse({ error: accountEligibility.error, code: accountEligibility.code }, 403);
+    return reply({ error: accountEligibility.error, code: accountEligibility.code }, 403);
   }
 
   if (!p.stripe_connect_account_id) {
@@ -788,7 +808,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       idempotencyKey,
       errorCode: 'no_connect_account',
     });
-    return jsonResponse(
+    return reply(
       {
         error: 'You do not have a payout account yet. Set up payouts to withdraw your earnings.',
         code: 'no_connect_account',
@@ -808,7 +828,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       errorCode: 'connect_not_onboarded',
       stripeConnectAccountId: p.stripe_connect_account_id,
     });
-    return jsonResponse(
+    return reply(
       {
         error: 'Your payout setup is not finished yet. Complete onboarding before withdrawing.',
         code: 'connect_not_onboarded',
@@ -833,7 +853,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
     if (instantCountError) {
-      return jsonResponse(
+      return reply(
         {
           error: 'We could not verify your Instant Cash Out eligibility. Please try again.',
           code: 'account_verification_failed',
@@ -853,7 +873,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
         errorCode: dailyLimitCheck.code,
         stripeConnectAccountId: accountId,
       });
-      return jsonResponse({ error: dailyLimitCheck.error, code: dailyLimitCheck.code }, 429);
+      return reply({ error: dailyLimitCheck.error, code: dailyLimitCheck.code }, 429);
     }
   }
 
@@ -871,6 +891,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     console.error(`${log} failed to read account or balance`, {
       userId,
       accountId,
+      requestId,
       error: errInfo?.message,
     });
     await writePayoutAudit(supabase, {
@@ -884,7 +905,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       errorCode: 'stripe_unavailable',
       errorMessage: errInfo?.message ?? null,
     });
-    return jsonResponse(
+    return reply(
       {
         error:
           'We could not reach Stripe to check your balance. No funds have moved — please try again.',
@@ -906,7 +927,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       errorCode: 'payouts_disabled',
       detail: { disabledReason: account.requirements?.disabled_reason ?? null },
     });
-    return jsonResponse(
+    return reply(
       {
         error:
           'Payouts are currently disabled on your account. Review your payout details and try again.',
@@ -938,7 +959,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       balanceAvailableCents: balance.availableCents,
       balanceInstantAvailableCents: balance.instantAvailableCents,
     });
-    return jsonResponse(
+    return reply(
       {
         error:
           method === 'instant'
@@ -966,7 +987,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       balanceAvailableCents: balance.availableCents,
       balanceInstantAvailableCents: balance.instantAvailableCents,
     });
-    return jsonResponse(
+    return reply(
       {
         error: 'That is more than you have available to withdraw.',
         code: 'insufficient_balance',
@@ -1011,7 +1032,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
           stripeConnectAccountId: accountId,
           errorCode: destination.code,
         });
-        return jsonResponse({ error: destination.error, code: destination.code }, 400);
+        return reply({ error: destination.error, code: destination.code }, 400);
       }
       destinationCard = destination.targetCard;
       destinationId = destination.targetCard.id;
@@ -1027,7 +1048,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
         errorCode: 'account_verification_failed',
         errorMessage: (cardError as { message?: string })?.message ?? null,
       });
-      return jsonResponse(
+      return reply(
         {
           error: 'We could not verify your payout card. No funds have moved — please try again.',
           code: 'account_verification_failed',
@@ -1089,6 +1110,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       userId,
       accountId,
       amountCents,
+      requestId,
       stripeCode: errInfo?.code,
       message: errInfo?.message,
     });
@@ -1113,7 +1135,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     // genuine provider-failure exit from this function; every other error
     // return above happens before that call and must not carry the flag.
     const mapped = mapStripePayoutError(errInfo);
-    return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
+    return reply({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
   }
 
   await writePayoutAudit(supabase, {
@@ -1182,7 +1204,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       const w = winner as
         | (WalletTransaction & { stripe_payout_id?: string; payout_method?: string })
         | null;
-      return jsonResponse({
+      return reply({
         payoutId: w?.stripe_payout_id ?? payout.id,
         payoutMethod: w?.payout_method ?? method,
         status: w?.status ?? payout.status,
@@ -1199,6 +1221,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       'connect-native payout succeeded but transaction record failed — reconciliation required',
       {
         userId,
+        requestId,
         payoutId: payout.id,
         amountCents,
         error: txError,
@@ -1206,7 +1229,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     );
     // The payout is real and the audit log has it; only the history row is
     // missing, so this is reported as success with a caveat.
-    return jsonResponse({
+    return reply({
       payoutId: payout.id,
       payoutMethod: method,
       status: payout.status,
@@ -1231,9 +1254,9 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     detail: { transactionId: (transaction as WalletTransaction).id, status: payout.status },
   });
 
-  console.log(`${log} payout created`, { userId, payoutId: payout.id, amountCents });
+  console.log(`${log} payout created`, { userId, payoutId: payout.id, amountCents, requestId });
 
-  return jsonResponse({
+  return reply({
     payoutId: payout.id,
     payoutMethod: method,
     status: payout.status,
@@ -1420,6 +1443,7 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const requestId = req.headers.get('x-request-id')?.slice(0, 120) || generateRequestId();
   const url = new URL(req.url);
   const pathParts = url.pathname.split('/connect');
   const subPath = pathParts.length > 1 ? pathParts[1] : '/';
@@ -2275,7 +2299,10 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
-      const reservedWithdrawal = reservation as { tx_id?: string | null; new_balance?: number | null } | null;
+      const reservedWithdrawal = reservation as {
+        tx_id?: string | null;
+        new_balance?: number | null;
+      } | null;
       const transactionId = reservedWithdrawal?.tx_id ?? null;
       const newBalance =
         typeof reservedWithdrawal?.new_balance === 'number' ? reservedWithdrawal.new_balance : null;
@@ -2357,7 +2384,10 @@ Deno.serve(async (req: Request) => {
           );
         }
         const mapped = mapStripeTransferError(errInfo);
-        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
+        return jsonResponse(
+          { error: mapped.error, code: mapped.code, stripeAttempted: true },
+          mapped.status
+        );
       }
 
       console.log('[connect/transfer] Stripe transfer created', {
@@ -2664,15 +2694,20 @@ Deno.serve(async (req: Request) => {
             p_transaction_id: transactionId,
             p_user_id: userId,
             p_stripe_transfer_id: t.stripe_transfer_id ?? null,
-            p_stripe_payout_id: (t as WalletTransaction & { stripe_payout_id?: string | null })
-              .stripe_payout_id ?? null,
+            p_stripe_payout_id:
+              (t as WalletTransaction & { stripe_payout_id?: string | null }).stripe_payout_id ??
+              null,
             p_metadata_patch: {
               ...((t.metadata as Record<string, unknown> | null) ?? {}),
-              retry_transfer_failed: retryErrInfo?.code ?? retryErrInfo?.message ?? 'transfer_failed',
+              retry_transfer_failed:
+                retryErrInfo?.code ?? retryErrInfo?.message ?? 'transfer_failed',
             },
           })
           .single();
-        if (retryRefundError || !(rollbackResult as { refunded?: boolean | null } | null)?.refunded) {
+        if (
+          retryRefundError ||
+          !(rollbackResult as { refunded?: boolean | null } | null)?.refunded
+        ) {
           logCritical(
             'balance refund after failed retry transfer also failed — manual reconciliation required',
             {
@@ -2697,7 +2732,10 @@ Deno.serve(async (req: Request) => {
         const mapped = mapStripeTransferError(
           stripeError as { code?: string; type?: string; message?: string }
         );
-        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
+        return jsonResponse(
+          { error: mapped.error, code: mapped.code, stripeAttempted: true },
+          mapped.status
+        );
       }
 
       // Same two-hop rule as the primary /transfer path: the retry re-ran hop
@@ -2945,6 +2983,7 @@ Deno.serve(async (req: Request) => {
         userId,
         body: payoutBody as Record<string, unknown>,
         method: 'standard',
+        requestId,
       });
     }
 
@@ -2971,6 +3010,7 @@ Deno.serve(async (req: Request) => {
           userId,
           body: nativeBody as Record<string, unknown>,
           method: 'instant',
+          requestId,
         });
       }
 
@@ -3396,7 +3436,10 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
-      const reservedWithdrawal = reservation as { tx_id?: string | null; new_balance?: number | null } | null;
+      const reservedWithdrawal = reservation as {
+        tx_id?: string | null;
+        new_balance?: number | null;
+      } | null;
       const transactionId = reservedWithdrawal?.tx_id ?? null;
       const newBalance =
         typeof reservedWithdrawal?.new_balance === 'number' ? reservedWithdrawal.new_balance : null;
@@ -3478,7 +3521,10 @@ Deno.serve(async (req: Request) => {
           );
         }
         const mapped = mapStripeTransferError(errInfo);
-        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
+        return jsonResponse(
+          { error: mapped.error, code: mapped.code, stripeAttempted: true },
+          mapped.status
+        );
       }
 
       console.log('[connect/instant-payout] platform transfer created', {

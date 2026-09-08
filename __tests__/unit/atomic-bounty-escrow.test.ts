@@ -13,8 +13,15 @@
  * These tests reimplement the small piece of client logic in isolation so we
  * do not need to mount the full WalletContext / React tree.
  */
+import * as fs from 'fs';
+import * as path from 'path';
 
-export {};
+export { };
+
+const walletContextSource = fs.readFileSync(
+  path.join(__dirname, '../../lib/wallet-context.tsx'),
+  'utf8'
+);
 
 function makeFetch(status: number, body: object = {}) {
   return jest.fn().mockResolvedValue({
@@ -153,6 +160,43 @@ describe('Atomic escrow reservation — client createEscrow handling', () => {
     });
     expect(result.ok).toBe(false);
     expect(setBalance).not.toHaveBeenCalled();
+  });
+});
+
+describe('WalletContext — stable wallet error codes', () => {
+  it('handles duplicate escrow by code, not by user-facing copy', () => {
+    expect(walletContextSource).toContain("errCode === 'duplicate_transaction'");
+    expect(walletContextSource).toContain('walletApiCode(errData)');
+  });
+
+  it('handles duplicate release only when the server says the settlement is a release', () => {
+    expect(walletContextSource).toContain(
+      "errCode === 'duplicate_transaction' && settlementType === 'release'"
+    );
+    expect(walletContextSource).not.toContain('/already (released|refunded)/i.test(errMsg)');
+  });
+
+  it('handles duplicate refund only when the server says the settlement is a refund', () => {
+    expect(walletContextSource).toContain(
+      "errCode === 'duplicate_transaction' && settlementType === 'refund'"
+    );
+  });
+
+  it('logs request id and stable wallet code for failed wallet API calls', () => {
+    expect(walletContextSource).toContain('function logWalletApiFailure');
+    expect(walletContextSource).toContain('walletApiRequestId(response, data)');
+    expect(walletContextSource).toContain('code: walletApiCode(data)');
+  });
+
+  it('handles legacy Stripe release failures by service code, not message regex', () => {
+    expect(walletContextSource).toContain("releaseErrorCode === 'escrow_already_settled'");
+    expect(walletContextSource).toContain("releaseErrorCode === 'connect_not_onboarded'");
+    expect(walletContextSource).not.toContain(
+      '/already (released|captured)|funds already/i.test(stripeErrMsg)'
+    );
+    expect(walletContextSource).not.toContain(
+      '/payout account|connect account/i.test(stripeErrMsg)'
+    );
   });
 });
 
@@ -450,7 +494,7 @@ describe('Wallet-escrow round-trip — bounty creation + dispute resolution (pos
     expect(ledger.filter(r => r.type === 'refund')).toHaveLength(1);
   });
 
-  it('refund RPC is a no-op when the dispute did not resolve in the poster\'s favour', () => {
+  it("refund RPC is a no-op when the dispute did not resolve in the poster's favour", () => {
     const profiles = new Map<string, Profile>([['poster1', { id: 'poster1', balance: 8.4 }]]);
     const ledger: Ledger[] = [];
     const bounty: Bounty = {
@@ -707,7 +751,7 @@ describe('Wallet-escrow round-trip — bounty creation + dispute resolution (hun
     expect(ledger.filter(r => r.type === 'release')).toHaveLength(1);
   });
 
-  it('release RPC is a no-op when the dispute did not resolve in the hunter\'s favour', () => {
+  it("release RPC is a no-op when the dispute did not resolve in the hunter's favour", () => {
     const profiles = new Map<string, Profile>([
       ['poster1', { id: 'poster1', balance: 100 }],
       ['hunter1', { id: 'hunter1', balance: 0 }],

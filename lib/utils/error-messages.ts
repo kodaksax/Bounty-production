@@ -1,7 +1,7 @@
 /**
  * Centralized error messages and error handling utilities
  * Provides user-friendly error messages for common error scenarios
- * 
+ *
  * Key principles:
  * - Never expose technical details to users
  * - Always provide actionable guidance
@@ -14,6 +14,7 @@ export type ErrorType =
   | 'authentication'
   | 'authorization'
   | 'payment'
+  | 'state_conflict'
   | 'rate_limit'
   | 'not_found'
   | 'server'
@@ -21,12 +22,74 @@ export type ErrorType =
   | 'database'
   | 'unknown';
 
+export type ErrorSeverity = 'info' | 'warning' | 'error' | 'critical';
+
+export type ErrorRecoverability =
+  | 'recoverable'
+  | 'user_actionable'
+  | 'auth'
+  | 'payment_critical'
+  | 'system';
+
 export interface UserFriendlyError {
   type: ErrorType;
   title: string;
   message: string;
   action?: string;
   retryable: boolean;
+}
+
+export interface AppErrorClassification extends UserFriendlyError {
+  severity: ErrorSeverity;
+  recoverability: ErrorRecoverability;
+  code: string;
+}
+
+const TYPE_CLASSIFICATION: Record<
+  ErrorType,
+  Pick<AppErrorClassification, 'severity' | 'recoverability' | 'code'>
+> = {
+  network: { severity: 'warning', recoverability: 'recoverable', code: 'network_error' },
+  validation: { severity: 'info', recoverability: 'user_actionable', code: 'validation_error' },
+  authentication: { severity: 'warning', recoverability: 'auth', code: 'auth_error' },
+  authorization: {
+    severity: 'warning',
+    recoverability: 'user_actionable',
+    code: 'authorization_error',
+  },
+  payment: { severity: 'critical', recoverability: 'payment_critical', code: 'payment_error' },
+  state_conflict: {
+    severity: 'warning',
+    recoverability: 'user_actionable',
+    code: 'state_conflict',
+  },
+  rate_limit: { severity: 'warning', recoverability: 'recoverable', code: 'rate_limit' },
+  not_found: { severity: 'info', recoverability: 'user_actionable', code: 'not_found' },
+  server: { severity: 'error', recoverability: 'recoverable', code: 'server_error' },
+  navigation: { severity: 'error', recoverability: 'system', code: 'navigation_error' },
+  database: { severity: 'error', recoverability: 'recoverable', code: 'database_error' },
+  unknown: { severity: 'error', recoverability: 'system', code: 'unknown_error' },
+};
+
+function getStableErrorCode(error: any, fallback: string): string {
+  if (typeof error?.code === 'string' && error.code.trim().length > 0) {
+    return error.code;
+  }
+  if (typeof error?.errorCode === 'string' && error.errorCode.trim().length > 0) {
+    return error.errorCode;
+  }
+  return fallback;
+}
+
+function isClosedBountyApplicationError(error: any): boolean {
+  const message = String(error?.message || error?.error || error || '').toLowerCase();
+  const code = String(error?.code || '').toLowerCase();
+
+  return (
+    message.includes('no longer accepting applications') ||
+    message.includes('bounty is no longer available') ||
+    (code === '23514' && message.includes('bounty'))
+  );
 }
 
 /**
@@ -91,12 +154,12 @@ function containsTechnicalDetails(message: string): boolean {
  */
 export function sanitizeErrorMessage(error: any): string {
   const message = error?.message || error?.error || String(error);
-  
+
   // Check if message contains technical details
   if (containsTechnicalDetails(message)) {
     return 'An unexpected error occurred. Please try again or contact support if the problem persists.';
   }
-  
+
   return message;
 }
 
@@ -106,12 +169,25 @@ export function sanitizeErrorMessage(error: any): string {
 export function getUserFriendlyError(error: any): UserFriendlyError {
   const errorMessage = error?.message || '';
   const errorCode = error?.code || '';
-  
+
+  if (isClosedBountyApplicationError(error)) {
+    return {
+      type: 'state_conflict',
+      title: 'Bounty No Longer Available',
+      message:
+        'This bounty is no longer accepting applications. Refresh the listing to see the latest status.',
+      action: 'Refresh',
+      retryable: false,
+    };
+  }
+
   // Navigation context errors (React Navigation)
-  if (errorMessage.includes('navigation') || 
-      errorMessage.includes('NavigationContainer') ||
-      errorMessage.includes('NavigationContent') ||
-      errorMessage.includes("Couldn't find")) {
+  if (
+    errorMessage.includes('navigation') ||
+    errorMessage.includes('NavigationContainer') ||
+    errorMessage.includes('NavigationContent') ||
+    errorMessage.includes("Couldn't find")
+  ) {
     return {
       type: 'navigation',
       title: 'Navigation Error',
@@ -120,25 +196,27 @@ export function getUserFriendlyError(error: any): UserFriendlyError {
       retryable: false,
     };
   }
-  
+
   // Supabase-specific errors
   if (isSupabaseError(error)) {
     return getSupabaseUserFriendlyError(error);
   }
-  
+
   // Stripe-specific errors
   if (isStripeError(error)) {
     return getStripeUserFriendlyError(error);
   }
 
   // Network errors - with clearer retry guidance
-  if (errorMessage.includes('Network request failed') || 
-      errorCode === 'ECONNREFUSED' ||
-      errorCode === 'ENOTFOUND' ||
-      errorCode === 'ECONNRESET' ||
-      errorMessage.includes('Failed to fetch') ||
-      errorMessage.includes('network') ||
-      errorMessage.includes('socket hang up')) {
+  if (
+    errorMessage.includes('Network request failed') ||
+    errorCode === 'ECONNREFUSED' ||
+    errorCode === 'ENOTFOUND' ||
+    errorCode === 'ECONNRESET' ||
+    errorMessage.includes('Failed to fetch') ||
+    errorMessage.includes('network') ||
+    errorMessage.includes('socket hang up')
+  ) {
     return {
       type: 'network',
       title: 'Connection Error',
@@ -160,7 +238,11 @@ export function getUserFriendlyError(error: any): UserFriendlyError {
   }
 
   // Authentication errors
-  if (error?.status === 401 || errorMessage.includes('Unauthorized') || errorMessage.includes('unauthenticated')) {
+  if (
+    error?.status === 401 ||
+    errorMessage.includes('Unauthorized') ||
+    errorMessage.includes('unauthenticated')
+  ) {
     return {
       type: 'authentication',
       title: 'Session Expired',
@@ -171,11 +253,15 @@ export function getUserFriendlyError(error: any): UserFriendlyError {
   }
 
   // Authorization errors
-  if (error?.status === 403 || errorMessage.includes('Forbidden') || errorMessage.includes('permission')) {
+  if (
+    error?.status === 403 ||
+    errorMessage.includes('Forbidden') ||
+    errorMessage.includes('permission')
+  ) {
     return {
       type: 'authorization',
       title: 'Access Denied',
-      message: 'You don\'t have permission to perform this action.',
+      message: "You don't have permission to perform this action.",
       action: 'Go Back',
       retryable: false,
     };
@@ -186,25 +272,34 @@ export function getUserFriendlyError(error: any): UserFriendlyError {
     return {
       type: 'not_found',
       title: 'Not Found',
-      message: 'The requested item could not be found. It may have been removed or is no longer available.',
+      message:
+        'The requested item could not be found. It may have been removed or is no longer available.',
       action: 'Go Back',
       retryable: false,
     };
   }
 
   // Rate limiting - with clear wait guidance
-  if (error?.status === 429 || errorMessage.toLowerCase().includes('rate limit') || errorMessage.includes('too many requests')) {
+  if (
+    error?.status === 429 ||
+    errorMessage.toLowerCase().includes('rate limit') ||
+    errorMessage.includes('too many requests')
+  ) {
     return {
       type: 'rate_limit',
       title: 'Please Slow Down',
-      message: 'You\'ve made too many requests. Wait a minute and try again.',
+      message: "You've made too many requests. Wait a minute and try again.",
       action: 'Wait & Retry',
       retryable: true,
     };
   }
 
   // Payment errors
-  if (error?.type === 'card_error' || error?.type === 'payment_error' || errorMessage.toLowerCase().includes('payment')) {
+  if (
+    error?.type === 'card_error' ||
+    error?.type === 'payment_error' ||
+    errorMessage.toLowerCase().includes('payment')
+  ) {
     return getPaymentUserFriendlyError(error);
   }
 
@@ -224,7 +319,11 @@ export function getUserFriendlyError(error: any): UserFriendlyError {
   }
 
   // Server errors
-  if (error?.status >= 500 || errorMessage.includes('Internal Server Error') || errorMessage.includes('500')) {
+  if (
+    error?.status >= 500 ||
+    errorMessage.includes('Internal Server Error') ||
+    errorMessage.includes('500')
+  ) {
     return {
       type: 'server',
       title: 'Server Error',
@@ -239,11 +338,28 @@ export function getUserFriendlyError(error: any): UserFriendlyError {
   return {
     type: 'unknown',
     title: 'Something Went Wrong',
-    message: sanitizedMessage === errorMessage 
-      ? errorMessage || 'An unexpected error occurred. Please try again.'
-      : sanitizedMessage,
+    message:
+      sanitizedMessage === errorMessage
+        ? errorMessage || 'An unexpected error occurred. Please try again.'
+        : sanitizedMessage,
     action: 'Try Again',
     retryable: true,
+  };
+}
+
+/**
+ * Classify an error for logging, analytics, and user presentation. This keeps
+ * the UI from parsing backend strings while preserving stable diagnostic fields.
+ */
+export function classifyError(error: any): AppErrorClassification {
+  const userError = getUserFriendlyError(error);
+  const defaults = TYPE_CLASSIFICATION[userError.type];
+  return {
+    ...userError,
+    ...defaults,
+    code: isClosedBountyApplicationError(error)
+      ? 'bounty_not_accepting_applications'
+      : getStableErrorCode(error, defaults.code),
   };
 }
 
@@ -254,7 +370,7 @@ function isSupabaseError(error: any): boolean {
   if (!error) return false;
   const message = error?.message || '';
   const code = error?.code || '';
-  
+
   return (
     message.toLowerCase().includes('supabase') ||
     message.includes('PGRST') ||
@@ -275,7 +391,7 @@ function isSupabaseError(error: any): boolean {
 function getSupabaseUserFriendlyError(error: any): UserFriendlyError {
   const message = error?.message || '';
   const code = error?.code || '';
-  
+
   // JWT/Session errors
   if (message.includes('JWT') || message.includes('token')) {
     return {
@@ -286,18 +402,18 @@ function getSupabaseUserFriendlyError(error: any): UserFriendlyError {
       retryable: false,
     };
   }
-  
+
   // Row-level security / permission errors
   if (message.includes('row-level security') || message.includes('policy') || code === '42501') {
     return {
       type: 'authorization',
       title: 'Access Denied',
-      message: 'You don\'t have permission to access this data.',
+      message: "You don't have permission to access this data.",
       action: 'Go Back',
       retryable: false,
     };
   }
-  
+
   // Unique constraint violations (e.g., duplicate email)
   if (code === '23505' || message.includes('duplicate') || message.includes('unique')) {
     return {
@@ -308,18 +424,18 @@ function getSupabaseUserFriendlyError(error: any): UserFriendlyError {
       retryable: true,
     };
   }
-  
+
   // Foreign key violations
   if (code === '23503' || message.includes('foreign key')) {
     return {
       type: 'validation',
       title: 'Invalid Reference',
-      message: 'The referenced item doesn\'t exist or has been removed.',
+      message: "The referenced item doesn't exist or has been removed.",
       action: 'Go Back',
       retryable: false,
     };
   }
-  
+
   // Not found in database
   if (code === 'PGRST116' || message.includes('no rows')) {
     return {
@@ -330,7 +446,7 @@ function getSupabaseUserFriendlyError(error: any): UserFriendlyError {
       retryable: false,
     };
   }
-  
+
   // Connection/network errors to database
   if (message.includes('connection') || message.includes('ECONNREFUSED')) {
     return {
@@ -341,7 +457,7 @@ function getSupabaseUserFriendlyError(error: any): UserFriendlyError {
       retryable: true,
     };
   }
-  
+
   // Default database error
   return {
     type: 'database',
@@ -359,7 +475,7 @@ function isStripeError(error: any): boolean {
   if (!error) return false;
   const message = error?.message || '';
   const type = error?.type || '';
-  
+
   // Check for Stripe-specific error types
   const stripeErrorTypes = [
     'card_error',
@@ -370,7 +486,7 @@ function isStripeError(error: any): boolean {
     'idempotency_error',
     'invalid_grant',
   ];
-  
+
   return (
     stripeErrorTypes.includes(type) ||
     type.includes('stripe') ||
@@ -389,12 +505,12 @@ function isStripeError(error: any): boolean {
 function getStripeUserFriendlyError(error: any): UserFriendlyError {
   const code = error?.code || error?.decline_code || '';
   const type = error?.type || '';
-  
+
   // Card errors
   if (type === 'card_error' || type.includes('card')) {
     return getPaymentUserFriendlyError(error);
   }
-  
+
   // Authentication required (3D Secure, etc.)
   if (code === 'authentication_required') {
     return {
@@ -405,7 +521,7 @@ function getStripeUserFriendlyError(error: any): UserFriendlyError {
       retryable: true,
     };
   }
-  
+
   // Rate limit
   if (type === 'rate_limit_error') {
     return {
@@ -416,7 +532,7 @@ function getStripeUserFriendlyError(error: any): UserFriendlyError {
       retryable: true,
     };
   }
-  
+
   // Invalid request (usually developer error, but show user-friendly message)
   if (type === 'invalid_request_error') {
     return {
@@ -427,7 +543,7 @@ function getStripeUserFriendlyError(error: any): UserFriendlyError {
       retryable: true,
     };
   }
-  
+
   // API errors
   if (type === 'api_error') {
     return {
@@ -438,7 +554,7 @@ function getStripeUserFriendlyError(error: any): UserFriendlyError {
       retryable: true,
     };
   }
-  
+
   // Default Stripe error
   return {
     type: 'payment',
@@ -454,7 +570,7 @@ function getStripeUserFriendlyError(error: any): UserFriendlyError {
  */
 function getPaymentUserFriendlyError(error: any): UserFriendlyError {
   const code = error?.code || error?.decline_code || '';
-  
+
   // Use specific payment error messages if available
   const specificMessage = PAYMENT_ERROR_MESSAGES[code as keyof typeof PAYMENT_ERROR_MESSAGES];
   if (specificMessage) {
@@ -466,7 +582,7 @@ function getPaymentUserFriendlyError(error: any): UserFriendlyError {
       retryable: true,
     };
   }
-  
+
   return {
     type: 'payment',
     title: 'Payment Error',
@@ -481,7 +597,7 @@ function getPaymentUserFriendlyError(error: any): UserFriendlyError {
  */
 export function getValidationError(field: string, error: string): string {
   const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
-  
+
   if (error.includes('required')) {
     return `${fieldName} is required`;
   }
@@ -501,7 +617,7 @@ export function getValidationError(field: string, error: string): string {
     const max = match ? match[0] : '';
     return `${fieldName} must be no more than ${max} characters`;
   }
-  
+
   return error;
 }
 
@@ -509,13 +625,15 @@ export function getValidationError(field: string, error: string): string {
  * Payment error messages
  */
 export const PAYMENT_ERROR_MESSAGES = {
-  card_declined: 'Your card was declined. Please check your card details or try a different payment method.',
+  card_declined:
+    'Your card was declined. Please check your card details or try a different payment method.',
   insufficient_funds: 'Your card has insufficient funds. Please use a different payment method.',
   expired_card: 'Your card has expired. Please update your payment method.',
   incorrect_cvc: 'The security code (CVC) you entered is incorrect.',
   processing_error: 'An error occurred while processing your payment. Please try again.',
   invalid_amount: 'The payment amount is invalid. Please check and try again.',
-  authentication_required: 'Additional authentication is required. Please complete the verification process.',
+  authentication_required:
+    'Additional authentication is required. Please complete the verification process.',
   generic: 'Payment failed. Please check your payment details and try again.',
 } as const;
 
@@ -524,10 +642,10 @@ export const PAYMENT_ERROR_MESSAGES = {
  */
 export function getPaymentErrorMessage(error: any): string {
   const code = error?.code || error?.decline_code;
-  
+
   if (code in PAYMENT_ERROR_MESSAGES) {
     return PAYMENT_ERROR_MESSAGES[code as keyof typeof PAYMENT_ERROR_MESSAGES];
   }
-  
+
   return PAYMENT_ERROR_MESSAGES.generic;
 }

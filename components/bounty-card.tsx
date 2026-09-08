@@ -8,12 +8,14 @@ import type { AppTheme } from 'lib/themes/types';
 import {
   BOUNTY_DISPLAY_STATUS_COLORS,
   BOUNTY_DISPLAY_STATUS_LABELS,
-  getBountyDisplayStatus,
 } from 'lib/utils/bounty-display-status';
+import { resolveBountyLifecycle } from 'lib/utils/bounty-lifecycle';
+import { isBountyPoster } from 'lib/utils/poster-bounty-dashboard';
 import { isBountyDeadlinePassed } from 'lib/utils/schedule-utils';
 import { shareBounty } from 'lib/utils/share-utils';
 import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BountyStatusPanel } from './ui/bounty-status-panel';
 
 interface BountyCardProps {
   bounty: Bounty;
@@ -46,6 +48,20 @@ interface BountyCardProps {
   requestStatus?: string | null;
   // For hunters: withdraw or discard application handler
   onWithdrawApplication?: (() => void) | undefined;
+  /**
+   * Which side of the transaction the viewer is on. Passed explicitly by the
+   * management lists, which already know it; falls back to comparing the
+   * poster id when it isn't supplied.
+   */
+  role?: 'poster' | 'hunter';
+  /**
+   * Unreviewed applications on this bounty. Only the list screens know this
+   * (they batch-load requests for every open posting), and without it an open
+   * posting with three applications waiting would read "waiting for hunters".
+   */
+  applicationCount?: number;
+  /** Set false to suppress the one-line "what happens next" strip. */
+  showNextStep?: boolean;
 }
 
 export function BountyCard({
@@ -69,8 +85,14 @@ export function BountyCard({
   otherPartyId,
   requestStatus,
   onWithdrawApplication,
+  role,
+  applicationCount = 0,
+  showNextStep = true,
 }: BountyCardProps) {
-  const isOwner = currentUserId === bounty.user_id;
+  // Ownership follows the same rule as isBountyPoster (poster_id is canonical,
+  // user_id is the backwards-compatible alias) so this never disagrees with the
+  // poster-only screens. When `role` is passed explicitly, it wins.
+  const isOwner = role ? role === 'poster' : isBountyPoster(bounty, currentUserId ?? null);
   const router = useRouter();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -93,14 +115,51 @@ export function BountyCard({
     });
   };
 
-  // The badge is derived from the shared helper so the Postings screen filter
-  // chips (which use the same helper) always agree with what the card shows.
-  const displayStatus = getBountyDisplayStatus({
-    bounty,
-    reviewNeeded,
-    submittedForReview,
-    requestStatus,
-  });
+  const viewerRole: 'poster' | 'hunter' = role ?? (isOwner ? 'poster' : 'hunter');
+
+  /**
+   * One resolve call gives both the badge and the "what happens next" line, so
+   * a card can never show a status its own next-step sentence contradicts. The
+   * badge still comes from getBountyDisplayStatus underneath, which is what the
+   * filter chips match on.
+   */
+  const lifecycle = useMemo(
+    () =>
+      resolveBountyLifecycle({
+        bounty,
+        role: viewerRole,
+        requestStatus: viewerRole === 'hunter' ? requestStatus : null,
+        // The card is handed the already-resolved review flags rather than the
+        // raw submission row, so translate them back into a submission status.
+        // A pending submission outranks a revision request: the flags are
+        // mutually exclusive in practice, and reading them in this order keeps
+        // the next-step line in step with the REVISION REQUESTED badge below.
+        submissionStatus:
+          reviewNeeded || submittedForReview
+            ? 'pending'
+            : revisionRequested
+              ? 'revision_requested'
+              : null,
+        submissionIsMine: !!submittedForReview,
+        applicationCount,
+        hasDispute,
+        hasCancellationRequest,
+        otherPartyName,
+      }),
+    [
+      bounty,
+      viewerRole,
+      requestStatus,
+      reviewNeeded,
+      submittedForReview,
+      revisionRequested,
+      applicationCount,
+      hasDispute,
+      hasCancellationRequest,
+      otherPartyName,
+    ]
+  );
+  const displayStatus = lifecycle.status;
 
   return (
     <TouchableOpacity activeOpacity={0.8} style={styles.card} onPress={onPress}>
@@ -359,6 +418,20 @@ export function BountyCard({
             </TouchableOpacity>
           </View>
         )}
+
+      {/* The one line that turns a status badge into an instruction. Full-width
+          and last so it reads as a footer under the card's content, and it is
+          the same sentence the bounty's detail screen leads with. */}
+      {showNextStep && (
+        <View style={styles.nextStepStrip}>
+          <BountyStatusPanel
+            state={lifecycle}
+            role={viewerRole}
+            otherPartyName={otherPartyName}
+            variant="inline"
+          />
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -373,6 +446,15 @@ function makeStyles(theme: AppTheme) {
       borderWidth: 1,
       borderColor: theme.border,
       ...legacyTheme.shadows.lg,
+    },
+    // Cancels the card's own padding so the strip spans edge to edge under it.
+    nextStepStrip: {
+      marginTop: 12,
+      marginHorizontal: -18,
+      marginBottom: -18,
+      borderBottomLeftRadius: 16,
+      borderBottomRightRadius: 16,
+      overflow: 'hidden',
     },
     header: {
       flexDirection: 'row',

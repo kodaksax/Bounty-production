@@ -155,6 +155,17 @@ const SECRETS = [
     secret: true,
   },
   {
+    name: 'SHOAL_POOL_SECRET',
+    why:
+      'Every per-agent account password is derived from it (HMAC over the address), so ' +
+      'seeding and running agree without a credential file. Required by every ' +
+      'authenticated scenario.',
+    source: 'BOUNTY_SHOAL_POOL_SECRET (generate once, then re-seed with it exported)',
+    value: () => process.env.BOUNTY_SHOAL_POOL_SECRET,
+    secret: true,
+    check: (v) => (v.length >= 16 ? null : 'too short -- needs at least 16 characters'),
+  },
+  {
     name: 'SHOAL_POSTER_ID',
     why: 'Only the race job uses this, and that job is if:false. Set it when you enable race testing.',
     source: 'BOUNTY_SHOAL_POSTER_ID (from seed.mjs accounts)',

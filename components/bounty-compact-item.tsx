@@ -24,11 +24,15 @@ export interface BountyCompactItemProps {
   user_id?: string | null
   work_type?: 'online' | 'in_person'
   poster_avatar?: string | null
+  /** Listing is missing scope / location / timing. See
+   * lib/utils/bounty-completeness.ts. */
+  incomplete?: boolean
+  missingSummary?: string
 }
 
 function BountyCompactItemComponent({
   id, title, username, price, distance, location, description,
-  isForHonor, user_id, work_type, poster_avatar
+  isForHonor, user_id, work_type, poster_avatar, incomplete, missingSummary
 }: BountyCompactItemProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -63,7 +67,7 @@ function BountyCompactItemComponent({
     setShowDetail(true)
   }, [triggerHaptic])
 
-  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : location ? `, ${location}` : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`
+  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : location ? `, ${location}` : distance !== null ? `, ${distance} miles away` : ', location to be determined'}${incomplete ? `, limited details${missingSummary ? `, ${missingSummary}` : ''}` : ''}`
 
   return (
     <>
@@ -112,6 +116,14 @@ function BountyCompactItemComponent({
               <Text style={s.distance}>{distance} mi</Text>
             )}
           </View>
+          {incomplete && (
+            <View style={s.limitedRow}>
+              <MaterialIcons name="info-outline" size={11} color={theme.textSecondary} />
+              <Text style={s.limitedText} numberOfLines={1}>
+                Limited details{missingSummary ? ` · ${missingSummary}` : ''}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Trailing price and chevron */}
@@ -149,7 +161,9 @@ export const BountyCompactItem = React.memo(BountyCompactItemComponent, (prev, n
   prev.isForHonor === next.isForHonor &&
   prev.user_id === next.user_id &&
   prev.work_type === next.work_type &&
-  prev.poster_avatar === next.poster_avatar
+  prev.poster_avatar === next.poster_avatar &&
+  prev.incomplete === next.incomplete &&
+  prev.missingSummary === next.missingSummary
 )
 
 function makeStyles(t: AppTheme) {
@@ -205,6 +219,18 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      flexShrink: 1,
+    },
+    limitedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 3,
+    },
+    limitedText: {
+      color: t.textSecondary,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+      fontWeight: '600',
       flexShrink: 1,
     },
     username: {

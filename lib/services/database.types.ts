@@ -97,6 +97,7 @@ export type Profile = {
   username: string
   avatar?: string
   avatar_url?: string // Legacy field, prefer 'avatar'
+  banner_url?: string | null
   about?: string | null
   phone?: string | null
   balance: number

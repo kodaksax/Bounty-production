@@ -131,6 +131,7 @@ export type AnalyticsEvent =
   | 'first_screen_viewed'
   | 'first_screen_proof_impression'
   | 'first_screen_cta_tapped'
+  | 'first_screen_how_it_works_tapped'
   // Historical only — fired by the "Get started" CTA of the now-deleted
   // 'onboarding-skip-role-selection' test arm. No longer emitted; kept so
   // past events remain queryable under this type.
@@ -315,6 +316,11 @@ export type AnalyticsEvent =
   // Canonical: composer reached on purpose (was `post_flow_started`).
   | 'composer_opened'
   | 'post_field_focused'
+  // Fired when a poster opens a contextual help tooltip in the composer (e.g.
+  // the marketplace-term tooltips on the Task step). Carries `surface`,
+  // `step_index`, and `term` so help engagement can be paired with the shared
+  // `post_step_viewed` step funnel WITHOUT adding a step to it.
+  | 'post_help_opened'
   | 'post_step_completed'
   | 'post_step_abandoned'
   | 'post_title_typed'

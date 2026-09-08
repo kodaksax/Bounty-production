@@ -38,6 +38,10 @@ export interface BountyFeaturedItemProps {
   end_date?: string | null
   duration_minutes?: number | null
   is_time_sensitive?: boolean
+  /** Listing is missing scope / location / timing. See
+   * lib/utils/bounty-completeness.ts. */
+  incomplete?: boolean
+  missingSummary?: string
 }
 
 function BountyFeaturedItemComponent({
@@ -45,6 +49,7 @@ function BountyFeaturedItemComponent({
   isForHonor, user_id, work_type, poster_avatar,
   categoryColor, categoryLabel, attachments_json,
   schedule_type, start_date, end_date, duration_minutes, is_time_sensitive,
+  incomplete, missingSummary,
 }: BountyFeaturedItemProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -167,6 +172,14 @@ function BountyFeaturedItemComponent({
             <Text style={s.location} numberOfLines={1}>
               {work_type === 'online' ? 'Remote' : location || 'In Person'}
             </Text>
+            {incomplete && (
+              <View style={s.limitedBadge}>
+                <MaterialIcons name="info-outline" size={11} color="rgba(255,255,255,0.85)" />
+                <Text style={s.limitedText} numberOfLines={1}>
+                  Limited details{missingSummary ? ` · ${missingSummary}` : ''}
+                </Text>
+              </View>
+            )}
             <View style={s.metaRow}>
               {isForHonor ? (
                 <View style={s.honorBadge}>
@@ -207,7 +220,9 @@ export const BountyFeaturedItem = React.memo(BountyFeaturedItemComponent, (prev,
   prev.start_date === next.start_date &&
   prev.end_date === next.end_date &&
   prev.duration_minutes === next.duration_minutes &&
-  prev.is_time_sensitive === next.is_time_sensitive
+  prev.is_time_sensitive === next.is_time_sensitive &&
+  prev.incomplete === next.incomplete &&
+  prev.missingSummary === next.missingSummary
 )
 
 function makeStyles(t: AppTheme) {
@@ -284,6 +299,25 @@ function makeStyles(t: AppTheme) {
       fontSize: 11,
       color: 'rgba(255,255,255,0.60)',
       marginTop: 1,
+    },
+    limitedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 4,
+      marginTop: 4,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.16)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.28)',
+    },
+    limitedText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: 'rgba(255,255,255,0.9)',
+      flexShrink: 1,
     },
     metaRow: {
       flexDirection: 'row',

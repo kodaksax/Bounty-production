@@ -443,34 +443,34 @@ export function CreateBountyFlow({
     return false;
   };
 
+  // Web used to skip this confirmation outright, because react-native-web's Alert is a
+  // no-op and the dialog would never have appeared. It is shimmed now
+  // (stubs/react-native-web-alert.web.js), so web asks the same question native does —
+  // which also means the QA swarm exercises the real discard path instead of silently
+  // losing a draft on every exit.
   const handleCancel = () => {
-    if (Platform.OS === 'web') {
-      // Alert.alert is a no-op on web — call onCancel directly
-      if (onCancel) onCancel();
-    } else {
-      Alert.alert(
-        'Discard Draft?',
-        'Your progress will be saved. You can return to this draft anytime.',
-        [
-          {
-            text: 'Keep Editing',
-            style: 'cancel',
-            // Clears a 'back' tag set by the hardware-back handler below so
-            // it doesn't leak into a later, unrelated exit.
-            onPress: () => {
-              exitMethodRef.current = null;
-            },
+    Alert.alert(
+      'Discard Draft?',
+      'Your progress will be saved. You can return to this draft anytime.',
+      [
+        {
+          text: 'Keep Editing',
+          style: 'cancel',
+          // Clears a 'back' tag set by the hardware-back handler below so
+          // it doesn't leak into a later, unrelated exit.
+          onPress: () => {
+            exitMethodRef.current = null;
           },
-          {
-            text: 'Exit',
-            style: 'destructive',
-            onPress: () => {
-              if (onCancel) onCancel();
-            },
+        },
+        {
+          text: 'Exit',
+          style: 'destructive',
+          onPress: () => {
+            if (onCancel) onCancel();
           },
-        ]
-      );
-    }
+        },
+      ]
+    );
   };
 
   useBackHandler(() => {

@@ -24,9 +24,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  isPaymentIntentId,
-  verifyDepositPaymentIntent,
-  type DepositPaymentIntent,
+    isPaymentIntentId,
+    verifyDepositPaymentIntent,
+    type DepositPaymentIntent,
 } from '../../supabase/functions/_shared/deposit-verification';
 
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '../../', p), 'utf8');
@@ -181,6 +181,19 @@ describe('a fabricated PaymentIntent cannot create wallet funds', () => {
     // the client's retry loop can recover a genuinely paid deposit.
     expect(walletSource).toContain("code === 'resource_missing'");
     expect(walletSource).toContain('isMissing ? 404 : 502');
+    expect(walletSource).toContain(
+      "code: isMissing ? 'payment_intent_not_found' : 'payment_verification_failed'"
+    );
+    expect(walletSource).toContain('retryable: !isMissing');
+  });
+
+  it('returns correlation ids and stable deposit error codes to speed incident triage', () => {
+    expect(walletSource).toContain('function generateRequestId');
+    expect(walletSource).toContain("'X-Request-Id': requestId");
+    expect(walletSource).toContain('requestId }');
+    expect(walletSource).toContain("code: 'invalid_payment_intent_id'");
+    expect(walletSource).toContain("code: 'deposit_record_failed'");
+    expect(walletSource).toContain("code: 'deposit_recorded_balance_refresh_failed'");
   });
 });
 
@@ -262,7 +275,10 @@ describe('the credited amount comes from Stripe, never from the client', () => {
     [905, 9.05],
     [20_000, 200],
   ])('converts %i cents to $%s', (cents, dollars) => {
-    const result = verifyDepositPaymentIntent({ callerId: USER_A, intent: intent({ amount: cents }) });
+    const result = verifyDepositPaymentIntent({
+      callerId: USER_A,
+      intent: intent({ amount: cents }),
+    });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
     expect(result.amount).toBeCloseTo(dollars, 6);

@@ -19,6 +19,7 @@ import {
     ActiveHuntersPill,
     MIN_ACTIVE_HUNTERS_TO_SHOW,
 } from '../../components/ui/active-hunters-pill';
+import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { EmptyState } from '../../components/ui/empty-state';
 import {
     SEARCH_FIELD_MAX_FONT_SCALE,
@@ -46,6 +47,10 @@ import type {
     TrendingBounty,
     UserProfile,
 } from '../../lib/types';
+import {
+    getBountyCompleteness,
+    summarizeMissingDetails,
+} from '../../lib/utils/bounty-completeness';
 import { logger } from '../../lib/utils/error-logger';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 /**
@@ -82,6 +87,10 @@ interface BountyRowItem {
   is_for_honor?: boolean;
   location?: string;
   status?: string;
+  // Listing is missing scope / location / timing — badged on the card and
+  // sorted below complete results. See lib/utils/bounty-completeness.ts.
+  incomplete?: boolean;
+  missingSummary?: string;
 }
 
 // Human-readable filter tokens for analytics — never the raw query text.
@@ -348,8 +357,9 @@ export default function EnhancedSearchScreen() {
     [router]
   );
 
-  const mapBounty = useCallback(
-    (b: Bounty): BountyRowItem => ({
+  const mapBounty = useCallback((b: Bounty): BountyRowItem => {
+    const completeness = getBountyCompleteness(b as any);
+    return {
       id: b.id.toString(),
       title: b.title || 'Untitled',
       description: b.description || '',
@@ -358,9 +368,12 @@ export default function EnhancedSearchScreen() {
       is_for_honor: (b as any).is_for_honor,
       location: (b as any).location,
       status: (b as any).status,
-    }),
-    []
-  );
+      incomplete: !completeness.isComplete,
+      missingSummary: completeness.isComplete
+        ? ''
+        : summarizeMissingDetails(completeness.missing),
+    };
+  }, []);
 
   const performBountySearch = useCallback(
     async (searchQuery: string, searchFilters: BountySearchFilters) => {
@@ -374,7 +387,14 @@ export default function EnhancedSearchScreen() {
           limit: 50,
         });
         if (requestId !== searchRequestIdRef.current) return; // superseded by a newer search
-        setBountyResults(results.map(mapBounty));
+        // Keep the server's sort order (date/amount), then move listings that
+        // are missing scope / location / timing to the end — a hunter can't
+        // judge those, so they belong below every result they can act on.
+        const mapped = results.map(mapBounty);
+        setBountyResults([
+          ...mapped.filter(m => !m.incomplete),
+          ...mapped.filter(m => m.incomplete),
+        ]);
 
         const filtersApplied = describeBountyFilters(searchFilters);
         const trimmedLength = searchQuery.trim().length;
@@ -492,7 +512,10 @@ export default function EnhancedSearchScreen() {
           ? `$${item.amount}`
           : '';
       const locationLabel = item.location ? `, in ${item.location}` : '';
-      const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${locationLabel}`;
+      const incompleteLabel = item.incomplete
+        ? `, limited details${item.missingSummary ? ', ' + item.missingSummary : ''}`
+        : '';
+      const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${locationLabel}${incompleteLabel}`;
 
       return (
         <TouchableOpacity
@@ -515,6 +538,14 @@ export default function EnhancedSearchScreen() {
               {item.description}
             </Text>
           ) : null}
+          {item.incomplete && (
+            <View style={s.limitedBadge}>
+              <MaterialIcons name="info-outline" size={13} color={theme.textSecondary} />
+              <Text style={s.limitedBadgeText} numberOfLines={1}>
+                Limited details{item.missingSummary ? ` · ${item.missingSummary}` : ''}
+              </Text>
+            </View>
+          )}
           <View style={s.metaRow}>
             {item.amount != null && !item.is_for_honor && (
               <Text style={s.amount}>${item.amount}</Text>
@@ -534,7 +565,7 @@ export default function EnhancedSearchScreen() {
         </TouchableOpacity>
       );
     },
-    [router]
+    [router, s, theme]
   );
 
   const renderUserItem = useCallback(
@@ -558,6 +589,14 @@ export default function EnhancedSearchScreen() {
           accessibilityHint="Opens user profile"
         >
           <View style={s.cardHeader}>
+            <Avatar style={s.userAvatar}>
+              <AvatarImage src={item.avatar || "/placeholder.svg?height=32&width=32"} alt={item.username} />
+              <AvatarFallback style={s.userAvatarFallback}>
+                <Text style={s.userAvatarFallbackText}>
+                  {item.username?.slice(0, 2).toUpperCase()}
+                </Text>
+              </AvatarFallback>
+            </Avatar>
             <Text style={s.cardTitle}>{item.username}</Text>
             {(item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') && (
               <MaterialIcons
@@ -1084,7 +1123,13 @@ export default function EnhancedSearchScreen() {
                       const newStatus = currentStatus.includes(option.value)
                         ? currentStatus.filter(s => s !== option.value)
                         : [...currentStatus, option.value];
-                      setFilters({ ...filters, status: newStatus });
+                      // Never allow an empty selection: an empty status array is
+                      // treated as "no filter" downstream and widens the query to
+                      // cancelled/deleted bounties. Re-default to Open instead.
+                      setFilters({
+                        ...filters,
+                        status: newStatus.length > 0 ? newStatus : ['open'],
+                      });
                     }}
                   >
                     <Text
@@ -1321,10 +1366,48 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
       flex: 1,
     },
+    userAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      marginRight: 10,
+    },
+    userAvatarFallback: {
+      backgroundColor: t.surfaceSecondary,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    userAvatarFallbackText: {
+      color: t.primaryLight,
+      fontSize: 11,
+      fontWeight: '700',
+    },
     cardDesc: {
       color: t.textSecondary,
       fontSize: 13,
       marginBottom: 6,
+    },
+    limitedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+      marginBottom: 6,
+      backgroundColor: t.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',
+      borderWidth: 1,
+      borderColor: t.isDark ? 'rgba(245,158,11,0.32)' : 'rgba(245,158,11,0.28)',
+    },
+    limitedBadgeText: {
+      color: t.textSecondary,
+      fontSize: 11,
+      fontWeight: '600',
+      flexShrink: 1,
     },
     metaRow: {
       flexDirection: 'row',

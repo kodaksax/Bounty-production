@@ -1,6 +1,7 @@
 /** Metro config — extend expo/metro-config and merge project aliases. */
 const path = require('path');
 const { resolve } = require('metro-resolver');
+const { resolveWebStub } = require('./stubs/web-stub-resolver.cjs');
 const projectRoot = __dirname;
 
 const aliasExtraNodeModules = {
@@ -26,21 +27,17 @@ try {
   const originalResolver =
     (defaultConfig.resolver && defaultConfig.resolver.resolveRequest) || resolve;
 
-  // Custom resolver: on web, route @stripe/stripe-react-native to a local web stub
+  // Custom resolver: on web, route a handful of native-only packages (Stripe,
+  // react-native-maps + its clustering wrapper, the url-polyfill auto-installer) to
+  // local web stubs, plus react-native-web's own no-op Alert. The mapping lives in
+  // stubs/web-stub-resolver.cjs so it can be unit-tested without booting Metro.
+  // `originModulePath` is passed through because the Alert rule is keyed on the
+  // importing package, not just the imported id (react-native-web reaches it by a
+  // relative import). Non-web platforms fall straight through.
   const resolveRequest = (context, realModuleName, platform, moduleName) => {
     const targetName = realModuleName || moduleName;
-    if (platform === 'web' && targetName === '@stripe/stripe-react-native') {
-      return {
-        type: 'sourceFile',
-        filePath: path.resolve(projectRoot, 'lib/services/stripe-mock.web.js'),
-      };
-    }
-    if (platform === 'web' && targetName === 'react-native-url-polyfill/auto') {
-      return {
-        type: 'sourceFile',
-        filePath: path.resolve(projectRoot, 'stubs/react-native-url-polyfill-auto.web.js'),
-      };
-    }
+    const webStub = resolveWebStub(targetName, platform, projectRoot, context.originModulePath);
+    if (webStub) return webStub;
 
     return originalResolver(context, realModuleName, platform, moduleName);
   };

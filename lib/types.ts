@@ -120,6 +120,7 @@ export interface UserProfile {
   username: string;
   name?: string;
   avatar?: string;
+  banner_url?: string;
   title?: string;
   languages?: string[];
   skills?: string[];

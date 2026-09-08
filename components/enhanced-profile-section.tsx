@@ -317,7 +317,22 @@ export function EnhancedProfileSection({
   return (
     <View className="px-4 py-2" style={{ backgroundColor: theme.background }}>
       {/* Enhanced Profile Header + Stats (merged card) */}
-      <View className="rounded-xl p-4 mb-4 shadow-sm" style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
+      <View className="rounded-xl mb-4 shadow-sm overflow-hidden" style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
+        {effectiveProfile.banner_url ? (
+          <OptimizedImage
+            source={{ uri: effectiveProfile.banner_url }}
+            width={640}
+            height={128}
+            style={{ width: '100%', height: 100 }}
+            resizeMode="cover"
+            useThumbnail
+            priority="low"
+            alt="Profile banner"
+          />
+        ) : (
+          <View style={{ width: '100%', height: 100, backgroundColor: theme.surfaceSecondary }} />
+        )}
+        <View className="p-4">
         <View className="flex-row items-start justify-between">
           <View className="flex-row items-center flex-1">
             <View className="relative">
@@ -552,6 +567,7 @@ export function EnhancedProfileSection({
               (effectiveProfile as any).created_at || effectiveProfile.joinDate || Date.now()
             ).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
           </Text>
+        </View>
         </View>
       </View>
 

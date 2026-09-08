@@ -6,6 +6,7 @@ export type NormalizedProfile = {
   username?: string;
   name?: string;
   avatar?: string;
+  banner_url?: string;
   title?: string;
   bio?: string;
   location?: string;
@@ -65,6 +66,7 @@ export function normalizeAuthProfile(p: AuthProfile | null): NormalizedProfile |
     username: p.username,
     name: p.username, // AuthProfile may not have name field
     avatar: p.avatar || (p as any).avatar_url || undefined,
+    banner_url: p.banner_url || undefined,
     bio: p.about,
     joinDate: p.created_at,
     created_at: p.created_at,
@@ -105,6 +107,7 @@ export function normalizeUserProfile(p: UserProfile | null): NormalizedProfile |
     username: p.username?.replace(/^@/, ''),
     name: p.name || p.username,
     avatar: p.avatar || (p as any).avatar_url || undefined,
+    banner_url: p.banner_url || undefined,
     title: p.title,
     bio: p.bio,
     location: p.location,
@@ -137,6 +140,7 @@ export function mergeNormalized(primary: NormalizedProfile | null, fallback: Nor
     username: primary.username || fallback.username,
     name: primary.name || fallback.name,
     avatar: primary.avatar || fallback.avatar,
+    banner_url: primary.banner_url || fallback.banner_url,
     title: primary.title || fallback.title,
     bio: primary.bio || fallback.bio,
     location: primary.location || fallback.location,

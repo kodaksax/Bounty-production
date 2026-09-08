@@ -32,6 +32,13 @@ export const FEED_SAFE_BOUNTY_COLUMNS = [
   'approx_latitude', 'approx_longitude', 'neighborhood',
 ].join(', ');
 
+// Statuses a hunter can meaningfully browse. Used as the fallback when a search
+// carries no explicit status filter, so an empty/omitted selection can never
+// widen the query to `cancelled` / `deleted` / `disputed` / `archived` rows the
+// search UI offers no chip for and a hunter cannot act on.
+// See app/tabs/search.tsx (status chips) — this list must stay a superset of them.
+export const BROWSABLE_BOUNTY_STATUSES = ['open', 'in_progress', 'completed'];
+
 // Lazy-load wsAdapter to avoid circular dependencies
 // Type for wsAdapter interface
 interface WsAdapter {
@@ -424,7 +431,9 @@ export const bountyService = {
         if (filters.status && filters.status.length > 0) {
           query = query.in('status', filters.status);
         } else {
-          query = query.neq('status', 'archived');
+          // No explicit selection: restrict to browsable statuses rather than
+          // `!= archived`, which also leaked `cancelled` / `deleted` rows.
+          query = query.in('status', BROWSABLE_BOUNTY_STATUSES);
         }
 
         if (filters.keywords) {
@@ -497,7 +506,7 @@ export const bountyService = {
             if (filters.status && filters.status.length > 0) {
               queryNoJoin = queryNoJoin.in('status', filters.status);
             } else {
-              queryNoJoin = queryNoJoin.neq('status', 'archived');
+              queryNoJoin = queryNoJoin.in('status', BROWSABLE_BOUNTY_STATUSES);
             }
 
             if (filters.keywords) {
@@ -641,6 +650,16 @@ export const bountyService = {
     limit?: number;
     offset?: number;
     includeArchived?: boolean;
+    /**
+     * Explicit status allowlist — takes precedence over includeArchived.
+     * Use this whenever the caller needs to guarantee removed/cancelled
+     * bounties never leak in (e.g. a profile's "Bounties Posted" history):
+     * includeArchived alone only ever excludes 'archived', not 'deleted'
+     * (the status an admin-removed bounty gets — see
+     * 20260829120000_bounty_moderation_queue.sql), 'cancelled', or
+     * 'cancellation_requested'.
+     */
+    statuses?: string[];
   }): Promise<Bounty[]> {
     try {
       // Prefer Supabase when configured
@@ -667,7 +686,11 @@ export const bountyService = {
         if (options?.status) query = query.eq('status', options.status);
         if (options?.userId) query = query.eq('poster_id', options.userId);
         if (options?.workType) query = query.eq('work_type', options.workType);
-        if (!options?.includeArchived) query = query.neq('status', 'archived');
+        if (options?.statuses && options.statuses.length > 0) {
+          query = query.in('status', options.statuses);
+        } else if (!options?.includeArchived) {
+          query = query.neq('status', 'archived');
+        }
 
         const limit = options?.limit ?? 20;
         const offset = options?.offset ?? 0;
@@ -1163,8 +1186,16 @@ export const bountyService = {
    * use this to render a user's full postings history/tabs, where silently
    * truncating at 20 would hide older bounties rather than just slow a feed.
    */
-  async getByUserId(userId: string, options?: { limit?: number; includeArchived?: boolean }): Promise<Bounty[]> {
-    return this.getAll({ userId, limit: options?.limit ?? 200, includeArchived: options?.includeArchived });
+  async getByUserId(
+    userId: string,
+    options?: { limit?: number; includeArchived?: boolean; statuses?: string[] }
+  ): Promise<Bounty[]> {
+    return this.getAll({
+      userId,
+      limit: options?.limit ?? 200,
+      includeArchived: options?.includeArchived,
+      statuses: options?.statuses,
+    });
   },
 
   /**

@@ -18,6 +18,12 @@ export interface AttachmentUploadOptions {
   maxSizeMB?: number
   allowsMultiple?: boolean
   /**
+   * Aspect ratio [width, height] for the native image-picker crop UI (only
+   * applies when picking a single image — allowsEditing is disabled for
+   * multi-select). Omit to use the picker's default (freeform/square) crop.
+   */
+  aspect?: [number, number]
+  /**
    * Reject uploads that only landed in the on-device AsyncStorage fallback.
    * Set this wherever the resulting URL is shared with someone else (chat
    * attachments, for example): a local cache key is meaningless to the
@@ -55,6 +61,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
     allowedTypes = 'all',
     maxSizeMB = 10,
     allowsMultiple = false,
+    aspect,
     requireRemote = false,
     onUploaded,
     onError,
@@ -104,7 +111,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
           results = camResult ? [camResult] : null
           break
         case 'photos':
-          results = await pickFromPhotos(allowsMultiple)
+          results = await pickFromPhotos(allowsMultiple, aspect)
           break
         case 'files':
           results = await pickFromFiles(allowsMultiple)
@@ -472,7 +479,10 @@ async function pickFromCamera(): Promise<{
 /**
  * Pick from photo library
  */
-async function pickFromPhotos(allowsMultiple: boolean = false): Promise<PickResult[] | null> {
+async function pickFromPhotos(
+  allowsMultiple: boolean = false,
+  aspect?: [number, number]
+): Promise<PickResult[] | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
   if (!permission.granted) {
     Alert.alert('Permission Required', 'Photo library permission is required.')
@@ -483,6 +493,7 @@ async function pickFromPhotos(allowsMultiple: boolean = false): Promise<PickResu
     mediaTypes: ImagePicker.MediaTypeOptions.All,
     allowsEditing: !allowsMultiple, // Disable editing if multiple selection is enabled
     allowsMultipleSelection: allowsMultiple,
+    ...(aspect && !allowsMultiple ? { aspect } : {}),
     quality: 0.8,
   })
 

@@ -478,27 +478,27 @@ export function useBountyPublish(params: UseBountyPublishParams) {
         return;
       }
 
-      if (Platform.OS === 'web') {
-        // Alert.alert is a no-op on web — proceed immediately after success
-        finish();
-      } else {
-        Alert.alert(
-          isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📋',
-          !isOnline
-            ? "You're offline. Your bounty will be posted automatically when you reconnect."
-            : postedUnfunded
-              ? // Sets the expectation the whole experiment depends on, in one
-                // line, without explaining escrow mechanics.
-                "Your bounty is live. You'll only be charged when you choose someone to do it."
-              : 'Your bounty has been posted successfully. Hunters will be able to see it and apply.',
-          [
-            {
-              text: isOnline ? 'View Bounty' : 'OK',
-              onPress: finish,
-            },
-          ]
-        );
-      }
+      // Web used to call finish() straight away, because react-native-web's Alert is a
+      // no-op and this confirmation would never have been seen. It is shimmed now
+      // (stubs/react-native-web-alert.web.js), so web gets the same confirmation native
+      // does — and the QA swarm can finally verify what the app claims at the moment of
+      // posting, which is the one screen it has to take on trust otherwise.
+      Alert.alert(
+        isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📋',
+        !isOnline
+          ? "You're offline. Your bounty will be posted automatically when you reconnect."
+          : postedUnfunded
+            ? // Sets the expectation the whole experiment depends on, in one
+              // line, without explaining escrow mechanics.
+              "Your bounty is live. You'll only be charged when you choose someone to do it."
+            : 'Your bounty has been posted successfully. Hunters will be able to see it and apply.',
+        [
+          {
+            text: isOnline ? 'View Bounty' : 'OK',
+            onPress: finish,
+          },
+        ]
+      );
     },
     {
       // No post-completion cooldown. The in-flight guard (submitInProgressRef,

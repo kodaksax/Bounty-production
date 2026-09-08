@@ -7,7 +7,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1133,6 +1133,7 @@ export default function DetailsScreen() {
         onNext={handlePostBounty}
         posting={posting}
         onSkip={handleSkipToApp}
+        onLearnMoreTrust={() => router.push('/legal/how-it-works' as Href)}
         onSwitchToHunter={() => handleSwitchIntent('hunter')}
         onBack={handleBack}
       />

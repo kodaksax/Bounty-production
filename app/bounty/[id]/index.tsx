@@ -1,222 +1,224 @@
-// app/bounty/[id]/index.tsx - Bounty detail routing entry point
-// This screen determines the user's role (poster or hunter) and redirects appropriately
+// app/bounty/[id]/index.tsx — the deep-link entry point for a single bounty.
+//
+// Every external route into a bounty (push notification, shared link, search
+// result, admin console) lands here. Its only job is to decide which of the
+// three real surfaces the viewer belongs on and hand off:
+//
+//   poster  → /postings/[bountyId]        (their command center)
+//   hunter  → /in-progress/[bountyId]/hunter (their hub — including for a
+//                                             rejected or withdrawn application)
+//   public  → /bounty/[id]/public          (read-only, with an Apply action)
+//
+// Previously anyone with no relationship to the bounty was sent to the poster's
+// dashboard, which answered with an "Access Denied" alert and `router.back()`.
+// From a notification or a shared link there was nothing behind it to go back
+// to. The routing decision now lives in getBountyDetailSurface, where it is
+// unit-tested, and the failure states below are real screens rather than an
+// alert.
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { bountyService } from '../../../lib/services/bounty-service';
-import { bountyRequestService } from '../../../lib/services/bounty-request-service';
-import { analyticsService } from '../../../lib/services/analytics-service';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { NotFoundScreen } from '../../../components/not-found-screen';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { ROUTES } from '../../../lib/routes';
+import { analyticsService } from '../../../lib/services/analytics-service';
+import { bountyRequestService } from '../../../lib/services/bounty-request-service';
+import { bountyService } from '../../../lib/services/bounty-service';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../lib/themes/types';
+import { getBountyDetailSurface } from '../../../lib/utils/bounty-lifecycle';
+
+const FEED_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=bounty`;
 
 export default function BountyDetailRouter() {
   const { id, source } = useLocalSearchParams<{ id?: string; source?: string }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
+  // The session restores after the first render on a cold start. Routing
+  // before it resolves would send a poster (or an accepted hunter) to the
+  // public read-only view, which is exactly the mis-route this screen exists
+  // to prevent.
+  const { session, isLoading: isAuthLoading } = useAuthContext();
   const currentUserId = session?.user?.id ?? null;
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
-  const routeBountyId = React.useMemo(() => {
+  const routeBountyId = useMemo(() => {
     const raw = Array.isArray(id) ? id[0] : id;
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [id]);
 
   // Tracks the most recently requested bounty id so a slower, stale response
-  // for a previous id (e.g. fast back-and-forth navigation between two bounty
-  // detail screens) can't clobber state or redirect based on the wrong id
-  // after a newer request has already resolved.
+  // for a previous id (fast back-and-forth between two bounty links) can't
+  // route on the wrong bounty after a newer request has already resolved.
   const latestRequestedIdRef = useRef<string | null>(null);
 
-  const determineBountyRole = useCallback(async (bountyId: string) => {
-    latestRequestedIdRef.current = bountyId;
-    try {
-      setIsLoading(true);
-      setError(null);
+  const routeToSurface = useCallback(
+    async (bountyId: string) => {
+      latestRequestedIdRef.current = bountyId;
+      const isStale = () => latestRequestedIdRef.current !== bountyId;
 
-      // Load bounty
-      const bounty = await bountyService.getById(bountyId);
-      if (latestRequestedIdRef.current !== bountyId) return;
-      if (!bounty) {
-        setError('Bounty not found');
-        return;
-      }
+      try {
+        setIsLoading(true);
+        setError(null);
+        setNotFound(false);
 
-      const isOwnBounty = bounty.user_id === currentUserId || bounty.poster_id === currentUserId;
-      const secondsSincePosted = bounty.created_at
-        ? Math.max(0, Math.round((Date.now() - new Date(bounty.created_at).getTime()) / 1000))
-        : undefined;
-      analyticsService.trackEvent('bounty_viewed', {
-        bounty_id: String(bounty.id),
-        is_own_bounty: isOwnBounty,
-        amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
-        is_for_honor: Boolean(bounty.is_for_honor),
-        category: bounty.category,
-        distance_miles: bounty.distance_miles ?? undefined,
-        seconds_since_posted: secondsSincePosted,
-        source: typeof source === 'string' ? source : undefined,
-        surface: 'role_route',
-      });
-
-      // Check if user is the poster
-      // Note: bounty.poster_id is the canonical field, user_id is a backwards-compatible alias
-      // Both are checked for compatibility with older code paths
-      if (isOwnBounty) {
-        // Redirect to poster's dashboard view
-        router.replace({
-          pathname: '/postings/[bountyId]',
-          params: { bountyId },
-        });
-        return;
-      }
-
-      // Check if user has a request for this bounty (hunter flow)
-      // Only run if we have a valid userId; unauthenticated users have no existing requests
-      // and will be directed to the postings view (which handles auth-gating for applying)
-      if (currentUserId) {
-        const requests = await bountyRequestService.getAll({
-          bountyId,
-          userId: currentUserId,
-        });
-        if (latestRequestedIdRef.current !== bountyId) return;
-
-        if (requests.length > 0) {
-          // User is a hunter with a request - redirect to hunter flow
-          router.replace({
-            pathname: '/in-progress/[bountyId]/hunter',
-            params: { bountyId },
-          });
+        const bounty = await bountyService.getById(bountyId);
+        if (isStale()) return;
+        if (!bounty) {
+          setNotFound(true);
           return;
         }
-      }
 
-      // User has no relationship to this bounty as poster or hunter
-      // The postings/[bountyId] view handles access control and shows the bounty detail
-      // Non-posters will see a read-only view with option to apply
-      router.replace({
-        pathname: '/postings/[bountyId]',
-        params: { bountyId },
-      });
-    } catch (err) {
-      if (latestRequestedIdRef.current !== bountyId) return;
-      console.error('Error determining bounty role:', err);
-      setError('Failed to load bounty details');
-    } finally {
-      if (latestRequestedIdRef.current === bountyId) {
-        setIsLoading(false);
+        const isPoster =
+          !!currentUserId &&
+          (String(bounty.user_id) === String(currentUserId) ||
+            String(bounty.poster_id) === String(currentUserId));
+
+        const secondsSincePosted = bounty.created_at
+          ? Math.max(0, Math.round((Date.now() - new Date(bounty.created_at).getTime()) / 1000))
+          : undefined;
+        analyticsService.trackEvent('bounty_viewed', {
+          bounty_id: String(bounty.id),
+          is_own_bounty: isPoster,
+          amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
+          is_for_honor: Boolean(bounty.is_for_honor),
+          category: bounty.category,
+          distance_miles: bounty.distance_miles ?? undefined,
+          seconds_since_posted: secondsSincePosted,
+          source: typeof source === 'string' ? source : undefined,
+          surface: 'role_route',
+        });
+
+        // Only a signed-in non-poster can have an application to look up.
+        let requestStatus: string | null = null;
+        if (!isPoster && currentUserId) {
+          try {
+            const requests = await bountyRequestService.getAll({
+              bountyId,
+              userId: currentUserId,
+            });
+            if (isStale()) return;
+            requestStatus = requests.length > 0 ? (requests[0].status ?? 'pending') : null;
+          } catch {
+            // A failed lookup must not strand an accepted hunter on the public
+            // view: fall through to the accepted_by check below.
+          }
+        }
+
+        const surface = getBountyDetailSurface({
+          isPoster,
+          requestStatus,
+          isAcceptedHunter:
+            !!currentUserId && String(bounty.accepted_by ?? '') === String(currentUserId),
+        });
+
+        if (isStale()) return;
+
+        if (surface === 'poster') {
+          router.replace({ pathname: '/postings/[bountyId]', params: { bountyId } });
+        } else if (surface === 'hunter') {
+          router.replace({ pathname: '/in-progress/[bountyId]/hunter', params: { bountyId } });
+        } else {
+          router.replace({ pathname: '/bounty/[id]/public', params: { id: bountyId } });
+        }
+      } catch (err) {
+        if (isStale()) return;
+        console.error('Error routing to bounty detail:', err);
+        setError('load_failed');
+      } finally {
+        if (latestRequestedIdRef.current === bountyId) setIsLoading(false);
       }
-    }
-  }, [currentUserId, router]);
+    },
+    [currentUserId, router, source]
+  );
 
   useEffect(() => {
+    if (isAuthLoading) return;
     if (!routeBountyId) {
-      setError('Invalid bounty ID');
+      setNotFound(true);
       setIsLoading(false);
       return;
     }
-    determineBountyRole(routeBountyId);
-  }, [routeBountyId, determineBountyRole]);
+    routeToSurface(routeBountyId);
+  }, [isAuthLoading, routeBountyId, routeToSurface]);
 
-  const handleGoBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/tabs/bounty-app');
-    }
-  };
+  const goToFeed = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace(FEED_ROUTE as never);
+  }, [router]);
 
-  if (isLoading) {
+  if (notFound) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#9CA3AF" />
-          <Text style={styles.loadingText}>Loading bounty...</Text>
-        </View>
-      </View>
+      <NotFoundScreen
+        title="This bounty isn't available"
+        message="It was removed, completed, or the link points somewhere that no longer exists."
+        icon="search-off"
+        actionText="Browse bounties"
+        onAction={() => router.replace(FEED_ROUTE as never)}
+      />
     );
   }
 
   if (error) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.5)" />
-          <Text style={styles.errorTitle}>Unable to Load Bounty</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <MaterialIcons name="arrow-back" size={20} color="#fffef5" />
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <SafeAreaView style={s.centered}>
+        <MaterialIcons name="cloud-off" size={48} color={theme.textSecondary} />
+        <Text style={s.title}>{"Couldn't open this bounty"}</Text>
+        <Text style={s.body}>
+          {"You're offline or the connection dropped. Nothing about the bounty has changed."}
+        </Text>
+        <TouchableOpacity
+          style={s.primaryBtn}
+          onPress={() => routeBountyId && routeToSurface(routeBountyId)}
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
+        >
+          <Text style={s.primaryBtnText}>Try again</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.textBtn} onPress={goToFeed} accessibilityRole="button">
+          <Text style={s.textBtnText}>Go back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
     );
   }
 
-  // Loading spinner as fallback while redirecting
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#9CA3AF" />
-        <Text style={styles.loadingText}>Redirecting...</Text>
-      </View>
-    </View>
+    <SafeAreaView style={s.centered}>
+      <ActivityIndicator size="large" color={theme.primary} />
+      <Text style={s.body}>{isLoading ? 'Loading bounty…' : 'Opening bounty…'}</Text>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B0F14',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    color: 'rgba(255,254,245,0.8)',
-    fontSize: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    gap: 16,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fffef5',
-  },
-  errorText: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.7)',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#059669',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    gap: 8,
-  },
-  backButtonText: {
-    color: '#fffef5',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    centered: {
+      flex: 1,
+      backgroundColor: t.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+      padding: 32,
+    },
+    title: { color: t.text, fontSize: 18, fontWeight: '700' },
+    body: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+    primaryBtn: {
+      backgroundColor: t.primary,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 10,
+      marginTop: 8,
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    primaryBtnText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+    textBtn: { paddingHorizontal: 24, paddingVertical: 12, minHeight: 44, justifyContent: 'center' },
+    textBtnText: { color: t.primaryLight, fontSize: 14, fontWeight: '600' },
+  });
+}

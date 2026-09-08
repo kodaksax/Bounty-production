@@ -1,5 +1,11 @@
+import { AccessibilityInfo } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { StepTask } from '../../app/screens/CreateBounty/quick/StepTask';
+
+// The RN jest preset's AccessibilityInfo mock omits announceForAccessibility,
+// which InfoTooltip calls when it opens.
+(AccessibilityInfo as unknown as { announceForAccessibility: jest.Mock }).announceForAccessibility =
+  jest.fn();
 
 const mockTrackEvent = jest.fn();
 jest.mock('../../lib/services/analytics-service', () => ({
@@ -38,11 +44,11 @@ describe('StepTask template tap contract', () => {
       />
     );
 
-    fireEvent.press(getByLabelText('Assemble furniture, suggested $40'));
+    fireEvent.press(getByLabelText('Assemble my furniture, suggested $40'));
 
     expect(onFieldFocus).toHaveBeenCalledTimes(1);
     expect(onUpdate).toHaveBeenCalledWith({
-      title: 'Assemble furniture',
+      title: 'Assemble my furniture',
       category: 'labor',
       amount: 40,
       isForHonor: false,
@@ -68,5 +74,54 @@ describe('StepTask template tap contract', () => {
       })
     );
     expect(onNext).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('StepTask contextual help tooltips', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const draft = {
+    title: 'Existing title',
+    description: '',
+    amount: 0,
+    isForHonor: false,
+    category: 'other',
+    workType: 'in_person',
+  } as any;
+
+  const renderStep = () =>
+    render(
+      <StepTask
+        draft={draft}
+        onUpdate={jest.fn()}
+        onNext={jest.fn()}
+        onFieldFocus={jest.fn()}
+        step={1}
+        totalSteps={6}
+      />
+    );
+
+  it('emits post_help_opened with the term when the bounty tooltip opens', () => {
+    const { getByLabelText } = renderStep();
+
+    fireEvent.press(getByLabelText('Help: How a bounty works'));
+
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      'post_help_opened',
+      expect.objectContaining({ surface: 'create_flow', step_index: 1, term: 'bounty' })
+    );
+  });
+
+  it('emits post_help_opened with the term when the price tooltip opens', () => {
+    const { getByLabelText } = renderStep();
+
+    fireEvent.press(getByLabelText('Help: About these prices'));
+
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      'post_help_opened',
+      expect.objectContaining({ surface: 'create_flow', step_index: 1, term: 'price' })
+    );
   });
 });

@@ -1,967 +1,787 @@
+/**
+ * app/postings/[bountyId] — the Poster's command center for one bounty.
+ *
+ * What this replaced, and why:
+ *
+ * The previous screen tracked a four-stage "timeline" in LOCAL component state
+ * seeded from `bounty.status`, let the poster tap through it, and popped a
+ * "Stage Locked — complete current stage to unlock" alert when they tapped too
+ * far. None of that reflected the backend: the stage reset on every navigation,
+ * the "Next Stage" button advanced a bounty whose hunter had submitted nothing,
+ * and the screen never once mentioned applications, the selected hunter, the
+ * submitted work, or the payment. A poster could not answer "what do I do now?"
+ * from it.
+ *
+ * Everything on this screen is now derived from backend state through
+ * useBountyLifecycle → resolveBountyLifecycle: one status, one explanation, one
+ * primary action, and the same story the hunter is being told from their side.
+ * Secondary and destructive actions live behind the panel's disclosure so the
+ * primary action is never one of six equal buttons.
+ *
+ * Access: a non-poster is no longer met with an "Access Denied" alert that
+ * bounced them backwards (a dead end reachable from any deep link) — they are
+ * redirected to the view that is actually theirs.
+ */
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EditPostingModal } from '../../../components/edit-posting-modal';
 import { NotFoundScreen } from '../../../components/not-found-screen';
-import WorkInProgressBanner from '../../../components/work-in-progress-banner';
+import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
+import { Stepper } from '../../../components/ui/stepper';
+import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useBountyLifecycle } from '../../../hooks/useBountyLifecycle';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
+import { ROUTES } from '../../../lib/routes';
+import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { messageService } from '../../../lib/services/message-service';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
-import type { Conversation } from '../../../lib/types';
-import { formatCategoryLabel, getCurrentUserId } from '../../../lib/utils/data-utils';
-import {
-    getPosterDashboardNextRoute,
-    isBountyPoster,
-} from '../../../lib/utils/poster-bounty-dashboard';
+import { getBountyStages } from '../../../lib/utils/bounty-lifecycle';
+import type { BountyActionKey } from '../../../lib/utils/bounty-lifecycle';
+import { formatCategoryLabel } from '../../../lib/utils/data-utils';
+import { bountyHoldsUnreleasedEscrow } from '../../../lib/utils/payment-architecture';
+import { shareBounty } from '../../../lib/utils/share-utils';
 
-type BountyStage = 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
-
-interface StageInfo {
-  id: BountyStage;
-  label: string;
-  icon: string;
-}
-
-const STAGES: StageInfo[] = [
-  { id: 'apply_work', label: 'Apply & Work', icon: 'work' },
-  { id: 'working_progress', label: 'Working Progress', icon: 'trending-up' },
-  { id: 'review_verify', label: 'Review & Verify', icon: 'rate-review' },
-  { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
-];
+/** Requests tab inside the Inbox shell — where applications are reviewed. */
+const REQUESTS_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=requests`;
+/** The post-a-bounty flow. */
+const POST_BOUNTY_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=postings`;
 
 export default function BountyDashboard() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const currentUserId = getCurrentUserId();
+  // `isAuthLoading` matters here: on a cold start the session restores after
+  // the first render, so a poster momentarily looks like a signed-out visitor.
+  // Acting on that would redirect them off their own dashboard before auth
+  // resolved.
+  const { session, isLoading: isAuthLoading } = useAuthContext();
+  const currentUserId = session?.user?.id ?? null;
   const { pushColor, popColor } = useBackgroundColor();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
-  const [bounty, setBounty] = useState<Bounty | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentStage, setCurrentStage] = useState<BountyStage>('apply_work');
-  const [messageText, setMessageText] = useState('');
-  const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
-  const glowAnim = useRef(new Animated.Value(0)).current;
-
-  // Normalize route param to a string (supports UUIDs)
-  const routeBountyId = React.useMemo(() => {
+  const routeBountyId = useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [bountyId]);
 
-  // Tracks the most recently requested bounty id so a slower, stale response
-  // for a previous id (fast back-and-forth navigation between two bounty
-  // dashboards) can't overwrite state with the wrong bounty's data after a
-  // newer request has already resolved.
-  const latestRequestedIdRef = useRef<string | null>(null);
+  const {
+    bounty,
+    role,
+    state,
+    otherParty,
+    applicationCount,
+    submission,
+    isLoading,
+    error,
+    notFound,
+    refresh,
+  } = useBountyLifecycle(routeBountyId, currentUserId);
 
-  useEffect(() => {
-    if (!routeBountyId) {
-      setError('Invalid bounty id');
-      setIsLoading(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [busyAction, setBusyAction] = useState<BountyActionKey | null>(null);
+
+  React.useEffect(() => {
+    pushColor(theme.background);
+    return () => popColor(theme.background);
+  }, [pushColor, popColor, theme.background]);
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refresh]);
+
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace(`${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=myPostings` as never);
+  }, [router]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  const handleMessage = useCallback(async () => {
+    if (!bounty) return;
+    const hunterId = otherParty.id ?? (bounty.accepted_by as string | undefined) ?? null;
+    if (!hunterId) {
+      Alert.alert(
+        'No hunter yet',
+        'You can message a hunter once you have selected one for this bounty.'
+      );
       return;
     }
-    latestRequestedIdRef.current = routeBountyId;
-    // Ensure the app-level safe area color matches this screen's dark background
-    pushColor(theme.background);
-    loadBounty(routeBountyId);
-    loadConversation(routeBountyId);
-    return () => {
-      popColor(theme.background);
-    };
-  }, [routeBountyId]);
-
-  // Start pulsing glow when a bounty is in progress
-  useEffect(() => {
-    if (bounty?.status === 'in_progress') {
-      const anim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-          Animated.timing(glowAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
-        ])
-      );
-      anim.start();
-      return () => anim.stop();
-    }
-  }, [bounty?.status, glowAnim]);
-
-  const loadBounty = async (id: string) => {
+    setBusyAction('message');
     try {
-      setIsLoading(true);
-      setError(null);
-      const data = await bountyService.getById(id);
-      if (latestRequestedIdRef.current !== id) return;
+      const conversation = await messageService.getOrCreateConversation(
+        [String(hunterId)],
+        '',
+        String(bounty.id)
+      );
+      if (!conversation?.id) throw new Error('no conversation');
+      router.push(`/tabs/messenger/${encodeURIComponent(String(conversation.id))}` as never);
+    } catch {
+      Alert.alert(
+        "Couldn't open the conversation",
+        'Check your connection and try again. Your messages are safe either way.'
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }, [bounty, otherParty.id, router]);
 
-      if (!data) {
-        throw new Error('Bounty not found');
-      }
-
-      // Check ownership
-      if (!isBountyPoster(data, currentUserId)) {
-        Alert.alert('Access Denied', 'You can only view your own bounty dashboards.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+  const handleSaveEdit = useCallback(
+    async (updates: Partial<Bounty>) => {
+      if (!bounty) return;
+      // A hunter applying mid-edit must not have the terms changed underneath
+      // them — the same guard the list screens apply, re-checked server-side
+      // against the live request rows rather than a stale local count.
+      try {
+        const pending = await bountyRequestService.getAll({
+          bountyId: String(bounty.id),
+          status: 'pending',
+        });
+        if (pending && pending.length > 0) {
+          Alert.alert(
+            "Can't edit now",
+            'A hunter applied while you were editing, so the terms are locked. Review the applications instead.'
+          );
+          return;
+        }
+      } catch {
+        Alert.alert(
+          "Can't edit right now",
+          "We couldn't check for new applications. Check your connection and try again."
+        );
         return;
       }
 
-      setBounty(data);
-
-      // Map bounty status to stage
-      if (data.status === 'open') {
-        setCurrentStage('apply_work');
-      } else if (data.status === 'in_progress') {
-        setCurrentStage('working_progress');
-      } else if (data.status === 'completed') {
-        setCurrentStage('payout');
+      try {
+        const updated = await bountyService.update(bounty.id, updates);
+        if (!updated) throw new Error('update failed');
+        setShowEditModal(false);
+        await refresh();
+      } catch (err: any) {
+        Alert.alert('Changes not saved', err?.message || 'Please try again.');
       }
-    } catch (err) {
-      if (latestRequestedIdRef.current !== id) return;
-      console.error('Error loading bounty:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load bounty');
-    } finally {
-      if (latestRequestedIdRef.current === id) {
-        setIsLoading(false);
-      }
+    },
+    [bounty, refresh]
+  );
+
+  const handlers = useMemo((): Partial<Record<BountyActionKey, () => void>> => {
+    if (!bounty || !routeBountyId) return {};
+    const map: Partial<Record<BountyActionKey, () => void>> = {
+      message: handleMessage,
+      share: () =>
+        shareBounty({
+          id: bounty.id,
+          title: bounty.title,
+          amount: bounty.amount,
+          isForHonor: bounty.is_for_honor,
+          description: bounty.description,
+          category: bounty.category,
+          location: bounty.location,
+        }),
+      review_applications: () => router.push(REQUESTS_ROUTE as never),
+      review_submission: () =>
+        router.push({
+          pathname: '/postings/[bountyId]/review-and-verify',
+          params: { bountyId: routeBountyId },
+        } as never),
+      view_payout: () =>
+        router.push({
+          pathname: '/postings/[bountyId]/payout',
+          params: { bountyId: routeBountyId },
+        } as never),
+      leave_review: () =>
+        router.push({
+          pathname: '/postings/[bountyId]/payout',
+          params: { bountyId: routeBountyId },
+        } as never),
+      repost: () => router.push(POST_BOUNTY_ROUTE as never),
+      cancel_bounty: () =>
+        router.push({ pathname: '/bounty/[id]/cancel', params: { id: routeBountyId } } as never),
+      respond_cancellation: () =>
+        router.push({
+          pathname: '/bounty/[id]/cancellation-response',
+          params: { id: routeBountyId },
+        } as never),
+      open_dispute: () =>
+        router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
+      view_dispute: () =>
+        router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
+      contact_support: () => router.push('/tabs/need-help-screen' as never),
+    };
+
+    // Editing is only honest while the terms can still legally change.
+    if (bounty.status === 'open' && !bounty.accepted_by && applicationCount === 0) {
+      map.edit = () => setShowEditModal(true);
     }
-  };
+    return map;
+  }, [bounty, routeBountyId, applicationCount, handleMessage, router]);
 
-  const loadConversation = async (idStr: string) => {
-    try {
-      const conversations = await messageService.getConversations();
-      if (latestRequestedIdRef.current !== idStr) return;
-      const bountyConv = conversations.find(c => String(c.bountyId) === idStr);
-      setConversation(bountyConv || null);
-    } catch (err) {
-      console.error('Error loading conversation:', err);
+  // ── Redirect rather than dead-end a non-poster ────────────────────────────
+  React.useEffect(() => {
+    if (isAuthLoading || isLoading || !bounty || !routeBountyId) return;
+    if (role === 'poster') return;
+    if (role === 'hunter') {
+      router.replace({
+        pathname: '/in-progress/[bountyId]/hunter',
+        params: { bountyId: routeBountyId },
+      } as never);
+    } else {
+      router.replace({
+        pathname: '/bounty/[id]/public',
+        params: { id: routeBountyId },
+      } as never);
     }
-  };
+  }, [isAuthLoading, isLoading, bounty, role, routeBountyId, router]);
 
-  const handleSendMessage = async () => {
-    if (!messageText.trim()) return;
-
-    let conv = conversation;
-    try {
-      setIsSendingMessage(true);
-
-      if (!conv) {
-        if (!bounty || !bounty.user_id) {
-          Alert.alert('No Conversation', 'No active conversation found for this bounty.');
-          return;
-        }
-
-        conv = await messageService.getOrCreateConversation(
-          [String(bounty.user_id)],
-          '',
-          routeBountyId || undefined
-        );
-        setConversation(conv);
-      }
-
-      await messageService.sendMessage(conv.id, messageText.trim());
-      setMessageText('');
-      Alert.alert('Success', 'Message sent successfully!');
-    } catch (err) {
-      console.error('Error sending message:', err);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
-    } finally {
-      setIsSendingMessage(false);
-    }
-  };
-
-  const handleStagePress = (stage: BountyStage) => {
-    const stageIndex = STAGES.findIndex(s => s.id === stage);
-    const currentIndex = STAGES.findIndex(s => s.id === currentStage);
-
-    // Can only navigate to current or previous stages
-    if (stageIndex > currentIndex) {
-      Alert.alert('Stage Locked', 'Complete current stage to unlock this stage.');
-      return;
-    }
-
-    setCurrentStage(stage);
-  };
-
-  const handleNext = () => {
-    if (!routeBountyId) return;
-    const nextRoute = getPosterDashboardNextRoute(currentStage, routeBountyId);
-    if (nextRoute) {
-      router.push(nextRoute as any);
-      return;
-    }
-
-    const currentIndex = STAGES.findIndex(s => s.id === currentStage);
-
-    if (currentIndex < STAGES.length - 1) {
-      const nextStage = STAGES[currentIndex + 1];
-      setCurrentStage(nextStage.id);
-    }
-  };
-
-  const getStatusBadgeColor = (status?: string) => {
-    switch (status) {
-      case 'open':
-        return '#059669'; // emerald-500
-      case 'in_progress':
-        return '#fbbf24'; // amber-400
-      case 'completed':
-        return '#6366f1'; // indigo-500
-      case 'archived':
-        return '#6b7280'; // gray-500
-      default:
-        return '#059669';
-    }
-  };
-
-  const getStatusLabel = (status?: string) => {
-    switch (status) {
-      case 'open':
-        return 'OPEN';
-      case 'in_progress':
-        return 'IN PROGRESS';
-      case 'completed':
-        return 'COMPLETED';
-      case 'archived':
-        return 'ARCHIVED';
-      default:
-        return 'OPEN';
-    }
-  };
-
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
-  };
-
-  if (isLoading) {
+  // ── States ────────────────────────────────────────────────────────────────
+  if (isAuthLoading || (isLoading && !bounty)) {
     return (
-      <SafeAreaView style={s.loadingContainer}>
+      <SafeAreaView style={s.centered}>
         <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={s.loadingText}>Loading bounty...</Text>
+        <Text style={s.centeredText}>Loading your bounty…</Text>
       </SafeAreaView>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <NotFoundScreen
+        title="This bounty is gone"
+        message="It was deleted, or the link points somewhere that no longer exists. Your other postings are unaffected."
+        icon="search-off"
+        actionText="Back to My Postings"
+        onAction={goBack}
+      />
     );
   }
 
   if (error || !bounty) {
-    // Check if it's a "not found" error
-    const isNotFound = error?.includes('not found') || error?.includes('Not found') || !bounty;
-
-    if (isNotFound) {
-      return (
-        <NotFoundScreen
-          title="Bounty Not Found"
-          message="The bounty you're looking for doesn't exist or has been removed."
-          icon="search-off"
-          actionText="Go Back"
-          onAction={() => router.back()}
-        />
-      );
-    }
-
-    // Other errors - show error screen with retry
     return (
-      <SafeAreaView style={s.errorContainer}>
-        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
-        <Text style={s.errorText}>{error || 'Failed to load bounty'}</Text>
-        <TouchableOpacity
-          style={s.retryButton}
-          onPress={() => routeBountyId && loadBounty(routeBountyId)}
-        >
-          <Text style={s.retryButtonText}>Retry</Text>
+      <SafeAreaView style={s.centered}>
+        <MaterialIcons name="cloud-off" size={48} color={theme.textSecondary} />
+        <Text style={s.errorTitle}>{"Couldn't load this bounty"}</Text>
+        <Text style={s.centeredText}>
+          {"You're offline or the connection dropped. Nothing about the bounty has changed."}
+        </Text>
+        <TouchableOpacity style={s.retryButton} onPress={onRefresh}>
+          <Text style={s.retryButtonText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.backButton} onPress={() => router.back()}>
-          <Text style={s.backButtonText}>Go Back</Text>
+        <TouchableOpacity style={s.textButton} onPress={goBack}>
+          <Text style={s.textButtonText}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  // `description` is optional on the two-step posting flow (added later on the
-  // confirmation screen) and can be null on older/API-created rows, so guard
-  // every string access below — an unguarded `.length` here white-screens the
-  // whole poster dashboard.
+  // Redirect in flight for a non-poster — don't paint a poster's dashboard.
+  if (role !== 'poster' || !state) {
+    return (
+      <SafeAreaView style={s.centered}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={s.centeredText}>Opening bounty…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const stages = getBountyStages('poster');
   const description = bounty.description ?? '';
   const descriptionPreview =
-    description.length > 150 ? description.substring(0, 150) + '...' : description;
+    description.length > 180 ? `${description.substring(0, 180)}…` : description;
+  const escrowHeld = bountyHoldsUnreleasedEscrow(bounty as any);
+  // formatCategoryLabel returns null for a bounty with no category.
+  const categoryLabel = formatCategoryLabel((bounty as any).category);
+  const hunterName = otherParty.name || 'your hunter';
 
   return (
-    <SafeAreaView style={[s.container, { width: '100%', alignSelf: 'stretch' }]} edges={['top']}>
-      {/* Header */}
+    <SafeAreaView style={s.container} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity style={s.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={s.headerIcon}
+          onPress={goBack}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Bounty Dashboard</Text>
+        <Text style={s.headerTitle} numberOfLines={1}>
+          Your bounty
+        </Text>
+        <TouchableOpacity
+          style={s.headerIcon}
+          onPress={handlers.share}
+          accessibilityRole="button"
+          accessibilityLabel="Share this bounty"
+        >
+          <MaterialIcons name="share" size={22} color={theme.text} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
-        style={[s.scrollView, { width: '100%' }]}
-        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 18 }]}
+        style={s.scroll}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.text}
+            colors={[theme.primary]}
+          />
+        }
       >
-        {/* Bounty Header Card */}
-        <View style={s.bountyCard}>
-          <View style={s.bountyHeader}>
-            <View style={s.avatarPlaceholder}>
-              <MaterialIcons name="person" size={32} color={theme.text} />
-            </View>
-            <View style={s.bountyHeaderInfo}>
-              <Text style={s.bountyTitle} numberOfLines={2}>
-                {bounty.title}
-              </Text>
-              <Text style={s.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
-              {(bounty as any)?.category && (
-                <View style={s.categoryPill}>
-                  <Text style={s.categoryPillText}>
-                    {formatCategoryLabel((bounty as any).category)}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          <View style={s.bountyMeta}>
-            <View style={[s.statusBadge, { backgroundColor: getStatusBadgeColor(bounty.status) }]}>
-              <Text style={s.statusBadgeText}>{getStatusLabel(bounty.status)}</Text>
-            </View>
+        {/* ── Identity: what is this, and what is it worth ──────────────── */}
+        <View style={s.heroCard}>
+          <View style={s.heroTopRow}>
+            <Text style={s.heroTitle} numberOfLines={3}>
+              {bounty.title}
+            </Text>
             {bounty.is_for_honor ? (
-              <View style={s.honorBadge}>
-                <MaterialIcons name="favorite" size={16} color="#ffffff" />
-                <Text style={s.honorText}>For Honor</Text>
+              <View style={s.honorPill}>
+                <MaterialIcons name="favorite" size={14} color="#ffffff" />
+                <Text style={s.honorPillText}>For honor</Text>
               </View>
             ) : (
-              <Text style={s.amount}>${bounty.amount}</Text>
+              <Text style={s.heroAmount}>${bounty.amount}</Text>
+            )}
+          </View>
+
+          <View style={s.metaRow}>
+            <MetaChip icon="schedule" label={`Posted ${formatTimeAgo(bounty.created_at)}`} s={s} color={theme.textSecondary} />
+            {!!bounty.end_date && (
+              <MetaChip icon="event" label={`Due ${formatDate(bounty.end_date)}`} s={s} color={theme.textSecondary} />
+            )}
+            {!!categoryLabel && (
+              <MetaChip icon="local-offer" label={categoryLabel} s={s} color={theme.textSecondary} />
+            )}
+            {!!bounty.work_type && (
+              <MetaChip
+                icon={bounty.work_type === 'online' ? 'computer' : 'person-pin'}
+                label={bounty.work_type === 'online' ? 'Online' : 'In person'}
+                s={s}
+                color={theme.textSecondary}
+              />
             )}
           </View>
         </View>
 
-        {/* Work in progress banner for posters */}
-        {bounty.status === 'in_progress' && (
-          <WorkInProgressBanner message="Your hunter is actively working on this. You’ll be notified when it’s ready for review." />
+        {/* ── The command center: what's happening, what's next, what to do ── */}
+        <BountyStatusPanel
+          state={state}
+          role="poster"
+          otherPartyName={otherParty.name}
+          onAction={handlers}
+          busyAction={busyAction}
+        />
+
+        {/* ── Where this bounty is in its life ──────────────────────────── */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Progress</Text>
+          <Stepper stages={stages} activeIndex={state.stageIndex} variant="compact" />
+        </View>
+
+        {/* ── Applications ─────────────────────────────────────────────── */}
+        {bounty.status === 'open' && (
+          <TouchableOpacity
+            style={s.card}
+            onPress={handlers.review_applications}
+            accessibilityRole="button"
+            accessibilityLabel={
+              applicationCount > 0
+                ? `${applicationCount} applications waiting for review`
+                : 'No applications yet'
+            }
+          >
+            <View style={s.rowBetween}>
+              <View style={s.rowLeft}>
+                <MaterialIcons name="people" size={20} color={theme.primaryLight} />
+                <Text style={s.sectionTitleInline}>Applications</Text>
+              </View>
+              {applicationCount > 0 ? (
+                <View style={s.countPill}>
+                  <Text style={s.countPillText}>{applicationCount}</Text>
+                </View>
+              ) : (
+                <Text style={s.mutedSmall}>None yet</Text>
+              )}
+            </View>
+            <Text style={s.cardBody}>
+              {applicationCount > 0
+                ? `Review who applied and choose the hunter you want. You're charged only when you accept.`
+                : `Hunters who apply show up here. Sharing the bounty gets it in front of more of them.`}
+            </Text>
+            {applicationCount > 0 && (
+              <View style={s.linkRow}>
+                <Text style={s.linkText}>Review hunters</Text>
+                <MaterialIcons name="chevron-right" size={18} color={theme.primaryLight} />
+              </View>
+            )}
+          </TouchableOpacity>
         )}
 
-        {/* Timeline */}
-        {bounty.status === 'open' && (
-          <View style={s.preAcceptancePanel}>
-            <MaterialIcons name="hourglass-empty" size={24} color={theme.primaryLight} />
-            <Text style={s.preAcceptanceTitle}>Awaiting a hunter</Text>
-            <Text style={s.preAcceptanceText}>
-              This posting is visible in the feed. You’ll receive requests from hunters and can
-              review them from the Postings screen.
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-              <TouchableOpacity style={s.secondaryBtn} onPress={() => router.back()}>
-                <Text style={s.secondaryBtnText}>Back to My Postings</Text>
+        {/* ── The hunter doing the work ─────────────────────────────────── */}
+        {!!bounty.accepted_by && (
+          <View style={s.card}>
+            <Text style={s.sectionTitle}>Your hunter</Text>
+            <View style={s.personRow}>
+              {otherParty.avatar ? (
+                <ExpoImage
+                  source={{ uri: otherParty.avatar }}
+                  style={s.avatar}
+                  recyclingKey={otherParty.avatar}
+                  accessibilityLabel={`${hunterName} profile picture`}
+                />
+              ) : (
+                <View style={[s.avatar, s.avatarFallback]}>
+                  <MaterialIcons name="person" size={24} color={theme.textSecondary} />
+                </View>
+              )}
+              <View style={s.personText}>
+                <Text style={s.personName}>{otherParty.name || 'Hunter'}</Text>
+                <Text style={s.mutedSmall}>Selected for this bounty</Text>
+              </View>
+            </View>
+            <View style={s.actionRow}>
+              <TouchableOpacity
+                style={s.outlineBtn}
+                onPress={handleMessage}
+                accessibilityRole="button"
+                accessibilityLabel={`Message ${hunterName}`}
+              >
+                <MaterialIcons name="chat" size={16} color={theme.text} />
+                <Text style={s.outlineBtnText}>Message</Text>
               </TouchableOpacity>
+              {!!otherParty.id && (
+                <TouchableOpacity
+                  style={s.outlineBtn}
+                  onPress={() => router.push(`/profile/${otherParty.id}` as never)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${hunterName}'s profile`}
+                >
+                  <MaterialIcons name="badge" size={16} color={theme.text} />
+                  <Text style={s.outlineBtnText}>View profile</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
 
-        <View style={s.timelineContainer}>
-          <Text style={s.sectionTitle}>Progress Timeline</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.timeline}
-          >
-            {STAGES.map((stage, index) => {
-              const isActive = stage.id === currentStage;
-              const stageIndex = STAGES.findIndex(s => s.id === stage.id);
-              const currentIndex = STAGES.findIndex(s => s.id === currentStage);
-              const isCompleted = stageIndex < currentIndex;
-              const isAccessible = stageIndex <= currentIndex;
-
-              return (
-                <TouchableOpacity
-                  key={stage.id}
-                  style={[
-                    s.stageItem,
-                    isActive && s.stageItemActive,
-                    isCompleted && s.stageItemCompleted,
-                    !isAccessible && s.stageItemLocked,
-                  ]}
-                  onPress={() => handleStagePress(stage.id)}
-                  disabled={!isAccessible}
-                >
-                  <View style={{ position: 'relative', width: 48, height: 48, marginBottom: 8 }}>
-                    {bounty?.status === 'in_progress' &&
-                      stage.id === 'working_progress' &&
-                      isActive && (
-                        <Animated.View
-                          style={[
-                            s.stageIconGlow,
-                            {
-                              transform: [
-                                {
-                                  scale: glowAnim.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [1, 1.25],
-                                  }),
-                                },
-                              ],
-                              opacity: glowAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [0.55, 0.12],
-                              }),
-                            },
-                          ]}
-                        />
-                      )}
-
-                    <View
-                      style={[
-                        s.stageIcon,
-                        isActive && s.stageIconActive,
-                        isCompleted && s.stageIconCompleted,
-                      ]}
-                    >
-                      <MaterialIcons
-                        name={stage.icon as any}
-                        size={24}
-                        color={isActive || isCompleted ? '#ffffff' : theme.primaryLight}
-                      />
-                    </View>
-                  </View>
-                  <Text
-                    style={[
-                      s.stageLabel,
-                      isActive && s.stageLabelActive,
-                      isCompleted && s.stageLabelCompleted,
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {stage.label}
-                  </Text>
-                  {isCompleted && (
-                    <View style={s.completedCheckmark}>
-                      <MaterialIcons name="check-circle" size={16} color={theme.primary} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Quick Message */}
-        <View style={s.messageContainer}>
-          <Text style={s.sectionTitle}>Quick Message</Text>
-          {conversation ? (
-            <View style={s.messageInputContainer}>
-              <TextInput
-                style={s.messageInput}
-                placeholder="Type a message to the hunter..."
-                placeholderTextColor={theme.textDisabled}
-                value={messageText}
-                onChangeText={setMessageText}
-                multiline
-                numberOfLines={3}
-              />
+        {/* ── The submitted work ────────────────────────────────────────── */}
+        {!!submission && (
+          <View style={s.card}>
+            <View style={s.rowBetween}>
+              <Text style={s.sectionTitle}>Submitted work</Text>
+              <Text style={s.mutedSmall}>{submissionStatusLabel(submission.status)}</Text>
+            </View>
+            {!!submission.message && <Text style={s.cardBody}>{submission.message}</Text>}
+            {Array.isArray(submission.proof_items) && submission.proof_items.length > 0 && (
+              <View style={s.proofRow}>
+                <MaterialIcons name="attach-file" size={16} color={theme.primaryLight} />
+                <Text style={s.mutedSmall}>
+                  {submission.proof_items.length}{' '}
+                  {submission.proof_items.length === 1 ? 'attachment' : 'attachments'}
+                </Text>
+              </View>
+            )}
+            {submission.status === 'pending' && (
               <TouchableOpacity
-                style={[
-                  s.sendButton,
-                  (!messageText.trim() || isSendingMessage) && s.sendButtonDisabled,
-                ]}
-                onPress={handleSendMessage}
-                disabled={!messageText.trim() || isSendingMessage}
+                style={s.linkRow}
+                onPress={handlers.review_submission}
+                accessibilityRole="button"
+                accessibilityLabel="Open the full review"
               >
-                {isSendingMessage ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <MaterialIcons name="send" size={20} color="#fff" />
-                )}
+                <Text style={s.linkText}>Open the full review</Text>
+                <MaterialIcons name="chevron-right" size={18} color={theme.primaryLight} />
               </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={s.noConversation}>
-              <MaterialIcons name="chat-bubble-outline" size={32} color={theme.primaryLight} />
-              <Text style={s.noConversationText}>No active conversation yet</Text>
-              <Text style={s.noConversationSubtext}>
-                A conversation will be created when a hunter accepts this bounty
-              </Text>
-            </View>
-          )}
-        </View>
+            )}
+          </View>
+        )}
 
-        {/* Context Panel - Description */}
-        <View style={s.contextPanel}>
-          <Text style={s.sectionTitle}>Description</Text>
-          <Text style={s.description}>
-            {descriptionExpanded ? description : descriptionPreview}
-          </Text>
-          {description.length > 150 && (
-            <TouchableOpacity
-              style={s.expandButton}
-              onPress={() => setDescriptionExpanded(!descriptionExpanded)}
-            >
-              <Text style={s.expandButtonText}>
-                {descriptionExpanded ? 'Show Less' : 'Show More'}
-              </Text>
+        {/* ── Money: the trust half of the transaction ──────────────────── */}
+        {!bounty.is_for_honor && (
+          <View style={s.card}>
+            <Text style={s.sectionTitle}>Payment</Text>
+            <View style={s.rowBetween}>
+              <Text style={s.cardBody}>Bounty reward</Text>
+              <Text style={s.paymentAmount}>${bounty.amount}</Text>
+            </View>
+            <View style={s.paymentStateRow}>
               <MaterialIcons
-                name={descriptionExpanded ? 'expand-less' : 'expand-more'}
+                name={escrowHeld ? 'lock' : bounty.status === 'completed' ? 'check-circle' : 'account-balance-wallet'}
                 size={16}
-                color={theme.primaryLight}
+                color={escrowHeld ? theme.warning : theme.success}
               />
-            </TouchableOpacity>
+              <Text style={s.cardBodyMuted}>
+                {escrowHeld
+                  ? `Held safely in escrow. It's released to ${hunterName} only when you approve the work.`
+                  : bounty.status === 'completed'
+                    ? `Released to ${hunterName}.`
+                    : "You'll be charged when you accept a hunter, and the money is held in escrow until you approve the work."}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── The brief itself ──────────────────────────────────────────── */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Details</Text>
+          {description.length > 0 ? (
+            <>
+              <Text style={s.cardBody}>
+                {descriptionExpanded ? description : descriptionPreview}
+              </Text>
+              {description.length > 180 && (
+                <TouchableOpacity
+                  style={s.expandBtn}
+                  onPress={() => setDescriptionExpanded(v => !v)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: descriptionExpanded }}
+                >
+                  <Text style={s.linkText}>{descriptionExpanded ? 'Show less' : 'Show more'}</Text>
+                  <MaterialIcons
+                    name={descriptionExpanded ? 'expand-less' : 'expand-more'}
+                    size={16}
+                    color={theme.primaryLight}
+                  />
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <Text style={s.cardBodyMuted}>No description was added to this bounty.</Text>
           )}
 
-          {/* Additional info */}
-          {bounty.location && (
-            <View style={s.infoRow}>
-              <MaterialIcons name="place" size={16} color={theme.primaryLight} />
-              <Text style={s.infoText}>{bounty.location}</Text>
-            </View>
-          )}
-          {bounty.timeline && (
-            <View style={s.infoRow}>
-              <MaterialIcons name="schedule" size={16} color={theme.primaryLight} />
-              <Text style={s.infoText}>{bounty.timeline}</Text>
-            </View>
-          )}
-          {bounty.skills_required && (
-            <View style={s.infoRow}>
-              <MaterialIcons name="build" size={16} color={theme.primaryLight} />
-              <Text style={s.infoText}>{bounty.skills_required}</Text>
-            </View>
+          {!!bounty.location && <DetailRow icon="place" text={bounty.location} s={s} color={theme.primaryLight} />}
+          {!!bounty.timeline && <DetailRow icon="schedule" text={bounty.timeline} s={s} color={theme.primaryLight} />}
+          {!!bounty.skills_required && (
+            <DetailRow icon="build" text={bounty.skills_required} s={s} color={theme.primaryLight} />
           )}
         </View>
-
-        {/* Next Button — only meaningful once a hunter has been accepted. While
-            the bounty is still open there is no next stage to advance to, and
-            the "Awaiting a hunter" panel above is the correct CTA; showing this
-            button there let the poster march an unclaimed bounty through
-            Working Progress / Review & Verify for work that doesn't exist. */}
-        {bounty.status !== 'open' && currentStage !== 'payout' && (
-          <TouchableOpacity style={s.nextButton} onPress={handleNext}>
-            <Text style={s.nextButtonText}>
-              {currentStage === 'review_verify' ? 'Go to Review & Verify' : 'Next Stage'}
-            </Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
-          </TouchableOpacity>
-        )}
-
-        {currentStage === 'payout' && (
-          <TouchableOpacity
-            style={s.nextButton}
-            onPress={() =>
-              routeBountyId &&
-              router.push({
-                pathname: '/postings/[bountyId]/payout',
-                params: { bountyId: routeBountyId },
-              })
-            }
-          >
-            <Text style={s.nextButtonText}>Go to Payout</Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
-          </TouchableOpacity>
-        )}
       </ScrollView>
+
+      {showEditModal && (
+        <EditPostingModal
+          visible={showEditModal}
+          bounty={bounty}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
+/**
+ * Presentational rows. They take the already-memoized style sheet rather than
+ * the theme so they never rebuild a StyleSheet per render — the pattern the
+ * rest of the hot screens follow.
+ */
+type Styles = ReturnType<typeof makeStyles>;
+
+function MetaChip({ icon, label, s, color }: { icon: string; label: string; s: Styles; color: string }) {
+  return (
+    <View style={s.metaChip}>
+      <MaterialIcons name={icon as any} size={13} color={color} />
+      <Text style={s.metaChipText} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function DetailRow({ icon, text, s, color }: { icon: string; text: string; s: Styles; color: string }) {
+  return (
+    <View style={s.detailRow}>
+      <MaterialIcons name={icon as any} size={16} color={color} />
+      <Text style={s.cardBodyMuted}>{text}</Text>
+    </View>
+  );
+}
+
+function submissionStatusLabel(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'Awaiting your review';
+    case 'approved':
+      return 'Approved';
+    case 'revision_requested':
+      return 'Changes requested';
+    case 'rejected':
+      return 'Rejected';
+    default:
+      return status;
+  }
+}
+
+function formatTimeAgo(dateString?: string | null): string {
+  if (!dateString) return 'recently';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return 'recently';
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(diffMs / 3600000);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(diffMs / 86400000);
+  return `${days}d ago`;
+}
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return dateString;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
-    container: {
+    container: { flex: 1, backgroundColor: t.background },
+    centered: {
       flex: 1,
       backgroundColor: t.background,
-      width: '100%',
-      alignSelf: 'stretch',
-    },
-    loadingContainer: {
-      flex: 1,
-      backgroundColor: t.background,
-      justifyContent: 'center',
       alignItems: 'center',
-      gap: 16,
-    },
-    loadingText: {
-      color: t.textSecondary,
-      fontSize: 14,
-    },
-    errorContainer: {
-      flex: 1,
-      backgroundColor: t.background,
       justifyContent: 'center',
-      alignItems: 'center',
-      gap: 16,
-      padding: 24,
+      gap: 12,
+      padding: 32,
     },
-    errorText: {
-      color: '#ef4444',
-      fontSize: 16,
-      textAlign: 'center',
-    },
+    centeredText: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+    errorTitle: { color: t.text, fontSize: 18, fontWeight: '700' },
     retryButton: {
       backgroundColor: t.primary,
       paddingHorizontal: 24,
       paddingVertical: 12,
-      borderRadius: 8,
-      marginTop: 16,
+      borderRadius: 10,
+      marginTop: 8,
+      minHeight: 44,
+      justifyContent: 'center',
     },
-    retryButtonText: {
-      color: '#ffffff',
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    backButton: {
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-    },
-    backButtonText: {
-      color: t.primaryLight,
-      fontSize: 14,
-      fontWeight: '600',
-    },
+    retryButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+    textButton: { paddingHorizontal: 24, paddingVertical: 12, minHeight: 44, justifyContent: 'center' },
+    textButtonText: { color: t.primaryLight, fontSize: 14, fontWeight: '600' },
+
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      backgroundColor: t.background,
+      paddingHorizontal: 8,
+      paddingVertical: 8,
       borderBottomWidth: 1,
       borderBottomColor: t.border,
     },
-    backIcon: {
-      padding: 8,
-      marginRight: 8,
-    },
-    headerTitle: {
-      color: t.text,
-      fontSize: 18,
-      fontWeight: '600',
-      flex: 1,
-    },
-    scrollView: {
-      flex: 1,
-    },
-    content: {
-      padding: 16,
-    },
-    bountyCard: {
+    headerIcon: { padding: 10, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { flex: 1, color: t.text, fontSize: 17, fontWeight: '700' },
+
+    scroll: { flex: 1 },
+    content: { padding: 16 },
+
+    heroCard: {
       backgroundColor: t.surface,
       borderRadius: 16,
-      padding: 16,
       borderWidth: 1,
       borderColor: t.border,
+      padding: 16,
       marginBottom: 16,
+      gap: 12,
     },
-    bountyHeader: {
+    heroTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    heroTitle: { flex: 1, color: t.text, fontSize: 20, fontWeight: '700', lineHeight: 26 },
+    heroAmount: { color: t.text, fontSize: 22, fontWeight: '800' },
+    honorPill: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
-    },
-    avatarPlaceholder: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: t.surfaceSecondary,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: 12,
-    },
-    bountyHeaderInfo: {
-      flex: 1,
-    },
-    bountyTitle: {
-      color: t.text,
-      fontSize: 18,
-      fontWeight: '600',
-      marginBottom: 4,
-    },
-    bountyAge: {
-      color: t.primaryLight,
-      fontSize: 12,
-    },
-    bountyMeta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    statusBadge: {
-      paddingHorizontal: 12,
+      gap: 4,
+      backgroundColor: t.primary,
+      paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 12,
     },
-    statusBadgeText: {
-      color: '#ffffff',
-      fontSize: 10,
-      fontWeight: '700',
+    honorPillText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+    metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    metaChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: t.surfaceSecondary,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 8,
     },
-    amount: {
-      color: t.text,
-      fontSize: 20,
-      fontWeight: '700',
+    metaChipText: { color: t.textSecondary, fontSize: 11, fontWeight: '600' },
+
+    card: {
+      backgroundColor: t.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: t.border,
+      padding: 16,
+      marginBottom: 16,
+      gap: 10,
     },
-    honorBadge: {
+    sectionTitle: { color: t.text, fontSize: 15, fontWeight: '700' },
+    sectionTitleInline: { color: t.text, fontSize: 15, fontWeight: '700' },
+    cardBody: { color: t.text, fontSize: 14, lineHeight: 20 },
+    cardBodyMuted: { color: t.textSecondary, fontSize: 13, lineHeight: 19, flex: 1 },
+    mutedSmall: { color: t.textSecondary, fontSize: 12 },
+
+    rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    countPill: {
+      backgroundColor: t.warning,
+      minWidth: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 8,
+    },
+    countPillText: { color: '#111827', fontSize: 12, fontWeight: '800' },
+    linkRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },
+    linkText: { color: t.primaryLight, fontSize: 13, fontWeight: '700' },
+    expandBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },
+
+    personRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: t.surfaceSecondary },
+    avatarFallback: { alignItems: 'center', justifyContent: 'center' },
+    personText: { flex: 1 },
+    personName: { color: t.text, fontSize: 15, fontWeight: '700' },
+    actionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+    outlineBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: t.primary,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 12,
-    },
-    honorText: {
-      color: '#ffffff',
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    categoryPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: t.surfaceSecondary,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 8,
-      marginTop: 6,
-    },
-    categoryPillText: {
-      color: t.textSecondary,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    timelineContainer: {
-      marginBottom: 16,
-    },
-    sectionTitle: {
-      color: t.text,
-      fontSize: 16,
-      fontWeight: '600',
-      marginBottom: 12,
-    },
-    timeline: {
-      paddingVertical: 8,
-      gap: 12,
-    },
-    stageItem: {
-      alignItems: 'center',
-      width: 100,
-      padding: 8,
-      borderRadius: 12,
-      backgroundColor: t.surfaceSecondary,
       borderWidth: 1,
       borderColor: t.border,
-    },
-    stageItemActive: {
-      backgroundColor: t.surface,
-      borderColor: t.primary,
-      borderWidth: 2,
-    },
-    stageItemCompleted: {
       backgroundColor: t.surfaceSecondary,
-      borderColor: t.primary,
-    },
-    stageItemLocked: {
-      opacity: 0.5,
-    },
-    stageIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: t.surfaceSecondary,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    // Glow effect: always green — semantic for active in-progress state
-    stageIconGlow: {
-      position: 'absolute',
-      top: -8,
-      left: -8,
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: '#059669',
-      opacity: 0.25,
-      shadowColor: '#059669',
-      shadowOpacity: 0.9,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 0 },
-      elevation: 10,
-    },
-    stageIconActive: {
-      backgroundColor: t.primary,
-    },
-    stageIconCompleted: {
-      backgroundColor: t.primary,
-    },
-    stageLabel: {
-      color: t.primaryLight,
-      fontSize: 12,
-      textAlign: 'center',
-    },
-    stageLabelActive: {
-      color: t.text,
-      fontWeight: '600',
-    },
-    stageLabelCompleted: {
-      color: t.primaryLight,
-    },
-    completedCheckmark: {
-      position: 'absolute',
-      top: 4,
-      right: 4,
-    },
-    messageContainer: {
-      marginBottom: 16,
-    },
-    messageInputContainer: {
-      flexDirection: 'row',
-      gap: 8,
-      alignItems: 'flex-end',
-    },
-    messageInput: {
-      flex: 1,
-      backgroundColor: t.surfaceSecondary,
-      borderRadius: 12,
-      padding: 12,
-      color: t.text,
-      fontSize: 14,
-      borderWidth: 1,
-      borderColor: t.border,
-      minHeight: 80,
-      textAlignVertical: 'top',
-    },
-    sendButton: {
-      backgroundColor: t.primary,
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    sendButtonDisabled: {
-      backgroundColor: t.overlay,
-    },
-    noConversation: {
-      backgroundColor: t.surfaceSecondary,
-      borderRadius: 12,
-      padding: 24,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: t.border,
-    },
-    noConversationText: {
-      color: t.text,
-      fontSize: 14,
-      fontWeight: '600',
-      marginTop: 12,
-      marginBottom: 4,
-    },
-    noConversationSubtext: {
-      color: t.primaryLight,
-      fontSize: 12,
-      textAlign: 'center',
-    },
-    contextPanel: {
-      backgroundColor: t.surface,
-      borderRadius: 16,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: t.border,
-      marginBottom: 16,
-    },
-    description: {
-      color: t.text,
-      fontSize: 14,
-      lineHeight: 20,
-      marginBottom: 12,
-    },
-    expandButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      paddingVertical: 8,
-    },
-    expandButtonText: {
-      color: t.primaryLight,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    infoRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginTop: 8,
-    },
-    infoText: {
-      color: t.textSecondary,
-      fontSize: 13,
-    },
-    nextButton: {
-      backgroundColor: t.primary,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 16,
-      borderRadius: 12,
-      gap: 8,
-      marginTop: 8,
-    },
-    nextButtonText: {
-      color: '#ffffff',
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    preAcceptancePanel: {
-      backgroundColor: t.surface,
-      borderRadius: 16,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: t.border,
-      marginBottom: 16,
-    },
-    preAcceptanceTitle: {
-      color: t.text,
-      fontSize: 15,
-      fontWeight: '700',
-      marginTop: 8,
-      marginBottom: 4,
-    },
-    preAcceptanceText: {
-      color: t.textSecondary,
-      fontSize: 13,
-    },
-    secondaryBtn: {
-      backgroundColor: 'transparent',
-      paddingHorizontal: 16,
+      paddingHorizontal: 14,
       paddingVertical: 10,
       borderRadius: 10,
-      borderWidth: 1,
-      borderColor: t.border,
+      minHeight: 44,
     },
-    secondaryBtnText: {
-      color: t.primaryLight,
-      fontSize: 13,
-      fontWeight: '600',
-    },
+    outlineBtnText: { color: t.text, fontSize: 13, fontWeight: '600' },
+
+    proofRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    paymentAmount: { color: t.text, fontSize: 18, fontWeight: '800' },
+    paymentStateRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+
+    detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 4 },
   });
 }

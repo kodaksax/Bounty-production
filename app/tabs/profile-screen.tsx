@@ -4,13 +4,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConnectionStatus } from "components/connection-status";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
+import { ProfileBountyHistorySection } from "components/profile-bounty-history-section";
 import { SkillsetChips } from "components/skillset-chips";
 import { BrandingLogo } from "components/ui/branding-logo";
+import { MilestoneBadgeChips } from "components/ui/milestone-badge-chips";
+import { ProfileCompletionMeter } from "components/ui/profile-completion-meter";
 import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
 import { TrustBadges } from "components/ui/trust-badges";
 import { VerificationBadgeChips } from "components/ui/verification-badge-chips";
+import { useProfileActivityStats } from "hooks/useProfileActivityStats";
+import { useRatings } from "hooks/useRatings";
 import { bountyRequestService } from "lib/services/bounty-request-service";
-import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { shareProfile as shareProfileLink } from "lib/utils/share-utils";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
@@ -52,13 +56,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // Also use auth profile service for Supabase-synced profile
   const { profile: authProfile, refreshProfile: refreshAuthProfile } = useAuthProfile()
 
-  // Add state for statistics
-  const [stats, setStats] = useState({
-    jobsAccepted: 0,
-    bountiesPosted: 0,
-    isLoading: true,
-  })
-
   // Activity feed removed per requirements
 
   // readiness flag to avoid rendering EnhancedProfileSection with an empty id
@@ -66,6 +63,14 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const isProfileReady = !!profileUuid
   // Determine if viewing own profile (then let EnhancedProfileSection load current-user)
   const isOwnProfile = !!(authUserId && profileUuid && profileUuid === authUserId)
+
+  // Marketplace activity stats — bounties posted/completed via the RPC-backed
+  // hook (replaces a previously-duplicated client-side fetch that never
+  // computed a "completed" count at all), plus hunter-side "jobs accepted"
+  // (a distinct concept, kept as its own lightweight fetch below).
+  const { stats: activityStats } = useProfileActivityStats(profileUuid)
+  const { stats: ratingStats } = useRatings(profileUuid)
+  const [jobsAccepted, setJobsAccepted] = useState(0)
 
   // Debounce guard for refreshes triggered by mount/focus
   const lastRefreshAtRef = useRef<number>(0);
@@ -81,36 +86,26 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     return true;
   };
 
-  // Fetch initial statistics from Supabase, responding to auth user changes
+  // Fetch hunter-side "jobs accepted" count, responding to auth user changes
   useEffect(() => {
-    const fetchStats = async () => {
-      if (!authUserId || authUserId === CURRENT_USER_ID) {
-        // Set loading to false when no valid user (including sentinel)
-        setStats({
-          jobsAccepted: 0,
-          bountiesPosted: 0,
-          isLoading: false,
-        });
-        return;
-      }
-      try {
-        const [postedBounties, acceptedRequests] = await Promise.all([
-          bountyService.getByUserId(authUserId),
-          bountyRequestService.getByUserId(authUserId),
-        ]);
-        const acceptedJobs = acceptedRequests.filter((req) => req.status === 'accepted');
-        setStats({
-          jobsAccepted: acceptedJobs.length,
-          bountiesPosted: postedBounties.length,
-          isLoading: false,
-        });
-        // Activity feed removed
-      } catch (error) {
-        console.error('[ProfileScreen] Error fetching profile statistics:', error);
-        setStats(prev => ({ ...prev, isLoading: false }));
-      }
+    if (!authUserId || authUserId === CURRENT_USER_ID) {
+      setJobsAccepted(0);
+      return;
+    }
+    let cancelled = false;
+    bountyRequestService
+      .getByUserId(authUserId)
+      .then((acceptedRequests) => {
+        if (!cancelled) {
+          setJobsAccepted(acceptedRequests.filter((req) => req.status === 'accepted').length);
+        }
+      })
+      .catch((error) => {
+        console.error('[ProfileScreen] Error fetching accepted jobs:', error);
+      });
+    return () => {
+      cancelled = true;
     };
-    fetchStats();
   }, [authUserId]);
 
   // ANNOTATION: The Supabase real-time subscriptions have been removed.
@@ -189,7 +184,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
           // If we have phone or location in the raw profile, prefer those
           const raw = (profileToUse as any)?._raw || null;
-          if (raw && raw.phone) {
+          // Only "Verified contact" when the phone number is actually
+          // verified, not merely present (raw.phone truthy previously
+          // conflated "entered a phone number" with "verified it").
+          if (raw && raw.phone_verified === true) {
             defaultSkills.push({ id: '2', icon: 'verified-user', text: 'Verified contact' })
           }
 
@@ -345,8 +343,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             key={profileUuid}
             showPortfolio={false}
             activityStats={{
-              jobsAccepted: stats.jobsAccepted,
-              bountiesPosted: stats.bountiesPosted,
+              jobsAccepted,
+              jobsCompleted: activityStats.bountiesCompleted,
+              bountiesPosted: activityStats.bountiesPosted,
             }}
           />
         ) : (
@@ -375,7 +374,24 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         {/* Portfolio (standalone, after skillsets) */}
         <PortfolioSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} />
 
-        {/* Verification Badges */}
+        {/* Profile completion meter — encourages personalization on this own-profile-only screen */}
+        <View style={styles.section}>
+          <ProfileCompletionMeter
+            input={{
+              username: authProfile?.username,
+              display_name: authProfile?.display_name,
+              avatar_url: authProfile?.avatar,
+              bio: authProfile?.about,
+              location: authProfile?.location,
+              banner_url: authProfile?.banner_url,
+            }}
+          />
+        </View>
+
+        {/* Bounties Posted */}
+        <ProfileBountyHistorySection userId={profileUuid} isOwnProfile={isOwnProfile} />
+
+        {/* Verification + Milestone Badges */}
         <View style={styles.section}>
           <VerificationBadgeChips
             input={{
@@ -389,6 +405,14 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               display_name: authProfile?.display_name,
               avatar_url: authProfile?.avatar,
               bio: authProfile?.about,
+            }}
+          />
+          <MilestoneBadgeChips
+            input={{
+              bounties_posted: activityStats.bountiesPosted,
+              bounties_completed: activityStats.bountiesCompleted,
+              average_rating: ratingStats.averageRating,
+              rating_count: ratingStats.ratingCount,
             }}
           />
           {/* Entry point for users who skipped or were rejected to complete ID

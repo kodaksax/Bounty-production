@@ -27,6 +27,8 @@ type PosterTaskPromptProps = {
   onNext: () => void;
   posting: boolean;
   onSkip: () => void;
+  /** Opens the public "How Bounty works" page (fees, escrow, disputes). */
+  onLearnMoreTrust: () => void;
   /** Subtle secondary escape hatch for someone who meant to pick Hunter on welcome.tsx. */
   onSwitchToHunter: () => void;
   /** Returns to the style step. Matches the back button ProfileDetailsForm/PosterFundingScreen already have. */
@@ -47,6 +49,7 @@ export function PosterTaskPrompt({
   onNext,
   posting,
   onSkip,
+  onLearnMoreTrust,
   onSwitchToHunter,
   onBack,
 }: PosterTaskPromptProps) {
@@ -164,6 +167,21 @@ export function PosterTaskPrompt({
           <View style={styles.trustCopyBlock}>
             <Text style={styles.trustCopyLine}>{posterTrustCopyStrings.line1}</Text>
             <Text style={styles.trustCopyLine}>{posterTrustCopyStrings.line2}</Text>
+            <TouchableOpacity
+              onPress={onLearnMoreTrust}
+              accessibilityRole="link"
+              accessibilityLabel="How Bounty works — fees, escrow and disputes"
+              style={{ marginTop: 6 }}
+            >
+              <Text
+                style={[
+                  styles.trustCopyLine,
+                  { color: theme.primary, textDecorationLine: 'underline' },
+                ]}
+              >
+                How it works — fees, escrow &amp; disputes
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>

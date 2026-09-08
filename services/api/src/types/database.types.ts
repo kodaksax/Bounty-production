@@ -47,6 +47,7 @@ export type Profile = {
   id: string
   username: string
   avatar_url: string
+  banner_url?: string
   about: string
   phone: string
   balance: number

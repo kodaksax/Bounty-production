@@ -1,3 +1,4 @@
+import { sanitizeErrorMessage } from '../../lib/utils/error-messages';
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuthProfile } from "hooks/useAuthProfile";
@@ -90,9 +91,8 @@ export default function EditProfileScreen() {
   // Track last seen user id so we can reset form when switching users
   const lastUserIdRef = useRef<string | undefined>(currentUserId);
 
-  // Avatar upload state
+  // Avatar / banner upload state
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  // TODO: Banner functionality - backend support needed (database schema doesn't include banner field yet)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
 
   const avatarUpload = useAttachmentUpload({
@@ -104,7 +104,7 @@ export default function EditProfileScreen() {
       setAvatarUrl(attachment.remoteUri || attachment.uri);
     },
     onError: (error) => {
-      Alert.alert('Avatar Upload Error', error.message);
+      Alert.alert("Couldn't update your photo", sanitizeErrorMessage(error));
     },
   });
 
@@ -113,19 +113,24 @@ export default function EditProfileScreen() {
     folder: 'banners',
     allowedTypes: 'images',
     maxSizeMB: 5,
+    // Wide crop matching the banner's on-screen proportions (BANNER_HEIGHT
+    // full-width) — reuses expo-image-picker's native crop UI instead of a
+    // custom cropper.
+    aspect: [3, 1],
     onUploaded: (attachment) => {
       setBannerUrl(attachment.remoteUri || attachment.uri);
-      // Note: Banner will be uploaded but not saved to profile (backend support needed)
-      Alert.alert(
-        'Banner Uploaded',
-        'Your banner has been uploaded but will not be saved yet. Banner support is coming soon!',
-        [{ text: 'OK' }]
-      );
     },
     onError: (error) => {
-      Alert.alert('Banner Upload Error', error.message);
+      Alert.alert("Couldn't update your banner", sanitizeErrorMessage(error));
     },
   });
+
+  const handleRemoveBanner = () => {
+    Alert.alert('Remove banner?', 'This will remove your profile banner.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => setBannerUrl(null) },
+    ]);
+  };
 
   const normalizedSkillsets = React.useMemo(
     () => (Array.isArray(profile?.skills) ? profile.skills.join(", ") : ""),
@@ -167,9 +172,11 @@ export default function EditProfileScreen() {
 
     // If the incoming profile equals our recorded initial data, do nothing.
     if (isSameFormData(initialData, nextData)) {
-      // Update avatar if it changed independently
+      // Update avatar/banner if they changed independently
       const nextAvatar = profile?.avatar || null;
+      const nextBanner = profile?.banner_url || null;
       setAvatarUrl((prev) => (prev === nextAvatar ? prev : nextAvatar));
+      setBannerUrl((prev) => (prev === nextBanner ? prev : nextBanner));
       return;
     }
 
@@ -180,8 +187,9 @@ export default function EditProfileScreen() {
       setInitialData(nextData);
     }
 
-    // Update avatar if changed and user hasn't manually changed it
+    // Update avatar/banner if changed and user hasn't manually changed them
     const nextAvatar = profile?.avatar || null;
+    const nextBanner = profile?.banner_url || null;
 
     const userChanged = lastUserIdRef.current !== currentUserId;
 
@@ -191,6 +199,7 @@ export default function EditProfileScreen() {
       setFormData(nextData);
       setInitialData(nextData);
       setAvatarUrl(nextAvatar);
+      setBannerUrl(nextBanner);
       lastUserIdRef.current = currentUserId;
       return;
     }
@@ -199,13 +208,14 @@ export default function EditProfileScreen() {
     setFormData((prev) => (userEditedRef.current || isSameFormData(prev, nextData) ? prev : nextData));
     setInitialData((prev) => (userEditedRef.current || isSameFormData(prev, nextData) ? prev : nextData));
     setAvatarUrl((prev) => (prev === nextAvatar ? prev : nextAvatar));
-  }, [profileFormData, profile?.avatar, currentUserId]);
+    setBannerUrl((prev) => (prev === nextBanner ? prev : nextBanner));
+  }, [profileFormData, profile?.avatar, profile?.banner_url, currentUserId]);
 
   // Check if form is dirty (has changes)
   const isDirty = React.useMemo(() => {
     const formChanged = JSON.stringify(formData) !== JSON.stringify(initialData);
     const avatarChanged = avatarUrl !== (profile?.avatar || null);
-    const bannerChanged = bannerUrl !== null;
+    const bannerChanged = bannerUrl !== (profile?.banner_url || null);
     return formChanged || avatarChanged || bannerChanged;
   }, [formData, initialData, avatarUrl, bannerUrl, profile]);
 
@@ -224,7 +234,7 @@ export default function EditProfileScreen() {
               // Reset form data to initial state
               setFormData(initialData);
               setAvatarUrl(profile?.avatar || null);
-              setBannerUrl(null);
+              setBannerUrl(profile?.banner_url || null);
                 // Mark as not edited after discarding changes
                 userEditedRef.current = false;
               router.back();
@@ -280,6 +290,12 @@ export default function EditProfileScreen() {
       };
       if (avatarUrl) {
         authUpdateData.avatar = avatarUrl;
+      }
+      // banner_url is nullable and explicitly clearable (removal), unlike
+      // avatar — only send it when it actually changed, using null (not
+      // omission) to mean "cleared."
+      if (bannerUrl !== (profile?.banner_url || null)) {
+        authUpdateData.banner_url = bannerUrl;
       }
 
       const authUpdated = await updateAuthProfile(authUpdateData);
@@ -399,11 +415,21 @@ export default function EditProfileScreen() {
                 </>
               ) : (
                 <>
-                  <MaterialIcons name="image" size={32} color={theme.textSecondary} />
-                  <Text style={styles.bannerHelpText}>Tap to upload banner</Text>
+                  <MaterialIcons name="add-photo-alternate" size={32} color={theme.textSecondary} />
+                  <Text style={styles.bannerHelpText}>Make your profile yours — add a banner</Text>
                 </>
               )}
             </TouchableOpacity>
+            {bannerUrl && !bannerUpload.isUploading && (
+              <TouchableOpacity
+                style={styles.bannerRemoveButton}
+                onPress={handleRemoveBanner}
+                accessibilityLabel="Remove banner"
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="close" size={16} color="#ffffff" />
+              </TouchableOpacity>
+            )}
             <View style={styles.avatarOverlap}>
               <TouchableOpacity
                 style={styles.avatar}
@@ -703,6 +729,19 @@ function makeStyles(theme: AppTheme) {
       marginTop: 6,
       fontStyle: "italic",
       fontWeight: "500",
+      textAlign: "center",
+      paddingHorizontal: 24,
+    },
+    bannerRemoveButton: {
+      position: "absolute",
+      top: 10,
+      right: 10,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      justifyContent: "center",
+      alignItems: "center",
     },
     avatarOverlap: {
       position: "absolute",

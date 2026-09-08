@@ -24,6 +24,10 @@ jest.mock('../../lib/wallet-context', () => ({
   useWallet: jest.fn(() => ({ balance: mockBalance })),
 }));
 
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 import { StepPay } from '../../app/screens/CreateBounty/quick/StepPay';
 
 function makeDraft(overrides: Partial<{ amount: number; isForHonor: boolean }> = {}) {

@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -10,7 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
@@ -22,11 +22,20 @@ import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
+import {
+  BOUNTY_DISPLAY_STATUS_COLORS,
+  BOUNTY_DISPLAY_STATUS_LABELS,
+} from '../../../lib/utils/bounty-display-status';
+import { resolveBountyLifecycle } from '../../../lib/utils/bounty-lifecycle';
+import { HunterEarningsCard } from '../../../components/ui/hunter-earnings-card';
+import { calculateHunterEarnings } from '../../../lib/constants/fees';
+import { ROUTES } from '../../../lib/routes';
+import { getUserFriendlyError } from '../../../lib/utils/error-messages';
 
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { pushColor, popColor } = useBackgroundColor();
@@ -65,9 +74,14 @@ export default function PublicBountyDetail() {
     };
   }, [routeBountyId]);
 
-  const loadBounty = async (bountyId: string) => {
+  /**
+   * @param silent Re-read without swapping the screen for the full-page
+   *   spinner — used by the focus refresh below, where flashing a loader over
+   *   content the reader is already looking at is worse than a brief staleness.
+   */
+  const loadBounty = async (bountyId: string, silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setError(null);
       const data = await bountyService.getById(bountyId);
 
@@ -107,41 +121,67 @@ export default function PublicBountyDetail() {
       }
     } catch (err) {
       console.error('Error loading bounty:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load bounty');
+      // A silent background re-read must not replace a perfectly readable
+      // screen with an error state; the content on screen is still the last
+      // thing the server confirmed.
+      if (!silent) {
+        setError(err instanceof Error ? err.message : 'Failed to load bounty');
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
-  const getStatusBadgeColor = (status?: string) => {
-    switch (status) {
-      case 'open':
-        return '#059669'; // emerald-500
-      case 'in_progress':
-        return '#fbbf24'; // amber-400
-      case 'completed':
-        return '#6366f1'; // indigo-500
-      case 'archived':
-        return '#6b7280'; // gray-500
-      default:
-        return '#059669';
-    }
-  };
+  // Re-read on focus. This screen fetched once per bounty id, so coming back
+  // to it — from the hub, from a message, from the applied-to list — showed
+  // whatever was true when it first loaded. A bounty that had since been
+  // accepted, cancelled or removed still rendered an "Apply" button that
+  // could only fail. Skips the very first focus, which the mount effect above
+  // already covers.
+  const hasFocusedOnceRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!routeBountyId) return;
+      if (!hasFocusedOnceRef.current) {
+        hasFocusedOnceRef.current = true;
+        return;
+      }
+      void loadBounty(routeBountyId, true);
+      // loadBounty is stable for a given id: it closes only over setState
+      // callbacks and the analytics guard refs.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [routeBountyId])
+  );
 
-  const getStatusLabel = (status?: string) => {
-    switch (status) {
-      case 'open':
-        return 'OPEN';
-      case 'in_progress':
-        return 'IN PROGRESS';
-      case 'completed':
-        return 'COMPLETED';
-      case 'archived':
-        return 'ARCHIVED';
-      default:
-        return 'OPEN';
-    }
-  };
+  /**
+   * The badge and the explanation below it come from the same resolve, so this
+   * screen can never disagree with the card the visitor tapped to get here or
+   * with the hub they land on after applying. It replaced a local
+   * status→label/color switch that knew nothing about deadlines, the viewer's
+   * own application, or cancellations.
+   */
+  const isOwnBounty = useMemo(() => {
+    if (!bounty || !currentUserId) return false;
+    return (
+      String(bounty.user_id) === String(currentUserId) ||
+      String(bounty.poster_id) === String(currentUserId)
+    );
+  }, [bounty, currentUserId]);
+
+  const viewerRole = useMemo(() => {
+    if (!bounty) return 'visitor' as const;
+    if (isOwnBounty) return 'poster' as const;
+    return hasApplied ? ('hunter' as const) : ('visitor' as const);
+  }, [bounty, isOwnBounty, hasApplied]);
+
+  const lifecycle = useMemo(() => {
+    if (!bounty) return null;
+    return resolveBountyLifecycle({
+      bounty,
+      role: viewerRole,
+      requestStatus: hasApplied ? 'pending' : null,
+    });
+  }, [bounty, viewerRole, hasApplied]);
 
   const formatTimeAgo = (dateString?: string) => {
     if (!dateString) return '';
@@ -193,9 +233,12 @@ export default function PublicBountyDetail() {
       return;
     }
 
+    const earnings = calculateHunterEarnings(bounty.amount);
     Alert.alert(
-      'Apply for Bounty',
-      'Are you sure you want to apply for this bounty? The poster will be notified of your request.',
+      bounty.is_for_honor ? 'Apply for this bounty?' : `Apply and earn $${earnings.net.toFixed(2)}?`,
+      bounty.is_for_honor
+        ? "The poster gets your application and can accept it. You'll be notified either way — you can withdraw it any time before they accept."
+        : `The poster gets your application and can accept it. If they do, $${earnings.gross.toFixed(2)} is held in escrow before you start, and $${earnings.net.toFixed(2)} lands in your wallet once they approve your work. You can withdraw the application any time before they accept.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -236,19 +279,38 @@ export default function PublicBountyDetail() {
                   bounty_id: String(bounty.id),
                   application_id: applicationId,
                 });
-                Alert.alert('Success', 'Your application has been submitted!', [
-                  { text: 'View Status', onPress: () => router.push(`/in-progress/${bounty.id}/hunter`) },
-                  { text: 'OK' }
-                ]);
+                Alert.alert(
+                  'Application sent',
+                  "The poster has been notified. You'll get a notification as soon as they respond — nothing to do until then.",
+                  [
+                    {
+                      text: 'Track it',
+                      onPress: () => router.push(`/in-progress/${bounty.id}/hunter`),
+                    },
+                    { text: 'Keep browsing', style: 'cancel' },
+                  ]
+                );
               } else {
                 const errorMsg = (result && (result as any).error) || 'Failed to apply.';
                 claimFailed(/banned|suspended/i.test(errorMsg) ? 'not_eligible' : 'validation');
-                Alert.alert('Error', errorMsg);
+                // getUserFriendlyError keeps genuinely user-actionable copy
+                // (e.g. "no longer accepting applications") and replaces the
+                // rest, so a PostgREST string is never shown.
+                const friendly = getUserFriendlyError(
+                  typeof errorMsg === 'string' ? new Error(errorMsg) : errorMsg
+                );
+                Alert.alert(friendly.title, friendly.message);
+                // A bounty that closed under the visitor makes the CTA stale —
+                // reload so the screen stops offering an action that cannot work.
+                if (friendly.type === 'state_conflict' && routeBountyId) {
+                  void loadBounty(routeBountyId);
+                }
               }
             } catch (err) {
               console.error('Error applying:', err);
               claimFailed('network');
-              Alert.alert('Error', 'An unexpected error occurred.');
+              const friendly = getUserFriendlyError(err);
+              Alert.alert(friendly.title, friendly.message);
             } finally {
               setIsApplying(false);
             }
@@ -268,13 +330,36 @@ export default function PublicBountyDetail() {
   }
 
   if (error || !bounty) {
+    // Says what happened and what to do about it, rather than surfacing the
+    // raw service message with a single backwards exit.
+    const isMissing = /not found/i.test(error ?? '') || !bounty;
     return (
       <SafeAreaView style={s.errorContainer}>
-        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
-        <Text style={s.errorText}>{error || 'Failed to load bounty'}</Text>
-        <TouchableOpacity style={s.backButton} onPress={() => router.back()}>
+        <MaterialIcons name={isMissing ? 'search-off' : 'cloud-off'} size={48} color="#ef4444" />
+        <Text style={s.errorText}>
+          {isMissing
+            ? "This bounty isn't available anymore. It may have been completed, cancelled or removed."
+            : "We couldn't load this bounty. You're offline or the connection dropped — nothing has changed."}
+        </Text>
+        {!isMissing && (
+          <TouchableOpacity
+            style={s.backButton}
+            onPress={() => routeBountyId && loadBounty(routeBountyId)}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
+            <MaterialIcons name="refresh" size={20} color={theme.primaryLight} />
+            <Text style={s.backButtonText}>Try again</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={s.backButton}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <MaterialIcons name="arrow-back" size={20} color={theme.primaryLight} />
-          <Text style={s.backButtonText}>Go Back</Text>
+          <Text style={s.backButtonText}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -303,7 +388,7 @@ export default function PublicBountyDetail() {
 
         <ScrollView
           style={[s.scrollView, { width: '100%' }]}
-          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 40 }]}
+          contentContainerStyle={[s.content, { paddingBottom: 24 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Main Hero Card */}
@@ -314,8 +399,19 @@ export default function PublicBountyDetail() {
             />
             
             <View style={s.heroTopRow}>
-              <View style={[s.statusBadge, { backgroundColor: getStatusBadgeColor(bounty.status) }]}>
-                <Text style={s.statusBadgeText}>{getStatusLabel(bounty.status)}</Text>
+              <View
+                style={[
+                  s.statusBadge,
+                  {
+                    backgroundColor: lifecycle
+                      ? BOUNTY_DISPLAY_STATUS_COLORS[lifecycle.status]
+                      : theme.primary,
+                  },
+                ]}
+              >
+                <Text style={s.statusBadgeText}>
+                  {lifecycle ? BOUNTY_DISPLAY_STATUS_LABELS[lifecycle.status] : 'OPEN'}
+                </Text>
               </View>
               <Text style={s.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
             </View>
@@ -350,6 +446,13 @@ export default function PublicBountyDetail() {
               </View>
             </View>
           </View>
+
+          {/* What this state means for the person reading it. No action button
+              here: the sticky Apply / View-your-application control below is
+              already this screen's single primary action. */}
+          {lifecycle && (
+            <BountyStatusPanel state={lifecycle} role={viewerRole} variant="banner" />
+          )}
 
           {/* Details Section */}
           <View style={s.detailsCard}>
@@ -402,61 +505,98 @@ export default function PublicBountyDetail() {
             ) : null}
           </View>
 
-          {/* Action Area */}
-          <View style={s.actionContainer}>
-            {currentUserId === bounty.user_id || currentUserId === bounty.poster_id ? (
-              <TouchableOpacity 
+          {/* "What will I earn?" — answered before the decision, not after.
+              Only for someone who could actually be paid for this: not the
+              poster, and not a for-honor bounty where there is no money. */}
+          {!isOwnBounty && !bounty.is_for_honor ? (
+            <HunterEarningsCard amount={bounty.amount} />
+          ) : null}
+
+        </ScrollView>
+
+        {/* Primary action, pinned. It used to sit at the bottom of the
+            ScrollView, so on any bounty with a real description the one thing
+            the visitor came here to do was below the fold. */}
+        <View style={s.actionContainer}>
+          {isOwnBounty ? (
+            <TouchableOpacity
+              style={s.actionButton}
+              onPress={() => router.push({ pathname: '/postings/[bountyId]', params: { bountyId: routeBountyId! } })}
+              accessibilityRole="button"
+              accessibilityLabel="Manage this bounty in your poster dashboard"
+            >
+              <LinearGradient
+                colors={['#3b82f6', '#2563eb']}
+                style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
+              />
+              <Text style={s.actionButtonText}>Manage this bounty</Text>
+            </TouchableOpacity>
+          ) : hasApplied ? (
+            <TouchableOpacity
+              style={s.actionButton}
+              onPress={() => router.push(`/in-progress/${routeBountyId}/hunter`)}
+              accessibilityRole="button"
+              accessibilityLabel="View your application for this bounty"
+            >
+              <LinearGradient
+                colors={['#8b5cf6', '#6d28d9']}
+                style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
+              />
+              <Text style={s.actionButtonText}>View your application</Text>
+            </TouchableOpacity>
+          ) : bounty.status === 'open' ? (
+            <TouchableOpacity
+              style={[s.actionButton, isApplying && { opacity: 0.8 }]}
+              onPress={handleApply}
+              disabled={isApplying}
+              accessibilityRole="button"
+              accessibilityLabel={
+                bounty.is_for_honor
+                  ? 'Apply for this bounty'
+                  : `Apply for this bounty and earn $${calculateHunterEarnings(bounty.amount).net.toFixed(2)}`
+              }
+              accessibilityState={{ disabled: isApplying, busy: isApplying }}
+            >
+              <LinearGradient
+                colors={['#059669', '#047857']}
+                style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
+              />
+              {isApplying ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={s.actionButtonText}>
+                  {bounty.is_for_honor
+                    ? 'Apply for this bounty'
+                    : `Apply — earn $${calculateHunterEarnings(bounty.amount).net.toFixed(2)}`}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            // A closed bounty used to render a dead disabled button and nothing
+            // else, which is a dead end: the visitor cannot act and is given
+            // nowhere to go. Say why it is closed, then offer the way out.
+            <>
+              <View style={s.closedNotice}>
+                <MaterialIcons name="lock" size={16} color={theme.textSecondary} />
+                <Text style={s.closedNoticeText}>
+                  This bounty is no longer accepting applications.
+                </Text>
+              </View>
+              <TouchableOpacity
                 style={s.actionButton}
-                onPress={() => router.push({ pathname: '/postings/[bountyId]', params: { bountyId: routeBountyId! } })}
-              >
-                <LinearGradient
-                  colors={['#3b82f6', '#2563eb']}
-                  style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
-                />
-                <Text style={s.actionButtonText}>Go to Poster Dashboard</Text>
-              </TouchableOpacity>
-            ) : hasApplied ? (
-              <TouchableOpacity 
-                style={s.actionButton}
-                onPress={() => router.push(`/in-progress/${routeBountyId}/hunter`)}
-              >
-                <LinearGradient
-                  colors={['#8b5cf6', '#6d28d9']}
-                  style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
-                />
-                <Text style={s.actionButtonText}>View Your Application</Text>
-              </TouchableOpacity>
-            ) : bounty.status === 'open' ? (
-              <TouchableOpacity 
-                style={[s.actionButton, isApplying && { opacity: 0.8 }]}
-                onPress={handleApply}
-                disabled={isApplying}
+                onPress={() => router.replace(`${ROUTES.TABS.BOUNTY_APP}?screen=bounty` as never)}
+                accessibilityRole="button"
+                accessibilityLabel="Browse other bounties"
               >
                 <LinearGradient
                   colors={['#059669', '#047857']}
                   style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
                 />
-                {isApplying ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={s.actionButtonText}>Apply for Bounty</Text>
-                )}
+                <Text style={s.actionButtonText}>Browse other bounties</Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity 
-                style={[s.actionButton, { opacity: 0.5 }]}
-                disabled={true}
-              >
-                <LinearGradient
-                  colors={['#6b7280', '#4b5563']}
-                  style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
-                />
-                <Text style={s.actionButtonText}>Bounty Closed</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-        </ScrollView>
+            </>
+          )}
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -735,8 +875,27 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
       marginTop: 4,
     },
+    // Pinned above the safe area rather than scrolling with the content, so
+    // the screen's single primary action is always on screen.
     actionContainer: {
-      marginTop: 8,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 8,
+      gap: 10,
+      backgroundColor: t.background,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: t.border,
+    },
+    closedNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    closedNoticeText: {
+      flex: 1,
+      color: t.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
     },
     actionButton: {
       height: 56,

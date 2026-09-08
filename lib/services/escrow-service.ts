@@ -13,13 +13,59 @@ import { API_BASE_URL } from '../config/api';
 import { logger } from '../utils/error-logger';
 import { performanceService } from './performance-service';
 import {
-  handleStripeError,
-  StripeEscrowCreateResponse,
-  StripeEscrowRefundResponse,
-  StripeEscrowReleaseResponse,
-  StripePaymentIntent,
+    handleStripeError,
+    StripeEscrowCreateResponse,
+    StripeEscrowRefundResponse,
+    StripeEscrowReleaseResponse,
+    StripePaymentIntent,
 } from './stripe-internal';
 import { stripeSdk } from './stripe-sdk';
+
+type EscrowErrorBody = {
+  error?: unknown;
+  message?: unknown;
+  code?: unknown;
+  requestId?: unknown;
+  retryable?: unknown;
+};
+
+function getHeaderValue(headers: unknown, name: string): string | undefined {
+  const getter = (headers as { get?: (key: string) => string | null | undefined } | undefined)?.get;
+  if (typeof getter !== 'function') return undefined;
+  return getter.call(headers, name) ?? getter.call(headers, name.toLowerCase()) ?? undefined;
+}
+
+async function readErrorBody(response: Response): Promise<EscrowErrorBody> {
+  try {
+    const data = await response.json();
+    return data && typeof data === 'object' ? (data as EscrowErrorBody) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function throwEscrowApiError(response: Response, fallbackMessage: string): Promise<never> {
+  const body = await readErrorBody(response);
+  const messageSource =
+    typeof body.error === 'string'
+      ? body.error
+      : typeof body.message === 'string'
+        ? body.message
+        : fallbackMessage;
+  const requestId =
+    typeof body.requestId === 'string'
+      ? body.requestId
+      : getHeaderValue(response.headers, 'X-Request-Id');
+
+  throw {
+    type: 'api_error',
+    code: typeof body.code === 'string' ? body.code : response.status.toString(),
+    status: response.status,
+    requestId,
+    retryable: typeof body.retryable === 'boolean' ? body.retryable : response.status >= 500,
+    message: messageSource,
+  };
+}
 
 class EscrowService {
   /**
@@ -75,11 +121,7 @@ class EscrowService {
           success: false,
           status: response.status,
         });
-        throw {
-          type: 'api_error',
-          code: response.status.toString(),
-          message: 'Failed to create escrow',
-        };
+        await throwEscrowApiError(response, 'Failed to create escrow');
       }
 
       const data = (await response.json()) as Partial<StripeEscrowCreateResponse> & {
@@ -131,10 +173,7 @@ class EscrowService {
   /**
    * Release an escrow by capturing the PaymentIntent and transferring to hunter.
    */
-  async releaseEscrow(
-    escrowId: string,
-    authToken?: string
-  ): Promise<StripeEscrowReleaseResponse> {
+  async releaseEscrow(escrowId: string, authToken?: string): Promise<StripeEscrowReleaseResponse> {
     performanceService.startMeasurement('escrow_release', 'payment_process', { escrowId });
 
     try {
@@ -160,11 +199,7 @@ class EscrowService {
           success: false,
           status: response.status,
         });
-        throw {
-          type: 'api_error',
-          code: response.status.toString(),
-          message: 'Failed to release escrow',
-        };
+        await throwEscrowApiError(response, 'Failed to release escrow');
       }
 
       const data = (await response.json()) as StripeEscrowReleaseResponse & {
@@ -221,11 +256,7 @@ class EscrowService {
           success: false,
           status: response.status,
         });
-        throw {
-          type: 'api_error',
-          code: response.status.toString(),
-          message: 'Failed to refund escrow',
-        };
+        await throwEscrowApiError(response, 'Failed to refund escrow');
       }
 
       const data = (await response.json()) as StripeEscrowRefundResponse & {
