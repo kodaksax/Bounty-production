@@ -807,7 +807,11 @@ export class NotificationService {
   }
 
   /**
-   * Mark all notifications as read
+   * Mark all of the signed-in user's unread notifications as read in one
+   * batch call. Used both by the explicit "Mark all read" button and by the
+   * Notification Center's on-open/on-focus auto-mark-read behavior (see
+   * components/notifications/notification-center-screen.tsx), so this must
+   * stay a single atomic operation rather than a per-row loop.
    */
   async markAllAsRead(): Promise<void> {
     try {
@@ -816,6 +820,26 @@ export class NotificationService {
       } = await supabase.auth.getSession();
       if (!session?.access_token) {
         return;
+      }
+
+      // Prefer the atomic server-side RPC (supabase/migrations/
+      // 20260908010000_mark_all_notifications_read_rpc.sql) -- a single
+      // `UPDATE ... WHERE user_id = auth.uid() AND read = false` -- over the
+      // Node API route below, matching the Supabase-first pattern already
+      // used by fetchNotifications/getUnreadCount in this service.
+      const { error: rpcError } = await supabase.rpc('mark_all_notifications_read');
+      if (!rpcError) {
+        this.cachedNotifications = this.cachedNotifications.map(notif => ({ ...notif, read: true }));
+        await this.persistCachedNotifications(session.user?.id);
+        this.unreadCount = 0;
+        this.syncBadgeCount().catch(() => {});
+        return;
+      }
+      if (__DEV__) {
+        console.log(
+          '[NotificationService] mark_all_notifications_read RPC failed, falling back to API:',
+          rpcError
+        );
       }
 
       const url = `${API_BASE_URL}/notifications/mark-all-read`;
@@ -844,7 +868,8 @@ export class NotificationService {
       this.syncBadgeCount().catch(() => {});
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
-      // Best-effort Supabase fallback
+      // Best-effort Supabase fallback (final safety net if both the RPC and
+      // the Node API route are unavailable)
       try {
         const {
           data: { session },
