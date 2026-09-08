@@ -219,7 +219,7 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
       </View>
 
       <View style={styles.forHonorRow}>
-        <Text style={styles.forHonorLabel}>Prefer not to pay?</Text>
+        <Text style={styles.forHonorLabel}>Or post for free with For Honor — no money attached</Text>
         <InfoTooltip
           title="What is a For Honor bounty?"
           content="For Honor bounties are completed without any payment — ideal for volunteer work, community requests, or favors. Hunters take them on to help out and build their reputation, not to earn money. You can always add payment to a future bounty."

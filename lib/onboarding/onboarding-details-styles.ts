@@ -707,9 +707,14 @@ export function makeOnboardingDetailsStyles(theme: AppTheme) {
       fontSize: 16,
       fontWeight: 'bold',
     },
+    // Was theme.textDisabled — that made a legitimate, intentional option
+    // (the $0 "For Honor" path) render identically to a greyed-out/inactive
+    // control, so testers only found it by guessing. theme.text reads as a
+    // real, tappable action instead of an accident.
     fundingSkipLinkText: {
       fontSize: 15,
-      color: theme.textDisabled,
+      fontWeight: '600',
+      color: theme.text,
       textDecorationLine: 'underline',
     },
     forHonorRow: {
@@ -721,6 +726,7 @@ export function makeOnboardingDetailsStyles(theme: AppTheme) {
     },
     forHonorLabel: {
       fontSize: 13,
+      fontWeight: '600',
       color: theme.textSecondary,
     },
     // Empty state (R5) — shown when a real fetch confirms there are genuinely
