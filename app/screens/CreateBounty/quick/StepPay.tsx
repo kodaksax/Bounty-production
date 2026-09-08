@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
+import { type Href, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { analyticsService } from '../../../../lib/services/analytics-service';
