@@ -44,55 +44,58 @@ export const cancellationService = {
 
       // For honor bounties bypass manual dispute flow and auto-cancel.
       const targetStatus = isForHonor ? 'cancelled' : 'cancellation_requested';
-      const bountyUpdateResult = await bountyService.update(bountyId, {
-        status: targetStatus,
-      });
-
-      if (!bountyUpdateResult) {
-        throw new Error('Failed to update bounty status');
-      }
-
-      // Create the cancellation record
-      const cancellationData = {
-        bounty_id: bountyId,
-        requester_id: requesterId,
-        requester_type: requesterType,
-        reason: normalizedReason,
-        status: isForHonor ? 'accepted' : 'pending',
-        refund_percentage: isForHonor ? 0 : refundPercentage,
-        refund_amount: isForHonor ? 0 : null,
-        response_message: isForHonor
+      const { data, error } = await supabase.rpc('create_bounty_cancellation', {
+        p_bounty_id: bountyId,
+        p_expected_status: bounty.status,
+        p_target_status: targetStatus,
+        p_requester_id: requesterId,
+        p_requester_type: requesterType,
+        p_reason: normalizedReason,
+        p_status: isForHonor ? 'accepted' : 'pending',
+        p_refund_percentage: isForHonor ? 0 : refundPercentage ?? null,
+        p_refund_amount: isForHonor ? 0 : null,
+        p_response_message: isForHonor
           ? 'Auto-accepted: for honor bounties do not require manual dispute resolution.'
           : null,
-        resolved_at: isForHonor ? nowIso : null,
-      };
-
-      const { data, error } = await supabase
-        .from('bounty_cancellations')
-        .insert(cancellationData)
-        .select('*')
-        .single();
+        p_resolved_at: isForHonor ? nowIso : null,
+      }).single();
 
       if (error) {
-        logger.error('Error creating cancellation request', { error, cancellationData });
+        logger.error('Error creating cancellation request', { error, bountyId, requesterId });
         throw error;
       }
 
+      const cancellationRow = data as {
+        id: string;
+        bounty_id: string | number;
+        requester_id: string;
+        requester_type: 'poster' | 'hunter';
+        reason: string;
+        status: 'pending' | 'accepted' | 'rejected' | 'disputed';
+        responder_id: string | null;
+        response_message: string | null;
+        refund_amount: number | null;
+        refund_percentage: number | null;
+        created_at: string;
+        updated_at: string | null;
+        resolved_at: string | null;
+      };
+
       // Transform to match BountyCancellation interface
       const cancellation: BountyCancellation = {
-        id: data.id,
-        bountyId: String(data.bounty_id),
-        requesterId: data.requester_id,
-        requesterType: data.requester_type,
-        reason: data.reason,
-        status: data.status,
-        responderId: data.responder_id,
-        responseMessage: data.response_message,
-        refundAmount: data.refund_amount,
-        refundPercentage: data.refund_percentage,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-        resolvedAt: data.resolved_at,
+        id: cancellationRow.id,
+        bountyId: String(cancellationRow.bounty_id),
+        requesterId: cancellationRow.requester_id,
+        requesterType: cancellationRow.requester_type,
+        reason: cancellationRow.reason,
+        status: cancellationRow.status,
+        responderId: cancellationRow.responder_id ?? undefined,
+        responseMessage: cancellationRow.response_message ?? undefined,
+        refundAmount: cancellationRow.refund_amount ?? undefined,
+        refundPercentage: cancellationRow.refund_percentage ?? undefined,
+        createdAt: cancellationRow.created_at,
+        updatedAt: cancellationRow.updated_at ?? undefined,
+        resolvedAt: cancellationRow.resolved_at ?? undefined,
       };
 
       await this.trackCancellationMetrics({

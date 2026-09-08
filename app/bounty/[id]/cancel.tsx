@@ -1,22 +1,28 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuthContext } from 'hooks/use-auth-context';
 import { EMAIL_SUBJECTS, SUPPORT_EMAIL, createSupportTel } from 'lib/constants/support';
+import { getBottomNavContentGap, getBottomNavOccludedHeight } from 'lib/constants/navigation';
 import { bountyService } from 'lib/services/bounty-service';
 import type { CancellationReasonCategory } from 'lib/services/cancellation-service';
 import { cancellationService } from 'lib/services/cancellation-service';
 import type { Bounty } from 'lib/services/database.types';
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import type { AppTheme } from 'lib/themes/types';
 import { AlertCircle, ArrowLeft, HelpCircle, Mail, Phone } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Linking,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const CANCELLATION_REASON_OPTIONS: { label: string; value: CancellationReasonCategory }[] = [
   { label: 'Changed my mind', value: 'changed_mind' },
@@ -27,23 +33,36 @@ const CANCELLATION_REASON_OPTIONS: { label: string; value: CancellationReasonCat
   { label: 'Other', value: 'other' },
 ];
 
+/** Text on the brand-green CTA / on the blue support buttons, in both themes. */
+const ON_ACCENT_TEXT = '#ffffff';
+
 export default function CancellationRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { session } = useAuthContext();
   const userId = session?.user?.id;
-  
+  const { theme } = useAppThemeContext();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
+  // The floating BottomNav overlays this route, so the scroll tail has to clear
+  // the bar plus the crosshair that overhangs it — derived from the live
+  // viewport, same as the wallet/funding screens.
+  const bottomClearance =
+    getBottomNavOccludedHeight(insets.bottom, windowWidth) + getBottomNavContentGap(windowHeight);
+
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonCategory, setReasonCategory] = useState<CancellationReasonCategory>('other');
   const [requesterType, setRequesterType] = useState<'poster' | 'hunter'>('poster');
-  
+
   useEffect(() => {
     loadBounty();
   }, [id]);
-  
+
   const loadBounty = async () => {
     try {
       setLoading(true);
@@ -64,28 +83,28 @@ export default function CancellationRequestScreen() {
       setLoading(false);
     }
   };
-  
+
   const handleSubmitCancellation = async () => {
     if (!reason.trim()) {
       Alert.alert('Error', 'Please provide a reason for cancellation');
       return;
     }
-    
+
     if (!userId || !bounty) {
       Alert.alert('Error', 'Unable to submit cancellation request');
       return;
     }
-    
+
     try {
       setSubmitting(true);
-      
+
       // Calculate recommended refund percentage
       const hasAcceptedHunter = !!bounty.accepted_by;
       const recommendedRefund = cancellationService.calculateRecommendedRefund(
         bounty.status,
         hasAcceptedHunter
       );
-      
+
       const result = await cancellationService.createCancellationRequest(
         id,
         userId,
@@ -94,7 +113,7 @@ export default function CancellationRequestScreen() {
         recommendedRefund,
         reasonCategory
       );
-      
+
       if (result) {
         const isForHonorAutoCancel = !!bounty.is_for_honor;
         if (isForHonorAutoCancel) {
@@ -128,7 +147,7 @@ export default function CancellationRequestScreen() {
       setSubmitting(false);
     }
   };
-  
+
   const handleContactSupport = () => {
     const subject = bounty ? EMAIL_SUBJECTS.cancellation(bounty.title) : EMAIL_SUBJECTS.general;
     Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`);
@@ -137,25 +156,22 @@ export default function CancellationRequestScreen() {
   const handleCallSupport = () => {
     Linking.openURL(createSupportTel());
   };
-  
+
   if (loading) {
     return (
-      <View className="flex-1 bg-[#0B0F14] items-center justify-center">
-        <ActivityIndicator size="large" color="#059669" />
+      <View style={[s.screen, s.centered]}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
-  
+
   if (!bounty) {
     return (
-      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
-        <AlertCircle size={48} color="#dc2626" />
-        <Text className="text-lg font-semibold text-white mt-4">Bounty not found</Text>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="mt-6 bg-[#059669] px-6 py-3 rounded-lg"
-        >
-          <Text className="text-white font-semibold">Go Back</Text>
+      <View style={[s.screen, s.centered, s.centeredPad]}>
+        <AlertCircle size={48} color={theme.error} />
+        <Text style={s.stateTitle}>Bounty not found</Text>
+        <TouchableOpacity onPress={() => router.back()} style={[s.primaryButton, s.stateButton]}>
+          <Text style={s.primaryButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -164,32 +180,24 @@ export default function CancellationRequestScreen() {
   // Edge case: Bounty already completed - cannot cancel
   if (bounty.status === 'completed') {
     return (
-      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
-        <AlertCircle size={48} color="#f59e0b" />
-        <Text className="text-lg font-semibold text-white mt-4">Cannot Cancel</Text>
-        <Text className="text-[#9CA3AF] text-center mt-2">
-          This bounty has already been completed. If you have an issue, please contact support for dispute resolution.
+      <View style={[s.screen, s.centered, s.centeredPad]}>
+        <AlertCircle size={48} color={theme.warning} />
+        <Text style={s.stateTitle}>Cannot Cancel</Text>
+        <Text style={s.stateBody}>
+          This bounty has already been completed. If you have an issue, please contact support for
+          dispute resolution.
         </Text>
-        <View className="mt-6 space-y-3 w-full max-w-xs">
-          <TouchableOpacity
-            onPress={handleContactSupport}
-            className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
-          >
-            <Mail size={18} color="white" />
-            <Text className="text-white font-semibold ml-2">Email Support</Text>
+        <View style={s.stateActions}>
+          <TouchableOpacity onPress={handleContactSupport} style={[s.primaryButton, s.rowButton]}>
+            <Mail size={18} color={ON_ACCENT_TEXT} />
+            <Text style={[s.primaryButtonText, s.rowButtonText]}>Email Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleCallSupport}
-            className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
-          >
-            <Phone size={18} color="white" />
-            <Text className="text-white font-semibold ml-2">Call Support</Text>
+          <TouchableOpacity onPress={handleCallSupport} style={[s.primaryButton, s.rowButton]}>
+            <Phone size={18} color={ON_ACCENT_TEXT} />
+            <Text style={[s.primaryButtonText, s.rowButtonText]}>Call Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="px-6 py-3 rounded-lg"
-          >
-            <Text className="text-[#9CA3AF] font-medium text-center">Go Back</Text>
+          <TouchableOpacity onPress={() => router.back()} style={s.linkButton}>
+            <Text style={s.linkButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -199,17 +207,12 @@ export default function CancellationRequestScreen() {
   // Edge case: Bounty already cancelled
   if (bounty.status === 'cancelled') {
     return (
-      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
-        <AlertCircle size={48} color="#9ca3af" />
-        <Text className="text-lg font-semibold text-white mt-4">Already Cancelled</Text>
-        <Text className="text-[#9CA3AF] text-center mt-2">
-          This bounty has already been cancelled.
-        </Text>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="mt-6 bg-[#059669] px-6 py-3 rounded-lg"
-        >
-          <Text className="text-white font-semibold">Go Back</Text>
+      <View style={[s.screen, s.centered, s.centeredPad]}>
+        <AlertCircle size={48} color={theme.textSecondary} />
+        <Text style={s.stateTitle}>Already Cancelled</Text>
+        <Text style={s.stateBody}>This bounty has already been cancelled.</Text>
+        <TouchableOpacity onPress={() => router.back()} style={[s.primaryButton, s.stateButton]}>
+          <Text style={s.primaryButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -218,193 +221,422 @@ export default function CancellationRequestScreen() {
   // Edge case: Bounty already has pending cancellation request
   if (bounty.status === 'cancellation_requested') {
     return (
-      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
-        <AlertCircle size={48} color="#f59e0b" />
-        <Text className="text-lg font-semibold text-white mt-4">Cancellation Pending</Text>
-        <Text className="text-[#9CA3AF] text-center mt-2">
-          A cancellation request is already pending for this bounty. Please wait for the other party to respond.
+      <View style={[s.screen, s.centered, s.centeredPad]}>
+        <AlertCircle size={48} color={theme.warning} />
+        <Text style={s.stateTitle}>Cancellation Pending</Text>
+        <Text style={s.stateBody}>
+          A cancellation request is already pending for this bounty. Please wait for the other party
+          to respond.
         </Text>
-        <View className="mt-6 space-y-3 w-full max-w-xs">
-          <TouchableOpacity
-            onPress={handleContactSupport}
-            className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
-          >
-            <HelpCircle size={18} color="white" />
-            <Text className="text-white font-semibold ml-2">Contact Support</Text>
+        <View style={s.stateActions}>
+          <TouchableOpacity onPress={handleContactSupport} style={[s.primaryButton, s.rowButton]}>
+            <HelpCircle size={18} color={ON_ACCENT_TEXT} />
+            <Text style={[s.primaryButtonText, s.rowButtonText]}>Contact Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="px-6 py-3 rounded-lg mt-3"
-          >
-            <Text className="text-[#9CA3AF] font-medium text-center">Go Back</Text>
+          <TouchableOpacity onPress={() => router.back()} style={s.linkButton}>
+            <Text style={s.linkButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
-  
+
   const hasAcceptedHunter = !!bounty.accepted_by;
   const recommendedRefund = cancellationService.calculateRecommendedRefund(
     bounty.status,
     hasAcceptedHunter
   );
-  
+
+  const submitDisabled = submitting || !reason.trim();
+
   return (
-    <View className="flex-1 bg-[#0B0F14]">
-      <ScrollView className="flex-1">
+    <View style={s.screen}>
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={{ paddingBottom: bottomClearance }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
-        <View className="bg-[#111827] px-4 py-6 pt-12">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="mb-4"
-          >
-            <ArrowLeft size={24} color="white" />
+        <View style={[s.header, { paddingTop: insets.top + 16 }]}>
+          <TouchableOpacity onPress={() => router.back()} style={s.backButton}>
+            <ArrowLeft size={24} color={theme.text} />
           </TouchableOpacity>
-          <Text className="text-2xl font-bold text-white">
-            Request Cancellation
-          </Text>
-          <Text className="text-[#9CA3AF] mt-1">
-            {bounty.title}
-          </Text>
+          <Text style={s.headerTitle}>Request Cancellation</Text>
+          <Text style={s.headerSubtitle}>{bounty.title}</Text>
         </View>
-        
+
         {/* Content */}
-        <View className="p-6">
+        <View style={s.content}>
           {/* Info Box */}
-          <View className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-            <View className="flex-row items-start">
-              <AlertCircle size={20} color="#f59e0b" />
-              <View className="flex-1 ml-3">
-                <Text className="text-amber-900 font-semibold mb-1">
-                  Cancellation Policy
-                </Text>
-                <Text className="text-amber-800 text-sm">
-                  {bounty.is_for_honor
-                    ? 'For honor bounties are automatically cancelled after submission. We still collect your reason to improve matching and quality metrics.'
-                    : bounty.status === 'open'
+          <View style={[s.calloutBox, s.warningBox]}>
+            <AlertCircle size={20} color={theme.warning} />
+            <View style={s.calloutBody}>
+              <Text style={[s.calloutTitle, s.warningText]}>Cancellation Policy</Text>
+              <Text style={[s.calloutText, s.warningText]}>
+                {bounty.is_for_honor
+                  ? 'For honor bounties are automatically cancelled after submission. We still collect your reason to improve matching and quality metrics.'
+                  : bounty.status === 'open'
                     ? 'Full refund available as no hunter has accepted this bounty yet.'
                     : hasAcceptedHunter
-                    ? `Estimated refund: ${recommendedRefund}% of bounty amount ($${(bounty.amount * recommendedRefund / 100).toFixed(2)}). The other party can accept or dispute this request.`
-                    : 'This request will be reviewed and the other party will be notified.'}
-                </Text>
-              </View>
+                      ? `Estimated refund: ${recommendedRefund}% of bounty amount ($${((bounty.amount * recommendedRefund) / 100).toFixed(2)}). The other party can accept or dispute this request.`
+                      : 'This request will be reviewed and the other party will be notified.'}
+              </Text>
             </View>
           </View>
-          
+
           {/* Bounty Details */}
-          <View className="bg-[#1F2937] rounded-lg p-4 mb-6">
-            <Text className="text-sm text-[#9CA3AF] mb-1">Bounty Amount</Text>
-            <Text className="text-2xl font-bold text-white mb-3">
-              ${bounty.amount.toFixed(2)}
-            </Text>
-            <Text className="text-sm text-[#9CA3AF] mb-1">Status</Text>
-            <Text className="text-base font-medium text-white capitalize">
-              {bounty.status.replace('_', ' ')}
-            </Text>
+          <View style={s.detailsCard}>
+            <Text style={s.detailLabel}>Bounty Amount</Text>
+            <Text style={s.detailAmount}>${bounty.amount.toFixed(2)}</Text>
+            <Text style={s.detailLabel}>Status</Text>
+            <Text style={s.detailValue}>{bounty.status.replace('_', ' ')}</Text>
           </View>
-          
+
           {/* Reason Input */}
-          <View className="mb-6">
-            <Text className="text-base font-semibold text-white mb-2">
-              Why are you cancelling? *
-            </Text>
-            <View className="flex-row flex-wrap gap-2 mb-3">
-              {CANCELLATION_REASON_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  onPress={() => setReasonCategory(option.value)}
-                  className={`px-3 py-2 rounded-full border ${
-                    reasonCategory === option.value
-                      ? 'bg-[#059669] border-[#059669]'
-                      : 'bg-[#1F2937] border-[#374151]'
-                  }`}
-                >
-                  <Text
-                    className={`text-sm ${
-                      reasonCategory === option.value ? 'text-white font-semibold' : 'text-gray-700'
-                    }`}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Why are you cancelling? *</Text>
+            <View style={s.chipRow}>
+              {CANCELLATION_REASON_OPTIONS.map(option => {
+                const selected = reasonCategory === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    onPress={() => setReasonCategory(option.value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    style={[s.chip, selected ? s.chipSelected : s.chipUnselected]}
                   >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text style={[s.chipText, selected ? s.chipTextSelected : s.chipTextUnselected]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <Text className="text-sm text-[#9CA3AF] mb-3">
-              Please explain why you want to cancel this bounty. This will be shared with the other party.
+            <Text style={s.helperText}>
+              Please explain why you want to cancel this bounty. This will be shared with the other
+              party.
             </Text>
             <TextInput
               value={reason}
               onChangeText={setReason}
               placeholder="Enter your reason..."
+              placeholderTextColor={theme.textDisabled}
               multiline
               numberOfLines={6}
               textAlignVertical="top"
-              className="border border-[#374151] rounded-lg p-3 text-base text-white"
-              style={{ minHeight: 120 }}
+              style={s.textInput}
             />
           </View>
-          
+
           {/* Submit Button */}
           <TouchableOpacity
             onPress={handleSubmitCancellation}
-            disabled={submitting || !reason.trim()}
-            className={`rounded-lg py-4 ${
-              submitting || !reason.trim()
-                ? 'bg-[#374151]'
-                : 'bg-[#059669]'
-            }`}
+            disabled={submitDisabled}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: submitDisabled, busy: submitting }}
+            style={[s.submitButton, submitDisabled && s.submitButtonDisabled]}
           >
             {submitting ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={ON_ACCENT_TEXT} />
             ) : (
-              <Text className="text-white text-center font-semibold text-base">
+              <Text style={[s.submitButtonText, submitDisabled && s.submitButtonTextDisabled]}>
                 {bounty.is_for_honor ? 'Cancel For Honor Bounty' : 'Submit Cancellation Request'}
               </Text>
             )}
           </TouchableOpacity>
-          
+
           {/* Support Contact Section */}
-          <View className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
-            <View className="flex-row items-start">
-              <HelpCircle size={20} color="#3b82f6" />
-              <View className="flex-1 ml-3">
-                <Text className="text-blue-900 font-semibold mb-1">
-                  Need Help?
-                </Text>
-                <Text className="text-blue-800 text-sm mb-3">
-                  If you have questions about the cancellation process or need assistance with a dispute, our support team is here to help.
-                </Text>
-                <View className="flex-row flex-wrap gap-2">
-                  <TouchableOpacity
-                    onPress={handleContactSupport}
-                    className="flex-row items-center bg-blue-600 px-3 py-2 rounded-lg"
-                  >
-                    <Mail size={14} color="white" />
-                    <Text className="text-white text-sm font-medium ml-1">Email</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleCallSupport}
-                    className="flex-row items-center bg-blue-500 px-3 py-2 rounded-lg"
-                  >
-                    <Phone size={14} color="white" />
-                    <Text className="text-white text-sm font-medium ml-1">Call</Text>
-                  </TouchableOpacity>
-                </View>
+          <View style={[s.calloutBox, s.infoBox]}>
+            <HelpCircle size={20} color={theme.info} />
+            <View style={s.calloutBody}>
+              <Text style={[s.calloutTitle, s.infoText]}>Need Help?</Text>
+              <Text style={[s.calloutText, s.infoText, s.calloutTextSpaced]}>
+                If you have questions about the cancellation process or need assistance with a
+                dispute, our support team is here to help.
+              </Text>
+              <View style={s.supportRow}>
+                <TouchableOpacity onPress={handleContactSupport} style={s.supportButton}>
+                  <Mail size={14} color={ON_ACCENT_TEXT} />
+                  <Text style={s.supportButtonText}>Email</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleCallSupport} style={s.supportButton}>
+                  <Phone size={14} color={ON_ACCENT_TEXT} />
+                  <Text style={s.supportButtonText}>Call</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
-          
-          <TouchableOpacity
-            onPress={() => router.back()}
-            disabled={submitting}
-            className="mt-4 py-4"
-          >
-            <Text className="text-[#9CA3AF] text-center font-medium">
-              Cancel
-            </Text>
+
+          <TouchableOpacity onPress={() => router.back()} disabled={submitting} style={s.linkButton}>
+            <Text style={s.linkButtonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
   );
+}
+
+/**
+ * Every color comes from the active AppTheme — the screen was previously
+ * hardcoded to the dark palette (#0B0F14 page, white text) with two stray
+ * light-mode callouts (amber-50 / blue-50), so it read as a dark screen in
+ * light mode and had unreadable amber-900-on-cream / gray-700-on-#1F2937 text
+ * in dark mode. Callout tints are the semantic color at low alpha, which works
+ * on both a white and a near-black page.
+ */
+function makeStyles(theme: AppTheme) {
+  const warningTint = theme.isDark ? 'rgba(251,191,36,0.14)' : 'rgba(251,191,36,0.16)';
+  const warningBorder = theme.isDark ? 'rgba(251,191,36,0.34)' : 'rgba(180,83,9,0.28)';
+  const infoTint = theme.isDark ? 'rgba(96,165,250,0.14)' : 'rgba(59,130,246,0.10)';
+  const infoBorder = theme.isDark ? 'rgba(96,165,250,0.34)' : 'rgba(59,130,246,0.28)';
+
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    centered: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    centeredPad: {
+      padding: 24,
+    },
+    stateTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+      marginTop: 16,
+      textAlign: 'center',
+    },
+    stateBody: {
+      color: theme.textSecondary,
+      textAlign: 'center',
+      marginTop: 8,
+      lineHeight: 20,
+    },
+    stateActions: {
+      marginTop: 24,
+      width: '100%',
+      maxWidth: 320,
+      gap: 12,
+    },
+    stateButton: {
+      marginTop: 24,
+      paddingHorizontal: 24,
+    },
+    header: {
+      backgroundColor: theme.surface,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+      paddingHorizontal: 16,
+      paddingBottom: 24,
+    },
+    backButton: {
+      marginBottom: 16,
+      alignSelf: 'flex-start',
+      padding: 4,
+    },
+    headerTitle: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+    headerSubtitle: {
+      color: theme.textSecondary,
+      marginTop: 4,
+    },
+    content: {
+      padding: 24,
+    },
+    calloutBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 16,
+    },
+    warningBox: {
+      backgroundColor: warningTint,
+      borderColor: warningBorder,
+      marginBottom: 24,
+    },
+    infoBox: {
+      backgroundColor: infoTint,
+      borderColor: infoBorder,
+      marginTop: 24,
+    },
+    calloutBody: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    calloutTitle: {
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    calloutText: {
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    calloutTextSpaced: {
+      marginBottom: 12,
+    },
+    // Amber/blue body copy that stays legible on the tint in both themes: the
+    // bright semantic color on dark, a deep shade of the same hue on light.
+    warningText: {
+      color: theme.isDark ? '#FCD34D' : '#92400E',
+    },
+    infoText: {
+      color: theme.isDark ? '#93C5FD' : '#1E3A8A',
+    },
+    detailsCard: {
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      padding: 16,
+      marginBottom: 24,
+    },
+    detailLabel: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginBottom: 4,
+    },
+    detailAmount: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 12,
+    },
+    detailValue: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: theme.text,
+      textTransform: 'capitalize',
+    },
+    section: {
+      marginBottom: 24,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 12,
+    },
+    chip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+    },
+    chipSelected: {
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
+    },
+    chipUnselected: {
+      backgroundColor: theme.surfaceSecondary,
+      borderColor: theme.border,
+    },
+    chipText: {
+      fontSize: 13,
+    },
+    chipTextSelected: {
+      color: ON_ACCENT_TEXT,
+      fontWeight: '600',
+    },
+    chipTextUnselected: {
+      color: theme.text,
+    },
+    helperText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginBottom: 12,
+    },
+    textInput: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: theme.text,
+      minHeight: 120,
+    },
+    submitButton: {
+      backgroundColor: theme.primary,
+      borderRadius: 8,
+      paddingVertical: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    submitButtonDisabled: {
+      backgroundColor: theme.surfaceSecondary,
+    },
+    submitButtonText: {
+      color: ON_ACCENT_TEXT,
+      fontSize: 16,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    submitButtonTextDisabled: {
+      color: theme.textDisabled,
+    },
+    supportRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    supportButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#1D4ED8',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    supportButtonText: {
+      color: ON_ACCENT_TEXT,
+      fontSize: 13,
+      fontWeight: '500',
+      marginLeft: 4,
+    },
+    primaryButton: {
+      backgroundColor: theme.primary,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryButtonText: {
+      color: ON_ACCENT_TEXT,
+      fontWeight: '600',
+    },
+    rowButton: {
+      flexDirection: 'row',
+    },
+    rowButtonText: {
+      marginLeft: 8,
+    },
+    linkButton: {
+      marginTop: 16,
+      paddingVertical: 16,
+      paddingHorizontal: 24,
+    },
+    linkButtonText: {
+      color: theme.textSecondary,
+      fontWeight: '500',
+      textAlign: 'center',
+    },
+  });
 }
