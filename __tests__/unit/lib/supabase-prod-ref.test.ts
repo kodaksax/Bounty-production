@@ -27,9 +27,14 @@ function read(relPath: string): string {
 
 describe('production Supabase URL / project ref', () => {
   test('production Supabase URL points at the correct project and has no fallback', () => {
-    process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://xwlwqzzphmmhghiqvkeu.supabase.co';
-    const ref = new URL(process.env.EXPO_PUBLIC_SUPABASE_URL).host.split('.')[0];
-    expect(ref).toBe('xwlwqzzphmmhghiqvkeu');
+    const originalSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    try {
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://xwlwqzzphmmhghiqvkeu.supabase.co';
+      const ref = new URL(process.env.EXPO_PUBLIC_SUPABASE_URL).host.split('.')[0];
+      expect(ref).toBe('xwlwqzzphmmhghiqvkeu');
+    } finally {
+      process.env.EXPO_PUBLIC_SUPABASE_URL = originalSupabaseUrl;
+    }
   });
 
   test('supabase-refs.json maps the production channel/env to the correct ref', () => {
