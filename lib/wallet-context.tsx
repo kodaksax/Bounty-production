@@ -1164,12 +1164,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           tx.escrowStatus === 'funded'
       );
 
-      if (!escrowTx) {
-        console.error('No funded escrow found for bounty:', bountyId);
-        return false;
-      }
-
-      const escrowAmount = Math.abs(escrowTx.amount);
+      // A missing local escrow is NOT a failure: the refund is also triggered by
+      // the party ACCEPTING a cancellation, and when the poster is the requester
+      // that party is the hunter, whose wallet never held the escrow. The server
+      // locates the escrow row itself and credits whoever funded it, so the only
+      // thing a missing local row changes is that there is no local ledger of
+      // this user's to update afterwards.
+      const escrowAmount = escrowTx ? Math.abs(escrowTx.amount) : 0;
       const refundAmount = (escrowAmount * refundPercentage) / 100;
 
       // Attempt server-side refund first to ensure server is the source of truth.
@@ -1225,39 +1226,45 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return false;
       }
 
-      // Update escrow transaction status
-      setTransactions(prev => {
-        const next = prev.map(tx =>
-          tx.id === escrowTx.id
-            ? ({
-                ...tx,
-                escrowStatus: 'released',
-                details: { ...tx.details, status: 'refunded' },
-              } as WalletTransactionRecord)
-            : tx
-        ) as WalletTransactionRecord[];
-        persistTransactions(next);
-        return next;
-      });
+      // Local ledger/balance updates apply only to the wallet that actually
+      // funded the escrow. When the refund was triggered by the responding
+      // hunter, the money moved in the POSTER's wallet server-side and this
+      // device must not credit itself — the refreshFromApi below is all it needs.
+      if (escrowTx) {
+        // Update escrow transaction status
+        setTransactions(prev => {
+          const next = prev.map(tx =>
+            tx.id === escrowTx.id
+              ? ({
+                  ...tx,
+                  escrowStatus: 'released',
+                  details: { ...tx.details, status: 'refunded' },
+                } as WalletTransactionRecord)
+              : tx
+          ) as WalletTransactionRecord[];
+          persistTransactions(next);
+          return next;
+        });
 
-      // Return refund amount to poster's balance
-      setBalance(prev => {
-        const next = prev + refundAmount;
-        persist(next);
-        return next;
-      });
+        // Return refund amount to poster's balance
+        setBalance(prev => {
+          const next = prev + refundAmount;
+          persist(next);
+          return next;
+        });
 
-      // Log refund transaction
-      await logTransaction({
-        type: 'refund',
-        amount: refundAmount, // positive for poster receiving refund
-        details: {
-          title,
-          bounty_id: bountyIdStr,
-          status: 'completed',
-          method: `${refundPercentage}% refund`,
-        },
-      });
+        // Log refund transaction
+        await logTransaction({
+          type: 'refund',
+          amount: refundAmount, // positive for poster receiving refund
+          details: {
+            title,
+            bounty_id: bountyIdStr,
+            status: 'completed',
+            method: `${refundPercentage}% refund`,
+          },
+        });
+      }
 
       // Sync balance from API to reconcile after the refund
       try {
