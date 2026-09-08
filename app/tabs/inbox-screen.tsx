@@ -11,6 +11,10 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
+import {
+  filterManagementBounties,
+  markBountyRemovedLocally,
+} from "lib/utils/bounty-visibility"
 import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
@@ -188,8 +192,11 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       setIsLoading((prev) => ({ ...prev, myBounties: true }))
       setError(null) // Clear previous error
       const mine = await bountyService.getByUserId(currentUserId)
-      // Filter out archived and deleted bounties from My Postings view
-      const activeBounties = mine.filter(b => b.status !== 'archived' && b.status !== 'deleted')
+      // One shared lifecycle filter (see lib/utils/bounty-visibility) rather
+      // than an inline status check, re-applied on EVERY load: it also drops
+      // bounties this client just removed, so a query that raced the mutation
+      // cannot put them back when the screen remounts after a tab switch.
+      const activeBounties = filterManagementBounties(mine)
       setMyBounties(activeBounties)
       setIsLoading((prev) => ({ ...prev, myBounties: false }))
       // Load related requests
@@ -223,12 +230,9 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       const map = new Map<string, Bounty>()
       for (const r of relevant) {
         const b = r?.bounty as Bounty | undefined
-        // Filter out archived and deleted bounties from in-progress view
-        if (b && !map.has(String(b.id)) && b.status !== 'archived' && b.status !== 'deleted') {
-          map.set(String(b.id), b)
-        }
+        if (b && !map.has(String(b.id))) map.set(String(b.id), b)
       }
-      setInProgressBounties(Array.from(map.values()))
+      setInProgressBounties(filterManagementBounties(Array.from(map.values())))
     } catch (e: any) {
       console.error('Error loading applied bounties for In Progress:', e)
       setError('Failed to load your applied bounties')
@@ -573,7 +577,10 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                 throw new Error("Failed to delete bounty")
               }
 
-              // Update UI only after successful deletion
+              // Update UI only after successful deletion. The registry mark
+              // makes the removal survive the reload below (and any query that
+              // was already in flight against the pre-delete row).
+              markBountyRemovedLocally(bounty.id)
               setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
 
               // Refresh to ensure consistency
@@ -610,6 +617,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             try {
               const updated = await bountyService.update(bounty.id, { status: 'deleted' })
               if (!updated) throw new Error('Failed to discard bounty')
+              markBountyRemovedLocally(bounty.id)
               setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
               await loadMyBounties()
             } catch (err: any) {
