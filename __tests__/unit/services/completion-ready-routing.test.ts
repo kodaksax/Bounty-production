@@ -1,4 +1,4 @@
-jest.mock('../../../lib/supabase', () => ({
+jest.mock('lib/supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
     auth: {
@@ -10,29 +10,29 @@ jest.mock('../../../lib/supabase', () => ({
   },
 }));
 
-jest.mock('../../../lib/config/api', () => ({
+jest.mock('lib/config/api', () => ({
   API_BASE_URL: 'https://example.supabase.co/functions/v1',
 }));
 
-jest.mock('../../../lib/utils/network', () => ({
+jest.mock('lib/utils/network', () => ({
   getReachableApiBaseUrl: jest.fn((url: string) => url),
 }));
 
-jest.mock('../../../lib/utils/dev-host', () => jest.fn(() => 'http://localhost:3001'));
-jest.mock('../../../lib/utils/data-utils', () => ({
+jest.mock('lib/utils/dev-host', () => jest.fn(() => 'http://localhost:3001'));
+jest.mock('lib/utils/data-utils', () => ({
   CURRENT_USER_ID: 'hunter123',
   getCurrentUserId: jest.fn(() => 'hunter123'),
 }));
-jest.mock('../../../lib/utils/error-logger', () => ({
+jest.mock('lib/utils/error-logger', () => ({
   logger: { error: jest.fn(), warning: jest.fn() },
 }));
-jest.mock('../../../lib/services/analytics-service', () => ({
+jest.mock('lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: jest.fn().mockResolvedValue(undefined) },
 }));
-jest.mock('../../../lib/services/bounty-request-service', () => ({
+jest.mock('lib/services/bounty-request-service', () => ({
   getHoursSinceClaimed: jest.fn(),
 }));
-jest.mock('../../../lib/services/bounty-service', () => ({
+jest.mock('lib/services/bounty-service', () => ({
   bountyService: { update: jest.fn() },
 }));
 
@@ -46,8 +46,8 @@ describe('completion ready routing', () => {
   });
 
   it('uses the service-role edge route instead of a client-side completion_ready write', async () => {
-    const { completionService } = require('../../../lib/services/completion-service');
-    const { supabase } = require('../../../lib/supabase');
+    const { completionService } = require('lib/services/completion-service');
+    const { supabase } = require('lib/supabase');
 
     await expect(completionService.markReady('bounty123', 'hunter123')).resolves.toBe(true);
 

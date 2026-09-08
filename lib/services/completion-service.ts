@@ -504,16 +504,19 @@ export const completionService = {
             try {
               return await postReadyViaRelayApi(bountyId, hunterId);
             } catch (relayError) {
-              const message =
-                relayError instanceof Error ? relayError.message : String(relayError);
+              const normalizedEdgeError =
+                edgeError instanceof Error ? edgeError : new Error(String(edgeError));
+              const normalizedRelayError =
+                relayError instanceof Error ? relayError : new Error(String(relayError));
+
               logger.warning('Completion ready backend request failed', {
                 bountyId,
                 hunterId,
-                message,
-                edgeError:
-                  edgeError instanceof Error ? edgeError.message : String(edgeError),
+                edgeError: normalizedEdgeError,
+                relayError: normalizedRelayError,
               });
-              return false;
+
+              throw normalizedRelayError;
             }
           }
         }
