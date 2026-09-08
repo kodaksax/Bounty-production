@@ -405,6 +405,11 @@ export type AnalyticsEvent =
   | 'application_submitted'
   | 'application_failed'
   | 'application_withdrawn'
+  // `application_discarded` fires when the hunter removes a rejected
+  // application from their list so it stops cluttering the in-progress tab
+  // (postings-screen / inbox-screen). Distinct from `application_withdrawn`,
+  // which only applies to still-pending applications.
+  | 'application_discarded'
   // Payment events
   | 'payment_initiated'
   | 'payment_completed'

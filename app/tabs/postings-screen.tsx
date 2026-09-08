@@ -7,7 +7,7 @@ import { CreateBountyFlow } from "app/screens/CreateBounty"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
-import { withdrawApplication } from "lib/services/application-withdrawal"
+import { discardApplication, withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
@@ -79,7 +79,7 @@ type MyPostingRowProps = {
   onEdit?: () => void
   onDelete?: () => void
   onDiscard?: () => void
-  onWithdrawApplication?: () => void
+  onWithdrawApplication?: (requestStatus?: string | null) => void
   onGoToReview: (id: string) => void
   onGoToPayout: (id: string) => void
   variant?: 'owner' | 'hunter'
@@ -733,7 +733,45 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     )
   }, [loadMyBounties])
 
-  const handleWithdrawApplication = async (bountyId: number | string) => {
+  const handleWithdrawApplication = async (bountyId: number | string, requestStatus?: string | null) => {
+    if (requestStatus === 'rejected') {
+      Alert.alert(
+        "Discard Application",
+        "Remove this rejected application from your list? This can't be undone.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await discardApplication({
+                  bountyId,
+                  currentUserId,
+                  surface: 'my_postings',
+                })
+
+                try {
+                  await loadInProgress()
+                } catch (refreshError) {
+                  console.warn('Failed to refresh in-progress bounties after discard:', refreshError)
+                }
+              } catch (err: any) {
+                console.error("Error discarding application:", err)
+                const friendly = getUserFriendlyError(err)
+                Alert.alert(friendly.title, friendly.message)
+              }
+            },
+          },
+        ],
+        { cancelable: true }
+      )
+      return
+    }
+
     Alert.alert(
       "Withdraw Application",
       "Are you sure you want to withdraw your application for this bounty?",
@@ -871,7 +909,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         currentUserId={currentUserId}
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
-        onWithdrawApplication={() => handleWithdrawApplication(bounty.id)}
+        onWithdrawApplication={(requestStatus) => handleWithdrawApplication(bounty.id, requestStatus)}
         onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
         onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
         variant={'hunter'}

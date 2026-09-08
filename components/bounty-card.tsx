@@ -46,8 +46,11 @@ interface BountyCardProps {
   otherPartyId?: string | null;
   // If the current user has a request for this bounty (pending/accepted/rejected)
   requestStatus?: string | null;
-  // For hunters: withdraw or discard application handler
-  onWithdrawApplication?: (() => void) | undefined;
+  // For hunters: withdraw a pending application, or discard a rejected one.
+  // Receives the current requestStatus so the caller can route to the right
+  // service call (withdrawApplication vs discardApplication) without having
+  // to re-derive status itself.
+  onWithdrawApplication?: ((requestStatus?: string | null) => void) | undefined;
   /**
    * Which side of the transaction the viewer is on. Passed explicitly by the
    * management lists, which already know it; falls back to comparing the
@@ -399,7 +402,7 @@ export function BountyCard({
               ]}
               onPress={e => {
                 e.stopPropagation();
-                onWithdrawApplication && onWithdrawApplication();
+                onWithdrawApplication && onWithdrawApplication(requestStatus);
               }}
             >
               <MaterialIcons
