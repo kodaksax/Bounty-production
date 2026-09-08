@@ -92,3 +92,64 @@ export async function withdrawApplication(
 
   return { applicationId: String(request.id) };
 }
+
+/**
+ * Delete the current user's already-rejected application for `bountyId` so it
+ * stops cluttering the "My Bounties" work list.
+ *
+ * Unlike `withdrawApplication` (which only ever targets a still-pending row),
+ * this targets a `rejected` row specifically — a rejected application can
+ * never be "withdrawn" back to pending, it can only be discarded from view.
+ * Emits `application_discarded` ONLY after the delete actually succeeds, for
+ * the same reason `withdrawApplication` guards its analytics emit.
+ */
+export async function discardApplication(
+  params: WithdrawApplicationParams
+): Promise<WithdrawApplicationResult> {
+  const { bountyId, currentUserId, surface } = params;
+
+  if (!currentUserId) {
+    throw new Error('You must be signed in to discard an application.');
+  }
+
+  const all = await bountyRequestService.getAll({
+    bountyId: String(bountyId),
+    userId: currentUserId,
+  });
+
+  const rejected = all.find((r) => r.status === 'rejected');
+
+  if (!rejected) {
+    // Distinguish "never existed" from an application that exists but isn't
+    // eligible to be discarded yet, so the hunter sees the right recovery.
+    const existingOther = all[0];
+    if (existingOther?.status === 'pending') {
+      throw new Error(
+        'This application is still pending and cannot be discarded yet.'
+      );
+    }
+    if (existingOther?.status === 'accepted') {
+      throw new Error(
+        'This application has already been accepted and cannot be discarded.'
+      );
+    }
+    throw new Error('No rejected application found for this bounty');
+  }
+
+  const success = await bountyRequestService.delete(rejected.id);
+
+  if (!success) {
+    throw new Error('Failed to discard application');
+  }
+
+  void analyticsService
+    .trackEvent('application_discarded', {
+      role: 'hunter',
+      bounty_id: String(bountyId),
+      application_id: String(rejected.id),
+      surface,
+    })
+    .catch(() => {});
+
+  return { applicationId: String(rejected.id) };
+}

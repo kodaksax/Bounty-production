@@ -57,7 +57,7 @@ type Props = {
   onEdit?: () => void;
   onDelete?: () => void;
   onDiscard?: () => void;
-  onWithdrawApplication?: () => void;
+  onWithdrawApplication?: (requestStatus?: string | null) => void;
   onGoToReview?: (bountyId: string) => void;
   onGoToPayout?: (bountyId: string) => void;
   variant?: 'owner' | 'hunter';
