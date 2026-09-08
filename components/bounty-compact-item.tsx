@@ -31,14 +31,6 @@ export interface BountyCompactItemProps {
   missingSummary?: string
   /** Optional attribution line, e.g. who completed the work and when. */
   dateLabel?: string
-  /** Proof this work went well — the poster's star rating and review of it,
-   * plus a short standing note (e.g. a repeat client). Rendered only with
-   * `dateLabel`, in the footer of the taller history card. */
-  credibility?: {
-    score?: number | null
-    quote?: string | null
-    note?: string | null
-  }
   /** Override the card container — e.g. a carousel giving every card the same
    * height. Pass a stable (StyleSheet or memoized) value so memo still holds. */
   style?: StyleProp<ViewStyle>
@@ -47,7 +39,7 @@ export interface BountyCompactItemProps {
 function BountyCompactItemComponent({
   id, title, username, price, distance, location, description,
   isForHonor, user_id, work_type, poster_avatar, incomplete, missingSummary,
-  dateLabel, credibility, style
+  dateLabel, style
 }: BountyCompactItemProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -82,11 +74,7 @@ function BountyCompactItemComponent({
     setShowDetail(true)
   }, [triggerHaptic])
 
-  const hasCredibility = Boolean(
-    dateLabel && credibility && (credibility.score != null || credibility.quote || credibility.note)
-  )
-
-  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : location ? `, ${location}` : distance !== null ? `, ${distance} miles away` : ', location to be determined'}${dateLabel ? `, ${dateLabel}` : ''}${credibility?.score != null ? `, rated ${credibility.score} out of 5` : ''}${credibility?.note ? `, ${credibility.note}` : ''}${incomplete ? `, limited details${missingSummary ? `, ${missingSummary}` : ''}` : ''}`
+  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : location ? `, ${location}` : distance !== null ? `, ${distance} miles away` : ', location to be determined'}${dateLabel ? `, ${dateLabel}` : ''}${incomplete ? `, limited details${missingSummary ? `, ${missingSummary}` : ''}` : ''}`
 
   return (
     <>
@@ -104,30 +92,21 @@ function BountyCompactItemComponent({
           <Text style={s.dateText} numberOfLines={1}>{dateLabel}</Text>
         ) : null}
 
-        <View style={[s.rowInner, dateLabel ? s.rowInnerStacked : null]}>
+        <View style={s.rowInner}>
         {/* Leading avatar */}
         <TouchableOpacity
           onPress={handleAvatarPress}
           disabled={!user_id}
-          style={[s.leadingAvatarWrap, dateLabel ? s.leadingAvatarWrapStacked : null]}
+          style={s.leadingAvatarWrap}
           accessibilityRole="button"
           accessibilityLabel={`View ${resolvedUsername}'s profile`}
         >
         </TouchableOpacity>
 
         {/* Main content */}
-        <View style={[s.mainContent, dateLabel ? s.mainContentStacked : null]}>
-          {/* Truncate with an ellipsis rather than letting a long title add
-              lines: cards in the completed-work carousel share one fixed
-              height, so extra lines would push the meta row out of view. */}
-          <Text
-            style={[s.title, dateLabel ? s.titleStacked : null]}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-          >
-            {title}
-          </Text>
-          <View style={[s.metaRow, dateLabel ? s.metaRowStacked : null]}>
+        <View style={s.mainContent}>
+          <Text style={s.title} numberOfLines={2}>{title}</Text>
+          <View style={s.metaRow}>
             <Text style={s.username}>{resolvedUsername}</Text>
             <View style={s.dot} />
             {work_type === 'online' ? (
@@ -154,7 +133,7 @@ function BountyCompactItemComponent({
         </View>
 
         {/* Trailing price and chevron */}
-        <View style={[s.trailing, dateLabel ? s.trailingStacked : null]}>
+        <View style={s.trailing}>
           {isForHonor ? (
             <View style={s.honorBadge}>
               <MaterialIcons name="favorite" size={12} color="#052e1b" />
@@ -163,33 +142,9 @@ function BountyCompactItemComponent({
           ) : (
             <Text style={s.price}>${price}</Text>
           )}
-          {!dateLabel && (
-            <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
-          )}
+          <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
         </View>
         </View>
-
-        {/* Credibility footer: what the poster thought of the work. */}
-        {hasCredibility && (
-          <View style={s.credFooter}>
-            <View style={s.credChips}>
-              {credibility?.score != null && (
-                <View style={s.ratingPill}>
-                  <MaterialIcons name="star" size={12} color="#b45309" />
-                  <Text style={s.ratingText}>{credibility.score.toFixed(1)}</Text>
-                </View>
-              )}
-              {credibility?.note ? (
-                <View style={s.notePill}>
-                  <Text style={s.noteText} numberOfLines={1}>{credibility.note}</Text>
-                </View>
-              ) : null}
-            </View>
-            {credibility?.quote ? (
-              <Text style={s.quoteText} numberOfLines={2}>&ldquo;{credibility.quote}&rdquo;</Text>
-            ) : null}
-          </View>
-        )}
       </TouchableOpacity>
 
       {showDetail && (
@@ -217,12 +172,6 @@ export const BountyCompactItem = React.memo(BountyCompactItemComponent, (prev, n
   prev.incomplete === next.incomplete &&
   prev.missingSummary === next.missingSummary &&
   prev.dateLabel === next.dateLabel &&
-  // Compared field by field: callers build this object inline, so an identity
-  // check would re-render every time, and ignoring it would keep a stale review
-  // on screen once ratings finish loading.
-  prev.credibility?.score === next.credibility?.score &&
-  prev.credibility?.quote === next.credibility?.quote &&
-  prev.credibility?.note === next.credibility?.note &&
   prev.style === next.style
 )
 
@@ -252,97 +201,15 @@ function makeStyles(t: AppTheme) {
       alignSelf: 'stretch',
       flex: 1,
     },
-    // Under an attribution line the body must not absorb the card's leftover
-    // height: flex 0 keeps it at its own size and top-aligns title, poster and
-    // price directly beneath that line instead of centering them in the gap.
-    rowInnerStacked: {
-      flex: 0,
-      // A centered column, not a row: with the title and attribution centered
-      // there is no left edge for the poster line to hang off, so the whole
-      // stack shares one axis and the price becomes a chip beneath it.
-      flexDirection: 'column',
-      alignItems: 'center',
-      alignSelf: 'stretch',
-    },
-    leadingAvatarWrapStacked: {
-      marginRight: 0,
-      marginBottom: 6,
-    },
-    mainContentStacked: {
-      alignSelf: 'stretch',
-      // mainContent is flex: 1, which in a row means "take the leftover width".
-      // In this stacked column it would mean "take the leftover height" — and
-      // the column is content-sized, so there is none: the title and poster
-      // collapsed to zero height and were clipped. Size to content instead.
-      flexGrow: 0,
-      flexShrink: 0,
-      flexBasis: 'auto',
-      minHeight: 0,
-    },
-    metaRowStacked: {
-      justifyContent: 'center',
-    },
-    trailingStacked: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginLeft: 0,
-      marginTop: 6,
-      gap: 6,
-    },
-    credFooter: {
-      alignSelf: 'stretch',
-      alignItems: 'center',
-      marginTop: 8,
-      gap: 4,
-    },
-    credChips: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      flexWrap: 'wrap',
-    },
-    ratingPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 3,
-      paddingHorizontal: 7,
-      paddingVertical: 2,
-      borderRadius: 999,
-      backgroundColor: t.isDark ? 'rgba(251,191,36,0.16)' : 'rgba(245,158,11,0.12)',
-    },
-    ratingText: {
-      fontSize: TYPOGRAPHY.SIZE_XSMALL,
-      fontWeight: '700',
-      color: t.isDark ? '#fcd34d' : '#b45309',
-    },
-    notePill: {
-      paddingHorizontal: 7,
-      paddingVertical: 2,
-      borderRadius: 999,
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.16)' : 'rgba(5,150,105,0.10)',
-    },
-    noteText: {
-      fontSize: TYPOGRAPHY.SIZE_XSMALL,
-      fontWeight: '600',
-      color: t.primary,
-    },
-    quoteText: {
-      fontSize: TYPOGRAPHY.SIZE_XSMALL,
-      lineHeight: getLineHeight(TYPOGRAPHY.SIZE_XSMALL),
-      fontStyle: 'italic',
-      color: t.textSecondary,
-      textAlign: 'center',
-    },
-    // Who did the work, centered above the title — a quiet caption, so it reads
-    // as context for the card rather than competing with the title.
+    // Who did the work, above the title. Body-sized rather than the row's small
+    // meta type: it's the line the section is about, not fine print.
     dateText: {
-      color: t.textSecondary,
-      fontSize: TYPOGRAPHY.SIZE_XSMALL,
-      lineHeight: getLineHeight(TYPOGRAPHY.SIZE_XSMALL),
-      fontWeight: '400',
-      textAlign: 'center',
-      alignSelf: 'stretch',
-      marginBottom: 2,
+      color: t.text,
+      fontSize: TYPOGRAPHY.SIZE_BODY,
+      lineHeight: getLineHeight(TYPOGRAPHY.SIZE_BODY),
+      fontWeight: '600',
+      marginBottom: 4,
+      flexShrink: 1,
     },
     leadingAvatarWrap: {
       marginRight: SPACING.ELEMENT_GAP,
@@ -366,17 +233,6 @@ function makeStyles(t: AppTheme) {
       color: t.isDark ? '#a7f3d0' : t.primaryLight,
       fontSize: 12,
       fontWeight: '700',
-    },
-    // Larger title for the attribution layout (a profile's completed work),
-    // where the card is taller and the title is the thing being read. The feed
-    // keeps the denser default.
-    titleStacked: {
-      fontSize: TYPOGRAPHY.SIZE_HEADER,
-      lineHeight: getLineHeight(TYPOGRAPHY.SIZE_HEADER),
-      // Centered under the centered attribution line, so the two read as one
-      // stacked heading rather than two differently-aligned lines.
-      textAlign: 'center',
-      alignSelf: 'stretch',
     },
     mainContent: {
       flex: 1,
