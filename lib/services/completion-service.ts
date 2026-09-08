@@ -494,6 +494,30 @@ export const completionService = {
       }
 
       if (isSupabaseConfigured) {
+        // `completion_ready` is service-role-only in production. Route through
+        // the Edge Function instead of attempting a client-side write that RLS
+        // will reject.
+        if (isEdgeFunctionsBase(API_BASE_URL)) {
+          try {
+            return await postReadyViaEdgeFunction(bountyId, hunterId);
+          } catch (edgeError) {
+            try {
+              return await postReadyViaRelayApi(bountyId, hunterId);
+            } catch (relayError) {
+              const message =
+                relayError instanceof Error ? relayError.message : String(relayError);
+              logger.warning('Completion ready backend request failed', {
+                bountyId,
+                hunterId,
+                message,
+                edgeError:
+                  edgeError instanceof Error ? edgeError.message : String(edgeError),
+              });
+              return false;
+            }
+          }
+        }
+
         try {
           // Some Postgres deployments may not have a unique constraint matching
           // the provided ON CONFLICT target. To avoid hard failure, perform a
