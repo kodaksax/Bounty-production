@@ -13,9 +13,26 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { CountdownBadge } from './ui/countdown-badge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Must match the grid feed's screen padding (SPACING.SCREEN_HORIZONTAL) and the
+// implicit gap the pair row's space-between leaves between the two columns.
 const H_PAD = 16;
 const COL_GAP = 10;
 export const GRID_CARD_WIDTH = (SCREEN_WIDTH - H_PAD * 2 - COL_GAP) / 2;
+
+// Every gap / pad / box dimension inside the card is a fraction of the card's
+// own width (itself derived from the device width above), so the card's
+// internal rhythm scales with the screen instead of being pinned to fixed px.
+// This is also what keeps spacing identical across cards: the footer is placed
+// by `content: flex 1`, not by how much meta a given bounty happens to have.
+const CW = GRID_CARD_WIDTH;
+const SPACE = {
+  pad: Math.round(CW * 0.082), // outer card padding
+  gapTight: Math.round(CW * 0.018), // inside a text group (username ↔ meta line)
+  gapRow: Math.round(CW * 0.034), // between stacked body rows
+  gapBlock: Math.round(CW * 0.055), // header ↔ body, and body ↔ footer divider
+};
+const AVATAR = Math.round(CW * 0.185);
+const DOT = Math.round(CW * 0.035);
 
 export interface BountyGridItemProps {
   id: string | number;
@@ -188,22 +205,32 @@ function BountyGridItemComponent({
               {title}
             </Text>
 
-            {/* Description */}
-            {description ? (
+            {/* Description — suppressed on incomplete cards: the "Limited
+                details" badge below already tells the hunter what's missing,
+                and dropping it keeps the clipped content box from eating the
+                title on a dense card. */}
+            {description && !incomplete ? (
               <Text style={s.description} numberOfLines={1}>
                 {description}
               </Text>
             ) : null}
-
-            {incomplete ? (
-              <View style={s.limitedBadge}>
-                <MaterialIcons name="info-outline" size={11} color={theme.textSecondary} />
-                <Text style={s.limitedText} numberOfLines={1}>
-                  {missingSummary || 'Limited details'}
-                </Text>
-              </View>
-            ) : null}
           </View>
+
+          {/* Limited-details badge — a sibling of the footer, NOT inside the
+              clipped content box, so this logistics warning is always visible
+              in full even when the body has to clip. */}
+          {incomplete ? (
+            <View style={s.limitedBadge}>
+              <MaterialIcons
+                name="info-outline"
+                size={11}
+                color={theme.isDark ? theme.warning : theme.textSecondary}
+              />
+              <Text style={s.limitedText} numberOfLines={1}>
+                {missingSummary || 'Limited details'}
+              </Text>
+            </View>
+          ) : null}
 
           {/* ── Footer: price / honor + View button ─────────── */}
           <View style={s.footer}>
@@ -266,11 +293,10 @@ function makeStyles(t: AppTheme) {
     card: {
       width: GRID_CARD_WIDTH,
       aspectRatio: 1,
-      justifyContent: 'space-between',
       overflow: 'hidden',
       backgroundColor: t.surface,
       borderRadius: 16,
-      padding: 14,
+      padding: SPACE.pad,
       borderWidth: 1,
       borderColor: t.border,
       shadowColor: '#000',
@@ -279,29 +305,35 @@ function makeStyles(t: AppTheme) {
       shadowRadius: 8,
       elevation: 5,
     },
+    // flex 1 (not flexShrink) so the body always occupies the full space above
+    // the footer — the footer lands at the same Y on every card regardless of
+    // how much meta a bounty has. overflow hidden so a content-heavy card
+    // clips its own body instead of bleeding text down onto the price.
     content: {
-      flexShrink: 1,
+      flex: 1,
+      overflow: 'hidden',
+      paddingBottom: SPACE.gapRow,
     },
 
     // Header
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      marginBottom: 10,
+      gap: SPACE.gapRow,
+      marginBottom: SPACE.gapBlock,
     },
     avatar: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      width: AVATAR,
+      height: AVATAR,
+      borderRadius: AVATAR / 2,
       borderWidth: 2,
       borderColor: t.border,
     },
     avatarFallback: {
       backgroundColor: t.surfaceSecondary,
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      width: AVATAR,
+      height: AVATAR,
+      borderRadius: AVATAR / 2,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -312,7 +344,7 @@ function makeStyles(t: AppTheme) {
     },
     headerMeta: {
       flex: 1,
-      gap: 3,
+      gap: SPACE.gapTight,
     },
     username: {
       fontSize: 11,
@@ -322,12 +354,12 @@ function makeStyles(t: AppTheme) {
     metaLine: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 5,
+      gap: SPACE.gapTight,
     },
     categoryDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
+      width: DOT,
+      height: DOT,
+      borderRadius: DOT / 2,
     },
     workChip: {
       flexDirection: 'row',
@@ -344,7 +376,7 @@ function makeStyles(t: AppTheme) {
       flexShrink: 1,
     },
     countdownBadge: {
-      marginBottom: 8,
+      marginBottom: SPACE.gapRow,
     },
 
     // Body
@@ -353,43 +385,47 @@ function makeStyles(t: AppTheme) {
       fontWeight: '700',
       color: t.text,
       lineHeight: 18,
-      marginBottom: 6,
+      marginBottom: SPACE.gapTight,
     },
     description: {
       fontSize: 12,
       color: t.textSecondary,
       lineHeight: 17,
-      marginBottom: 6,
+      marginBottom: SPACE.gapTight,
     },
     limitedBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       alignSelf: 'flex-start',
-      gap: 3,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
+      gap: SPACE.gapTight,
+      paddingHorizontal: SPACE.gapRow,
+      paddingVertical: SPACE.gapTight,
       borderRadius: 999,
-      backgroundColor: t.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',
+      // Dark mode: a crisp outlined amber chip rather than a low-alpha fill,
+      // which over the dark surface just muddied into an opaque brown block
+      // and let the grey text disappear.
+      backgroundColor: t.isDark ? 'transparent' : 'rgba(245,158,11,0.12)',
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(245,158,11,0.32)' : 'rgba(245,158,11,0.28)',
-      marginBottom: 6,
+      borderColor: t.isDark ? t.warning : 'rgba(245,158,11,0.28)',
+      marginBottom: SPACE.gapRow,
     },
     limitedText: {
       fontSize: 10,
-      fontWeight: '600',
-      color: t.textSecondary,
+      fontWeight: t.isDark ? '700' : '600',
+      color: t.isDark ? t.warning : t.textSecondary,
       flexShrink: 1,
     },
 
-    // Footer
+    // Footer — pinned to the bottom by `content: flex 1`, so its top edge is at
+    // an identical Y on every card. The gap above the divider is owned by
+    // `content.paddingBottom`, so a clipped body can't crowd the price.
     footer: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingTop: 10,
+      paddingTop: SPACE.gapBlock,
       borderTopWidth: 1,
       borderTopColor: t.surfaceSecondary,
-      marginTop: 4,
     },
     amount: {
       fontSize: 18,
