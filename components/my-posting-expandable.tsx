@@ -57,6 +57,13 @@ type Props = {
   onEdit?: () => void;
   onDelete?: () => void;
   onDiscard?: () => void;
+  /**
+   * Hunter-only "Hide"/"Remove from List" on a completed bounty card. Must
+   * persist (see lib/utils/hunter-hidden-bounties.ts) — the caller is
+   * responsible for both the write and removing this bounty from the list
+   * that feeds this card, so it does not reappear on the next remount.
+   */
+  onHide?: () => void | Promise<void>;
   onWithdrawApplication?: (requestStatus?: string | null) => void;
   onGoToReview?: (bountyId: string) => void;
   onGoToPayout?: (bountyId: string) => void;
@@ -95,6 +102,7 @@ export function MyPostingExpandable({
   onEdit,
   onDelete,
   onDiscard,
+  onHide,
   onWithdrawApplication,
   onGoToReview,
   onGoToPayout,
@@ -1917,9 +1925,21 @@ export function MyPostingExpandable({
                               { text: 'Cancel', style: 'cancel' },
                               {
                                 text: 'Hide',
-                                onPress: () => {
+                                onPress: async () => {
+                                  // onHide persists the hide (see
+                                  // lib/utils/hunter-hidden-bounties.ts) and
+                                  // removes this bounty from the caller's list
+                                  // state — without that write, this was just
+                                  // component-local state that reappeared on
+                                  // the next remount (issue #779).
+                                  try {
+                                    await onHide?.();
+                                  } catch (err) {
+                                    console.error('Error hiding bounty:', err);
+                                    Alert.alert('Error', 'Failed to hide bounty. Please try again.');
+                                    return;
+                                  }
                                   setHiddenByUser(true);
-                                  onRefresh?.();
                                 },
                               },
                             ]
@@ -1941,9 +1961,15 @@ export function MyPostingExpandable({
                               {
                                 text: 'Remove',
                                 style: 'destructive',
-                                onPress: () => {
+                                onPress: async () => {
+                                  try {
+                                    await onHide?.();
+                                  } catch (err) {
+                                    console.error('Error removing bounty from list:', err);
+                                    Alert.alert('Error', 'Failed to remove bounty. Please try again.');
+                                    return;
+                                  }
                                   setHiddenByUser(true);
-                                  onRefresh?.();
                                 },
                               },
                             ]
