@@ -773,15 +773,37 @@ Deno.serve(async (req: Request) => {
         if (!bountyId)
           return jsonResponse(errorPayload('bountyId is required', 'bounty_id_required'), 400);
 
-        // Verify the caller is the bounty owner (user_id is the canonical owner column)
+        // Authorize the caller. The poster owns the escrow, but they are not
+        // always the one who triggers the refund: when the POSTER requests a
+        // cancellation, the accepted hunter is the party who accepts it, and
+        // bounty_cancellations' RLS requires the responder to be someone other
+        // than the requester. Gating on ownership alone made every
+        // poster-initiated cancellation unrefundable (403 not_bounty_owner),
+        // which stranded the escrow while the bounty went to `cancelled`.
         const { data: bountyRow, error: bountyErr } = await supabase
           .from('bounties')
-          .select('user_id')
+          .select('user_id, accepted_by')
           .eq('id', bountyId)
           .single();
         if (bountyErr || !bountyRow)
           return jsonResponse(errorPayload('Bounty not found', 'bounty_not_found'), 404);
-        if ((bountyRow as { user_id: string }).user_id !== userId) {
+
+        const bounty = bountyRow as { user_id: string; accepted_by: string | null };
+        const isOwner = bounty.user_id === userId;
+        let isRespondingHunter = false;
+        if (!isOwner && bounty.accepted_by === userId) {
+          // Only while an open cancellation request exists — the hunter has no
+          // standing to refund a bounty nobody asked to cancel.
+          const { data: pendingCancellation } = await supabase
+            .from('bounty_cancellations')
+            .select('id')
+            .eq('bounty_id', bountyId)
+            .eq('status', 'pending')
+            .limit(1)
+            .maybeSingle();
+          isRespondingHunter = !!pendingCancellation;
+        }
+        if (!isOwner && !isRespondingHunter) {
           return jsonResponse(
             errorPayload('Unauthorized to refund funds', 'not_bounty_owner'),
             403
@@ -804,7 +826,7 @@ Deno.serve(async (req: Request) => {
         if (existingSettlement) {
           const settlement = existingSettlement as WalletTransaction;
           const isPending = settlement.status === 'pending';
-          if (isPending && settlement.type === 'refund' && settlement.user_id === userId) {
+          if (isPending && settlement.type === 'refund' && settlement.user_id === bounty.user_id) {
             // Recovery path: a prior attempt inserted the pending transaction but the
             // process crashed before the balance credit and status promotion could both
             // commit. apply_refund_tx atomically promotes the status AND credits the
@@ -816,7 +838,7 @@ Deno.serve(async (req: Request) => {
               'apply_refund_tx',
               {
                 p_tx_id: settlement.id,
-                p_user_id: userId,
+                p_user_id: settlement.user_id,
                 p_amount: recoveryAmount,
               }
             );
@@ -888,9 +910,12 @@ Deno.serve(async (req: Request) => {
             404
           );
 
+        // The refund goes back to whoever funded the escrow — the poster — which
+        // is not the caller when a hunter accepts a poster's cancellation.
+        const refundRecipientId = (escrowTx as WalletTransaction).user_id ?? bounty.user_id;
         const escrowAmount = Math.abs((escrowTx as WalletTransaction).amount);
         const refundAmount = Math.round(((escrowAmount * refundPercentage) / 100) * 100) / 100;
-        const effectiveKey = idempotencyKey || `refund_${bountyId}_${userId}`;
+        const effectiveKey = idempotencyKey || `refund_${bountyId}_${refundRecipientId}`;
 
         // Insert refund transaction as 'pending' first; promote to 'completed' only after
         // the balance update succeeds. This prevents an orphaned 'completed' record from
@@ -899,7 +924,7 @@ Deno.serve(async (req: Request) => {
           .from('wallet_transactions')
           .insert([
             {
-              user_id: userId,
+              user_id: refundRecipientId,
               bounty_id: bountyId,
               type: 'refund',
               amount: refundAmount,
@@ -933,7 +958,7 @@ Deno.serve(async (req: Request) => {
         // transaction with an already-credited balance (which would double-credit on retry).
         const { data: refundResult, error: refundRpcErr } = await supabase.rpc('apply_refund_tx', {
           p_tx_id: (refundTxRow as WalletTransaction).id,
-          p_user_id: userId,
+          p_user_id: refundRecipientId,
           p_amount: refundAmount,
         });
         if (refundRpcErr) {

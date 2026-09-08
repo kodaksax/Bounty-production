@@ -39,6 +39,7 @@ export const cancellationService = {
       }
 
       const isForHonor = Boolean(bounty.is_for_honor);
+      const previousStatus = bounty.status;
       const normalizedReason = this.composeReasonWithCategory(reason, reasonCategory);
       const nowIso = new Date().toISOString();
 
@@ -75,6 +76,17 @@ export const cancellationService = {
 
       if (error) {
         logger.error('Error creating cancellation request', { error, cancellationData });
+        // The status flip above has already landed. Without putting it back, a
+        // failed insert leaves the bounty in `cancellation_requested` with no
+        // request for anyone to accept or reject — a dead end for both sides
+        // that no screen in the app can clear.
+        const reverted = await bountyService.update(bountyId, { status: previousStatus });
+        if (!reverted) {
+          logger.error('Failed to revert bounty status after cancellation insert failed', {
+            bountyId,
+            previousStatus,
+          });
+        }
         throw error;
       }
 
