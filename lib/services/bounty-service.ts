@@ -646,6 +646,13 @@ export const bountyService = {
   async getAll(options?: {
     status?: string;
     userId?: string;
+    /**
+     * Hunter-side filter: bounties this user was accepted to work on
+     * (`bounties.accepted_by`), as opposed to `userId`, which filters by the
+     * poster. Use it for "work completed" views; combining both would ask for
+     * bounties a user posted *and* worked, which never happens.
+     */
+    hunterId?: string;
     workType?: 'online' | 'in_person';
     limit?: number;
     offset?: number;
@@ -685,6 +692,7 @@ export const bountyService = {
 
         if (options?.status) query = query.eq('status', options.status);
         if (options?.userId) query = query.eq('poster_id', options.userId);
+        if (options?.hunterId) query = query.eq('accepted_by', options.hunterId);
         if (options?.workType) query = query.eq('work_type', options.workType);
         if (options?.statuses && options.statuses.length > 0) {
           query = query.in('status', options.statuses);
@@ -724,6 +732,7 @@ export const bountyService = {
 
       if (options?.status) params.append('status', options.status);
       if (options?.userId) params.append('poster_id', options.userId);
+      if (options?.hunterId) params.append('accepted_by', options.hunterId);
       if (options?.workType) params.append('work_type', options.workType);
       if (options?.limit != null) params.append('limit', String(options.limit));
       if (options?.offset != null) params.append('offset', String(options.offset));
@@ -735,6 +744,13 @@ export const bountyService = {
       }
       const json = await response.json();
       let list = Array.isArray(json) ? (json as Bounty[]) : [];
+      // Re-apply the hunter filter locally: the REST fallback may not honour
+      // the query param, and silently returning other people's work here would
+      // be worse than returning nothing.
+      if (options?.hunterId) list = list.filter(b => b.accepted_by === options.hunterId);
+      if (options?.statuses && options.statuses.length > 0) {
+        list = list.filter(b => options.statuses!.includes(String(b.status)));
+      }
       if (!options?.includeArchived) list = list.filter(b => b.status !== 'archived');
       if (options?.limit != null || options?.offset != null) {
         const start = options?.offset ?? 0;
@@ -1196,6 +1212,23 @@ export const bountyService = {
       includeArchived: options?.includeArchived,
       statuses: options?.statuses,
     });
+  },
+
+  /**
+   * Bounties a user completed as the hunter — the work they did, not the jobs
+   * they posted. Ordered newest-completed first.
+   */
+  async getCompletedByHunterId(hunterId: string, options?: { limit?: number }): Promise<Bounty[]> {
+    const completed = await this.getAll({
+      hunterId,
+      statuses: ['completed'],
+      limit: options?.limit ?? 50,
+    });
+    return completed.sort(
+      (a, b) =>
+        new Date(b.completed_at || b.created_at).getTime() -
+        new Date(a.completed_at || a.created_at).getTime()
+    );
   },
 
   /**

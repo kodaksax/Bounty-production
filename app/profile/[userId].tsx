@@ -26,7 +26,7 @@ import {
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
-import { ProfileBountyHistorySection } from "../../components/profile-bounty-history-section";
+import { ProfileBountyTabs } from "../../components/profile-bounty-history-section";
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
 import { BrandingLogo } from "../../components/ui/branding-logo";
@@ -579,6 +579,10 @@ export default function UserProfileScreen() {
           )}
         </View>
 
+        {/* Completed work — kept near the top, under the identity block and its
+            actions, so the first thing a visitor sees is what this user has done */}
+        <ProfileBountyTabs userId={userId} isOwnProfile={isOwnProfile} />
+
         {/* Email Verification Badge + Resend Prompt (own profile only) */}
         {isOwnProfile && (
           <View style={styles.verificationSection}>
@@ -681,8 +685,6 @@ export default function UserProfileScreen() {
         {/* Portfolio */}
         <PortfolioSection userId={userId} isOwnProfile={isOwnProfile} />
 
-        {/* Bounty history — respects moderation/removal via the RPC-backed stats hook's underlying query filter */}
-        <ProfileBountyHistorySection userId={userId} isOwnProfile={isOwnProfile} />
       </ScrollView>
 
       {/* Report Modal */}

@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConnectionStatus } from "components/connection-status";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
-import { ProfileBountyHistorySection } from "components/profile-bounty-history-section";
+import { ProfileBountyTabs } from "components/profile-bounty-history-section";
 import { SkillsetChips } from "components/skillset-chips";
 import { BrandingLogo } from "components/ui/branding-logo";
 import { MilestoneBadgeChips } from "components/ui/milestone-badge-chips";
@@ -355,6 +355,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         )}
 
 
+        {/* Completed work / open postings, as swipeable tabs */}
+        <ProfileBountyTabs userId={profileUuid} isOwnProfile={isOwnProfile} />
+
         {/* Skillsets - simplified chip display */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -387,9 +390,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             }}
           />
         </View>
-
-        {/* Bounties Posted */}
-        <ProfileBountyHistorySection userId={profileUuid} isOwnProfile={isOwnProfile} />
 
         {/* Verification + Milestone Badges */}
         <View style={styles.section}>
