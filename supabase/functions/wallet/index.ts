@@ -803,7 +803,9 @@ Deno.serve(async (req: Request) => {
             .limit(1)
             .maybeSingle();
           isRespondingHunter = !!pendingCancellation;
-          if (isRespondingHunter) {
+          if (pendingCancellation) {
+            // The hunter never gets to choose the refund split — it is whatever
+            // the poster committed to when they filed the request.
             const storedRefundPct = Number(pendingCancellation.refund_percentage);
             refundPercentage = Number.isFinite(storedRefundPct)
               ? Math.min(100, Math.max(0, storedRefundPct))
