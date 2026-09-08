@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { type Href, useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
@@ -14,7 +14,7 @@ import { QuickStepLayout } from './QuickStepLayout';
 interface StepPayProps {
   draft: BountyDraft;
   onUpdate: (data: Partial<BountyDraft>) => void;
-  onNext: () => void;
+  onNext: (payment: Pick<BountyDraft, 'amount' | 'isForHonor'>) => void;
   onBack: () => void;
   step: number;
   totalSteps: number;
@@ -67,7 +67,18 @@ export function StepPay({
   const { balance } = useWallet();
   const [error, setError] = useState<string | null>(null);
 
-  const isCustom = !draft.isForHonor && draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount);
+  // Mirror of the amount/honor the poster has committed on this screen, updated
+  // synchronously by every change handler. The CTA press reads this instead of
+  // the `draft` prop, so a tap in the same frame as the last keystroke still
+  // sees the typed amount rather than a value the parent has not propagated
+  // back yet — the race that made the first Post Bounty tap do nothing.
+  const committedRef = useRef({ amount: draft.amount, isForHonor: draft.isForHonor });
+
+  // Keep the mirror current when the draft changes from outside these handlers
+  // (an async draft load on mount, or a back-and-forward remount).
+  useEffect(() => {
+    committedRef.current = { amount: draft.amount, isForHonor: draft.isForHonor };
+  }, [draft.amount, draft.isForHonor]);
 
   const handleHonorToggle = () => {
     const next = !draft.isForHonor;
@@ -83,7 +94,9 @@ export function StepPay({
       });
     }
     setError(null);
-    onUpdate({ isForHonor: next, amount: next ? 0 : draft.amount });
+    const nextAmount = next ? 0 : draft.amount;
+    committedRef.current = { amount: nextAmount, isForHonor: next };
+    onUpdate({ isForHonor: next, amount: nextAmount });
   };
 
   const handlePreset = (preset: number) => {
@@ -93,23 +106,31 @@ export function StepPay({
     // for money only if and when they accept an applicant. Routing to the
     // top-up gate here would reintroduce, at the amount step, exactly the
     // activation block that deferring the charge exists to remove.
+    committedRef.current = { amount: preset, isForHonor: false };
     onUpdate({ amount: preset, isForHonor: false });
   };
 
   const handleCustomAmount = (value: string) => {
     const digits = value.replace(/[^0-9]/g, '');
+    const amount = digits ? parseInt(digits, 10) : 0;
     setError(null);
-    onUpdate({ amount: digits ? parseInt(digits, 10) : 0, isForHonor: false });
+    committedRef.current = { amount, isForHonor: false };
+    onUpdate({ amount, isForHonor: false });
   };
 
   const handleContinue = () => {
-    const amountError = validateAmount(draft.amount, draft.isForHonor);
+    // Read the committed value, not the `draft` prop: the prop can be one tick
+    // behind the last keystroke, and the CTA is intentionally never disabled,
+    // so this handler must see the amount the poster actually typed.
+    const { amount, isForHonor } = committedRef.current;
+
+    const amountError = validateAmount(amount, isForHonor);
     if (amountError) {
       setError(amountError);
       return;
     }
 
-    const amountCovered = !draft.isForHonor && draft.amount > 0 && balance >= draft.amount;
+    const amountCovered = !isForHonor && amount > 0 && balance >= amount;
 
     // No balance gate here. Posting never debits the wallet, so an amount the
     // poster cannot currently cover is a perfectly valid offer to publish —
@@ -120,9 +141,9 @@ export function StepPay({
 
     analyticsService.trackEvent('amount_set', {
       surface: 'create_flow',
-      amount: draft.isForHonor ? 0 : draft.amount,
-      isForHonor: draft.isForHonor,
-      method: isCustom ? 'custom' : 'preset',
+      amount: isForHonor ? 0 : amount,
+      isForHonor,
+      method: !isForHonor && amount > 0 && !AMOUNT_PRESETS.includes(amount) ? 'custom' : 'preset',
       category: draft.category || 'none',
       balance,
       balanceCovered: amountCovered,
@@ -131,18 +152,17 @@ export function StepPay({
     if (amountCovered) {
       analyticsService.trackEvent('payment_attached', {
         surface: 'create_flow',
-        amount: draft.amount,
+        amount,
         source: 'existing_balance',
         architecture: 1,
       });
     }
 
-    onNext();
+    onNext({ amount, isForHonor });
   };
 
   const showBalanceWarning =
     !draft.isForHonor && draft.amount > 0 && !validateBalance(draft.amount, balance, false);
-  const isValid = draft.isForHonor || draft.amount >= 1;
 
   return (
     <QuickStepLayout
@@ -151,7 +171,10 @@ export function StepPay({
       onBack={onBack}
       title="How much will you pay?"
       ctaLabel={isSubmitting ? 'Posting…' : ctaLabel}
-      ctaDisabled={!isValid}
+      // The CTA stays pressable below $1 on purpose: disabling it swallows a tap
+      // that lands in the same frame as the first digit. handleContinue shows
+      // the amount validation error instead. `ctaBusy` still blocks a second
+      // tap while a publish is in flight.
       ctaBusy={isSubmitting}
       onCta={handleContinue}
     >
