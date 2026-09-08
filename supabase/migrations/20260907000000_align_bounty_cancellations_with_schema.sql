@@ -37,8 +37,7 @@ ALTER TABLE public.bounty_cancellations
   ALTER COLUMN created_at SET NOT NULL;
 
 ALTER TABLE public.bounty_cancellations
-  ALTER COLUMN resolved_at TYPE timestamptz USING resolved_at AT TIME ZONE 'UTC',
-  ALTER COLUMN requested_at TYPE timestamptz USING requested_at AT TIME ZONE 'UTC';
+  ALTER COLUMN resolved_at TYPE timestamptz USING resolved_at AT TIME ZONE 'UTC';
 
 -- 4. requested_by is a legacy NOT NULL column with no default that nothing in
 --    the codebase writes; it would have been the next insert failure after

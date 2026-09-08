@@ -599,7 +599,7 @@ function makeStyles(theme: AppTheme) {
     supportButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.info,
+      backgroundColor: '#1D4ED8',
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 8,

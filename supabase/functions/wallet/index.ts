@@ -768,7 +768,7 @@ Deno.serve(async (req: Request) => {
         // Clamp to (0, 100]; default to 100 (full refund) when not provided.
         const rawRefundPct =
           typeof body.refundPercentage === 'number' ? body.refundPercentage : 100;
-        const refundPercentage = Math.min(100, Math.max(0, rawRefundPct));
+        let refundPercentage = Math.min(100, Math.max(0, rawRefundPct));
 
         if (!bountyId)
           return jsonResponse(errorPayload('bountyId is required', 'bounty_id_required'), 400);
@@ -796,12 +796,19 @@ Deno.serve(async (req: Request) => {
           // standing to refund a bounty nobody asked to cancel.
           const { data: pendingCancellation } = await supabase
             .from('bounty_cancellations')
-            .select('id')
+            .select('id, requester_id, refund_percentage')
             .eq('bounty_id', bountyId)
             .eq('status', 'pending')
+            .eq('requester_id', bounty.user_id)
             .limit(1)
             .maybeSingle();
           isRespondingHunter = !!pendingCancellation;
+          if (isRespondingHunter) {
+            const storedRefundPct = Number(pendingCancellation.refund_percentage);
+            refundPercentage = Number.isFinite(storedRefundPct)
+              ? Math.min(100, Math.max(0, storedRefundPct))
+              : 100;
+          }
         }
         if (!isOwner && !isRespondingHunter) {
           return jsonResponse(
