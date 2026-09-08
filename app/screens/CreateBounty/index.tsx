@@ -354,17 +354,18 @@ export function CreateBountyFlow({
   };
 
   /** Step 2's CTA. Snapshots the draft first — publishing clears it. */
-  const handlePublishFromAmountStep = () => {
+  const handlePublishFromAmountStep = (payment: Pick<BountyDraft, 'amount' | 'isForHonor'>) => {
     // Backstop so a publish can never outrun its own funnel start — every
     // realistic path here already went through handleNext.
     markComposerStarted('publish');
-    publishedDraftRef.current = draft;
+    const publishDraft = { ...draft, ...payment };
+    publishedDraftRef.current = publishDraft;
     // handlePublish is synchronous: deferred-funding eligibility is prefetched
     // when the amount is chosen, precisely so the tap does not wait on a
     // round-trip before showing either the funding gate or the submit spinner.
     // Failures inside the submit it kicks off are surfaced by useBountyPublish's
     // onError / ErrorBanner.
-    handlePublish();
+    handlePublish(publishDraft);
   };
 
   /** Open one of the optional-detail screens over the confirmation screen. */

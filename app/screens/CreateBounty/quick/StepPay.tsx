@@ -12,7 +12,7 @@ import { QuickStepLayout } from './QuickStepLayout';
 interface StepPayProps {
   draft: BountyDraft;
   onUpdate: (data: Partial<BountyDraft>) => void;
-  onNext: () => void;
+  onNext: (payment: Pick<BountyDraft, 'amount' | 'isForHonor'>) => void;
   onBack: () => void;
   step: number;
   totalSteps: number;
@@ -155,7 +155,7 @@ export function StepPay({
       });
     }
 
-    onNext();
+    onNext({ amount, isForHonor });
   };
 
   const showBalanceWarning =

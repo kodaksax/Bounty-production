@@ -78,7 +78,7 @@ describe('StepPay — type-then-immediate-submit', () => {
     fireEvent.press(getByLabelText('Post Bounty'));
 
     expect(onUpdate).toHaveBeenCalledWith({ amount: 50, isForHonor: false });
-    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledWith({ amount: 50, isForHonor: false });
     expect(mockTrackEvent).toHaveBeenCalledWith(
       'amount_set',
       expect.objectContaining({ amount: 50, method: 'custom' })

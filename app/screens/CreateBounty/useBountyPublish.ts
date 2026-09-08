@@ -128,6 +128,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // the wrong funding expectation, so it has to be the ref.
   const { variant: fundingVariant } = useDeferredFundingVariant();
   const deferredGrantRef = useRef(false);
+  const publishDraftRef = useRef(draft);
 
   /**
    * Whether this bounty will be posted unfunded — PREFETCHED, not resolved on
@@ -202,6 +203,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     reset: resetSubmitError,
   } = useFormSubmission(
     async () => {
+      const publishDraft = publishDraftRef.current;
       // Canonical `bounty_submitted` — the poster committed a publish attempt.
       // Fires once per create attempt (including a retry) BEFORE the
       // create/escrow round-trip, so bounty_published ÷ bounty_submitted is
@@ -209,8 +211,8 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       analyticsService.trackEvent('bounty_submitted', {
         surface,
         role: 'poster',
-        is_for_honor: draft.isForHonor,
-        amount: draft.isForHonor ? 0 : draft.amount,
+        is_for_honor: publishDraft.isForHonor,
+        amount: publishDraft.isForHonor ? 0 : publishDraft.amount,
       });
 
       if (!canPostBounties) {
@@ -220,7 +222,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       }
 
       const useStripeNativePayments =
-        !draft.isForHonor && draft.amount > 0 && shouldUseStripeNativeFunding();
+        !publishDraft.isForHonor && publishDraft.amount > 0 && shouldUseStripeNativeFunding();
 
       // publish() resolves this immediately before calling submit(), so the ref
       // is current here. retry() re-runs the SAME publish attempt and correctly
@@ -229,18 +231,22 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // which is also correct: that poster has just pre-funded.
       const deferFunding = deferredGrantRef.current;
 
-      if (!deferFunding && !useStripeNativePayments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
+      if (
+        !deferFunding &&
+        !useStripeNativePayments &&
+        !validateBalance(publishDraft.amount, balance, publishDraft.isForHonor)
+      ) {
         analyticsService.trackEvent('post_amount_blocked_by_balance', {
           surface,
-          attemptedAmount: draft.amount,
+          attemptedAmount: publishDraft.amount,
           balance,
-          shortfall: Number((draft.amount - balance).toFixed(2)),
+          shortfall: Number((publishDraft.amount - balance).toFixed(2)),
           method: 'publish',
         });
-        throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
+        throw new Error(getInsufficientBalanceMessage(publishDraft.amount, balance));
       }
 
-      const { bounty: createdBounty, created } = await bountyService.createBounty(draft, {
+      const { bounty: createdBounty, created } = await bountyService.createBounty(publishDraft, {
         fundingMode: deferFunding ? 'at_accept' : 'at_post',
       });
       let paymentArchitectureVersion: 1 | 2 | 3 = 1;
@@ -280,7 +286,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // Skip the post-time escrow for a granted deferred bounty. The DB trigger
       // has already skipped its own debit, and calling createEscrow here would
       // charge the poster at exactly the moment the experiment exists to avoid.
-      if (created && !draft.isForHonor && draft.amount > 0 && !postedUnfunded) {
+      if (created && !publishDraft.isForHonor && publishDraft.amount > 0 && !postedUnfunded) {
         try {
           await analyticsService.trackEvent('payment_architecture_routed', {
             bountyId: String(createdBounty.id),
@@ -317,7 +323,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
               await analyticsService.trackEvent('payment_initiated', {
                 bountyId: String(createdBounty.id),
                 architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
-                amount: draft.amount,
+                amount: publishDraft.amount,
               });
             } catch {
               /* analytics is best-effort */
@@ -350,7 +356,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
               await analyticsService.trackEvent('escrow_funded', {
                 bountyId: String(createdBounty.id),
                 architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
-                amount: draft.amount,
+                amount: publishDraft.amount,
               });
             } catch {
               /* analytics is best-effort */
@@ -383,12 +389,17 @@ export function useBountyPublish(params: UseBountyPublishParams) {
           }
         } else {
           try {
-            await createEscrow(createdBounty.id, draft.amount, draft.title, sessionUserId ?? '');
+            await createEscrow(
+              createdBounty.id,
+              publishDraft.amount,
+              publishDraft.title,
+              sessionUserId ?? ''
+            );
             try {
               await analyticsService.trackEvent('escrow_funded', {
                 bountyId: String(createdBounty.id),
                 architecture: 'v1',
-                amount: draft.amount,
+                amount: publishDraft.amount,
               });
             } catch {
               /* analytics is best-effort */
@@ -431,12 +442,12 @@ export function useBountyPublish(params: UseBountyPublishParams) {
           analyticsService.trackEvent('bounty_posted_unfunded', {
             surface,
             bountyId: String(createdBounty.id),
-            amountBucket: amountBucket(draft.amount),
+            amountBucket: amountBucket(publishDraft.amount),
             fundingMode: 'at_accept',
             variant: fundingVariant,
             firstBounty: true,
-            category: draft.category || 'none',
-            workType: draft.workType,
+            category: publishDraft.category || 'none',
+            workType: publishDraft.workType,
             platform: Platform.OS,
           });
         }
@@ -449,15 +460,15 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // see PublishedBountyMeta. This hook deliberately no longer emits a
       // terminal event of its own.
       const meta: PublishedBountyMeta = {
-        amountCents: toCents(draft.isForHonor ? 0 : draft.amount),
-        category: draft.category || 'other',
+        amountCents: toCents(publishDraft.isForHonor ? 0 : publishDraft.amount),
+        category: publishDraft.category || 'other',
         architecture: paymentArchitectureVersion,
         surface,
         bountyId: String(createdBounty.id),
-        amountDollars: draft.isForHonor ? 0 : draft.amount,
-        isForHonor: draft.isForHonor,
-        funded: !draft.isForHonor && draft.amount > 0 && !postedUnfunded,
-        workType: draft.workType,
+        amountDollars: publishDraft.isForHonor ? 0 : publishDraft.amount,
+        isForHonor: publishDraft.isForHonor,
+        funded: !publishDraft.isForHonor && publishDraft.amount > 0 && !postedUnfunded,
+        workType: publishDraft.workType,
         queuedOffline: !isOnline,
       };
       const finish = () => onPublished(createdBounty.id.toString(), meta);
@@ -516,13 +527,16 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // instead of the throw/Alert error path (submit's own check stays as a
   // safety net for anything that reaches it despite this gate).
   /** The pre-experiment publish decision, unchanged and fully synchronous. */
-  const publishWithBalanceGate = (useStripeNativePayments: boolean) => {
-    if (!useStripeNativePayments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
+  const publishWithBalanceGate = (publishDraft: BountyDraft, useStripeNativePayments: boolean) => {
+    if (
+      !useStripeNativePayments &&
+      !validateBalance(publishDraft.amount, balance, publishDraft.isForHonor)
+    ) {
       analyticsService.trackEvent('post_amount_blocked_by_balance', {
         surface,
-        attemptedAmount: draft.amount,
+        attemptedAmount: publishDraft.amount,
         balance,
-        shortfall: Number((draft.amount - balance).toFixed(2)),
+        shortfall: Number((publishDraft.amount - balance).toFixed(2)),
         method: 'publish',
       });
       setInsufficientBalanceOrigin('publish');
@@ -532,9 +546,10 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     submit();
   };
 
-  const publish = () => {
+  const publish = (publishDraft: BountyDraft = draft) => {
+    publishDraftRef.current = publishDraft;
     const useStripeNativePayments =
-      !draft.isForHonor && draft.amount > 0 && shouldUseStripeNativeFunding();
+      !publishDraft.isForHonor && publishDraft.amount > 0 && shouldUseStripeNativeFunding();
 
     // Fully synchronous: the eligibility answer was prefetched when the amount
     // was chosen (see deferredEligibleRef). A poster whose bounty defers must
@@ -548,8 +563,8 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     // insert if it independently decides the bounty defers.
     const deferred =
       !useStripeNativePayments &&
-      !draft.isForHonor &&
-      draft.amount > 0 &&
+      !publishDraft.isForHonor &&
+      publishDraft.amount > 0 &&
       deferredEligibleRef.current === true;
 
     deferredGrantRef.current = deferred;
@@ -558,7 +573,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       submit();
       return;
     }
-    publishWithBalanceGate(useStripeNativePayments);
+    publishWithBalanceGate(publishDraft, useStripeNativePayments);
   };
 
   const onTopUpComplete = () => {
