@@ -100,6 +100,9 @@ export function markBountyRemovedLocally(
 ): void {
   if (id == null) return;
   const at = Date.now();
+  for (const [key, removedAt] of removedBounties) {
+    if (at - removedAt > REMOVED_BOUNTY_TTL_MS) removedBounties.delete(key);
+  }
   for (const scope of scopes) removedBounties.set(registryKey(id, scope), at);
 }
 
