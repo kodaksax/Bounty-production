@@ -70,6 +70,7 @@ export function MessengerScreen({
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
   const router = useRouter()
+  const isStandalone = !onNavigate
   const { theme } = useAppThemeContext()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } =
     useConversations()
@@ -230,7 +231,19 @@ export function MessengerScreen({
         style={{ borderBottomColor: theme.border, backgroundColor: theme.background }}
       >
         <View className="flex-row justify-between items-center">
-          <BrandingLogo size="medium" />
+          <View className="flex-row items-center">
+            {isStandalone && (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                className="mr-3 p-1"
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <MaterialIcons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+            )}
+            <BrandingLogo size="medium" />
+          </View>
           <WalletBalanceButton onPress={() => onNavigate?.("wallet")} />
         </View>
       </View>
