@@ -39,6 +39,14 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
+// Pin the posting policy so this suite exercises StepPay's submit/validation
+// wiring, not the policy hook's network read. The $1 floor keeps the
+// below-minimum assertions below exact and independent of the shipped default.
+jest.mock('../../hooks/usePostingPolicy', () => {
+  const policy = { honorPostsEnabled: true, minimumAmount: 1 };
+  return { __esModule: true, default: () => policy, usePostingPolicy: () => policy };
+});
+
 import { StepPay } from '../../app/screens/CreateBounty/quick/StepPay';
 
 function makeDraft(overrides: Partial<{ amount: number; isForHonor: boolean }> = {}) {

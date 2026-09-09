@@ -28,6 +28,15 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
+// Pin the posting policy so this suite exercises StepPay's balance-routing
+// guard in isolation. honorPostsEnabled:true keeps the for-honor path open (the
+// shipped default is the closed state), and the $1 floor keeps the amount
+// checks independent of the policy value.
+jest.mock('../../hooks/usePostingPolicy', () => {
+  const policy = { honorPostsEnabled: true, minimumAmount: 1 };
+  return { __esModule: true, default: () => policy, usePostingPolicy: () => policy };
+});
+
 import { StepPay } from '../../app/screens/CreateBounty/quick/StepPay';
 
 function makeDraft(overrides: Partial<{ amount: number; isForHonor: boolean }> = {}) {
