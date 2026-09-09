@@ -28,6 +28,14 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
+// StepPay reads the posting policy (honor option + minimum amount) from
+// usePostingPolicy, which hits Supabase. Pin it to the historical open policy
+// so the for-honor case here isn't silently rewritten to a paid $0 draft by
+// the "honor disabled" cleanup effect (the closed default).
+jest.mock('../../hooks/usePostingPolicy', () => ({
+  usePostingPolicy: () => ({ honorPostsEnabled: true, minimumAmount: 1 }),
+}));
+
 import { StepPay } from '../../app/screens/CreateBounty/quick/StepPay';
 
 function makeDraft(overrides: Partial<{ amount: number; isForHonor: boolean }> = {}) {
