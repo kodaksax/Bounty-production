@@ -364,6 +364,12 @@ export type AnalyticsEvent =
   // (a dual-emit) — de-duped into one event on 2026-08-28. Distinct from the
   // hunter-side `application_*` funnel below (different actor, different stage).
   | 'application_accepted'
+  // The POSTER opened a conversation with an applicant WITHOUT accepting them
+  // (the "Ask a question" action on ApplicantCard). Sizes P0-02: accepting used
+  // to be the only way to talk to a hunter, so a poster had to commit
+  // irreversibly to a stranger they could not question. Join to
+  // `application_accepted` on bountyId to see whether asking first converts.
+  | 'applicant_question_opened'
   // Canonical: work on an accepted bounty has begun. Emitted alongside
   // `application_accepted` once the server confirms the in_progress transition.
   | 'work_started'

@@ -7,10 +7,30 @@
 // role key as a bearer token (not just any authenticated JWT), since this
 // function resolves and emails arbitrary users given a userIds list.
 //
-// SendGrid: if SENDGRID_API_KEY is not configured (true in every environment
-// as of 2026-07-25 — no key has been provisioned yet), emails are logged to
-// the function's console instead of sent. This is intentional so the pipeline
-// is fully wired and testable before a real provider key exists.
+// Provider: Resend first, SendGrid second, neither = drop with a warning.
+// Resolved once at module scope by `pickProvider()` below.
+//
+// If no provider key is configured, emails are dropped with a warning instead
+// of sent. That was intentional while the pipeline was being built — but as of
+// 2026-09-09 STILL no key is provisioned in production, and this function is
+// invoked continuously with real, correct payloads ("New Bounty Application",
+// "Bounty Accepted!", "Message from ...") addressed to real users. Every one
+// of them is discarded.
+//
+// This is the whole of the "application alerts are push-only" finding: the
+// email channel is not missing, it is unplugged. Setting RESEND_API_KEY (and a
+// NOTIFICATION_FROM_EMAIL on a domain verified with that provider) turns it on
+// with no code change.
+//
+// SendGrid is retained as a fallback rather than deleted so that setting
+// RESEND_API_KEY is a reversible one-variable change: unset it and the
+// SendGrid path is live again, with no redeploy needed to roll back.
+//
+// Until a key exists the response reports provider:'none' with sent:0,
+// skipped:N, delivered:false and providerConfigured:false, so a caller or a
+// dashboard can tell that nothing was delivered. It previously counted console
+// lines as `sent`, which is why the gap was invisible from outside. Note that
+// `ok` deliberately stays true in that state — see the response comment below.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -55,24 +75,105 @@ function escapeHtml(s: string): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
 }
 
+// Function logs are broadly readable in the Supabase dashboard and in any
+// downstream log sink, so a recipient address logged here is PII sitting in
+// observability tooling. Outside an explicitly non-production environment we
+// log the (opaque) user id and counts only — never the address or the subject
+// line, which for a message notification can contain the sender's name.
+//
+// APP_ENV is the flag the other functions in this project already use. It is
+// unset in production, so the default is the redacted path.
+const APP_ENV = Deno.env.get('APP_ENV') ?? 'production'
+const VERBOSE_LOGGING = APP_ENV === 'development' || APP_ENV === 'local' || APP_ENV === 'staging' || APP_ENV === 'test'
+
+type ProviderName = 'resend' | 'sendgrid' | 'none'
+
+/**
+ * Resend wins when both keys are set, so cutting over is "set RESEND_API_KEY"
+ * and rolling back is "unset it" — neither needs a code change.
+ */
+function pickProvider(): { name: ProviderName; key: string | undefined } {
+  const resendKey = Deno.env.get('RESEND_API_KEY')
+  if (resendKey) return { name: 'resend', key: resendKey }
+  const sendGridKey = Deno.env.get('SENDGRID_API_KEY')
+  if (sendGridKey) return { name: 'sendgrid', key: sendGridKey }
+  return { name: 'none', key: undefined }
+}
+
+const PROVIDER = pickProvider()
+
+// The default is on bountyfinder.app — the domain that actually exists and
+// carries support@. The previous default (notifications@bountyapp.com) was a
+// domain this project does not own, so it could never have passed provider
+// domain verification and would have been rejected at send time.
+const fromEmail = Deno.env.get('NOTIFICATION_FROM_EMAIL') || 'Bounty <notifications@bountyfinder.app>'
+// Replies land on the monitored support inbox rather than an unread noreply.
+const replyToEmail = Deno.env.get('NOTIFICATION_REPLY_TO_EMAIL') || 'support@bountyfinder.app'
+
+/** `alice@example.com` -> `a***@example.com`; only ever used in verbose mode. */
+function redactEmail(email: string): string {
+  const at = email.indexOf('@')
+  if (at <= 0) return '***'
+  return `${email[0]}***${email.slice(at)}`
+}
+
+/**
+ * `NOTIFICATION_FROM_EMAIL` may be either a bare address or a display form
+ * (`Bounty <notifications@bountyfinder.app>`). Resend accepts both; SendGrid's
+ * `from.email` requires the bare address and silently 400s on the display
+ * form, so it gets the extracted one.
+ */
+function bareAddress(from: string): string {
+  const match = from.match(/<([^>]+)>/)
+  return (match ? match[1] : from).trim()
+}
+
+/**
+ * Provider error bodies are operational data, not recipient PII — a dead email
+ * channel is undebuggable without them. Truncated because provider errors can
+ * return a full HTML page on a gateway failure.
+ */
+async function providerError(label: string, resp: Response): Promise<false> {
+  const body = await resp.text().catch(() => '')
+  console.error(`[send-notification-email] ${label} error`, resp.status, body.slice(0, 300))
+  return false
+}
+
+async function sendViaResend(apiKey: string, toEmail: string, content: EmailContent, fromEmail: string): Promise<boolean> {
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: [toEmail],
+      subject: content.subject,
+      html: content.html,
+      text: content.text,
+      // Replies to a notification should reach a human, not bounce off an
+      // unmonitored sending address.
+      ...(replyToEmail ? { reply_to: replyToEmail } : {}),
+    }),
+  })
+  if (!resp.ok) return providerError('Resend', resp)
+  return true
+}
+
 async function sendViaSendGrid(apiKey: string, toEmail: string, content: EmailContent, fromEmail: string): Promise<boolean> {
   const resp = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       personalizations: [{ to: [{ email: toEmail }] }],
-      from: { email: fromEmail },
+      from: { email: bareAddress(fromEmail) },
       subject: content.subject,
       content: [
         { type: 'text/plain', value: content.text },
         { type: 'text/html', value: content.html },
       ],
+      ...(replyToEmail ? { reply_to: { email: bareAddress(replyToEmail) } } : {}),
     }),
   })
-  if (!resp.ok) {
-    console.error('[send-notification-email] SendGrid error', resp.status, await resp.text().catch(() => ''))
-    return false
-  }
+  if (!resp.ok) return providerError('SendGrid', resp)
   return true
 }
 
@@ -112,11 +213,10 @@ Deno.serve(async (req: Request) => {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
   const content = buildEmail(category, title, body, data)
-  const sendGridKey = Deno.env.get('SENDGRID_API_KEY')
-  const fromEmail = Deno.env.get('NOTIFICATION_FROM_EMAIL') || 'notifications@bountyapp.com'
 
   let sent = 0
   let failed = 0
+  let skipped = 0
   await Promise.all(targetIds.map(async (userId) => {
     try {
       const { data: userResp, error } = await supabaseAdmin.auth.admin.getUserById(userId)
@@ -126,14 +226,23 @@ Deno.serve(async (req: Request) => {
         failed++
         return
       }
-      if (sendGridKey) {
-        const ok = await sendViaSendGrid(sendGridKey, email, content, fromEmail)
+      if (PROVIDER.name === 'resend' && PROVIDER.key) {
+        const ok = await sendViaResend(PROVIDER.key, email, content, fromEmail)
+        if (ok) sent++; else failed++
+      } else if (PROVIDER.name === 'sendgrid' && PROVIDER.key) {
+        const ok = await sendViaSendGrid(PROVIDER.key, email, content, fromEmail)
         if (ok) sent++; else failed++
       } else {
-        // No provider configured — log instead of silently no-op-ing so the
-        // pipeline is visibly exercised end-to-end during testing.
-        console.log('[send-notification-email] (console fallback, no SENDGRID_API_KEY)', { to: email, subject: content.subject })
-        sent++
+        // No provider configured. Counted as `skipped`, never as `sent`: this
+        // notification did NOT reach the user, and saying otherwise is what
+        // let a dead email channel look healthy for weeks.
+        console.warn(
+          '[send-notification-email] NOT SENT — no email provider configured (set RESEND_API_KEY)',
+          VERBOSE_LOGGING
+            ? { userId, to: redactEmail(email), subject: content.subject }
+            : { userId }
+        )
+        skipped++
       }
     } catch (e) {
       console.error('[send-notification-email] send failed for user', userId, e)
@@ -141,5 +250,26 @@ Deno.serve(async (req: Request) => {
     }
   }))
 
-  return jsonResponse({ ok: failed === 0, sent, failed, provider: sendGridKey ? 'sendgrid' : 'console' })
+  if (skipped > 0) {
+    console.warn(
+      `[send-notification-email] ${skipped} notification email(s) were dropped because no email provider is configured. ` +
+      'Set RESEND_API_KEY (and a NOTIFICATION_FROM_EMAIL on a verified domain) to deliver them.'
+    )
+  }
+
+  // `ok` is scoped to request PROCESSING: it stays true when the function did
+  // everything asked of it. A missing provider key is a configuration state,
+  // not a transient error, and flipping `ok` for it would make every caller's
+  // retry/backoff/alerting treat a permanently unconfigured channel as a
+  // flapping dependency. Delivery is reported separately instead, so a caller
+  // or a dashboard can still tell that nothing reached a user.
+  return jsonResponse({
+    ok: failed === 0,
+    delivered: skipped === 0,
+    providerConfigured: PROVIDER.name !== 'none',
+    sent,
+    failed,
+    skipped,
+    provider: PROVIDER.name,
+  })
 })

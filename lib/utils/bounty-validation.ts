@@ -152,7 +152,19 @@ export function validateDescription(value: string | undefined | null): string | 
  * @param isForHonor - Whether this is an honor bounty
  * @returns Error message string if invalid, null if valid
  */
-export function validateAmount(amount: number, isForHonor: boolean): string | null {
+/**
+ * @param minimumAmount Minimum paid bounty, in dollars. Mirrors
+ *   `public.posting_policy_config.minimum_amount`, which
+ *   `trg_bounties_enforce_posting_policy` enforces at insert. Defaults to the
+ *   historical $1 floor so existing callers that do not pass it keep their
+ *   current behaviour; the composer passes the real policy value so a poster
+ *   is told the minimum here rather than being refused at publish.
+ */
+export function validateAmount(
+  amount: number,
+  isForHonor: boolean,
+  minimumAmount = 1
+): string | null {
   if (isForHonor) {
     if (amount < 0) {
       return 'Amount must be at least $0';
@@ -167,8 +179,9 @@ export function validateAmount(amount: number, isForHonor: boolean): string | nu
     return 'Please enter a valid amount';
   }
 
-  if (amount < 1) {
-    return 'The minimum bounty amount is $1.00';
+  const floor = Number.isFinite(minimumAmount) && minimumAmount > 0 ? minimumAmount : 1;
+  if (amount < floor) {
+    return `The minimum bounty amount is $${floor.toFixed(2)}`;
   }
 
   if (amount > 10000) {

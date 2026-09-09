@@ -106,6 +106,15 @@ interface WalletContextValue {
     accessToken?: string,
     options?: { silent?: boolean; force?: boolean }
   ) => Promise<void>;
+  /**
+   * Re-read balance and transactions from the server, resolving the auth token
+   * internally. Use this when the CLIENT has detected that its cached wallet
+   * state disagrees with the server — as opposed to refreshFromApi, which
+   * expects the caller to already hold a token.
+   *
+   * Returns true when a refresh actually ran (a session was available).
+   */
+  reconcileFromServer: () => Promise<boolean>;
   transactions: WalletTransactionRecord[];
   logTransaction: (
     tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }
@@ -463,13 +472,34 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // the latest implementation without forcing the auth-state effect to
   // re-subscribe if the function identity changes.
   const refreshFromApiRef =
-    useRef<(accessToken?: string, options?: { silent?: boolean }) => Promise<void> | undefined>(
-      refreshFromApi
-    );
+    useRef<
+      | ((
+          accessToken?: string,
+          options?: { silent?: boolean; force?: boolean }
+        ) => Promise<void>)
+      | undefined
+    >(refreshFromApi);
 
   useEffect(() => {
     refreshFromApiRef.current = refreshFromApi;
   }, [refreshFromApi]);
+
+  /**
+   * Server-authoritative reconcile, used when the client has spotted that its
+   * own cached wallet state contradicts the bounty's state.
+   *
+   * `force` is deliberate: the mismatch this exists for is an escrow that the
+   * server has already RELEASED while the client still shows it funded, i.e. a
+   * legitimate decrease. The optimistic-deposit guard exists to stop a stale
+   * API read masking a recent local increase, and would otherwise suppress
+   * exactly the correction we are asking for here.
+   */
+  const reconcileFromServer = useCallback(async (): Promise<boolean> => {
+    const token = await getAccessToken();
+    if (!token) return false;
+    await refreshFromApiRef.current?.(token, { silent: true, force: true });
+    return true;
+  }, [getAccessToken]);
 
   const refresh = useCallback(async () => {
     if (!mountedRef.current) return;
@@ -1314,6 +1344,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setBalance: setBalanceAndPersist,
       refresh,
       refreshFromApi,
+      reconcileFromServer,
       transactions,
       logTransaction,
       clearAllTransactions,
@@ -1334,6 +1365,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setBalanceAndPersist,
       refresh,
       refreshFromApi,
+      reconcileFromServer,
       transactions,
       logTransaction,
       clearAllTransactions,
