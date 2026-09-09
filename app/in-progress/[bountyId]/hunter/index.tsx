@@ -138,6 +138,12 @@ export default function HunterFlowIndex() {
           pathname: '/bounty/[id]/cancellation-response',
           params: { id: routeBountyId },
         } as never),
+      // The hunter is the only party who can ASK to cancel: this is their exit
+      // from work they can't finish. Approving it returns the poster's escrow
+      // in full, so it goes through the request/approve flow rather than
+      // cancelling anything outright.
+      cancel_bounty: () =>
+        router.push({ pathname: '/bounty/[id]/cancel', params: { id: routeBountyId } } as never),
       contact_support: () => router.push('/tabs/need-help-screen' as never),
     };
   }, [routeBountyId, handleMessage, router]);

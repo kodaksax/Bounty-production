@@ -497,8 +497,12 @@ function resolvePoster(args: {
           needsAttention: false,
           tone: 'progress',
           stageIndex: 1,
+          // No cancel_bounty here: a cancellation REQUEST is the hunter's exit
+          // from work they can't finish. Once a hunter is on the clock the
+          // poster's route out is a dispute, which is the flow that can settle
+          // escrow either way. See describeHunter's in_progress case.
+          secondaryActions: [action('open_dispute')],
           primaryAction: action('message', `Message ${hunter}`),
-          secondaryActions: [action('cancel_bounty'), action('open_dispute')],
         });
       }
       return finalize({
@@ -511,7 +515,7 @@ function resolvePoster(args: {
         tone: 'progress',
         stageIndex: 1,
         primaryAction: action('message', `Message ${hunter}`),
-        secondaryActions: [action('cancel_bounty'), action('open_dispute')],
+        secondaryActions: [action('open_dispute')],
       });
 
     case 'deadline_passed':
@@ -522,7 +526,7 @@ function resolvePoster(args: {
           ? `The deadline passed and ${hunter} hasn't submitted the work.`
           : 'The deadline you set passed without a hunter being selected.',
         nextStep: bounty.accepted_by
-          ? 'Message the hunter, or cancel to get your escrow back.'
+          ? 'Message the hunter, or open a dispute to get your escrow back.'
           : 'Post it again with a new deadline, or delete it and your funds return to your balance.',
         waitingOn: 'you',
         needsAttention: true,
@@ -532,7 +536,7 @@ function resolvePoster(args: {
           ? action('message', `Message ${hunter}`)
           : action('repost'),
         secondaryActions: bounty.accepted_by
-          ? [action('cancel_bounty'), action('open_dispute')]
+          ? [action('open_dispute')]
           : [action('edit'), action('delete')],
       });
 
@@ -697,7 +701,11 @@ function resolveHunter(args: {
           tone: 'action',
           stageIndex: 1,
           primaryAction: action('submit_work', 'Resubmit work'),
-          secondaryActions: [action('message', `Message ${poster}`), action('open_dispute')],
+          secondaryActions: [
+            action('message', `Message ${poster}`),
+            action('cancel_bounty', 'Request cancellation'),
+            action('open_dispute'),
+          ],
         });
       }
       return finalize({
@@ -710,7 +718,14 @@ function resolveHunter(args: {
         tone: 'action',
         stageIndex: 1,
         primaryAction: action('submit_work'),
-        secondaryActions: [action('message', `Message ${poster}`), action('open_dispute')],
+        // 'Request cancellation' is the hunter's way out of work they've taken
+        // on but can't finish. It needs the poster's (or support's) approval,
+        // and approving it returns the full escrow to the poster.
+        secondaryActions: [
+          action('message', `Message ${poster}`),
+          action('cancel_bounty', 'Request cancellation'),
+          action('open_dispute'),
+        ],
       });
 
     case 'deadline_passed':

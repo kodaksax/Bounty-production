@@ -217,8 +217,11 @@ export default function BountyDashboard() {
           params: { bountyId: routeBountyId },
         } as never),
       repost: () => router.push(POST_BOUNTY_ROUTE as never),
-      cancel_bounty: () =>
-        router.push({ pathname: '/bounty/[id]/cancel', params: { id: routeBountyId } } as never),
+      // No cancel_bounty for the poster: cancellation REQUESTS are hunter-only
+      // (see describeHunter in lib/utils/bounty-lifecycle.ts). A poster with an
+      // unaccepted bounty deletes it (refunded on the spot); once a hunter is
+      // working, the poster's route is a dispute. The poster's role here is to
+      // RESPOND to the hunter's request, below.
       respond_cancellation: () =>
         router.push({
           pathname: '/bounty/[id]/cancellation-response',

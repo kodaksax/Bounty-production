@@ -57,7 +57,20 @@ export default function CancellationRequestScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonCategory, setReasonCategory] = useState<CancellationReasonCategory>('other');
-  const [requesterType, setRequesterType] = useState<'poster' | 'hunter'>('poster');
+
+  /**
+   * A cancellation request is the HUNTER's exit from work they've taken on and
+   * can't finish — it asks the poster (or support) for release, and approving
+   * it returns the poster's escrow in full.
+   *
+   * It is deliberately not available to posters. A poster whose bounty nobody
+   * has accepted deletes it outright and is refunded on the spot; once a hunter
+   * is on the clock, the poster's route is a dispute, which is the flow that
+   * can settle escrow in either direction. Letting a poster file a request
+   * here made them both requester and beneficiary of a flow whose whole point
+   * is the other party's consent.
+   */
+  const isAcceptedHunter = !!bounty && !!userId && bounty.accepted_by === userId;
 
   useEffect(() => {
     loadBounty();
@@ -69,12 +82,6 @@ export default function CancellationRequestScreen() {
       const bountyData = await bountyService.getById(id);
       if (bountyData) {
         setBounty(bountyData);
-        // Determine if user is poster or hunter
-        if (bountyData.poster_id === userId) {
-          setRequesterType('poster');
-        } else if (bountyData.accepted_by === userId) {
-          setRequesterType('hunter');
-        }
       }
     } catch (error) {
       console.error('Error loading bounty:', error);
@@ -98,19 +105,13 @@ export default function CancellationRequestScreen() {
     try {
       setSubmitting(true);
 
-      // Calculate recommended refund percentage
-      const hasAcceptedHunter = !!bounty.accepted_by;
-      const recommendedRefund = cancellationService.calculateRecommendedRefund(
-        bounty.status,
-        hasAcceptedHunter
-      );
-
+      // The server decides the rest: it re-checks that this user really is the
+      // accepted hunter, flips the bounty status (which the hunter cannot do
+      // through RLS), and files the request at a full refund.
       const result = await cancellationService.createCancellationRequest(
         id,
         userId,
-        requesterType,
         reason,
-        recommendedRefund,
         reasonCategory
       );
 
@@ -241,11 +242,31 @@ export default function CancellationRequestScreen() {
     );
   }
 
-  const hasAcceptedHunter = !!bounty.accepted_by;
-  const recommendedRefund = cancellationService.calculateRecommendedRefund(
-    bounty.status,
-    hasAcceptedHunter
-  );
+  // Only the hunter working the bounty can ask to cancel it. Posters land here
+  // from a stale link or an older build; send them to the flow that actually
+  // fits rather than filing a request the settlement path doesn't expect.
+  if (!isAcceptedHunter) {
+    return (
+      <View style={[s.screen, s.centered, s.centeredPad]}>
+        <AlertCircle size={48} color={theme.warning} />
+        <Text style={s.stateTitle}>Not available here</Text>
+        <Text style={s.stateBody}>
+          Only the hunter working on a bounty can request its cancellation. If you posted this
+          bounty and need to stop it, open a dispute so support can settle the escrow, or delete
+          the posting if no hunter has been selected yet.
+        </Text>
+        <View style={s.stateActions}>
+          <TouchableOpacity onPress={handleContactSupport} style={[s.primaryButton, s.rowButton]}>
+            <HelpCircle size={18} color={ON_ACCENT_TEXT} />
+            <Text style={[s.primaryButtonText, s.rowButtonText]}>Contact Support</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={s.linkButton}>
+            <Text style={s.linkButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const submitDisabled = submitting || !reason.trim();
 
@@ -275,11 +296,9 @@ export default function CancellationRequestScreen() {
               <Text style={[s.calloutText, s.warningText]}>
                 {bounty.is_for_honor
                   ? 'For honor bounties are automatically cancelled after submission. We still collect your reason to improve matching and quality metrics.'
-                  : bounty.status === 'open'
-                    ? 'Full refund available as no hunter has accepted this bounty yet.'
-                    : hasAcceptedHunter
-                      ? `Estimated refund: ${recommendedRefund}% of bounty amount ($${((bounty.amount * recommendedRefund) / 100).toFixed(2)}). The other party can accept or dispute this request.`
-                      : 'This request will be reviewed and the other party will be notified.'}
+                  : `You're asking to step off this bounty. If the poster or support approves, the full $${Number(
+                      bounty.amount
+                    ).toFixed(2)} returns to their wallet and you won't be paid for it. They can also decline, or raise a dispute.`}
               </Text>
             </View>
           </View>
