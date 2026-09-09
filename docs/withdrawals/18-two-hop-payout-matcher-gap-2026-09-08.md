@@ -129,12 +129,34 @@ attaches the id first. A test in `withdrawal-payout-integrity.test.ts` pins it.
 
 Moved no money — Stripe had already paid.
 
+## 5a. Addendum, same day: `20260824010100`/`010200`/`010300` applied
+
+The remaining ADR 0001 §2 chain — the `settlement_state` column, its
+derivation trigger on both `wallet_transactions` and `bounty_payments`, and
+the backfill — turned out to have an unapplied **prerequisite** the original
+`docs/withdrawals/17` scope missed: `20260824010100_add_settlement_state.sql`
+creates the enum and column that `010200`'s trigger writes and `010300`'s
+backfill re-derives. Neither could run without it.
+
+All three were dry-run in a transaction and rolled back first (both of
+`010300`'s hard invariant checks — no settled release without a transfer id,
+no settled withdrawal without a payout id — passed silently, confirming the
+gate that matters actually fires), then applied for real and re-verified
+live: column, both triggers, and all three migration rows are present, and a
+probe update confirmed the trigger genuinely overrides a direct attempt to
+set `settlement_state` rather than merely defaulting to it.
+
+No Edge Function redeploy was needed — the column is derived in the database
+only; no application code writes it. The `wallet` function already read it
+behind a `??` fallback, so it was never actually erroring despite the column
+missing for two weeks.
+
+Live backfill result: 25 withdrawals `ledger_only` (the known historical
+set), 5 `stripe_pending`, and exactly 1 `stripe_settled` — the row repaired
+in §4 above, self-consistently confirming this doc's own fix.
+
 ## 6. Still open
 
-- **`20260824010200` / `20260824010300` (derive `settlement_state` + backfill)
-  remain unapplied**, so `settlement_state` does not exist. The deployed
-  `wallet` function selects both it and `stripe_payout_status` — worth checking
-  whether the wallet screen is currently erroring.
 - **Doc 17 §5 step 3 was never done.** `reconciliation_findings.finding_key`
   and `occurrence_count` are still NULL/1 on live rows, so the dedupe RPC is
   not in the deployed `reconciliation` function — which is why closing one
