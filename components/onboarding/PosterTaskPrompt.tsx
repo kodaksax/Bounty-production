@@ -192,14 +192,14 @@ export function PosterTaskPrompt({
           onPress={handleNext}
           disabled={posting}
           accessibilityRole="button"
-          accessibilityLabel="Post bounty, free to post"
+          accessibilityLabel="Continue to fund and post your bounty"
           accessibilityState={{ disabled: posting, busy: posting }}
         >
           {posting ? (
             <ActivityIndicator color="#052e1b" style={{ marginRight: 8 }} />
           ) : null}
           <Text style={styles.nextButtonText}>
-            {posting ? 'Posting…' : 'Post Bounty - free to post'}
+            {posting ? 'Posting…' : 'Fund & Post Bounty'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -218,7 +218,9 @@ export function PosterTaskPrompt({
           accessibilityRole="button"
           accessibilityLabel="Switch to browsing and earning instead"
         >
-          <Text style={styles.switchPathLinkText}>Looking to earn instead? Switch to Hunter</Text>
+          <Text style={styles.switchPathLinkText}>
+            Looking to earn instead? Switch to Hunter — browse and complete paid tasks
+          </Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

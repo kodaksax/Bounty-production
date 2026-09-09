@@ -141,6 +141,10 @@ export type AnalyticsEvent =
   // Sign-in screen rendered its intent-aware "why sign in / what's next" line
   // to a visitor who picked a role but hasn't authenticated yet.
   | 'onboarding_signin_context_shown'
+  // The post-role-selection screen (app/onboarding/username.tsx, framed as
+  // Sign Up) offers an explicit way out for a visitor who already has an
+  // account — this fires when they take it.
+  | 'onboarding_signin_link_tapped'
   | 'onboarding_auth_started'
   | 'onboarding_auth_completed'
   | 'onboarding_style_step_viewed'

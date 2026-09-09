@@ -80,7 +80,11 @@ export default function OnboardingWelcome() {
     analyticsService.trackEvent('role_selected', { role: intent, surface: 'onboarding' });
     trackCtaTapped(intent);
     updateData({ intent });
-    router.replace('/onboarding/username');
+    // push (not replace): keeps this screen on the stack so the next screen's
+    // back control can return here. Safe against the "signed-in user lands
+    // back on Welcome" bug this used to guard against — the redirect effect
+    // above still fires and routes any signed-in visitor away immediately.
+    router.push('/onboarding/username');
   };
 
   const handleLogIn = () => {
