@@ -66,6 +66,8 @@ export default function HunterReviewAndVerifyScreen() {
   // Attachment upload hook
   const {
     pickAttachment,
+    isUploading: isUploadingProof,
+    isPicking: isPickingProof,
   } = useAttachmentUpload({
     bucket: 'bounty-attachments',
     folder: 'proofs',
@@ -225,6 +227,20 @@ export default function HunterReviewAndVerifyScreen() {
       Alert.alert(
         'Submission Locked',
         'A dispute is currently open for this bounty. Submissions are paused until the dispute is resolved by an admin.'
+      );
+      return;
+    }
+
+    // `proofItems` is only appended to inside the upload hook's `onUploaded`
+    // callback, which fires after the file finishes uploading. Without this
+    // guard, tapping Submit right after picking a photo would submit the
+    // completion before that callback ran — the just-picked proof file
+    // would silently be left out, with no error and no indication anything
+    // was wrong.
+    if (isUploadingProof || isPickingProof) {
+      Alert.alert(
+        'Upload in Progress',
+        'Please wait for your proof file to finish uploading before submitting.'
       );
       return;
     }
@@ -541,23 +557,41 @@ export default function HunterReviewAndVerifyScreen() {
               <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute." />
             )}
             <TouchableOpacity
-              style={[styles.addProofButton, hasActiveDispute && styles.submitButtonDisabled]}
+              style={[styles.addProofButton, (hasActiveDispute || isUploadingProof || isPickingProof) && styles.submitButtonDisabled]}
               onPress={handleAddProof}
-              disabled={hasActiveDispute}
+              disabled={hasActiveDispute || isUploadingProof || isPickingProof}
             >
-              <MaterialIcons name={hasActiveDispute ? 'lock' : 'add'} size={20} color="#fff" />
-              <Text style={styles.addProofText}>{hasActiveDispute ? 'Locked (Dispute Open)' : 'Add Proof'}</Text>
+              {isUploadingProof || isPickingProof ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <MaterialIcons name={hasActiveDispute ? 'lock' : 'add'} size={20} color="#fff" />
+              )}
+              <Text style={styles.addProofText}>
+                {hasActiveDispute
+                  ? 'Locked (Dispute Open)'
+                  : isUploadingProof
+                    ? 'Uploading…'
+                    : isPickingProof
+                      ? 'Selecting…'
+                      : 'Add Proof'}
+              </Text>
             </TouchableOpacity>
             <View style={{ height: 12 }} />
             <TouchableOpacity
-              style={[styles.submitButton, (isSubmitting || hasActiveDispute) && styles.submitButtonDisabled]}
+              style={[styles.submitButton, (isSubmitting || hasActiveDispute || isUploadingProof || isPickingProof) && styles.submitButtonDisabled]}
               onPress={handleRequestReview}
-              disabled={isSubmitting || hasActiveDispute}
+              disabled={isSubmitting || hasActiveDispute || isUploadingProof || isPickingProof}
             >
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.submitButtonText}>{hasActiveDispute ? 'Locked (Dispute Open)' : 'Submit'}</Text>
+                <Text style={styles.submitButtonText}>
+                  {hasActiveDispute
+                    ? 'Locked (Dispute Open)'
+                    : isUploadingProof || isPickingProof
+                      ? 'Uploading proof…'
+                      : 'Submit'}
+                </Text>
               )}
             </TouchableOpacity>
             <View style={{ height: 12 }} />
