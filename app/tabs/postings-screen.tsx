@@ -62,6 +62,7 @@ import {
 } from '../../hooks/useBountyStatusFilters'
 import { BountySectionHeader } from '../../components/ui/bounty-section-header'
 import { useBountyForm } from '../../hooks/useBountyForm'
+import { useAskApplicant } from '../../hooks/useAskApplicant'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
@@ -511,6 +512,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     setIsLoading,
     setError,
   })
+
+  // P0-02: let a poster ask an applicant a question BEFORE committing to them.
+  // ApplicantCard already renders an "Ask a question" button whenever
+  // onRequestMoreInfo is supplied; until now neither list passed it, so the
+  // button never appeared and accepting was the only way to open a thread.
+  const { handleAskApplicant } = useAskApplicant({ bountyRequests })
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.
@@ -1035,11 +1042,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       request={request}
       onAccept={handleAcceptRequest}
       onReject={handleRejectRequest}
+      onRequestMoreInfo={handleAskApplicant}
       // Ensure returning from profile restores the Postings screen to the
       // Requests tab reliably by directing BountyApp to open postings + requests.
       referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=requests`}
     />
-  ), [handleAcceptRequest, handleRejectRequest]);
+  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant]);
 
   if (alternateScreen) {
     return alternateScreen

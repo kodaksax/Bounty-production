@@ -52,6 +52,7 @@ import {
   useBountyStatusFilters,
 } from '../../hooks/useBountyStatusFilters'
 import { BountySectionHeader } from '../../components/ui/bounty-section-header'
+import { useAskApplicant } from '../../hooks/useAskApplicant'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { getBountyFundingRequirement } from '../../lib/services/bounty-funding-service'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -403,6 +404,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     setIsLoading,
     setError,
   })
+
+  // P0-02: let a poster ask an applicant a question BEFORE committing to them.
+  // ApplicantCard already renders an "Ask a question" button whenever
+  // onRequestMoreInfo is supplied; until now neither list passed it, so the
+  // button never appeared and accepting was the only way to open a thread.
+  const { handleAskApplicant } = useAskApplicant({ bountyRequests })
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.
@@ -896,11 +903,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       request={request}
       onAccept={handleAcceptRequest}
       onReject={handleRejectRequest}
+      onRequestMoreInfo={handleAskApplicant}
       // Ensure returning from profile restores this screen to the Requests tab
       // reliably by directing BountyApp to open messages + requests.
       referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=requests`}
     />
-  ), [handleAcceptRequest, handleRejectRequest]);
+  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant]);
 
   if (showArchivedBounties) {
     return <ArchivedBountiesScreen onBack={() => setShowArchivedBounties(false)} />
