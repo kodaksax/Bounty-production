@@ -760,8 +760,24 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         // Capture the PaymentIntent (confirms the charge)
         const capturedIntent = await stripe.paymentIntents.capture(escrowId);
 
-        // Calculate platform fee (10%)
-        const platformFeePercentage = 10;
+        // Platform fee. This route used to hardcode 10 while every other
+        // release path (the wallet function, bounty-payments, and
+        // completion-release-service) charged config.stripe.platformFeePercent
+        // — 5 by default — and the client quoted the hunter 5% from
+        // lib/constants/fees.ts before they applied. The route is NOT dead: it
+        // is reached from lib/wallet-context.tsx and lib/services/dispute-service.ts
+        // whenever a bounty carries a payment_intent_id (the v2 Stripe-native
+        // manual-capture escrow), so the mismatch was live and money-visible —
+        // the hunter was shown a 5% deduction and had 10% taken. Read the same
+        // constant as everyone else instead of a second opinion.
+        //
+        // Imported lazily on purpose: ../config calls getRequired('STRIPE_SECRET_KEY')
+        // at module scope, so importing it at the top of this file makes the
+        // whole route module unloadable when Stripe is not configured — which
+        // is exactly the case payments.no-stripe.test.ts asserts still works.
+        // Reaching this line means Stripe IS configured.
+        const { config } = await import('../config');
+        const platformFeePercentage = config.stripe.platformFeePercent;
         const amountCents = capturedIntent.amount;
         const platformFeeCents = Math.round((amountCents * platformFeePercentage) / 100);
         const hunterAmountCents = amountCents - platformFeeCents;

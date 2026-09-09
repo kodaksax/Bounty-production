@@ -32,7 +32,9 @@ import { Stepper } from '../../../../components/ui/stepper';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
+import { getUserFriendlyError } from '../../../../lib/utils/error-messages';
 import { ROUTES } from '../../../../lib/routes';
+import { discardApplication } from '../../../../lib/services/application-withdrawal';
 import { messageService } from '../../../../lib/services/message-service';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
@@ -120,6 +122,40 @@ export default function HunterFlowIndex() {
     }
   }, [bounty, otherParty.id, router]);
 
+  const handleDiscardApplication = useCallback(() => {
+    if (!routeBountyId) return;
+    Alert.alert(
+      'Discard Application',
+      "Remove this rejected application from your list? This can't be undone.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            setBusyAction('discard_application');
+            try {
+              await discardApplication({
+                bountyId: routeBountyId,
+                currentUserId: currentUserId ?? undefined,
+                surface: 'hunter_detail',
+              });
+              // The application row (and with it, this hunter's reason to be on
+              // this screen) is gone — there is nothing left here to refresh.
+              router.replace(MY_WORK_ROUTE as never);
+            } catch (err) {
+              const friendly = getUserFriendlyError(err);
+              Alert.alert(friendly.title, friendly.message);
+            } finally {
+              setBusyAction(null);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [routeBountyId, currentUserId, router]);
+
   const handlers = useMemo((): Partial<Record<BountyActionKey, () => void>> => {
     if (!routeBountyId) return {};
     return {
@@ -129,6 +165,7 @@ export default function HunterFlowIndex() {
       apply: () =>
         router.push({ pathname: '/bounty/[id]/public', params: { id: routeBountyId } } as never),
       message: handleMessage,
+      discard_application: handleDiscardApplication,
       view_dispute: () =>
         router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
       open_dispute: () =>
@@ -146,7 +183,7 @@ export default function HunterFlowIndex() {
         router.push({ pathname: '/bounty/[id]/cancel', params: { id: routeBountyId } } as never),
       contact_support: () => router.push('/tabs/need-help-screen' as never),
     };
-  }, [routeBountyId, handleMessage, router]);
+  }, [routeBountyId, handleMessage, handleDiscardApplication, router]);
 
   const goBack = useCallback(() => {
     if (router.canGoBack()) router.back();

@@ -71,6 +71,16 @@ export default function DisputeDetailScreen() {
       if (success) {
         loadEvidence()
         Alert.alert('Evidence Added', 'Your evidence has been uploaded.')
+      } else {
+        // The file itself uploaded fine (onUploaded only fires on storage
+        // success) but persisting its metadata into dispute_evidence failed
+        // — without this branch that failure was completely silent: no
+        // alert, no retry, and the file was orphaned in storage with
+        // nothing linking it to the dispute.
+        Alert.alert(
+          "Couldn't save evidence",
+          'Your file uploaded, but we could not attach it to this dispute. Please try again.'
+        )
       }
     },
     onError: (error) => {

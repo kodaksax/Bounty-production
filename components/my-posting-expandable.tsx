@@ -13,7 +13,7 @@ import type { Attachment, Conversation } from 'lib/types';
 import { getCurrentUserId } from 'lib/utils/data-utils';
 import { bountyHoldsUnreleasedEscrow } from 'lib/utils/payment-architecture';
 import { getBountyStages } from 'lib/utils/bounty-lifecycle';
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -57,6 +57,13 @@ type Props = {
   onEdit?: () => void;
   onDelete?: () => void;
   onDiscard?: () => void;
+  /**
+   * Hunter-only "Hide"/"Remove from List" on a completed bounty card. Must
+   * persist (see lib/utils/hunter-hidden-bounties.ts) — the caller is
+   * responsible for both the write and removing this bounty from the list
+   * that feeds this card, so it does not reappear on the next remount.
+   */
+  onHide?: () => void | Promise<void>;
   onWithdrawApplication?: (requestStatus?: string | null) => void;
   onGoToReview?: (bountyId: string) => void;
   onGoToPayout?: (bountyId: string) => void;
@@ -95,6 +102,7 @@ export function MyPostingExpandable({
   onEdit,
   onDelete,
   onDiscard,
+  onHide,
   onWithdrawApplication,
   onGoToReview,
   onGoToPayout,
@@ -274,7 +282,7 @@ export function MyPostingExpandable({
 
   // Hunter completion submission state
   const [startTime] = useState(Date.now());
-  const { transactions } = useWallet();
+  const { transactions, reconcileFromServer } = useWallet();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -284,11 +292,28 @@ export function MyPostingExpandable({
     dispatchDraft({ type: 'reset' });
   }, [bounty.id]);
 
-  // Monitoring: detect mismatches where bounty marked completed but escrow still funded locally.
-  // Suppress when a dispute is active — escrow is intentionally held during dispute resolution.
-  // Also suppress when no settlement (release/refund) transaction exists yet: a `completed`
-  // bounty with `funded` escrow and no settlement is a legitimate transient state (dispute
-  // window, pending payout, or post-completion dispute) — not a local cache inconsistency.
+  // Reconcile (not just report) the mismatch where a bounty is marked completed
+  // but the client still shows its escrow funded.
+  //
+  // This detector used to log and stop. In production it fired 93 times in 30
+  // days and was still firing the day this was written, always alongside a
+  // successful "Escrow released successfully during approveAndRelease" — i.e.
+  // the server HAD released the money and only the client's cached wallet
+  // state was stale. The poster approved the work and the app kept telling
+  // them their money was held, at the exact moment that decides whether they
+  // post again. A detector that only writes a log line cannot fix that; it
+  // needs to re-read the server.
+  //
+  // reconciledRef keeps this to one refresh per bounty per mount: without it
+  // the effect re-runs on the very `transactions` array it just refreshed and
+  // loops (the six-fires-in-eleven-minutes pattern seen in client_logs).
+  //
+  // Suppress when a dispute is active — escrow is intentionally held during
+  // dispute resolution. Also suppress when no settlement (release/refund)
+  // transaction exists yet: a `completed` bounty with `funded` escrow and no
+  // settlement is a legitimate transient state (dispute window, pending
+  // payout, or post-completion dispute) — not a cache inconsistency.
+  const reconciledRef = useRef<string | null>(null);
   useEffect(() => {
     try {
       if (!bounty) return;
@@ -314,14 +339,41 @@ export function MyPostingExpandable({
           String(tx.details?.bounty_id) === bountyIdStr
       );
       if (!hasSettlement) return;
+      if (reconciledRef.current === bountyIdStr) return;
+      reconciledRef.current = bountyIdStr;
+
       logClientError('Bounty completed but escrow still funded locally', {
         bountyId: bountyIdStr,
         bountyStatus: bounty.status,
+        action: 'reconciling',
       });
+
+      // Pull authoritative balance + transactions from the server. The log
+      // above is kept so the mismatch rate stays measurable, but it is now a
+      // record of a correction rather than of an unhandled inconsistency.
+      //
+      // reconcileFromServer resolves `false` when it did not actually refresh
+      // (no session / no access token) — the common case on a cold start,
+      // and it does NOT throw, so a `.catch` alone would leave the guard set
+      // and suppress every retry for this bounty for the rest of the mount.
+      // Only a refresh that really happened may keep the guard.
+      void (async () => {
+        let refreshed = false;
+        try {
+          refreshed = await reconcileFromServer();
+        } catch {
+          refreshed = false;
+        }
+        if (!refreshed) {
+          // Failed or no-op reconcile must not poison the guard — allow a
+          // retry on the next render pass that still sees the mismatch.
+          reconciledRef.current = null;
+        }
+      })();
     } catch (e) {
       // swallow
     }
-  }, [bounty, transactions, hasDispute, activeDisputeId]);
+  }, [bounty, transactions, hasDispute, activeDisputeId, reconcileFromServer]);
 
   useEffect(() => {
     let mounted = true;
@@ -1960,9 +2012,21 @@ export function MyPostingExpandable({
                               { text: 'Cancel', style: 'cancel' },
                               {
                                 text: 'Hide',
-                                onPress: () => {
+                                onPress: async () => {
+                                  // onHide persists the hide (see
+                                  // lib/utils/hunter-hidden-bounties.ts) and
+                                  // removes this bounty from the caller's list
+                                  // state — without that write, this was just
+                                  // component-local state that reappeared on
+                                  // the next remount (issue #779).
+                                  try {
+                                    await onHide?.();
+                                  } catch (err) {
+                                    console.error('Error hiding bounty:', err);
+                                    Alert.alert('Error', 'Failed to hide bounty. Please try again.');
+                                    return;
+                                  }
                                   setHiddenByUser(true);
-                                  onRefresh?.();
                                 },
                               },
                             ]
@@ -1984,9 +2048,15 @@ export function MyPostingExpandable({
                               {
                                 text: 'Remove',
                                 style: 'destructive',
-                                onPress: () => {
+                                onPress: async () => {
+                                  try {
+                                    await onHide?.();
+                                  } catch (err) {
+                                    console.error('Error removing bounty from list:', err);
+                                    Alert.alert('Error', 'Failed to remove bounty. Please try again.');
+                                    return;
+                                  }
                                   setHiddenByUser(true);
-                                  onRefresh?.();
                                 },
                               },
                             ]

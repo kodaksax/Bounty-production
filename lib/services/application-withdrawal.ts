@@ -8,7 +8,7 @@
 import { analyticsService } from './analytics-service';
 import { bountyRequestService } from './bounty-request-service';
 
-export type WithdrawApplicationSurface = 'my_postings' | 'inbox';
+export type WithdrawApplicationSurface = 'my_postings' | 'inbox' | 'hunter_detail';
 
 export interface WithdrawApplicationParams {
   bountyId: string | number;

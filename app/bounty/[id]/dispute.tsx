@@ -2,6 +2,7 @@ import { DisputeSubmissionForm } from 'components/dispute-submission-form';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuthContext } from 'hooks/use-auth-context';
 import { EMAIL_SUBJECTS, SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, createSupportTel } from 'lib/constants/support';
+import { attachmentService } from 'lib/services/attachment-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { cancellationService } from 'lib/services/cancellation-service';
 import type { Bounty } from 'lib/services/database.types';
@@ -82,23 +83,70 @@ export default function DisputeScreen() {
         reason,
         evidence
       );
-      
-      if (result) {
-        Alert.alert(
-          'Success',
-          'Dispute created successfully. We will review your case.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setDispute(result);
-              },
-            },
-          ]
-        );
-      } else {
+
+      if (!result) {
         throw new Error('Failed to create dispute');
       }
+
+      // `createDispute` deliberately does not persist the `evidence` array —
+      // it only uses it for an analytics count. Each item must be synced
+      // individually afterward, and image/document items are still local
+      // file:// URIs from the picker at this point. Without this loop, any
+      // evidence attached on the create-dispute form was silently discarded:
+      // the dispute was created, "Success" was shown, and the files the user
+      // picked never reached storage or the dispute_evidence table.
+      let evidenceFailures = 0;
+      if (evidence && evidence.length > 0) {
+        for (const item of evidence) {
+          try {
+            let content = item.content;
+
+            if (item.type === 'image' || item.type === 'document') {
+              const uploaded = await attachmentService.upload({
+                id: item.id,
+                name: item.description || item.id,
+                uri: item.content,
+                mimeType: item.mimeType,
+                size: item.fileSize,
+              });
+
+              if (uploaded.status !== 'uploaded' || !uploaded.remoteUri) {
+                evidenceFailures += 1;
+                continue;
+              }
+              content = uploaded.remoteUri;
+            }
+
+            const success = await disputeService.uploadEvidence(result.id, userId, {
+              type: item.type,
+              content,
+              description: item.description,
+              mimeType: item.mimeType,
+              fileSize: item.fileSize,
+            });
+
+            if (!success) evidenceFailures += 1;
+          } catch (evidenceError) {
+            console.error('Error syncing dispute evidence:', evidenceError);
+            evidenceFailures += 1;
+          }
+        }
+      }
+
+      Alert.alert(
+        'Success',
+        evidenceFailures > 0
+          ? `Dispute created successfully, but ${evidenceFailures} piece${evidenceFailures === 1 ? '' : 's'} of evidence failed to upload. You can add it again from the dispute details screen.`
+          : 'Dispute created successfully. We will review your case.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setDispute(result);
+            },
+          },
+        ]
+      );
     } finally {
       setSubmitting(false);
     }
@@ -135,7 +183,12 @@ export default function DisputeScreen() {
         setShowEvidenceModal(false);
         setEvidenceInput('');
       } else {
-        throw new Error('Failed to add evidence');
+        // handleSubmitEvidence below calls this without awaiting/catching,
+        // so throwing here would only produce an unhandled promise
+        // rejection — the modal would stay open with no feedback and the
+        // user would have no idea their evidence wasn't saved. Surface it
+        // directly instead.
+        Alert.alert('Error', 'Failed to add evidence. Please try again.');
       }
     } finally {
       setSubmitting(false);

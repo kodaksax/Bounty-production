@@ -165,7 +165,17 @@ export function EnhancedProfileSection({
   } = usePortfolioUpload({
     userId: resolvedUserId,
     onUploaded: async item => {
-      await addItem({ ...item, id: undefined as any, createdAt: undefined as any } as any);
+      // The file itself already uploaded to storage successfully at this
+      // point (that's what triggers `onUploaded`) — but persisting the
+      // portfolio_items row can still fail independently (RLS, network,
+      // etc). Without checking this, that failure was invisible: addItem
+      // reverts the optimistic item and the photo just disappears from the
+      // profile with no explanation.
+      const saved = await addItem({ ...item, id: undefined as any, createdAt: undefined as any } as any);
+      if (!saved) {
+        Alert.alert("Couldn't save that item", 'Your file uploaded, but we could not add it to your portfolio. Please try again.');
+        return;
+      }
       try {
         await refresh();
       } catch (e) {
@@ -878,7 +888,17 @@ export function PortfolioSection({
   } = usePortfolioUpload({
     userId: resolvedUserId,
     onUploaded: async item => {
-      await addItem({ ...item, id: undefined as any, createdAt: undefined as any } as any);
+      // The file itself already uploaded to storage successfully at this
+      // point (that's what triggers `onUploaded`) — but persisting the
+      // portfolio_items row can still fail independently (RLS, network,
+      // etc). Without checking this, that failure was invisible: addItem
+      // reverts the optimistic item and the photo just disappears from the
+      // profile with no explanation.
+      const saved = await addItem({ ...item, id: undefined as any, createdAt: undefined as any } as any);
+      if (!saved) {
+        Alert.alert("Couldn't save that item", 'Your file uploaded, but we could not add it to your portfolio. Please try again.');
+        return;
+      }
       try {
         await refresh();
       } catch (e) {

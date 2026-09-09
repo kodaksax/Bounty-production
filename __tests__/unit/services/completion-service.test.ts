@@ -20,6 +20,19 @@ jest.mock('../../../lib/supabase', () => ({
   },
 }));
 
+// Pin the API base URL to a non-Edge-Functions host so these tests exercise the
+// direct-Supabase code paths deterministically. Without this, `markReady` sees a
+// real `API_BASE_URL` ending in `/functions/v1` (whenever EXPO_PUBLIC_SUPABASE_URL
+// is set, e.g. in CI) and routes through the Edge Function instead of the
+// client-side write these tests assert. Edge-route behaviour is covered
+// separately in completion-ready-routing.test.ts.
+jest.mock('../../../lib/config/api', () => ({
+  API_BASE_URL: 'https://api.example.com',
+  getApiBaseUrl: jest.fn(() => 'https://api.example.com'),
+  getFinancialApiUrl: jest.fn(() => 'https://api.example.com'),
+  FINANCIAL_API_BASE_URL: 'https://api.example.com',
+}));
+
 // Mock logger
 jest.mock('../../../lib/utils/error-logger', () => ({
   logger: {

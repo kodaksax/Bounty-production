@@ -284,6 +284,28 @@ describe('webhooks — payout matching is identifier-based only', () => {
   });
 });
 
+describe('webhooks — payouts never correlate a withdrawal heuristically', () => {
+  const strippedWebhooks = stripComments(webhooksSource);
+
+  test('the webhook code no longer includes the two-hop fallback matcher', () => {
+    expect(strippedWebhooks).not.toContain('findWithdrawalAwaitingPayoutId');
+    expect(strippedWebhooks).not.toContain('selectTwoHopWithdrawalMatch');
+  });
+
+  test('both payout.created and payout.paid stay on strict payout-id lookup', () => {
+    const created = stripComments(
+      regionBetween(webhooksSource, "case 'payout.created':", "case 'payout.paid':")
+    );
+    const paid = stripComments(
+      regionBetween(webhooksSource, "case 'payout.paid':", "case 'payout.updated':")
+    );
+    expect(created).toContain('findCandidateWithdrawalTx');
+    expect(created).not.toContain('findWithdrawalAwaitingPayoutId');
+    expect(paid).toContain('findCandidateWithdrawalTx');
+    expect(paid).not.toContain('findWithdrawalAwaitingPayoutId');
+  });
+});
+
 describe('webhooks — failed and canceled payouts never complete a withdrawal', () => {
   const undelivered = stripComments(
     regionBetween(

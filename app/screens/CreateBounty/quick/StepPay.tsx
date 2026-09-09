@@ -3,6 +3,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { type Href, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { usePostingPolicy } from '../../../../hooks/usePostingPolicy';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
@@ -65,6 +66,7 @@ export function StepPay({
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const { balance } = useWallet();
+  const { honorPostsEnabled, minimumAmount } = usePostingPolicy();
   const [error, setError] = useState<string | null>(null);
 
   // Mirror of the amount/honor the poster has committed on this screen, updated
@@ -79,6 +81,17 @@ export function StepPay({
   useEffect(() => {
     committedRef.current = { amount: draft.amount, isForHonor: draft.isForHonor };
   }, [draft.amount, draft.isForHonor]);
+
+  // A draft saved while the honor option was still available would otherwise
+  // sit here as an un-toggleable $0 the poster cannot see or clear, and would
+  // then be refused by the server at publish with no obvious cause. Clear it
+  // as soon as we learn the option is off.
+  useEffect(() => {
+    if (!honorPostsEnabled && draft.isForHonor) {
+      committedRef.current = { amount: 0, isForHonor: false };
+      onUpdate({ isForHonor: false, amount: 0 });
+    }
+  }, [honorPostsEnabled, draft.isForHonor, onUpdate]);
 
   const handleHonorToggle = () => {
     const next = !draft.isForHonor;
@@ -124,7 +137,7 @@ export function StepPay({
     // so this handler must see the amount the poster actually typed.
     const { amount, isForHonor } = committedRef.current;
 
-    const amountError = validateAmount(amount, isForHonor);
+    const amountError = validateAmount(amount, isForHonor, minimumAmount);
     if (amountError) {
       setError(amountError);
       return;
@@ -268,7 +281,15 @@ export function StepPay({
         </View>
       </View>
 
-      {/* For honor option */}
+      {/* For honor option.
+          Hidden while the server refuses $0 posts (the default). This is the
+          mechanism that turned high-intent posters into dead listings: a
+          poster who could not fund picked "free" instead, and 49% of all
+          bounties ever created are for-honor while no external user has
+          funded escrow since 1 Sep. The recovery from "I cannot pay right
+          now" is pay-at-accept — which is what the card above already says —
+          not "make it free". */}
+      {honorPostsEnabled ? (
       <TouchableOpacity
         onPress={handleHonorToggle}
         activeOpacity={0.8}
@@ -284,6 +305,7 @@ export function StepPay({
           Post for honor — no payment
         </Text>
       </TouchableOpacity>
+      ) : null}
 
       {showBalanceWarning ? (
         // Informational, not a blocker. Posting is free; the charge lands when

@@ -1,9 +1,11 @@
 /**
- * Onboarding Sign In Screen
- * Second step: real Apple / Google sign-in (via useSocialAuth), plus a
- * "Continue with email" path to the real create-account screen.
- * First-time visitors reach this screen unauthenticated, so these need to
- * be real auth actions, not decorative ones.
+ * Onboarding Sign Up Screen
+ * Second step: real Apple / Google sign-in (via useSocialAuth) — which
+ * creates an account on first use — plus a "Continue with email" path to
+ * the real create-account screen. First-time visitors reach this screen
+ * unauthenticated and are here to create an account, so this is framed as
+ * Sign Up (with a way out to Sign In for anyone who already has one), and
+ * these need to be real auth actions, not decorative ones.
  */
 
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
@@ -98,11 +100,11 @@ export default function UsernameScreen() {
   const nextUpMessage = useMemo(() => {
     switch (onboardingData.intent) {
       case 'poster':
-        return 'Sign in to post your bounty — then a quick style pick and you’re in.';
+        return 'Sign up to post a task and get it done — then a quick style pick and you’re in.';
       case 'hunter':
-        return 'Sign in to claim bounties and get paid — then a quick style pick and you’re in.';
+        return 'Sign up to claim tasks and get paid — then a quick style pick and you’re in.';
       default:
-        return 'Sign in to post or claim bounties — then a quick style pick and you’re in.';
+        return 'Sign up to post or claim tasks — then a quick style pick and you’re in.';
     }
   }, [onboardingData.intent]);
 
@@ -158,6 +160,21 @@ export default function UsernameScreen() {
     router.push('/auth/sign-up-form');
   };
 
+  const handleBack = () => {
+    hapticFeedback.light();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/onboarding/welcome');
+    }
+  };
+
+  const handleGoToSignIn = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_signin_link_tapped');
+    router.push('/auth/sign-in-form');
+  };
+
   const handleSkip = () => {
     analyticsService.trackEvent('onboarding_step_skipped', { step: 'sign_in' });
     // Already signed in (e.g. reached this screen mid-onboarding) — safe to
@@ -168,11 +185,20 @@ export default function UsernameScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <TouchableOpacity
+        onPress={handleBack}
+        style={styles.backButton}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <MaterialIcons name="arrow-back" size={24} color={theme.text} />
+      </TouchableOpacity>
+
       <OnboardingProgressDots total={totalSteps} activeIndex={0} style={styles.dotsContainer} />
 
-      <Text style={styles.heading}>Sign in in seconds</Text>
+      <Text style={styles.heading}>Sign up in seconds</Text>
       <Text style={styles.subheading}>
-        Use Apple or Google for one-tap, password-free sign-in — or continue with email. We never post
+        Use Apple or Google for one-tap, password-free sign-up — or continue with email. We never post
         or share anything without asking.
       </Text>
 
@@ -237,6 +263,14 @@ export default function UsernameScreen() {
           <Text style={styles.emailButtonText}>Continue with email</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          onPress={handleGoToSignIn}
+          accessibilityRole="button"
+          accessibilityLabel="Already have an account? Sign in"
+        >
+          <Text style={styles.signInLinkText}>Already have an account? Sign In</Text>
+        </TouchableOpacity>
+
         {ONBOARDING_SKIP_AUTH_ENABLED && <SkipAuthLink onPress={handleSkip} />}
       </View>
     </View>
@@ -249,6 +283,11 @@ function makeStyles(theme: AppTheme) {
       flex: 1,
       backgroundColor: theme.background,
       paddingHorizontal: 24,
+    },
+    backButton: {
+      alignSelf: 'flex-start',
+      padding: 8,
+      marginTop: 8,
     },
     dotsContainer: {
       paddingTop: 16,
@@ -336,6 +375,13 @@ function makeStyles(theme: AppTheme) {
     },
     buttonIcon: {
       marginRight: 8,
+    },
+    signInLinkText: {
+      textAlign: 'center',
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+      marginTop: 4,
     },
   });
 }

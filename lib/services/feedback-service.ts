@@ -20,7 +20,7 @@ export type FeatureRequestStatus =
   | 'declined';
 
 /** Default recipient + subject for the Contact Support flow. */
-export const SUPPORT_REQUEST_EMAIL = 'support@bountyapp.com';
+export const SUPPORT_REQUEST_EMAIL = 'support@bountyfinder.app';
 export const SUPPORT_REQUEST_SUBJECT = 'Bounty Support Request';
 
 /**

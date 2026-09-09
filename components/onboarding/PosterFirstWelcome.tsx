@@ -81,9 +81,9 @@ export function PosterFirstWelcome({
           onPress={onLoginPress}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel="Log in to an existing account"
+          accessibilityLabel="Sign in to an existing account"
         >
-          <Text style={styles.loginButtonText}>Log In</Text>
+          <Text style={styles.loginButtonText}>Sign In</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
