@@ -11,7 +11,11 @@ import {
     type BountyPaymentSettlementStatus,
     type StripeTransferEvent,
 } from '../_shared/bounty-payment-settlement-state.ts';
-import { decidePayoutEventAction } from '../_shared/payout-state.ts';
+import {
+  decidePayoutEventAction,
+  selectTwoHopWithdrawalMatch,
+} from '../_shared/payout-state.ts';
+import type { TwoHopCandidateRow } from '../_shared/payout-state.ts';
 import type { WalletTransaction } from '../_shared/types.ts';
 import {
     collectWebhookSecrets,
@@ -276,10 +280,16 @@ async function syncConnectAccountToProfile(
  * could credit real balance against a withdrawal that had already been
  * delivered.
  *
- * Identifier matching is now the only matching. Every withdrawal row created
- * by /connect carries its payout id from birth, so the id is always available
- * for anything this system originated. A payout with no id match is either
- * foreign (dashboard/automatic) or an orphan; both are reported for human
+ * Identifier matching is the only matching *this* function does. Note that
+ * the original premise here — "every withdrawal row created by /connect
+ * carries its payout id from birth" — is false for the standard two-hop path:
+ * when the connected account is on an automatic payout schedule Stripe
+ * refuses API payout creation, so /connect leaves `stripe_payout_id` NULL and
+ * Stripe's own scheduled payout settles later. Those rows are matched by
+ * findWithdrawalAwaitingPayoutId, which the id-writing callers try only after
+ * this one misses; see its docstring for why that is not a return to
+ * amount-matching. A payout matched by neither is either foreign
+ * (dashboard/automatic sweep) or an orphan; both are reported for human
  * review rather than guessed at. Legacy rows written before 2026-08-16 have
  * no payout id and are deliberately left alone — this change does not
  * retro-fit history.
@@ -320,6 +330,132 @@ async function findCandidateWithdrawalTx(
   }
 
   return byPayoutId ?? null;
+}
+
+/**
+ * Fallback matcher for the **standard two-hop** withdrawal path, where the
+ * payout id genuinely does not exist at row-creation time.
+ *
+ * `findCandidateWithdrawalTx`'s premise — "every withdrawal row created by
+ * /connect carries its payout id from birth" — holds only when /connect was
+ * able to create the Payout itself. Stripe refuses that on a connected
+ * account whose payout schedule is *automatic*: /connect records
+ * `metadata.payout_creation_failed = 'cannot_create_connect_standard_payouts_through_api'`
+ * and leaves `stripe_payout_id` NULL, and Stripe's own scheduled payout
+ * settles the money hours or days later.
+ *
+ * Before this function existed, such a row could never be matched by
+ * anything: `payout.created`'s "backfill" looked the row up *by* the very
+ * `stripe_payout_id` it was trying to write (and then guarded the write with
+ * `stripe_payout_id IS NULL`, which the lookup had just excluded), so both
+ * conditions could never hold at once and the backfill was unreachable.
+ * `payout.paid` used the same matcher and so could never promote the row.
+ * Result: withdrawal 205beb22 (user 6fdeb6f5, $49.36) sat 'pending' for a
+ * week after Stripe had actually paid it — see
+ * docs/withdrawals/17-payout-webhook-gap-2026-09-01.md.
+ *
+ * This is deliberately NOT the unsound amount-matching removed on
+ * 2026-08-16. That heuristic took "most recent completed withdrawal for this
+ * user with this amount" and misfired across an eleven-day gap. Every one of
+ * the following is required here, and a miss on any of them yields no match
+ * at all:
+ *
+ *   - same user (resolved from the payout's connected account),
+ *   - status 'pending' with `stripe_payout_id` still NULL — a settled or
+ *     already-identified row is never a candidate,
+ *   - `stripe_transfer_id` present, i.e. the two-hop shape (hop 1 done),
+ *   - amount equal to the payout **to the cent**,
+ *   - `metadata.destination_bank_account_id` equal to the payout's
+ *     `destination` — the discriminator the 2026-07-27 misfire lacked,
+ *   - the withdrawal predates the payout,
+ *   - and the match is **unique**. Two candidates means no match.
+ *
+ * The uniqueness and exact-cents rules are what make Stripe's balance-sweep
+ * behaviour safe: an automatic payout sweeps the connected account's entire
+ * balance, so a sweep covering two withdrawals equals neither of them
+ * individually and correctly matches nothing, leaving reconciliation to
+ * report it for a human.
+ *
+ * **Only the id-writing paths may use this.** `handleUndeliveredPayout`
+ * (payout.failed / payout.canceled) must keep matching by id alone, because a
+ * wrong match there *credits real balance* for a withdrawal that may already
+ * have been delivered — the one direction of this bug that loses money. Once
+ * `payout.created` attaches the id via this function, failure handling finds
+ * the row by id exactly as designed, so strict matching there stays correct
+ * for standard withdrawals too.
+ */
+async function findWithdrawalAwaitingPayoutId(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  userId: string,
+  payout: Stripe.Payout
+): Promise<{
+  id: string;
+  amount: number;
+  status: string;
+  metadata: Record<string, unknown> | null;
+  payout_method?: string;
+} | null> {
+  const destination =
+    typeof payout.destination === 'string'
+      ? payout.destination
+      : ((payout.destination as { id?: string } | null)?.id ?? null);
+
+  // No destination on the payout means no discriminator, and amount alone is
+  // exactly the unsound match this function exists to avoid.
+  if (!destination) return null;
+
+  const payoutCreatedAt = new Date(payout.created * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from('wallet_transactions')
+    .select('id, amount, status, metadata, payout_method, created_at')
+    .eq('user_id', userId)
+    .eq('type', 'withdrawal')
+    .eq('status', 'pending')
+    .is('stripe_payout_id', null)
+    .not('stripe_transfer_id', 'is', null)
+    .lt('created_at', payoutCreatedAt);
+
+  if (error) {
+    // Same reasoning as findCandidateWithdrawalTx: a lookup failure is not
+    // evidence of absence.
+    console.error('[webhooks] two-hop withdrawal lookup failed', {
+      payoutId: payout.id,
+      userId,
+      error,
+    });
+    throw error;
+  }
+
+  const result = selectTwoHopWithdrawalMatch({
+    candidates: (data ?? []) as TwoHopCandidateRow[],
+    payoutAmountCents: payout.amount,
+    payoutDestination: destination,
+  });
+
+  if (result.kind === 'ambiguous') {
+    console.warn(
+      `[webhooks] payout ${payout.id} matched ${result.count} pending two-hop withdrawals ` +
+        `for user ${userId} — ambiguous, no ledger action. Reconciliation will report it.`
+    );
+    return null;
+  }
+
+  if (result.kind === 'none') return null;
+
+  console.log(
+    `[webhooks] payout ${payout.id} matched pending two-hop withdrawal ${result.row.id} ` +
+      `(user ${userId}, ${payout.amount}c, destination ${destination})`
+  );
+
+  return result.row as {
+    id: string;
+    amount: number;
+    status: string;
+    metadata: Record<string, unknown> | null;
+    payout_method?: string;
+  };
 }
 
 /**
@@ -2512,11 +2648,13 @@ Deno.serve(async (req: Request) => {
                 }
               );
             } else if (createdProfile) {
-              const candidateTx = await findCandidateWithdrawalTx(
-                supabase,
-                createdProfile.id,
-                payout
-              );
+              // Strict id match first; the two-hop fallback covers rows whose
+              // payout id could not exist at creation time. This is the write
+              // that makes the `.is('stripe_payout_id', null)` guard below
+              // meaningful rather than self-contradictory.
+              const candidateTx =
+                (await findCandidateWithdrawalTx(supabase, createdProfile.id, payout)) ??
+                (await findWithdrawalAwaitingPayoutId(supabase, createdProfile.id, payout));
               if (candidateTx) {
                 await supabase
                   .from('wallet_transactions')
@@ -2653,7 +2791,9 @@ Deno.serve(async (req: Request) => {
             // money — the payout already happened — so there is no balance
             // action to double-apply.
             try {
-              const candidateTx = await findCandidateWithdrawalTx(supabase, paidProfile.id, payout);
+              const candidateTx =
+                (await findCandidateWithdrawalTx(supabase, paidProfile.id, payout)) ??
+                (await findWithdrawalAwaitingPayoutId(supabase, paidProfile.id, payout));
               const action = decidePayoutEventAction({
                 outcome: 'paid',
                 row: candidateTx
