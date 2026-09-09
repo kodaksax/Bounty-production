@@ -263,7 +263,7 @@ describe('webhooks — payout matching is identifier-based only', () => {
     regionBetween(
       webhooksSource,
       'async function findCandidateWithdrawalTx(',
-      'async function findWithdrawalAwaitingPayoutId('
+      'async function reconcileInstantPayoutFee('
     )
   );
 
@@ -284,72 +284,25 @@ describe('webhooks — payout matching is identifier-based only', () => {
   });
 });
 
-/**
- * The standard two-hop fallback (regression: withdrawal 205beb22, $49.36,
- * stranded 'pending' for a week after Stripe paid it). Its safety rests on
- * being narrow, and on being unreachable from the one handler where a wrong
- * match would move real money.
- */
-describe('webhooks — the two-hop fallback matcher is narrow and write-path only', () => {
-  const fallback = stripComments(
-    regionBetween(
-      webhooksSource,
-      'async function findWithdrawalAwaitingPayoutId(',
-      'async function reconcileInstantPayoutFee('
-    )
-  );
+describe('webhooks — payouts never correlate a withdrawal heuristically', () => {
+  const strippedWebhooks = stripComments(webhooksSource);
 
-  test('only ever considers pending rows that still lack a payout id', () => {
-    expect(fallback).toContain("eq('status', 'pending')");
-    expect(fallback).toContain("is('stripe_payout_id', null)");
+  test('the webhook code no longer includes the two-hop fallback matcher', () => {
+    expect(strippedWebhooks).not.toContain('findWithdrawalAwaitingPayoutId');
+    expect(strippedWebhooks).not.toContain('selectTwoHopWithdrawalMatch');
   });
 
-  test('requires the two-hop shape — hop 1 already settled', () => {
-    expect(fallback).toContain("not('stripe_transfer_id', 'is', null)");
-  });
-
-  test('scopes to the payout owner and to withdrawals older than the payout', () => {
-    expect(fallback).toContain("eq('user_id', userId)");
-    expect(fallback).toContain("lt('created_at', payoutCreatedAt)");
-  });
-
-  test('delegates the decision to the shared, tested selector', () => {
-    expect(fallback).toContain('selectTwoHopWithdrawalMatch');
-  });
-
-  test('takes no action on an ambiguous match', () => {
-    expect(fallback).toMatch(/ambiguous[\s\S]*return null/);
-  });
-
-  /**
-   * THE load-bearing assertion. payout.failed / payout.canceled credit real
-   * balance back to the hunter; a wrong match there hands out money for a
-   * withdrawal that was already delivered — the 2026-07-27 misfire. Those
-   * paths must keep matching by payout id alone. They stay correct for
-   * standard withdrawals anyway, because payout.created now attaches the id
-   * first.
-   */
-  test('handleUndeliveredPayout never uses it', () => {
-    const undeliveredRegion = stripComments(
-      regionBetween(
-        webhooksSource,
-        'async function handleUndeliveredPayout(',
-        'async function handlePayoutStatusUpdate('
-      )
-    );
-    expect(undeliveredRegion).toContain('findCandidateWithdrawalTx');
-    expect(undeliveredRegion).not.toContain('findWithdrawalAwaitingPayoutId');
-  });
-
-  test('the id-writing handlers do use it', () => {
+  test('both payout.created and payout.paid stay on strict payout-id lookup', () => {
     const created = stripComments(
       regionBetween(webhooksSource, "case 'payout.created':", "case 'payout.paid':")
     );
     const paid = stripComments(
       regionBetween(webhooksSource, "case 'payout.paid':", "case 'payout.updated':")
     );
-    expect(created).toContain('findWithdrawalAwaitingPayoutId');
-    expect(paid).toContain('findWithdrawalAwaitingPayoutId');
+    expect(created).toContain('findCandidateWithdrawalTx');
+    expect(created).not.toContain('findWithdrawalAwaitingPayoutId');
+    expect(paid).toContain('findCandidateWithdrawalTx');
+    expect(paid).not.toContain('findWithdrawalAwaitingPayoutId');
   });
 });
 
