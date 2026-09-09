@@ -72,19 +72,28 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
+      # Export BOTH names from the one resolved token. Later steps here read
+      # $EAS_TOKEN, but eas-cli itself only picks the token up from EXPO_TOKEN
+      # in the environment — writing EAS_TOKEN alone (as this step used to)
+      # left `eas` unauthenticated and every run failed at "Verify EAS auth"
+      # with "Not logged in". Same fix already applied in eas-deploy.yml.
+      # Do NOT re-declare either name in a step-level `env:` below: that would
+      # shadow this value with an empty string whenever only one secret is set.
       - name: Normalize tokens
         run: |
           if [ -n "${{ secrets.EAS_TOKEN }}" ]; then
-            echo "EAS_TOKEN=${{ secrets.EAS_TOKEN }}" >> "$GITHUB_ENV"
+            RESOLVED='${{ secrets.EAS_TOKEN }}'
           elif [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
-            echo "EAS_TOKEN=${{ secrets.EXPO_TOKEN }}" >> "$GITHUB_ENV"
+            RESOLVED='${{ secrets.EXPO_TOKEN }}'
           else
             echo "::error::No EAS_TOKEN or EXPO_TOKEN secret configured for this repo."
             exit 1
           fi
+          echo "EAS_TOKEN=$RESOLVED" >> "$GITHUB_ENV"
+          echo "EXPO_TOKEN=$RESOLVED" >> "$GITHUB_ENV"
 
       - name: Verify EAS auth
-        run: eas whoami --token "$EAS_TOKEN"
+        run: eas whoami
 
       - name: Record publish metadata
         run: |
