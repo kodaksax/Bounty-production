@@ -1451,6 +1451,49 @@ export function MyPostingExpandable({
                         </Text>
                       </TouchableOpacity>
 
+                      {/*
+                        The hunter's way out of work they've taken on but
+                        can't finish. Only the accepted hunter may file one —
+                        the screen and request_bounty_cancellation both
+                        re-check that — and approving it returns the poster's
+                        escrow in full, so this is deliberately a REQUEST and
+                        not an outright cancel.
+
+                        Hidden once a dispute is open: a dispute already
+                        freezes the workflow and settles escrow either way, so
+                        offering both would be two competing routes to the
+                        same money.
+                      */}
+                      {variant === 'hunter' &&
+                        !hasDispute &&
+                        currentUserId === bounty.accepted_by &&
+                        (bounty.status === 'in_progress' ? (
+                          <TouchableOpacity
+                            style={styles.hunterToolBtnWarning}
+                            onPress={() =>
+                              router.push({
+                                pathname: '/bounty/[id]/cancel',
+                                params: { id: String(bounty.id) },
+                              } as never)
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel="Request cancellation"
+                            accessibilityHint="Asks the poster to release you from this bounty; the full amount is returned to them"
+                          >
+                            <MaterialIcons name="cancel" size={18} color="#f59e0b" />
+                            <Text style={styles.hunterToolTextWarning}>
+                              Request Cancellation
+                            </Text>
+                          </TouchableOpacity>
+                        ) : bounty.status === 'cancellation_requested' ? (
+                          <View style={styles.hunterToolBtnWarning}>
+                            <MaterialIcons name="hourglass-empty" size={18} color="#f59e0b" />
+                            <Text style={styles.hunterToolTextWarning}>
+                              Cancellation Requested
+                            </Text>
+                          </View>
+                        ) : null)}
+
                       {/* Workflow Dispute Modal */}
                       <WorkflowDisputeModal
                         visible={showDisputeModal}

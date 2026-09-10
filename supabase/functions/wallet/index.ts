@@ -804,12 +804,17 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
           isRespondingHunter = !!pendingCancellation;
           if (pendingCancellation) {
-            // The hunter never gets to choose the refund split — it is whatever
-            // the poster committed to when they filed the request.
-            const storedRefundPct = Number(pendingCancellation.refund_percentage);
-            refundPercentage = Number.isFinite(storedRefundPct)
-              ? Math.min(100, Math.max(0, storedRefundPct))
-              : 100;
+            // The hunter never gets to choose the refund split, and neither
+            // does the stored recommendation: granting a cancellation returns
+            // the FULL escrow to the poster.
+            //
+            // This used to clamp to bounty_cancellations.refund_percentage,
+            // which calculateRecommendedRefund() sets to 50 for an in-progress
+            // bounty. But no flow ever pays the hunter the other half, so a
+            // partial refund left the remainder stranded in escrow behind a
+            // bounty that was already cancelled. Full refund until a real
+            // split-settlement path exists.
+            refundPercentage = 100;
           }
         }
         if (!isOwner && !isRespondingHunter) {

@@ -447,6 +447,66 @@ export const adminDataClient = {
   },
 
   /**
+   * Approve a pending cancellation request AND settle the escrow.
+   *
+   * Deliberately not `updateBountyStatus(id, 'cancelled')`. That RPC is a
+   * lifecycle-only move by design -- it flips `bounties.status` and touches no
+   * money -- which is correct for Archive/Cancel on an unfunded bounty but
+   * wrong for granting a cancellation: the poster was debited into escrow when
+   * they accepted a hunter, so approving the request has to give that money
+   * back. Routing the approval here left the escrow row with no offsetting
+   * refund and the `bounty_cancellations` row still `pending`, i.e. the
+   * poster's money stranded in a bounty that was already dead.
+   *
+   * admin_approve_bounty_cancellation() does all three in one transaction:
+   * refunds the full escrow to whoever funded it, resolves the cancellation
+   * request, and cancels the bounty. It is idempotent -- a second call after a
+   * partial failure finishes the settlement instead of double-crediting.
+   * See 20260908010000_refund_escrow_on_cancellation_approval.sql.
+   */
+  async approveBountyCancellation(
+    id: string,
+    reason?: string
+  ): Promise<{ refundApplied: boolean; refundAmount: number | null; transactionId: string | null }> {
+    const { data, error } = await supabase.rpc('admin_approve_bounty_cancellation', {
+      p_bounty_id: id,
+      p_reason: reason ?? null,
+    });
+
+    if (error) {
+      if (error.code === '42501') {
+        throw new AdminModerationError('NOT_ADMIN', "You don't have permission to perform this action.");
+      }
+      if (error.code === 'P0002') {
+        throw new AdminModerationError('BOUNTY_NOT_FOUND', 'This bounty no longer exists.');
+      }
+      // 23514 is update_balance() refusing to drive a balance negative. The
+      // whole approval aborted, so nothing was half-settled.
+      if (error.code === '23514') {
+        throw new AdminModerationError(
+          'DATABASE_ERROR',
+          'The refund could not be applied. No changes were made.'
+        );
+      }
+      console.error('[adminDataClient.approveBountyCancellation]', error);
+      throw new AdminModerationError('DATABASE_ERROR', "We couldn't approve this cancellation. Please try again.");
+    }
+
+    // RETURNS TABLE arrives as a single-row array.
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { refund_applied?: boolean; refund_amount?: number | string | null; refund_transaction_id?: string | null }
+      | null
+      | undefined;
+
+    const rawAmount = row?.refund_amount;
+    return {
+      refundApplied: !!row?.refund_applied,
+      refundAmount: rawAmount == null ? null : Number(rawAmount),
+      transactionId: row?.refund_transaction_id ?? null,
+    };
+  },
+
+  /**
    * Remove a bounty for a community guidelines violation.
    *
    * Was a direct `.from('bounties').update({ status: 'archived' }).eq('id', id)`

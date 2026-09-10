@@ -125,7 +125,13 @@ describe('resolveBountyLifecycle — poster lifecycle', () => {
     });
     expect(s.status).toBe('deadline_passed');
     expect(s.primaryAction?.key).toBe('message');
-    expect(s.secondaryActions.map(a => a.key)).toContain('cancel_bounty');
+    // The poster's route out of an accepted bounty is a dispute, not a
+    // cancellation request: requests are the HUNTER's exit, and granting one
+    // returns the poster's escrow in full. Offering it to the poster made them
+    // both requester and beneficiary of a consent flow.
+    const keys = s.secondaryActions.map(a => a.key);
+    expect(keys).toContain('open_dispute');
+    expect(keys).not.toContain('cancel_bounty');
   });
 
   it('cancelled and archived postings are terminal and offer a repost', () => {
@@ -177,6 +183,19 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     expect(s.waitingOn).toBe('you');
     expect(s.primaryAction?.key).toBe('submit_work');
     expect(s.group).toBe('attention');
+  });
+
+  it('the hunter on the clock is the one offered a cancellation request', () => {
+    const s = resolveBountyLifecycle({
+      bounty: bounty({ status: 'in_progress', accepted_by: 'me' }),
+      role: 'hunter',
+      requestStatus: 'accepted',
+    });
+    const cancel = s.secondaryActions.find(a => a.key === 'cancel_bounty');
+    expect(cancel).toBeDefined();
+    // Labelled as a request, not an outright cancel — it needs the poster's
+    // (or support's) approval, and approving it refunds the poster in full.
+    expect(cancel?.label).toBe('Request cancellation');
   });
 
   it('only the hunter’s own submission reads as submitted for review', () => {
