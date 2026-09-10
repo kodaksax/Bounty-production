@@ -19,6 +19,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Modal,
   Pressable,
   ScrollView,
@@ -28,6 +29,7 @@ import {
 } from 'react-native';
 import { showReportAlert } from './ReportModal';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { PdfPreview, isPdfSource } from './ui/pdf-preview';
 import { ReputationScoreCompact } from './ui/reputation-score';
 import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from './ui/skeleton-loaders';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
@@ -80,6 +82,90 @@ interface EnhancedProfileSectionProps {
   // own FOLLOW_FEATURE_ENABLED-gated Follow button, to avoid this component
   // rendering a second, duplicate one.
   hideFollowButton?: boolean;
+}
+
+/**
+ * Height of the in-modal PDF viewer. Tall enough to read a page without the
+ * modal swallowing the whole screen.
+ */
+const PDF_PREVIEW_HEIGHT = Math.min(Math.round(Dimensions.get('window').height * 0.6), 560);
+
+/**
+ * Media area of the portfolio detail modal.
+ *
+ * PDFs get a real viewer (white pages on a neutral backdrop, exactly like the
+ * downloaded file) instead of being fed to <OptimizedImage>, which cannot decode
+ * a PDF and left the app's themed background showing through.
+ */
+function PortfolioItemPreview({
+  item,
+  player,
+  hasVideo,
+}: {
+  item: PortfolioItem;
+  player: ReturnType<typeof usePortfolioVideoPlayer>['player'];
+  hasVideo: boolean;
+}) {
+  const { theme } = useAppThemeContext();
+
+  if (item.type === 'video') {
+    return hasVideo ? (
+      <VideoView
+        player={player}
+        nativeControls
+        contentFit="contain"
+        style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
+      />
+    ) : (
+      <View
+        className="rounded-lg items-center justify-center h-64 mb-3"
+        style={{ backgroundColor: theme.surfaceSecondary }}
+      >
+        <Text style={{ color: theme.textSecondary }}>Unable to load video preview</Text>
+      </View>
+    );
+  }
+
+  if (isPdfSource(item)) {
+    return (
+      <PdfPreview
+        uri={item.url}
+        name={item.name || item.title || undefined}
+        style={{ width: '100%', height: PDF_PREVIEW_HEIGHT, marginBottom: 12 }}
+      />
+    );
+  }
+
+  if (item.type === 'file') {
+    // Non-PDF documents have nothing to render inline; show the file rather than
+    // an image box that can never load.
+    return (
+      <View
+        className="rounded-lg items-center justify-center h-64 mb-3 px-6"
+        style={{ backgroundColor: theme.surfaceSecondary }}
+      >
+        <MaterialIcons name="insert-drive-file" size={56} color={theme.primary} />
+        <Text
+          className="text-sm mt-3 text-center"
+          style={{ color: theme.text }}
+          numberOfLines={2}
+        >
+          {item.name || item.title || 'File'}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <OptimizedImage
+      source={{ uri: item.thumbnail || item.url }}
+      style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
+      resizeMode="contain"
+      useThumbnail={false}
+      priority="high"
+      alt={item.title || 'Portfolio item detail'}
+    />
+  );
 }
 
 function usePortfolioVideoPlayer(item: PortfolioItem | null) {
@@ -199,6 +285,7 @@ export function EnhancedProfileSection({
   const [isReordering, setIsReordering] = useState(false);
   const { player: selectedVideoPlayer, hasVideo: hasSelectedVideo } =
     usePortfolioVideoPlayer(selectedPortfolioItem);
+  const isPdfPreview = isPdfSource(selectedPortfolioItem);
 
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
@@ -709,7 +796,11 @@ export function EnhancedProfileSection({
                         </>
                       ) : (
                         <View className="items-center justify-center p-3">
-                          <MaterialIcons name="insert-drive-file" size={28} color={theme.primary} />
+                          <MaterialIcons
+                            name={isPdfSource(item) ? 'picture-as-pdf' : 'insert-drive-file'}
+                            size={28}
+                            color={isPdfSource(item) ? '#ef4444' : theme.primary}
+                          />
                           <Text className="text-[10px] mt-1" style={{ color: theme.textSecondary }} numberOfLines={2}>
                             {item.name || 'File'}
                           </Text>
@@ -804,7 +895,10 @@ export function EnhancedProfileSection({
           onPress={() => setSelectedPortfolioItem(null)}
         >
           <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
-            <View className="rounded-xl p-4 m-4 max-w-lg w-full" style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
+            <View
+              className={`rounded-xl p-4 m-4 w-full ${isPdfPreview ? '' : 'max-w-lg'}`}
+              style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.surfaceSecondary }}
+            >
               <View className="flex-row justify-between items-center mb-3">
                 <Text className="text-lg font-bold" style={{ color: theme.text }}>Portfolio Item</Text>
                 <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
@@ -813,29 +907,11 @@ export function EnhancedProfileSection({
               </View>
               {selectedPortfolioItem && (
                 <>
-                  {selectedPortfolioItem.type === 'video' ? (
-                    hasSelectedVideo ? (
-                      <VideoView
-                        player={selectedVideoPlayer}
-                        nativeControls
-                        contentFit="contain"
-                        style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
-                      />
-                    ) : (
-                      <View className="rounded-lg items-center justify-center h-64 mb-3" style={{ backgroundColor: theme.surfaceSecondary }}>
-                        <Text style={{ color: theme.textSecondary }}>Unable to load video preview</Text>
-                      </View>
-                    )
-                  ) : (
-                    <OptimizedImage
-                      source={{ uri: selectedPortfolioItem.thumbnail || selectedPortfolioItem.url }}
-                      style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
-                      resizeMode="contain"
-                      useThumbnail={false}
-                      priority="high"
-                      alt={selectedPortfolioItem.title || 'Portfolio item detail'}
-                    />
-                  )}
+                  <PortfolioItemPreview
+                    item={selectedPortfolioItem}
+                    player={selectedVideoPlayer}
+                    hasVideo={hasSelectedVideo}
+                  />
                   {selectedPortfolioItem.title && (
                     <Text className="text-base font-medium mb-2" style={{ color: theme.text }}>
                       {selectedPortfolioItem.title}
@@ -913,6 +989,7 @@ export function PortfolioSection({
   const [isReordering, setIsReordering] = React.useState(false);
   const { player: standaloneVideoPlayer, hasVideo: standaloneHasVideo } =
     usePortfolioVideoPlayer(selectedPortfolioItem);
+  const isPdfPreview = isPdfSource(selectedPortfolioItem);
 
   const handleDeletePortfolioItem = async (itemId: string) => {
     Alert.alert('Delete item', 'Are you sure you want to delete this portfolio item?', [
@@ -1034,7 +1111,11 @@ export function PortfolioSection({
                     </>
                   ) : (
                     <View className="items-center justify-center p-3">
-                      <MaterialIcons name="insert-drive-file" size={28} color={theme.primary} />
+                      <MaterialIcons
+                        name={isPdfSource(item) ? 'picture-as-pdf' : 'insert-drive-file'}
+                        size={28}
+                        color={isPdfSource(item) ? '#ef4444' : theme.primary}
+                      />
                       <Text className="text-[10px] mt-1" style={{ color: theme.textSecondary }} numberOfLines={2}>
                         {item.name || 'File'}
                       </Text>
@@ -1116,7 +1197,10 @@ export function PortfolioSection({
           onPress={() => setSelectedPortfolioItem(null)}
         >
           <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
-            <View className="rounded-xl p-4 m-4 max-w-lg w-full" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
+            <View
+              className={`rounded-xl p-4 m-4 w-full ${isPdfPreview ? '' : 'max-w-lg'}`}
+              style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}
+            >
               <View className="flex-row justify-between items-center mb-3">
                 <Text className="text-lg font-bold" style={{ color: theme.text }}>Portfolio Item</Text>
                 <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
@@ -1125,29 +1209,11 @@ export function PortfolioSection({
               </View>
               {selectedPortfolioItem && (
                 <>
-                  {selectedPortfolioItem.type === 'video' ? (
-                    standaloneHasVideo ? (
-                      <VideoView
-                        player={standaloneVideoPlayer}
-                        nativeControls
-                        contentFit="contain"
-                        style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
-                      />
-                    ) : (
-                      <View className="rounded-lg items-center justify-center h-64 mb-3" style={{ backgroundColor: theme.surfaceSecondary }}>
-                        <Text style={{ color: theme.textSecondary }}>Unable to load video preview</Text>
-                      </View>
-                    )
-                  ) : (
-                    <OptimizedImage
-                      source={{ uri: selectedPortfolioItem.thumbnail || selectedPortfolioItem.url }}
-                      style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
-                      resizeMode="contain"
-                      useThumbnail={false}
-                      priority="high"
-                      alt={selectedPortfolioItem.title || 'Portfolio item detail'}
-                    />
-                  )}
+                  <PortfolioItemPreview
+                    item={selectedPortfolioItem}
+                    player={standaloneVideoPlayer}
+                    hasVideo={standaloneHasVideo}
+                  />
                   {selectedPortfolioItem.title && (
                     <Text className="text-base font-medium mb-2" style={{ color: theme.text }}>
                       {selectedPortfolioItem.title}
