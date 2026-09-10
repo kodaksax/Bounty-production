@@ -39,7 +39,6 @@ import { StaleBountyAlert } from './stale-bounty-alert';
 import { AnimatedSection } from './ui/animated-section';
 import { AttachmentsList } from './ui/attachments-list';
 import { DisputeFrozenBanner } from './ui/dispute-frozen-banner';
-import { MessageBar } from './ui/message-bar';
 import { RatingStars } from './ui/rating-stars';
 import { RevisionFeedbackBanner } from './ui/revision-feedback-banner';
 import { Stepper } from './ui/stepper';
@@ -743,60 +742,6 @@ export function MyPostingExpandable({
       return [];
     }
   }, [bounty.attachments_json]);
-
-  const handleSendMessage = async (text: string) => {
-    if (__DEV__) {
-      console.log('[handleSendMessage] bounty.accepted_by:', bounty.accepted_by);
-      console.log(
-        '[handleSendMessage] conversation:',
-        conversation?.id,
-        conversation?.participantIds
-      );
-      console.log('[handleSendMessage] currentUserId:', currentUserId);
-    }
-    const resolveCounterpartyId = (): string | null => {
-      const effectiveUserId = currentUserId || getCurrentUserId();
-      const participantFallback = effectiveUserId
-        ? (conversation?.participantIds || []).find(id => String(id) !== String(effectiveUserId))
-        : null;
-      const ownerCounterparty = bounty.accepted_by || readyRecord?.hunter_id || participantFallback;
-      const hunterCounterparty = bounty.poster_id || bounty.user_id || participantFallback;
-
-      if (isOwner) {
-        return ownerCounterparty ? String(ownerCounterparty) : null;
-      }
-
-      return hunterCounterparty ? String(hunterCounterparty) : null;
-    };
-
-    const counterpartyId = resolveCounterpartyId();
-    if (__DEV__) {
-      console.log('[handleSendMessage] counterpartyId:', counterpartyId);
-    }
-
-    let targetConversationId = conversation?.id ? String(conversation.id) : null;
-
-    if (counterpartyId) {
-      try {
-        const canonicalConversation = await messageService.getOrCreateConversation(
-          [counterpartyId],
-          EMPTY_CONVERSATION_NAME,
-          String(bounty.id)
-        );
-        if (canonicalConversation?.id) {
-          targetConversationId = String(canonicalConversation.id);
-          if (!conversation || String(conversation.id) !== targetConversationId) {
-            dispatchUi({ type: 'set', key: 'conversation', value: canonicalConversation });
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to resolve canonical conversation for quick message', err);
-      }
-    }
-
-    if (!targetConversationId) throw new Error('No conversation');
-    await messageService.sendMessage(targetConversationId, text, currentUserId);
-  };
 
   const formatTime = (seconds: number): string => {
     if (seconds < 60) return `${seconds}s`;
@@ -1585,11 +1530,13 @@ export function MyPostingExpandable({
 
                 <AttachmentsList attachments={attachments} />
 
-                <RatingStars
-                  rating={ratingDraft}
-                  onRatingChange={v => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
-                  label="Rate This Bounty:"
-                />
+                {hasSubmission && (
+                  <RatingStars
+                    rating={ratingDraft}
+                    onRatingChange={v => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
+                    label="Rate This Bounty:"
+                  />
+                )}
 
                 {/* Poster Flow Tools - raise/view dispute */}
                 <View style={styles.posterToolsSection}>
@@ -1701,6 +1648,16 @@ export function MyPostingExpandable({
               locked={(!readyToSubmitPressed && !readyRecord) || submissionPending || hasSubmission}
             >
               <View style={{ gap: 16 }}>
+                <TouchableOpacity
+                  style={styles.messagingBtn}
+                  onPress={handleMessagePoster}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message Poster"
+                >
+                  <MaterialIcons name="chat" size={18} color="#fff" />
+                  <Text style={styles.messagingBtnText}>Message Poster</Text>
+                </TouchableOpacity>
+
                 {/* If a submission is pending, show waiting state */}
                 {submissionPending || hasSubmission ? (
                   <>
