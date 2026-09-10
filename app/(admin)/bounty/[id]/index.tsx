@@ -58,6 +58,13 @@ interface Transition {
   icon: IconName;
   /** Transitions that move money or end the engagement warrant a stronger confirm. */
   destructive?: boolean;
+  /**
+   * This transition settles escrow as part of the move, so it goes through
+   * adminDataClient.approveBountyCancellation() instead of the lifecycle-only
+   * updateBountyStatus(). The one exception to the "no money here" rule below,
+   * and the copy in confirmStatusChange has to match.
+   */
+  settlesEscrow?: boolean;
 }
 
 /**
@@ -69,6 +76,12 @@ interface Transition {
  * where the money-moving flow and its audit trail already live; flipping a
  * bounty row to `completed` here does not release escrow and must not be
  * mistaken for doing so.
+ *
+ * `settlesEscrow` marks the single deliberate exception: approving a
+ * cancellation. That one CANNOT be lifecycle-only -- the poster is debited
+ * into escrow when they accept a hunter, so a "cancelled" bounty whose escrow
+ * was never returned is stranded money, not a clean lifecycle state. It is
+ * routed through a transactional RPC that refunds and cancels together.
  */
 const STATUS_TRANSITIONS: Record<AdminBountyStatus, Transition[]> = {
   open: [
@@ -89,7 +102,7 @@ const STATUS_TRANSITIONS: Record<AdminBountyStatus, Transition[]> = {
     { status: 'archived', label: 'Archive', icon: 'archive' },
   ],
   cancellation_requested: [
-    { status: 'cancelled', label: 'Approve cancellation', icon: 'check', destructive: true },
+    { status: 'cancelled', label: 'Approve cancellation', icon: 'check', destructive: true, settlesEscrow: true },
     { status: 'in_progress', label: 'Decline, resume work', icon: 'undo' },
   ],
   deleted: [{ status: 'archived', label: 'Restore as archived', icon: 'restore_from_trash' as IconName }],
@@ -154,10 +167,28 @@ export default function AdminBountyDetailScreen() {
   }, [loadBounty]);
 
   const applyStatus = useCallback(
-    async (next: AdminBountyStatus) => {
+    async (next: AdminBountyStatus, settlesEscrow = false) => {
       if (!bounty || pendingAction != null) return;
       setPendingAction(next);
       try {
+        if (settlesEscrow) {
+          // Refund + resolve + cancel, in one server-side transaction.
+          const result = await adminDataClient.approveBountyCancellation(
+            bounty.id,
+            'Cancellation approved by support.'
+          );
+          // The RPC is the authority on the new state; re-read rather than
+          // patching a status in locally, so the financial summary below
+          // reflects the refund too.
+          await loadBounty();
+          Alert.alert(
+            'Cancellation approved',
+            result.refundApplied && result.refundAmount != null
+              ? `The bounty is cancelled and $${result.refundAmount.toFixed(2)} was refunded to the poster's wallet.`
+              : 'The bounty is cancelled. There was no escrow left to refund — check Transactions if you expected one.'
+          );
+          return;
+        }
         const updated = await adminDataClient.updateBountyStatus(bounty.id, next);
         setBounty(updated);
         Alert.alert('Status updated', `This bounty is now "${next.replace(/_/g, ' ')}".`);
@@ -175,23 +206,26 @@ export default function AdminBountyDetailScreen() {
         setPendingAction(null);
       }
     },
-    [bounty, pendingAction, router]
+    [bounty, pendingAction, router, loadBounty]
   );
 
   const confirmStatusChange = useCallback(
     (transition: Transition) => {
       if (!bounty) return;
+      const escrowNote = transition.settlesEscrow
+        ? "This cancels the bounty AND refunds the full escrowed amount to the poster's wallet. This moves real money and cannot be undone here."
+        : `This changes the bounty's lifecycle state to "${transition.status.replace(/_/g, ' ')}". It does not move any money — escrow, releases and refunds are handled on the Transactions and Disputes screens.`;
       Alert.alert(
         transition.destructive ? `${transition.label}?` : 'Change status',
         transition.destructive
-          ? `This changes the bounty's lifecycle state to "${transition.status.replace(/_/g, ' ')}". It does not move any money — escrow, releases and refunds are handled on the Transactions and Disputes screens.`
+          ? escrowNote
           : `Change this bounty's status to "${transition.status.replace(/_/g, ' ')}"?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: transition.label,
             style: transition.destructive ? 'destructive' : 'default',
-            onPress: () => void applyStatus(transition.status),
+            onPress: () => void applyStatus(transition.status, transition.settlesEscrow),
           },
         ]
       );

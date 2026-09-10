@@ -18,14 +18,30 @@ export type CancellationReasonCategory =
  */
 export const cancellationService = {
   /**
-   * Create a cancellation request for a bounty
+   * File a cancellation request. HUNTER ONLY.
+   *
+   * A cancellation request asks the counterparty for release from work already
+   * under way, and granting it returns the poster's escrow in full — so the
+   * hunter is the only party it can come from. A poster with an unaccepted
+   * bounty deletes it (refunded on the spot); once a hunter is working, the
+   * poster's route is a dispute, which is the flow that can settle escrow in
+   * either direction.
+   *
+   * Everything lives in request_bounty_cancellation because the hunter cannot
+   * write the status themselves: the only UPDATE policies on `bounties` are
+   * `auth.uid() = poster_id`, so a hunter's status flip matches zero rows and
+   * PostgREST still reports success — the request row would end up attached to
+   * a bounty still reading `in_progress`. The RPC is SECURITY DEFINER, re-checks
+   * that the caller really is the accepted hunter, and does the flip and the
+   * insert in one transaction.
+   *
+   * The refund percentage is not a parameter: approving returns 100% of escrow.
+   * See 20260908020000_hunter_only_cancellation_requests.sql.
    */
   async createCancellationRequest(
     bountyId: string | number,
     requesterId: string,
-    requesterType: 'poster' | 'hunter',
     reason: string,
-    refundPercentage?: number,
     reasonCategory: CancellationReasonCategory = 'other'
   ): Promise<BountyCancellation | null> {
     try {
@@ -40,24 +56,10 @@ export const cancellationService = {
 
       const isForHonor = Boolean(bounty.is_for_honor);
       const normalizedReason = this.composeReasonWithCategory(reason, reasonCategory);
-      const nowIso = new Date().toISOString();
 
-      // For honor bounties bypass manual dispute flow and auto-cancel.
-      const targetStatus = isForHonor ? 'cancelled' : 'cancellation_requested';
-      const { data, error } = await supabase.rpc('create_bounty_cancellation', {
+      const { data, error } = await supabase.rpc('request_bounty_cancellation', {
         p_bounty_id: bountyId,
-        p_expected_status: bounty.status,
-        p_target_status: targetStatus,
-        p_requester_id: requesterId,
-        p_requester_type: requesterType,
         p_reason: normalizedReason,
-        p_status: isForHonor ? 'accepted' : 'pending',
-        p_refund_percentage: isForHonor ? 0 : refundPercentage ?? null,
-        p_refund_amount: isForHonor ? 0 : null,
-        p_response_message: isForHonor
-          ? 'Auto-accepted: for honor bounties do not require manual dispute resolution.'
-          : null,
-        p_resolved_at: isForHonor ? nowIso : null,
       }).single();
 
       if (error) {
@@ -101,26 +103,25 @@ export const cancellationService = {
       await this.trackCancellationMetrics({
         requesterId,
         bounty,
-        requesterType,
+        requesterType: 'hunter',
         reasonCategory,
         wasAutoCancelled: isForHonor,
       });
 
+      // Only the for-honor path resolves immediately, so it is the only one
+      // with a settled outcome to count. A pending request is not yet a
+      // withdrawal — that is recorded when it is accepted.
       if (isForHonor) {
-        await this.updateUserStats(
-          requesterId,
-          requesterType === 'hunter' ? 'withdrawal' : 'cancellation'
-        );
+        await this.updateUserStats(requesterId, 'withdrawal');
       }
 
       return cancellation;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in createCancellationRequest', { 
-        bountyId, 
-        requesterId, 
-        requesterType, 
-        error: { message: error.message } 
+      logger.error('Error in createCancellationRequest', {
+        bountyId,
+        requesterId,
+        error: { message: error.message },
       });
       return null;
     }
@@ -273,8 +274,16 @@ export const cancellationService = {
         throw new Error('Bounty not found');
       }
 
-      // Calculate refund amount based on percentage or default to full refund
-      const refundPercentage = cancellation.refundPercentage ?? 100;
+      // Granting a cancellation returns the WHOLE escrow to the poster.
+      //
+      // `refundPercentage` on the request is a recommendation, not a
+      // settlement instruction — calculateRecommendedRefund() suggests 50 for
+      // an in-progress bounty with an accepted hunter. Honouring it here would
+      // refund half and leave the other half sitting in escrow forever,
+      // because nothing in this flow ever pays a hunter that remainder. Until
+      // a split-settlement path exists, a partial refund is just stranded
+      // money, so the full amount goes back.
+      const refundPercentage = 100;
       const refundAmount = (bounty.amount * refundPercentage) / 100;
 
       // Process the wallet refund FIRST, before mutating any record. The refund

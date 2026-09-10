@@ -59,23 +59,28 @@ describe('BountyStatusPanel', () => {
       role: 'poster',
       otherPartyName: 'Dana',
     });
-    const onCancel = jest.fn();
+    // open_dispute is the poster's destructive action on an in-progress bounty.
+    // This used to assert on cancel_bounty, but a cancellation REQUEST is the
+    // hunter's exit — granting one refunds the poster's escrow in full — so the
+    // poster is no longer offered it at all. The contract under test is the
+    // disclosure, not which action happens to sit behind it.
+    const onDispute = jest.fn();
     const { getByText, queryByText } = render(
       <BountyStatusPanel
         state={state}
         role="poster"
         otherPartyName="Dana"
-        onAction={{ message: jest.fn(), cancel_bounty: onCancel, open_dispute: jest.fn() }}
+        onAction={{ message: jest.fn(), open_dispute: onDispute }}
       />
     );
 
     // Collapsed: the primary action is the only button on screen.
     expect(getByText('Message Dana')).toBeTruthy();
-    expect(queryByText('Cancel bounty')).toBeNull();
+    expect(queryByText('Open a dispute')).toBeNull();
 
     fireEvent.press(getByText('More actions'));
-    fireEvent.press(getByText('Cancel bounty'));
-    expect(onCancel).toHaveBeenCalledTimes(1);
+    fireEvent.press(getByText('Open a dispute'));
+    expect(onDispute).toHaveBeenCalledTimes(1);
   });
 
   it('never offers the primary action twice as a secondary', () => {
