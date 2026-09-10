@@ -2502,6 +2502,15 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 8,
       backgroundColor: 'rgba(239, 68, 68, 0.2)',
     },
+    hunterToolBtnWarning: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    },
     hunterToolText: {
       color: theme.text,
       fontSize: 13,
