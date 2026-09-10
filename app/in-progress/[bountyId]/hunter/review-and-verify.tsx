@@ -26,6 +26,9 @@ import { disputeService } from '../../../../lib/services/dispute-service';
 import { messageService } from '../../../../lib/services/message-service';
 import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+// The completion-message field lives in this list's header, so the list is
+// what has to inset for the keyboard.
+import { keyboardAwareListProps } from '../../../../components/ui/keyboard-avoiding';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
@@ -402,6 +405,7 @@ export default function HunterReviewAndVerifyScreen() {
       </View>
 
       <FlatList
+        {...keyboardAwareListProps}
         style={styles.scrollView}
         data={proofItems}
         keyExtractor={(item) => item.id}

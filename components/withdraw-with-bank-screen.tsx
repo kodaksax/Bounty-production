@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -32,6 +31,7 @@ import { WithdrawalConfirmSheet } from './ui/withdrawal-confirm-sheet';
 import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdrawal-result-screen';
 import { WithdrawMethodSelect } from './withdraw-method-select';
 import { WithdrawNowCard } from './withdraw-now-card';
+import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
 
 interface WithdrawWithBankScreenProps {
   onBack?: () => void;
@@ -505,7 +505,7 @@ export function WithdrawWithBankScreen({
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.content}>
+      <KeyboardAwareScrollView contentContainerStyle={s.content}>
         {/* Connect-native withdrawal (Phase 5). When the balance source is
             Stripe, this card is the whole withdrawal flow: it shows the real
             withdrawable amount and pays it out directly, with no dependency on
@@ -795,7 +795,7 @@ export function WithdrawWithBankScreen({
         )}
         </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Withdraw Button — the Connect-native card owns its own action, so
           this legacy footer is suppressed to avoid two competing withdraw

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -23,6 +22,7 @@ import type { AppTheme } from '../lib/themes/types';
 import { useWallet } from '../lib/wallet-context';
 import { WithdrawalConfirmSheet } from './ui/withdrawal-confirm-sheet';
 import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdrawal-result-screen';
+import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
 
 // Mirrors the server-side defaults (INSTANT_PAYOUT_FEE_PERCENT /
 // INSTANT_PAYOUT_FEE_MIN_USD in supabase/functions/connect/index.ts) for
@@ -281,7 +281,7 @@ export function InstantCashOutScreen({
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.content}>
+      <KeyboardAwareScrollView contentContainerStyle={s.content}>
         <View style={s.balanceCard}>
           <Text style={s.balanceLabel}>Available for Instant Cash Out</Text>
           <Text style={s.balanceAmount}>{formatCurrency(effectiveAvailable)}</Text>
@@ -387,7 +387,7 @@ export function InstantCashOutScreen({
             shown above before you confirm. Standard withdrawals to your bank account remain free.
           </Text>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <View style={[s.footer, { paddingBottom: getBottomNavBaseClearance(insets.bottom, 16) }]}>
         <TouchableOpacity

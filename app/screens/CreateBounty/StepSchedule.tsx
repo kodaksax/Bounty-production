@@ -6,7 +6,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -15,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getBottomNavBaseClearance, getBottomNavContentPadding } from '../../../lib/constants/navigation';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
 interface StepScheduleProps {
   draft: BountyDraft;
@@ -194,7 +194,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <ScrollView
+      <KeyboardAwareScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={{
@@ -446,7 +446,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
             </Text>
           </View>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Navigation Buttons */}
       <View

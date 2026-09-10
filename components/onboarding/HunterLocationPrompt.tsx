@@ -11,6 +11,7 @@ import type { UserFriendlyError } from '../../lib/utils/error-messages';
 import type { Bounty } from '../../lib/services/database.types';
 import type { OnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
 import type { AppTheme } from '../../lib/themes/types';
+import { KeyboardAvoidingScreen } from '../ui/keyboard-avoiding';
 
 type HunterLocationPromptProps = {
   theme: AppTheme;
@@ -125,7 +126,14 @@ export function HunterLocationPrompt({
   const zipError = zipFormatError || zipSubmitError;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    // The ZIP field sits in the bottom action block behind a flex spacer, so
+    // the screen gives up the keyboard's height and the spacer collapses,
+    // carrying the field up with it. `offset` is the safe-area padding the
+    // keyboard already covers.
+    <KeyboardAvoidingScreen
+      style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+      offset={insets.bottom}
+    >
       <View style={styles.stepBackRow}>
         <TouchableOpacity
           onPress={handleBack}
@@ -266,7 +274,7 @@ export function HunterLocationPrompt({
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingScreen>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   Animated,
   Dimensions,
   Easing,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -129,6 +130,9 @@ export function QuickStepLayout({
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          // The flow root already shrinks by the keyboard's height, so this
+          // body only has to let the user swipe the keyboard away.
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.title} accessibilityRole="header">
