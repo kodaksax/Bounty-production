@@ -75,7 +75,10 @@ function coveredHeight(event: KeyboardEvent): number {
   const end = event.endCoordinates;
   if (!end) return 0;
   const windowHeight = Dimensions.get('window').height;
-  return Math.max(0, windowHeight - (end.screenY ?? windowHeight));
+  const screenY = end.screenY ?? windowHeight;
+  const frameBottom = screenY + (end.height ?? 0);
+  if (frameBottom < windowHeight) return 0;
+  return Math.max(0, windowHeight - screenY);
 }
 
 export interface KeyboardInsetOptions {
@@ -239,11 +242,17 @@ export function KeyboardAvoidingScreen({
   enabled = true,
 }: KeyboardAvoidingScreenProps) {
   const { inset, translateY } = useKeyboardInset({ offset, enabled });
+  const paddingBottom = offset === 0
+    ? inset
+    : inset.interpolate({
+      inputRange: [0, 1],
+      outputRange: [offset, offset + 1],
+    });
 
   if (behavior === 'position') {
     return <Animated.View style={[style, { transform: [{ translateY }] }]}>{children}</Animated.View>;
   }
-  return <Animated.View style={[style, { paddingBottom: inset }]}>{children}</Animated.View>;
+  return <Animated.View style={[style, { paddingBottom }]}>{children}</Animated.View>;
 }
 
 export interface KeyboardAwareScrollViewProps extends ScrollViewProps {

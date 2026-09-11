@@ -173,7 +173,7 @@ export function AppModal({
           style={[
             StyleSheet.absoluteFill,
             variant === 'sheet' ? styles.sheetRoot : styles.dialogRoot,
-            { paddingBottom: keyboardInset },
+            { marginBottom: keyboardInset },
             containerStyle,
           ]}
           pointerEvents="box-none"

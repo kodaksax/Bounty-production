@@ -22,7 +22,7 @@ import type { AppTheme } from '../lib/themes/types';
 import { useWallet } from '../lib/wallet-context';
 import { WithdrawalConfirmSheet } from './ui/withdrawal-confirm-sheet';
 import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdrawal-result-screen';
-import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
+import { KeyboardAwareScrollView, KeyboardAvoidingScreen } from './ui/keyboard-avoiding';
 
 // Mirrors the server-side defaults (INSTANT_PAYOUT_FEE_PERCENT /
 // INSTANT_PAYOUT_FEE_MIN_USD in supabase/functions/connect/index.ts) for
@@ -281,11 +281,12 @@ export function InstantCashOutScreen({
         <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAwareScrollView contentContainerStyle={s.content}>
-        <View style={s.balanceCard}>
-          <Text style={s.balanceLabel}>Available for Instant Cash Out</Text>
-          <Text style={s.balanceAmount}>{formatCurrency(effectiveAvailable)}</Text>
-        </View>
+      <KeyboardAvoidingScreen style={s.body}>
+        <KeyboardAwareScrollView contentContainerStyle={s.content}>
+          <View style={s.balanceCard}>
+            <Text style={s.balanceLabel}>Available for Instant Cash Out</Text>
+            <Text style={s.balanceAmount}>{formatCurrency(effectiveAvailable)}</Text>
+          </View>
 
         {loading ? (
           <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 16 }} />
@@ -380,29 +381,30 @@ export function InstantCashOutScreen({
           )}
         </View>
 
-        <View style={s.infoCard}>
-          <MaterialIcons name="bolt" size={20} color={theme.primary} />
-          <Text style={s.infoText}>
-            Instant Cash Out typically arrives within minutes. A small fee applies —
-            shown above before you confirm. Standard withdrawals to your bank account remain free.
-          </Text>
-        </View>
-      </KeyboardAwareScrollView>
+          <View style={s.infoCard}>
+            <MaterialIcons name="bolt" size={20} color={theme.primary} />
+            <Text style={s.infoText}>
+              Instant Cash Out typically arrives within minutes. A small fee applies —
+              shown above before you confirm. Standard withdrawals to your bank account remain free.
+            </Text>
+          </View>
+        </KeyboardAwareScrollView>
 
-      <View style={[s.footer, { paddingBottom: getBottomNavBaseClearance(insets.bottom, 16) }]}>
-        <TouchableOpacity
-          onPress={handleCashOut}
-          disabled={isCashOutDisabled}
-          style={[s.cashOutButton, isCashOutDisabled && s.cashOutButtonDisabled]}
-          accessibilityRole="button"
-          accessibilityLabel={amount ? `Cash out ${formatCurrency(parsedAmount)} instantly` : 'Cash out instantly'}
-          accessibilityState={{ disabled: isCashOutDisabled }}
-        >
-          <Text style={s.cashOutButtonText}>
-            {amount ? `Cash Out ${formatCurrency(parsedAmount)}` : 'Cash Out Instantly'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <View style={[s.footer, { paddingBottom: getBottomNavBaseClearance(insets.bottom, 16) }]}>
+          <TouchableOpacity
+            onPress={handleCashOut}
+            disabled={isCashOutDisabled}
+            style={[s.cashOutButton, isCashOutDisabled && s.cashOutButtonDisabled]}
+            accessibilityRole="button"
+            accessibilityLabel={amount ? `Cash out ${formatCurrency(parsedAmount)} instantly` : 'Cash out instantly'}
+            accessibilityState={{ disabled: isCashOutDisabled }}
+          >
+            <Text style={s.cashOutButtonText}>
+              {amount ? `Cash Out ${formatCurrency(parsedAmount)}` : 'Cash Out Instantly'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingScreen>
 
       <WithdrawalConfirmSheet
         visible={showConfirmSheet}
@@ -431,6 +433,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   },
   backButton: { padding: 8 },
   headerTitle: { fontSize: 18, fontWeight: '600', color: t.text },
+  body: { flex: 1 },
   content: { padding: 16 },
   balanceCard: {
     backgroundColor: t.surface, borderRadius: 16, padding: 14, marginBottom: 12, alignItems: 'center',

@@ -39,11 +39,8 @@ import { useKeyboardInset } from './ui/keyboard-avoiding'
 // Alert defer delay to allow React to process state updates before showing alert
 const ALERT_DEFER_DELAY = 100;
 
-// Breathing room kept between the card and the top of the keyboard, plus the
-// floor the card will not shrink past — below this the header and composer
-// alone no longer fit and shrinking further just clips them.
+// Breathing room kept between the card and the top of the keyboard.
 const CARD_KEYBOARD_MARGIN = 24;
-const MIN_CARD_HEIGHT = 280;
 
 // Type for detail rows in Additional Details section
 interface DetailRow {
@@ -618,7 +615,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const cardHeight = Math.min(
     height * 0.9,
     760,
-    Math.max(MIN_CARD_HEIGHT, height - keyboardHeight - CARD_KEYBOARD_MARGIN)
+    Math.max(0, height - keyboardHeight - CARD_KEYBOARD_MARGIN)
   )
 
   return (
@@ -1303,5 +1300,4 @@ function makeStyles(theme: AppTheme) {
   },
   });
 }
-
 
