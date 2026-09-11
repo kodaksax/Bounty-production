@@ -259,8 +259,12 @@ export function SignInForm() {
 
           setLoginAttempts(newAttempts);
 
-          // Use centralized error message
-          throw new Error(authError.userMessage);
+          // Use centralized error message, and carry the failure category on
+          // the thrown error so the outer catch reports a real reason on
+          // AUTH_ATTEMPT_FAILED instead of the always-empty err.code.
+          const signInError = new Error(authError.userMessage);
+          (signInError as any).code = authError.category;
+          throw signInError;
         }
 
         // Reset login attempts on success
@@ -481,7 +485,7 @@ export function SignInForm() {
         posthogCapture('AUTH_ATTEMPT_FAILED', {
           correlation_id: correlationId,
           method: 'email',
-          error_code: err?.code ?? 'unknown',
+          error_code: err?.code ?? parseAuthError(err, correlationId).category,
           outcome: timedOut ? 'timed_out' : 'rejected',
         });
 
