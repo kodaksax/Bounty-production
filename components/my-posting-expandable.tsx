@@ -39,7 +39,6 @@ import { StaleBountyAlert } from './stale-bounty-alert';
 import { AnimatedSection } from './ui/animated-section';
 import { AttachmentsList } from './ui/attachments-list';
 import { DisputeFrozenBanner } from './ui/dispute-frozen-banner';
-import { MessageBar } from './ui/message-bar';
 import { RatingStars } from './ui/rating-stars';
 import { RevisionFeedbackBanner } from './ui/revision-feedback-banner';
 import { Stepper } from './ui/stepper';
@@ -744,60 +743,6 @@ export function MyPostingExpandable({
     }
   }, [bounty.attachments_json]);
 
-  const handleSendMessage = async (text: string) => {
-    if (__DEV__) {
-      console.log('[handleSendMessage] bounty.accepted_by:', bounty.accepted_by);
-      console.log(
-        '[handleSendMessage] conversation:',
-        conversation?.id,
-        conversation?.participantIds
-      );
-      console.log('[handleSendMessage] currentUserId:', currentUserId);
-    }
-    const resolveCounterpartyId = (): string | null => {
-      const effectiveUserId = currentUserId || getCurrentUserId();
-      const participantFallback = effectiveUserId
-        ? (conversation?.participantIds || []).find(id => String(id) !== String(effectiveUserId))
-        : null;
-      const ownerCounterparty = bounty.accepted_by || readyRecord?.hunter_id || participantFallback;
-      const hunterCounterparty = bounty.poster_id || bounty.user_id || participantFallback;
-
-      if (isOwner) {
-        return ownerCounterparty ? String(ownerCounterparty) : null;
-      }
-
-      return hunterCounterparty ? String(hunterCounterparty) : null;
-    };
-
-    const counterpartyId = resolveCounterpartyId();
-    if (__DEV__) {
-      console.log('[handleSendMessage] counterpartyId:', counterpartyId);
-    }
-
-    let targetConversationId = conversation?.id ? String(conversation.id) : null;
-
-    if (counterpartyId) {
-      try {
-        const canonicalConversation = await messageService.getOrCreateConversation(
-          [counterpartyId],
-          EMPTY_CONVERSATION_NAME,
-          String(bounty.id)
-        );
-        if (canonicalConversation?.id) {
-          targetConversationId = String(canonicalConversation.id);
-          if (!conversation || String(conversation.id) !== targetConversationId) {
-            dispatchUi({ type: 'set', key: 'conversation', value: canonicalConversation });
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to resolve canonical conversation for quick message', err);
-      }
-    }
-
-    if (!targetConversationId) throw new Error('No conversation');
-    await messageService.sendMessage(targetConversationId, text, currentUserId);
-  };
-
   const formatTime = (seconds: number): string => {
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
@@ -1265,8 +1210,8 @@ export function MyPostingExpandable({
             </View>
           )}
 
-          {/* Work in Progress section - only when in_progress status */}
-          {bounty.status === 'in_progress' && (
+          {/* Work in Progress section - hunter only, while the bounty is in progress */}
+          {bounty.status === 'in_progress' && !isOwner && (
             <AnimatedSection
               title="Work in progress"
               expanded={wipExpanded}
@@ -1277,398 +1222,260 @@ export function MyPostingExpandable({
               }}
               locked={readyToSubmitPressed || !!readyRecord}
             >
-              {isOwner ? (
-                <View style={{ gap: 16 }}>
-                  {/* Poster view: Message bar, attachments, rating */}
+              <View style={{ gap: 16 }}>
+                {/* Hunter view: Instructions, attachments, next button */}
 
-                  {hasDispute && (
-                    <DisputeFrozenBanner message="A dispute has been opened for this bounty. The submission and review flow is paused until an admin resolves the dispute." />
-                  )}
-
-                  {/* Show review button if submission is pending */}
-                  {hasSubmission && (
-                    <TouchableOpacity
-                      style={[styles.reviewSubmissionBtn, hasDispute && styles.buttonDisabled]}
-                      onPress={() =>
-                        dispatchUi({ type: 'set', key: 'showReviewModal', value: true })
-                      }
-                      disabled={hasDispute}
-                    >
-                      <MaterialIcons
-                        name={hasDispute ? 'lock' : 'rate-review'}
-                        size={20}
-                        color="#fff"
-                      />
-                      <Text style={styles.reviewSubmissionText}>
-                        {hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {conversation && (
-                    <MessageBar
-                      conversationId={conversation.id}
-                      onSendMessage={handleSendMessage}
-                      placeholder="Send a quick message to the hunter..."
-                    />
-                  )}
-
-                  <TouchableOpacity
-                    style={styles.messagingBtn}
-                    onPress={handleMessageHunter}
-                    accessibilityRole="button"
-                    accessibilityLabel="Message Hunter"
-                  >
-                    <MaterialIcons name="chat" size={18} color="#fff" />
-                    <Text style={styles.messagingBtnText}>Message Hunter</Text>
-                  </TouchableOpacity>
-
-                  <AttachmentsList attachments={attachments} />
-
-                  <RatingStars
-                    rating={ratingDraft}
-                    onRatingChange={v => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
-                    label="Rate This Bounty:"
+                {/* Show revision feedback banner if present */}
+                {showRevisionBanner && revisionFeedback && (
+                  <RevisionFeedbackBanner
+                    feedback={revisionFeedback}
+                    onDismiss={() =>
+                      dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
+                    }
+                    showDismiss={true}
                   />
-                  {/* Poster Flow Tools - message hunter, raise/view dispute */}
-                  <View style={styles.posterToolsSection}>
-                    <TouchableOpacity
-                      style={styles.posterToolsToggle}
-                      onPress={() =>
-                        dispatchUi({
-                          type: 'set',
-                          key: 'posterToolsExpanded',
-                          value: !posterToolsExpanded,
-                        })
-                      }
-                      accessibilityRole="button"
-                      accessibilityLabel="Poster flow tools"
-                      accessibilityHint="Opens quick tools including dispute and message actions"
-                    >
-                      <View style={styles.posterToolsToggleLeft}>
-                        <MaterialIcons name="gavel" size={18} color={theme.textSecondary} />
-                        <Text style={styles.posterToolsToggleText}>Poster Flow Tools</Text>
-                      </View>
-                      <MaterialIcons
-                        name={posterToolsExpanded ? 'expand-less' : 'expand-more'}
-                        size={20}
-                        color={theme.textSecondary}
-                      />
-                    </TouchableOpacity>
+                )}
 
-                    {posterToolsExpanded && (
-                      <View style={styles.posterToolsMenu}>
-                        <TouchableOpacity
-                          style={styles.hunterToolBtnDanger}
-                          onPress={
-                            hasDispute
-                              ? handleViewDispute
-                              : () =>
-                                  dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
-                          }
-                        >
-                          <MaterialIcons
-                            name={hasDispute ? 'gavel' : 'report-problem'}
-                            size={18}
-                            color={hasDispute ? '#f59e0b' : '#fca5a5'}
-                          />
-                          <Text
-                            style={
-                              hasDispute
-                                ? styles.hunterToolTextWarning
-                                : styles.hunterToolTextDanger
-                            }
-                          >
-                            {hasDispute ? 'View Dispute' : 'Raise Dispute'}
-                          </Text>
-                        </TouchableOpacity>
+                {hasDispute && (
+                  <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence and other workflow actions are paused until an admin resolves the dispute." />
+                )}
 
-                        {/* Workflow Dispute Modal for poster */}
-                        <WorkflowDisputeModal
-                          visible={showDisputeModal}
-                          bountyId={String(bounty.id)}
-                          bountyTitle={bounty.title}
-                          initiatorId={currentUserId || ''}
-                          respondentId={String(
-                            bounty.accepted_by || (readyRecord ? readyRecord.hunter_id : '')
-                          )}
-                          stage={bounty.status === 'in_progress' ? 'in_progress' : 'review_verify'}
-                          onClose={() =>
-                            dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })
-                          }
-                          onDisputeCreated={disputeId => {
-                            dispatchUi({ type: 'set', key: 'showDisputeModal', value: false });
-                            dispatchUi({ type: 'set', key: 'hasDispute', value: true });
-                            dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId });
-                            Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
-                              {
-                                text: 'View',
-                                onPress: () => (router as any).push(`/dispute/${disputeId}`),
-                              },
-                              { text: 'OK' },
-                            ]);
-                          }}
-                        />
-                      </View>
-                    )}
-                  </View>
+                <View style={styles.infoBox}>
+                  <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+                  <Text style={styles.infoText}>
+                    Congrats on being selected! Begin work on the bounty, money is in escrow; once
+                    complete press the next button.
+                  </Text>
                 </View>
-              ) : (
-                <View style={{ gap: 16 }}>
-                  {/* Hunter view: Instructions, attachments, next button */}
 
-                  {/* Show revision feedback banner if present */}
-                  {showRevisionBanner && revisionFeedback && (
-                    <RevisionFeedbackBanner
-                      feedback={revisionFeedback}
-                      onDismiss={() =>
-                        dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
-                      }
-                      showDismiss={true}
-                    />
-                  )}
+                <AttachmentsList attachments={attachments} />
 
-                  {hasDispute && (
-                    <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence and other workflow actions are paused until an admin resolves the dispute." />
-                  )}
-
-                  <View style={styles.infoBox}>
-                    <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
-                    <Text style={styles.infoText}>
-                      Congrats on being selected! Begin work on the bounty, money is in escrow; once
-                      complete press the next button.
-                    </Text>
-                  </View>
-
-                  <AttachmentsList attachments={attachments} />
-
-                  <TouchableOpacity
-                    style={[
-                      styles.primaryBtn,
-                      (readyToSubmitPressed || !!readyRecord || hasDispute) &&
-                        styles.buttonDisabled,
-                    ]}
-                    onPress={async () => {
-                      if (!currentUserId) {
-                        Alert.alert(
-                          'Sign In Required',
-                          'Your session is missing. Please sign in again and retry.'
-                        );
-                        return;
-                      }
-
-                      if (hasDispute) {
-                        Alert.alert(
-                          'Action Locked',
-                          'A dispute is currently open for this bounty. The submission flow is paused until the dispute is resolved by an admin.'
-                        );
-                        return;
-                      }
-
-                      const confirmAndMarkReady = async () => {
-                        // Persist ready state and advance UI
-                        const ok = await completionService.markReady(
-                          String(bounty.id),
-                          currentUserId
-                        );
-                        if (ok) {
-                          dispatchUi({ type: 'set', key: 'readyToSubmitPressed', value: true });
-                          dispatchUi({ type: 'set', key: 'wipExpanded', value: false });
-                          dispatchUi({ type: 'set', key: 'reviewExpanded', value: true });
-                          dispatchUi({
-                            type: 'set',
-                            key: 'localStageOverride',
-                            value: 'review_verify',
-                          });
-                          // update local readyRecord optimistically
-                          const now = new Date().toISOString();
-                          const rec = {
-                            bounty_id: String(bounty.id),
-                            hunter_id: currentUserId,
-                            ready_at: now,
-                          };
-                          dispatchDraft({ type: 'setReadyRecord', record: rec });
-                          // Trigger parent refresh to update list
-                          if (onRefresh) onRefresh();
-                        } else {
-                          Alert.alert('Error', 'Failed to mark Ready. Please try again.');
-                        }
-                      };
-
+                <TouchableOpacity
+                  style={[
+                    styles.primaryBtn,
+                    (readyToSubmitPressed || !!readyRecord || hasDispute) &&
+                      styles.buttonDisabled,
+                  ]}
+                  onPress={async () => {
+                    if (!currentUserId) {
                       Alert.alert(
-                        'Confirm Ready',
-                        'Are you sure you are ready to submit your work for review? This will lock the Work in Progress section.',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Ready', onPress: confirmAndMarkReady },
-                        ]
+                        'Sign In Required',
+                        'Your session is missing. Please sign in again and retry.'
                       );
-                    }}
-                    disabled={readyToSubmitPressed || !!readyRecord || hasDispute}
-                  >
-                    <Text style={styles.primaryText}>Ready to Submit</Text>
-                    <MaterialIcons
-                      name={
-                        readyToSubmitPressed || !!readyRecord || hasDispute
-                          ? 'lock'
-                          : 'arrow-forward'
+                      return;
+                    }
+
+                    if (hasDispute) {
+                      Alert.alert(
+                        'Action Locked',
+                        'A dispute is currently open for this bounty. The submission flow is paused until the dispute is resolved by an admin.'
+                      );
+                      return;
+                    }
+
+                    const confirmAndMarkReady = async () => {
+                      // Persist ready state and advance UI
+                      const ok = await completionService.markReady(
+                        String(bounty.id),
+                        currentUserId
+                      );
+                      if (ok) {
+                        dispatchUi({ type: 'set', key: 'readyToSubmitPressed', value: true });
+                        dispatchUi({ type: 'set', key: 'wipExpanded', value: false });
+                        dispatchUi({ type: 'set', key: 'reviewExpanded', value: true });
+                        dispatchUi({
+                          type: 'set',
+                          key: 'localStageOverride',
+                          value: 'review_verify',
+                        });
+                        // update local readyRecord optimistically
+                        const now = new Date().toISOString();
+                        const rec = {
+                          bounty_id: String(bounty.id),
+                          hunter_id: currentUserId,
+                          ready_at: now,
+                        };
+                        dispatchDraft({ type: 'setReadyRecord', record: rec });
+                        // Trigger parent refresh to update list
+                        if (onRefresh) onRefresh();
+                      } else {
+                        Alert.alert('Error', 'Failed to mark Ready. Please try again.');
                       }
-                      size={18}
-                      color="#fff"
+                    };
+
+                    Alert.alert(
+                      'Confirm Ready',
+                      'Are you sure you are ready to submit your work for review? This will lock the Work in Progress section.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Ready', onPress: confirmAndMarkReady },
+                      ]
+                    );
+                  }}
+                  disabled={readyToSubmitPressed || !!readyRecord || hasDispute}
+                >
+                  <Text style={styles.primaryText}>Ready to Submit</Text>
+                  <MaterialIcons
+                    name={
+                      readyToSubmitPressed || !!readyRecord || hasDispute
+                        ? 'lock'
+                        : 'arrow-forward'
+                    }
+                    size={18}
+                    color="#fff"
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.messagingBtn}
+                  onPress={handleMessagePoster}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message Poster"
+                >
+                  <MaterialIcons name="chat" size={18} color="#fff" />
+                  <Text style={styles.messagingBtnText}>Message Poster</Text>
+                </TouchableOpacity>
+
+                <View style={styles.hunterToolsSection}>
+                  <TouchableOpacity
+                    style={styles.hunterToolsToggle}
+                    onPress={() =>
+                      dispatchUi({
+                        type: 'set',
+                        key: 'hunterToolsExpanded',
+                        value: !hunterToolsExpanded,
+                      })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel="Hunter flow tools"
+                    accessibilityHint="Opens quick tools including dispute and message actions"
+                  >
+                    <View style={styles.hunterToolsToggleLeft}>
+                      <MaterialIcons name="build-circle" size={18} color={theme.textSecondary} />
+                      <Text style={styles.hunterToolsToggleText}>Hunter Flow Tools</Text>
+                    </View>
+                    <MaterialIcons
+                      name={hunterToolsExpanded ? 'expand-less' : 'expand-more'}
+                      size={20}
+                      color={theme.textSecondary}
                     />
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.messagingBtn}
-                    onPress={handleMessagePoster}
-                    accessibilityRole="button"
-                    accessibilityLabel="Message Poster"
-                  >
-                    <MaterialIcons name="chat" size={18} color="#fff" />
-                    <Text style={styles.messagingBtnText}>Message Poster</Text>
-                  </TouchableOpacity>
+                  {hunterToolsExpanded && (
+                    <View style={styles.hunterToolsMenu}>
+                      <TouchableOpacity
+                        style={styles.hunterToolBtn}
+                        onPress={handleMessagePoster}
+                      >
+                        <MaterialIcons name="chat" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+                        <Text style={styles.hunterToolText}>Message Poster</Text>
+                      </TouchableOpacity>
 
-                  <View style={styles.hunterToolsSection}>
-                    <TouchableOpacity
-                      style={styles.hunterToolsToggle}
-                      onPress={() =>
-                        dispatchUi({
-                          type: 'set',
-                          key: 'hunterToolsExpanded',
-                          value: !hunterToolsExpanded,
-                        })
-                      }
-                      accessibilityRole="button"
-                      accessibilityLabel="Hunter flow tools"
-                      accessibilityHint="Opens quick tools including dispute and message actions"
-                    >
-                      <View style={styles.hunterToolsToggleLeft}>
-                        <MaterialIcons name="build-circle" size={18} color={theme.textSecondary} />
-                        <Text style={styles.hunterToolsToggleText}>Hunter Flow Tools</Text>
-                      </View>
-                      <MaterialIcons
-                        name={hunterToolsExpanded ? 'expand-less' : 'expand-more'}
-                        size={20}
-                        color={theme.textSecondary}
-                      />
-                    </TouchableOpacity>
-
-                    {hunterToolsExpanded && (
-                      <View style={styles.hunterToolsMenu}>
-                        <TouchableOpacity
-                          style={styles.hunterToolBtn}
-                          onPress={handleMessagePoster}
-                        >
-                          <MaterialIcons name="chat" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
-                          <Text style={styles.hunterToolText}>Message Poster</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.hunterToolBtnDanger}
-                          onPress={
-                            hasDispute
-                              ? handleViewDispute
-                              : () =>
-                                  dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
-                          }
-                        >
-                          <MaterialIcons
-                            name={hasDispute ? 'gavel' : 'report-problem'}
-                            size={18}
-                            color={hasDispute ? '#f59e0b' : '#fca5a5'}
-                          />
-                          <Text
-                            style={
-                              hasDispute
-                                ? styles.hunterToolTextWarning
-                                : styles.hunterToolTextDanger
-                            }
-                          >
-                            {hasDispute ? 'View Dispute' : 'Raise Dispute'}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/*
-                          The hunter's way out of work they've taken on but
-                          can't finish. Only the accepted hunter may file one —
-                          the screen and request_bounty_cancellation both
-                          re-check that — and approving it returns the poster's
-                          escrow in full, so this is deliberately a REQUEST and
-                          not an outright cancel.
-
-                          Hidden once a dispute is open: a dispute already
-                          freezes the workflow and settles escrow either way, so
-                          offering both would be two competing routes to the
-                          same money.
-                        */}
-                        {variant === 'hunter' &&
-                          !hasDispute &&
-                          currentUserId === bounty.accepted_by &&
-                          (bounty.status === 'in_progress' ? (
-                            <TouchableOpacity
-                              style={styles.hunterToolBtnWarning}
-                              onPress={() =>
-                                router.push({
-                                  pathname: '/bounty/[id]/cancel',
-                                  params: { id: String(bounty.id) },
-                                } as never)
-                              }
-                              accessibilityRole="button"
-                              accessibilityLabel="Request cancellation"
-                              accessibilityHint="Asks the poster to release you from this bounty; the full amount is returned to them"
-                            >
-                              <MaterialIcons name="cancel" size={18} color="#f59e0b" />
-                              <Text style={styles.hunterToolTextWarning}>
-                                Request Cancellation
-                              </Text>
-                            </TouchableOpacity>
-                          ) : bounty.status === 'cancellation_requested' ? (
-                            <View style={styles.hunterToolBtnWarning}>
-                              <MaterialIcons name="hourglass-empty" size={18} color="#f59e0b" />
-                              <Text style={styles.hunterToolTextWarning}>
-                                Cancellation Requested
-                              </Text>
-                            </View>
-                          ) : null)}
-
-                        {/* Workflow Dispute Modal */}
-                        <WorkflowDisputeModal
-                          visible={showDisputeModal}
-                          bountyId={String(bounty.id)}
-                          bountyTitle={bounty.title}
-                          initiatorId={currentUserId || ''}
-                          respondentId={String(
-                            variant === 'hunter'
-                              ? bounty.poster_id || bounty.user_id
-                              : bounty.accepted_by || ''
-                          )}
-                          stage={bounty.status === 'in_progress' ? 'in_progress' : 'review_verify'}
-                          onClose={() =>
-                            dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })
-                          }
-                          onDisputeCreated={disputeId => {
-                            dispatchUi({ type: 'set', key: 'showDisputeModal', value: false });
-                            dispatchUi({ type: 'set', key: 'hasDispute', value: true });
-                            dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId });
-                            Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
-                              {
-                                text: 'View',
-                                onPress: () => (router as any).push(`/dispute/${disputeId}`),
-                              },
-                              { text: 'OK' },
-                            ]);
-                          }}
+                      <TouchableOpacity
+                        style={styles.hunterToolBtnDanger}
+                        onPress={
+                          hasDispute
+                            ? handleViewDispute
+                            : () =>
+                                dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
+                        }
+                      >
+                        <MaterialIcons
+                          name={hasDispute ? 'gavel' : 'report-problem'}
+                          size={18}
+                          color={hasDispute ? '#f59e0b' : '#fca5a5'}
                         />
-                      </View>
-                    )}
-                  </View>
+                        <Text
+                          style={
+                            hasDispute
+                              ? styles.hunterToolTextWarning
+                              : styles.hunterToolTextDanger
+                          }
+                        >
+                          {hasDispute ? 'View Dispute' : 'Raise Dispute'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/*
+                        The hunter's way out of work they've taken on but
+                        can't finish. Only the accepted hunter may file one —
+                        the screen and request_bounty_cancellation both
+                        re-check that — and approving it returns the poster's
+                        escrow in full, so this is deliberately a REQUEST and
+                        not an outright cancel.
+
+                        Hidden once a dispute is open: a dispute already
+                        freezes the workflow and settles escrow either way, so
+                        offering both would be two competing routes to the
+                        same money.
+                      */}
+                      {variant === 'hunter' &&
+                        !hasDispute &&
+                        currentUserId === bounty.accepted_by &&
+                        (bounty.status === 'in_progress' ? (
+                          <TouchableOpacity
+                            style={styles.hunterToolBtnWarning}
+                            onPress={() =>
+                              router.push({
+                                pathname: '/bounty/[id]/cancel',
+                                params: { id: String(bounty.id) },
+                              } as never)
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel="Request cancellation"
+                            accessibilityHint="Asks the poster to release you from this bounty; the full amount is returned to them"
+                          >
+                            <MaterialIcons name="cancel" size={18} color="#f59e0b" />
+                            <Text style={styles.hunterToolTextWarning}>
+                              Request Cancellation
+                            </Text>
+                          </TouchableOpacity>
+                        ) : bounty.status === 'cancellation_requested' ? (
+                          <View style={styles.hunterToolBtnWarning}>
+                            <MaterialIcons name="hourglass-empty" size={18} color="#f59e0b" />
+                            <Text style={styles.hunterToolTextWarning}>
+                              Cancellation Requested
+                            </Text>
+                          </View>
+                        ) : null)}
+
+                      {/* Workflow Dispute Modal */}
+                      <WorkflowDisputeModal
+                        visible={showDisputeModal}
+                        bountyId={String(bounty.id)}
+                        bountyTitle={bounty.title}
+                        initiatorId={currentUserId || ''}
+                        respondentId={String(
+                          variant === 'hunter'
+                            ? bounty.poster_id || bounty.user_id
+                            : bounty.accepted_by || ''
+                        )}
+                        stage={bounty.status === 'in_progress' ? 'in_progress' : 'review_verify'}
+                        onClose={() =>
+                          dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })
+                        }
+                        onDisputeCreated={disputeId => {
+                          dispatchUi({ type: 'set', key: 'showDisputeModal', value: false });
+                          dispatchUi({ type: 'set', key: 'hasDispute', value: true });
+                          dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId });
+                          Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
+                            {
+                              text: 'View',
+                              onPress: () => (router as any).push(`/dispute/${disputeId}`),
+                            },
+                            { text: 'OK' },
+                          ]);
+                        }}
+                      />
+                    </View>
+                  )}
                 </View>
-              )}
+              </View>
             </AnimatedSection>
           )}
 
-          {/* Poster Review & Verify Section - when hunter has submitted */}
-          {isOwner && bounty.status === 'in_progress' && hasSubmission && (
+          {/* Poster Review & Verify Section - poster-side hub for the whole in-progress stage */}
+          {isOwner && bounty.status === 'in_progress' && (
             <AnimatedSection
               title="Review & Verify"
               expanded={reviewExpanded}
@@ -1682,27 +1489,146 @@ export function MyPostingExpandable({
                 )}
 
                 <View style={styles.infoBox}>
-                  <MaterialIcons name="rate-review" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+                  <MaterialIcons
+                    name={hasSubmission ? 'rate-review' : 'hourglass-top'}
+                    size={18}
+                    color={theme.isDark ? '#6ee7b7' : theme.primary}
+                  />
                   <Text style={styles.infoText}>
-                    The hunter has submitted their work for review. Review the submission and
-                    approve or request changes.
+                    {hasSubmission
+                      ? 'The hunter has submitted their work for review. Review the submission and approve or request changes.'
+                      : 'Your hunter is working on this. We’ll let you know when it’s ready for review.'}
                   </Text>
                 </View>
 
+                {hasSubmission && (
+                  <TouchableOpacity
+                    style={[styles.reviewSubmissionBtn, hasDispute && styles.buttonDisabled]}
+                    onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
+                    disabled={hasDispute}
+                  >
+                    <MaterialIcons
+                      name={hasDispute ? 'lock' : 'rate-review'}
+                      size={20}
+                      color="#fff"
+                    />
+                    <Text style={styles.reviewSubmissionText}>
+                      {hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
-                  style={[styles.reviewSubmissionBtn, hasDispute && styles.buttonDisabled]}
-                  onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
-                  disabled={hasDispute}
+                  style={styles.messagingBtn}
+                  onPress={handleMessageHunter}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message Hunter"
                 >
-                  <MaterialIcons
-                    name={hasDispute ? 'lock' : 'rate-review'}
-                    size={20}
-                    color="#fff"
-                  />
-                  <Text style={styles.reviewSubmissionText}>
-                    {hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}
-                  </Text>
+                  <MaterialIcons name="chat" size={18} color="#fff" />
+                  <Text style={styles.messagingBtnText}>Message Hunter</Text>
                 </TouchableOpacity>
+
+                <AttachmentsList attachments={attachments} />
+
+                {hasSubmission && (
+                  <RatingStars
+                    rating={ratingDraft}
+                    onRatingChange={v => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
+                    label="Rate This Bounty:"
+                  />
+                )}
+
+                {/* Poster Flow Tools - raise/view dispute */}
+                <View style={styles.posterToolsSection}>
+                  <TouchableOpacity
+                    style={styles.posterToolsToggle}
+                    onPress={() =>
+                      dispatchUi({
+                        type: 'set',
+                        key: 'posterToolsExpanded',
+                        value: !posterToolsExpanded,
+                      })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel="Poster flow tools"
+                    accessibilityHint="Opens quick tools including dispute and message actions"
+                  >
+                    <View style={styles.posterToolsToggleLeft}>
+                      <MaterialIcons name="gavel" size={18} color={theme.textSecondary} />
+                      <Text style={styles.posterToolsToggleText}>Poster Flow Tools</Text>
+                    </View>
+                    <MaterialIcons
+                      name={posterToolsExpanded ? 'expand-less' : 'expand-more'}
+                      size={20}
+                      color={theme.textSecondary}
+                    />
+                  </TouchableOpacity>
+
+                  {posterToolsExpanded && (
+                    <View style={styles.posterToolsMenu}>
+                      <TouchableOpacity
+                        style={styles.hunterToolBtn}
+                        onPress={handleMessageHunter}
+                      >
+                        <MaterialIcons
+                          name="chat"
+                          size={18}
+                          color={theme.isDark ? '#6ee7b7' : theme.primary}
+                        />
+                        <Text style={styles.hunterToolText}>Message Hunter</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.hunterToolBtnDanger}
+                        onPress={
+                          hasDispute
+                            ? handleViewDispute
+                            : () => dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
+                        }
+                      >
+                        <MaterialIcons
+                          name={hasDispute ? 'gavel' : 'report-problem'}
+                          size={18}
+                          color={hasDispute ? '#f59e0b' : '#fca5a5'}
+                        />
+                        <Text
+                          style={
+                            hasDispute ? styles.hunterToolTextWarning : styles.hunterToolTextDanger
+                          }
+                        >
+                          {hasDispute ? 'View Dispute' : 'Raise Dispute'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Workflow Dispute Modal for poster */}
+                      <WorkflowDisputeModal
+                        visible={showDisputeModal}
+                        bountyId={String(bounty.id)}
+                        bountyTitle={bounty.title}
+                        initiatorId={currentUserId || ''}
+                        respondentId={String(
+                          bounty.accepted_by || (readyRecord ? readyRecord.hunter_id : '')
+                        )}
+                        stage={bounty.status === 'in_progress' ? 'in_progress' : 'review_verify'}
+                        onClose={() =>
+                          dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })
+                        }
+                        onDisputeCreated={disputeId => {
+                          dispatchUi({ type: 'set', key: 'showDisputeModal', value: false });
+                          dispatchUi({ type: 'set', key: 'hasDispute', value: true });
+                          dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId });
+                          Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
+                            {
+                              text: 'View',
+                              onPress: () => (router as any).push(`/dispute/${disputeId}`),
+                            },
+                            { text: 'OK' },
+                          ]);
+                        }}
+                      />
+                    </View>
+                  )}
+                </View>
                 {/* Full review screen removed (legacy) - keep modal only */}
               </View>
             </AnimatedSection>
@@ -1722,6 +1648,16 @@ export function MyPostingExpandable({
               locked={(!readyToSubmitPressed && !readyRecord) || submissionPending || hasSubmission}
             >
               <View style={{ gap: 16 }}>
+                <TouchableOpacity
+                  style={styles.messagingBtn}
+                  onPress={handleMessagePoster}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message Poster"
+                >
+                  <MaterialIcons name="chat" size={18} color="#fff" />
+                  <Text style={styles.messagingBtnText}>Message Poster</Text>
+                </TouchableOpacity>
+
                 {/* If a submission is pending, show waiting state */}
                 {submissionPending || hasSubmission ? (
                   <>
@@ -2523,8 +2459,6 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 8,
       backgroundColor: 'rgba(239, 68, 68, 0.2)',
     },
-    // Amber rather than red: requesting a cancellation is a reversible ask the
-    // poster still has to grant, not the escalation that Raise Dispute is.
     hunterToolBtnWarning: {
       flexDirection: 'row',
       alignItems: 'center',
