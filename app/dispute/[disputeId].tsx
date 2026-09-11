@@ -19,6 +19,7 @@ import { userProfileService } from '../../lib/services/userProfile'
 import type { BountyDispute } from '../../lib/types'
 import { getCurrentUserId } from '../../lib/utils/data-utils'
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../lib/utils/dispute-helpers'
+import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding'
 
 type CommentItem = {
   id: string
@@ -277,7 +278,14 @@ export default function DisputeDetailScreen() {
   const isParticipant = currentUserId === dispute.initiatorId || currentUserId === dispute.respondentId
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    // The comment/evidence composer is pinned to the bottom, so the whole
+    // screen gives up the keyboard's height and the list above shrinks with
+    // it. `offset` is the bar's own safe-area padding — the keyboard already
+    // covers that area, and counting it twice leaves a gap under the input.
+    <KeyboardAvoidingScreen
+      style={[styles.container, { paddingTop: insets.top }]}
+      offset={insets.bottom}
+    >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
@@ -465,7 +473,7 @@ export default function DisputeDetailScreen() {
           />
         </>
       )}
-    </View>
+    </KeyboardAvoidingScreen>
   )
 }
 

@@ -22,6 +22,7 @@ import { disputeService } from '../../../../lib/services/dispute-service';
 import { messageService } from '../../../../lib/services/message-service';
 import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+import { KeyboardAwareScrollView } from '../../../../components/ui/keyboard-avoiding';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
@@ -278,7 +279,7 @@ export default function HunterWorkInProgressScreen() {
         <Text style={styles.headerTitle}>Hunter Dashboard</Text>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
         showsVerticalScrollIndicator={false}
@@ -526,7 +527,7 @@ export default function HunterWorkInProgressScreen() {
           <Text style={styles.nextButtonText}>Next</Text>
           <MaterialIcons name="arrow-forward" size={20} color="#fff" />
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

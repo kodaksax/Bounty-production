@@ -53,6 +53,7 @@ import {
 } from '../../lib/utils/bounty-completeness';
 import { logger } from '../../lib/utils/error-logger';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
+import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 /**
  * react-native-maps and its clustering wrapper are heavy modules, and a static
  * import runs their initialisation the first time this screen's module is
@@ -1065,7 +1066,10 @@ export default function EnhancedSearchScreen() {
 
       {/* Filter Modal */}
       <Modal visible={showFilters} animationType="slide" transparent>
-        <View style={s.modalOverlay}>
+        {/* The Min/Max amount fields sit at the bottom of this sheet, so the
+            overlay gives up the keyboard's height and the sheet — capped at
+            80% of the overlay — rides up with it. */}
+        <KeyboardAvoidingScreen style={s.modalOverlay}>
           <View style={s.modalContent}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Filter Bounties</Text>
@@ -1210,7 +1214,7 @@ export default function EnhancedSearchScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingScreen>
       </Modal>
     </View>
   );

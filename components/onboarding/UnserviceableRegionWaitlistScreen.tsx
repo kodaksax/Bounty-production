@@ -1,6 +1,7 @@
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { OnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
 import type { AppTheme } from '../../lib/themes/types';
+import { KeyboardAvoidingScreen } from '../ui/keyboard-avoiding';
 
 type Props = {
   theme: AppTheme;
@@ -32,11 +33,14 @@ export function UnserviceableRegionWaitlistScreen({
   onContinue,
 }: Props) {
   return (
-    <View
+    // The waitlist email field sits in a vertically-centred block, so the
+    // screen shrinks by the keyboard and the block re-centres above it.
+    <KeyboardAvoidingScreen
       style={[
         styles.container,
         { paddingTop: insets.top, paddingBottom: insets.bottom, paddingHorizontal: 24 },
       ]}
+      offset={insets.bottom}
     >
       <View style={{ flex: 1, justifyContent: 'center' }}>
         <Text style={styles.title}>We are not live in your region yet</Text>
@@ -118,6 +122,6 @@ export function UnserviceableRegionWaitlistScreen({
           <Text style={styles.skipLinkText}>Continue to app</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingScreen>
   );
 }

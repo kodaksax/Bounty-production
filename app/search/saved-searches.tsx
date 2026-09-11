@@ -17,6 +17,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { searchService } from '../../lib/services/search-service';
 import type { SavedSearch } from '../../lib/types';
+import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 
 export default function SavedSearchesScreen() {
   const router = useRouter();
@@ -226,7 +227,13 @@ export default function SavedSearchesScreen() {
 
       {/* New Search Modal */}
       {showNewSearchModal && (
-        <View style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        // A hand-rolled overlay rather than AppModal, so it needs its own
+        // keyboard avoidance: the centered card re-centers in whatever space
+        // the keyboard leaves instead of sitting underneath it.
+        <KeyboardAvoidingScreen
+          style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+          offset={insets.bottom}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Saved Search</Text>
@@ -277,7 +284,7 @@ export default function SavedSearchesScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingScreen>
       )}
     </View>
   );

@@ -171,6 +171,9 @@ jest.mock('react-native', () => {
       out: jest.fn(fn => fn || (t => t)),
       quad: jest.fn(t => t),
       cubic: jest.fn(t => t),
+      // The keyboard curve in components/ui/keyboard-avoiding is built from
+      // Easing.poly, so the factory has to exist here too.
+      poly: jest.fn(() => (t => t)),
       bezier: jest.fn(() => (t => t)),
     },
     Dimensions: {

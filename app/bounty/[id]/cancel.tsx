@@ -14,7 +14,6 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -23,6 +22,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
 const CANCELLATION_REASON_OPTIONS: { label: string; value: CancellationReasonCategory }[] = [
   { label: 'Changed my mind', value: 'changed_mind' },
@@ -272,7 +272,7 @@ export default function CancellationRequestScreen() {
 
   return (
     <View style={s.screen}>
-      <ScrollView
+      <KeyboardAwareScrollView
         style={s.scroll}
         contentContainerStyle={{ paddingBottom: bottomClearance }}
         showsVerticalScrollIndicator={false}
@@ -391,7 +391,7 @@ export default function CancellationRequestScreen() {
             <Text style={s.linkButtonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

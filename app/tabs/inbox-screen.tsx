@@ -62,6 +62,9 @@ import type { AppTheme } from '../../lib/themes/types'
 // Reuse the exact same expandable row used by the Activity (Postings) screen so
 // the Inbox renders Work / Posts / Requests with identical look-and-feel.
 import { MyPostingRow } from './postings-screen'
+// Expanded rows contain text fields (completion message, revision
+// feedback), so the list has to inset for the keyboard.
+import { keyboardAwareListProps } from "../../components/ui/keyboard-avoiding"
 
 interface InboxScreenProps {
   onBack?: () => void
@@ -1110,6 +1113,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
           <View className="flex-1 px-4">
             {activeTab === "inProgress" ? (
               <FlatList
+                {...keyboardAwareListProps}
                 ref={inProgressListRef}
                 data={inProgressRows}
                 keyExtractor={keyExtractorRow}
@@ -1210,6 +1214,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               />
             ) : activeTab === "requests" ? (
               <FlatList
+                {...keyboardAwareListProps}
                 data={bountyRequests}
                 keyExtractor={keyExtractorRequest}
                 getItemLayout={getItemLayoutRequest}
@@ -1265,6 +1270,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               />
             ) : (
               <FlatList
+                {...keyboardAwareListProps}
                 ref={myPostingsListRef}
                 data={myPostingsRows}
                 keyExtractor={keyExtractorRow}

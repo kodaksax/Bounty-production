@@ -10,7 +10,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -26,6 +25,7 @@ import {
   type HunterServiceArea,
 } from '../../lib/services/hunter-service-area-service';
 import { getCurrentUserId } from '../../lib/utils/data-utils';
+import { KeyboardAwareScrollView } from '../ui/keyboard-avoiding';
 
 const RADIUS_PRESETS: Array<{ label: string; value: number | null }> = [
   { label: '1 mi', value: 1 },
@@ -226,7 +226,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
     <View style={s.screen}>
       <SettingsScreenHeader icon="place" title="Location & Visibility" onBack={onBack} />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={[
           s.scrollContent,
           { paddingBottom: Math.max(insets.bottom, 24) + 24 },
@@ -502,7 +502,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
             ))
           )}
         </SettingsSection>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

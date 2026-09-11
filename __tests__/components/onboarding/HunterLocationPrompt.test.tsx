@@ -5,8 +5,33 @@ jest.mock('react-native', () => {
   const ReactMock = require('react')
   const passthrough = (name: string) =>
     ({ children, ...props }: any) => ReactMock.createElement(name, props, children)
+  const immediate = () => ({ start: (cb?: () => void) => cb?.() })
   return {
     StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
+    Platform: { OS: 'ios', select: (obj: any) => obj.ios ?? obj.default },
+    Dimensions: { get: () => ({ width: 375, height: 812 }) },
+    // The screen wraps itself in KeyboardAvoidingScreen (see
+    // components/ui/keyboard-avoiding), which needs an Animated value and a
+    // keyboard subscription. Neither animates in these tests.
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
+    Easing: {
+      in: (fn: any) => fn,
+      out: (fn: any) => fn,
+      inOut: (fn: any) => fn,
+      linear: (t: number) => t,
+      ease: (t: number) => t,
+      poly: () => (t: number) => t,
+    },
+    Animated: {
+      Value: jest.fn().mockImplementation((value: number) => ({
+        _value: value,
+        setValue: jest.fn(),
+        interpolate: jest.fn().mockReturnValue(value),
+      })),
+      timing: jest.fn(immediate),
+      parallel: jest.fn(immediate),
+      View: passthrough('Animated.View'),
+    },
     View: passthrough('View'),
     Text: passthrough('Text'),
     TouchableOpacity: passthrough('TouchableOpacity'),

@@ -18,7 +18,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -28,6 +27,7 @@ import {
 import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { supabase } from '../../lib/supabase';
+import { KeyboardAwareScrollView } from '../../components/ui/keyboard-avoiding';
 
 interface AdminActionLogEntry {
   id: string;
@@ -301,7 +301,7 @@ export default function AdminWithdrawalRecoveryScreen() {
   return (
     <View style={styles.container}>
       <AdminHeader title="Withdrawal Recovery" />
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.content}>
         <Text style={styles.sectionTitle}>Force-Retry a Failed Withdrawal</Text>
         <AdminCard>
           <Text style={styles.hint}>
@@ -545,7 +545,7 @@ export default function AdminWithdrawalRecoveryScreen() {
           ))
         )}
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

@@ -28,12 +28,11 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  KeyboardAvoidingView,
   Platform,
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAvoidingScreen } from '../../../components/ui/keyboard-avoiding';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -135,7 +134,6 @@ export function CreateBountyFlow({
   const publishedDraftRef = useRef<BountyDraft | null>(null);
   const { session } = useAuthContext();
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
-  const insets = useSafeAreaInsets();
   const { createEscrow, balance } = useWallet();
   const { paymentMethods } = useStripe();
   const { theme } = useAppThemeContext();
@@ -716,11 +714,14 @@ export function CreateBountyFlow({
   }
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      style={{ backgroundColor: theme.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={insets.top}
+    // The flow is full-bleed from y=0, so the container gives up exactly the
+    // keyboard's height: the step's scroll body shrinks and its pinned CTA
+    // stays above the keyboard. (The `KeyboardAvoidingView` this replaces
+    // passed `keyboardVerticalOffset={insets.top}`, which is the distance from
+    // the *window* top to the view's top — zero here — so it over-shifted the
+    // whole flow by the status-bar inset.)
+    <KeyboardAvoidingScreen
+      style={{ flex: 1, backgroundColor: theme.background }}
     >
       <View className="flex-1">
         {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
@@ -811,7 +812,7 @@ export function CreateBountyFlow({
           </View>
         )}
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingScreen>
   );
 }
 
