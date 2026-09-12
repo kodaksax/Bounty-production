@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -16,6 +15,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { disputeService } from '../../lib/services/dispute-service';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { generateEvidenceId } from '../../lib/utils/dispute-helpers';
+import { KeyboardAwareScrollView } from '../../components/ui/keyboard-avoiding';
 
 type LocalEvidenceItem = {
   id: string;
@@ -166,7 +166,7 @@ export default function CreateDisputeScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+      <KeyboardAwareScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Info Banner */}
         <View style={styles.infoBanner}>
           <MaterialIcons name="info-outline" size={20} color="#3b82f6" />
@@ -394,7 +394,7 @@ export default function CreateDisputeScreen() {
 
         {/* Bottom Padding */}
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

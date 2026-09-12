@@ -15,7 +15,6 @@ import {
   Alert,
   Linking,
   Modal,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -23,6 +22,7 @@ import {
   View,
 } from 'react-native';
 import { ROUTES } from '../../../lib/routes';
+import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
 export default function DisputeScreen() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
@@ -268,7 +268,7 @@ export default function DisputeScreen() {
   
   return (
     <View className="flex-1 bg-[#0B0F14]">
-      <ScrollView className="flex-1">
+      <KeyboardAwareScrollView className="flex-1">
         {/* Header */}
         <View className="bg-[#111827] px-4 py-6 pt-12">
           <TouchableOpacity
@@ -422,7 +422,7 @@ export default function DisputeScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Evidence Modal */}
       <Modal

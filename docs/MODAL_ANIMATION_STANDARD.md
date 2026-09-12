@@ -30,6 +30,10 @@ effect fighting each other.
   underlying native `<Modal>` only unmounts once the close animation has
   actually finished playing (`onClosed` fires at that point). A modal never
   flashes in before it's ready and never vanishes mid-transition.
+- **Keyboard:** the modal area shrinks by the keyboard's overlap, so a dialog
+  with a text field re-centers above it instead of disappearing under it. A
+  fixed-height card must also cap itself against `useModalContentHeight()`.
+  See [Keyboard Avoidance Standard](./KEYBOARD_AVOIDANCE_STANDARD.md).
 
 ### Why not one primitive for *everything*
 

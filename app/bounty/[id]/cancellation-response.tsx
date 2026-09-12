@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
   Alert,
   Linking,
@@ -21,6 +20,7 @@ import { isPhase2Bounty, isStripeNativeBounty, isV3Bounty } from 'lib/utils/paym
 import type { BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
+import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
 export default function CancellationResponseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -321,7 +321,7 @@ export default function CancellationResponseScreen() {
   
   return (
     <View className="flex-1 bg-[#0B0F14]">
-      <ScrollView className="flex-1">
+      <KeyboardAwareScrollView className="flex-1">
         {/* Header */}
         <View className="bg-[#111827] px-4 py-6 pt-12">
           <TouchableOpacity
@@ -488,7 +488,7 @@ export default function CancellationResponseScreen() {
             </View>
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

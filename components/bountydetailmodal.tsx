@@ -34,9 +34,13 @@ import type { BountyScheduleType, Message } from '../lib/types'
 import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { ReportModal } from "./ReportModal"
 import { AppModal } from './ui/app-modal'
+import { useKeyboardInset } from './ui/keyboard-avoiding'
 
 // Alert defer delay to allow React to process state updates before showing alert
 const ALERT_DEFER_DELAY = 100;
+
+// Breathing room kept between the card and the top of the keyboard.
+const CARD_KEYBOARD_MARGIN = 24;
 
 // Type for detail rows in Additional Details section
 interface DetailRow {
@@ -602,6 +606,18 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
   const { width, height } = Dimensions.get('window')
 
+  // The card is a fixed-height box with the apply composer pinned below the
+  // scroll area. At its natural height the keyboard covers that composer, so
+  // cap the card to what is left above the keyboard — the ScrollView gives up
+  // the difference and the input stays on screen. AppModal re-centers the
+  // shrunken card in the same keyboard curve.
+  const { height: keyboardHeight } = useKeyboardInset()
+  const cardHeight = Math.min(
+    height * 0.9,
+    760,
+    Math.max(0, height - keyboardHeight - CARD_KEYBOARD_MARGIN)
+  )
+
   return (
     <AppModal
       visible={visible}
@@ -614,7 +630,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         <View
           style={[
             styles.cardShadow,
-            { width: width - 35, maxWidth: 560, height: Math.min(height * 0.9, 760) }
+            { width: width - 35, maxWidth: 560, height: cardHeight }
           ]}
         >
           {/* Rounded card (clips children) */}
@@ -642,6 +658,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               ref={messagesEndRef}
               style={styles.scrollContainer}
               contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             >
               <View
                 style={styles.bountyCard}
@@ -1282,5 +1300,4 @@ function makeStyles(theme: AppTheme) {
   },
   });
 }
-
 

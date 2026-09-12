@@ -6,7 +6,6 @@ import {
     ActivityIndicator,
     Alert,
     FlatList,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -31,6 +30,7 @@ import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
 import { useWallet } from '../../../lib/wallet-context';
+import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
 interface ProofItem {
   id: string;
@@ -452,7 +452,7 @@ export default function ReviewAndVerifyScreen() {
         <Text style={styles.headerTitle}>Review & Verify</Text>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
         showsVerticalScrollIndicator={false}
@@ -637,7 +637,7 @@ export default function ReviewAndVerifyScreen() {
             <MaterialIcons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Attachment Viewer Modal */}
       <AttachmentViewerModal

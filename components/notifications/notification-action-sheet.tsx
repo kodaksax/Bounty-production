@@ -114,7 +114,7 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
   };
 
   return (
-    <AppModal visible={visible} onRequestClose={onClose} variant="sheet" contentStyle={s.modalContent}>
+    <AppModal visible={visible} onRequestClose={onClose} variant="sheet" contentStyle={s.modalContent} avoidKeyboard={false}>
       <KeyboardAvoidingView style={s.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.sheet}>
           <View style={s.handle} />

@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  ScrollView,
   Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -13,6 +12,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import type { LocalDisputeEvidence } from '../lib/types';
 import { generateEvidenceId } from '../lib/utils/dispute-helpers';
+import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
 
 interface DisputeSubmissionFormProps {
   bountyTitle: string;
@@ -127,7 +127,7 @@ export function DisputeSubmissionForm({
   };
 
   return (
-    <ScrollView className="flex-1">
+    <KeyboardAwareScrollView className="flex-1">
       {/* Bounty Info */}
       <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6">
         <Text className="text-sm text-emerald-600 font-medium mb-1">Bounty</Text>
@@ -342,6 +342,6 @@ export function DisputeSubmissionForm({
           </TouchableOpacity>
         )}
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }

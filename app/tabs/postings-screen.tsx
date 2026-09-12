@@ -41,6 +41,9 @@ import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
+// Rows expand into forms with text fields (completion message, revision
+// feedback), so the list itself has to inset for the keyboard.
+import { keyboardAwareListProps } from "../../components/ui/keyboard-avoiding"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
 import { EmptyState } from '../../components/ui/empty-state'
@@ -1253,6 +1256,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             ) : (
               activeTab === "inProgress" ? (
                 <FlatList
+                  {...keyboardAwareListProps}
                   ref={inProgressListRef}
                   data={inProgressRows}
                   keyExtractor={keyExtractorRow}
@@ -1353,6 +1357,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 />
               ) : activeTab === "requests" ? (
                 <FlatList
+                  {...keyboardAwareListProps}
                   data={bountyRequests}
                   keyExtractor={keyExtractorRequest}
                   getItemLayout={getItemLayoutRequest}
@@ -1408,6 +1413,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 />
               ) : activeTab === "myPostings" ? (
                 <FlatList
+                  {...keyboardAwareListProps}
                   ref={myPostingsListRef}
                   data={myPostingsRows}
                   keyExtractor={keyExtractorRow}

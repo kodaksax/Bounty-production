@@ -5,12 +5,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BrandingLogo } from "components/ui/branding-logo"
 import * as DocumentPicker from 'expo-document-picker'
 import { useEffect, useState } from "react"
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 
+import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
 interface SkillsetEditScreenProps {
   onBack?: () => void
   onSave?: (skills: Skill[]) => void
@@ -220,7 +221,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
           <Text className="text-xs" style={{ color: theme.text }}>{banner}</Text>
         </View>
       )}
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
+      <KeyboardAwareScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
         {/* Preset skill categories */}
         <View className="mb-5">
           <Text className="text-sm font-semibold mb-1" style={{ color: theme.text }}>Skill Categories</Text>
@@ -335,7 +336,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
             </View>
           )
         })}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   )
 }

@@ -28,6 +28,7 @@ import { useWallet } from '../lib/wallet-context';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { RatingStars } from './ui/rating-stars';
+import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
 
 const EMERALD_SHADOW = {
   shadowColor: '#059669',
@@ -562,7 +563,7 @@ export function PosterReviewModal({
               </View>
             </ScrollView>
           ) : showRatingForm ? (
-            <ScrollView
+            <KeyboardAwareScrollView
               style={s.scrollView}
               contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
             >
@@ -596,9 +597,9 @@ export function PosterReviewModal({
                   )}
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           ) : showRevisionForm ? (
-            <ScrollView
+            <KeyboardAwareScrollView
               style={s.scrollView}
               contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
             >
@@ -634,7 +635,7 @@ export function PosterReviewModal({
                   </TouchableOpacity>
                 </View>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           ) : (
             <ScrollView
               style={s.scrollView}

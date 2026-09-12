@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -23,6 +22,7 @@ import type { Bounty } from '../../../lib/services/database.types';
 import { disputeService } from '../../../lib/services/dispute-service';
 import type { BountyCancellation, BountyDispute } from '../../../lib/types';
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
+import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
 interface DisputeDetailData {
   dispute: BountyDispute;
@@ -265,7 +265,7 @@ export default function AdminDisputeDetailScreen() {
     <View style={styles.container}>
       <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
       
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+      <KeyboardAwareScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Status Banner */}
         <View
           style={[
@@ -581,7 +581,7 @@ export default function AdminDisputeDetailScreen() {
 
         {/* Bottom Padding */}
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

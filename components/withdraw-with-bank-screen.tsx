@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -32,6 +31,7 @@ import { WithdrawalConfirmSheet } from './ui/withdrawal-confirm-sheet';
 import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdrawal-result-screen';
 import { WithdrawMethodSelect } from './withdraw-method-select';
 import { WithdrawNowCard } from './withdraw-now-card';
+import { KeyboardAwareScrollView, KeyboardAvoidingScreen } from './ui/keyboard-avoiding';
 
 interface WithdrawWithBankScreenProps {
   onBack?: () => void;
@@ -505,16 +505,17 @@ export function WithdrawWithBankScreen({
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.content}>
-        {/* Connect-native withdrawal (Phase 5). When the balance source is
-            Stripe, this card is the whole withdrawal flow: it shows the real
-            withdrawable amount and pays it out directly, with no dependency on
-            the ledger figures rendered below. The legacy balance card and
-            amount form stay mounted only while the flag is off. */}
-        {isConnectNativeWithdrawal ? (
-          <WithdrawNowCard onWithdrawComplete={onBack} />
-        ) : (
-        <>
+      <KeyboardAvoidingScreen style={s.body}>
+        <KeyboardAwareScrollView contentContainerStyle={s.content}>
+          {/* Connect-native withdrawal (Phase 5). When the balance source is
+              Stripe, this card is the whole withdrawal flow: it shows the real
+              withdrawable amount and pays it out directly, with no dependency on
+              the ledger figures rendered below. The legacy balance card and
+              amount form stay mounted only while the flag is off. */}
+          {isConnectNativeWithdrawal ? (
+            <WithdrawNowCard onWithdrawComplete={onBack} />
+          ) : (
+          <>
         {/* Balance Display */}
         <View style={s.balanceCard}>
           <Text style={s.balanceLabel}>Total Balance</Text>
@@ -793,33 +794,34 @@ export function WithdrawWithBankScreen({
             )}
           </View>
         )}
-        </>
-        )}
-      </ScrollView>
+          </>
+          )}
+        </KeyboardAwareScrollView>
 
-      {/* Withdraw Button — the Connect-native card owns its own action, so
-          this legacy footer is suppressed to avoid two competing withdraw
-          buttons driving two different balance sources. */}
-      {!isConnectNativeWithdrawal && (
-      <View style={[s.footer, { paddingBottom: getBottomNavBaseClearance(insets.bottom, 16) }]}>
-        <TouchableOpacity
-          onPress={handleWithdraw}
-          disabled={isWithdrawDisabled}
-          style={[s.withdrawButton, isWithdrawDisabled && s.withdrawButtonDisabled]}
-          accessibilityLabel={
-            withdrawalAmount
-              ? `Withdraw ${formatCurrency(parseFloat(withdrawalAmount))}`
-              : 'Withdraw funds'
-          }
-          accessibilityRole="button"
-          accessibilityState={{ disabled: isWithdrawDisabled }}
-        >
-          <Text style={s.withdrawButtonText}>
-            Withdraw {withdrawalAmount ? formatCurrency(parseFloat(withdrawalAmount)) : ''}
-          </Text>
-        </TouchableOpacity>
-      </View>
-      )}
+        {/* Withdraw Button — the Connect-native card owns its own action, so
+            this legacy footer is suppressed to avoid two competing withdraw
+            buttons driving two different balance sources. */}
+        {!isConnectNativeWithdrawal && (
+        <View style={[s.footer, { paddingBottom: getBottomNavBaseClearance(insets.bottom, 16) }]}>
+          <TouchableOpacity
+            onPress={handleWithdraw}
+            disabled={isWithdrawDisabled}
+            style={[s.withdrawButton, isWithdrawDisabled && s.withdrawButtonDisabled]}
+            accessibilityLabel={
+              withdrawalAmount
+                ? `Withdraw ${formatCurrency(parseFloat(withdrawalAmount))}`
+                : 'Withdraw funds'
+            }
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isWithdrawDisabled }}
+          >
+            <Text style={s.withdrawButtonText}>
+              Withdraw {withdrawalAmount ? formatCurrency(parseFloat(withdrawalAmount)) : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        )}
+      </KeyboardAvoidingScreen>
 
       <WithdrawalConfirmSheet
         visible={showConfirmSheet}
@@ -857,6 +859,9 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: t.text,
+  },
+  body: {
+    flex: 1,
   },
   content: {
     padding: 16,

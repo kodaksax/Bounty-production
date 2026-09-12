@@ -4,7 +4,6 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Image,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +13,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { KeyboardAwareScrollView } from '../ui/keyboard-avoiding';
 
 export interface FeedbackFormValues {
   subject: string;
@@ -115,7 +115,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   };
 
   return (
-    <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 96 }}>
+    <KeyboardAwareScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 96 }}>
       <Text style={s.label}>{subjectLabel}</Text>
       <TextInput
         value={subject}
@@ -208,7 +208,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
           />
         )}
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 };
 

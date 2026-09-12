@@ -96,6 +96,10 @@ jest.mock('react-native', () => {
     Platform: { OS: 'ios', select: (obj: any) => obj.ios ?? obj.default },
     StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
     Dimensions: { get: () => ({ width: 375, height: 812 }) },
+    useWindowDimensions: () => ({ width: 375, height: 812, scale: 2, fontScale: 1 }),
+    // AppModal's keyboard avoidance subscribes on mount (see
+    // components/ui/keyboard-avoiding); the listener never fires here.
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
     Animated,
     FlatList,
     RefreshControl: passthrough('RefreshControl'),
