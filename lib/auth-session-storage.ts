@@ -29,6 +29,14 @@ const SUPABASE_SESSION_KEY = 'supabase.auth.token';
 const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
   Platform.OS === 'ios' ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK } : undefined;
 
+// expo-secure-store has no web implementation (its web module is a stub with
+// no native bridge methods at all — calling any of its functions there throws
+// "X is not a function"). On web we persist to AsyncStorage instead, which
+// wraps window.localStorage there. This also fixes session persistence on
+// web: previously every setItem() there failed and silently fell back to the
+// in-memory-only cache, so a signed-in web session was lost on every reload.
+const isWeb = Platform.OS === 'web';
+
 // Chunking configuration for large session objects
 const CHUNK_SIZE = 1900;
 const CHUNK_META_SUFFIX = '__chunkCount';
@@ -99,6 +107,14 @@ const inMemorySessionCache: Map<string, string> = new Map();
  * Handles both plain values and the __chunked__ format written by the storage adapter.
  */
 async function _deleteSessionKey(key: string): Promise<void> {
+  if (isWeb) {
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch {
+      // Ignore — key may not exist
+    }
+    return;
+  }
   try {
     const val = await SecureStore.getItemAsync(key);
     if (val === '__chunked__') {
@@ -201,6 +217,17 @@ export async function getStartupTimeoutCount(): Promise<number> {
 async function readRawItem(key: string): Promise<string | null> {
   const cached = inMemorySessionCache.get(key);
   if (cached) return cached;
+
+  if (isWeb) {
+    try {
+      const val = await AsyncStorage.getItem(key);
+      if (val) inMemorySessionCache.set(key, val);
+      return val;
+    } catch (e) {
+      console.error('[AuthSessionStorage] AsyncStorage getItem failed:', e);
+      return null;
+    }
+  }
 
   const val = await withSecureStoreTimeout(
     () => SecureStore.getItemAsync(key),
@@ -316,6 +343,21 @@ export const createAuthSessionStorageAdapter = () => {
       // sign-in to complete even if secure storage is slow or unavailable.
       inMemorySessionCache.set(key, value);
 
+      if (isWeb) {
+        // expo-secure-store has no web implementation — persist to
+        // AsyncStorage (window.localStorage under the hood) instead so a
+        // web session actually survives a page reload.
+        try {
+          await AsyncStorage.setItem(key, value);
+        } catch (storageError) {
+          console.error(
+            '[AuthSessionStorage] AsyncStorage write failed (session kept in memory for this run):',
+            storageError
+          );
+        }
+        return;
+      }
+
       // Persist to secure storage best-effort. Every native call is bounded by
       // withSecureStoreTimeout, and we deliberately DO NOT rethrow: Supabase's
       // `_saveSession()` awaits this method inside gotrue's auth lock, so a
@@ -395,6 +437,12 @@ export const createAuthSessionStorageAdapter = () => {
       try {
         // Clear from in-memory cache
         inMemorySessionCache.delete(key);
+
+        if (isWeb) {
+          await AsyncStorage.removeItem(key);
+          console.log('[AuthSessionStorage] Session removed from AsyncStorage and in-memory cache');
+          return;
+        }
 
         // Always remove from secure storage (if it exists). Bounded so a hung
         // keychain call during sign-out can never block the flow.
