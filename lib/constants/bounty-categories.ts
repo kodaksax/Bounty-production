@@ -12,12 +12,16 @@ export interface BountyCategoryDef {
   color: string;
 }
 
+// Order is product-defined display order (not alphabetical, not creation
+// order) — it's the canonical sequence for every category chip row in the
+// app (feed carousel, profile skill picker, etc.). Change it here only; every
+// consumer maps over this array rather than sorting its own copy.
 export const BOUNTY_CATEGORIES: BountyCategoryDef[] = [
-  { id: 'tech', label: 'Tech', icon: 'computer', color: '#3b82f6' },
-  { id: 'design', label: 'Design', icon: 'palette', color: '#a855f7' },
-  { id: 'writing', label: 'Writing', icon: 'edit', color: '#f59e0b' },
   { id: 'labor', label: 'Labor', icon: 'build', color: '#f97316' },
   { id: 'delivery', label: 'Delivery', icon: 'local-shipping', color: '#06b6d4' },
+  { id: 'design', label: 'Design', icon: 'palette', color: '#a855f7' },
+  { id: 'tech', label: 'Tech', icon: 'computer', color: '#3b82f6' },
+  { id: 'writing', label: 'Writing', icon: 'edit', color: '#f59e0b' },
   { id: 'other', label: 'Other', icon: 'more-horiz', color: '#8b5cf6' },
 ];
 

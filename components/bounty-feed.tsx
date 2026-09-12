@@ -106,9 +106,17 @@ const DISTANCE_OPTIONS: FilterChipOption<DistanceFilterValue>[] = [
 // list; `kind` is what the renderer switches on. `id` is shared so a single
 // keyExtractor covers both.
 const DISTANCE_ITEM_ID = '__distance__';
+const ONLINE_ITEM_ID = '__online__';
+const HIGHEST_PAY_ITEM_ID = '__highest_pay__';
 type FilterBarItem =
   | { kind: 'category'; id: string; label: string; icon: FilterChipIconName }
-  | { kind: 'distance'; id: typeof DISTANCE_ITEM_ID };
+  | { kind: 'distance'; id: typeof DISTANCE_ITEM_ID }
+  // Not a stored category — filters on the bounty's work_type ('online' vs
+  // 'in_person', set in StepWhere.tsx) rather than its category field.
+  | { kind: 'workType'; id: typeof ONLINE_ITEM_ID }
+  // Not a filter at all — toggles the list's sort order rather than removing
+  // rows, so it composes with every category/workType/distance combination.
+  | { kind: 'sort'; id: typeof HIGHEST_PAY_ITEM_ID };
 
 function nearbyToBounty(nb: NearbyBounty): Bounty {
   return {
@@ -151,6 +159,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [refreshing, setRefreshing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | 'all'>('all');
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilterValue>(DISTANCE_OFF);
+  // Independent of category/distance — a hunter can combine "Labor" with
+  // "Online" with "Highest pay" all at once.
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [sortByHighestPay, setSortByHighestPay] = useState(false);
   // Count of newly-posted open bounties observed via realtime since the last
   // load/refresh. Not injected directly into `bounties` — this feed is
   // paginated (PAGE_SIZE/offsetRef), so splicing a live INSERT into the
@@ -198,22 +210,27 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   );
 
   // The single source of truth for the feed's one horizontal carousel: every
-  // category chip plus the Distance chip, injected between Delivery and Other
-  // as an ordinary item. Being in this list — rather than in a lane of its own
-  // — is what gives Distance the same spacing, scroll and virtualization
-  // behavior as the categories; only its tap handler differs. Future secondary
-  // filters (Price, Date, Status) get inserted here the same way.
+  // category chip plus the non-category filter/sort chips, in the app's
+  // canonical order — For You, Labor, Online, Highest pay, Delivery, Design,
+  // Tech, Writing, Other, Distance. Being in this one list — rather than each
+  // chip having a lane of its own — is what gives every chip the same
+  // spacing, scroll and virtualization behavior; only the tap handler differs
+  // per `kind`. Future secondary filters get inserted here the same way.
   //
   // `categories` itself stays pure: it's also the allow-list that validates the
   // persisted `activeCategory`, and a pseudo-id in there would read as a real
   // category.
   const filterItems = useMemo<FilterBarItem[]>(() => {
     const items: FilterBarItem[] = categories.map(c => ({ kind: 'category' as const, ...c }));
-    const afterDelivery = items.findIndex(i => i.id === 'delivery');
-    const beforeOther = items.findIndex(i => i.id === 'other');
-    const at =
-      afterDelivery >= 0 ? afterDelivery + 1 : beforeOther >= 0 ? beforeOther : items.length;
-    items.splice(at, 0, { kind: 'distance', id: DISTANCE_ITEM_ID });
+    const afterLabor = items.findIndex(i => i.id === 'labor');
+    const insertAt = afterLabor >= 0 ? afterLabor + 1 : items.length;
+    items.splice(
+      insertAt,
+      0,
+      { kind: 'workType', id: ONLINE_ITEM_ID },
+      { kind: 'sort', id: HIGHEST_PAY_ITEM_ID }
+    );
+    items.push({ kind: 'distance', id: DISTANCE_ITEM_ID });
     return items;
   }, [categories]);
 
@@ -283,6 +300,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       // never inferred from the bounty's title/description text.
       list = list.filter(b => (b.category || '').toLowerCase() === activeCategory);
     }
+    // Independent of category — the "Online" chip filters on work_type, the
+    // field StepWhere.tsx writes, so it composes with any category selection.
+    if (onlineOnly) {
+      list = list.filter(b => (b as any).work_type === 'online');
+    }
     // "Everything" and "For You" both show the full (category-unfiltered) set;
     // BountyGridFeed always features the highest-priced bounties within
     // whatever list it's given, so featured stays highest-priced even when a
@@ -296,6 +318,17 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       const bIncomplete = bountyCompleteness.get(String(b.id))?.isComplete === false;
       if (aIncomplete !== bIncomplete) return aIncomplete ? 1 : -1;
 
+      // "Highest pay" is a sort toggle, not a filter — it reorders within
+      // whatever category/online/distance selection is already active, with
+      // distance left as the tiebreaker for equal amounts.
+      if (sortByHighestPay) {
+        const amtA = (a as any).amount;
+        const amtB = (b as any).amount;
+        if (amtA != null && amtB != null && amtA !== amtB) return amtB - amtA;
+        if (amtA != null && amtB == null) return -1;
+        if (amtA == null && amtB != null) return 1;
+      }
+
       const distA = bountyDistances.get(String(a.id));
       const distB = bountyDistances.get(String(b.id));
       if (distA == null && distB == null) return 0;
@@ -304,7 +337,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       return (distA ?? Infinity) - (distB ?? Infinity);
     });
     return list;
-  }, [bounties, activeCategory, bountyDistances, appliedBountyIds, bountyCompleteness]);
+  }, [
+    bounties,
+    activeCategory,
+    onlineOnly,
+    sortByHighestPay,
+    bountyDistances,
+    appliedBountyIds,
+    bountyCompleteness,
+  ]);
 
   // bounty_list_viewed — fires once the feed's actual result set for the
   // current filters is known (skeleton fully resolved), including the
@@ -321,6 +362,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     if (activeCategory !== 'all') filtersApplied.push(`category:${activeCategory}`);
     if (distanceFilter !== 'off')
       filtersApplied.push(`radius:${distanceFilter == null ? 'anywhere' : distanceFilter}`);
+    if (onlineOnly) filtersApplied.push('work_type:online');
+    if (sortByHighestPay) filtersApplied.push('sort:amount_desc');
     const key = `${source}|${filteredBounties.length}|${filtersApplied.join(',')}`;
     if (listViewedKeyRef.current === key) return;
     listViewedKeyRef.current = key;
@@ -330,7 +373,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       filters_applied: filtersApplied,
       radius_miles: typeof distanceFilter === 'number' ? distanceFilter : undefined,
       has_location_permission: Boolean(permission?.granted),
-      sort_order: distanceFilter !== 'off' ? 'distance' : 'recent',
+      sort_order: sortByHighestPay ? 'amount_desc' : distanceFilter !== 'off' ? 'distance' : 'recent',
       is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
       // Metro-level viewer region (e.g. "Baltimore, MD") so demand density is
       // comparable to bounty_created's metro_region per metro. Named
@@ -345,6 +388,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     filteredBounties,
     activeCategory,
     distanceFilter,
+    onlineOnly,
+    sortByHighestPay,
     permission?.granted,
   ]);
 
@@ -765,24 +810,31 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         />
       );
     }
-    // Distance now lives in the same row as the categories, so an empty result
-    // caused by either filter gets the same one-tap escape hatch.
+    // Distance and Online now live in the same row as the categories, so an
+    // empty result caused by any combination of them gets the same one-tap
+    // escape hatch. Highest pay is excluded — it's a sort, never a cause of
+    // zero results.
     const hasCategoryFilter = Boolean(activeCategory) && activeCategory !== 'all';
     const hasDistanceFilter = distanceFilter !== DISTANCE_OFF;
-    if (hasCategoryFilter || hasDistanceFilter) {
-      const clearsBoth = hasCategoryFilter && hasDistanceFilter;
+    const hasOnlineFilter = onlineOnly;
+    const activeFilterCount = [hasCategoryFilter, hasDistanceFilter, hasOnlineFilter].filter(
+      Boolean
+    ).length;
+    if (activeFilterCount > 0) {
+      const clearsMultiple = activeFilterCount > 1;
       return (
         <View style={{ width: '100%', alignItems: 'center' }}>
           <Text style={{ color: theme.textSecondary, marginBottom: 8 }}>
-            No bounties match {clearsBoth ? 'these filters' : 'this filter'}.
+            No bounties match {clearsMultiple ? 'these filters' : 'this filter'}.
           </Text>
           <TouchableOpacity
             onPress={() => {
               if (hasCategoryFilter) handleSetActiveCategory('all');
               if (hasDistanceFilter) setDistanceFilter(DISTANCE_OFF);
+              if (hasOnlineFilter) setOnlineOnly(false);
             }}
             accessibilityRole="button"
-            accessibilityLabel={clearsBoth ? 'Clear filters' : 'Clear filter'}
+            accessibilityLabel={clearsMultiple ? 'Clear filters' : 'Clear filter'}
             style={{
               backgroundColor: theme.surfaceSecondary,
               paddingHorizontal: 16,
@@ -793,7 +845,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
             }}
           >
             <Text style={{ color: theme.text, fontWeight: '700' }}>
-              {clearsBoth ? 'Clear filters' : 'Clear filter'}
+              {clearsMultiple ? 'Clear filters' : 'Clear filter'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -815,6 +867,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     loadBounties,
     activeCategory,
     distanceFilter,
+    onlineOnly,
     handleSetActiveCategory,
     theme,
     router,
@@ -831,8 +884,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   );
 
   // Renders the feed's one and only horizontal filter carousel, from the single
-  // `filterItems` source: category chips and the Distance chip side by side,
-  // scrolling together as one list.
+  // `filterItems` source: category chips alongside the Online, Highest pay and
+  // Distance chips, scrolling together as one list.
   //
   // Uses a ScrollView, never a nested FlatList: in the grid layout this row is
   // rendered inside another FlatList's ListHeaderComponent, and a nested
@@ -864,6 +917,42 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                     : 'Location access is off, so distance filters may not match what’s actually near you.'
                 }
                 testID="feed-distance-filter"
+              />
+            );
+          }
+          if (item.kind === 'workType') {
+            return (
+              <FilterChip
+                key={item.id}
+                label="Online"
+                icon="language"
+                active={onlineOnly}
+                onPress={() => setOnlineOnly(v => !v)}
+                accessibilityLabel={`Filter by Online${onlineOnly ? ', currently active' : ''}`}
+                accessibilityHint={
+                  onlineOnly
+                    ? 'Tap to remove filter and show in-person bounties too'
+                    : 'Tap to show only bounties that can be done online'
+                }
+                testID="feed-online-filter"
+              />
+            );
+          }
+          if (item.kind === 'sort') {
+            return (
+              <FilterChip
+                key={item.id}
+                label="Highest pay"
+                icon="attach-money"
+                active={sortByHighestPay}
+                onPress={() => setSortByHighestPay(v => !v)}
+                accessibilityLabel={`Sort by highest pay${sortByHighestPay ? ', currently active' : ''}`}
+                accessibilityHint={
+                  sortByHighestPay
+                    ? 'Tap to return to the default sort order'
+                    : 'Tap to sort bounties by highest pay first'
+                }
+                testID="feed-highest-pay-sort"
               />
             );
           }

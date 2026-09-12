@@ -3,11 +3,15 @@
  *
  * The feed used to stack two horizontal carousels — categories, then a
  * separate distance carousel. They were consolidated into ONE carousel whose
- * items come from a single source (`filterItems`), with the Distance chip
- * injected as an ordinary item between Delivery and Other.
+ * items come from a single source (`filterItems`).
  *
- * These tests lock in that shape: one horizontal list, and Distance sitting in
- * the middle of the category chips rather than in a lane of its own.
+ * The carousel's canonical order is: For You, Labor, Online, Highest pay,
+ * Delivery, Design, Tech, Writing, Other, Distance. Online and Highest pay are
+ * not stored categories — they're a work_type filter and a sort toggle,
+ * respectively — but sit in the same row, styled the same as the category
+ * chips, per the product's category/chip ordering spec.
+ *
+ * These tests lock in that shape: one horizontal list, in that exact order.
  */
 import { cleanup, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
@@ -183,6 +187,7 @@ function chipLabelsInOrder(root: any): string[] {
         typeof node.type === 'string' &&
         typeof node.props?.accessibilityLabel === 'string' &&
         (node.props.accessibilityLabel.startsWith('Filter by ') ||
+          node.props.accessibilityLabel.startsWith('Sort by ') ||
           node.props.accessibilityLabel.startsWith('Distance filter')),
       { deep: true }
     )
@@ -203,27 +208,46 @@ describe('BountyFeed filter carousel', () => {
     expect(horizontalLists).toHaveLength(1);
   });
 
-  it('places the Distance chip between Delivery and Other in the same carousel', async () => {
+  it('renders every chip in the canonical order: For You, Labor, Online, Highest pay, Delivery, Design, Tech, Writing, Other, Distance', async () => {
     const { UNSAFE_root } = renderFeed();
     await waitFor(() => expect(chipLabelsInOrder(UNSAFE_root).length).toBeGreaterThan(0));
 
     const labels = chipLabelsInOrder(UNSAFE_root);
-    const delivery = labels.indexOf('Filter by Delivery');
-    const distance = labels.findIndex((l) => l.startsWith('Distance filter'));
-    const other = labels.indexOf('Filter by Other');
+    const indexOfPrefix = (prefix: string) => labels.findIndex((l) => l.startsWith(prefix));
 
-    expect(delivery).toBeGreaterThanOrEqual(0);
-    expect(distance).toBe(delivery + 1);
-    expect(other).toBe(distance + 1);
+    const order = [
+      'Filter by For You',
+      'Filter by Labor',
+      'Filter by Online',
+      'Sort by highest pay',
+      'Filter by Delivery',
+      'Filter by Design',
+      'Filter by Tech',
+      'Filter by Writing',
+      'Filter by Other',
+    ].map(indexOfPrefix);
+    const distance = indexOfPrefix('Distance filter');
+
+    order.forEach((idx) => expect(idx).toBeGreaterThanOrEqual(0));
+    expect(distance).toBeGreaterThanOrEqual(0);
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i]).toBe(order[i - 1] + 1);
+    }
+    // Distance is the last chip in the row, after Other.
+    expect(distance).toBe(order[order.length - 1] + 1);
   });
 
-  it('keeps every category chip when the Distance chip is injected', async () => {
+  it('keeps every category chip, plus Online and Highest pay, alongside Distance', async () => {
     const { UNSAFE_root } = renderFeed();
     await waitFor(() => expect(chipLabelsInOrder(UNSAFE_root).length).toBeGreaterThan(0));
 
     const labels = chipLabelsInOrder(UNSAFE_root);
-    ;['For You', 'Tech', 'Design', 'Writing', 'Labor', 'Delivery', 'Other'].forEach((category) => {
-      expect(labels.some((l) => l.startsWith(`Filter by ${category}`))).toBe(true);
-    });
+    ;['For You', 'Labor', 'Delivery', 'Design', 'Tech', 'Writing', 'Other', 'Online'].forEach(
+      (category) => {
+        expect(labels.some((l) => l.startsWith(`Filter by ${category}`))).toBe(true);
+      }
+    );
+    expect(labels.some((l) => l.startsWith('Sort by highest pay'))).toBe(true);
+    expect(labels.some((l) => l.startsWith('Distance filter'))).toBe(true);
   });
 });
