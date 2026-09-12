@@ -321,6 +321,24 @@ describe('sign-in recovery after a failed attempt', () => {
     );
   });
 
+  it('reports a real reason on AUTH_ATTEMPT_FAILED, not "unknown"', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { capture } = require('lib/posthog');
+    capture.mockClear();
+    signInWithPassword.mockResolvedValue(INVALID_CREDENTIALS);
+
+    const utils = render(<SignInForm />);
+    fillCredentials(utils, 'wrong-password');
+    await tapSignIn(utils);
+
+    await waitFor(() =>
+      expect(capture).toHaveBeenCalledWith(
+        'AUTH_ATTEMPT_FAILED',
+        expect.objectContaining({ error_code: 'invalid_credentials', outcome: 'rejected' })
+      )
+    );
+  });
+
   it('resets the attempt counter on a successful sign-in', async () => {
     signInWithPassword
       .mockResolvedValueOnce(INVALID_CREDENTIALS)

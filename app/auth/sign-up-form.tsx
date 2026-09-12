@@ -50,6 +50,34 @@ const IOS_NEW_PASSWORD_RULES =
   'minlength: 8; required: lower; required: upper; required: digit; required: special;';
 
 /**
+ * Map a rejected `/auth/register` response to a low-cardinality reason so
+ * `auth_signup_failed` is groupable in analytics. Mirrors the user-facing
+ * branches in `handleSubmit` below — keep the two in sync.
+ */
+function classifyRegisterFailure(status: number, backendMessage: string): string {
+  const msg = backendMessage.toLowerCase();
+  if (status === 409) {
+    if (msg.includes('email')) return 'email_already_registered';
+    if (msg.includes('username')) return 'username_taken';
+    return 'account_exists';
+  }
+  if (status === 401 || msg.includes('invalid jwt') || msg.includes('missing jwt')) {
+    return 'configuration_error';
+  }
+  if (status === 404) return 'endpoint_not_found';
+  if (
+    status >= 500 ||
+    msg.includes('internal server error') ||
+    msg.includes('internal_server_error') ||
+    msg === 'error' ||
+    msg.includes('unexpected error')
+  ) {
+    return 'server_error';
+  }
+  return 'other';
+}
+
+/**
  * Signs the just-registered user in, retrying once on a transient failure.
  *
  * The account already exists at this point, so a single flaky request must not
@@ -240,6 +268,17 @@ export function SignUpForm() {
           url: registerEndpoint,
           rawBody: text,
           parsedError: backendMessage,
+        });
+
+        // A rejected registration used to leave no analytics trace: every
+        // branch below only calls setAuthError and returns, and the outer
+        // catch never runs for a resolved HTTP response. Capture the failure
+        // once here so it covers every rejection branch, carrying the HTTP
+        // status and a groupable reason.
+        analyticsService.trackEvent('auth_signup_failed', {
+          method: 'email',
+          status: registerRes.status,
+          reason: classifyRegisterFailure(registerRes.status, String(backendMessage)),
         });
 
         if (registerRes.status === 409) {
