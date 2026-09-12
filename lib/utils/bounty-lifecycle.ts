@@ -73,6 +73,7 @@ export type BountyActionKey =
   | 'delete'
   | 'cancel_bounty'
   | 'withdraw_application'
+  | 'discard_application'
   | 'respond_cancellation'
   | 'open_dispute'
   | 'view_dispute'
@@ -224,6 +225,14 @@ const ACTIONS: Record<BountyActionKey, BountyLifecycleAction> = {
     key: 'withdraw_application',
     label: 'Withdraw application',
     icon: 'undo',
+    tone: 'danger',
+  },
+  // A rejected application can never go back to pending — "withdraw" implies
+  // that. This just clears it from the hunter's own list.
+  discard_application: {
+    key: 'discard_application',
+    label: 'Discard application',
+    icon: 'delete-outline',
     tone: 'danger',
   },
   respond_cancellation: {
@@ -682,7 +691,10 @@ function resolveHunter(args: {
         tone: 'neutral',
         stageIndex: 0,
         primaryAction: action('find_bounties'),
-        secondaryActions: [],
+        // A rejected application otherwise lingers with nothing to do about it
+        // forever — this is the one place a hunter can clear it from their own
+        // list (see lib/services/application-withdrawal.ts#discardApplication).
+        secondaryActions: [action('discard_application')],
       });
 
     case 'in_progress':

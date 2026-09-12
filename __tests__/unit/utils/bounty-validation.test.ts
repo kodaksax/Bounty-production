@@ -194,4 +194,78 @@ describe('Bounty Validation Utils', () => {
       expect(result).toBe('Amount must be at least $0');
     });
   });
+
+  describe('validateAmount minimumAmount parameter', () => {
+    // The composer passes the live value of
+    // `public.posting_policy_config.minimum_amount` so a poster is told the
+    // floor here instead of being refused by
+    // `trg_bounties_enforce_posting_policy` at publish. These cases pin the
+    // coercion rules that keep the client's message matching the server's gate.
+
+    it('should enforce a custom minimum above the default', () => {
+      expect(validateAmount(4.99, false, 5)).toBe('The minimum bounty amount is $5.00');
+      expect(validateAmount(5, false, 5)).toBeNull();
+      expect(validateAmount(5.01, false, 5)).toBeNull();
+    });
+
+    it('should still reject amounts below the default when a lower minimum is passed', () => {
+      // A configured minimum below $1 is honoured — the floor is policy, not a
+      // hardcoded constant.
+      expect(validateAmount(0.5, false, 0.25)).toBeNull();
+      expect(validateAmount(0.2, false, 0.25)).toBe('The minimum bounty amount is $0.25');
+    });
+
+    it('should format a decimal minimum to two decimal places', () => {
+      expect(validateAmount(2, false, 2.5)).toBe('The minimum bounty amount is $2.50');
+      expect(validateAmount(2.5, false, 2.5)).toBeNull();
+    });
+
+    it('should round a minimum with more than two decimals in the message only', () => {
+      // 2.555 formats as $2.56 but the comparison uses the exact value, so an
+      // amount between the two still fails with the rounded message.
+      expect(validateAmount(2.554, false, 2.555)).toBe('The minimum bounty amount is $2.56');
+      expect(validateAmount(2.555, false, 2.555)).toBeNull();
+    });
+
+    it('should fall back to $1 for a NaN minimum', () => {
+      expect(validateAmount(0.5, false, NaN)).toBe('The minimum bounty amount is $1.00');
+      expect(validateAmount(1, false, NaN)).toBeNull();
+    });
+
+    it('should fall back to $1 for a non-finite minimum', () => {
+      expect(validateAmount(0.5, false, Infinity)).toBe('The minimum bounty amount is $1.00');
+      expect(validateAmount(1, false, -Infinity)).toBeNull();
+    });
+
+    it('should fall back to $1 for a zero minimum', () => {
+      // A $0 minimum would re-open the free-post hole this gate exists to
+      // close, so it is treated as unset rather than honoured.
+      expect(validateAmount(0, false, 0)).toBe('The minimum bounty amount is $1.00');
+      expect(validateAmount(0.99, false, 0)).toBe('The minimum bounty amount is $1.00');
+    });
+
+    it('should fall back to $1 for a negative minimum', () => {
+      expect(validateAmount(0.5, false, -5)).toBe('The minimum bounty amount is $1.00');
+      expect(validateAmount(1, false, -5)).toBeNull();
+    });
+
+    it('should still enforce the $10,000 maximum regardless of the minimum', () => {
+      expect(validateAmount(10001, false, 5)).toBe('The maximum bounty amount is $10,000.00');
+      expect(validateAmount(10000, false, 5)).toBeNull();
+    });
+
+    it('should still reject a non-numeric amount before applying the minimum', () => {
+      expect(validateAmount(NaN, false, 5)).toBe('Please enter a valid amount');
+    });
+
+    it('should ignore the minimum for honor bounties, which must be exactly $0', () => {
+      // The minimum is a PAID-bounty floor. An honor bounty is $0 by
+      // definition, and a configured minimum must never make $0 "valid" for a
+      // paid post nor make an honor post require money.
+      expect(validateAmount(0, true, 5)).toBeNull();
+      expect(validateAmount(5, true, 5)).toBe('Honor bounties must have a $0 amount');
+      expect(validateAmount(0.01, true, 5)).toBe('Honor bounties must have a $0 amount');
+      expect(validateAmount(-0.01, true, 5)).toBe('Amount must be at least $0');
+    });
+  });
 });

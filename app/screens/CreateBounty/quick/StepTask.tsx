@@ -1,7 +1,6 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { validateTitle } from '../../../../lib/utils/bounty-validation';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
@@ -29,22 +28,26 @@ interface TaskTemplate {
    * as hand-picked categories. */
   category: string;
   amount: number;
-  icon: keyof typeof MaterialIcons.glyphMap;
 }
 
-// One-tap starting points covering every category in BOUNTY_CATEGORIES, so no
-// matter which template a poster taps their bounty is still filterable in the
-// feed. Prices are rough market anchors, not quotes — StepPay shows them as an
-// editable, pre-filled amount rather than a locked price.
+// A curated set of one-tap starting points, chosen to signal the odd-jobs range
+// of the marketplace — the errands people don't expect to be able to hand off —
+// rather than to cover every BOUNTY_CATEGORIES bucket. Titles are kept short
+// enough to fit a single chip line; prices are rough market anchors, not quotes,
+// and StepPay shows them as an editable, pre-filled amount.
 const TASK_TEMPLATES: TaskTemplate[] = [
-  { id: 'assemble_furniture', title: 'Assemble furniture', category: 'labor', amount: 40, icon: 'build' },
-  { id: 'move_couch', title: 'Move a couch', category: 'labor', amount: 60, icon: 'weekend' },
-  { id: 'pick_up_package', title: 'Pick up a package', category: 'delivery', amount: 15, icon: 'local-shipping' },
-  { id: 'mount_tv', title: 'Mount a TV', category: 'labor', amount: 35, icon: 'tv' },
-  { id: 'walk_dog', title: 'Walk my dog', category: 'other', amount: 20, icon: 'pets' },
-  { id: 'design_flyer', title: 'Design a flyer', category: 'design', amount: 75, icon: 'palette' },
-  { id: 'write_description', title: 'Write a product description', category: 'writing', amount: 30, icon: 'edit' },
-  { id: 'fix_computer', title: 'Fix my computer', category: 'tech', amount: 45, icon: 'computer' },
+  { id: 'hold_merch_line', title: 'Hold my spot in the merch line', category: 'other', amount: 25 },
+  { id: 'lecture_notes', title: 'Take lecture notes for me', category: 'writing', amount: 20 },
+  { id: 'home_haircut', title: 'Cut my hair at my place', category: 'other', amount: 65 },
+  { id: 'mount_tv', title: 'Mount my TV', category: 'labor', amount: 35 },
+  { id: 'explain_insurance', title: 'Explain my insurance policy', category: 'other', amount: 30 },
+  { id: 'hem_gown', title: 'Hem my gown', category: 'other', amount: 45 },
+  { id: 'tagalog_grocery_run', title: 'Tagalog language translator', category: 'other', amount: 55 },
+  { id: 'walk_dog', title: 'Walk my dog', category: 'other', amount: 20 },
+  { id: 'clean_closet', title: 'Clean out my closet', category: 'labor', amount: 60 },
+  { id: 'help_move_in', title: 'Help me move in', category: 'labor', amount: 90 },
+  { id: 'design_artwork', title: 'Design an artwork', category: 'design', amount: 100 },
+  { id: 'assemble_furniture', title: 'Assemble my furniture', category: 'labor', amount: 40 },
 ];
 
 interface StepTaskProps {
@@ -71,7 +74,13 @@ const MAX_LENGTH = 120;
  */
 export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSteps }: StepTaskProps) {
   const { theme } = useAppThemeContext();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
+  // Everything below scales off the viewport width rather than fixed pixels, so
+  // the chips stay proportionate from small phones up to tablets. 375 is the
+  // reference width the base values are tuned against; clamped so the pills
+  // never shrink below legibility or balloon on a large tablet.
+  const { width } = useWindowDimensions();
+  const scale = Math.min(Math.max(width / 375, 0.85), 1.3);
+  const styles = useMemo(() => makeStyles(theme, scale), [theme, scale]);
   const [focused, setFocused] = useState(false);
   const [touched, setTouched] = useState(false);
 
@@ -121,11 +130,41 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSte
       step={step}
       totalSteps={totalSteps}
       title="What do you need done?"
-      subtitle="Tap a task to get started, or describe your own below."
+      subtitle="Write honestly about something you want someone else to solve, or tap a task below. "
       ctaLabel="Continue"
       ctaDisabled={!!error}
       onCta={onNext}
     >
+      
+      <View>
+        <TextInput
+          value={draft.title}
+          onChangeText={handleChange}
+          onFocus={() => {
+            setFocused(true);
+            onFieldFocus?.();
+          }}
+          onBlur={() => {
+            setFocused(false);
+            setTouched(true);
+          }}
+          multiline
+          textAlignVertical="top"
+          maxLength={MAX_LENGTH}
+          style={[
+            styles.input,
+            { borderColor: focused ? theme.primary : theme.border },
+          ]}
+          accessibilityLabel="What do you need done?"
+          accessibilityHint="For example, pick up groceries or wait in line for me"
+        />
+
+        {/* Animated examples, shown only while the field is untouched. */}
+        {isEmpty ? (
+          <SuggestionPlaceholder suggestions={SUGGESTIONS} style={styles.suggestion} />
+        ) : null}
+      </View>
+
       <View style={styles.introRow}>
         <Text style={styles.introText}>New to Bounty?</Text>
         <InfoTooltip
@@ -157,10 +196,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSte
             accessibilityLabel={`${template.title}, suggested $${template.amount}`}
             accessibilityHint="Fills in the task, category, and price, then continues to the price step"
           >
-            <View style={styles.cardIconWrap}>
-              <MaterialIcons name={template.icon} size={20} color={theme.primary} />
-            </View>
-            <Text style={styles.cardTitle} numberOfLines={2}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
               {template.title}
             </Text>
             <Text style={styles.cardAmount}>${template.amount}</Text>
@@ -168,40 +204,8 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSte
         ))}
       </View>
 
-      <View style={styles.dividerRow}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>or describe it yourself</Text>
-        <View style={styles.dividerLine} />
-      </View>
-
-      <View>
-        <TextInput
-          value={draft.title}
-          onChangeText={handleChange}
-          onFocus={() => {
-            setFocused(true);
-            onFieldFocus?.();
-          }}
-          onBlur={() => {
-            setFocused(false);
-            setTouched(true);
-          }}
-          multiline
-          textAlignVertical="top"
-          maxLength={MAX_LENGTH}
-          style={[
-            styles.input,
-            { borderColor: focused ? theme.primary : theme.border },
-          ]}
-          accessibilityLabel="What do you need done?"
-          accessibilityHint="For example, pick up groceries or wait in line for me"
-        />
-
-        {/* Animated examples, shown only while the field is untouched. */}
-        {isEmpty ? (
-          <SuggestionPlaceholder suggestions={SUGGESTIONS} style={styles.suggestion} />
-        ) : null}
-      </View>
+     
+      
 
       <View style={styles.helperRow}>
         <Text style={styles.helper}>Keep it short and clear. You can add photos next.</Text>
@@ -219,17 +223,23 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSte
 
 export default StepTask;
 
-function makeStyles(theme: AppTheme) {
+function makeStyles(theme: AppTheme, scale: number) {
+  // Base numbers are the reference-width (375pt) values, multiplied by the
+  // viewport scale — nothing here is a fixed size.
+  const ms = (n: number) => Math.round(n * scale);
   return StyleSheet.create({
     introRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 14,
+      marginTop: 16,
+      marginBottom: 10,
     },
     introText: {
-      fontSize: 15,
-      fontWeight: '600',
+      fontSize: 13,
+      fontWeight: '700',
       color: theme.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
     },
     sectionRow: {
       flexDirection: 'row',
@@ -246,37 +256,37 @@ function makeStyles(theme: AppTheme) {
     grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      justifyContent: 'space-between',
-      marginBottom: 16,
+      alignItems: 'flex-start',
+      marginBottom: ms(16),
     },
+    // A pill that hugs its content, so its width tracks the label length the
+    // way the feed's filter chips do. No fixed width or height. flexShrink 0 so
+    // several fit on a line and the row wraps to the next line instead of
+    // squeezing a chip narrow enough to clip its label.
     card: {
-      width: '48%',
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.surface,
-      paddingHorizontal: 12,
-      paddingVertical: 12,
-      marginBottom: 10,
-    },
-    cardIconWrap: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.isDark ? 'rgba(5,150,105,0.2)' : 'rgba(5,150,105,0.1)',
-      marginBottom: 8,
+      alignSelf: 'flex-start',
+      flexShrink: 0,
+      maxWidth: '100%',
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.text,
+      backgroundColor: theme.surface,
+      paddingVertical: ms(7),
+      paddingHorizontal: ms(12),
+      marginRight: ms(8),
+      marginBottom: ms(8),
     },
     cardTitle: {
-      fontSize: 14,
+      flexShrink: 1,
+      fontSize: ms(13),
       fontWeight: '600',
       color: theme.text,
-      lineHeight: 18,
     },
     cardAmount: {
-      marginTop: 4,
-      fontSize: 13,
+      marginLeft: ms(6),
+      fontSize: ms(12),
       fontWeight: '700',
       color: theme.primary,
     },

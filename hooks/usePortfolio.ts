@@ -6,7 +6,7 @@ interface UsePortfolioResult {
   items: PortfolioItem[];
   loading: boolean;
   error: string | null;
-  addItem: (item: Omit<PortfolioItem, 'id' | 'createdAt'>) => Promise<void>;
+  addItem: (item: Omit<PortfolioItem, 'id' | 'createdAt'>) => Promise<boolean>;
   deleteItem: (itemId: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -29,16 +29,23 @@ export function usePortfolio(userId: string): UsePortfolioResult {
     }
   };
 
-  const addItem = async (item: Omit<PortfolioItem, 'id' | 'createdAt'>) => {
+  const addItem = async (item: Omit<PortfolioItem, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
       setError(null);
       const newItem = await portfolioService.addItem(item);
-      
+
       // Optimistic update
       setItems(prev => [newItem, ...prev]);
+      return true;
     } catch (err) {
+      // This failure previously only surfaced as `error` state on this hook,
+      // which callers weren't reading — a file could upload to storage fine
+      // and then vanish from the UI with zero indication that the portfolio
+      // record itself never saved. Return success/failure so callers can
+      // show the user something went wrong.
       setError(err instanceof Error ? err.message : 'Failed to add item');
       await fetchItems(); // Revert
+      return false;
     }
   };
 

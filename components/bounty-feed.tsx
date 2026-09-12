@@ -63,6 +63,12 @@ import {
     summarizeMissingDetails,
     type BountyCompleteness,
 } from '../lib/utils/bounty-completeness';
+import {
+    clearBountyRemovedLocally,
+    filterOpenFeedBounties,
+    isBountyVisibleInOpenFeed,
+    markBountyRemovedLocally,
+} from '../lib/utils/bounty-visibility';
 import { logger } from '../lib/utils/error-logger';
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
@@ -261,7 +267,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   }, [bounties]);
 
   const filteredBounties = useMemo(() => {
-    let list = [...bounties];
+    // Re-assert the lifecycle filter at render time as well as at fetch time:
+    // this is the last gate before a row is drawn, so nothing that became
+    // ineligible can reach the list regardless of how it got into state.
+    let list = filterOpenFeedBounties(bounties);
     // Hide bounties whose deadline has passed — they're still visible to the
     // poster (as "Deadline Passed") in My Postings, just not to hunters here.
     list = list.filter(b => !isBountyDeadlinePassed(b));
@@ -438,10 +447,17 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
                 API_TIMEOUTS.DEFAULT
               );
-        const safeBounties = Array.isArray(fetchedBounties) ? fetchedBounties : [];
+        const pageRows = Array.isArray(fetchedBounties) ? fetchedBounties : [];
+        // Lifecycle filtering is re-applied to EVERY result set, not just
+        // trusted from the query: a bounty completed/removed while this fetch
+        // was in flight (or served from a cache/replica) would otherwise be
+        // merged straight back into the list. `existing` is filtered too, so a
+        // row that became ineligible while it sat in state cannot survive a
+        // pagination merge either.
+        const safeBounties = filterOpenFeedBounties(pageRows);
         const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
           const map = new Map<string, Bounty>();
-          existing.concat(incoming).forEach(b => {
+          filterOpenFeedBounties(existing.concat(incoming)).forEach(b => {
             map.set(String(b.id), b);
           });
           return Array.from(map.values());
@@ -451,8 +467,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         } else {
           setBounties(prev => mergeUniqueById(prev, safeBounties));
         }
-        offsetRef.current = pageOffset + safeBounties.length;
-        setHasMore(safeBounties.length === PAGE_SIZE);
+        // Pagination bookkeeping tracks the rows the SERVER returned, not the
+        // rows that survived filtering: advancing the offset by the filtered
+        // count would re-request rows already consumed, and a page that filters
+        // down to fewer than PAGE_SIZE items does not mean the list ended.
+        offsetRef.current = pageOffset + pageRows.length;
+        setHasMore(pageRows.length === PAGE_SIZE);
         setLoadError(null);
         logger.info('feed.bounties.request_completed', {
           reset,
@@ -548,13 +568,21 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bounties' }, payload => {
         const updated = payload.new as Bounty;
+        // A bounty that's no longer open (accepted/completed/cancelled/removed)
+        // should drop out of the open-bounties feed rather than linger with a
+        // stale status — and must stay out even if an in-flight or cached
+        // query returns its old row moments later, hence the registry mark.
+        if (isBountyVisibleInOpenFeed(updated)) {
+          // Reopened (e.g. an acceptance was withdrawn): the backend says it is
+          // eligible again, so lift any earlier local suppression.
+          clearBountyRemovedLocally(updated.id, ['feed']);
+        } else {
+          markBountyRemovedLocally(updated.id, ['feed']);
+        }
         setBounties(prev => {
           const exists = prev.some(b => String(b.id) === String(updated.id));
           if (!exists) return prev;
-          // A bounty that's no longer open (accepted/cancelled/expired) should
-          // drop out of the open-bounties feed rather than linger with a
-          // stale status.
-          if (updated.status !== 'open') {
+          if (!isBountyVisibleInOpenFeed(updated)) {
             return prev.filter(b => String(b.id) !== String(updated.id));
           }
           return prev.map(b => (String(b.id) === String(updated.id) ? { ...b, ...updated } : b));
@@ -563,6 +591,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'bounties' }, payload => {
         const deletedId = (payload.old as Partial<Bounty>)?.id;
         if (deletedId == null) return;
+        markBountyRemovedLocally(deletedId);  // gone for good, every list
         setBounties(prev => prev.filter(b => String(b.id) !== String(deletedId)));
       })
       .subscribe();

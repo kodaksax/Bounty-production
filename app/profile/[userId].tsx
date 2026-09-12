@@ -25,7 +25,7 @@ import {
 } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
+import { EnhancedProfileSection } from "../../components/enhanced-profile-section";
 import { ProfileBountyTabs } from "../../components/profile-bounty-history-section";
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
@@ -681,9 +681,6 @@ export default function UserProfileScreen() {
           <Text style={styles.sectionTitle}>Skillsets</Text>
           <SkillsetChips skills={skills} />
         </View>
-
-        {/* Portfolio */}
-        <PortfolioSection userId={userId} isOwnProfile={isOwnProfile} />
 
       </ScrollView>
 

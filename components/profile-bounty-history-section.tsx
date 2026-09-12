@@ -22,6 +22,7 @@ import type { AppTheme } from '../lib/themes/types';
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
 import { BountyCompactItem } from './bounty-compact-item';
 import { BountyDetailModal } from './bountydetailmodal';
+import { PortfolioGrid, useProfilePortfolio } from './profile-portfolio-grid';
 
 const VISIBLE_LIMIT = 5;
 // The underlying query orders by created_at, so pull a wider window than we
@@ -40,6 +41,16 @@ const OPEN_STATUSES = ['open'];
 const GRID_COLUMNS = 3;
 const GRID_GAP = 8;
 const PAGE_H_PADDING = 16;
+
+/**
+ * Edge of one square in a profile grid. Three columns and their gaps come out
+ * of the page's content width, so the tiles fit exactly rather than wrapping to
+ * two-per-row on narrow devices — and the portfolio tab lines up with the
+ * bounty tabs column for column.
+ */
+function tileWidthFor(windowWidth: number) {
+  return (windowWidth - PAGE_H_PADDING * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
+}
 
 // Card height floor, as a proportion of the live window rather than a pixel
 // constant, so it scales with the device and re-lays out on rotation.
@@ -389,20 +400,30 @@ export function ProfileBountyTabs({
   );
   const { profile } = useNormalizedProfile(userId);
   const name = profile?.username || (isOwnProfile ? 'You' : 'This user');
+  const tileWidth = useMemo(() => tileWidthFor(windowWidth), [windowWidth]);
 
   const completed = useCompletedWork(userId);
   const open = useOpenPostings(userId);
+  // Undefined for one's own profile so the normalized profile resolves the id
+  // the portfolio store is keyed by — the same resolution the portfolio used
+  // when it sat on its own below the skillsets.
+  const portfolio = useProfilePortfolio(isOwnProfile ? undefined : userId);
 
   const pagerRef = useRef<ScrollView>(null);
   const [activeTab, setActiveTab] = useState(0);
-  // Both panes live side by side in one row, so the pager needs a height. Track
-  // each pane's natural height and use the taller one: sizing to the active pane
-  // would make the row jump mid-swipe, while a fixed height would clip.
-  const [pageHeights, setPageHeights] = useState<[number, number]>([0, 0]);
-  const pagerHeight = Math.max(pageHeights[0], pageHeights[1]) || undefined;
+  // All three panes live side by side in one row, so the pager needs a height.
+  // Track each pane's natural height and use the tallest: sizing to the active
+  // pane would make the row jump mid-swipe, while a fixed height would clip.
+  const [pageHeights, setPageHeights] = useState<number[]>(() => [0, 0, 0]);
+  const pagerHeight = Math.max(...pageHeights) || undefined;
 
-  const setHeight = useCallback((index: 0 | 1, height: number) => {
-    setPageHeights(prev => (prev[index] === height ? prev : index === 0 ? [height, prev[1]] : [prev[0], height]));
+  const setHeight = useCallback((index: number, height: number) => {
+    setPageHeights(prev => {
+      if (prev[index] === height) return prev;
+      const next = [...prev];
+      next[index] = height;
+      return next;
+    });
   }, []);
 
   const goToTab = useCallback(
@@ -422,8 +443,9 @@ export function ProfileBountyTabs({
   );
 
   const tabs = [
-    { key: 'completed',  label: 'Completed', count: completed.bounties.length },
-    { key: 'posted',  label: 'Posted', count: open.bounties.length },
+    { key: 'completed', label: 'Completed', count: completed.bounties.length },
+    { key: 'posted', label: 'Posted', count: open.bounties.length },
+    { key: 'portfolio', label: 'Portfolio', count: portfolio.items.length },
   ];
 
   if (!userId) return null;
@@ -439,10 +461,15 @@ export function ProfileBountyTabs({
               style={[styles.tab, active && styles.tabActive]}
               onPress={() => goToTab(index)}
               accessibilityRole="tab"
-              accessibilityLabel={`${tab.label}, ${tab.count} bounties`}
+              accessibilityLabel={`${tab.label}, ${tab.count} ${
+                tab.key === 'portfolio' ? 'items' : 'bounties'
+              }`}
               accessibilityState={{ selected: active }}
             >
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+              <Text
+                style={[styles.tabLabel, active && styles.tabLabelActive]}
+                numberOfLines={1}
+              >
                 {tab.label} ({tab.count})
               </Text>
             </TouchableOpacity>
@@ -458,8 +485,8 @@ export function ProfileBountyTabs({
         onMomentumScrollEnd={onPagerScrollEnd}
         // No rubber-banding at either end: without these the grid can be
         // dragged off-centre and hangs there mid-gesture, which reads as the
-        // row having been knocked out of place. Swiping between the two tabs
-        // still works; only the overscroll past them is gone.
+        // row having been knocked out of place. Swiping between the three
+        // tabs still works; only the overscroll past them is gone.
         bounces={false}
         overScrollMode="never"
         // flex-start, not the default stretch: a stretched pane would be forced
@@ -518,16 +545,20 @@ export function ProfileBountyTabs({
             };
           }}
         />
+        <View style={styles.page} onLayout={e => setHeight(2, e.nativeEvent.layout.height)}>
+          <PortfolioGrid
+            portfolio={portfolio}
+            isOwnProfile={isOwnProfile}
+            tileWidth={tileWidth}
+          />
+        </View>
       </ScrollView>
     </View>
   );
 }
 
 function makeStyles(theme: AppTheme, windowWidth: number, cardMinHeight: number) {
-  // Three columns and two gaps come out of the page's content width, so the
-  // tiles fit exactly rather than wrapping to two-per-row on narrow devices.
-  const tileWidth =
-    (windowWidth - PAGE_H_PADDING * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
+  const tileWidth = tileWidthFor(windowWidth);
 
   return StyleSheet.create({
     section: {

@@ -2,7 +2,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConnectionStatus } from "components/connection-status";
-import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
+import { EnhancedProfileSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { ProfileBountyTabs } from "components/profile-bounty-history-section";
 import { SkillsetChips } from "components/skillset-chips";
@@ -355,9 +355,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         )}
 
 
-        {/* Completed work / open postings, as swipeable tabs */}
-        <ProfileBountyTabs userId={profileUuid} isOwnProfile={isOwnProfile} />
-
         {/* Skillsets - simplified chip display */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -372,23 +369,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             </TouchableOpacity>
           </View>
           <SkillsetChips skills={skills} />
-        </View>
-
-        {/* Portfolio (standalone, after skillsets) */}
-        <PortfolioSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} />
-
-        {/* Profile completion meter — encourages personalization on this own-profile-only screen */}
-        <View style={styles.section}>
-          <ProfileCompletionMeter
-            input={{
-              username: authProfile?.username,
-              display_name: authProfile?.display_name,
-              avatar_url: authProfile?.avatar,
-              bio: authProfile?.about,
-              location: authProfile?.location,
-              banner_url: authProfile?.banner_url,
-            }}
-          />
         </View>
 
         {/* Verification + Milestone Badges */}
@@ -449,6 +429,23 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               </TouchableOpacity>
             );
           })()}
+        </View>
+
+        {/* Completed work / open postings, as swipeable tabs */}
+        <ProfileBountyTabs userId={profileUuid} isOwnProfile={isOwnProfile} />
+
+        {/* Profile completion meter — encourages personalization on this own-profile-only screen */}
+        <View style={styles.section}>
+          <ProfileCompletionMeter
+            input={{
+              username: authProfile?.username,
+              display_name: authProfile?.display_name,
+              avatar_url: authProfile?.avatar,
+              bio: authProfile?.about,
+              location: authProfile?.location,
+              banner_url: authProfile?.banner_url,
+            }}
+          />
         </View>
 
         {/* Platform Security & Trust Badges */}

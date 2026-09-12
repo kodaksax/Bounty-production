@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { RADIUS, SIZING, TYPOGRAPHY } from 'lib/constants/accessibility';
 import {
   NOTIFICATION_CATEGORIES,
@@ -13,7 +13,7 @@ import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import type { Notification, NotificationCategory } from 'lib/types';
 import { useAuth } from 'providers/auth-provider';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -74,6 +74,25 @@ export function NotificationCenterScreen() {
   const [search, setSearch] = useState('');
   const [contextMenuFor, setContextMenuFor] = useState<Notification | null>(null);
   const [actionSheetFor, setActionSheetFor] = useState<Notification | null>(null);
+
+  // Instagram-style behavior: opening the Notification Center marks every
+  // currently-unread notification as read immediately, instead of requiring
+  // each row to be tapped individually (kodaksax/Bounty-production#776).
+  // Runs on every focus (initial mount + navigating back to this screen),
+  // not just once, so re-opening the tab after new notifications arrive also
+  // clears them without a manual "Mark all read" tap. `unreadCount` is read
+  // through a ref rather than a hook dependency so this effect doesn't
+  // re-fire mid-focus as markAllAsRead drives the count to 0 -- it should
+  // only run once per focus transition.
+  const unreadCountRef = useRef(unreadCount);
+  unreadCountRef.current = unreadCount;
+  useFocusEffect(
+    useCallback(() => {
+      if (unreadCountRef.current > 0) {
+        markAllAsRead();
+      }
+    }, [markAllAsRead])
+  );
 
   const visibleNotifications = useMemo(() => {
     let list = notifications.filter(n => !n.archived);

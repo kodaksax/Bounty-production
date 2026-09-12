@@ -23,7 +23,7 @@
       "path": "/",
       "requiresAuth": false,
       "tags": { "funnel": ["funnel:signup"], "area": ["area:web", "area:auth", "area:ux"] },
-      "notes": "The cheapest scenario that proves the whole chain works: Shoal launches, drives a real Chromium at the Metro-served Expo web bundle, the app mounts, agents act, findings and a report come back. Run this first after any setup change. A first-time visitor at / gets the onboarding welcome screen (the 'Name your price' / 'I'd rather earn' / 'Log In' landing); app/index.tsx only shows the sign-in form to a device that has signed in before."
+      "notes": "The cheapest scenario that proves the whole chain works: Shoal launches, drives a real Chromium at the Metro-served Expo web bundle, the app mounts, agents act, findings and a report come back. Run this first after any setup change. A first-time visitor at / gets the onboarding welcome screen (the 'Make today pay.' / 'I'd rather earn' / 'Sign In' landing); app/index.tsx only shows the sign-in form to a device that has signed in before."
     },
 
     {

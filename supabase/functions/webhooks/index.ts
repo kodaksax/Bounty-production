@@ -11,7 +11,9 @@ import {
     type BountyPaymentSettlementStatus,
     type StripeTransferEvent,
 } from '../_shared/bounty-payment-settlement-state.ts';
-import { decidePayoutEventAction } from '../_shared/payout-state.ts';
+import {
+  decidePayoutEventAction,
+} from '../_shared/payout-state.ts';
 import type { WalletTransaction } from '../_shared/types.ts';
 import {
     collectWebhookSecrets,
@@ -276,13 +278,13 @@ async function syncConnectAccountToProfile(
  * could credit real balance against a withdrawal that had already been
  * delivered.
  *
- * Identifier matching is now the only matching. Every withdrawal row created
- * by /connect carries its payout id from birth, so the id is always available
- * for anything this system originated. A payout with no id match is either
- * foreign (dashboard/automatic) or an orphan; both are reported for human
- * review rather than guessed at. Legacy rows written before 2026-08-16 have
- * no payout id and are deliberately left alone — this change does not
- * retro-fit history.
+ * Identifier matching is the only matching *this* function does. Rows that do
+ * not yet carry a Stripe payout id are deliberately left for reconciliation
+ * and human review rather than guessed at: Stripe automatic sweeps and
+ * Dashboard-created payouts are account-level payouts that may share user,
+ * amount, and destination with an app withdrawal without being caused by it.
+ * Legacy rows written before 2026-08-16 likewise have no payout id and remain
+ * manual-review cases rather than being retro-fitted heuristically.
  *
  * Status is deliberately NOT filtered here: callers apply their own
  * compare-and-set on the status they require, which is what makes replayed
@@ -2653,7 +2655,11 @@ Deno.serve(async (req: Request) => {
             // money — the payout already happened — so there is no balance
             // action to double-apply.
             try {
-              const candidateTx = await findCandidateWithdrawalTx(supabase, paidProfile.id, payout);
+              const candidateTx = await findCandidateWithdrawalTx(
+                supabase,
+                paidProfile.id,
+                payout
+              );
               const action = decidePayoutEventAction({
                 outcome: 'paid',
                 row: candidateTx

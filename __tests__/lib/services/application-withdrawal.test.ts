@@ -19,7 +19,7 @@ jest.mock('../../../lib/services/bounty-request-service', () => ({
   },
 }));
 
-import { withdrawApplication } from '../../../lib/services/application-withdrawal';
+import { withdrawApplication, discardApplication } from '../../../lib/services/application-withdrawal';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 
@@ -151,5 +151,95 @@ describe('withdrawApplication', () => {
     await expect(
       withdrawApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
     ).resolves.toEqual({ applicationId: 'req-9' });
+  });
+});
+
+describe('discardApplication', () => {
+  it('deletes the rejected request and emits application_discarded on success', async () => {
+    mockGetAll.mockResolvedValue([{ id: 'req-4', status: 'rejected' }]);
+    mockDelete.mockResolvedValue(true);
+
+    const result = await discardApplication({
+      bountyId: 7,
+      currentUserId: 'hunter-1',
+      surface: 'my_postings',
+    });
+
+    expect(mockGetAll).toHaveBeenCalledWith({
+      bountyId: '7',
+      userId: 'hunter-1',
+    });
+    expect(mockDelete).toHaveBeenCalledWith('req-4');
+    expect(result).toEqual({ applicationId: 'req-4' });
+    expect(mockTrack).toHaveBeenCalledWith('application_discarded', {
+      role: 'hunter',
+      bounty_id: '7',
+      application_id: 'req-4',
+      surface: 'my_postings',
+    });
+  });
+
+  it('fails fast when the current user session is unresolved', async () => {
+    await expect(
+      discardApplication({ bountyId: 7, currentUserId: undefined, surface: 'inbox' })
+    ).rejects.toThrow('signed in');
+
+    expect(mockGetAll).not.toHaveBeenCalled();
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('throws and does NOT delete when no application exists at all', async () => {
+    mockGetAll.mockResolvedValue([]);
+
+    await expect(
+      discardApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
+    ).rejects.toThrow('No rejected application found');
+
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('throws a clear error and does NOT delete when the application is still pending', async () => {
+    mockGetAll.mockResolvedValue([{ id: 'req-5', status: 'pending' }]);
+
+    await expect(
+      discardApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
+    ).rejects.toThrow('still pending');
+
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('throws a clear error and does NOT delete when the application was accepted', async () => {
+    mockGetAll.mockResolvedValue([{ id: 'req-6', status: 'accepted' }]);
+
+    await expect(
+      discardApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
+    ).rejects.toThrow('already been accepted');
+
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('throws and does NOT emit when the delete reports failure', async () => {
+    mockGetAll.mockResolvedValue([{ id: 'req-7', status: 'rejected' }]);
+    mockDelete.mockResolvedValue(false);
+
+    await expect(
+      discardApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
+    ).rejects.toThrow('Failed to discard application');
+
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('does not reject the caller if the analytics emit rejects', async () => {
+    mockGetAll.mockResolvedValue([{ id: 'req-8', status: 'rejected' }]);
+    mockDelete.mockResolvedValue(true);
+    mockTrack.mockRejectedValueOnce(new Error('posthog down'));
+
+    await expect(
+      discardApplication({ bountyId: 7, currentUserId: 'hunter-1', surface: 'inbox' })
+    ).resolves.toEqual({ applicationId: 'req-8' });
   });
 });

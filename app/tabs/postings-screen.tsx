@@ -7,13 +7,22 @@ import { CreateBountyFlow } from "app/screens/CreateBounty"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
-import { withdrawApplication } from "lib/services/application-withdrawal"
+import { discardApplication, withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
+import {
+  filterManagementBounties,
+  markBountyRemovedLocally,
+} from "lib/utils/bounty-visibility"
+import {
+  filterHunterHiddenBounties,
+  hideBountyForHunter,
+  loadHunterHiddenBountyIds,
+} from "lib/utils/hunter-hidden-bounties"
 import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
@@ -53,6 +62,7 @@ import {
 } from '../../hooks/useBountyStatusFilters'
 import { BountySectionHeader } from '../../components/ui/bounty-section-header'
 import { useBountyForm } from '../../hooks/useBountyForm'
+import { useAskApplicant } from '../../hooks/useAskApplicant'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
@@ -79,7 +89,8 @@ type MyPostingRowProps = {
   onEdit?: () => void
   onDelete?: () => void
   onDiscard?: () => void
-  onWithdrawApplication?: () => void
+  onHide?: () => void | Promise<void>
+  onWithdrawApplication?: (requestStatus?: string | null) => void
   onGoToReview: (id: string) => void
   onGoToPayout: (id: string) => void
   variant?: 'owner' | 'hunter'
@@ -90,7 +101,7 @@ type MyPostingRowProps = {
   applicationCount?: number
 }
 
-export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onDiscard, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh, applicationCount }) {
+export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onDiscard, onHide, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh, applicationCount }) {
   return (
     <MyPostingExpandable
       bounty={bounty}
@@ -100,6 +111,7 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
       onEdit={onEdit}
       onDelete={onDelete}
       onDiscard={onDiscard}
+      onHide={onHide}
       onWithdrawApplication={onWithdrawApplication}
       onGoToReview={onGoToReview}
       onGoToPayout={onGoToPayout}
@@ -142,6 +154,11 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   })
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Bounty ids this hunter hid from their own In Progress list via the
+  // "Hide"/"Remove from List" card actions. Persisted per-user (see
+  // lib/utils/hunter-hidden-bounties.ts) so a hidden card stays hidden across
+  // tab switches and app restarts instead of resetting on remount.
+  const [hunterHiddenBountyIds, setHunterHiddenBountyIds] = useState<Set<string>>(new Set())
 
   const insets = useSafeAreaInsets()
   const BOTTOM_ACTIONS_HEIGHT = 64 // compact height to free more scroll space
@@ -283,8 +300,11 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       setIsLoading((prev) => ({ ...prev, myBounties: true }))
       setError(null) // Clear previous error
       const mine = await bountyService.getByUserId(currentUserId)
-      // Filter out archived and deleted bounties from My Postings view
-      const activeBounties = mine.filter(b => b.status !== 'archived' && b.status !== 'deleted')
+      // One shared lifecycle filter (see lib/utils/bounty-visibility) rather
+      // than an inline status check, re-applied on EVERY load: it also drops
+      // bounties this client just removed, so a query that raced the mutation
+      // cannot put them back when the screen remounts after a tab switch.
+      const activeBounties = filterManagementBounties(mine)
       setMyBounties(activeBounties)
       setIsLoading((prev) => ({ ...prev, myBounties: false }))
       // Load related requests
@@ -318,12 +338,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       const map = new Map<string, Bounty>()
       for (const r of relevant) {
         const b = r?.bounty as Bounty | undefined
-        // Filter out archived and deleted bounties from in-progress view
-        if (b && !map.has(String(b.id)) && b.status !== 'archived' && b.status !== 'deleted') {
-          map.set(String(b.id), b)
-        }
+        if (b && !map.has(String(b.id))) map.set(String(b.id), b)
       }
-      setInProgressBounties(Array.from(map.values()))
+      setInProgressBounties(filterManagementBounties(Array.from(map.values())))
     } catch (e: any) {
       console.error('Error loading applied bounties for In Progress:', e)
       setError('Failed to load your applied bounties')
@@ -395,6 +412,24 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     loadMyBounties()
     loadInProgress()
   }, [postSuccess, loadMyBounties, loadInProgress, currentUserId]) // Re-fetch after a successful post
+
+  // Load this hunter's persisted "hidden from In Progress" ids so a card
+  // dismissed via "Hide"/"Remove from List" on a previous visit — or before
+  // an app restart — stays off the list on this load too, not just the one
+  // where it was hidden.
+  useEffect(() => {
+    let active = true
+    if (!currentUserId) {
+      setHunterHiddenBountyIds(new Set())
+      return
+    }
+    loadHunterHiddenBountyIds(currentUserId).then((ids) => {
+      if (active) setHunterHiddenBountyIds(ids)
+    })
+    return () => {
+      active = false
+    }
+  }, [currentUserId])
 
   // Realtime applicant counts: a single list-level subscription (not one per
   // row — see MyPostingExpandable's completion-status subscriptions for why
@@ -477,6 +512,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     setIsLoading,
     setError,
   })
+
+  // P0-02: let a poster ask an applicant a question BEFORE committing to them.
+  // ApplicantCard already renders an "Ask a question" button whenever
+  // onRequestMoreInfo is supplied; until now neither list passed it, so the
+  // button never appeared and accepting was the only way to open a thread.
+  const { handleAskApplicant } = useAskApplicant({ bountyRequests })
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.
@@ -681,7 +722,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 throw new Error("Failed to delete bounty")
               }
 
-              // Update UI only after successful deletion
+              // Update UI only after successful deletion. The registry mark
+              // makes the removal survive the reload below (and any query that
+              // was already in flight against the pre-delete row).
+              markBountyRemovedLocally(bounty.id)
               setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
 
               // Refresh to ensure consistency
@@ -720,6 +764,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             try {
               const updated = await bountyService.update(bounty.id, { status: 'deleted' })
               if (!updated) throw new Error('Failed to discard bounty')
+              markBountyRemovedLocally(bounty.id)
               setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
               await loadMyBounties()
             } catch (err: any) {
@@ -733,7 +778,62 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     )
   }, [loadMyBounties])
 
-  const handleWithdrawApplication = async (bountyId: number | string) => {
+  // Hunter-only "Hide"/"Remove from List" on a completed bounty card (see
+  // MyPostingExpandable's variant="hunter" branch). Persists the hide (so it
+  // survives remount/app-restart — issue #779) before removing the row from
+  // local state; a write failure is surfaced by the card's own try/catch and
+  // this callback simply rethrows so the card doesn't optimistically hide
+  // something that was never actually recorded.
+  const handleHideInProgressBounty = React.useCallback(async (bounty: Bounty) => {
+    await hideBountyForHunter(currentUserId, bounty.id)
+    const key = String(bounty.id)
+    setHunterHiddenBountyIds((prev) => {
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
+    setInProgressBounties((prev) => prev.filter((b) => String(b.id) !== key))
+  }, [currentUserId])
+
+  const handleWithdrawApplication = async (bountyId: number | string, requestStatus?: string | null) => {
+    if (requestStatus === 'rejected') {
+      Alert.alert(
+        "Discard Application",
+        "Remove this rejected application from your list? This can't be undone.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await discardApplication({
+                  bountyId,
+                  currentUserId,
+                  surface: 'my_postings',
+                })
+
+                try {
+                  await loadInProgress()
+                } catch (refreshError) {
+                  console.warn('Failed to refresh in-progress bounties after discard:', refreshError)
+                }
+              } catch (err: any) {
+                console.error("Error discarding application:", err)
+                const friendly = getUserFriendlyError(err)
+                Alert.alert(friendly.title, friendly.message)
+              }
+            },
+          },
+        ],
+        { cancelable: true }
+      )
+      return
+    }
+
     Alert.alert(
       "Withdraw Application",
       "Are you sure you want to withdraw your application for this bounty?",
@@ -871,7 +971,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         currentUserId={currentUserId}
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
-        onWithdrawApplication={() => handleWithdrawApplication(bounty.id)}
+        onWithdrawApplication={(requestStatus) => handleWithdrawApplication(bounty.id, requestStatus)}
+        onHide={() => handleHideInProgressBounty(bounty)}
         onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
         onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
         variant={'hunter'}
@@ -880,13 +981,22 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       />
     </View>
     )
-  }, [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
+  }, [currentUserId, expandedMap, isListScrolling, router, refreshAll, handleHideInProgressBounty]);
 
   // Memoized styles that must be called unconditionally (before any early returns)
   const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
   const listContentPadding = useMemo(
     () => ({ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }),
     [insets.bottom]
+  )
+
+  // Bounties this hunter locally hid from In Progress (see
+  // lib/utils/hunter-hidden-bounties.ts) — re-applied on every render so a
+  // hide persisted before this mount (or before an app restart) still takes
+  // effect, exactly like filterManagementBounties above for archived/deleted.
+  const visibleInProgressBounties = React.useMemo(
+    () => filterHunterHiddenBounties(inProgressBounties, hunterHiddenBountyIds),
+    [inProgressBounties, hunterHiddenBountyIds]
   )
 
   // Filter chips select on the status a card *displays*, not on bounty.status —
@@ -903,7 +1013,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   } = useBountyStatusFilters({
     currentUserId,
     myBounties,
-    inProgressBounties,
+    inProgressBounties: visibleInProgressBounties,
     hunterRequests,
     statusFilterInProgress,
     statusFilterMyPostings,
@@ -932,11 +1042,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       request={request}
       onAccept={handleAcceptRequest}
       onReject={handleRejectRequest}
+      onRequestMoreInfo={handleAskApplicant}
       // Ensure returning from profile restores the Postings screen to the
       // Requests tab reliably by directing BountyApp to open postings + requests.
       referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=requests`}
     />
-  ), [handleAcceptRequest, handleRejectRequest]);
+  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant]);
 
   if (alternateScreen) {
     return alternateScreen

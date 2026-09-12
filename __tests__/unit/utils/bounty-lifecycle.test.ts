@@ -152,7 +152,7 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     expect(s.secondaryActions.map(a => a.key)).toContain('withdraw_application');
   });
 
-  it('a rejected application is terminal and routes onward, never to a dead end', () => {
+  it('a rejected application is terminal, routes onward, and can be cleared from the list', () => {
     const s = resolveBountyLifecycle({
       bounty: bounty(),
       role: 'hunter',
@@ -161,6 +161,10 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     expect(s.status).toBe('rejected');
     expect(s.primaryAction?.key).toBe('find_bounties');
     expect(s.group).toBe('past');
+    // Previously secondaryActions was empty here, so a hunter who landed on the
+    // detail screen (rather than the postings list, which had its own ad-hoc
+    // discard handler) had no way to manage a rejected application at all.
+    expect(s.secondaryActions.map(a => a.key)).toContain('discard_application');
   });
 
   it('accepted work is the hunter’s action item', () => {

@@ -264,6 +264,16 @@ export default function EditProfileScreen() {
   }, true);
 
   const handleSave = async () => {
+    // `avatarUrl`/`bannerUrl` only change inside each upload hook's
+    // `onUploaded` callback, which fires once the upload finishes. Saving
+    // while one is still in flight would persist the *old* avatar/banner
+    // and silently drop the photo the user just picked — no error, the
+    // form just closes as if it saved successfully.
+    if (avatarUpload.isUploading || avatarUpload.isPicking || bannerUpload.isUploading || bannerUpload.isPicking) {
+      Alert.alert('Upload in Progress', 'Please wait for your photo to finish uploading before saving.');
+      return;
+    }
+
     try {
       setSaving(true);
       setSaveError(null);
@@ -356,11 +366,11 @@ export default function EditProfileScreen() {
         <Text style={styles.headerTitle}>Edit Profile</Text>
         <TouchableOpacity
           onPress={handleSave}
-          disabled={saving || !isDirty}
-          style={[styles.headerButton, styles.saveButton, (!isDirty || saving) && styles.saveButtonDisabled]}
+          disabled={saving || !isDirty || avatarUpload.isUploading || bannerUpload.isUploading}
+          style={[styles.headerButton, styles.saveButton, (!isDirty || saving || avatarUpload.isUploading || bannerUpload.isUploading) && styles.saveButtonDisabled]}
           accessibilityLabel={isDirty ? "Save profile changes" : "No changes to save"}
           accessibilityRole="button"
-          accessibilityState={{ disabled: saving || !isDirty }}
+          accessibilityState={{ disabled: saving || !isDirty || avatarUpload.isUploading || bannerUpload.isUploading }}
         >
           {saving ? (
             <ActivityIndicator size="small" color="#ffffff" />
