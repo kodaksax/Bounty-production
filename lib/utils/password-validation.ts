@@ -152,8 +152,22 @@ export function calculatePasswordStrength(password: string): PasswordStrengthRes
     feedback.push('Avoid repeating characters');
   }
 
+  // Password is valid only if every requirement is met.
+  const isValid = metCount === requirements.length;
+
   // Normalize score to 0-4 range
-  const normalizedScore = Math.max(0, Math.min(4, Math.round(score)));
+  const rawScore = Math.max(0, Math.min(4, Math.round(score)));
+
+  // A password the form will REJECT must never be described as strong.
+  //
+  // The length bonuses push an incomplete password over the top of the scale:
+  // 4 of 5 requirements met at 12+ characters scores 4 + 0.5, which rounds to
+  // 5 and clamps to 4 — "Very Strong" — while `isValid` is still false. Users
+  // were told their password was excellent and then refused by the same form.
+  // While requirements remain unmet the meter stays a progress indicator and
+  // is capped below the reassuring end of the scale.
+  const INCOMPLETE_CEILING = 2; // 'fair'
+  const normalizedScore = isValid ? rawScore : Math.min(rawScore, INCOMPLETE_CEILING);
 
   // Determine level based on normalized score
   const levels: ('very-weak' | 'weak' | 'fair' | 'strong' | 'very-strong')[] = [
@@ -170,9 +184,6 @@ export function calculatePasswordStrength(password: string): PasswordStrengthRes
   if (unmetRequirements.length > 0) {
     feedback.push(...unmetRequirements.map((r) => `Missing: ${r.label.toLowerCase()}`));
   }
-
-  // Password is valid only if all requirements are met
-  const isValid = metCount === requirements.length;
 
   return {
     score: normalizedScore,

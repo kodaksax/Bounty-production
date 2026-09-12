@@ -91,6 +91,27 @@ export default function UsernameScreen() {
     clearError,
   } = useSocialAuth();
 
+  // Describe only the buttons this render actually puts on screen. These two
+  // conditions must stay identical to the ones guarding the buttons below: the
+  // subheading used to promise "Apple or Google, one-tap, password-free"
+  // unconditionally, so on web and Android — where Apple is hidden and Google
+  // needs configured client ids — the only control present was "Continue with
+  // email" leading to a four-field password form. Five agents across three
+  // test personas named that contradiction as the reason they abandoned signup.
+  const appleButtonVisible = Platform.OS === 'ios';
+  const googleButtonVisible = isGoogleConfigured;
+  const oneTapProvider =
+    appleButtonVisible && googleButtonVisible
+      ? 'Apple or Google'
+      : appleButtonVisible
+        ? 'Apple'
+        : googleButtonVisible
+          ? 'Google'
+          : null;
+  const subheading = oneTapProvider
+    ? `Use ${oneTapProvider} for one-tap, password-free sign-up — or continue with email. We never post or share anything without asking.`
+    : 'Create your account with an email address and password. We never post or share anything without asking.';
+
   const totalSteps = totalStepsFor(onboardingData.intent);
 
   // Visitors who picked a role on the welcome screen land here without knowing
@@ -197,10 +218,7 @@ export default function UsernameScreen() {
       <OnboardingProgressDots total={totalSteps} activeIndex={0} style={styles.dotsContainer} />
 
       <Text style={styles.heading}>Sign up in seconds</Text>
-      <Text style={styles.subheading}>
-        Use Apple or Google for one-tap, password-free sign-up — or continue with email. We never post
-        or share anything without asking.
-      </Text>
+      <Text style={styles.subheading}>{subheading}</Text>
 
       <View style={styles.nextUpCard}>
         <MaterialIcons name="lock-open" size={16} color={theme.textSecondary} />

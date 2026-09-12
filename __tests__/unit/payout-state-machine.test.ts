@@ -178,7 +178,7 @@ describe('instant-payout error classification', () => {
 });
 
 describe('webhook decisions: duplicates, replays and out-of-order delivery', () => {
-  const pendingRow = { id: 'tx_1', status: 'pending' as const, amount: -25, metadata: {} };
+  const pendingRow = { id: 'tx_1', status: 'pending' as const, amount: -25, metadata: {}, stripePayoutStatus: null };
 
   test('payout.paid completes a pending withdrawal', () => {
     expect(decidePayoutEventAction({ outcome: 'paid', row: pendingRow })).toEqual({
@@ -235,20 +235,152 @@ describe('webhook decisions: duplicates, replays and out-of-order delivery', () 
     });
   });
 
+  // "Settled" means a Payout was observed in a settled state, which is what
+  // stripe_payout_status records. These fixtures previously said 'completed'
+  // with no settlement evidence at all — a state the module's own rule forbids
+  // — so they were asserting absorption for the one shape that must not
+  // absorb. See the premature-completion tests below.
+  const settledRow = {
+    ...pendingRow,
+    status: 'completed' as const,
+    stripePayoutStatus: 'paid',
+  };
+
   test('a late payout.failed cannot un-complete a settled withdrawal', () => {
     // Out-of-order delivery: paid landed first, failed arrives afterwards.
-    const completed = { ...pendingRow, status: 'completed' as const };
-    expect(decidePayoutEventAction({ outcome: 'failed', row: completed })).toEqual({
+    expect(decidePayoutEventAction({ outcome: 'failed', row: settledRow })).toEqual({
       kind: 'noop',
       reason: 'already_terminal',
     });
   });
 
   test('a late payout.failed cannot refund a settled withdrawal', () => {
-    const completed = { ...pendingRow, status: 'completed' as const };
-    const action = decidePayoutEventAction({ outcome: 'failed', row: completed });
+    const action = decidePayoutEventAction({ outcome: 'failed', row: settledRow });
     expect(action.kind).not.toBe('fail');
   });
+
+  test('settlement evidence in metadata alone is enough to absorb', () => {
+    // The reconciliation path stamps metadata but not the column.
+    const viaMetadata = {
+      ...pendingRow,
+      status: 'completed' as const,
+      metadata: { payout_status: 'paid' },
+    };
+    expect(decidePayoutEventAction({ outcome: 'failed', row: viaMetadata })).toEqual({
+      kind: 'noop',
+      reason: 'already_terminal',
+    });
+  });
+});
+
+describe('prematurely-completed withdrawals still honour a failure', () => {
+  // Five production rows reached `completed` carrying a payout id but no
+  // settled payout status, because a reconciliation pass promoted them before
+  // payout.paid arrived. If a payout.failed then lands on such a row and the
+  // terminal state absorbs it, the money never reached the bank and the
+  // balance is never credited back — the hunter is permanently short.
+  const prematurelyCompleted = {
+    id: 'tx_premature',
+    status: 'completed' as const,
+    amount: -10,
+    metadata: { payout_id: 'po_1', transfer_id: 'tr_1' },
+    stripePayoutStatus: null,
+  };
+
+  test('payout.failed refunds a completed row that was never proven settled', () => {
+    expect(decidePayoutEventAction({ outcome: 'failed', row: prematurelyCompleted })).toEqual({
+      kind: 'fail',
+      transactionId: 'tx_premature',
+      refundAmount: 10,
+      outcome: 'failed',
+    });
+  });
+
+  test('payout.canceled refunds it too', () => {
+    expect(decidePayoutEventAction({ outcome: 'canceled', row: prematurelyCompleted })).toEqual({
+      kind: 'fail',
+      transactionId: 'tx_premature',
+      refundAmount: 10,
+      outcome: 'canceled',
+    });
+  });
+
+  test('it is still refunded at most once', () => {
+    // After the refund the handler stamps metadata.payout_status; a redelivery
+    // must then find nothing to do.
+    const afterRefund = {
+      ...prematurelyCompleted,
+      metadata: { ...prematurelyCompleted.metadata, payout_status: 'failed' },
+    };
+    expect(decidePayoutEventAction({ outcome: 'failed', row: afterRefund })).toEqual({
+      kind: 'noop',
+      reason: 'already_refunded',
+    });
+  });
+
+  test('a duplicate payout.paid on it is still absorbed, not re-completed', () => {
+    expect(decidePayoutEventAction({ outcome: 'paid', row: prematurelyCompleted })).toEqual({
+      kind: 'noop',
+      reason: 'already_terminal',
+    });
+  });
+
+  test('manually_paid is never reopened, settled or not', () => {
+    const manual = { ...prematurelyCompleted, status: 'manually_paid' as const };
+    for (const outcome of ['paid', 'failed', 'canceled'] as const) {
+      expect(decidePayoutEventAction({ outcome, row: manual }).kind).toBe('noop');
+    }
+  });
+
+  test('an already-failed row is never refunded again', () => {
+    const failed = { ...prematurelyCompleted, status: 'failed' as const };
+    expect(decidePayoutEventAction({ outcome: 'failed', row: failed }).kind).toBe('noop');
+  });
+});
+
+describe('stripePayoutStatus is required, not optional', () => {
+  // A caller that queries a row but forgets to select stripe_payout_status
+  // must not be able to pass `undefined` for it silently and have that read
+  // as "no evidence" — that would refund a withdrawal that already settled,
+  // crediting a balance that already received its money. TypeScript enforces
+  // this at the call site (the field has no `?`); these tests document the
+  // runtime consequence of the two values a caller can legitimately supply.
+  const settledButOnlyInMetadata = {
+    id: 'tx_meta_only',
+    status: 'completed' as const,
+    amount: -10,
+    // The reconciliation path stamps metadata but not the column, so a caller
+    // that only has metadata to go on (and is honest about not having the
+    // column) still correctly identifies this row as settled.
+    metadata: { payout_status: 'paid' },
+    stripePayoutStatus: null,
+  };
+
+  test('metadata evidence alone is enough to protect a settled row even without the column', () => {
+    expect(decidePayoutEventAction({ outcome: 'failed', row: settledButOnlyInMetadata })).toEqual({
+      kind: 'noop',
+      reason: 'already_terminal',
+    });
+  });
+
+  test('with neither the column nor metadata evidence, a completed row is (correctly) treated as unproven', () => {
+    const noEvidenceAtAll = {
+      id: 'tx_no_evidence',
+      status: 'completed' as const,
+      amount: -10,
+      metadata: {},
+      stripePayoutStatus: null,
+    };
+    // This is the premature-completion case, not a caller bug: a row that is
+    // completed with genuinely no evidence anywhere IS the state that must
+    // remain refundable. The type system's job is only to stop a caller from
+    // producing this exact shape BY ACCIDENT when real evidence exists.
+    expect(decidePayoutEventAction({ outcome: 'failed', row: noEvidenceAtAll }).kind).toBe('fail');
+  });
+});
+
+describe('webhook decisions: unmatched rows, manual settlement and replay', () => {
+  const pendingRow = { id: 'tx_1', status: 'pending' as const, amount: -25, metadata: {}, stripePayoutStatus: null };
 
   test('an unmatched payout produces no ledger effect', () => {
     for (const outcome of ['paid', 'failed', 'canceled'] as const) {
@@ -268,7 +400,7 @@ describe('webhook decisions: duplicates, replays and out-of-order delivery', () 
 
   test('replaying the same event N times has the effect of applying it once', () => {
     // Model the CAS the handler performs: apply the action, then re-decide.
-    let row: { id: string; status: string; amount: number; metadata: Record<string, unknown> } = {
+    let row: { id: string; status: string; amount: number; metadata: Record<string, unknown>; stripePayoutStatus: string | null } = {
       ...pendingRow,
     };
     let completions = 0;
@@ -284,7 +416,7 @@ describe('webhook decisions: duplicates, replays and out-of-order delivery', () 
   });
 
   test('replaying a failure N times refunds exactly once', () => {
-    let row: { id: string; status: string; amount: number; metadata: Record<string, unknown> } = {
+    let row: { id: string; status: string; amount: number; metadata: Record<string, unknown>; stripePayoutStatus: string | null } = {
       ...pendingRow,
     };
     let refunded = 0;
@@ -303,7 +435,7 @@ describe('webhook decisions: duplicates, replays and out-of-order delivery', () 
     // Both callers read the same pending row and both decide 'complete'; the
     // CAS in the handler is what serialises them. Model that: the first write
     // wins, the second re-decides against the updated row.
-    let row: { id: string; status: string; amount: number; metadata: Record<string, unknown> } = {
+    let row: { id: string; status: string; amount: number; metadata: Record<string, unknown>; stripePayoutStatus: string | null } = {
       ...pendingRow,
     };
     const first = decidePayoutEventAction({ outcome: 'paid', row });

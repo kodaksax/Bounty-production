@@ -22,6 +22,7 @@ import { useAttachmentUpload } from '../../hooks/use-attachment-upload';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
+import { usePostingPolicy } from '../../hooks/usePostingPolicy';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isLocalBounty, rankNearbyBounties } from '../../lib/onboarding/hunter-discovery';
@@ -63,6 +64,11 @@ export default function DetailsScreen() {
   const { session } = useAuthContext();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
+  // The server floor lives in posting_policy_config and is enforced by
+  // trg_bounties_enforce_posting_policy. Without it this screen quoted
+  // validateAmount's historical $1 default while production enforced $5, so a
+  // poster was told $2 was fine and then refused at publish.
+  const { minimumAmount: postingMinimumAmount } = usePostingPolicy();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeOnboardingDetailsStyles(theme), [theme]);
 
@@ -802,7 +808,7 @@ export default function DetailsScreen() {
     }
 
     const amount = Number(onboardingData.price);
-    const amountError = validateAmount(amount, false);
+    const amountError = validateAmount(amount, false, postingMinimumAmount);
     if (!onboardingData.price || Number.isNaN(amount) || amountError) {
       Alert.alert('Set a price', amountError || 'Enter a valid price for this bounty.');
       return;

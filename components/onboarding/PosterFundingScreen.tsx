@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePostingPolicy } from '../../hooks/usePostingPolicy';
 import { buildDepositSuccessMessage, useWalletDeposit } from '../../hooks/use-wallet-deposit';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import type { OnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
@@ -46,6 +47,10 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const amount = Number(price) || 0;
+  // Read inside the component rather than taking it as a prop: the defect this
+  // guards against was a call site that simply never consulted the policy, and
+  // a prop would let the next one make the same omission.
+  const { honorPostsEnabled } = usePostingPolicy();
 
   const {
     isProcessing,
@@ -218,25 +223,37 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
         </TouchableOpacity>
       </View>
 
-      <View style={styles.forHonorRow}>
-        <Text style={styles.forHonorLabel}>Or post for free with For Honor — no money attached</Text>
-        <InfoTooltip
-          title="What is a For Honor bounty?"
-          content="For Honor bounties are completed without any payment — ideal for volunteer work, community requests, or favors. Hunters take them on to help out and build their reputation, not to earn money. You can always add payment to a future bounty."
-          iconSize={16}
-        />
-      </View>
-      <TouchableOpacity
-        style={styles.skipLink}
-        onPress={() => onSkip({ hasPaymentMethod })}
-        disabled={posting}
-        accessibilityRole="button"
-        accessibilityLabel="Post as a For Honor bounty instead, no payment required"
-      >
-        <Text style={styles.fundingSkipLinkText}>
-          {posting ? 'Posting…' : 'Post as For Honor instead'}
-        </Text>
-      </TouchableOpacity>
+      {/* Only offer the $0 route when the server will actually accept one.
+          `trg_bounties_enforce_posting_policy` rejects honor bounties whenever
+          `posting_policy_config.honor_posts_enabled` is false, and it has been
+          false in production — so this block used to render an escape hatch
+          that answered "Could not post bounty — for-honor bounties are not
+          currently accepted", leaving a first-time poster with no way through
+          except linking a card. usePostingPolicy fails closed, so a slow or
+          failed read hides the link rather than offering a refused one. */}
+      {honorPostsEnabled && (
+        <>
+          <View style={styles.forHonorRow}>
+            <Text style={styles.forHonorLabel}>Or post for free with For Honor — no money attached</Text>
+            <InfoTooltip
+              title="What is a For Honor bounty?"
+              content="For Honor bounties are completed without any payment — ideal for volunteer work, community requests, or favors. Hunters take them on to help out and build their reputation, not to earn money. You can always add payment to a future bounty."
+              iconSize={16}
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.skipLink}
+            onPress={() => onSkip({ hasPaymentMethod })}
+            disabled={posting}
+            accessibilityRole="button"
+            accessibilityLabel="Post as a For Honor bounty instead, no payment required"
+          >
+            <Text style={styles.fundingSkipLinkText}>
+              {posting ? 'Posting…' : 'Post as For Honor instead'}
+            </Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       {showPaymentMethodsModal && (
         <PaymentMethodsModal

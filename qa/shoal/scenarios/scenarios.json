@@ -1,6 +1,5 @@
 {
   "$comment": "Bounty scenario registry. Shoal's CLI has no scenario concept -- it takes a URL, a --task string, --strategy ids, --personas ids and --swarm. Each entry here is a named, reviewable bundle of those real flags plus Bounty's own triage tags, expanded by qa/shoal/bin/run.mjs. Adding a scenario never requires touching Shoal.",
-
   "$fields": {
     "path": "appended to the environment's base URL; the route the swarm starts on",
     "strategy": "Shoal strategy ids -- must exist in Shoal's strategies.yaml (complete-task, explore, adversarial-input, rage-quit, dark-patterns, state-breaker, race)",
@@ -9,257 +8,719 @@
     "oracle": "id of a server-side invariant check in qa/shoal/bin/oracle.mjs to run after the swarm -- agent observations are never sufficient proof for money or state",
     "tags": "Bounty triage taxonomy applied to every finding this scenario produces"
   },
-
   "scenarios": [
     {
       "id": "smoke",
       "title": "Phase 1 smoke -- app boots and signup is reachable",
       "phase": 1,
       "task": "You have just opened this app for the first time. Confirm it actually works: wait for it to finish loading, read what the first screen offers you, and find the way to CREATE A NEW ACCOUNT (not sign in to an existing one). Follow that route until the account-creation form is on screen, and check that the form has the fields you would expect and a submit control. Do NOT submit the form and do NOT enter a real email or password. Then check you are not stranded: confirm there is a visible way back to where you started. Report anything that fails to load, any control that does nothing, any dead end, and say plainly whether a new user could find the signup route.",
-      "strategy": ["complete-task"],
-      "personas": ["bounty-new-poster", "newbie-nora"],
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-new-poster",
+        "newbie-nora"
+      ],
       "swarm": 2,
       "maxSteps": 18,
       "path": "/",
       "requiresAuth": false,
-      "tags": { "funnel": ["funnel:signup"], "area": ["area:web", "area:auth", "area:ux"] },
+      "tags": {
+        "funnel": [
+          "funnel:signup"
+        ],
+        "area": [
+          "area:web",
+          "area:auth",
+          "area:ux"
+        ]
+      },
       "notes": "The cheapest scenario that proves the whole chain works: Shoal launches, drives a real Chromium at the Metro-served Expo web bundle, the app mounts, agents act, findings and a report come back. Run this first after any setup change. A first-time visitor at / gets the onboarding welcome screen (the 'Make today pay.' / 'I'd rather earn' / 'Sign In' landing); app/index.tsx only shows the sign-in form to a device that has signed in before."
     },
-
     {
       "id": "poster-conversion",
       "title": "Scenario A -- brand-new poster from first screen to a published bounty",
       "phase": 4,
-      "task": "You need something done today that you cannot do yourself -- for example moving a heavy piece of furniture down two flights of stairs this afternoon, or collecting a parcel across town before the depot closes. Starting from this screen, get that task posted and live on the marketplace so somebody can pick it up. Create whatever account you need along the way. Use ONLY throwaway details: an email at example.com, a made-up name, a made-up address. Enter a realistic description and a realistic price for the job. Keep going until either the task is published AND you have confirmed with your own eyes that it now appears somewhere as a real posting, or you hit something you cannot get past. Report the exact screen and control where you got stuck or gave up, and report anything that made you doubt it worked.",
-      "strategy": ["complete-task"],
-      "personas": ["bounty-new-poster", "bounty-impatient-mobile", "newbie-nora"],
+      "task": "You need something done today that you cannot do yourself -- for example moving a heavy piece of furniture down two flights of stairs this afternoon, or collecting a parcel across town before the depot closes. Starting from this screen, get that task posted and live on the marketplace so somebody can pick it up. Create whatever account you need along the way. Use ONLY throwaway details: an email at example.com, a made-up name, a made-up address. Enter a realistic description and a realistic price for the job. Keep going until either the task is published AND you have confirmed with your own eyes that it now appears somewhere as a real posting, or you hit something you cannot get past. Report the exact screen and control where you got stuck or gave up, and report anything that made you doubt it worked. This is a disposable test account on a test system, created for this test and belonging to nobody: the signup form has age and terms checkboxes, and you are explicitly authorised to tick them and continue. Do not stop at them.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-new-poster",
+        "bounty-impatient-mobile",
+        "newbie-nora"
+      ],
       "swarm": 6,
       "maxSteps": 40,
       "path": "/",
       "requiresAuth": false,
       "tags": {
-        "funnel": ["funnel:signup", "funnel:post", "funnel:payment"],
-        "area": ["area:web", "area:auth", "area:marketplace", "area:ux"]
+        "funnel": [
+          "funnel:signup",
+          "funnel:post",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:web",
+          "area:auth",
+          "area:marketplace",
+          "area:ux"
+        ]
       },
       "notes": "The headline conversion measurement. The funnel under test is: / (onboarding welcome) -> /auth/sign-up-form -> /onboarding/* -> /screens/CreateBounty (StepTask -> StepPhotos -> StepWhere -> StepWhen -> StepPay -> StepReviewQuick -> StepPostPublish)."
     },
-
     {
       "id": "poster-rage-quit",
       "title": "Phase 3 -- where posters abandon",
       "phase": 3,
-      "task": "You need a heavy item moved this afternoon and you are trying this app for the first time. Get a task posted. You are busy and impatient: the moment anything is slow, confusing, asks for more than you expected, or makes you feel unsure, stop and leave -- do not push through it the way a tester would. Before you leave, file a finding naming the EXACT screen, the exact control, and the exact wording that made you quit.",
-      "strategy": ["rage-quit"],
-      "personas": ["bounty-new-poster", "bounty-impatient-mobile", "speedrun-sam", "distracted-dee"],
+      "task": "You need a heavy item moved this afternoon and you are trying this app for the first time. Get a task posted. You are busy and impatient: the moment anything is slow, confusing, asks for more than you expected, or makes you feel unsure, stop and leave -- do not push through it the way a tester would. Before you leave, file a finding naming the EXACT screen, the exact control, and the exact wording that made you quit. This is a disposable test account on a test system, created for this test and belonging to nobody: the signup form has age and terms checkboxes, and you are explicitly authorised to tick them and continue. Do not stop at them.",
+      "strategy": [
+        "rage-quit"
+      ],
+      "personas": [
+        "bounty-new-poster",
+        "bounty-impatient-mobile",
+        "speedrun-sam",
+        "distracted-dee"
+      ],
       "swarm": 8,
       "maxSteps": 30,
       "path": "/",
       "requiresAuth": false,
       "tags": {
-        "funnel": ["funnel:signup", "funnel:post", "funnel:payment"],
-        "area": ["area:web", "area:auth", "area:marketplace", "area:ux"]
+        "funnel": [
+          "funnel:signup",
+          "funnel:post",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:web",
+          "area:auth",
+          "area:marketplace",
+          "area:ux"
+        ]
       },
       "notes": "The abandonment-point histogram this produces is the direct synthetic analogue of the PostHog poster funnel -- compare with qa/shoal/bin/report.mjs --posthog."
     },
-
     {
       "id": "hunter-conversion",
       "title": "Scenario B -- hunter browses, evaluates and applies",
       "phase": 4,
       "task": "You want to earn some money today in a gap between other commitments. Browse what work is on offer here, use search or filters to narrow it to something worth your time, open a task that looks promising, and work out exactly what it pays, where it is, when it must be done by, and what is expected of you. If it is worth doing, apply for it or accept it, then open the conversation with the person who posted it and ask a clarifying question. Report anything that stops you judging whether a task is worth taking -- missing reward, missing location, missing deadline, vague scope -- and anything unclear about when and how you would actually get paid.",
-      "strategy": ["complete-task"],
-      "personas": ["bounty-hunter", "bounty-impatient-mobile", "careful-carl"],
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-hunter",
+        "bounty-impatient-mobile",
+        "careful-carl"
+      ],
       "swarm": 5,
       "maxSteps": 35,
       "path": "/",
       "requiresAuth": true,
       "tags": {
-        "funnel": ["funnel:browse", "funnel:apply", "funnel:chat"],
-        "area": ["area:web", "area:marketplace", "area:ux"]
+        "funnel": [
+          "funnel:browse",
+          "funnel:apply",
+          "funnel:chat"
+        ],
+        "area": [
+          "area:web",
+          "area:marketplace",
+          "area:ux"
+        ]
       },
       "notes": "Needs a seeded hunter account and at least one open bounty in the target project, otherwise the swarm reports an empty feed (which is a valid finding about empty states, but not what this scenario is for)."
     },
-
     {
       "id": "hunter-rage-quit",
       "title": "Phase 3 -- where hunters abandon",
       "phase": 3,
       "task": "You are looking for paid work you can do today. Browse the available tasks, open one, and try to take it on. You have very little patience: if the listings are hard to scan, the details are missing, applying takes more steps than you expected, or anything is unclear about the money, stop and leave. Before leaving, file a finding naming exactly where and why you quit.",
-      "strategy": ["rage-quit"],
-      "personas": ["bounty-hunter", "bounty-impatient-mobile", "speedrun-sam"],
+      "strategy": [
+        "rage-quit"
+      ],
+      "personas": [
+        "bounty-hunter",
+        "bounty-impatient-mobile",
+        "speedrun-sam"
+      ],
       "swarm": 6,
       "maxSteps": 28,
       "path": "/",
       "requiresAuth": true,
       "tags": {
-        "funnel": ["funnel:browse", "funnel:apply"],
-        "area": ["area:web", "area:marketplace", "area:ux"]
+        "funnel": [
+          "funnel:browse",
+          "funnel:apply"
+        ],
+        "area": [
+          "area:web",
+          "area:marketplace",
+          "area:ux"
+        ]
       }
     },
-
     {
       "id": "composer-adversarial",
       "title": "Phase 3 -- adversarial input against the bounty composer",
       "phase": 3,
       "task": "You are posting a task, but your data is messy and you are careless. Work through the posting form and, in each field, try hostile-but-plausible values BEFORE valid ones: a title of several hundred characters; a title that is only spaces; a description full of emoji and accented characters; a price of 0; a negative price; a price of 999999; a price with letters or two decimal points in it; a location that is nonsense or blank; a phone number that is too short; leaving a required field empty; and submitting the same thing twice in a row by pressing the button repeatedly. For every one, judge it as a real person would: did the app tell you something was wrong, did it tell you WHICH field and WHAT to do about it, and could you actually recover and carry on? Report every field that silently swallows garbage, every rejection with no explanation, every error that does not say how to fix it, and every case where a repeated click created something twice.",
-      "strategy": ["adversarial-input"],
-      "personas": ["bounty-new-poster", "chaos-cathy", "literal-lena"],
+      "strategy": [
+        "adversarial-input"
+      ],
+      "personas": [
+        "bounty-new-poster",
+        "chaos-cathy",
+        "literal-lena"
+      ],
       "swarm": 5,
       "maxSteps": 40,
       "path": "/screens/CreateBounty",
       "requiresAuth": true,
       "tags": {
-        "funnel": ["funnel:post"],
-        "area": ["area:web", "area:marketplace", "area:ux"]
+        "funnel": [
+          "funnel:post"
+        ],
+        "area": [
+          "area:web",
+          "area:marketplace",
+          "area:ux"
+        ]
       },
       "notes": "The bar is recovery, not rejection: 'validation exists' is not a pass if the user cannot tell what went wrong. Duplicate-submission findings here should be cross-checked with the duplicate-bounty oracle."
     },
-
     {
       "id": "state-breaker",
       "title": "Phase 3 -- state handling across posting, auth and payment",
       "phase": 3,
       "task": "Use the app normally to post a task, but wander the way real people do: part-way through, reload the page; use the browser Back button and then Forward again; leave the flow to look at something else and come back; submit a form twice; go back and change something you already filled in; and after you sign in, reload. Pay particular attention around anything to do with money or your account: reload right after signing in, and reload right after any payment or funding step. Each time, check carefully whether your work survived, whether anything was duplicated, whether the screen is showing stale information, and whether you can get back to where you were. Report every case where data was lost, an action happened twice, the screen contradicted itself, or you were stuck somewhere with no way out.",
-      "strategy": ["state-breaker"],
-      "personas": ["chaos-cathy", "bounty-returning-poster", "distracted-dee"],
+      "strategy": [
+        "state-breaker"
+      ],
+      "personas": [
+        "chaos-cathy",
+        "bounty-returning-poster",
+        "distracted-dee"
+      ],
       "swarm": 5,
       "maxSteps": 40,
       "path": "/",
       "requiresAuth": true,
       "oracle": "duplicate-bounties",
       "tags": {
-        "funnel": ["funnel:post", "funnel:signup", "funnel:payment"],
-        "area": ["area:web", "area:auth", "area:supabase", "area:stripe"]
+        "funnel": [
+          "funnel:post",
+          "funnel:signup",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:web",
+          "area:auth",
+          "area:supabase",
+          "area:stripe"
+        ]
       }
     },
-
     {
       "id": "trust-audit",
       "title": "Phase 3 -- dark-pattern and trust audit of the poster promise",
       "phase": 3,
       "task": "You are considering paying a stranger through this app to do a job for you, and you have not decided to trust it yet. Go as far through posting and funding a task as you can WITHOUT completing a payment, and audit what you are told along the way. Specifically hunt for: any fee, charge or commission that is not disclosed before you commit; who holds your money between paying and the work being done, and whether that is explained; whether the people who would do your job are identity-verified, and by whom; whether you can see real ratings and reviews; what happens if the work is not done or is done badly; how you would cancel; how you would raise a dispute and who decides it; any pre-ticked option; any consent you gave without meaning to; and any button whose words do not match what it actually does. Quote the exact wording you saw and say exactly where it appeared. If a cost or condition shows up later than it should have, refuse to complete the payment and file a finding saying so.",
-      "strategy": ["dark-patterns"],
-      "personas": ["bounty-skeptical-poster", "skeptic-saul", "literal-lena"],
+      "strategy": [
+        "dark-patterns"
+      ],
+      "personas": [
+        "bounty-skeptical-poster",
+        "skeptic-saul",
+        "literal-lena"
+      ],
       "swarm": 5,
       "maxSteps": 35,
       "path": "/",
       "requiresAuth": false,
       "tags": {
-        "funnel": ["funnel:trust", "funnel:payment", "funnel:post"],
-        "area": ["area:web", "area:marketplace", "area:stripe", "area:ux"]
+        "funnel": [
+          "funnel:trust",
+          "funnel:payment",
+          "funnel:post"
+        ],
+        "area": [
+          "area:web",
+          "area:marketplace",
+          "area:stripe",
+          "area:ux"
+        ]
       },
       "notes": "Bounty's whole poster proposition is 'safely, today'. Findings here are trust defects even when nothing is technically broken."
     },
-
     {
       "id": "explore",
       "title": "Phase 3 -- open exploration for dead ends and orphaned screens",
       "phase": 3,
       "task": "You have no particular goal. Wander this app and see what it offers. Open every section you can find, follow links, and try controls you have not tried. Report dead links, screens that go nowhere, controls whose purpose you cannot work out, controls that appear to do nothing at all, places you got stranded with no obvious way back, and any place where the app calls the same thing by two different names.",
-      "strategy": ["explore"],
-      "personas": ["bounty-new-poster", "newbie-nora", "keyboard-kai", "screenreader-sadie"],
+      "strategy": [
+        "explore"
+      ],
+      "personas": [
+        "bounty-new-poster",
+        "newbie-nora",
+        "keyboard-kai",
+        "screenreader-sadie"
+      ],
       "swarm": 6,
       "maxSteps": 35,
       "path": "/",
       "requiresAuth": true,
       "tags": {
-        "funnel": ["funnel:browse"],
-        "area": ["area:web", "area:ux"]
+        "funnel": [
+          "funnel:browse"
+        ],
+        "area": [
+          "area:web",
+          "area:ux"
+        ]
       },
       "notes": "screenreader-sadie runs Shoal's a11y modality (accessibility tree, not pixels) and finds defects vision structurally cannot."
     },
-
     {
       "id": "auth",
       "title": "Phase 6 -- authentication lifecycle",
       "phase": 6,
-      "task": "Test getting into and out of this account thoroughly, as a real person would. In order: create a new account with a throwaway email at example.com and note exactly where you end up afterwards; sign out; sign in again with the SAME credentials and check you land somewhere sensible and not back at a welcome or first-run screen; sign out; try to sign in with a deliberately WRONG password and read what it tells you; then correct it and sign in properly on the retry; reload the page while signed in and check you are still signed in; and try to reach a signed-in area directly by its address after signing out. Report anything that loses your session, sends you back to a welcome or sign-up screen when you already have an account, gives an error that does not tell you what to do, leaves you stuck part-way through setting up your account, or lets you reach something you should not be able to reach.",
-      "strategy": ["complete-task", "state-breaker"],
-      "personas": ["bounty-new-poster", "bounty-returning-poster", "careful-carl"],
+      "task": "Test getting into and out of this account thoroughly, as a real person would. In order: create a new account with a throwaway email at example.com and note exactly where you end up afterwards; sign out; sign in again with the SAME credentials and check you land somewhere sensible and not back at a welcome or first-run screen; sign out; try to sign in with a deliberately WRONG password and read what it tells you; then correct it and sign in properly on the retry; reload the page while signed in and check you are still signed in; and try to reach a signed-in area directly by its address after signing out. Report anything that loses your session, sends you back to a welcome or sign-up screen when you already have an account, gives an error that does not tell you what to do, leaves you stuck part-way through setting up your account, or lets you reach something you should not be able to reach. This is a disposable test account on a test system, created for this test and belonging to nobody: the signup form has age and terms checkboxes, and you are explicitly authorised to tick them and continue. Do not stop at them.",
+      "strategy": [
+        "complete-task",
+        "state-breaker"
+      ],
+      "personas": [
+        "bounty-new-poster",
+        "bounty-returning-poster",
+        "careful-carl"
+      ],
       "swarm": 4,
       "maxSteps": 40,
       "path": "/",
       "requiresAuth": false,
       "tags": {
-        "funnel": ["funnel:signup"],
-        "area": ["area:auth", "area:supabase", "area:web"]
+        "funnel": [
+          "funnel:signup"
+        ],
+        "area": [
+          "area:auth",
+          "area:supabase",
+          "area:web"
+        ]
       },
       "notes": "Written to catch the specific beta regression class where a freshly created account is bounced back to the welcome/sign-in screen. Agents use throwaway example.com addresses; never point this at a project whose users matter."
     },
-
     {
       "id": "poster-review",
       "title": "Scenario C -- poster reviews applicants and picks a hunter",
       "phase": 4,
       "task": "You already posted a task and people have applied to do it. Find your own posted task, open the list of people who applied, and look at what you can learn about each of them -- their profile, whether they are verified, their rating and any reviews. Choose one and accept them for the job, then open the conversation with them and send a message confirming the details. Report anything that stops you judging whether an applicant is trustworthy, anything where a count or badge does not match what is actually there, and anything that made accepting somebody feel risky or irreversible without warning you.",
-      "strategy": ["complete-task"],
-      "personas": ["bounty-returning-poster", "bounty-skeptical-poster"],
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-returning-poster",
+        "bounty-skeptical-poster"
+      ],
       "swarm": 4,
       "maxSteps": 35,
       "path": "/tabs/postings-screen",
       "requiresAuth": true,
       "tags": {
-        "funnel": ["funnel:apply", "funnel:chat", "funnel:trust"],
-        "area": ["area:web", "area:marketplace", "area:ux"]
+        "funnel": [
+          "funnel:apply",
+          "funnel:chat",
+          "funnel:trust"
+        ],
+        "area": [
+          "area:web",
+          "area:marketplace",
+          "area:ux"
+        ]
       },
       "notes": "Requires seeded state: a bounty owned by the test poster with at least one application against it."
     },
-
     {
       "id": "completion",
       "title": "Scenario D -- completion, proof of work and approval",
       "phase": 4,
       "task": "There is a task you are involved in that has been accepted and worked on. Follow it through to the end: find where work is marked as complete, look at the proof of work that was submitted, review it, and take it through to approval and payment as far as the app will let you. Stop before anything that would move real money if you cannot tell that this is a test environment. Report anything where you cannot tell what state the job is in, where the proof of work is not visible or not enough to judge by, where approving felt irreversible without warning, and where the screen said something had happened but you could not confirm it anywhere else.",
-      "strategy": ["complete-task"],
-      "personas": ["bounty-returning-poster", "bounty-hunter", "careful-carl"],
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-returning-poster",
+        "bounty-hunter",
+        "careful-carl"
+      ],
       "swarm": 4,
       "maxSteps": 40,
       "path": "/tabs/postings-screen",
       "requiresAuth": true,
       "oracle": "completion-integrity",
       "tags": {
-        "funnel": ["funnel:completion", "funnel:payment", "funnel:payout"],
-        "area": ["area:web", "area:marketplace", "area:supabase", "area:stripe"]
+        "funnel": [
+          "funnel:completion",
+          "funnel:payment",
+          "funnel:payout"
+        ],
+        "area": [
+          "area:web",
+          "area:marketplace",
+          "area:supabase",
+          "area:stripe"
+        ]
       },
       "notes": "Requires seeded state: an accepted bounty in progress. The oracle, not the agents, decides whether the lifecycle actually recorded correctly."
     },
-
     {
       "id": "payment-lifecycle",
       "title": "Scenario E -- payment UI in Stripe test mode",
       "phase": 4,
       "task": "You are funding a task so that somebody will actually do it. Go through the payment part of the flow and read it as carefully as somebody handing over money would. Establish, before you pay: the exact total you will be charged, every fee that makes it up, who holds the money until the work is done, and what happens if it never gets done. Then go through the payment steps using test payment details only. Watch what the app tells you at every stage -- while it is processing, when it succeeds, and if anything fails or you cancel -- and check afterwards whether your balance, the task's state, and any transaction record actually agree with what the success screen claimed. Report every disagreement between what the screen says happened and what you can independently confirm happened, and every stage where you could not tell whether your money had moved.",
-      "strategy": ["complete-task", "dark-patterns"],
-      "personas": ["bounty-skeptical-poster", "bounty-new-poster", "careful-carl"],
+      "strategy": [
+        "complete-task",
+        "dark-patterns"
+      ],
+      "personas": [
+        "bounty-skeptical-poster",
+        "bounty-new-poster",
+        "careful-carl"
+      ],
       "swarm": 4,
       "maxSteps": 40,
       "path": "/tabs/wallet-screen",
       "requiresAuth": true,
       "oracle": "payment-integrity",
       "tags": {
-        "funnel": ["funnel:payment", "funnel:payout"],
-        "area": ["area:stripe", "area:supabase", "area:web"]
+        "funnel": [
+          "funnel:payment",
+          "funnel:payout"
+        ],
+        "area": [
+          "area:stripe",
+          "area:supabase",
+          "area:web"
+        ]
       },
       "notes": "STRIPE TEST MODE ONLY -- the guard refuses to start if a pk_live_ key is visible in the served bundle. A browser-visible success message is never accepted as proof: the payment-integrity oracle checks the ledger."
     },
-
     {
       "id": "race-claim",
       "title": "Phase 5 -- concurrent claims on one bounty",
       "phase": 5,
       "task": "This job is available and you want it. Get to it and take it -- accept or apply for it -- as fast as you can, because other people are trying to take the same one at the same moment. As soon as you have tried, check carefully whether you ACTUALLY got it: re-read the screen, and look for anywhere else in the app that would confirm it is yours. Report immediately if it looks like you and somebody else both got the same job, if the screen said you got it but you cannot confirm it anywhere, or if the job's state contradicts itself between two places.",
-      "strategy": ["race"],
-      "personas": ["bounty-hunter", "speedrun-sam"],
+      "strategy": [
+        "race"
+      ],
+      "personas": [
+        "bounty-hunter",
+        "speedrun-sam"
+      ],
       "swarm": 8,
       "maxSteps": 20,
       "path": null,
       "requiresAuth": true,
       "oracle": "race-claim",
       "tags": {
-        "funnel": ["funnel:apply"],
-        "area": ["area:marketplace", "area:supabase"]
+        "funnel": [
+          "funnel:apply"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:supabase"
+        ]
       },
       "notes": "path is null because the contended bounty id is supplied at run time: --bounty-id <uuid>, which the runner turns into /bounty/<id> and passes to Shoal as --race-path. Shoal's own server-verified race oracle only covers its bundled demo shop, so for Bounty the ground truth comes from qa/shoal/bin/oracle.mjs race-claim, which reads the database directly."
+    },
+    {
+      "id": "hunter-payout",
+      "title": "Phase 6 -- hunter takes money out",
+      "phase": 6,
+      "task": "You have done work through this app and you want your money in your own bank account. Find where your earnings are, establish exactly how much of it you can actually take out right now and how much is held back, and then try to withdraw it. Along the way, deliberately test the edges: try to take out MORE than you have; try to take out a very small amount such as one dollar; and look for any minimum, any fee, and any waiting period, and check whether you were told about each of them BEFORE you started rather than after. If the app asks you to set up payout or bank details, go as far as you can with test details and report exactly where it stops you and whether it explains why. Most important: after every attempt, go and check somewhere else in the app whether it actually happened -- does your balance agree, is there a transaction record, does its status make sense. Report every case where the screen claimed a withdrawal succeeded, or was pending, or failed, and you could not confirm the same thing anywhere else, and every case where you could not tell whether your money had moved.",
+      "strategy": [
+        "complete-task",
+        "dark-patterns"
+      ],
+      "personas": [
+        "bounty-hunter",
+        "careful-carl",
+        "skeptic-saul"
+      ],
+      "swarm": 4,
+      "maxSteps": 40,
+      "path": "/tabs/wallet-screen",
+      "requiresAuth": true,
+      "oracle": "payment-integrity",
+      "tags": {
+        "funnel": [
+          "funnel:payout",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:stripe",
+          "area:supabase",
+          "area:web"
+        ]
+      },
+      "notes": "Stripe TEST mode only. A hunter who cannot get paid never comes back, so a failed payout reported as success is the worst defect class in the product. The payment-integrity oracle, not the agent, decides whether the ledger agrees."
+    },
+    {
+      "id": "hunter-completion-submit",
+      "title": "Scenario D2 -- hunter finishes the job and submits proof",
+      "phase": 4,
+      "task": "You have already been accepted for a job through this app and you have now done the work. Take it to the end: find the job you are working on, find where you tell the person who hired you that it is finished, submit whatever proof of work it asks for, and confirm it actually registered. Then check what you are told about when and how you get paid -- does the app tell you what happens next, who has to do what, and by when. Report anything where you could not find where to mark the work done, where submitting proof failed or silently did nothing, where the job state did not change after you submitted, where you were left with no idea whether the other person had seen it, and anything that made you doubt you were going to be paid.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-hunter",
+        "careful-carl",
+        "literal-lena"
+      ],
+      "swarm": 4,
+      "maxSteps": 40,
+      "path": "/tabs/postings-screen",
+      "requiresAuth": true,
+      "oracle": "completion-integrity",
+      "tags": {
+        "funnel": [
+          "funnel:completion",
+          "funnel:payment",
+          "funnel:payout"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:supabase",
+          "area:web",
+          "area:ux"
+        ]
+      },
+      "notes": "The hunter half of the completion handshake -- the existing completion scenario approaches it from the poster side. Seeded state: seed.mjs state gives every slot an in_progress bounty with a completion submission."
+    },
+    {
+      "id": "messaging-lifecycle",
+      "title": "Phase 4 -- conversation as marketplace coordination",
+      "phase": 4,
+      "task": "You need to coordinate a job with somebody through this app. Find the messages area, open a conversation you are part of, and read it. Send a short message and confirm it actually appears and stays there. Then push on it the way a real coordination would: send a very long message; send several messages quickly one after another; leave the conversation, go somewhere else in the app, and come back and check the history is intact and in the right order; reload the page inside the conversation. Then try to start a conversation from a job posting itself rather than from the messages list, and check you end up in the same conversation rather than a second empty one. Report every message that disappeared, arrived twice, arrived out of order, or was silently not sent; every empty conversation you could not get out of; every place where you could not tell who you were talking to or which job it was about; and any link or button that took you to a messages screen that looked broken, empty or obsolete.",
+      "strategy": [
+        "complete-task",
+        "state-breaker"
+      ],
+      "personas": [
+        "bounty-returning-poster",
+        "chaos-cathy",
+        "distracted-dee"
+      ],
+      "swarm": 4,
+      "maxSteps": 40,
+      "path": "/tabs/messenger-screen",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:chat"
+        ],
+        "area": [
+          "area:web",
+          "area:marketplace",
+          "area:supabase",
+          "area:ux"
+        ]
+      },
+      "notes": "Bounty has several messaging routes (tabs/messenger-screen, tabs/inbox-screen, tabs/chat-detail-screen, tabs/full-chat-detail-screen, tabs/messenger/*). Routes pointing at an obsolete one are exactly what this looks for."
+    },
+    {
+      "id": "authz-probe",
+      "title": "Phase 6 -- can a user reach things that belong to somebody else",
+      "phase": 6,
+      "task": "You are a nosy but non-technical user on a shared marketplace, and you want to find out how much of other people you can see. Using only the app itself -- links, buttons, search, profiles and the address bar -- try to reach things that belong to OTHER people: open another user profile and note exactly what it shows you about them; try to open a job you did not post and see whether you are offered controls that only its owner should have (edit, cancel, remove, accept somebody, mark complete); try to open a conversation you are not part of; try to see another person balance, earnings, payment methods or payout details; try to see the list of people who applied to a job somebody else posted. Also check the other direction: are your OWN private details -- your exact address, your phone number, your email, your money -- visible to people you have not accepted yet. Do not attempt anything technical: no editing of network requests, no scripts, no tampering with data. Report exactly what you were able to see or do that you believe you should not have been, and quote the address of the screen where it happened.",
+      "strategy": [
+        "explore",
+        "adversarial-input"
+      ],
+      "personas": [
+        "skeptic-saul",
+        "chaos-cathy",
+        "literal-lena"
+      ],
+      "swarm": 4,
+      "maxSteps": 40,
+      "path": "/tabs/bounty-app",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:trust",
+          "funnel:browse"
+        ],
+        "area": [
+          "area:auth",
+          "area:supabase",
+          "area:marketplace"
+        ]
+      },
+      "notes": "UI-level authorization probing only, on STAGING, with throwaway pool accounts. Anything it finds is a starting point for a real RLS/grant review, not a conclusion -- the database is the authority. Deliberately does not ask agents to tamper with requests."
+    },
+    {
+      "id": "bounty-management",
+      "title": "Phase 4 -- everything a poster can do to a bounty after posting",
+      "phase": 4,
+      "task": "You have jobs posted on this app and now you need to manage them. Work through every control the app gives you over a job you own, and after EACH one go and look at that job again from a different place in the app -- your list of postings, the public browse feed, search, and the job own page -- and check all of them agree. Specifically: change something about a posted job and confirm the change shows everywhere; take a job down, hide it, cancel it or remove it, whichever the app offers, and then check it is really gone from the browse feed and from search and does not come back when you switch between tabs or reload; and if the app lets you bring one back or repost it, do that and check it reappears correctly. Report every case where a job you cancelled, hid or completed reappeared somewhere as if it were still live, every place where two screens disagreed about the same job state, every control that appeared to do nothing, and every irreversible action the app let you take without warning you first.",
+      "strategy": [
+        "complete-task",
+        "state-breaker"
+      ],
+      "personas": [
+        "bounty-returning-poster",
+        "careful-carl",
+        "chaos-cathy"
+      ],
+      "swarm": 4,
+      "maxSteps": 40,
+      "path": "/tabs/postings-screen",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:post",
+          "funnel:browse"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:supabase",
+          "area:web",
+          "area:ux"
+        ]
+      },
+      "notes": "Written around the known bug class where completed or hidden bounties reappear after navigating between tabs. Cross-check any reappearance finding against the database before trusting it."
+    },
+    {
+      "id": "landing-conversion",
+      "title": "Phase 2 -- the pre-signup promise, judged by somebody with a real task",
+      "phase": 2,
+      "task": "You have a real problem: a heavy piece of furniture has to be moved this afternoon and you cannot do it yourself. You have never heard of this app before and you are deciding, right now, whether to use it or to just phone somebody, ask a neighbour, or do it yourself. WITHOUT creating an account, find out everything the app is willing to tell you first: what it actually is, who would turn up, whether those people are checked in any way, what it costs you, when and how you pay, what protects you if the job is done badly or not at all, and how you would get your money back. Follow every link that promises to explain any of that -- how it works, terms, guidelines, privacy, help, fees -- and read what is actually there. Then decide, and say plainly which it is: would you sign up, or would you leave, and what one specific thing on these pages made the difference. Report every question in the list above that you could NOT get answered before being asked to create an account, every claim you were asked to take on faith with no evidence behind it, every link that went nowhere or to an empty or unfinished page, and every place where the wording made you trust it less.",
+      "strategy": [
+        "dark-patterns",
+        "explore"
+      ],
+      "personas": [
+        "bounty-skeptical-poster",
+        "skeptic-saul",
+        "newbie-nora",
+        "careful-carl"
+      ],
+      "swarm": 5,
+      "maxSteps": 30,
+      "path": "/",
+      "requiresAuth": false,
+      "tags": {
+        "funnel": [
+          "funnel:trust",
+          "funnel:signup"
+        ],
+        "area": [
+          "area:web",
+          "area:ux",
+          "area:marketplace"
+        ]
+      },
+      "notes": "The signup-wall question: how much of the proposition is legible before an account is required. app/legal/how-it-works.tsx was built for exactly this audience -- this measures whether it is reachable and whether it answers the questions people actually have."
+    },
+    {
+      "id": "a11y-audit",
+      "title": "Phase 3 -- getting through without a mouse or eyes",
+      "phase": 3,
+      "task": "Get through the core of this app without relying on pointing at things: reach the sign-in or sign-up route, browse the available jobs, open one, and try to act on it. Use the keyboard to move between controls and activate them, and rely on what each control announces itself as rather than on where it sits on screen. Report every control you could reach but could not identify -- an unlabelled button, an icon with no name, a field with no label; every control you could NOT reach at all with the keyboard; every place focus was lost, trapped, or jumped somewhere unexpected; every dialog or overlay you could not close or escape from; every error or status message that was shown visually but never announced; and every image or piece of information that exists only as a picture with no text alternative. Say for each one what a person using only a keyboard, or only a screen reader, would actually experience.",
+      "strategy": [
+        "explore"
+      ],
+      "personas": [
+        "screenreader-sadie",
+        "keyboard-kai",
+        "literal-lena"
+      ],
+      "swarm": 4,
+      "maxSteps": 35,
+      "path": "/",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:browse",
+          "funnel:signup"
+        ],
+        "area": [
+          "area:web",
+          "area:ux"
+        ]
+      },
+      "notes": "screenreader-sadie drives Shoal accessibility-tree modality rather than pixels, so this finds defects a visual agent structurally cannot. Real small-viewport coverage stays with Playwright -- Shoal viewport is a hardcoded 1024x768."
+    },
+    {
+      "id": "value-tiers",
+      "title": "Phase 4 -- does the amount of money change the experience",
+      "phase": 4,
+      "task": "Post two jobs, one cheap and one expensive, and compare exactly what the app does differently. First post a small errand worth about five dollars. Then post a substantial job worth about one hundred and fifty dollars. For EACH one, note carefully: what you were told the total would be and what fee was taken out; whether you were asked to pay up front, later, or at all; how many confirmation steps there were; what you were told about who holds the money; and what warnings or reassurance you were given. Then say plainly where the two differed and whether each difference made sense to you as the person paying. Report anything where the fee, the total, or who holds the money was stated differently in two places; anything where the expensive job was treated as casually as the cheap one; anything where a small job cost more in fees than felt reasonable and you were not told before committing; and any value the app refused without explaining the limit.",
+      "strategy": [
+        "complete-task",
+        "dark-patterns"
+      ],
+      "personas": [
+        "bounty-skeptical-poster",
+        "careful-carl",
+        "literal-lena"
+      ],
+      "swarm": 4,
+      "maxSteps": 45,
+      "path": "/screens/CreateBounty",
+      "requiresAuth": true,
+      "oracle": "payment-integrity",
+      "tags": {
+        "funnel": [
+          "funnel:post",
+          "funnel:payment",
+          "funnel:trust"
+        ],
+        "area": [
+          "area:stripe",
+          "area:marketplace",
+          "area:ux"
+        ]
+      },
+      "notes": "Fee disclosure has been wrong before (a client-side 10% constant against a server-side 5%). This reads the number the user is actually shown at two very different amounts, and the oracle checks what was recorded."
+    },
+    {
+      "id": "abandonment-recovery",
+      "title": "Phase 4 -- nobody came, or somebody came and vanished",
+      "phase": 4,
+      "task": "You posted a job and it has not gone to plan. Work out, using only what the app tells you, the answers to these questions and report which ones you could NOT answer: is my job actually visible to anyone; has anybody looked at it; how long has it been up; is anything happening; what am I supposed to do if nobody takes it -- wait, raise the price, change it, or cancel; and will I get my money back if I cancel, when, and does it cost me anything. Then take the recovery action the app offers and see it through, and check afterwards whether your money and the job state both ended up where the app said they would. Do the same for a job where somebody was accepted but nothing has happened since: find out what you are able to do about a person who took your job and then disappeared, whether you can cancel or replace them, whether you can raise a problem with anybody, and how long you would be stuck waiting. Report every one of those questions the app leaves you unable to answer, and every recovery route that dead-ends.",
+      "strategy": [
+        "complete-task",
+        "explore"
+      ],
+      "personas": [
+        "bounty-returning-poster",
+        "bounty-skeptical-poster",
+        "distracted-dee"
+      ],
+      "swarm": 4,
+      "maxSteps": 40,
+      "path": "/tabs/postings-screen",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:post",
+          "funnel:completion",
+          "funnel:trust"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux",
+          "area:supabase"
+        ]
+      },
+      "notes": "Scenarios F and G. Liquidity failure is the normal case for a young marketplace, so what the poster is told while nothing is happening is a first-order retention question, not an edge case."
     }
   ]
 }

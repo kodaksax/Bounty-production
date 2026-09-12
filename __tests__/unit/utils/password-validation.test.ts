@@ -217,6 +217,42 @@ describe('Password Validation', () => {
     });
   });
 
+  describe('the meter never contradicts the form', () => {
+    // A password meeting 4 of 5 requirements at 12+ characters used to score
+    // 4 + 0.5, round to 5 and clamp to 4 — "Very Strong" — while isValid was
+    // false. Signup told people their password was excellent and then
+    // refused it. Whatever the score, the label may not reassure while the
+    // form will still reject.
+    const missingSpecialChar = 'Abcdefghij12'; // 12 chars, upper, lower, digit, no special
+
+    it('does not call a rejected password strong or very strong', () => {
+      const result = calculatePasswordStrength(missingSpecialChar);
+      expect(result.isValid).toBe(false);
+      expect(['very-weak', 'weak', 'fair']).toContain(result.level);
+    });
+
+    it('still reports the unmet requirement', () => {
+      const result = calculatePasswordStrength(missingSpecialChar);
+      expect(result.requirements.some((r) => !r.met)).toBe(true);
+      expect(validateNewPassword(missingSpecialChar)).not.toBeNull();
+    });
+
+    it('reaches the top of the scale once every requirement is met', () => {
+      const result = calculatePasswordStrength('Abcdefghij12!');
+      expect(result.isValid).toBe(true);
+      expect(result.level).toBe('very-strong');
+    });
+
+    it('never labels an invalid password above fair, at any length', () => {
+      for (const pw of ['Abcdef12', 'Abcdefghijklmnop12', 'ABCDEFGHIJKLMNOP12!']) {
+        const result = calculatePasswordStrength(pw);
+        if (!result.isValid) {
+          expect(['very-weak', 'weak', 'fair']).toContain(result.level);
+        }
+      }
+    });
+  });
+
   describe('PASSWORD_REQUIREMENTS constant', () => {
     it('should have correct default values', () => {
       expect(PASSWORD_REQUIREMENTS.minLength).toBe(8);

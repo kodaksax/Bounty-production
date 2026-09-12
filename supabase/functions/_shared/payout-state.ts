@@ -240,6 +240,23 @@ export function decidePayoutEventAction(args: {
     status: LedgerStatus | string;
     amount: number;
     metadata?: Record<string, unknown> | null;
+    /**
+     * The `stripe_payout_status` column, REQUIRED (pass `null` explicitly if
+     * the caller genuinely does not have it).
+     *
+     * This is deliberately not optional. A `completed` row's correctness now
+     * turns on this field via `hasSettlementEvidence` — a `completed` row with
+     * no settlement evidence is treated as unproven and CAN be refunded by a
+     * late `payout.failed`/`payout.canceled`, while a genuinely-settled one
+     * must not be. An optional field lets a caller that simply forgot to
+     * SELECT the column pass `undefined` by accident, which reads as "no
+     * evidence" and would refund a withdrawal that was already correctly
+     * paid — crediting a balance that already received its money, the
+     * opposite failure from the one this field exists to prevent. Requiring
+     * it forces every call site to look up the column (or its `metadata`
+     * fallback) and decide, rather than omit it silently.
+     */
+    stripePayoutStatus: string | null;
   } | null;
 }): PayoutLedgerAction {
   const { outcome, row } = args;
@@ -247,7 +264,29 @@ export function decidePayoutEventAction(args: {
   if (!row) return { kind: 'noop', reason: 'no_matching_withdrawal' };
 
   if (isTerminalLedgerStatus(row.status)) {
-    return { kind: 'noop', reason: 'already_terminal' };
+    // Terminal states absorb — with one exception, and it is a money-loss one.
+    //
+    // This module's rule is that a withdrawal may only be `completed` once a
+    // settled Payout has been observed. Production violates it: five rows
+    // reached `completed` carrying a payout id but no settled payout status,
+    // because a reconciliation pass promoted them before payout.paid landed.
+    //
+    // For such a row, absorbing a later `payout.failed`/`payout.canceled`
+    // means the money never reached the bank, the balance is never credited
+    // back, and the hunter is permanently short the withdrawal amount with no
+    // automated recovery — precisely the 2026-08-13 failure this module was
+    // written to prevent, reached by a different route.
+    //
+    // So a `completed` row with NO settlement evidence is not treated as
+    // absorbing for a failure outcome. Everything else still absorbs, and
+    // double-refunding is still prevented by the `already_refunded` check
+    // below plus the atomic refund RPC, which reports `refunded: false` when
+    // a concurrent delivery got there first.
+    const failureOutcome = outcome === 'failed' || outcome === 'canceled';
+    const prematurelyCompleted = row.status === 'completed' && !hasSettlementEvidence(row);
+    if (!(failureOutcome && prematurelyCompleted)) {
+      return { kind: 'noop', reason: 'already_terminal' };
+    }
   }
 
   if (outcome === 'paid') {
@@ -262,7 +301,10 @@ export function decidePayoutEventAction(args: {
     return { kind: 'noop', reason: 'already_refunded' };
   }
 
-  if (!canTransition(row.status, 'failed')) {
+  // `completed` is not in ALLOWED_TRANSITIONS' exits, so the premature-
+  // completion case above has to bypass this check too; it is the same
+  // decision, expressed once.
+  if (row.status !== 'completed' && !canTransition(row.status, 'failed')) {
     return { kind: 'noop', reason: 'already_terminal' };
   }
 
@@ -272,6 +314,25 @@ export function decidePayoutEventAction(args: {
     refundAmount: Math.abs(row.amount),
     outcome,
   };
+}
+
+/**
+ * Whether a row carries positive evidence that its Payout actually settled.
+ *
+ * Reads the `stripe_payout_status` column first — the column the
+ * `settlement_state` derive trigger keys off, and therefore the only one that
+ * makes a completion provable — and falls back to the `payout_status` written
+ * into `metadata` by the reconciliation path, which stamps metadata but not
+ * the column.
+ */
+export function hasSettlementEvidence(row: {
+  metadata?: Record<string, unknown> | null;
+  stripePayoutStatus?: string | null;
+}): boolean {
+  if (mapStripePayoutStatusToLedger(row.stripePayoutStatus ?? '') === 'completed') return true;
+  const fromMetadata = (row.metadata ?? {}).payout_status;
+  return typeof fromMetadata === 'string'
+    && mapStripePayoutStatusToLedger(fromMetadata) === 'completed';
 }
 
 /**

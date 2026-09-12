@@ -301,10 +301,11 @@ async function findCandidateWithdrawalTx(
   status: string;
   metadata: Record<string, unknown> | null;
   payout_method?: string;
+  stripe_payout_status?: string | null;
 } | null> {
   const { data: byPayoutId, error: byPayoutIdError } = await supabase
     .from('wallet_transactions')
-    .select('id, amount, status, metadata, payout_method')
+    .select('id, amount, status, metadata, payout_method, stripe_payout_status')
     .eq('stripe_payout_id', payout.id)
     .eq('type', 'withdrawal')
     .maybeSingle();
@@ -458,6 +459,7 @@ async function handleUndeliveredPayout(
         status: candidateTx.status,
         amount: candidateTxRow.amount,
         metadata: candidateMetadata,
+        stripePayoutStatus: candidateTx.stripe_payout_status ?? null,
       },
     });
 
@@ -2668,6 +2670,7 @@ Deno.serve(async (req: Request) => {
                       status: candidateTx.status,
                       amount: candidateTx.amount,
                       metadata: candidateTx.metadata,
+                      stripePayoutStatus: candidateTx.stripe_payout_status ?? null,
                     }
                   : null,
               });
@@ -2730,11 +2733,57 @@ Deno.serve(async (req: Request) => {
                     `[webhooks] Withdrawal ${candidateTx.id} completed by payout ${payout.id}`
                   );
                 } else {
-                  // Already terminal — a duplicate delivery, or reconciliation
-                  // got there first. Expected and harmless.
-                  console.log(
-                    `[webhooks] payout.paid ${payout.id} matched an already-resolved withdrawal, no change`
-                  );
+                  // The CAS above matched nothing. That is either a duplicate
+                  // delivery (harmless) or — the case this branch exists for —
+                  // another writer promoted the row to 'completed' before this
+                  // webhook arrived, WITHOUT stamping stripe_payout_status.
+                  //
+                  // That second case is not harmless. `settlement_state` is
+                  // derived from stripe_payout_status and nothing else, so the
+                  // row stays 'stripe_pending' permanently even though Stripe
+                  // has told us it paid. Five production withdrawals sat in
+                  // exactly that state, one of them promoted by reconciliation
+                  // 26 minutes before its payout.paid landed. The invariant
+                  // that is supposed to prove a hunter was paid then reads
+                  // "unconfirmed" forever, which also means it can no longer
+                  // distinguish a payout that genuinely never arrived.
+                  //
+                  // Stamp settlement only. Deliberately narrow: it does not
+                  // touch status, completed_at or balances — the row is
+                  // already terminal and the money already moved — so it is
+                  // safe to replay and preserves the original completion time.
+                  const { data: stamped, error: stampError } = await supabase
+                    .from('wallet_transactions')
+                    .update({
+                      stripe_payout_id: payout.id,
+                      stripe_payout_status: 'paid',
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', candidateTx.id)
+                    .eq('status', 'completed')
+                    .is('stripe_payout_status', null) // CAS: a second delivery matches nothing
+                    .select()
+                    .maybeSingle();
+
+                  if (stampError) {
+                    console.error('[webhooks] failed to stamp settlement on payout.paid', {
+                      payoutId: payout.id,
+                      transactionId: candidateTx.id,
+                      error: stampError,
+                    });
+                    throw stampError;
+                  }
+
+                  if (stamped) {
+                    console.log(
+                      `[webhooks] Withdrawal ${candidateTx.id} was already completed; stamped settlement from payout ${payout.id}`
+                    );
+                  } else {
+                    // Genuinely a duplicate delivery of a fully-resolved row.
+                    console.log(
+                      `[webhooks] payout.paid ${payout.id} matched an already-resolved withdrawal, no change`
+                    );
+                  }
                 }
               }
 

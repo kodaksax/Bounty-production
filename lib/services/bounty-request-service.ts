@@ -595,6 +595,36 @@ export const bountyRequestService = {
         // Remove legacy/incorrect user_id column before inserting (schema uses hunter_id/poster_id)
         if ((normalizedRequest as any).user_id) delete (normalizedRequest as any).user_id;
 
+        // An application has to name its applicant. `hunter_id` is nullable in
+        // the schema while `poster_id` is NOT NULL — backwards for this table —
+        // so an insert that omits it silently succeeds and produces a row the
+        // poster can see and even accept, with nobody attached. Production
+        // carries 50 such rows, 28 of them already 'accepted'. The read path
+        // (see `getRequestsWithProfiles`) already logs and skips them; refuse
+        // to create any more. Asserted here rather than only in the DB so the
+        // caller gets a diagnosable error instead of a constraint violation.
+        //
+        // The cause is NOT necessarily a signed-out user — it could just as
+        // easily be a caller bug or a data-shape regression upstream — so the
+        // user-facing copy stays neutral, and the log carries what actually
+        // distinguishes those cases: whether the original request even
+        // supplied an id under either field name, and whether Supabase itself
+        // currently reports a session, without asserting which one is at fault.
+        if (!normalizedRequest.hunter_id) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          logger.error('Refusing to create a bounty request with no hunter_id', {
+            bountyId: normalizedRequest.bounty_id,
+            requestHadHunterId: Boolean((request as any).hunter_id),
+            requestHadUserId: Boolean((request as any).user_id),
+            hasActiveSession: Boolean(sessionData.session),
+            sessionUserId: sessionData.session?.user?.id ?? null,
+          });
+          return {
+            success: false,
+            error: 'Could not submit your application. Please sign in and try again.',
+          };
+        }
+
         // Perform the insert as a standalone operation (do not chain `.select()`)
         // so test mocks that simulate insert errors are triggered correctly.
         const { data: insData, error } = await supabase
