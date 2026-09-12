@@ -4,6 +4,7 @@ import { API_BASE_URL } from 'lib/config/api';
 import { ERROR_LOG_THROTTLE } from 'lib/config/network';
 import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants';
 import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
+import { capture as posthogCapture } from 'lib/posthog';
 import { Platform } from 'react-native';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';
@@ -283,6 +284,19 @@ export class NotificationService {
           ? await Notifications.requestPermissionsAsync()
           : { status: 'undetermined' };
         finalStatus = status;
+      }
+
+      // Only capture on a genuine transition (undetermined->granted/denied,
+      // denied->granted, etc.) -- this function re-runs on every foreground
+      // transition, and re-checking an already-settled status isn't a new
+      // event worth counting.
+      const previousStatus = await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
+      if (previousStatus !== finalStatus) {
+        posthogCapture('notification_permission_result', {
+          status: finalStatus,
+          previous_status: previousStatus,
+          platform: Platform.OS,
+        });
       }
 
       // Store the permission status

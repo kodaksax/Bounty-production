@@ -14,6 +14,7 @@ import { SettingsRow } from '../ui/settings-row';
 import { SettingsScreenHeader } from '../ui/settings-screen-header';
 import { SettingsSection } from '../ui/settings-section';
 import { notificationService } from '../../lib/services/notification-service';
+import { capture as posthogCapture } from '../../lib/posthog';
 
 interface NotificationsCenterScreenProps { onBack: () => void }
 
@@ -71,6 +72,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
     const key = `${category}:${channel}`;
     setPrefs(prev => ({ ...prev, [key]: value }));
     setSyncingKey(key);
+    posthogCapture('notification_preference_toggled', { category, channel, enabled: value });
     try {
       await notificationService.setChannelPreference(category, channel, value);
     } catch (e) {

@@ -6,6 +6,7 @@ import {
   NOTIFICATION_CATEGORY_LABELS,
 } from 'lib/config/notification-taxonomy';
 import { useNotifications } from 'lib/context/notification-context';
+import { capture as posthogCapture } from 'lib/posthog';
 import { notificationService } from 'lib/services/notification-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { resolveNotificationDeepLink, supportsActionSheet } from 'lib/services/notification-deep-links';
@@ -112,6 +113,13 @@ export function NotificationCenterScreen() {
     }
     notificationService.markAsRead([notification.id]).catch(() => {});
     const action = resolveNotificationDeepLink({ type: notification.type, category: notification.category, data: notification.data });
+    posthogCapture('notification_opened', {
+      notification_type: notification.type,
+      category: notification.category,
+      bounty_id: notification.data?.bountyId ?? null,
+      deep_link_kind: action.kind,
+      surface: 'notification_center',
+    });
     if (action.kind === 'route') {
       router.push(action.path as any);
     } else if (action.kind === 'conversation') {
@@ -141,6 +149,11 @@ export function NotificationCenterScreen() {
   }, [fetchNotifications]);
 
   const handleArchive = useCallback(async (notification: Notification) => {
+    posthogCapture('notification_dismissed', {
+      notification_type: notification.type,
+      category: notification.category,
+      bounty_id: notification.data?.bountyId ?? null,
+    });
     if (offlineQueueService.getOnlineStatus()) {
       try {
         await notificationService.archiveNotifications([notification.id]);

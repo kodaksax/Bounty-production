@@ -63,7 +63,7 @@ const REQUESTS_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=req
 const POST_BOUNTY_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=postings`;
 
 export default function BountyDashboard() {
-  const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
+  const { bountyId, openEdit } = useLocalSearchParams<{ bountyId?: string; openEdit?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // `isAuthLoading` matters here: on a cold start the session restores after
@@ -98,11 +98,23 @@ export default function BountyDashboard() {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [busyAction, setBusyAction] = useState<BountyActionKey | null>(null);
+  // "Add details"/"Improve bounty" notifications deep-link here with
+  // ?openEdit=true so the poster lands directly in the edit modal instead of
+  // having to find the edit action themselves. Guarded to fire once per
+  // mount — the modal is user-closeable and shouldn't reopen on its own.
+  const autoOpenEditHandledRef = React.useRef(false);
 
   React.useEffect(() => {
     pushColor(theme.background);
     return () => popColor(theme.background);
   }, [pushColor, popColor, theme.background]);
+
+  React.useEffect(() => {
+    if (openEdit === 'true' && !autoOpenEditHandledRef.current) {
+      autoOpenEditHandledRef.current = true;
+      setShowEditModal(true);
+    }
+  }, [openEdit]);
 
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);

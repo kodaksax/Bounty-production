@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { bountyRequestService } from 'lib/services/bounty-request-service';
+import { capture as posthogCapture } from 'lib/posthog';
 import { notificationService } from 'lib/services/notification-service';
 import { resolveNotificationDeepLink } from 'lib/services/notification-deep-links';
 import { sendMessage } from 'lib/services/supabase-messaging';
@@ -45,6 +46,14 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
   const visible = !!notification;
   const category = notification ? (notification.category ?? categoryForNotificationType(notification.type)) : null;
   const bundled = notification ? isBundled(notification) : false;
+  // Derived alongside category/bundled (both already null-safe) rather than
+  // read inline in JSX, so a transient null `notification` during the sheet's
+  // close animation can never reach a direct `.type` access.
+  const viewButtonLabel = notification?.type === 'bounty_quality_nudge'
+    ? 'Add Details'
+    : category === 'marketplace' ? 'View Bounty'
+    : category === 'messages' ? 'View Conversation'
+    : 'View';
 
   const finishAndClose = async () => {
     if (notification) {
@@ -58,6 +67,13 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
   const handleView = () => {
     if (!notification) return;
     const action = resolveNotificationDeepLink({ type: notification.type, category: notification.category, data: notification.data });
+    posthogCapture('notification_opened', {
+      notification_type: notification.type,
+      category: notification.category,
+      bounty_id: notification.data?.bountyId ?? null,
+      deep_link_kind: action.kind,
+      surface: 'action_sheet',
+    });
     onClose();
     if (action.kind === 'route') {
       router.push(action.path as any);
@@ -72,6 +88,11 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     setBusy('accept');
     try {
       await bountyRequestService.acceptRequest(requestId);
+      posthogCapture('notification_action_completed', {
+        notification_type: notification?.type,
+        action: 'accept_application',
+        bounty_id: notification?.data?.bountyId ?? null,
+      });
       await finishAndClose();
     } catch (e) {
       console.error('[NotificationActionSheet] accept failed', e);
@@ -161,9 +182,7 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
               ) : null}
 
               <TouchableOpacity style={s.viewButton} onPress={handleView}>
-                <Text style={s.viewText}>
-                  {category === 'marketplace' ? 'View Bounty' : category === 'messages' ? 'View Conversation' : 'View'}
-                </Text>
+                <Text style={s.viewText}>{viewButtonLabel}</Text>
                 <MaterialIcons name="chevron-right" size={18} color={theme.textSecondary} />
               </TouchableOpacity>
             </>

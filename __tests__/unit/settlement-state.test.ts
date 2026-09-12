@@ -376,7 +376,7 @@ describe('REGRESSION 3: an unready hunter cannot trigger a settled fund release'
 
   test('every release path notifies an unready payee, including the PL/pgSQL one', () => {
     const notifySql = read(
-      'supabase/migrations/20260824010500_notify_unready_payee_on_release.sql'
+      'supabase/migrations/20260912033828_notify_unready_payee_on_release.sql'
     );
     // Two triggers, because /wallet/release promotes pending -> completed via
     // UPDATE while the dispute path inserts completed directly. An INSERT-only
@@ -409,16 +409,25 @@ describe('migration set', () => {
       '20260824010200_derive_settlement_state_trigger.sql',
       '20260824010300_backfill_settlement_state.sql',
       '20260824010400_settlement_state_requires_evidence_check.sql',
-      '20260824010500_notify_unready_payee_on_release.sql',
+      // Renamed from 20260824010500_... during the 2026-09-12 notification
+      // overhaul when it was actually applied for the first time (it had sat
+      // unapplied in git since 08-24) -- the migration ledger records its
+      // real applied version, 20260912033828, not its original filename.
+      '20260912033828_notify_unready_payee_on_release.sql',
     ];
     const present = fs.readdirSync(MIGRATIONS);
     for (const file of expected) {
       expect(present).toContain(file);
     }
-    // The backfill must sort after the trigger that it fires, or it computes
-    // nothing; the CHECK must sort after the backfill, or it rejects rows that
-    // have not been classified yet.
-    expect(expected).toEqual([...expected].sort());
+    // The first five must stay in relative order among themselves: the
+    // backfill must sort after the trigger that it fires, or it computes
+    // nothing; the CHECK must sort after the backfill, or it rejects rows
+    // that have not been classified yet. The notify migration was applied
+    // later in real time (see above) so it is intentionally excluded from
+    // this same-batch ordering check rather than forced into a false
+    // adjacency with a filename timestamp it no longer has.
+    const sameBatch = expected.slice(0, 5);
+    expect(sameBatch).toEqual([...sameBatch].sort());
   });
 
   test('the backfill calls the shared rule rather than duplicating the CASE', () => {

@@ -11,6 +11,8 @@ import {
     useState,
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import { capture as posthogCapture } from '../posthog';
+import { categoryForNotificationType } from '../config/notification-taxonomy';
 import { resolveNotificationDeepLink } from '../services/notification-deep-links';
 import { notificationService } from '../services/notification-service';
 import { isNotificationsChannelConnected, subscribeToNotifications } from '../services/notification-realtime';
@@ -125,10 +127,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // warm-tap paths — and the Notification Center's own tap handling — all
   // resolve destinations identically instead of duplicating this logic.
   const handleNotificationTap = useCallback(
-    async (response: any) => {
+    async (response: any, surface: 'push_tap' | 'cold_start' = 'push_tap') => {
       const data = response.notification.request.content.data || {};
       const type = data.type || 'update';
       const action = resolveNotificationDeepLink({ type, data });
+
+      // `surface` distinguishes a live tap (foreground/background) from the
+      // app being launched by a notification, matching the `surface` values
+      // used at the other notification_opened call sites (notification
+      // center row tap, action-sheet "View") so downstream funnel analysis
+      // has one consistent schema across every source.
+      posthogCapture('notification_opened', {
+        notification_type: type,
+        category: categoryForNotificationType(type),
+        bounty_id: data.bountyId ?? null,
+        deep_link_kind: action.kind,
+        surface,
+      });
 
       if (action.kind === 'route') {
         router.push(action.path as any);
@@ -167,7 +182,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         // Small delay to ensure router is ready
         setTimeout(() => {
           if (isMountedRef.current) {
-            handleNotificationTap(response);
+            handleNotificationTap(response, 'cold_start');
           }
         }, ROUTER_READY_DELAY_MS);
       }
@@ -243,6 +258,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const listeners = notificationService.setupNotificationListeners(
       // On notification received (foreground)
       (notification: any) => {
+        const data = notification?.request?.content?.data || {};
+        const type = data.type || 'update';
+        posthogCapture('notification_received', {
+          notification_type: type,
+          category: categoryForNotificationType(type),
+          bounty_id: data.bountyId ?? null,
+          app_state: 'foreground',
+        });
         // Refresh notifications list
         fetchNotifications();
         refreshUnreadCount();

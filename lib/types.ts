@@ -619,6 +619,8 @@ export type NotificationType =
   | 'balance_update'
   | 'bounty_nearby'
   | 'bounty_expiry'
+  /** Poster-facing: their bounty is missing information hunters look for, or has gotten little response. */
+  | 'bounty_quality_nudge'
   | 'account_warning'
   | 'account_restricted'
   | 'payout_paid'

@@ -82,6 +82,7 @@ const TYPE_CATEGORY: Record<string, Category> = {
   cancellation_request: 'marketplace', cancellation_accepted: 'marketplace', cancellation_rejected: 'marketplace',
   stale_bounty: 'marketplace', stale_bounty_cancelled: 'marketplace', stale_bounty_reposted: 'marketplace',
   update: 'marketplace', bounty_nearby: 'marketplace', bounty_expiry: 'marketplace', review_needed: 'marketplace',
+  bounty_quality_nudge: 'marketplace',
   message: 'messages',
   payment: 'payments', payout_paid: 'payments', payout_failed: 'payments', payout_canceled: 'payments',
   withdrawal_reversed: 'payments', bank_disconnected: 'payments', payout_method_changed: 'payments',
@@ -206,6 +207,61 @@ function extractInvalidTokens(chunkTokens: string[], expoResponseBody: unknown):
     }
   })
   return invalid
+}
+
+// PostHog delivery-funnel instrumentation (notification_generated/sent/failed).
+// Same HTTP capture pattern as process-analytics-person/index.ts. Every event
+// for a single outbox-row invocation is queued (see `posthogEvents` in the
+// handler) and flushed as ONE batch call via schedulePostHogCapture below,
+// rather than one HTTP request per outcome type -- a row can fan out to
+// dozens/hundreds of recipients, and separate requests per branch would
+// multiply network overhead for no benefit. Best-effort: a PostHog outage
+// must never affect notification delivery.
+async function capturePostHogEvents(
+  events: Array<{ event: string; distinct_id: string; properties?: Record<string, unknown> }>
+): Promise<void> {
+  if (events.length === 0) return
+  const posthogKey = Deno.env.get('POSTHOG_PROJECT_API_KEY')
+  if (!posthogKey) return
+  try {
+    const host = Deno.env.get('POSTHOG_HOST') ?? 'https://us.i.posthog.com'
+    // Short timeout: this is background/best-effort telemetry, not something
+    // the caller should ever wait meaningfully long for.
+    await fetch(`${host}/batch/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(3_000),
+      body: JSON.stringify({
+        api_key: posthogKey,
+        batch: events.map((e) => ({
+          event: e.event,
+          distinct_id: e.distinct_id,
+          properties: { ...e.properties, source: 'process-notification' },
+          timestamp: new Date().toISOString(),
+        })),
+      }),
+    })
+  } catch (e) {
+    console.error('[process-notification] PostHog capture failed (non-fatal)', e)
+  }
+}
+
+// Fire-and-forget: schedules the capture without the caller awaiting network
+// latency to PostHog. EdgeRuntime.waitUntil is the Supabase/Deno Edge Runtime's
+// supported mechanism for background work that keeps running after the
+// response is returned -- used when available so the task reliably completes;
+// falls back to a detached, un-awaited call otherwise (still best-effort).
+function schedulePostHogCapture(
+  events: Array<{ event: string; distinct_id: string; properties?: Record<string, unknown> }>
+): void {
+  if (events.length === 0) return
+  const task = capturePostHogEvents(events)
+  const runtime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime
+  if (runtime && typeof runtime.waitUntil === 'function') {
+    runtime.waitUntil(task)
+  } else {
+    task.catch(() => {})
+  }
 }
 
 const corsHeaders = {
@@ -362,6 +418,35 @@ Deno.serve(async (req: Request) => {
       if (isChannelEnabled(prefMap, userId, 'email', category)) emailRecipients.push(userId)
     }
 
+    // Every PostHog event for this single invocation is queued here and
+    // flushed exactly once, in the background, right before each return --
+    // see schedulePostHogCapture.
+    const posthogEvents: Array<{ event: string; distinct_id: string; properties?: Record<string, unknown> }> = []
+
+    // notification_generated: one event per recipient who will receive this
+    // through at least one channel, listing which. Fired once per outbox row
+    // per recipient regardless of retry (a retry only re-attempts delivery,
+    // it doesn't regenerate the notification).
+    if (rows.status === 'pending') {
+      const channelsByUser = new Map<string, string[]>()
+      for (const userId of inAppRecipients) channelsByUser.set(userId, [...(channelsByUser.get(userId) || []), 'in_app'])
+      for (const userId of pushRecipients) channelsByUser.set(userId, [...(channelsByUser.get(userId) || []), 'push'])
+      for (const userId of emailRecipients) channelsByUser.set(userId, [...(channelsByUser.get(userId) || []), 'email'])
+      for (const [userId, channels] of channelsByUser.entries()) {
+        posthogEvents.push({
+          event: 'notification_generated',
+          distinct_id: userId,
+          properties: {
+            notification_type: notificationType,
+            category,
+            bounty_id: outboxData.bountyId ?? null,
+            channels,
+            urgent,
+          },
+        })
+      }
+    }
+
     // Persist in-app notifications so the feed bell badge + list update for
     // every outbox-driven event (messages, applications, acceptances, etc.).
     // Guard on 'pending' so a retry of a previously-'failed' row does not
@@ -407,41 +492,68 @@ Deno.serve(async (req: Request) => {
 
     if (pushRecipients.length === 0) {
       // No one wants a push for this event; in-app rows (if any) are saved.
+      schedulePostHogCapture(posthogEvents)
       await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts: (rows.attempts || 0) + 1 }).eq('id', id)
       return jsonResponse({ message: 'In-app notifications saved; no push recipients', inApp: inAppRecipients.length })
     }
 
-    // Fetch enabled tokens for push recipients only.
+    // Fetch enabled tokens for push recipients, keeping the owning profile_id
+    // so delivery outcomes can be attributed to the specific recipient rather
+    // than reported for the whole pushRecipients set.
     const { data: tokens, error: tokenErr } = await supabaseAdmin
       .from('push_tokens')
-      .select('token')
+      .select('profile_id, token')
       .in('profile_id', pushRecipients)
       .eq('enabled', true)
 
     if (tokenErr) {
       console.error('[process-notification] token lookup error', tokenErr)
+      schedulePostHogCapture(posthogEvents)
       await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: String(tokenErr), attempts: (rows.attempts || 0) + 1 }).eq('id', id)
       return jsonResponse({ error: 'Failed to lookup tokens' }, 500)
     }
 
-    const tokensList = (tokens || []).map((r: any) => r.token).filter(Boolean)
-    if (tokensList.length === 0) {
-      // Every one of these recipients wanted a push and not one of them has a
-      // deliverable token. That is indistinguishable from a healthy send in the
-      // outbox — the row is still marked 'sent' below, because retrying cannot
-      // conjure a device — so the warning is the only signal that a delivery
-      // gap exists. Its absence is how a push regression can run for months
-      // without surfacing anywhere.
+    const tokenRows = ((tokens || []) as { profile_id: string; token: string }[]).filter((r) => !!r.token && !!r.profile_id)
+    // Positionally aligned: tokensList[i] belongs to tokenOwners[i]. Kept as
+    // parallel arrays (not objects) because createMessages/extractInvalidTokens
+    // already index by position.
+    const tokensList = tokenRows.map((r) => r.token)
+    const tokenOwners = tokenRows.map((r) => r.profile_id)
+
+    // A recipient who wanted a push but has zero enabled tokens is a delivery
+    // failure for THEM specifically, whether or not other recipients on the
+    // same outbox row have deliverable devices.
+    const recipientsWithToken = new Set(tokenOwners)
+    const recipientsWithoutToken = pushRecipients.filter((userId) => !recipientsWithToken.has(userId))
+    if (recipientsWithoutToken.length > 0) {
+      // Absence of a deliverable token is otherwise indistinguishable from a
+      // healthy send — the warning (and the notification_failed events below)
+      // are the only signal that a delivery gap exists. Their absence is how
+      // a push regression can run for months without surfacing anywhere.
       console.warn(
-        '[process-notification] resolved zero deliverable push tokens',
-        buildZeroTokenWarning({ notificationId: id, notificationType, pushRecipients })
+        '[process-notification] some push recipients have no deliverable token',
+        buildZeroTokenWarning({ notificationId: id, notificationType, pushRecipients: recipientsWithoutToken })
       )
+      for (const userId of recipientsWithoutToken) {
+        posthogEvents.push({
+          event: 'notification_failed',
+          distinct_id: userId,
+          properties: { notification_type: notificationType, category, reason: 'no_deliverable_token' },
+        })
+      }
+    }
+
+    if (tokensList.length === 0) {
+      // Nobody has a deliverable token at all. The row is still marked
+      // 'sent' below, because retrying cannot conjure a device.
+      schedulePostHogCapture(posthogEvents)
       await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts: (rows.attempts || 0) + 1 }).eq('id', id)
       return jsonResponse({ message: 'In-app notifications saved; no tokens for recipients', inApp: inAppRecipients.length })
     }
 
     // Build Expo messages, keeping them positionally aligned with tokensList so
-    // we can map Expo error tickets back to the originating token.
+    // we can map Expo error tickets back to the originating token (and, via
+    // tokenOwners, the originating recipient).
     const messages = createMessages(tokensList, { title: rows.title || '', body: rows.body || '', data: outboxData, sound: 'default' })
 
     // Chunk and send directly to Expo Push API
@@ -450,10 +562,19 @@ Deno.serve(async (req: Request) => {
     let sent = 0
     const errors: any[] = []
     const invalidTokens: string[] = []
+    // Per-recipient outcome across all their tokens/chunks. A success on any
+    // one device means the push was genuinely attempted-and-accepted for that
+    // recipient, so 'sent' always wins over a 'failed' recorded for a
+    // different (or earlier-processed) device of the same person.
+    const outcomeByUser = new Map<string, 'sent' | 'failed'>()
+    const markOutcome = (userId: string, outcome: 'sent' | 'failed') => {
+      if (outcome === 'sent' || outcomeByUser.get(userId) !== 'sent') outcomeByUser.set(userId, outcome)
+    }
 
     for (let i = 0; i < messages.length; i += chunkSize) {
       const chunk = messages.slice(i, i + chunkSize)
       const chunkTokens = tokensList.slice(i, i + chunkSize)
+      const chunkOwners = tokenOwners.slice(i, i + chunkSize)
       try {
         const resp = await fetchImpl('https://exp.host/--/api/v2/push/send', {
           method: 'POST',
@@ -464,11 +585,27 @@ Deno.serve(async (req: Request) => {
         if (!resp.ok) {
           const text = await resp.text().catch(() => '')
           errors.push({ status: resp.status, body: text })
+          for (const userId of chunkOwners) markOutcome(userId, 'failed')
           continue
         }
 
-        // Inspect per-message tickets to detect dead tokens for pruning.
+        // Inspect per-message tickets to detect dead tokens for pruning, and
+        // to attribute this chunk's actual per-recipient outcome.
         const respBody = await resp.json().catch(() => null)
+        const tickets = (respBody as { data?: unknown } | null)?.data
+        if (Array.isArray(tickets)) {
+          tickets.forEach((ticket: unknown, index: number) => {
+            const owner = chunkOwners[index]
+            if (!owner) return
+            const isError = !!ticket && (ticket as { status?: string }).status === 'error'
+            markOutcome(owner, isError ? 'failed' : 'sent')
+          })
+        } else {
+          // Unexpected response shape from an otherwise-ok HTTP response —
+          // no per-ticket detail to attribute, so treat the chunk as sent
+          // rather than silently dropping its recipients from both funnels.
+          for (const userId of chunkOwners) markOutcome(userId, 'sent')
+        }
         for (const dead of extractInvalidTokens(chunkTokens, respBody)) {
           invalidTokens.push(dead)
         }
@@ -476,7 +613,24 @@ Deno.serve(async (req: Request) => {
         sent += chunk.length
       } catch (e) {
         errors.push(String(e))
+        for (const userId of chunkOwners) markOutcome(userId, 'failed')
       }
+    }
+
+    for (const [userId, outcome] of outcomeByUser.entries()) {
+      posthogEvents.push(
+        outcome === 'sent'
+          ? {
+              event: 'notification_sent',
+              distinct_id: userId,
+              properties: { notification_type: notificationType, category, channel: 'push', bounty_id: outboxData.bountyId ?? null },
+            }
+          : {
+              event: 'notification_failed',
+              distinct_id: userId,
+              properties: { notification_type: notificationType, category, reason: 'push_send_error' },
+            }
+      )
     }
 
     // Disable tokens Expo reported as permanently undeliverable so future
@@ -493,11 +647,14 @@ Deno.serve(async (req: Request) => {
     }
 
     if (errors.length > 0) {
+      schedulePostHogCapture(posthogEvents)
       await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: JSON.stringify(errors), attempts: (rows.attempts || 0) + 1 }).eq('id', id)
       return jsonResponse({ ok: false, sent, errors, prunedTokens: invalidTokens.length }, 500)
     }
 
     await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts: (rows.attempts || 0) + 1 }).eq('id', id)
+
+    schedulePostHogCapture(posthogEvents)
 
     return jsonResponse({ ok: true, sent, inApp: inAppRecipients.length, prunedTokens: invalidTokens.length })
   } catch (error) {

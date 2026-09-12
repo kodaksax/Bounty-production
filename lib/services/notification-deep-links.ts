@@ -42,6 +42,12 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
 
   switch (category) {
     case 'marketplace': {
+      // Poster-facing quality nudges go to the poster's own bounty management
+      // screen with the edit modal pre-opened, not the public bounty view —
+      // the CTA is "Add details", not "View bounty".
+      if (ctx.type === 'bounty_quality_nudge' && data.bountyId) {
+        return { kind: 'route', path: `/postings/${data.bountyId}?openEdit=true` };
+      }
       if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}?source=notification` };
       return { kind: 'none' };
     }

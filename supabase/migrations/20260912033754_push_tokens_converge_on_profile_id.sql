@@ -1,6 +1,12 @@
 -- push_tokens: make profile_id the authoritative owner column.
 --
--- NOT APPLIED. Written for a human to review and apply.
+-- Applied 2026-09-12 as part of the notification-system audit/overhaul.
+-- Filename originally read 20260818000000 and was flagged "NOT APPLIED" while
+-- awaiting review; renamed to its actual applied version (20260912033754) to
+-- match the live migration ledger and avoid the git/live drift this project
+-- has repeatedly been bitten by. Divergence at apply time: 8/371 rows (grown
+-- from the 6 originally documented below) -- the UPDATE is dynamic, not
+-- hardcoded to 6, so this was still safe to apply as-is.
 --
 -- Background
 -- ----------

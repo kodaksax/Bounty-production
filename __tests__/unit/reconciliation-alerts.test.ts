@@ -25,18 +25,22 @@ const ROOT = path.join(__dirname, '../..');
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const MIGRATIONS = path.join(ROOT, 'supabase/migrations');
 
+// Renamed from their original 20260824020000-020400 filenames during the
+// 2026-09-12 notification overhaul, when this whole chain was actually
+// applied for the first time (it had sat unapplied in git since 08-24) --
+// the migration ledger records the real applied versions below.
 const typeMigration = read(
-  'supabase/migrations/20260824020000_reconciliation_alert_notification_type.sql'
+  'supabase/migrations/20260912033911_reconciliation_alert_notification_type.sql'
 );
-const plumbing = read('supabase/migrations/20260824020100_reconciliation_alert_plumbing.sql');
+const plumbing = read('supabase/migrations/20260912033941_reconciliation_alert_plumbing.sql');
 const triggerSql = read(
-  'supabase/migrations/20260824020200_alert_on_critical_finding_trigger.sql'
+  'supabase/migrations/20260912034020_alert_on_critical_finding_trigger.sql'
 );
 const digestSql = read(
-  'supabase/migrations/20260824020300_unresolved_findings_daily_digest.sql'
+  'supabase/migrations/20260912034056_unresolved_findings_daily_digest.sql'
 );
 const scheduleSql = read(
-  'supabase/migrations/20260824020400_schedule_reconciliation_invariant_sweep.sql'
+  'supabase/migrations/20260912034125_schedule_reconciliation_invariant_sweep.sql'
 );
 const processNotification = read('supabase/functions/process-notification/index.ts');
 const reconciliationSource = read('supabase/functions/reconciliation/index.ts');
@@ -259,12 +263,15 @@ describe('the reconciliation invariant sweep runs on a schedule', () => {
 
 describe('migration set', () => {
   test('all Phase 4 migrations are present and correctly ordered', () => {
+    // Renamed from 20260824020000-020400 during the 2026-09-12 notification
+    // overhaul, when this chain was actually applied for the first time (see
+    // the comment near the top of this file) -- relative order is unchanged.
     const expected = [
-      '20260824020000_reconciliation_alert_notification_type.sql',
-      '20260824020100_reconciliation_alert_plumbing.sql',
-      '20260824020200_alert_on_critical_finding_trigger.sql',
-      '20260824020300_unresolved_findings_daily_digest.sql',
-      '20260824020400_schedule_reconciliation_invariant_sweep.sql',
+      '20260912033911_reconciliation_alert_notification_type.sql',
+      '20260912033941_reconciliation_alert_plumbing.sql',
+      '20260912034020_alert_on_critical_finding_trigger.sql',
+      '20260912034056_unresolved_findings_daily_digest.sql',
+      '20260912034125_schedule_reconciliation_invariant_sweep.sql',
     ];
     const present = fs.readdirSync(MIGRATIONS);
     for (const file of expected) expect(present).toContain(file);
@@ -274,8 +281,8 @@ describe('migration set', () => {
   test('the backlog is seeded before the sweep is scheduled', () => {
     // Ordering is load-bearing: schedule first and the first run pages for a
     // 28-finding backlog everyone already knows about.
-    const seedMigration = '20260824020200';
-    const scheduleMigration = '20260824020400';
+    const seedMigration = '20260912034020';
+    const scheduleMigration = '20260912034125';
     expect(seedMigration < scheduleMigration).toBe(true);
     expect(triggerSql).toMatch(/INSERT INTO public\.reconciliation_alerts_sent/);
   });
