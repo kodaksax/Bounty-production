@@ -325,14 +325,22 @@ export function SignInForm() {
               } catch {}
               return;
             }
-          } catch {
+          } catch (mfaCheckError: any) {
             // Fail-closed: if we cannot determine MFA level, block sign-in to avoid bypassing 2FA
             console.error('[sign-in] Could not determine MFA level, blocking sign-in', {
               correlationId,
             });
-            throw new Error(
+            // Preserve the timeout signal on the rethrown error — otherwise a
+            // timed-out MFA check reaches the outer catch as a plain Error and
+            // AUTH_ATTEMPT_FAILED reports outcome: 'rejected' instead of
+            // 'timed_out'.
+            const mfaBlockedError: Error & { code?: string } = new Error(
               'Unable to verify multi-factor authentication status. Please try again.'
             );
+            if (isTimeoutError(mfaCheckError) || mfaCheckError?.code === 'AUTH_STAGE_TIMEOUT') {
+              mfaBlockedError.code = 'AUTH_STAGE_TIMEOUT';
+            }
+            throw mfaBlockedError;
           }
 
           // OPTIMIZED: Quick profile check with fast timeout and immediate navigation
