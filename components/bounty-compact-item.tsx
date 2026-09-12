@@ -28,11 +28,23 @@ export interface BountyCompactItemProps {
    * lib/utils/bounty-completeness.ts. */
   incomplete?: boolean
   missingSummary?: string
+  category?: string
+  createdAt?: string
+  /** 0-based index in the feed's rendered order — forwarded to bounty_viewed
+   * as position_in_list. See components/bounty-feed.tsx. */
+  position?: number
+  /** bounty-ranking-v2 experiment arm this row was rendered under, if any. */
+  rankingVariant?: 'control' | 'test'
+  /** Pre-jitter rank_score from the ranking-v2 formula, for bounty_viewed debugging. */
+  rankScore?: number
+  /** Set only on the first row of a dormant/honor section. */
+  sectionLabel?: 'dormant' | 'honor'
 }
 
 function BountyCompactItemComponent({
   id, title, username, price, distance, location, description,
-  isForHonor, user_id, work_type, poster_avatar, incomplete, missingSummary
+  isForHonor, user_id, work_type, poster_avatar, incomplete, missingSummary,
+  category, createdAt, position, rankingVariant, rankScore, sectionLabel
 }: BountyCompactItemProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -99,6 +111,11 @@ function BountyCompactItemComponent({
 
         {/* Main content */}
         <View style={s.mainContent}>
+          {sectionLabel && (
+            <Text style={s.sectionLabel} accessibilityRole="header">
+              {sectionLabel === 'honor' ? 'Honor bounties' : 'Dormant — low recent interest'}
+            </Text>
+          )}
           <Text style={s.title} numberOfLines={2}>{title}</Text>
           <View style={s.metaRow}>
             <Text style={s.username}>{resolvedUsername}</Text>
@@ -142,7 +159,12 @@ function BountyCompactItemComponent({
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username: resolvedUsername, title, price, distance, location: location ?? undefined, description, user_id, work_type, poster_avatar: poster_avatar ?? undefined, is_for_honor: isForHonor }}
+          bounty={{
+            id, username: resolvedUsername, title, price, distance, location: location ?? undefined,
+            description, user_id, work_type, poster_avatar: poster_avatar ?? undefined, is_for_honor: isForHonor,
+            category, created_at: createdAt, position_in_list: position,
+            ranking_variant: rankingVariant, rank_score: rankScore,
+          }}
           onClose={() => setShowDetail(false)}
         />
       )}
@@ -163,7 +185,13 @@ export const BountyCompactItem = React.memo(BountyCompactItemComponent, (prev, n
   prev.work_type === next.work_type &&
   prev.poster_avatar === next.poster_avatar &&
   prev.incomplete === next.incomplete &&
-  prev.missingSummary === next.missingSummary
+  prev.missingSummary === next.missingSummary &&
+  prev.category === next.category &&
+  prev.createdAt === next.createdAt &&
+  prev.position === next.position &&
+  prev.rankingVariant === next.rankingVariant &&
+  prev.rankScore === next.rankScore &&
+  prev.sectionLabel === next.sectionLabel
 )
 
 function makeStyles(t: AppTheme) {
@@ -220,6 +248,14 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       gap: 6,
       flexShrink: 1,
+    },
+    sectionLabel: {
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      color: t.textSecondary,
+      marginBottom: 3,
     },
     limitedRow: {
       flexDirection: 'row',

@@ -38,6 +38,19 @@ export interface BountyListItemProps {
   incomplete?: boolean;
   /** Compact "No location or timing" summary shown next to the badge. */
   missingSummary?: string;
+  category?: string;
+  createdAt?: string;
+  /** 0-based index in the feed's rendered order — forwarded to bounty_viewed
+   * as position_in_list. See components/bounty-feed.tsx. */
+  position?: number;
+  /** bounty-ranking-v2 experiment arm this card was rendered under, if any. */
+  rankingVariant?: 'control' | 'test';
+  /** Pre-jitter rank_score from the ranking-v2 formula, for bounty_viewed debugging. */
+  rankScore?: number;
+  /** Set only on the first card of a dormant/honor section — renders a small
+   * divider caption so the section boundary is visible without breaking this
+   * list's paging/snap layout (see components/bounty-feed.tsx). */
+  sectionLabel?: 'dormant' | 'honor';
 }
 
 function BountyListItemComponent({
@@ -59,6 +72,12 @@ function BountyListItemComponent({
   is_time_sensitive,
   incomplete,
   missingSummary,
+  category,
+  createdAt,
+  position,
+  rankingVariant,
+  rankScore,
+  sectionLabel,
 }: BountyListItemProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -158,6 +177,11 @@ function BountyListItemComponent({
 
         {/* Center: main content */}
         <View style={s.mainContent}>
+          {sectionLabel && (
+            <Text style={s.sectionLabel} accessibilityRole="header">
+              {sectionLabel === 'honor' ? 'Honor bounties' : 'Dormant — low recent interest'}
+            </Text>
+          )}
           <View style={s.titleRow}>
             <Text style={s.title}>{title}</Text>
             {isForHonor && (
@@ -257,6 +281,11 @@ function BountyListItemComponent({
             work_type,
             poster_avatar: poster_avatar ?? undefined,
             is_for_honor: isForHonor,
+            category,
+            created_at: createdAt,
+            position_in_list: position,
+            ranking_variant: rankingVariant,
+            rank_score: rankScore,
           }}
           onClose={() => setShowDetail(false)}
         />
@@ -285,7 +314,13 @@ export const BountyListItem = React.memo(
     prev.duration_minutes === next.duration_minutes &&
     prev.is_time_sensitive === next.is_time_sensitive &&
     prev.incomplete === next.incomplete &&
-    prev.missingSummary === next.missingSummary
+    prev.missingSummary === next.missingSummary &&
+    prev.category === next.category &&
+    prev.createdAt === next.createdAt &&
+    prev.position === next.position &&
+    prev.rankingVariant === next.rankingVariant &&
+    prev.rankScore === next.rankScore &&
+    prev.sectionLabel === next.sectionLabel
 );
 
 function makeStyles(t: AppTheme) {
@@ -421,6 +456,14 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+    },
+    sectionLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      color: t.textSecondary,
+      marginBottom: 8,
     },
     limitedBadge: {
       flexDirection: 'row',

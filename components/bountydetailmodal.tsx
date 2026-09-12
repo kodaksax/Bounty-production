@@ -83,6 +83,15 @@ interface BountyDetailModalProps {
     deadline?: string
     status?: string
     is_for_honor?: boolean
+    category?: string
+    created_at?: string
+    /** 0-based index in the feed's rendered order, for bounty_viewed's
+     * position_in_list. See components/bounty-feed.tsx. */
+    position_in_list?: number
+    /** bounty-ranking-v2 experiment arm, when this card came from the ranked feed. */
+    ranking_variant?: 'control' | 'test'
+    /** Pre-jitter rank_score from the ranking-v2 formula, for debugging. */
+    rank_score?: number
   }
   onClose: () => void
   onNavigateToChat?: (conversationId: string) => void
@@ -153,6 +162,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       distance_miles: b.distance ?? undefined,
       seconds_since_posted: secondsSincePosted,
       surface: 'modal',
+      position_in_list: b.position_in_list,
+      ranking_variant: b.ranking_variant,
+      rank_score: b.rank_score,
     })
   }
 

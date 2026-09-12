@@ -79,6 +79,20 @@ export type BountyFeedHandle = {
   handleTabRepress: () => void;
 };
 
+// bounty-ranking-v2 experiment (PostHog flag `bounty-ranking-v2`, experiment
+// id 463516). Flag evaluation and the weighted formula both run server-side
+// in the `bounty-ranking` edge function (see lib/ranking/bounty-ranking-v2.ts)
+// — this component only ever reorders `filteredBounties` into the sections
+// that function returns, or leaves today's client-side order untouched for
+// `control` / while unresolved / on any failure. Scoped to the list/compact
+// layouts only: BountyGridFeed already re-sorts by price internally (a
+// separate, pre-existing product decision — see its own buildGridRows), so a
+// server-decided order would just be discarded there.
+type RankedEntry = { id: string; rank_score: number };
+type RankingResponse =
+  | { variant: 'control' }
+  | { variant: 'test'; sections: { main: RankedEntry[]; dormant: RankedEntry[]; honor: RankedEntry[] } };
+
 interface BountyFeedProps {
   activeScreen: string;
   setActiveScreen: (screen: string) => void;
@@ -346,6 +360,93 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     appliedBountyIds,
     bountyCompleteness,
   ]);
+
+  // bounty-ranking-v2: only in play for the true default view. The instant a
+  // hunter engages an explicit sort/filter chip (category, Online, Highest
+  // pay, Distance), their intent overrides the experiment's default-order
+  // formula — same principle "Highest pay" already applies over distance.
+  const isDefaultUnfilteredView =
+    activeCategory === 'all' && !onlineOnly && !sortByHighestPay && distanceFilter === DISTANCE_OFF;
+
+  const [rankingResult, setRankingResult] = useState<RankingResponse | null>(null);
+  const rankingRequestKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const uid = validUserId ?? currentUserId;
+    if (!isDefaultUnfilteredView || !uid || filteredBounties.length === 0) {
+      setRankingResult(null);
+      return;
+    }
+    const sortedIds = filteredBounties.map(b => String(b.id)).sort();
+    const key = `${uid}|${sortedIds.join(',')}|${Array.from(appliedBountyIds).sort().join(',')}`;
+    if (rankingRequestKeyRef.current === key) return;
+    rankingRequestKeyRef.current = key;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('bounty-ranking', {
+          body: {
+            bountyIds: filteredBounties.map(b => String(b.id)),
+            appliedBountyIds: Array.from(appliedBountyIds),
+          },
+        });
+        if (cancelled) return;
+        if (error || !data) {
+          setRankingResult({ variant: 'control' });
+          return;
+        }
+        setRankingResult(data as RankingResponse);
+      } catch (err) {
+        if (cancelled) return;
+        logger.warning('feed.ranking.request_failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        setRankingResult({ variant: 'control' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDefaultUnfilteredView, filteredBounties, appliedBountyIds, validUserId, currentUserId]);
+
+  // Reorders filteredBounties into the server's main/dormant/honor sections
+  // for the `test` arm; passes filteredBounties through untouched for
+  // `control`, an unresolved/failed fetch, or a manually filtered view.
+  const rankedFeedMeta = useMemo(() => {
+    if (rankingResult?.variant !== 'test') {
+      return {
+        ordered: filteredBounties,
+        variant: rankingResult?.variant,
+        sectionById: new Map<string, 'dormant' | 'honor'>(),
+        firstOfSection: new Set<string>(),
+        rankScoreById: new Map<string, number>(),
+      };
+    }
+    const { sections } = rankingResult;
+    const byId = new Map(filteredBounties.map(b => [String(b.id), b] as const));
+    const pick = (entries: RankedEntry[]) =>
+      entries.map(e => byId.get(e.id)).filter((b): b is Bounty => Boolean(b));
+    const sectionById = new Map<string, 'dormant' | 'honor'>();
+    const firstOfSection = new Set<string>();
+    const rankScoreById = new Map<string, number>();
+    (['dormant', 'honor'] as const).forEach(key => {
+      sections[key].forEach((e, i) => {
+        sectionById.set(e.id, key);
+        if (i === 0) firstOfSection.add(e.id);
+      });
+    });
+    [...sections.main, ...sections.dormant, ...sections.honor].forEach(e => {
+      rankScoreById.set(e.id, e.rank_score);
+    });
+    return {
+      ordered: [...pick(sections.main), ...pick(sections.dormant), ...pick(sections.honor)],
+      variant: 'test' as const,
+      sectionById,
+      firstOfSection,
+      rankScoreById,
+    };
+  }, [filteredBounties, rankingResult]);
 
   // bounty_list_viewed — fires once the feed's actual result set for the
   // current filters is known (skeleton fully resolved), including the
@@ -744,11 +845,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   );
 
   const renderBountyItem = useCallback(
-    ({ item }: { item: Bounty }) => {
+    ({ item, index }: { item: Bounty; index: number }) => {
       const distance =
         bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '');
       const completeness = bountyCompleteness.get(String(item.id));
       const incomplete = completeness?.isComplete === false;
+      const idStr = String(item.id);
+      const sectionLabel = rankedFeedMeta.firstOfSection.has(idStr)
+        ? rankedFeedMeta.sectionById.get(idStr)
+        : undefined;
       const props = {
         id: item.id,
         title: item.title,
@@ -772,6 +877,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         is_time_sensitive: item.is_time_sensitive,
         incomplete,
         missingSummary: incomplete ? summarizeMissingDetails(completeness!.missing) : '',
+        category: item.category,
+        createdAt: item.created_at,
+        position: index,
+        rankingVariant: rankedFeedMeta.variant,
+        rankScore: rankedFeedMeta.rankScoreById.get(idStr),
+        sectionLabel,
       };
       if (isCompact) {
         return <BountyCompactItem {...props} />;
@@ -782,7 +893,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         </View>
       );
     },
-    [bountyDistances, calculateDistance, listHeight, isCompact, bountyCompleteness]
+    [bountyDistances, calculateDistance, listHeight, isCompact, bountyCompleteness, rankedFeedMeta]
   );
 
   const handleEndReached = useCallback(() => {
@@ -1154,7 +1265,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         <View style={{ flex: 1 }} onLayout={e => setListHeight(e.nativeEvent.layout.height)}>
           <Animated.FlatList
             ref={bountyListRef}
-            data={filteredBounties}
+            data={rankedFeedMeta.ordered}
             keyExtractor={keyExtractor}
             pagingEnabled={!isCompact}
             snapToInterval={isCompact ? undefined : listHeight}

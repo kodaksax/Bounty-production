@@ -202,6 +202,14 @@ verify_jwt = false
 [functions.admin-review-id]
 verify_jwt = false
 
+# bounty-ranking: server-side scoring for the bounty-ranking-v2 PostHog
+# experiment. Caller must be an authenticated hunter — gateway JWT
+# verification plus its own supabase.auth.getUser(token) check (belt and
+# suspenders, matching admin-profiles) so ranking can never be computed for a
+# spoofed or missing identity.
+[functions.bounty-ranking]
+verify_jwt = true
+
 # share-bounty / share-profile / share-og-image: public link-unfurling +
 # smart-redirect pages hit directly by browsers, messaging-app crawlers, and
 # <img> requests — none of these can attach a Supabase JWT.
