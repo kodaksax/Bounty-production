@@ -107,7 +107,7 @@
         "npm:pg@^8.17.2",
         "npm:postgres@^3.4.8",
         "npm:posthog-react-native-session-replay@^1.6.0",
-        "npm:posthog-react-native@^4.66.0",
+        "npm:posthog-react-native@^4.70.0",
         "npm:prettier@^3.8.1",
         "npm:react-dom@19.2.0",
         "npm:react-native-branch@^6.9.0",
