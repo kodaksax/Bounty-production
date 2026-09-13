@@ -96,8 +96,14 @@ export type AnalyticsEvent =
   // "new users can't get in" report is traceable without a device in hand.
   // Deliberately NOT one event per auth stage — the per-stage traces stay
   // local (see lib/utils/auth-diagnostics.ts) to avoid drowning PostHog.
+  //
+  // No `auth_signup_success`: it fired ~1:1 alongside `signup_completed` for
+  // the clean-registration branch (confirmed live in PostHog) and added no
+  // information `signup_completed`'s `has_session: true` doesn't already
+  // carry. Retired 2026-09-13; the branches below that `signup_completed`
+  // never fires for (session/confirmation failures) stay, since those are
+  // genuinely not covered elsewhere.
   | 'auth_signup_started'
-  | 'auth_signup_success'
   | 'auth_signup_failed'
   // Registration succeeded but the immediate sign-in that follows it did not,
   // so the account exists with no session. The user is NOT in the app.
@@ -157,8 +163,8 @@ export type AnalyticsEvent =
   // RENAMED from 'onboarding_bounty_accepted' (2026-08). It fires when the
   // HUNTER's sample application is submitted — nothing "accepts" anything
   // here (no poster action occurred). The old name collided with the
-  // genuinely poster-side `bounty_accepted`/`bounty_claimed` fired from
-  // hooks/useAcceptRequest.ts, which measure a completely different funnel
+  // genuinely poster-side `application_accepted` fired from
+  // hooks/useAcceptRequest.ts, which measures a completely different funnel
   // step. Flagging in case a dashboard still queries the old name.
   | 'onboarding_bounty_applied'
   | 'onboarding_application_submitted_screen_shown'
@@ -456,8 +462,12 @@ export type AnalyticsEvent =
   //   payment_completed            (existing) — top-up deposit succeeded
   //   accept_funding_succeeded     (NEW)      — escrow reserved + hunter accepted
   //     └ escrow_funded            (existing, timing:'at_accept')
-  //     └ bounty_claimed           (existing) — the acceptance itself
-  //   bounty_work_started          (NEW)      — bounty is funded AND in_progress
+  //     └ application_accepted     (existing) — the acceptance itself
+  //   work_started                 (existing) — bounty is funded AND in_progress;
+  //                                              carries fundingMode/variant/
+  //                                              amountBucket here (folded in
+  //                                              from a short-lived duplicate
+  //                                              `bounty_work_started`, removed)
   //   bounty_completed             (existing)
   //
   // Failure/abandon branches:
@@ -477,7 +487,6 @@ export type AnalyticsEvent =
   | 'accept_funding_succeeded'
   | 'accept_funding_failed'
   | 'accept_funding_abandoned'
-  | 'bounty_work_started'
   // Stripe Phase 2 (payment_architecture_version=2) bounty escrow routing —
   // see lib/utils/payment-architecture.ts. escrow_funded/escrow_released/
   // escrow_refunded above are reused for both architectures (properties

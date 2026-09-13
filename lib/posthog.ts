@@ -54,6 +54,17 @@ try {
         personProfiles: 'identified_only',
         // Application Installed/Opened/Updated/Backgrounded — needed for the
         // acquisition -> activation funnel referenced in app/_layout.tsx.
+        //
+        // "Application Opened" duplicates our manual `app_opened` event
+        // (analytics-service.ts, fired from app/_layout.tsx) almost 1:1 —
+        // confirmed live in PostHog (near-identical unique-user counts).
+        // Kept anyway: this flag is the only source of "Application
+        // Installed" / "Application Updated", which nothing else tracks and
+        // which distinguish a fresh install from an ordinary relaunch.
+        // Decision (2026-09-13): keep both rather than lose that signal.
+        // CONSEQUENCE: every acquisition/activation funnel and dashboard
+        // MUST use `app_opened`, never `Application Opened` — the native
+        // event should only ever be queried for Installed/Updated.
         captureAppLifecycleEvents: true,
         // Sentry (@sentry/react-native) is already wired as the crash/error
         // reporter throughout this app (see analytics-service.ts). Disable

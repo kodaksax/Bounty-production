@@ -1,5 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useState } from 'react';
+import { analyticsService } from '../lib/services/analytics-service';
 import { messageService } from '../lib/services/message-service';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
 import type { Message } from '../lib/types';
@@ -127,6 +128,20 @@ export function useMessages(conversationId: string): UseMessagesResult {
 
       // Replace temp message with real one
       setMessages(prev => prev.map(m => (m.id === tempMessage!.id ? message : m)));
+
+      // This call bypasses lib/services/message-service.ts (the only other
+      // place `message_sent` was emitted), so without this the vast majority
+      // of real sends — every canonical/UUID conversation, which is what both
+      // chat screens use — went untracked. Confirmed live: 11 message_sent
+      // events against 260+ rows in the messages table over 60 days.
+      analyticsService
+        .trackEvent('message_sent', {
+          conversationId,
+          messageLength: text.length,
+        })
+        .catch(() => {
+          /* analytics is best-effort */
+        });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
       // Mark the specific temp message as failed rather than deleting it, so

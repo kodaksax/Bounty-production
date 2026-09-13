@@ -236,6 +236,15 @@ export function useAcceptRequest({
       // is emitted immediately after — the same real state change also means
       // work on the bounty has begun. Conversation creation below is
       // best-effort and must not gate either event.
+      //
+      // `work_started` also carries the funding-architecture fields
+      // (fundingMode/variant/amountBucket) that a short-lived duplicate event
+      // `bounty_work_started` used to carry separately — that duplicate fired
+      // on every accept alongside this one (confirmed live in PostHog, ~1:1
+      // volume) and has been folded in here instead of kept as a second name.
+      // `bounty_claimed` was a legacy back-compat alias for `application_accepted`
+      // that a prior cutover documented as removed but never actually was;
+      // removed for real now.
       try {
         const bountyIdStr = bountyId != null ? String(bountyId) : undefined
         const acceptProps = {
@@ -247,11 +256,15 @@ export function useAcceptRequest({
           amount: (request.bounty as any)?.amount ?? undefined,
         }
         await analyticsService.trackEvent('application_accepted', acceptProps)
-        await analyticsService.trackEvent('bounty_claimed' as any, {
-          bountyId: bountyIdStr,
-          requestId: String(requestId),
+        // Funded AND in progress — the point past which a hunter may legitimately
+        // begin work. fundingMode/variant/amountBucket let "posted -> work
+        // actually started" be compared between the deferred and control arms.
+        await analyticsService.trackEvent('work_started', {
+          ...acceptProps,
+          fundingMode: wasDeferredFunding ? 'at_accept' : 'at_post',
+          variant: wasDeferredFunding ? 'deferred' : 'control',
+          amountBucket: amountBucket(Number((request.bounty as any)?.amount ?? 0)),
         })
-        await analyticsService.trackEvent('work_started', acceptProps)
 
         // Deferred bounties only: the server just took the money as part of
         // this same transaction, so success here IS the funding moment.
@@ -274,17 +287,6 @@ export function useAcceptRequest({
             timing: 'at_accept',
           })
         }
-
-        // Funded AND in progress — the point past which a hunter may legitimately
-        // begin work. Emitted for both arms so "posted -> work actually started"
-        // is comparable between them.
-        await analyticsService.trackEvent('bounty_work_started', {
-          bountyId: bountyId != null ? String(bountyId) : undefined,
-          fundingMode: wasDeferredFunding ? 'at_accept' : 'at_post',
-          variant: wasDeferredFunding ? 'deferred' : 'control',
-          isForHonor: !!(request.bounty as any)?.is_for_honor,
-          amountBucket: amountBucket(Number((request.bounty as any)?.amount ?? 0)),
-        })
       } catch {
         /* analytics is best-effort */
       }

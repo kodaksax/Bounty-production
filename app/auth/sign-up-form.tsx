@@ -398,8 +398,14 @@ export function SignUpForm() {
 
         // Session established — this device has now completed a sign-up, so a
         // later logout shows the log-in form instead of first-run onboarding.
+        //
+        // No separate `auth_signup_success` event here: it fired every time
+        // alongside `signup_completed` for this exact branch (confirmed ~1:1
+        // live in PostHog — 37 vs 34 events/45d), and `signup_completed`
+        // already carries `has_session: true` for precisely this outcome. The
+        // other auth_signup_* diagnostic events stay, since they cover
+        // branches `signup_completed` never fires for at all.
         void markDeviceHasSignedIn();
-        analyticsService.trackEvent('auth_signup_success', { method: 'email' });
 
         // Decide the destination from what we actually know right now. The
         // account was created seconds ago, so onboarding is incomplete unless

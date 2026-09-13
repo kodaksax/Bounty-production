@@ -147,13 +147,12 @@ export function useBountyForm({
           // Real signal that the user needs funds right now — surface the
           // Moments Queue's fund_wallet prompt next time it's evaluated,
           // rather than only showing this one-off blocking alert.
+          // moment_event_enqueued now fires from momentsService.enqueue()
+          // itself, so every caller is tracked consistently — see the note
+          // there for why a one-off call here undercounted.
           momentsService.enqueue(currentUserId, 'fund_wallet', {
             amountNeeded: formData.amount - balance,
             bountyTitle: formData.title,
-          })
-          analyticsService.trackEvent('moment_event_enqueued', {
-            momentType: 'fund_wallet',
-            source: 'post_bounty_insufficient_balance',
           })
           Alert.alert(
             'Insufficient Balance',

@@ -113,8 +113,8 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     expect(ensureFunded).toHaveBeenCalledWith('b1', expect.objectContaining({ hunterName: 'Ada' }));
     // The single most important assertion in this file.
     expect(mockAcceptRequest).not.toHaveBeenCalled();
-    expect(eventNames()).not.toContain('bounty_claimed');
-    expect(eventNames()).not.toContain('bounty_work_started');
+    expect(eventNames()).not.toContain('application_accepted');
+    expect(eventNames()).not.toContain('work_started');
   });
 
   test('refreshes the wallet after a deferred acceptance charges the poster', async () => {
@@ -161,7 +161,7 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     // The hunter IS accepted and the money IS escrowed; a stale displayed
     // number must not surface as a failed acceptance.
     expect(mockAcceptRequest).toHaveBeenCalled();
-    expect(eventNames()).toContain('bounty_work_started');
+    expect(eventNames()).toContain('work_started');
   });
 
   test('the gate runs BEFORE the acceptance, not after', async () => {
@@ -194,10 +194,10 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     const names = eventNames();
     expect(names).toEqual(
       expect.arrayContaining([
-        'bounty_claimed',
+        'application_accepted',
         'accept_funding_succeeded',
         'escrow_funded',
-        'bounty_work_started',
+        'work_started',
       ])
     );
     // escrow_funded must say WHEN it happened, or the two arms are
@@ -222,7 +222,7 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     // No second escrow claim — the money was taken when the bounty was posted.
     expect(names).not.toContain('escrow_funded');
     // The shared step still fires, tagged as control.
-    const work = mockTrackEvent.mock.calls.find(c => c[0] === 'bounty_work_started')?.[1];
+    const work = mockTrackEvent.mock.calls.find(c => c[0] === 'work_started')?.[1];
     expect(work).toMatchObject({ fundingMode: 'at_post', variant: 'control' });
   });
 
@@ -243,7 +243,7 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
 
     expect(handleAcceptFailure).toHaveBeenCalledTimes(1);
     expect(mockAcceptRequest).toHaveBeenCalledTimes(2);
-    expect(eventNames()).toContain('bounty_claimed');
+    expect(eventNames()).toContain('application_accepted');
   });
 
   test('a failure that keeps failing does not loop the money path', async () => {
@@ -264,8 +264,8 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
 
     // Bounded: one original attempt + exactly one retry.
     expect(mockAcceptRequest).toHaveBeenCalledTimes(2);
-    expect(eventNames()).not.toContain('bounty_claimed');
-    expect(eventNames()).not.toContain('bounty_work_started');
+    expect(eventNames()).not.toContain('application_accepted');
+    expect(eventNames()).not.toContain('work_started');
     expect(alertSpy).toHaveBeenCalledWith(
       'Accept Failed',
       'Funding was updated, but selecting this hunter still failed. Please try again.'
@@ -287,7 +287,7 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     });
 
     expect(mockAcceptRequest).toHaveBeenCalledTimes(1);
-    expect(eventNames()).not.toContain('bounty_work_started');
+    expect(eventNames()).not.toContain('work_started');
     // And no conversation was opened telling the hunter they have a funded job.
     expect(mockRpc).not.toHaveBeenCalledWith('rpc_create_conversation', expect.anything());
   });
@@ -300,7 +300,7 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
       await result.current.handleAcceptRequest('req-1');
     });
 
-    expect(eventNames()).not.toContain('bounty_work_started');
+    expect(eventNames()).not.toContain('work_started');
     expect(mockRpc).not.toHaveBeenCalledWith('rpc_create_conversation', expect.anything());
   });
 

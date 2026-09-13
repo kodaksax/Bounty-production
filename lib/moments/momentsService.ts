@@ -8,6 +8,7 @@
  */
 
 import * as Sentry from '@sentry/react-native';
+import { analyticsService } from '../services/analytics-service';
 import { supabase } from '../supabase';
 import { MAX_MOMENT_SHOWS, type MomentState, type MomentStatus, type MomentType } from './types';
 
@@ -235,6 +236,22 @@ export const momentsService = {
         { user_id: userId, moment_type: momentType, status: 'pending', metadata },
         { onConflict: 'user_id,moment_type' }
       );
-    if (error) console.error('[moments] enqueue failed', { momentType, error });
+    if (error) {
+      console.error('[moments] enqueue failed', { momentType, error });
+      return;
+    }
+    // Centralized here rather than at each call site — a prior version only
+    // tracked this from one narrow caller (hooks/useBountyForm.ts), so the
+    // several other enqueue() call sites (stripe_connect_onboarding,
+    // inactive_user_return, backfill's post_first_bounty/accept_first_bounty)
+    // went untracked and moment_event_enqueued read as dark for 15 days while
+    // moment_shown — fired centrally in moments-provider.tsx regardless of
+    // origin — stayed healthy. Skipped for the metadata-merge branch above:
+    // that path doesn't change queue state, so it isn't a new enqueue.
+    analyticsService
+      .trackEvent('moment_event_enqueued', { momentType, source: 'moments_service' })
+      .catch(() => {
+        /* analytics is best-effort */
+      });
   },
 };
