@@ -1,4 +1,4 @@
-import { isValidUsZip, parseCoordsFromLocation } from '../../../lib/utils/geo'
+import { extractZipFromText, isValidUsZip, parseCoordsFromLocation } from '../../../lib/utils/geo'
 
 describe('geo utils', () => {
   test('parseCoordsFromLocation parses "lat, lng" strings', () => {
@@ -28,5 +28,28 @@ describe('geo utils', () => {
     expect(isValidUsZip('941035')).toBe(false)
     expect(isValidUsZip('9410a')).toBe(false)
     expect(isValidUsZip('94103-1234')).toBe(false)
+  })
+
+  test('extractZipFromText pulls the ZIP out of a full address', () => {
+    expect(extractZipFromText('5018 Painters Mill Road, Owings Mills, MD 21117')).toBe('21117')
+    expect(extractZipFromText('11989A Reisterstown Rd, Reisterstown, MD 21136')).toBe('21136')
+    expect(extractZipFromText('Crescentwood Ave, Warren, MI, 48021')).toBe('48021')
+  })
+
+  test('extractZipFromText prefers the last 5-digit token over a leading street number', () => {
+    expect(extractZipFromText('5018 Main St, Baltimore, MD 21201')).toBe('21201')
+  })
+
+  test('extractZipFromText accepts a bare ZIP', () => {
+    expect(extractZipFromText('21201')).toBe('21201')
+  })
+
+  test('extractZipFromText returns null for text with no standalone 5-digit token', () => {
+    expect(extractZipFromText('Bmore')).toBeNull()
+    expect(extractZipFromText('DMV')).toBeNull()
+    expect(extractZipFromText('122 main st')).toBeNull()
+    expect(extractZipFromText('')).toBeNull()
+    expect(extractZipFromText(null)).toBeNull()
+    expect(extractZipFromText(undefined)).toBeNull()
   })
 })

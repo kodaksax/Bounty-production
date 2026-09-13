@@ -26,3 +26,19 @@ const US_ZIP_PATTERN = /^\d{5}$/;
 export function isValidUsZip(zip: string): boolean {
   return US_ZIP_PATTERN.test(zip.trim());
 }
+
+const ZIP_TOKEN_PATTERN = /\b\d{5}\b/g;
+
+/**
+ * Pulls a 5-digit ZIP out of free-text like "5018 Painters Mill Road, Owings
+ * Mills, MD 21117" or a reverse-geocoded "<street>, <city>, <region>, <zip>"
+ * string. Takes the LAST standalone 5-digit token rather than the first, since
+ * a US street number (e.g. "5018") comes before the ZIP, not after it. Returns
+ * null for text with no such token (e.g. "Bmore", "DMV", a bare city name) —
+ * callers should fall back to another source rather than guess.
+ */
+export function extractZipFromText(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const matches = text.match(ZIP_TOKEN_PATTERN);
+  return matches && matches.length > 0 ? matches[matches.length - 1] : null;
+}

@@ -5,10 +5,57 @@ import type { Bounty } from 'lib/services/database.types';
 import { performanceService } from 'lib/services/performance-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { inferRoleFromFirstAction } from 'lib/services/role-inference-service';
-import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
+import { isSupabaseConfigured, supabaseEnv, supabase } from 'lib/supabase';
 import { validateTitle } from 'lib/utils/bounty-validation';
 import { getCurrentUserId } from 'lib/utils/data-utils';
 import { coarseRegionFromLocationText } from 'lib/utils/serviceable-region';
+import { extractZipFromText, isValidUsZip } from 'lib/utils/geo';
+
+/**
+ * Resolves the ZIP to store on a bounty, in priority order:
+ *  1. An explicit `draft.zipCode`, if some future UI sets one directly.
+ *  2. Extracted from the bounty's own in-person `location` text — this is
+ *     where a raw ZIP typed into the address field, or the ZIP embedded in a
+ *     reverse-geocoded "<street>, <city>, <region>, <zip>" string, actually
+ *     lives today. Online bounties carry no address, so this is skipped for
+ *     them.
+ *  3. The poster's own profile ZIP (profiles.zip_code) — same capture path
+ *     onboarding/details.tsx already writes via handleSubmitZip.
+ *
+ * Best-effort throughout: a failed profile lookup (e.g. offline) just means
+ * the bounty posts with no ZIP, exactly as it does today.
+ */
+async function deriveBountyZipCode(
+  draft: Pick<BountyDraft, 'zipCode' | 'workType' | 'location'>,
+  posterId: string
+): Promise<string | undefined> {
+  const explicit = draft.zipCode?.trim();
+  if (explicit && isValidUsZip(explicit)) {
+    return explicit;
+  }
+
+  if (draft.workType === 'in_person') {
+    const fromLocation = extractZipFromText(draft.location);
+    if (fromLocation) {
+      return fromLocation;
+    }
+  }
+
+  if (!posterId) {
+    return undefined;
+  }
+
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('zip_code')
+      .eq('id', posterId)
+      .single();
+    return data?.zip_code || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface CreateBountyPayload {
   title: string;
@@ -173,6 +220,7 @@ export const bountyService = {
       }
 
       const posterId = getCurrentUserId();
+      const zipCode = await deriveBountyZipCode(draft, posterId);
 
       const payload: Omit<Bounty, 'id' | 'created_at'> & { attachments?: any[]; category?: string } = {
         title: draft.title,
@@ -180,7 +228,7 @@ export const bountyService = {
         amount: draft.isForHonor ? 0 : draft.amount,
         is_for_honor: draft.isForHonor,
         location: draft.workType === 'in_person' ? draft.location : '',
-        zip_code: draft.zipCode || undefined,
+        zip_code: zipCode,
         latitude: draft.workType === 'in_person' ? draft.latitude ?? undefined : undefined,
         longitude: draft.workType === 'in_person' ? draft.longitude ?? undefined : undefined,
         unit: draft.workType === 'in_person' ? draft.unit || undefined : undefined,
@@ -381,6 +429,7 @@ export const bountyService = {
     }
 
     const isInPerson = draft.workType === 'in_person';
+    const zipCode = isInPerson ? await deriveBountyZipCode(draft, getCurrentUserId()) : undefined;
 
     const updates: Partial<Omit<Bounty, 'id' | 'created_at'>> = {
       title: draft.title,
@@ -390,7 +439,7 @@ export const bountyService = {
       // Use null (not undefined) so Supabase explicitly clears these columns
       // when switching from in-person to online or removing location/schedule.
       location: isInPerson ? draft.location : '',
-      zip_code: isInPerson ? draft.zipCode || null : null,
+      zip_code: isInPerson ? zipCode ?? null : null,
       latitude: isInPerson ? draft.latitude ?? null : null,
       longitude: isInPerson ? draft.longitude ?? null : null,
       unit: isInPerson ? draft.unit || null : null,
