@@ -31,6 +31,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
 import { mayAdminReopenFailedWithdrawal } from '../_shared/payout-state.ts';
+import { writePayoutAudit } from '../_shared/payout-audit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1286,6 +1287,32 @@ Deno.serve(async (req: Request) => {
       metadata: { note: note ?? null, newBalance },
     });
 
+    if (t.user_id) {
+      await writePayoutAudit(supabase, {
+        userId: t.user_id,
+        event: 'withdrawal_completed',
+        payoutMethod: (t.payout_method as 'instant' | 'standard' | null) ?? null,
+        amountCents: Math.round(Math.abs(t.amount) * 100),
+        currency: 'usd',
+        detail: { transactionId, source: 'mark_externally_settled', reason },
+      });
+
+      // manually_paid is the other legitimate way a withdrawal reaches a
+      // paid-out terminal state (see the payout.paid branch in webhooks for
+      // the primary path) — see 20260913220000_withdrawal_counter_and_backfill.sql.
+      const { error: counterError } = await supabase.rpc('increment_withdrawal_counter', {
+        p_user_id: t.user_id,
+        p_completed_at: new Date().toISOString(),
+      });
+      if (counterError) {
+        console.error('[admin-withdrawals] failed to increment withdrawal_count', {
+          userId: t.user_id,
+          transactionId,
+          error: counterError,
+        });
+      }
+    }
+
     console.log(
       `[admin-withdrawals] Admin ${adminUser.id} marked transaction ${transactionId} as manually_paid (externally settled): ${reason}`
     );
@@ -1554,20 +1581,32 @@ Deno.serve(async (req: Request) => {
   // ─── list_balance_findings ──────────────────────────────────────────────────
   // Backs the balance-reconciliation admin screen: unacknowledged findings
   // first, plus the most recent snapshots for the trend view.
+  //
+  // Previously hard-allowlisted to 6 balance/webhook finding_types
+  // (platform_balance_drift, connect_account_balance_drift,
+  // missed_webhook_replayed, dispute_funds_movement, stripe_topup,
+  // external_account_change) — that excluded the highest-severity types
+  // reconciliation actually emits (balance_drift, stuck_pending_withdrawal,
+  // completed_withdrawal_without_payout*, orphan_*), so the acknowledge
+  // mechanism below existed but nobody could ever see those findings to act
+  // on them: 0 of 629 findings acknowledged in a 12-day window, across every
+  // type. Now shows every non-INFO finding — INFO is reconciliation's own
+  // "known, already-decided backlog" marker (see
+  // splitInvariantViolations/completed_withdrawal_without_payout_grandfathered
+  // in reconciliation-logic.ts) and stays excluded so it doesn't compete with
+  // things that still need a human decision.
   if (action === 'list_balance_findings') {
     const limit = Math.min(Math.max(Number(body.limit) || 50, 1), 200);
     const { data: findings, error: findingsErr } = await supabase
       .from('reconciliation_findings')
       .select('*')
-      .in('finding_type', [
-        'platform_balance_drift',
-        'connect_account_balance_drift',
-        'missed_webhook_replayed',
-        'dispute_funds_movement',
-        'stripe_topup',
-        'external_account_change',
-      ])
+      // Stored lowercase in the DB (verified against live data) even though
+      // reconciliation/index.ts's own literals read 'CRITICAL'/'WARNING'/'INFO'
+      // — something downcases before insert. Match the stored form, not the
+      // source literal.
+      .neq('severity', 'info')
       .order('acknowledged_at', { ascending: true, nullsFirst: true })
+      .order('severity', { ascending: true }) // 'critical' < 'warning' alphabetically
       .order('run_at', { ascending: false })
       .limit(limit);
     if (findingsErr) {

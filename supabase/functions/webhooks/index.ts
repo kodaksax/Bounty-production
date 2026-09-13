@@ -15,6 +15,7 @@ import {
   decidePayoutEventAction,
 } from '../_shared/payout-state.ts';
 import type { WalletTransaction } from '../_shared/types.ts';
+import { writePayoutAudit } from '../_shared/payout-audit.ts';
 import {
     collectWebhookSecrets,
     verifyStripeSignature,
@@ -504,6 +505,19 @@ async function handleUndeliveredPayout(
         console.log(
           `[webhooks] Refunded $${refundAmount} to user ${profile.id} for ${outcome} payout ${payout.id}`
         );
+        await writePayoutAudit(supabase, {
+          userId: profile.id,
+          event: 'withdrawal_failed',
+          payoutMethod:
+            (candidateTxRow.payout_method as 'instant' | 'standard' | null) ?? null,
+          amountCents: Math.round(refundAmount * 100),
+          currency: payout.currency,
+          stripePayoutId: payout.id,
+          stripeConnectAccountId: accountId,
+          errorCode: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
+          errorMessage: payout.failure_message ?? null,
+          detail: { transactionId: candidateTxRow.id, source: `payout.${outcome}` },
+        });
         try {
           await heycatch.trackEvent(
             'payout_failed',
@@ -2732,6 +2746,39 @@ Deno.serve(async (req: Request) => {
                   console.log(
                     `[webhooks] Withdrawal ${candidateTx.id} completed by payout ${payout.id}`
                   );
+
+                  await writePayoutAudit(supabase, {
+                    userId: paidProfile.id,
+                    event: 'withdrawal_completed',
+                    payoutMethod:
+                      (candidateTx.payout_method as 'instant' | 'standard' | null) ?? null,
+                    amountCents: payout.amount,
+                    currency: payout.currency,
+                    stripePayoutId: payout.id,
+                    stripeConnectAccountId: paidAccountId,
+                    detail: { transactionId: candidateTx.id, source: 'payout.paid' },
+                  });
+
+                  // profiles.withdrawal_count / last_withdrawal_at exist but were
+                  // never written anywhere — every hunter who ever withdrew showed
+                  // 0 withdrawals. This is the one place a withdrawal legitimately
+                  // becomes 'completed' via a settled Stripe payout, so it is the
+                  // one place this counter increments (mark_externally_settled is
+                  // the other legitimate completion path — see admin-withdrawals).
+                  const { error: counterError } = await supabase.rpc(
+                    'increment_withdrawal_counter',
+                    {
+                      p_user_id: paidProfile.id,
+                      p_completed_at: new Date().toISOString(),
+                    }
+                  );
+                  if (counterError) {
+                    console.error('[webhooks] failed to increment withdrawal_count', {
+                      userId: paidProfile.id,
+                      transactionId: candidateTx.id,
+                      error: counterError,
+                    });
+                  }
                 } else {
                   // The CAS above matched nothing. That is either a duplicate
                   // delivery (harmless) or — the case this branch exists for —

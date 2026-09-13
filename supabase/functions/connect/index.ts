@@ -35,6 +35,7 @@ import {
     isRecoverableInstantPayoutError,
 } from '../_shared/payout-state.ts';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
+import { writePayoutAudit } from '../_shared/payout-audit.ts';
 
 // stripe@14's bundled types for Balance.InstantAvailable omit `net_available`,
 // even though the live API returns it (see
@@ -374,80 +375,6 @@ interface InstantCardSummary {
 // ---------------------------------------------------------------------------
 // Connect-native payouts (Phases 4-5)
 // ---------------------------------------------------------------------------
-
-/**
- * Lifecycle events written to public.payout_audit_log.
- *
- * Connect-native payouts never move profiles.balance, so this log is the only
- * durable record of why a payout was allowed or refused. Emitted even on the
- * failure paths — especially on the failure paths.
- */
-type PayoutAuditEvent =
-  | 'withdrawal_requested'
-  | 'withdrawal_validated'
-  | 'stripe_payout_created'
-  // An instant payout Stripe refused. Recorded separately from
-  // withdrawal_failed because the withdrawal itself has NOT failed — it falls
-  // back to a standard payout and stays pending. Conflating the two is the
-  // reasoning that produced the 2026-08-13 incident.
-  | 'instant_payout_failed'
-  | 'withdrawal_completed'
-  | 'withdrawal_failed';
-
-interface PayoutAuditEntry {
-  userId: string;
-  event: PayoutAuditEvent;
-  payoutMethod?: 'instant' | 'standard';
-  amountCents?: number;
-  currency?: string;
-  balanceAvailableCents?: number;
-  balanceInstantAvailableCents?: number;
-  stripePayoutId?: string | null;
-  stripeConnectAccountId?: string | null;
-  idempotencyKey?: string | null;
-  errorCode?: string | null;
-  errorMessage?: string | null;
-  detail?: Record<string, unknown>;
-}
-
-/**
- * Best-effort audit write. Deliberately never throws and never blocks the
- * payout: losing an audit row is bad, but failing a payout that Stripe already
- * accepted because we could not write a log line would be worse. Failures are
- * logged loudly so they surface in monitoring.
- */
-async function writePayoutAudit(supabase: SupabaseClient, entry: PayoutAuditEntry): Promise<void> {
-  try {
-    const { error } = await supabase.from('payout_audit_log').insert({
-      user_id: entry.userId,
-      event: entry.event,
-      payout_method: entry.payoutMethod ?? null,
-      amount_cents: entry.amountCents ?? null,
-      currency: entry.currency ?? 'usd',
-      balance_available_cents: entry.balanceAvailableCents ?? null,
-      balance_instant_available_cents: entry.balanceInstantAvailableCents ?? null,
-      stripe_payout_id: entry.stripePayoutId ?? null,
-      stripe_connect_account_id: entry.stripeConnectAccountId ?? null,
-      idempotency_key: entry.idempotencyKey ?? null,
-      error_code: entry.errorCode ?? null,
-      error_message: entry.errorMessage ?? null,
-      detail: entry.detail ?? null,
-    });
-    if (error) {
-      console.error('[payout-audit] failed to write audit row', {
-        userId: entry.userId,
-        event: entry.event,
-        error: error.message,
-      });
-    }
-  } catch (auditError) {
-    console.error('[payout-audit] threw while writing audit row', {
-      userId: entry.userId,
-      event: entry.event,
-      error: (auditError as { message?: string })?.message,
-    });
-  }
-}
 
 /**
  * True when this hunter already has a withdrawal in flight.
@@ -2010,6 +1937,15 @@ Deno.serve(async (req: Request) => {
         hasBankAccountId: !!requestedBankAccountId,
       });
 
+      await writePayoutAudit(supabase, {
+        userId,
+        event: 'withdrawal_requested',
+        payoutMethod: 'standard',
+        amountCents: validation.amountCents,
+        currency,
+        idempotencyKey,
+      });
+
       // Idempotency replay: if this key was already processed, return the
       // recorded withdrawal instead of creating a duplicate payout.
       if (idempotencyKey) {
@@ -2307,6 +2243,17 @@ Deno.serve(async (req: Request) => {
       const newBalance =
         typeof reservedWithdrawal?.new_balance === 'number' ? reservedWithdrawal.new_balance : null;
 
+      await writePayoutAudit(supabase, {
+        userId,
+        event: 'withdrawal_validated',
+        payoutMethod: 'standard',
+        amountCents: validation.amountCents,
+        currency,
+        idempotencyKey,
+        stripeConnectAccountId: p.stripe_connect_account_id,
+        detail: { transactionId },
+      });
+
       let transfer: Stripe.Transfer;
       try {
         console.log('[connect/transfer] creating Stripe transfer', {
@@ -2346,6 +2293,18 @@ Deno.serve(async (req: Request) => {
           stripeCode: errInfo?.code,
           stripeType: errInfo?.type,
           message: errInfo?.message,
+        });
+        await writePayoutAudit(supabase, {
+          userId,
+          event: 'withdrawal_failed',
+          payoutMethod: 'standard',
+          amountCents: validation.amountCents,
+          currency,
+          idempotencyKey,
+          stripeConnectAccountId: p.stripe_connect_account_id,
+          errorCode: errInfo?.code ?? 'transfer_failed',
+          errorMessage: errInfo?.message ?? null,
+          detail: { transactionId, stage: 'transfer_create' },
         });
         const { data: rollbackResult, error: refundError } = await supabase
           .rpc('fail_legacy_withdrawal', {
@@ -2445,6 +2404,19 @@ Deno.serve(async (req: Request) => {
           { userId, transferId: transfer.id, amount, error: standardPayoutError }
         );
       }
+
+      await writePayoutAudit(supabase, {
+        userId,
+        event: standardPayout ? 'stripe_payout_created' : 'withdrawal_failed',
+        payoutMethod: 'standard',
+        amountCents: validation.amountCents,
+        currency,
+        idempotencyKey,
+        stripeConnectAccountId: p.stripe_connect_account_id,
+        stripePayoutId: standardPayout?.id ?? null,
+        errorCode: standardPayoutError,
+        detail: { transactionId, transferId: transfer.id },
+      });
 
       const { data: transaction, error: txError } = await supabase
         .from('wallet_transactions')
@@ -2673,6 +2645,16 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Failed to reserve balance for retry' }, 500);
       }
 
+      await writePayoutAudit(supabase, {
+        userId,
+        event: 'withdrawal_validated',
+        payoutMethod: 'standard',
+        amountCents: Math.round(amount * 100),
+        currency: 'usd',
+        stripeConnectAccountId: p.stripe_connect_account_id,
+        detail: { transactionId, retryAttempt: retryCount + 1 },
+      });
+
       let transfer: Stripe.Transfer;
       try {
         transfer = await stripe.transfers.create(
@@ -2689,6 +2671,17 @@ Deno.serve(async (req: Request) => {
       } catch (stripeError) {
         console.error('[connect] Transfer creation failed, refunding balance:', stripeError);
         const retryErrInfo = stripeError as { code?: string; type?: string; message?: string };
+        await writePayoutAudit(supabase, {
+          userId,
+          event: 'withdrawal_failed',
+          payoutMethod: 'standard',
+          amountCents: Math.round(amount * 100),
+          currency: 'usd',
+          stripeConnectAccountId: p.stripe_connect_account_id,
+          errorCode: retryErrInfo?.code ?? 'transfer_failed',
+          errorMessage: retryErrInfo?.message ?? null,
+          detail: { transactionId, stage: 'retry_transfer_create', retryAttempt: retryCount + 1 },
+        });
         const { data: rollbackResult, error: retryRefundError } = await supabase
           .rpc('fail_legacy_withdrawal', {
             p_transaction_id: transactionId,
@@ -2769,6 +2762,18 @@ Deno.serve(async (req: Request) => {
           { userId, transferId: transfer.id, transactionId, amount, error: retryPayoutError }
         );
       }
+
+      await writePayoutAudit(supabase, {
+        userId,
+        event: retryPayout ? 'stripe_payout_created' : 'withdrawal_failed',
+        payoutMethod: 'standard',
+        amountCents: Math.round(amount * 100),
+        currency: 'usd',
+        stripeConnectAccountId: p.stripe_connect_account_id,
+        stripePayoutId: retryPayout?.id ?? null,
+        errorCode: retryPayoutError,
+        detail: { transactionId, transferId: transfer.id, retryAttempt: retryCount + 1 },
+      });
 
       const { data: retriedTx, error: retriedTxError } = await supabase
         .from('wallet_transactions')
@@ -3444,6 +3449,17 @@ Deno.serve(async (req: Request) => {
       const newBalance =
         typeof reservedWithdrawal?.new_balance === 'number' ? reservedWithdrawal.new_balance : null;
 
+      await writePayoutAudit(supabase, {
+        userId,
+        event: 'withdrawal_validated',
+        payoutMethod: 'instant',
+        amountCents: validation.amountCents,
+        currency,
+        idempotencyKey,
+        stripeConnectAccountId: p.stripe_connect_account_id,
+        detail: { transactionId },
+      });
+
       // Step 1: move funds from the platform balance into the connected
       // account's Stripe balance — required before Stripe will let the
       // connected account pay any of it out, instant or otherwise.
@@ -3483,6 +3499,18 @@ Deno.serve(async (req: Request) => {
           amount,
           stripeCode: errInfo?.code,
           message: errInfo?.message,
+        });
+        await writePayoutAudit(supabase, {
+          userId,
+          event: 'withdrawal_failed',
+          payoutMethod: 'instant',
+          amountCents: validation.amountCents,
+          currency,
+          idempotencyKey,
+          stripeConnectAccountId: p.stripe_connect_account_id,
+          errorCode: errInfo?.code ?? 'transfer_failed',
+          errorMessage: errInfo?.message ?? null,
+          detail: { transactionId, stage: 'transfer_create' },
         });
         const { data: rollbackResult, error: refundError } = await supabase
           .rpc('fail_legacy_withdrawal', {
@@ -3747,6 +3775,18 @@ Deno.serve(async (req: Request) => {
       console.log('[connect/instant-payout] instant payout created', {
         userId,
         payoutId: payout.id,
+      });
+
+      await writePayoutAudit(supabase, {
+        userId,
+        event: 'stripe_payout_created',
+        payoutMethod: 'instant',
+        amountCents: validation.amountCents,
+        currency,
+        idempotencyKey,
+        stripeConnectAccountId: p.stripe_connect_account_id,
+        stripePayoutId: payout.id,
+        detail: { transactionId, transferId: transfer.id },
       });
 
       const { data: transaction, error: txError } = await supabase

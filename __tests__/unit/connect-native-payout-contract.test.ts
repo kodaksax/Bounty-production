@@ -22,6 +22,16 @@ const connectSource = fs.readFileSync(
   'utf8'
 );
 
+// writePayoutAudit moved to _shared/payout-audit.ts so webhooks and
+// admin-withdrawals can call it too (it used to be wired into the
+// Connect-native path only, which meant every legacy withdrawal route —
+// the ones actually processing production traffic — never wrote to
+// payout_audit_log at all).
+const payoutAuditSource = fs.readFileSync(
+  path.join(__dirname, '../../supabase/functions/_shared/payout-audit.ts'),
+  'utf8'
+);
+
 function extractFunctionBody(source: string, functionName: string): string {
   const start = source.indexOf(`function ${functionName}(`);
   if (start === -1) throw new Error(`function ${functionName} not found`);
@@ -209,7 +219,7 @@ describe('handleConnectNativePayout — audit trail', () => {
   });
 
   test('audit writes never block the payout', () => {
-    const auditBody = extractFunctionBody(connectSource, 'writePayoutAudit');
+    const auditBody = extractFunctionBody(payoutAuditSource, 'writePayoutAudit');
     expect(auditBody).toContain('try {');
     expect(auditBody).toContain('catch');
     // Must not rethrow: an audit failure cannot fail a payout Stripe accepted.
