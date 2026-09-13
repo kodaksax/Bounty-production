@@ -63,6 +63,11 @@ export interface AuthProfile {
   // sign-in/session-restore to force-sign-out and route banned/suspended
   // users away from the app -- see 20260726000000_enforce_account_status.sql.
   account_status?: 'active' | 'suspended' | 'banned';
+  // True for the team's own QA/seed accounts (profiles.is_internal). Single
+  // source of truth for "is this a real user" -- gates the
+  // "show test bounties" toggle (hooks/useShowTestBounties.ts) and nothing
+  // else. Never derive this from an email pattern client-side.
+  is_internal?: boolean;
 }
 
 interface CachedProfile {
@@ -622,6 +627,7 @@ export class AuthProfileService {
               : undefined,
           last_session_at: data.last_session_at || undefined,
           account_status: data.account_status || undefined,
+          is_internal: typeof data.is_internal === 'boolean' ? data.is_internal : undefined,
         };
 
         console.log('[authProfileService] Profile data mapped', {
@@ -801,6 +807,7 @@ export class AuthProfileService {
               : undefined,
           last_session_at: data.last_session_at || undefined,
           account_status: data.account_status || undefined,
+          is_internal: typeof data.is_internal === 'boolean' ? data.is_internal : undefined,
         };
 
         console.log(

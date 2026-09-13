@@ -29,7 +29,7 @@ export const FEED_SAFE_BOUNTY_COLUMNS = [
   'avatar', 'accepted_by', 'is_stale', 'stale_reason', 'stale_detected_at', 'category',
   'schedule_type', 'start_date', 'end_date', 'latest_arrival_time', 'duration_minutes',
   'conditional_end_note', 'expiry_notified_at', 'zip_code', 'payment_architecture_version',
-  'approx_latitude', 'approx_longitude', 'neighborhood',
+  'approx_latitude', 'approx_longitude', 'neighborhood', 'is_test',
 ].join(', ');
 
 // Statuses a hunter can meaningfully browse. Used as the fallback when a search
@@ -417,6 +417,8 @@ export const bountyService = {
     sortBy?: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'distance_asc';
     limit?: number;
     offset?: number;
+    /** Internal accounts only, opt-in — see hooks/useShowTestBounties.ts. */
+    includeTest?: boolean;
   }): Promise<Bounty[]> {
     try {
       if (isSupabaseConfigured) {
@@ -434,6 +436,10 @@ export const bountyService = {
           // No explicit selection: restrict to browsable statuses rather than
           // `!= archived`, which also leaked `cancelled` / `deleted` rows.
           query = query.in('status', BROWSABLE_BOUNTY_STATUSES);
+        }
+
+        if (!filters.includeTest) {
+          query = query.eq('is_test', false);
         }
 
         if (filters.keywords) {
@@ -507,6 +513,10 @@ export const bountyService = {
               queryNoJoin = queryNoJoin.in('status', filters.status);
             } else {
               queryNoJoin = queryNoJoin.in('status', BROWSABLE_BOUNTY_STATUSES);
+            }
+
+            if (!filters.includeTest) {
+              queryNoJoin = queryNoJoin.eq('is_test', false);
             }
 
             if (filters.keywords) {
@@ -616,6 +626,8 @@ export const bountyService = {
   async getOpenCount(options?: {
     category?: string;
     workType?: 'online' | 'in_person';
+    /** Internal accounts only, opt-in — see hooks/useShowTestBounties.ts. */
+    includeTest?: boolean;
   }): Promise<number | null> {
     try {
       if (!isSupabaseConfigured) return null;
@@ -623,6 +635,7 @@ export const bountyService = {
         .from('bounties')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'open');
+      if (!options?.includeTest) query = query.eq('is_test', false);
       const category = options?.category;
       if (category && category !== 'all' && category !== 'everything') {
         query = query.eq('category', category);
@@ -660,6 +673,13 @@ export const bountyService = {
      * 'cancellation_requested'.
      */
     statuses?: string[];
+    /**
+     * Internal accounts only, opt-in (hooks/useShowTestBounties.ts). Ignored
+     * (test bounties always included) when `userId` is set — that path is a
+     * poster looking at their own bounties, who should see their own test
+     * ones regardless of this flag.
+     */
+    includeTest?: boolean;
   }): Promise<Bounty[]> {
     try {
       // Prefer Supabase when configured
@@ -690,6 +710,9 @@ export const bountyService = {
           query = query.in('status', options.statuses);
         } else if (!options?.includeArchived) {
           query = query.neq('status', 'archived');
+        }
+        if (!options?.userId && !options?.includeTest) {
+          query = query.eq('is_test', false);
         }
 
         const limit = options?.limit ?? 20;

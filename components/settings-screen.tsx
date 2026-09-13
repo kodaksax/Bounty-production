@@ -7,6 +7,7 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } f
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthProfile } from '../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile';
+import { useShowTestBounties } from '../hooks/useShowTestBounties';
 import { useAdmin } from '../lib/admin-context';
 import { type BountyFormat, useBountyFormat } from '../lib/bounty-format-context';
 import { BOUNTY_FORMAT_OPTIONS } from '../lib/bounty-format-options';
@@ -67,6 +68,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
 
   const { profile: authProfile } = useAuthProfile();
   useNormalizedProfile();
+  const { showTestBounties, setShowTestBounties } = useShowTestBounties();
 
   const handleAdminTabToggle = async (value: boolean) => {
     await setAdminTabEnabled(value);
@@ -318,6 +320,30 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
                   thumbColor={theme.surface}
                   ios_backgroundColor={theme.border}
                   accessibilityLabel="Toggle admin tab visibility"
+                />
+              }
+            />
+          </SettingsSection>
+        )}
+
+        {authProfile?.is_internal && (
+          <SettingsSection title="Internal">
+            <SettingsRow
+              icon="science"
+              label="Show Test Bounties"
+              description={
+                showTestBounties
+                  ? 'Test bounties from internal accounts appear in your feed/search.'
+                  : 'Test bounties are hidden, same as every real hunter sees.'
+              }
+              right={
+                <Switch
+                  value={showTestBounties}
+                  onValueChange={setShowTestBounties}
+                  trackColor={{ false: theme.border, true: theme.primary }}
+                  thumbColor={theme.surface}
+                  ios_backgroundColor={theme.border}
+                  accessibilityLabel="Toggle test bounty visibility"
                 />
               }
             />

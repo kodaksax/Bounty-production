@@ -62,6 +62,12 @@ export async function searchBountiesNearby(params: {
   category?: string | null;
   limit?: number;
   offset?: number;
+  /**
+   * Internal accounts only, opt-in — see hooks/useShowTestBounties.ts. The
+   * RPC itself re-checks the caller is internal server-side, so passing true
+   * as a non-internal user is a no-op, not a leak.
+   */
+  includeTest?: boolean;
 }): Promise<NearbyBounty[]> {
   try {
     const { data, error } = await supabase.rpc('search_bounties_nearby', {
@@ -71,6 +77,7 @@ export async function searchBountiesNearby(params: {
       p_category: params.category ?? null,
       p_limit: params.limit ?? 50,
       p_offset: params.offset ?? 0,
+      p_include_test: params.includeTest ?? false,
     });
     if (error) {
       logger.error('search_bounties_nearby rpc error', { error, params });

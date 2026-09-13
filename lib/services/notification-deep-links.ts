@@ -48,6 +48,12 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'bounty_quality_nudge' && data.bountyId) {
         return { kind: 'route', path: `/postings/${data.bountyId}?openEdit=true` };
       }
+      // Poster-facing pending-application nudge: go straight to the
+      // applicant management screen (where Accept/Decline live), not the
+      // public bounty view -- same reasoning as the quality nudge above.
+      if (ctx.type === 'application_pending_reminder' && data.bountyId) {
+        return { kind: 'route', path: `/postings/${data.bountyId}` };
+      }
       if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}?source=notification` };
       return { kind: 'none' };
     }

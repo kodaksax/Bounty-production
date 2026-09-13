@@ -23,6 +23,8 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   bounty_expiry: 'marketplace',
   review_needed: 'marketplace',
   bounty_quality_nudge: 'marketplace',
+  application_pending_reminder: 'marketplace',
+  application_expired: 'marketplace',
 
   message: 'messages',
 

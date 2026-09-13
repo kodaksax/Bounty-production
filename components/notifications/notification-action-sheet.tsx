@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { bountyRequestService } from 'lib/services/bounty-request-service';
+import { analyticsService } from 'lib/services/analytics-service';
 import { capture as posthogCapture } from 'lib/posthog';
 import { notificationService } from 'lib/services/notification-service';
 import { resolveNotificationDeepLink } from 'lib/services/notification-deep-links';
@@ -87,7 +88,20 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     if (!requestId) return;
     setBusy('accept');
     try {
-      await bountyRequestService.acceptRequest(requestId);
+      const result = await bountyRequestService.acceptRequest(requestId);
+      if (result) {
+        // useAcceptRequest.ts is the only other place this fires; accepting
+        // from a push notification instead of the in-app list used to skip
+        // it entirely, undercounting the canonical acceptance funnel.
+        void analyticsService
+          .trackEvent('application_accepted', {
+            role: 'poster',
+            bounty_id: notification?.data?.bountyId ? String(notification.data.bountyId) : undefined,
+            application_id: String(requestId),
+            hunter_id: notification?.data?.hunterId ? String(notification.data.hunterId) : undefined,
+          })
+          .catch(() => {});
+      }
       posthogCapture('notification_action_completed', {
         notification_type: notification?.type,
         action: 'accept_application',

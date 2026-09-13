@@ -78,6 +78,12 @@ export type Bounty = {
   // Set when the poster approves the hunter's submission (status -> 'completed').
   // See lib/services/completion-service.ts:approveSubmission.
   completed_at?: string | null;
+  // True when the poster is an internal/QA profile (profiles.is_internal),
+  // defaulted server-side by fn_bounties_default_is_test at insert time.
+  // Excluded from the hunter feed, search, and nearby-bounty notifications
+  // unless the viewer is internal and has opted in — see
+  // hooks/useShowTestBounties.ts and 20260913010000_bounty_test_flag_and_internal_profiles.sql.
+  is_test?: boolean;
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)
@@ -134,6 +140,10 @@ export type Profile = {
   // Last time the user was observed active in-app (throttled). Drives
   // lib/moments/registry.ts's inactive_user_return moment.
   last_session_at?: string | null
+  // True for the team's own QA/seed accounts. Single source of truth for
+  // "is this a real user" — see lib/services/auth-profile-service.ts's
+  // AuthProfile.is_internal and hooks/useShowTestBounties.ts.
+  is_internal?: boolean
 }
 
 export type Skill = {

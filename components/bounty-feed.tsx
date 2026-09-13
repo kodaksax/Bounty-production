@@ -41,6 +41,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveHunters } from '../hooks/useActiveHunters';
 import { useForegroundRefresh } from '../hooks/useForegroundRefresh';
+import { useShowTestBounties } from '../hooks/useShowTestBounties';
 import { useValidUserId } from '../hooks/useValidUserId';
 import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags';
 import { useBountyFormat } from '../lib/bounty-format-context';
@@ -188,6 +189,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // on count-fetch failure), in which case the badge falls back to the loaded
   // count. See bountyService.getOpenCount.
   const [activeCount, setActiveCount] = useState<number | null>(null);
+
+  // "See test bounties anyway" — internal accounts only (bounty_test_flag_
+  // and_internal_profiles migration). isInternal reads the already-fetched
+  // profile rather than a hook, matching this file's existing
+  // authProfileService usage below; the persisted toggle itself is
+  // meaningless (and never rendered) for anyone else.
+  const isInternalViewer = !!authProfileService.getCurrentProfile()?.is_internal;
+  const { showTestBounties } = useShowTestBounties();
+  const includeTestBounties = isInternalViewer && showTestBounties;
 
   const { theme } = useAppThemeContext();
   const { bountyFormat } = useBountyFormat();
@@ -586,11 +596,17 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                   radiusMiles: distanceFilter,
                   limit: PAGE_SIZE,
                   offset: pageOffset,
+                  includeTest: includeTestBounties,
                 }).then(rows => rows.map(nearbyToBounty)),
                 API_TIMEOUTS.DEFAULT
               )
             : await withTimeout(
-                bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
+                bountyService.getAll({
+                  status: 'open',
+                  limit: PAGE_SIZE,
+                  offset: pageOffset,
+                  includeTest: includeTestBounties,
+                }),
                 API_TIMEOUTS.DEFAULT
               );
         const pageRows = Array.isArray(fetchedBounties) ? fetchedBounties : [];
@@ -646,7 +662,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         setLoadingMore(false);
       }
     },
-    [distanceFilter, userLocation]
+    [distanceFilter, userLocation, includeTestBounties]
   );
 
   // Distance filter changes what's fetched from the server (unlike category,
@@ -665,15 +681,32 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distanceFilter]);
 
+  // Same reset-and-reload treatment for the internal "show test bounties"
+  // toggle — it changes what the server returns, not something client-side
+  // filtering can retrofit onto an already-loaded page. Skips its first run
+  // for the same reason as the distance-filter effect above (the initial
+  // mount load already reads the current value).
+  const isFirstIncludeTestRun = useRef(true);
+  useEffect(() => {
+    if (isFirstIncludeTestRun.current) {
+      isFirstIncludeTestRun.current = false;
+      return;
+    }
+    offsetRef.current = 0;
+    setHasMore(true);
+    loadBounties({ reset: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeTestBounties]);
+
   // Server-side total of open bounties for the active category. Cheap
   // (head/count query, no rows) and independent of pagination, so the "N active"
   // badge stays stable while the user scrolls. Refreshes on mount + category
   // change (via the effect below) and on pull-to-refresh.
   const refreshActiveCount = useCallback(async () => {
     setActiveCount(null);
-    const c = await bountyService.getOpenCount({ category: activeCategory });
+    const c = await bountyService.getOpenCount({ category: activeCategory, includeTest: includeTestBounties });
     setActiveCount(c);
-  }, [activeCategory]);
+  }, [activeCategory, includeTestBounties]);
 
   useEffect(() => {
     refreshActiveCount();

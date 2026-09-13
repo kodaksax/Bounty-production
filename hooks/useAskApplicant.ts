@@ -5,6 +5,7 @@ import type { BountyRequestWithDetails } from 'lib/services/bounty-request-servi
 import { messageService } from 'lib/services/message-service';
 import { analyticsService } from 'lib/services/analytics-service';
 import { logClientError } from 'lib/services/monitoring';
+import { supabase } from 'lib/supabase';
 
 interface UseAskApplicantParams {
   /** The applicant list currently on screen, used to resolve a request id. */
@@ -72,6 +73,22 @@ export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
           requestId: String(requestId),
           hunterId,
         });
+
+        // Mark this specific application as one the poster engaged with
+        // before deciding, so the request-expiry sweep never auto-closes it
+        // out from under an active conversation. Stamped via RPC (server's
+        // now()), not a client timestamp -- a skewed device clock must never
+        // be able to move the expiry watermark. Best-effort and silent:
+        // missing this stamp only costs the (unlikely) case of this exact
+        // request also going unanswered for request_expiry_hours, never a
+        // user-facing failure.
+        void supabase
+          .rpc('fn_mark_poster_interacted', { p_request_id: String(requestId) })
+          .then(({ error }) => {
+            if (error) {
+              logClientError('Failed to stamp poster_interacted_at', { error, requestId });
+            }
+          });
 
         router.push(`/tabs/messenger/${encodeURIComponent(String(conversation.id))}` as never);
       } catch (error) {

@@ -29,6 +29,7 @@ import {
 } from '../../components/ui/search-bar-row';
 import { Skeleton } from '../../components/ui/skeleton';
 import { useAccessibleAnimation } from '../../hooks/use-accessible-animation';
+import { useShowTestBounties } from '../../hooks/useShowTestBounties';
 import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
 import { A11Y, SPACING } from '../../lib/constants/accessibility';
 import { analyticsService } from '../../lib/services/analytics-service';
@@ -376,6 +377,9 @@ export default function EnhancedSearchScreen() {
     };
   }, []);
 
+  const isInternalViewer = !!authProfileService.getCurrentProfile()?.is_internal;
+  const { showTestBounties } = useShowTestBounties();
+
   const performBountySearch = useCallback(
     async (searchQuery: string, searchFilters: BountySearchFilters) => {
       const requestId = ++searchRequestIdRef.current;
@@ -386,6 +390,7 @@ export default function EnhancedSearchScreen() {
           keywords: searchQuery.trim() || undefined,
           ...searchFilters,
           limit: 50,
+          includeTest: isInternalViewer && showTestBounties,
         });
         if (requestId !== searchRequestIdRef.current) return; // superseded by a newer search
         // Keep the server's sort order (date/amount), then move listings that
@@ -435,7 +440,7 @@ export default function EnhancedSearchScreen() {
         if (requestId === searchRequestIdRef.current) setIsSearching(false);
       }
     },
-    [mapBounty]
+    [mapBounty, isInternalViewer, showTestBounties]
   );
 
   const performUserSearch = useCallback(async (searchQuery: string) => {
