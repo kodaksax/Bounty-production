@@ -146,9 +146,9 @@ export const bountyService = {
         // No `profiles` embed here — see the comment in `getAll`. The base
         // table is self-only under RLS, so the embed returned a null poster for
         // every bounty the caller didn't post. Enrich via `public_profiles`.
-        // maybeSingle(): a removed or RLS-hidden bounty returns { data: null }
-        // with no error, so the caller lands on the not-found screen instead of
-        // .single() raising PGRST116 and being treated as a load failure.
+        // maybeSingle(): a removed or RLS-hidden bounty resolves to
+        // { data: null, error: null }. We still return null either way (outer
+        // catch also maps errors to null), but this avoids a noisy PGRST116 log.
         const { data, error } = await supabase
           .from('bounties')
           .select('*')

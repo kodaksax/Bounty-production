@@ -9,7 +9,7 @@ import { useNotifications } from 'lib/context/notification-context';
 import { capture as posthogCapture } from 'lib/posthog';
 import { notificationService } from 'lib/services/notification-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
-import { resolveNotificationDeepLink, supportsActionSheet } from 'lib/services/notification-deep-links';
+import { getNotificationBountyId, resolveNotificationDeepLink, supportsActionSheet } from 'lib/services/notification-deep-links';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import type { Notification, NotificationCategory } from 'lib/types';
@@ -116,7 +116,7 @@ export function NotificationCenterScreen() {
     posthogCapture('notification_opened', {
       notification_type: notification.type,
       category: notification.category,
-      bounty_id: notification.data?.bountyId ?? null,
+      bounty_id: getNotificationBountyId(notification.data),
       deep_link_kind: action.kind,
       surface: 'notification_center',
     });

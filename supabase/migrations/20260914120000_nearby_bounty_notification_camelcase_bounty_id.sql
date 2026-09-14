@@ -23,8 +23,13 @@ SET search_path = public
 AS $$
 DECLARE
   v_poster_id   uuid;
-  v_recipients  jsonb;
+  v_candidates  uuid[];
 BEGIN
+  -- Test bounties never page a real hunter, regardless of match quality.
+  IF COALESCE(NEW.is_test, false) THEN
+    RETURN NEW;
+  END IF;
+
   -- Nothing to match without a zip code on the bounty.
   IF NEW.zip_code IS NULL OR btrim(NEW.zip_code) = '' THEN
     RETURN NEW;
@@ -32,24 +37,19 @@ BEGIN
 
   v_poster_id := COALESCE(NEW.poster_id, NEW.user_id);
 
-  SELECT jsonb_agg(id)
-  INTO v_recipients
+  SELECT array_agg(id)
+  INTO v_candidates
   FROM public.profiles
   WHERE zip_code = NEW.zip_code
     AND id IS DISTINCT FROM v_poster_id;
 
-  -- No matching users (or only the poster themselves) — nothing to send.
-  IF v_recipients IS NULL OR jsonb_array_length(v_recipients) = 0 THEN
-    RETURN NEW;
-  END IF;
-
-  INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
-  VALUES (
-    v_recipients,
+  PERFORM public.fn_score_and_dispatch_bounty_notification(
+    NEW.id,
+    v_candidates,
+    1,
     'New Bounty Near You',
     '"' || NEW.title || '" was just posted in your ZIP code (' || NEW.zip_code || ').',
-    jsonb_build_object('bountyId', NEW.id, 'type', 'bounty_nearby', 'zip_code', NEW.zip_code),
-    NEW.id::text
+    jsonb_build_object('match', 'zip', 'zip_code', NEW.zip_code)
   );
 
   RETURN NEW;
@@ -66,18 +66,23 @@ SET search_path = public, extensions
 AS $$
 DECLARE
   v_poster_id  uuid;
-  v_recipients jsonb;
+  v_candidates uuid[];
   v_place      text;
   v_body       text;
 BEGIN
+  -- Test bounties never page a real hunter, regardless of match quality.
+  IF COALESCE(NEW.is_test, false) THEN
+    RETURN NEW;
+  END IF;
+
   IF NEW.geom IS NULL THEN
     RETURN NEW;
   END IF;
 
   v_poster_id := COALESCE(NEW.poster_id, NEW.user_id);
 
-  SELECT jsonb_agg(DISTINCT hsa.hunter_id)
-  INTO v_recipients
+  SELECT array_agg(DISTINCT hsa.hunter_id)
+  INTO v_candidates
   FROM public.hunter_service_areas hsa
   JOIN public.profiles p ON p.id = hsa.hunter_id
   WHERE hsa.radius_miles IS NOT NULL
@@ -96,10 +101,6 @@ BEGIN
       AND p.zip_code = NEW.zip_code
     );
 
-  IF v_recipients IS NULL OR jsonb_array_length(v_recipients) = 0 THEN
-    RETURN NEW;
-  END IF;
-
   -- Coarse, public-safe locality (district or city, captured by reverse
   -- geocoding at post time). Deliberately NOT NEW.location, which may be the
   -- exact street address and must not be broadcast.
@@ -111,13 +112,13 @@ BEGIN
     ELSE '"' || NEW.title || '" was just posted near you.'
   END;
 
-  INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
-  VALUES (
-    v_recipients,
+  PERFORM public.fn_score_and_dispatch_bounty_notification(
+    NEW.id,
+    v_candidates,
+    1,
     'New Bounty Near You',
     v_body,
-    jsonb_build_object('bountyId', NEW.id, 'type', 'bounty_nearby', 'match', 'service_area', 'place', v_place),
-    NEW.id::text
+    jsonb_build_object('match', 'service_area', 'place', v_place)
   );
 
   RETURN NEW;

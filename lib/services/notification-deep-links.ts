@@ -25,6 +25,12 @@ export interface NotificationDeepLinkContext {
   data?: Notification['data'];
 }
 
+export function getNotificationBountyId(data?: Notification['data']): string | null {
+  if (!data) return null;
+  const bountyId = data.bountyId ?? data.bounty_id;
+  return bountyId == null ? null : String(bountyId);
+}
+
 /**
  * Categories/types whose single (non-bundled) form supports a multi-action
  * rich sheet (Accept/Decline/Reply/Withdraw). Bundled notifications and every
@@ -43,10 +49,8 @@ export function supportsActionSheet(ctx: NotificationDeepLinkContext, notificati
 export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): DeepLinkAction {
   const category = ctx.category ?? categoryForNotificationType(ctx.type);
   const data = ctx.data ?? {};
-  // The relevance engine writes the camelCase `bountyId`, but the two older
-  // nearby-bounty triggers write snake_case `bounty_id`. Accept both so a tap
-  // resolves regardless of which trigger produced the push.
-  const bountyId = data.bountyId ?? data.bounty_id;
+  // Accept both nearby-bounty payload keys.
+  const bountyId = getNotificationBountyId(data);
 
   switch (category) {
     case 'marketplace': {

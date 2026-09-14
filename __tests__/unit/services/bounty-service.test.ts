@@ -120,6 +120,19 @@ describe('bountyService', () => {
     expect(fromCalls[1]).toBe('public_profiles');
   });
 
+  it('getById returns null when maybeSingle resolves null data without error', async () => {
+    supabase.from.mockImplementationOnce(() => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+        })),
+      })),
+    }));
+
+    const res = await bountyService.getById(999);
+    expect(res).toBeNull();
+  });
+
   it('addAttachmentToBounty merges attachments and updates via Supabase', async () => {
     // Spy on internal getById to return an existing bounty with attachments_json string
     const spyGet = jest
