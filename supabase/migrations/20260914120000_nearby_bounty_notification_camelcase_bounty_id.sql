@@ -10,9 +10,11 @@
 -- them resolved to nothing and opened no screen.
 --
 -- This redefines both trigger functions to write `bountyId` in the data
--- payload. The `bounty_id` column of notifications_outbox is unchanged — only
--- the JSON `data` key that the client reads changes. The resolver also accepts
--- the legacy `bounty_id` key, so pushes already queued keep working.
+-- payload. It keeps the current behaviour otherwise: the `is_test` guard (added
+-- in 20260913010000), the direct insert into notifications_outbox, and the
+-- recipient guard. Only the JSON `data` key the client reads changes; the
+-- notifications_outbox `bounty_id` column is unchanged. The resolver also
+-- accepts the legacy `bounty_id` key, so pushes already queued keep working.
 
 -- 1. ZIP-match trigger (20260714c_notify_zip_matched_users_on_bounty_insert.sql)
 CREATE OR REPLACE FUNCTION public.fn_notify_zip_matched_bounty()
@@ -23,7 +25,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_poster_id   uuid;
-  v_candidates  uuid[];
+  v_recipients  jsonb;
 BEGIN
   -- Test bounties never page a real hunter, regardless of match quality.
   IF COALESCE(NEW.is_test, false) THEN
@@ -37,27 +39,31 @@ BEGIN
 
   v_poster_id := COALESCE(NEW.poster_id, NEW.user_id);
 
-  SELECT array_agg(id)
-  INTO v_candidates
+  SELECT jsonb_agg(id)
+  INTO v_recipients
   FROM public.profiles
   WHERE zip_code = NEW.zip_code
     AND id IS DISTINCT FROM v_poster_id;
 
-  PERFORM public.fn_score_and_dispatch_bounty_notification(
-    NEW.id,
-    v_candidates,
-    1,
+  -- No matching users (or only the poster themselves) — nothing to send.
+  IF v_recipients IS NULL OR jsonb_array_length(v_recipients) = 0 THEN
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
+  VALUES (
+    v_recipients,
     'New Bounty Near You',
     '"' || NEW.title || '" was just posted in your ZIP code (' || NEW.zip_code || ').',
-    jsonb_build_object('match', 'zip', 'zip_code', NEW.zip_code)
+    jsonb_build_object('bountyId', NEW.id, 'type', 'bounty_nearby', 'zip_code', NEW.zip_code),
+    NEW.id::text
   );
 
   RETURN NEW;
 END;
 $$;
 
--- 2. Service-area trigger
--- (20260728120000_notify_service_area_include_city_in_message.sql)
+-- 2. Service-area trigger (20260727120000_notify_service_area_matched_bounty.sql)
 CREATE OR REPLACE FUNCTION public.fn_notify_service_area_matched_bounty()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -66,9 +72,7 @@ SET search_path = public, extensions
 AS $$
 DECLARE
   v_poster_id  uuid;
-  v_candidates uuid[];
-  v_place      text;
-  v_body       text;
+  v_recipients jsonb;
 BEGIN
   -- Test bounties never page a real hunter, regardless of match quality.
   IF COALESCE(NEW.is_test, false) THEN
@@ -81,8 +85,8 @@ BEGIN
 
   v_poster_id := COALESCE(NEW.poster_id, NEW.user_id);
 
-  SELECT array_agg(DISTINCT hsa.hunter_id)
-  INTO v_candidates
+  SELECT jsonb_agg(DISTINCT hsa.hunter_id)
+  INTO v_recipients
   FROM public.hunter_service_areas hsa
   JOIN public.profiles p ON p.id = hsa.hunter_id
   WHERE hsa.radius_miles IS NOT NULL
@@ -101,24 +105,17 @@ BEGIN
       AND p.zip_code = NEW.zip_code
     );
 
-  -- Coarse, public-safe locality (district or city, captured by reverse
-  -- geocoding at post time). Deliberately NOT NEW.location, which may be the
-  -- exact street address and must not be broadcast.
-  v_place := NULLIF(btrim(COALESCE(NEW.neighborhood, '')), '');
+  IF v_recipients IS NULL OR jsonb_array_length(v_recipients) = 0 THEN
+    RETURN NEW;
+  END IF;
 
-  v_body := CASE
-    WHEN v_place IS NOT NULL
-      THEN '"' || NEW.title || '" was just posted near you in ' || v_place || '.'
-    ELSE '"' || NEW.title || '" was just posted near you.'
-  END;
-
-  PERFORM public.fn_score_and_dispatch_bounty_notification(
-    NEW.id,
-    v_candidates,
-    1,
+  INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
+  VALUES (
+    v_recipients,
     'New Bounty Near You',
-    v_body,
-    jsonb_build_object('match', 'service_area', 'place', v_place)
+    '"' || NEW.title || '" was just posted near you.',
+    jsonb_build_object('bountyId', NEW.id, 'type', 'bounty_nearby', 'match', 'service_area'),
+    NEW.id::text
   );
 
   RETURN NEW;
