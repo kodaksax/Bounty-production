@@ -2,6 +2,7 @@ import { ThemeProvider } from 'components/theme-provider';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
+import { AppMetrics, AppMetricsRoot } from 'expo-observe';
 import { Slot, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
@@ -244,6 +245,9 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         try {
           hideNativeSplashSafely();
         } catch {}
+        try {
+          AppMetrics.markInteractive();
+        } catch {}
         setPhase('app');
       }
     }, SAFETY_MS);
@@ -324,6 +328,9 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         try {
           hideNativeSplashSafely();
         } catch {}
+        try {
+          AppMetrics.markInteractive();
+        } catch {}
         setPhase('app');
       }
     };
@@ -335,6 +342,9 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     if (startupDone.value && fontsLoaded && !cancelled) {
       try {
         hideNativeSplashSafely();
+      } catch {}
+      try {
+        AppMetrics.markInteractive();
       } catch {}
       setPhase('app');
     }
@@ -530,4 +540,4 @@ const styles = StyleSheet.create({
 // Sentry still captures errors/breadcrumbs via initializeSentry() + the ErrorBoundary
 // onError callback + the global error handlers in lib/error-handling.ts.
 
-export default RootLayout;
+export default AppMetricsRoot.wrap(RootLayout);
