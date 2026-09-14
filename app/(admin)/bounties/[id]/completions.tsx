@@ -1,4 +1,4 @@
-// app/(admin)/bounty/[id]/completions.tsx - Completion submissions for one bounty
+// app/(admin)/bounties/[id]/completions.tsx - Completion submissions for one bounty
 //
 // New screen. `completion_submissions` is the evidence record for "the hunter
 // says the work is done" — the single most important artefact when

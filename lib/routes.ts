@@ -51,14 +51,20 @@ export const ROUTES = {
     VERIFICATIONS: '/(admin)/verifications',
     
     // Bounty Management
+    //
+    // The admin bounty-detail screens live under `bounties/[id]`, not
+    // `bounty/[id]`. Expo Router strips the `(admin)` group from the URL, so a
+    // `/(admin)/bounty/[id]` file resolves to the same `/bounty/[id]` path as
+    // the user-facing `app/bounty/[id]` screen and shadowed it. The distinct
+    // `bounties` segment keeps the two route trees apart.
     BOUNTIES: '/(admin)/bounties',
-    BOUNTY_DETAIL: (id: string | number) => `/(admin)/bounty/${id}` as const,
+    BOUNTY_DETAIL: (id: string | number) => `/(admin)/bounties/${id}` as const,
     /** Hunter applications for one bounty. */
-    BOUNTY_REQUESTS: (id: string | number) => `/(admin)/bounty/${id}/requests` as const,
+    BOUNTY_REQUESTS: (id: string | number) => `/(admin)/bounties/${id}/requests` as const,
     /** Completion submissions (proof of work) for one bounty. */
-    BOUNTY_COMPLETIONS: (id: string | number) => `/(admin)/bounty/${id}/completions` as const,
+    BOUNTY_COMPLETIONS: (id: string | number) => `/(admin)/bounties/${id}/completions` as const,
     /** Canonical event ledger for one bounty: the real lifecycle sequence. */
-    BOUNTY_TIMELINE: (id: string | number) => `/(admin)/bounty/${id}/timeline` as const,
+    BOUNTY_TIMELINE: (id: string | number) => `/(admin)/bounties/${id}/timeline` as const,
     
     // Financial & Transactions
     TRANSACTIONS: '/(admin)/transactions',

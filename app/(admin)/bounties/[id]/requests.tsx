@@ -1,4 +1,4 @@
-// app/(admin)/bounty/[id]/requests.tsx - Hunter applications for one bounty
+// app/(admin)/bounties/[id]/requests.tsx - Hunter applications for one bounty
 //
 // New screen. `bounty_requests` is a core marketplace table (237 rows in
 // production) that had no admin surface whatsoever: when investigating a

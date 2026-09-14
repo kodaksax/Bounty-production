@@ -1,4 +1,4 @@
-// app/(admin)/bounty/[id]/timeline.tsx — one bounty's lifecycle
+// app/(admin)/bounties/[id]/timeline.tsx — one bounty's lifecycle
 //
 // The actual sequence of what happened, oldest first, with every entry
 // labelled by provenance:
