@@ -3,10 +3,7 @@ import type { Bounty } from "lib/services/database.types";
 import React, { useState, useMemo } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +11,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardAvoidingScreen, KeyboardAwareScrollView } from "./ui/keyboard-avoiding";
+import { usePostingPolicy } from "../hooks/usePostingPolicy";
 import { useAppThemeContext } from "../lib/themes/AppThemeContext";
 import type { AppTheme } from "../lib/themes/types";
 
@@ -33,6 +32,12 @@ export function EditPostingModal({
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  // The posting policy is enforced by an INSERT-only trigger, so an edit is
+  // the one place a poster could still turn a listing into For Honor (or drop
+  // it below the minimum) while the server has those disabled. Offer only what
+  // a new post could be; a bounty that is already For Honor keeps its toggle.
+  const { honorPostsEnabled, minimumAmount } = usePostingPolicy();
+  const canToggleForHonor = honorPostsEnabled || !!bounty.is_for_honor;
 
   const [formData, setFormData] = useState({
     title: bounty.title || "",
@@ -68,8 +73,15 @@ export function EditPostingModal({
       setError("Description is required");
       return;
     }
-    if (!formData.isForHonor && formData.amount <= 0) {
+    if (formData.amount <= 0 && !formData.isForHonor) {
       setError("Amount must be greater than 0");
+      return;
+    }
+    // Only a changed amount must meet today's minimum: a listing posted before
+    // the minimum existed can still have its title or description edited.
+    const amountChanged = formData.amount !== (bounty.amount || 0) || formData.isForHonor !== !!bounty.is_for_honor;
+    if (!formData.isForHonor && amountChanged && formData.amount < minimumAmount) {
+      setError(`Amount must be at least $${minimumAmount}`);
       return;
     }
 
@@ -115,10 +127,10 @@ export function EditPostingModal({
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.container}
-      >
+      {/* RN's KeyboardAvoidingView computes no overlap inside a <Modal>, so the
+          lower fields sat under the iOS keyboard (same root cause as GitHub
+          #750; see docs/KEYBOARD_AVOIDANCE_STANDARD.md). */}
+      <KeyboardAvoidingScreen style={styles.container}>
         <View style={styles.overlay}>
           <View style={styles.modal}>
             {/* Header */}
@@ -133,14 +145,13 @@ export function EditPostingModal({
               </TouchableOpacity>
             </View>
 
-            <ScrollView
+            <KeyboardAwareScrollView
               style={styles.content}
               contentContainerStyle={[
                 styles.contentContainer,
                 // ensure actions aren't clipped behind bottom nav / home indicator
                 { paddingBottom: Math.max(insets.bottom, 16) + 60 },
               ]}
-              keyboardShouldPersistTaps="handled"
             >
               {/* Title */}
               <View style={styles.field}>
@@ -177,31 +188,33 @@ export function EditPostingModal({
               </View>
 
               {/* For Honor toggle */}
-              <TouchableOpacity
-                style={styles.toggleRow}
-                onPress={() =>
-                  setFormData({ ...formData, isForHonor: !formData.isForHonor })
-                }
-                disabled={isSubmitting}
-              >
-                <View style={styles.toggleLeft}>
-                  <MaterialIcons name="favorite" size={20} color="#059669" />
-                  <Text style={styles.toggleLabel}>For Honor</Text>
-                </View>
-                <View
-                  style={[
-                    styles.toggle,
-                    formData.isForHonor && styles.toggleActive,
-                  ]}
+              {canToggleForHonor && (
+                <TouchableOpacity
+                  style={styles.toggleRow}
+                  onPress={() =>
+                    setFormData({ ...formData, isForHonor: !formData.isForHonor })
+                  }
+                  disabled={isSubmitting}
                 >
+                  <View style={styles.toggleLeft}>
+                    <MaterialIcons name="favorite" size={20} color="#059669" />
+                    <Text style={styles.toggleLabel}>For Honor</Text>
+                  </View>
                   <View
                     style={[
-                      styles.toggleThumb,
-                      formData.isForHonor && styles.toggleThumbActive,
+                      styles.toggle,
+                      formData.isForHonor && styles.toggleActive,
                     ]}
-                  />
-                </View>
-              </TouchableOpacity>
+                  >
+                    <View
+                      style={[
+                        styles.toggleThumb,
+                        formData.isForHonor && styles.toggleThumbActive,
+                      ]}
+                    />
+                  </View>
+                </TouchableOpacity>
+              )}
 
               {/* Amount (only if not for honor) */}
               {!formData.isForHonor && (
@@ -266,10 +279,10 @@ export function EditPostingModal({
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingScreen>
     </Modal>
   );
 }

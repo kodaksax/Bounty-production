@@ -39,12 +39,12 @@ describe('resolveNotificationDeepLink: bounty_quality_nudge', () => {
 });
 
 describe('resolveNotificationDeepLink: application', () => {
-  test('routes a new application to the poster applicant-management screen where Accept/Decline live', () => {
+  test('routes a new application to the poster Requests tab where Accept/Decline live', () => {
     const action = resolveNotificationDeepLink({
       type: 'application',
       data: { bountyId: 'abc-123' },
     });
-    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123' });
+    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?screen=messages&initialTab=requests' });
   });
 
   test('routes the pending-application reminder to the same screen', () => {
@@ -63,9 +63,9 @@ describe('resolveNotificationDeepLink: application', () => {
     expect(action.kind === 'route' && action.path).not.toMatch(/^\/bounty\//);
   });
 
-  test('resolves to none when the payload is missing bountyId', () => {
+  test('still routes when the payload is missing bountyId', () => {
     const action = resolveNotificationDeepLink({ type: 'application', data: {} });
-    expect(action).toEqual({ kind: 'none' });
+    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?screen=messages&initialTab=requests' });
   });
 });
 
@@ -76,5 +76,47 @@ describe('resolveNotificationDeepLink: bounty_nearby (regression guard)', () => 
       data: { bountyId: 'xyz-789' },
     });
     expect(action).toEqual({ kind: 'route', path: '/bounty/xyz-789?source=notification' });
+  });
+
+  // The two older nearby-bounty triggers write the id as snake_case
+  // `bounty_id`. Before the resolver accepted both keys, these taps fell
+  // through to { kind: 'none' } and opened nothing.
+  test('routes when the trigger payload uses the snake_case bounty_id key', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'bounty_nearby',
+      data: { bounty_id: 'xyz-789' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/bounty/xyz-789?source=notification' });
+  });
+
+  test('prefers camelCase bountyId when both keys are present', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'bounty_nearby',
+      data: { bountyId: 'camel-1', bounty_id: 'snake-2' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/bounty/camel-1?source=notification' });
+  });
+});
+
+describe('resolveNotificationDeepLink: application (GitHub #809)', () => {
+  test('sends the poster to the Requests tab where applications are accepted or declined', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'application',
+      data: { bountyId: 'abc-123', hunterId: 'h-1' },
+    });
+    expect(action).toEqual({
+      kind: 'route',
+      path: '/tabs/bounty-app?screen=messages&initialTab=requests',
+    });
+  });
+
+  test('still routes a bundled application notification that carries no bountyId', () => {
+    const action = resolveNotificationDeepLink({ type: 'application', data: {} });
+    expect(action.kind).toBe('route');
+  });
+
+  test('never resolves to a /bounty/:id URL (which the admin console used to shadow)', () => {
+    const action = resolveNotificationDeepLink({ type: 'application', data: { bountyId: 'abc-123' } });
+    expect(action.kind === 'route' && action.path).not.toMatch(/^\/bounty\//);
   });
 });

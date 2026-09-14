@@ -35,7 +35,7 @@ const OVERRIDES: Record<string, string> = {
   dispute_disputeid: 'dispute_detail',
   dispute_create: 'dispute_create',
   admin: 'admin_dashboard',
-  admin_bounties_id: 'admin_bounty_detail',
+  admin_bounty_id: 'admin_bounty_detail',
   admin_user_id: 'admin_user_detail',
   admin_disputes_id: 'admin_dispute_detail',
   wallet_connect_embedded_onboarding: 'wallet_connect_onboarding',

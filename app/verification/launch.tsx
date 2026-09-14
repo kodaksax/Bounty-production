@@ -16,10 +16,17 @@ import { BrandingLogo } from '../../components/ui/branding-logo';
 import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { SPACING } from '../../lib/constants/accessibility';
+import { analyticsService } from '../../lib/services/analytics-service';
+import { reportError } from '../../lib/services/sentry-service';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { getNetworkErrorMessage } from '../../lib/utils/network-connectivity';
+
+// Distinguishes this native Stripe Identity trust-badge flow from the Stripe
+// Connect payout onboarding, which emits the same identity_* events with
+// source 'stripe_connect_onboarding' (see app/wallet/connect/embedded-onboarding.tsx).
+const IDENTITY_SOURCE = 'stripe_identity_verification';
 
 export default function VerificationLaunchScreen() {
   const router = useRouter();
@@ -55,8 +62,13 @@ export default function VerificationLaunchScreen() {
   const handleStart = useCallback(async () => {
     setErrorMessage(null);
     setStarting(true);
+    // Marks the entry point of the funnel. Paired with identity_submitted (sheet
+    // finished) and the terminal identity_onboarding_outcome in pending.tsx, so a
+    // flow that dies inside present() is visible as a start with no submission.
+    void analyticsService.trackEvent('identity_onboarding_started', { source: IDENTITY_SOURCE });
     try {
       await present();
+      void analyticsService.trackEvent('identity_submitted', { source: IDENTITY_SOURCE });
       // present() resolves once the sheet is dismissed one way or another.
       // We don't trust its local status as authoritative -- Stripe's webhook
       // is the source of truth -- so always route to pending.tsx and let it
@@ -65,6 +77,14 @@ export default function VerificationLaunchScreen() {
       // shows a retry CTA if status comes back requires_input/canceled.
       router.replace('/verification/pending');
     } catch (err) {
+      // A JS-reachable failure (session/ephemeral-key fetch, or a sheet error
+      // surfaced to JS). A hard native crash never reaches here -- the start/
+      // submitted gap is what exposes that case. Report both so neither is silent.
+      void analyticsService.trackEvent('identity_onboarding_outcome', {
+        source: IDENTITY_SOURCE,
+        outcome: 'verify_error',
+      });
+      reportError(err);
       setErrorMessage(getNetworkErrorMessage(err));
     } finally {
       setStarting(false);

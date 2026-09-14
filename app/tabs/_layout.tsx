@@ -8,7 +8,7 @@
 // leaked (every request is anonymous and RLS returns 401 / zero rows), but the
 // screen is misleading and non-functional.
 //
-// This mirrors app/(admin)/_layout.tsx: a UX guard only. It keeps a
+// This mirrors app/admin/_layout.tsx: a UX guard only. It keeps a
 // session-less visitor off a screen whose every query would fail anyway and
 // hands them back to the root auth gate, which knows whether to show
 // onboarding, the sign-in form, or an account-blocked / environment-error
@@ -21,7 +21,7 @@
 // without changing the route (see the ScreenTracker note in app/_layout.tsx).
 // With no _layout here expo-router was already synthesising a Stack for the
 // segment; this file makes that explicit and adds the guard, matching
-// app/(admin)/_layout.tsx. Rendering <Tabs> instead would inject a second,
+// app/admin/_layout.tsx. Rendering <Tabs> instead would inject a second,
 // real tab bar.
 import type { Href } from 'expo-router';
 import { Redirect, Stack, usePathname } from 'expo-router';

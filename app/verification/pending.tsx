@@ -16,6 +16,7 @@ import { BrandingLogo } from '../../components/ui/branding-logo';
 import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { SPACING } from '../../lib/constants/accessibility';
+import { analyticsService } from '../../lib/services/analytics-service';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -23,6 +24,9 @@ import type { AppTheme } from '../../lib/themes/types';
 type IdentityStatus = 'unstarted' | 'requires_input' | 'processing' | 'verified' | 'canceled';
 
 const POLL_INTERVAL_MS = 4000;
+
+// Keep in step with app/verification/launch.tsx.
+const IDENTITY_SOURCE = 'stripe_identity_verification';
 
 export default function VerificationPendingScreen() {
   const router = useRouter();
@@ -34,6 +38,9 @@ export default function VerificationPendingScreen() {
   const [status, setStatus] = useState<IdentityStatus | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The poll fires every few seconds; emit the terminal funnel event only on the
+  // first status that resolves the flow, so one attempt reports one outcome.
+  const terminalFiredRef = useRef(false);
 
   const fetchStatus = useCallback(async () => {
     const accessToken = session?.access_token;
@@ -47,8 +54,23 @@ export default function VerificationPendingScreen() {
     setCheckFailed(false);
     setStatus(data.status as IdentityStatus);
     if (data.status === 'verified') {
+      if (!terminalFiredRef.current) {
+        terminalFiredRef.current = true;
+        void analyticsService.trackEvent('identity_verified', { source: IDENTITY_SOURCE });
+        void analyticsService.trackEvent('identity_onboarding_outcome', {
+          source: IDENTITY_SOURCE,
+          outcome: 'success',
+        });
+      }
       router.replace('/verification/verified');
     } else if (data.status === 'requires_input' || data.status === 'canceled') {
+      if (!terminalFiredRef.current) {
+        terminalFiredRef.current = true;
+        void analyticsService.trackEvent('identity_onboarding_outcome', {
+          source: IDENTITY_SOURCE,
+          outcome: data.status === 'requires_input' ? 'action_required' : 'cancelled',
+        });
+      }
       router.replace('/verification/rejected');
     }
   }, [session?.access_token, router]);

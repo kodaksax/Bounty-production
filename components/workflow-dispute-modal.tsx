@@ -4,10 +4,7 @@ import { useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,10 +13,14 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
+import { KeyboardAvoidingScreen, KeyboardAwareScrollView } from './ui/keyboard-avoiding'
 import { disputeService } from '../lib/services/dispute-service'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import type { LocalDisputeEvidence } from '../lib/types'
+
+/** Pinned footer (12pt padding + 48pt button + 12pt padding) plus breathing room. */
+const FOOTER_CLEARANCE = 88
 
 type Props = {
   visible: boolean
@@ -432,9 +433,14 @@ export function WorkflowDisputeModal({
       presentationStyle="fullScreen"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
+      {/* KeyboardAvoidingView measures against the window and does nothing
+          inside a <Modal>, so the details field sat under the iOS keyboard
+          (GitHub #750). See docs/KEYBOARD_AVOIDANCE_STANDARD.md. The footer
+          safe-area bottom padding lives on this container (offset), not on the
+          footer, so it is replaced by the keyboard overlap rather than added. */}
+      <KeyboardAvoidingScreen
         style={[styles.container, { paddingTop: insets.top }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        offset={insets.bottom}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -455,17 +461,19 @@ export function WorkflowDisputeModal({
         </View>
 
         {/* Content */}
-        <ScrollView
+        <KeyboardAwareScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 }]}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+          // The focused input has to clear the pinned Back/Continue footer
+          // that now rides on top of the keyboard, not just the keyboard.
+          extraScrollPadding={FOOTER_CLEARANCE}
         >
           {renderStep()}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         {/* Footer buttons */}
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.footer, { paddingBottom: 12 }]}>
           {currentStepIndex > 0 && (
             <TouchableOpacity style={styles.backBtn} onPress={goBack}>
               <MaterialIcons name="arrow-back" size={20} color={accentColor} />
@@ -506,7 +514,7 @@ export function WorkflowDisputeModal({
             </TouchableOpacity>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingScreen>
     </Modal>
   )
 }

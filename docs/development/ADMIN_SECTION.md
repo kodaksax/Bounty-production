@@ -58,20 +58,20 @@ ROUTES.ADMIN = {
   INDEX: '/(admin)',
   
   // User Management
-  USERS: '/(admin)/users',
-  USER_DETAIL: (id) => `/(admin)/user/${id}`,
-  BLOCKED_USERS: '/(admin)/blocked-users',
+  USERS: '/admin/users',
+  USER_DETAIL: (id) => `/admin/user/${id}`,
+  BLOCKED_USERS: '/admin/blocked-users',
   
   // Bounty Management
-  BOUNTIES: '/(admin)/bounties',
-  BOUNTY_DETAIL: (id) => `/(admin)/bounties/${id}`,
+  BOUNTIES: '/admin/bounties',
+  BOUNTY_DETAIL: (id) => `/admin/bounty/${id}`,
   
   // Financial
-  TRANSACTIONS: '/(admin)/transactions',
+  TRANSACTIONS: '/admin/transactions',
   
   // Analytics
-  ANALYTICS: '/(admin)/analytics',
-  REPORTS: '/(admin)/reports',
+  ANALYTICS: '/admin/analytics',
+  REPORTS: '/admin/reports',
   
   // Settings (nested)
   SETTINGS: {

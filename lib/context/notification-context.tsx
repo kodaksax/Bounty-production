@@ -13,7 +13,7 @@ import {
 import { AppState, AppStateStatus } from 'react-native';
 import { capture as posthogCapture } from '../posthog';
 import { categoryForNotificationType } from '../config/notification-taxonomy';
-import { resolveNotificationDeepLink } from '../services/notification-deep-links';
+import { getNotificationBountyId, resolveNotificationDeepLink } from '../services/notification-deep-links';
 import { notificationService } from '../services/notification-service';
 import { isNotificationsChannelConnected, subscribeToNotifications } from '../services/notification-realtime';
 import { supabase } from '../supabase';
@@ -140,7 +140,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       posthogCapture('notification_opened', {
         notification_type: type,
         category: categoryForNotificationType(type),
-        bounty_id: data.bountyId ?? null,
+        bounty_id: getNotificationBountyId(data),
         deep_link_kind: action.kind,
         surface,
       });
