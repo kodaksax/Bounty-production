@@ -28,6 +28,7 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 const { useAskApplicant } = require('hooks/useAskApplicant');
 
 const request = { id: 'req-1', hunter_id: 'hunter-1', bounty_id: 'b1' };
+const otherRequest = { id: 'req-2', hunter_id: 'hunter-2', bounty_id: 'b2' };
 
 describe('useAskApplicant re-entrancy', () => {
   beforeEach(() => {
@@ -50,6 +51,25 @@ describe('useAskApplicant re-entrancy', () => {
     expect(mockGetOrCreate).toHaveBeenCalledTimes(1);
     expect(mockTrackEvent).toHaveBeenCalledTimes(1);
     expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
+  test('a tap on another applicant while the first is in flight is ignored', async () => {
+    // The guard is hook-level, so only one conversation opens at a time. The
+    // screens disable every card's button meanwhile (askDisabled), so this tap
+    // cannot happen in the UI; the hook still refuses it as a backstop.
+    const { result } = renderHook(() =>
+      useAskApplicant({ bountyRequests: [request, otherRequest] })
+    );
+
+    await act(async () => {
+      const first = result.current.handleAskApplicant('req-1');
+      const second = result.current.handleAskApplicant('req-2');
+      await Promise.all([first, second]);
+    });
+
+    expect(mockGetOrCreate).toHaveBeenCalledTimes(1);
+    expect(mockGetOrCreate).toHaveBeenCalledWith(['hunter-1'], '', 'b1');
     expect(mockPush).toHaveBeenCalledTimes(1);
   });
 

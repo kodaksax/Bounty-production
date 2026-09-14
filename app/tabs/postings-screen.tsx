@@ -1047,6 +1047,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       onReject={handleRejectRequest}
       onRequestMoreInfo={handleAskApplicant}
       isAsking={askingRequestId === String(request.id)}
+      askDisabled={askingRequestId !== null}
       // Ensure returning from profile restores the Postings screen to the
       // Requests tab reliably by directing BountyApp to open postings + requests.
       referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=requests`}

@@ -908,6 +908,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       onReject={handleRejectRequest}
       onRequestMoreInfo={handleAskApplicant}
       isAsking={askingRequestId === String(request.id)}
+      askDisabled={askingRequestId !== null}
       // Ensure returning from profile restores this screen to the Requests tab
       // reliably by directing BountyApp to open messages + requests.
       referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=requests`}

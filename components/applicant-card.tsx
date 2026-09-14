@@ -18,8 +18,12 @@ interface ApplicantCardProps {
   onReject: (requestId: string | number) => Promise<void>;
   onRequestMoreInfo?: (requestId: string | number) => void;
   /** True while this card's conversation is being opened, so the button
-   *  disables and shows a spinner, the way accept and decline already do. */
+   *  shows a spinner, the way accept and decline already do. */
   isAsking?: boolean;
+  /** True while any applicant's conversation is being opened. The guard opens
+   *  one at a time, so every "Ask a question" button disables meanwhile —
+   *  otherwise a tap on another card is silently dropped with no feedback. */
+  askDisabled?: boolean;
   referrerOverride?: string;
 }
 
@@ -29,6 +33,7 @@ export function ApplicantCard({
   onReject,
   onRequestMoreInfo,
   isAsking = false,
+  askDisabled = false,
   referrerOverride,
 }: ApplicantCardProps) {
   const { theme } = useAppThemeContext();
@@ -262,9 +267,9 @@ export function ApplicantCard({
           <View style={s.secondaryRow}>
             {onRequestMoreInfo && (
               <TouchableOpacity
-                style={[s.secondaryAction, (isProcessing || isAsking || request.status !== 'pending') && s.actionDisabled]}
+                style={[s.secondaryAction, (isProcessing || askDisabled || request.status !== 'pending') && s.actionDisabled]}
                 onPress={handleRequestInfo}
-                disabled={isProcessing || isAsking || request.status !== 'pending'}
+                disabled={isProcessing || askDisabled || request.status !== 'pending'}
                 accessibilityRole="button"
                 accessibilityLabel={`Ask ${applicantName} a question`}
               >
