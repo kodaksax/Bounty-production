@@ -8,7 +8,7 @@ describe('normalizeScreenName', () => {
     expect(normalizeScreenName(['bounty', '[id]'])).toBe('bounty_detail');
     expect(normalizeScreenName(['profile', '[userId]'])).toBe('profile_other');
     expect(normalizeScreenName(['(admin)'])).toBe('admin_dashboard');
-    expect(normalizeScreenName(['(admin)', 'bounty', '[id]'])).toBe('admin_bounty_detail');
+    expect(normalizeScreenName(['admin', 'bounty', '[id]'])).toBe('admin_bounty_detail');
   });
 
   test('never includes a dynamic segment value — only the literal placeholder', () => {

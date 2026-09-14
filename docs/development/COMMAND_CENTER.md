@@ -167,10 +167,10 @@ inside 24h.
 
 | Route | File |
 |---|---|
-| `/(admin)/command-center` | `app/(admin)/command-center.tsx` |
-| `/(admin)/anomalies` | `app/(admin)/anomalies.tsx` |
-| `/(admin)/bounty/[id]/timeline` | `app/(admin)/bounty/[id]/timeline.tsx` |
-| `/(admin)/bounty/[id]` (extended) | financial-status panel + timeline link |
+| `/admin/command-center` | `app/admin/command-center.tsx` |
+| `/admin/anomalies` | `app/admin/anomalies.tsx` |
+| `/admin/bounty/[id]/timeline` | `app/admin/bounty/[id]/timeline.tsx` |
+| `/admin/bounty/[id]` (extended) | financial-status panel + timeline link |
 
 Both new destinations are linked from the existing dashboard under a new
 **Overview** group.

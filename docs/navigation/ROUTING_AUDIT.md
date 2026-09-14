@@ -85,21 +85,21 @@ This document provides a complete audit of the BOUNTYExpo app's navigation route
 | `/in-progress/[bountyId]/hunter/review-and-verify` | `app/in-progress/[bountyId]/hunter/review-and-verify.tsx` | Submit for review | ✅ `router.back()` |
 | `/in-progress/[bountyId]/hunter/payout` | `app/in-progress/[bountyId]/hunter/payout.tsx` | Payout received | ✅ `router.back()` or `router.replace('/tabs/bounty-app')` |
 
-### Admin Routes (`app/(admin)/`)
+### Admin Routes (`app/admin/`)
 
 | Route | File | Description | Back Navigation |
 |-------|------|-------------|-----------------|
-| `/(admin)/` | `app/(admin)/index.tsx` | Admin dashboard | ✅ AdminHeader with back |
-| `/(admin)/users` | `app/(admin)/users.tsx` | User management | ✅ `router.back()` |
-| `/(admin)/user/[id]` | `app/(admin)/user/[id].tsx` | User detail | ✅ `router.back()` |
-| `/(admin)/bounties` | `app/(admin)/bounties.tsx` | Bounty management | ✅ `router.back()` |
-| `/(admin)/bounty/[id]` | `app/(admin)/bounty/[id].tsx` | Bounty detail | ✅ `router.back()` |
-| `/(admin)/transactions` | `app/(admin)/transactions.tsx` | Transaction history | ✅ `router.back()` |
-| `/(admin)/analytics` | `app/(admin)/analytics.tsx` | Analytics dashboard | ✅ `router.back()` |
-| `/(admin)/reports` | `app/(admin)/reports.tsx` | Moderation queue | ✅ `router.back()` |
-| `/(admin)/blocked-users` | `app/(admin)/blocked-users.tsx` | Blocked users | ✅ `router.back()` |
-| `/(admin)/audit-logs` | `app/(admin)/audit-logs.tsx` | Audit logs | ✅ `router.back()` |
-| `/(admin)/settings/` | `app/(admin)/settings/index.tsx` | Admin settings | ✅ `router.back()` |
+| `/admin` | `app/admin/index.tsx` | Admin dashboard | ✅ AdminHeader with back |
+| `/admin/users` | `app/admin/users.tsx` | User management | ✅ `router.back()` |
+| `/admin/user/[id]` | `app/admin/user/[id].tsx` | User detail | ✅ `router.back()` |
+| `/admin/bounties` | `app/admin/bounties.tsx` | Bounty management | ✅ `router.back()` |
+| `/admin/bounty/[id]` | `app/admin/bounty/[id]/index.tsx` | Bounty detail | ✅ `router.back()` |
+| `/admin/transactions` | `app/admin/transactions.tsx` | Transaction history | ✅ `router.back()` |
+| `/admin/analytics` | `app/admin/analytics.tsx` | Analytics dashboard | ✅ `router.back()` |
+| `/admin/reports` | `app/admin/reports.tsx` | Moderation queue | ✅ `router.back()` |
+| `/admin/blocked-users` | `app/admin/blocked-users.tsx` | Blocked users | ✅ `router.back()` |
+| `/admin/audit-logs` | `app/admin/audit-logs.tsx` | Audit logs | ✅ `router.back()` |
+| `/admin/settings/` | `app/admin/settings/index.tsx` | Admin settings | ✅ `router.back()` |
 | `/(admin)/settings/general` | `app/(admin)/settings/general.tsx` | General settings | ✅ `router.back()` |
 | `/(admin)/settings/notifications` | `app/(admin)/settings/notifications.tsx` | Notification settings | ✅ `router.back()` |
 | `/(admin)/settings/security` | `app/(admin)/settings/security.tsx` | Security settings | ✅ `router.back()` |

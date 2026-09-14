@@ -1,4 +1,4 @@
-// app/admin/bounty/[id].tsx - Admin Bounty Detail
+// app/admin/bounty/[id]/index.tsx - Admin Bounty Detail
 //
 // Fixed here:
 //  - The screen was a dead end. "Posted By" and "Accepted By" rendered raw

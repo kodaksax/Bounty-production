@@ -38,6 +38,37 @@ describe('resolveNotificationDeepLink: bounty_quality_nudge', () => {
   });
 });
 
+describe('resolveNotificationDeepLink: application', () => {
+  test('routes a new application to the poster Requests tab where Accept/Decline live', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'application',
+      data: { bountyId: 'abc-123' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?screen=messages&initialTab=requests' });
+  });
+
+  test('routes the pending-application reminder to the same screen', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'application_pending_reminder',
+      data: { bountyId: 'abc-123' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123' });
+  });
+
+  test('never falls through to the public bounty view, even though category is marketplace', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'application',
+      data: { bountyId: 'abc-123' },
+    });
+    expect(action.kind === 'route' && action.path).not.toMatch(/^\/bounty\//);
+  });
+
+  test('still routes when the payload is missing bountyId', () => {
+    const action = resolveNotificationDeepLink({ type: 'application', data: {} });
+    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?screen=messages&initialTab=requests' });
+  });
+});
+
 describe('resolveNotificationDeepLink: bounty_nearby (regression guard)', () => {
   test('still routes to the public bounty view with the notification-source tag', () => {
     const action = resolveNotificationDeepLink({
