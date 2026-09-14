@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const { withAppBuildGradle } = require('@expo/config-plugins');
 const withRemoveMediaPermissions = require('./plugins/withRemoveMediaPermissions');
 const withNewArchAppDelegate = require('./plugins/withNewArchAppDelegate');
+const withMaterialAppTheme = require('./plugins/withMaterialAppTheme');
 
 // Environment resolution order:
 // 1) APP_ENV (primary source of truth for this app)
@@ -369,6 +370,10 @@ module.exports = ({ config }) => {
   // picker for user-initiated selection and must not request these permissions
   // (Google Play policy compliance).
   result = withRemoveMediaPermissions(result);
+
+  // Stripe Identity crashes natively on Android unless AppTheme is a Material
+  // Components theme (GitHub #808). Requires a new native build to take effect.
+  result = withMaterialAppTheme(result);
 
   // Drop the template's `sourceURL(for bridge: RCTBridge)` override from the
   // generated AppDelegate — RCTBridge no longer exists under RN 0.83 +
