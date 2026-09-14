@@ -412,7 +412,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   // ApplicantCard already renders an "Ask a question" button whenever
   // onRequestMoreInfo is supplied; until now neither list passed it, so the
   // button never appeared and accepting was the only way to open a thread.
-  const { handleAskApplicant, askingRequestId } = useAskApplicant({ bountyRequests })
+  const { handleAskApplicant, askingRequestId, isAskApplicantBusy } = useAskApplicant({ bountyRequests })
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.
@@ -908,11 +908,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       onReject={handleRejectRequest}
       onRequestMoreInfo={handleAskApplicant}
       isAskingQuestion={askingRequestId === String(request.id)}
+      isAskQuestionDisabled={isAskApplicantBusy}
       // Ensure returning from profile restores this screen to the Requests tab
       // reliably by directing BountyApp to open messages + requests.
       referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=requests`}
     />
-  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant, askingRequestId]);
+  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant, askingRequestId, isAskApplicantBusy]);
 
   if (showArchivedBounties) {
     return <ArchivedBountiesScreen onBack={() => setShowArchivedBounties(false)} />

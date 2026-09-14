@@ -105,6 +105,8 @@ describe('NotificationActionSheet', () => {
         <NotificationActionSheet notification={applicationNotification} currentUserId="poster-id" onClose={onClose} />
       );
 
+      expect(getByText('View Requests')).toBeTruthy();
+
       fireEvent.press(getByText('Review & Accept'));
 
       expect(mockAcceptRequest).not.toHaveBeenCalled();

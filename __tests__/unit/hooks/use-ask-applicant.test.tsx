@@ -87,6 +87,7 @@ describe('useAskApplicant', () => {
       await result.current.handleAskApplicant('req-1');
     });
     expect(result.current.askingRequestId).toBe('req-1');
+    expect(result.current.isAskApplicantBusy).toBe(true);
 
     await act(async () => {
       await result.current.handleAskApplicant('req-1');
@@ -97,6 +98,7 @@ describe('useAskApplicant', () => {
       jest.advanceTimersByTime(ASK_APPLICANT_NAV_LOCK_MS);
     });
     expect(result.current.askingRequestId).toBeNull();
+    expect(result.current.isAskApplicantBusy).toBe(false);
 
     await act(async () => {
       await result.current.handleAskApplicant('req-1');
@@ -115,6 +117,7 @@ describe('useAskApplicant', () => {
     expect(Alert.alert).toHaveBeenCalledTimes(1);
     expect(mockPush).not.toHaveBeenCalled();
     expect(result.current.askingRequestId).toBeNull();
+    expect(result.current.isAskApplicantBusy).toBe(false);
 
     await act(async () => {
       await result.current.handleAskApplicant('req-1');

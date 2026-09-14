@@ -141,7 +141,7 @@ export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
     [bountyRequests, router]
   );
 
-  return { handleAskApplicant, askingRequestId };
+  return { handleAskApplicant, askingRequestId, isAskApplicantBusy: askingRequestId !== null };
 }
 
 export default useAskApplicant;

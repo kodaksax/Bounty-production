@@ -19,6 +19,8 @@ interface ApplicantCardProps {
   onRequestMoreInfo?: (requestId: string | number) => void;
   /** True while the "Ask a question" conversation is being opened. */
   isAskingQuestion?: boolean;
+  /** True when another applicant's conversation is opening and this action is locked. */
+  isAskQuestionDisabled?: boolean;
   referrerOverride?: string;
 }
 
@@ -28,6 +30,7 @@ export function ApplicantCard({
   onReject,
   onRequestMoreInfo,
   isAskingQuestion = false,
+  isAskQuestionDisabled = false,
   referrerOverride,
 }: ApplicantCardProps) {
   const { theme } = useAppThemeContext();
@@ -261,12 +264,12 @@ export function ApplicantCard({
           <View style={s.secondaryRow}>
             {onRequestMoreInfo && (
               <TouchableOpacity
-                style={[s.secondaryAction, (isProcessing || isAskingQuestion || request.status !== 'pending') && s.actionDisabled]}
+                style={[s.secondaryAction, (isProcessing || isAskQuestionDisabled || request.status !== 'pending') && s.actionDisabled]}
                 onPress={handleRequestInfo}
-                disabled={isProcessing || isAskingQuestion || request.status !== 'pending'}
+                disabled={isProcessing || isAskQuestionDisabled || request.status !== 'pending'}
                 accessibilityRole="button"
                 accessibilityLabel={`Ask ${applicantName} a question`}
-                accessibilityState={{ busy: isAskingQuestion, disabled: isProcessing || isAskingQuestion || request.status !== 'pending' }}
+                accessibilityState={{ busy: isAskingQuestion, disabled: isProcessing || isAskQuestionDisabled || request.status !== 'pending' }}
               >
                 {isAskingQuestion ? (
                   <ActivityIndicator size="small" color={theme.textSecondary} />

@@ -50,7 +50,9 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
   // Derived alongside category/bundled (both already null-safe) rather than
   // read inline in JSX, so a transient null `notification` during the sheet's
   // close animation can never reach a direct `.type` access.
-  const viewButtonLabel = notification?.type === 'bounty_quality_nudge'
+  const viewButtonLabel = notification?.type === 'application'
+    ? 'View Requests'
+    : notification?.type === 'bounty_quality_nudge'
     ? 'Add Details'
     : category === 'marketplace' ? 'View Bounty'
     : category === 'messages' ? 'View Conversation'
