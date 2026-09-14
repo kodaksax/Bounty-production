@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service';
 import { messageService } from 'lib/services/message-service';
@@ -41,9 +41,17 @@ interface UseAskApplicantParams {
 export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
   const router = useRouter();
   const [askingRequestId, setAskingRequestId] = useState<string | null>(null);
+  // Synchronous re-entrancy guard. `askingRequestId` state updates on the next
+  // render, so a poster who taps twice in the same frame would clear the check
+  // both times before the first render lands -- each tap would then run the
+  // whole path, stacking another messenger screen. The ref flips immediately,
+  // so the second tap bails.
+  const isAskingRef = useRef(false);
 
   const handleAskApplicant = useCallback(
     async (requestId: string | number) => {
+      if (isAskingRef.current) return;
+
       const request = bountyRequests.find((r) => String(r.id) === String(requestId));
       const hunterId = request?.hunter_id ? String(request.hunter_id) : null;
 
@@ -55,6 +63,7 @@ export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
         return;
       }
 
+      isAskingRef.current = true;
       setAskingRequestId(String(requestId));
       try {
         const conversation = await messageService.getOrCreateConversation(
@@ -102,6 +111,7 @@ export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
           'Check your connection and try again. Your bounty and this application are unaffected.'
         );
       } finally {
+        isAskingRef.current = false;
         setAskingRequestId(null);
       }
     },

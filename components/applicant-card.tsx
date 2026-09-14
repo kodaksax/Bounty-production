@@ -17,6 +17,9 @@ interface ApplicantCardProps {
   onAccept: (requestId: string | number) => Promise<void>;
   onReject: (requestId: string | number) => Promise<void>;
   onRequestMoreInfo?: (requestId: string | number) => void;
+  /** True while this card's conversation is being opened, so the button
+   *  disables and shows a spinner, the way accept and decline already do. */
+  isAsking?: boolean;
   referrerOverride?: string;
 }
 
@@ -25,6 +28,7 @@ export function ApplicantCard({
   onAccept,
   onReject,
   onRequestMoreInfo,
+  isAsking = false,
   referrerOverride,
 }: ApplicantCardProps) {
   const { theme } = useAppThemeContext();
@@ -258,14 +262,20 @@ export function ApplicantCard({
           <View style={s.secondaryRow}>
             {onRequestMoreInfo && (
               <TouchableOpacity
-                style={[s.secondaryAction, (isProcessing || request.status !== 'pending') && s.actionDisabled]}
+                style={[s.secondaryAction, (isProcessing || isAsking || request.status !== 'pending') && s.actionDisabled]}
                 onPress={handleRequestInfo}
-                disabled={isProcessing || request.status !== 'pending'}
+                disabled={isProcessing || isAsking || request.status !== 'pending'}
                 accessibilityRole="button"
                 accessibilityLabel={`Ask ${applicantName} a question`}
               >
-                <MaterialIcons name="chat" size={16} color={theme.textSecondary} />
-                <Text style={s.secondaryActionText}>Ask a question</Text>
+                {isAsking ? (
+                  <ActivityIndicator size="small" color={theme.textSecondary} />
+                ) : (
+                  <>
+                    <MaterialIcons name="chat" size={16} color={theme.textSecondary} />
+                    <Text style={s.secondaryActionText}>Ask a question</Text>
+                  </>
+                )}
               </TouchableOpacity>
             )}
 
