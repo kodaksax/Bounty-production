@@ -38,9 +38,9 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
@@ -112,8 +112,11 @@ export default function ConnectOnboardingScreen() {
   const [requirementsCurrentlyDue, setRequirementsCurrentlyDue] = useState<string[]>([]);
   const [disabledReason, setDisabledReason] = useState<string | null>(null);
 
-  // Guard against React strict-mode / re-focus double-invocations.
-  const launchedRef = useRef(false);
+  // True only while an onboarding attempt is actively running (from launch until
+  // a terminal result/error). Blocks a second concurrent launch -- including the
+  // strict-mode double-invoke -- without permanently latching (re-entry is gated
+  // on the live `phase` at the auto-launch effect below).
+  const launchingRef = useRef(false);
   // Prevents overlapping verify-onboarding calls (e.g. a manual Retry
   // pressed while the auto-triggered check is still in flight).
   const verifyingRef = useRef(false);
@@ -238,16 +241,19 @@ export default function ConnectOnboardingScreen() {
   );
 
   const launchOnboarding = useCallback(async () => {
-    const token = session?.access_token;
-    if (!token) {
-      setError('You must be signed in to set up payouts.');
-      setPhase('error');
-      return;
-    }
+    if (launchingRef.current) return;
+    launchingRef.current = true;
 
     let launchFailureReason = 'launch_failed';
 
     try {
+      const token = session?.access_token;
+      if (!token) {
+        setError('You must be signed in to set up payouts.');
+        setPhase('error');
+        return;
+      }
+
       setError(null);
       setPhase('starting');
 
@@ -350,15 +356,23 @@ export default function ConnectOnboardingScreen() {
       }
       setError(message);
       setPhase('error');
+    } finally {
+      launchingRef.current = false;
     }
   }, [session?.access_token, session?.user?.id, verifyOnboardingStatus]);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (launchedRef.current) return;
-    launchedRef.current = true;
-    launchOnboarding();
-  }, [authLoading, launchOnboarding]);
+  // Auto-launch on entry and re-entry. Guarded on the live `phase` so it only
+  // fires from the initial spinner: once the browser is open, a result is shown,
+  // or an error is displayed, re-focusing never starts a second attempt over it.
+  // A screen restored on a cold start mounts back in `phase === 'starting'`, so
+  // this recovers the flow instead of blocking on a one-shot ref.
+  useFocusEffect(
+    useCallback(() => {
+      if (authLoading) return;
+      if (phase !== 'starting') return;
+      void launchOnboarding();
+    }, [authLoading, phase, launchOnboarding])
+  );
 
   const handleRetry = useCallback(() => {
     launchOnboarding();
