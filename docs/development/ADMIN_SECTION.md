@@ -64,7 +64,7 @@ ROUTES.ADMIN = {
   
   // Bounty Management
   BOUNTIES: '/(admin)/bounties',
-  BOUNTY_DETAIL: (id) => `/(admin)/bounty/${id}`,
+  BOUNTY_DETAIL: (id) => `/(admin)/bounties/${id}`,
   
   // Financial
   TRANSACTIONS: '/(admin)/transactions',

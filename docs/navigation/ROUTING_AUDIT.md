@@ -93,7 +93,7 @@ This document provides a complete audit of the BOUNTYExpo app's navigation route
 | `/(admin)/users` | `app/(admin)/users.tsx` | User management | ✅ `router.back()` |
 | `/(admin)/user/[id]` | `app/(admin)/user/[id].tsx` | User detail | ✅ `router.back()` |
 | `/(admin)/bounties` | `app/(admin)/bounties.tsx` | Bounty management | ✅ `router.back()` |
-| `/(admin)/bounty/[id]` | `app/(admin)/bounty/[id].tsx` | Bounty detail | ✅ `router.back()` |
+| `/(admin)/bounties/[id]` | `app/(admin)/bounties/[id]/index.tsx` | Bounty detail | ✅ `router.back()` |
 | `/(admin)/transactions` | `app/(admin)/transactions.tsx` | Transaction history | ✅ `router.back()` |
 | `/(admin)/analytics` | `app/(admin)/analytics.tsx` | Analytics dashboard | ✅ `router.back()` |
 | `/(admin)/reports` | `app/(admin)/reports.tsx` | Moderation queue | ✅ `router.back()` |
