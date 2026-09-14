@@ -25,6 +25,12 @@ export interface NotificationDeepLinkContext {
   data?: Notification['data'];
 }
 
+export function getNotificationBountyId(data?: Notification['data']): string | null {
+  if (!data) return null;
+  const bountyId = data.bountyId ?? data.bounty_id;
+  return bountyId == null ? null : String(bountyId);
+}
+
 /**
  * Categories/types whose single (non-bundled) form supports a multi-action
  * rich sheet (Accept/Decline/Reply/Withdraw). Bundled notifications and every
@@ -43,20 +49,22 @@ export function supportsActionSheet(ctx: NotificationDeepLinkContext, notificati
 export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): DeepLinkAction {
   const category = ctx.category ?? categoryForNotificationType(ctx.type);
   const data = ctx.data ?? {};
+  // Accept both nearby-bounty payload keys.
+  const bountyId = getNotificationBountyId(data);
 
   switch (category) {
     case 'marketplace': {
       // Poster-facing quality nudges go to the poster's own bounty management
       // screen with the edit modal pre-opened, not the public bounty view —
       // the CTA is "Add details", not "View bounty".
-      if (ctx.type === 'bounty_quality_nudge' && data.bountyId) {
-        return { kind: 'route', path: `/postings/${data.bountyId}?openEdit=true` };
+      if (ctx.type === 'bounty_quality_nudge' && bountyId) {
+        return { kind: 'route', path: `/postings/${bountyId}?openEdit=true` };
       }
       // Poster-facing pending-application nudge: go straight to the
       // applicant management screen (where Accept/Decline live), not the
       // public bounty view -- same reasoning as the quality nudge above.
-      if (ctx.type === 'application_pending_reminder' && data.bountyId) {
-        return { kind: 'route', path: `/postings/${data.bountyId}` };
+      if (ctx.type === 'application_pending_reminder' && bountyId) {
+        return { kind: 'route', path: `/postings/${bountyId}` };
       }
       // A new application is only ever sent to the poster, and the only thing
       // to do with it is accept/decline -- land on the Requests tab where that
@@ -64,7 +72,7 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'application') {
         return { kind: 'route', path: POSTER_REQUESTS_PATH };
       }
-      if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}?source=notification` };
+      if (bountyId) return { kind: 'route', path: `/bounty/${bountyId}?source=notification` };
       return { kind: 'none' };
     }
     case 'messages': {
@@ -75,11 +83,11 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'payout_method_changed' || ctx.type === 'bank_disconnected') {
         return { kind: 'route', path: '/tabs/bounty-app?screen=wallet' };
       }
-      if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}?source=notification` };
+      if (bountyId) return { kind: 'route', path: `/bounty/${bountyId}?source=notification` };
       return { kind: 'route', path: '/tabs/bounty-app?screen=wallet' };
     }
     case 'security': {
-      if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}/dispute` };
+      if (bountyId) return { kind: 'route', path: `/bounty/${bountyId}/dispute` };
       return { kind: 'none' };
     }
     case 'verification': {

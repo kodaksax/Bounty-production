@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { bountyRequestService } from 'lib/services/bounty-request-service';
 import { capture as posthogCapture } from 'lib/posthog';
 import { notificationService } from 'lib/services/notification-service';
-import { POSTER_REQUESTS_PATH, resolveNotificationDeepLink } from 'lib/services/notification-deep-links';
+import { POSTER_REQUESTS_PATH, getNotificationBountyId, resolveNotificationDeepLink } from 'lib/services/notification-deep-links';
 import { sendMessage } from 'lib/services/supabase-messaging';
 import { categoryForNotificationType, isBundled } from 'lib/config/notification-taxonomy';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
@@ -73,7 +73,7 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     posthogCapture('notification_opened', {
       notification_type: notification.type,
       category: notification.category,
-      bounty_id: notification.data?.bountyId ?? null,
+      bounty_id: getNotificationBountyId(notification.data),
       deep_link_kind: action.kind,
       surface: 'action_sheet',
     });
@@ -96,7 +96,7 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     posthogCapture('notification_opened', {
       notification_type: notification.type,
       category: notification.category,
-      bounty_id: notification.data?.bountyId ?? null,
+      bounty_id: getNotificationBountyId(notification.data),
       deep_link_kind: 'route',
       surface: 'action_sheet_accept',
     });

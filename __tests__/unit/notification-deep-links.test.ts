@@ -46,6 +46,25 @@ describe('resolveNotificationDeepLink: bounty_nearby (regression guard)', () => 
     });
     expect(action).toEqual({ kind: 'route', path: '/bounty/xyz-789?source=notification' });
   });
+
+  // The two older nearby-bounty triggers write the id as snake_case
+  // `bounty_id`. Before the resolver accepted both keys, these taps fell
+  // through to { kind: 'none' } and opened nothing.
+  test('routes when the trigger payload uses the snake_case bounty_id key', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'bounty_nearby',
+      data: { bounty_id: 'xyz-789' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/bounty/xyz-789?source=notification' });
+  });
+
+  test('prefers camelCase bountyId when both keys are present', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'bounty_nearby',
+      data: { bountyId: 'camel-1', bounty_id: 'snake-2' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/bounty/camel-1?source=notification' });
+  });
 });
 
 describe('resolveNotificationDeepLink: application (GitHub #809)', () => {
