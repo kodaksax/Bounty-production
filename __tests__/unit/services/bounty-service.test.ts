@@ -52,7 +52,7 @@ describe('bountyService', () => {
         return {
           select: jest.fn(() => ({
             eq: jest.fn(() => ({
-              single: jest.fn(() =>
+              maybeSingle: jest.fn(() =>
                 Promise.resolve({ data: { id: 1, user_id: 'u1' }, error: null })
               ),
             })),
@@ -93,7 +93,7 @@ describe('bountyService', () => {
         return {
           select: jest.fn(() => ({
             eq: jest.fn(() => ({
-              single: jest.fn(() =>
+              maybeSingle: jest.fn(() =>
                 Promise.resolve({ data: { id: 2, poster_id: 'p1' }, error: null })
               ),
             })),
