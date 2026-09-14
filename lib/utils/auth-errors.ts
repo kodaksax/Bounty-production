@@ -133,6 +133,39 @@ export function parseAuthError(error: any, correlationId?: string): AuthError {
     recoveryAction = 'none';
     retryable = false;
   }
+  // Retryable transport failures (auth-js's own "please retry this" signal).
+  //
+  // `authFetchWithTimeout` aborts any /auth/v1/* request that exceeds its
+  // budget; auth-js's `_handleRequest` catches that raw AbortError (and any
+  // other fetch-level throw, e.g. a dropped connection) and always re-wraps
+  // it as `new AuthRetryableFetchError(message, 0)` (see
+  // node_modules/@supabase/auth-js/dist/main/lib/fetch.js) before it ever
+  // reaches this function. That wrapper's `status` is 0 — which is falsy, so
+  // `code` fell through to the literal string 'unknown' — and its message
+  // ("Aborted", or whatever the platform's abort/network error said) matched
+  // none of the branches above. Every one of those failures was therefore
+  // reported as an uncategorised error, indistinguishable in the funnel from
+  // a genuine server rejection.
+  //
+  // Matched on `name` ALONE, deliberately not also on message content: an
+  // earlier version additionally matched `message === 'Aborted'`, but that
+  // string collided with the pre-existing, separately-tested contract that a
+  // RAW (not auth-js-wrapped) AbortError is a 'timeout_error' — some runtimes
+  // give a raw AbortError that exact message too, so matching on it here
+  // would have silently reclassified that case as well. auth-js's own
+  // `AuthRetryableFetchError` name never collides with 'AbortError', so
+  // keying on name is both sufficient (this constructor IS auth-js's
+  // "this failed at the transport level, retry it" signal, whatever the
+  // underlying cause) and unambiguous. Kept above isTimeoutError()/
+  // isNetworkError() only so it isn't shadowed by their broader message-based
+  // fallbacks.
+  else if (error?.name === 'AuthRetryableFetchError') {
+    category = 'network_error';
+    userMessage =
+      'The connection to the authentication service was interrupted. Please check your internet connection and try again.';
+    recoveryAction = 'retry';
+    retryable = true;
+  }
   // Network errors
   else if (isNetworkError(error)) {
     category = 'network_error';

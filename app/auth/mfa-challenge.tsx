@@ -104,7 +104,7 @@ export default function MfaChallengeScreen() {
   return (
     <AnimatedScreen animationType="fade" duration={300}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <View

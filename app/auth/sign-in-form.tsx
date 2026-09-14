@@ -114,6 +114,16 @@ export function SignInForm() {
   const [throttleHydrated, setThrottleHydrated] = useState(false);
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const captchaShownRef = useRef(false);
+  // Timestamp of the failure that produced the CURRENT value of `loginAttempts`.
+  //
+  // This is the authoritative age of the throttle and must survive a remount
+  // unchanged. Persisting `Date.now()` from the write-back effect instead
+  // re-stamped the counter every single time the screen mounted and rehydrated
+  // a stored count, so LOGIN_THROTTLE_TTL_MS could never elapse: a user who
+  // once mistyped their password three times kept a permanently-armed CAPTCHA,
+  // and every Sign In tap after that was rejected locally before any request
+  // went out. Only a genuine new failure may move this forward.
+  const attemptsAtRef = useRef<number | null>(null);
   console.log('[sign-in] Component rendered', { loginAttempts, lockoutUntil, captchaVerified });
   const passwordRef = useRef<TextInput>(null);
 
@@ -124,6 +134,15 @@ export function SignInForm() {
   const [socialAuthLoading, setSocialAuthLoading] = useState(false);
   const [socialAuthError, setSocialAuthError] = useState<string | null>(null);
   const socialLoginStartMsRef = useRef<number | null>(null);
+  // Correlation id for the Google attempt currently in flight — set once in
+  // the button's onPress and reused by the `response` effect below (which
+  // fires on a later render, once the prompt resolves) for every event it
+  // emits. Without this the onPress's AUTH_ATTEMPT_STARTED and the effect's
+  // eventual AUTH_ATTEMPT_FAILED each minted their own id via
+  // generateCorrelationId, so the two could never be stitched together in
+  // analytics. See hooks/useSocialAuth.ts for the same fix on the onboarding
+  // copy of this flow.
+  const googleCorrelationIdRef = useRef<string | null>(null);
 
   // Use form submission hook with rate limiting
   const {
@@ -257,6 +276,10 @@ export function SignInForm() {
             );
           }
 
+          // A real failed request is the only thing allowed to move the
+          // throttle's clock forward, so the TTL measures an active burst of
+          // bad attempts rather than "how recently the screen was opened".
+          attemptsAtRef.current = Date.now();
           setLoginAttempts(newAttempts);
 
           // Use centralized error message, and carry the failure category on
@@ -334,11 +357,18 @@ export function SignInForm() {
             // timed-out MFA check reaches the outer catch as a plain Error and
             // AUTH_ATTEMPT_FAILED reports outcome: 'rejected' instead of
             // 'timed_out'.
-            const mfaBlockedError: Error & { code?: string } = new Error(
+            const mfaBlockedError: Error & { code?: string; failureStage?: string } = new Error(
               'Unable to verify multi-factor authentication status. Please try again.'
             );
+            mfaBlockedError.failureStage = 'mfa_check';
             if (isTimeoutError(mfaCheckError) || mfaCheckError?.code === 'AUTH_STAGE_TIMEOUT') {
               mfaBlockedError.code = 'AUTH_STAGE_TIMEOUT';
+            } else {
+              // Without an explicit code this reached AUTH_ATTEMPT_FAILED as
+              // `error_code: 'unknown'`, identical to every other uncategorised
+              // failure — so a sign-in blocked by the fail-closed MFA gate was
+              // indistinguishable in analytics from a wrong password.
+              mfaBlockedError.code = 'mfa_check_failed';
             }
             throw mfaBlockedError;
           }
@@ -484,16 +514,30 @@ export function SignInForm() {
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
           }
         } else {
-          throw new Error('Authentication failed. Please try again.');
+          // Supabase reported no error but returned no session. The only
+          // documented cause is a confirmation-gated account, so name it
+          // rather than reporting a generic failure the user cannot act on.
+          const noSessionError: Error & { code?: string; failureStage?: string } = new Error(
+            'Your account needs to be confirmed before you can sign in. Check your inbox for the confirmation link.'
+          );
+          noSessionError.code = 'session_missing_after_signin';
+          noSessionError.failureStage = 'session_establish';
+          throw noSessionError;
         }
       } catch (err: any) {
         console.error('[sign-in] Sign-in error:', err, { correlationId });
 
         const timedOut = isTimeoutError(err) || err?.code === 'AUTH_STAGE_TIMEOUT';
+        const parsed = parseAuthError(err, correlationId);
         posthogCapture('AUTH_ATTEMPT_FAILED', {
           correlation_id: correlationId,
           method: 'email',
-          error_code: err?.code ?? parseAuthError(err, correlationId).category,
+          error_code: err?.code ?? parsed.category,
+          // Which step of the flow rejected. Previously absent, so a failure
+          // after a SUCCESSFUL password exchange (MFA gate, missing session)
+          // looked exactly like a rejected password in the funnel.
+          failure_stage: err?.failureStage ?? 'sign_in_request',
+          error_category: parsed.category,
           outcome: timedOut ? 'timed_out' : 'rejected',
         });
 
@@ -623,6 +667,9 @@ export function SignInForm() {
           Number.isFinite(attemptsAt) && Date.now() - attemptsAt < LOGIN_THROTTLE_TTL_MS;
 
         if (Number.isFinite(attempts) && attempts > 0 && attemptsAreFresh) {
+          // Carry the STORED timestamp forward, so the TTL keeps ageing from
+          // the original failure rather than restarting at this mount.
+          attemptsAtRef.current = Math.max(attemptsAtRef.current ?? 0, attemptsAt);
           setLoginAttempts((currentAttempts) => Math.max(currentAttempts, attempts));
         } else if (Number.isFinite(attempts)) {
           void storage.removeItem(LOGIN_ATTEMPTS_KEY);
@@ -642,12 +689,39 @@ export function SignInForm() {
   useEffect(() => {
     if (!throttleHydrated) return;
     if (loginAttempts > 0) {
+      // Write `attemptsAtRef`, never a fresh `Date.now()` — see the ref's
+      // declaration for why re-stamping here made the TTL unreachable.
+      if (attemptsAtRef.current === null) attemptsAtRef.current = Date.now();
       void storage.setItem(LOGIN_ATTEMPTS_KEY, String(loginAttempts));
-      void storage.setItem(LOGIN_ATTEMPTS_AT_KEY, String(Date.now()));
+      void storage.setItem(LOGIN_ATTEMPTS_AT_KEY, String(attemptsAtRef.current));
     } else {
+      attemptsAtRef.current = null;
       void storage.removeItem(LOGIN_ATTEMPTS_KEY);
       void storage.removeItem(LOGIN_ATTEMPTS_AT_KEY);
     }
+  }, [loginAttempts, throttleHydrated]);
+
+  // Age the throttle out while the screen is OPEN, not only across mounts.
+  //
+  // Without this a user sitting on the sign-in screen with an armed CAPTCHA
+  // they cannot clear has no way forward: the TTL is only ever consulted by
+  // the mount-time hydration effect, so the challenge stays required for as
+  // long as the screen stays mounted. Mirrors the lockout expiry timer below.
+  useEffect(() => {
+    if (!throttleHydrated || loginAttempts <= 0) return;
+    const attemptsAt = attemptsAtRef.current;
+    if (attemptsAt === null) return;
+    const remaining = attemptsAt + LOGIN_THROTTLE_TTL_MS - Date.now();
+    if (remaining <= 0) {
+      setLoginAttempts(0);
+      setCaptchaVerified(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLoginAttempts(0);
+      setCaptchaVerified(false);
+    }, remaining);
+    return () => clearTimeout(timer);
   }, [loginAttempts, throttleHydrated]);
 
   // A lockout that has elapsed must not leave the counter sitting at the
@@ -725,18 +799,51 @@ export function SignInForm() {
       if (response.type !== 'success') {
         // User cancelled or error — clear the loading spinner set in onPress
         setSocialAuthLoading(false);
+        // Every non-success outcome is reported. `dismiss` and `locked` used to
+        // fall through here with no message and no event, which is exactly how
+        // a misconfigured native Google client presents on Android: the
+        // spinner clears and nothing at all happens. See hooks/useSocialAuth.ts
+        // for the same fix on the onboarding copy of this flow.
+        //
+        // Reuse the id set in onPress so this failure stitches to its
+        // AUTH_ATTEMPT_STARTED. The fallback only fires if this effect somehow
+        // ran with no prior prompt (shouldn't happen — a response only exists
+        // after the button's onPress ran).
+        const socialCorrelationId =
+          googleCorrelationIdRef.current ?? generateCorrelationId('signin_google');
         if (response.type === 'error') {
-          setSocialAuthError(response.error?.message ?? 'Google sign-in failed');
-          // The prompt failed before any token exchange — e.g. the native
-          // Google Sign-In config is missing from the build. Record it so the
-          // break shows up in analytics instead of only in a bug report (#727).
-          posthogCapture('AUTH_ATTEMPT_FAILED', {
-            correlation_id: generateCorrelationId('signin_google'),
-            method: 'google',
-            error_code: response.error?.code ?? 'google_prompt_error',
-            outcome: 'unavailable',
-          });
+          setSocialAuthError(
+            response.error?.message ??
+              'Google sign-in failed. Please try again or use your email and password.'
+          );
+        } else if (response.type === 'locked') {
+          setSocialAuthError('A sign-in window is already open. Close it and try again.');
+        } else if (response.type !== 'cancel') {
+          setSocialAuthError(
+            'Google sign-in did not complete. Please try again, or use your email and password.'
+          );
         }
+        posthogCapture('AUTH_ATTEMPT_FAILED', {
+          correlation_id: socialCorrelationId,
+          method: 'google',
+          error_code:
+            response.type === 'error'
+              ? (response.error?.code ?? 'google_prompt_error')
+              : `google_prompt_${response.type}`,
+          failure_stage: 'google_prompt',
+          // 'locked' is an explicit rejection (a sign-in window is already
+          // open — the user-facing copy above says so), not an ambient
+          // dismissal, so it must not fall into the 'dismissed' bucket below.
+          // Matches the outcome mapping in hooks/useSocialAuth.ts.
+          outcome:
+            response.type === 'error'
+              ? 'unavailable'
+              : response.type === 'cancel'
+                ? 'cancelled'
+                : response.type === 'locked'
+                  ? 'rejected'
+                  : 'dismissed',
+        });
         return;
       }
       const idToken = response.params.id_token;
@@ -759,10 +866,14 @@ export function SignInForm() {
 
         // Simplified: Let Supabase handle its own timeout
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
-        socialCorrelationId = generateCorrelationId('signin_google');
+        // Same reuse-over-regenerate rule as the failure branch above — this
+        // is the same user attempt continuing into the token-exchange stage.
+        socialCorrelationId =
+          googleCorrelationIdRef.current ?? generateCorrelationId('signin_google');
         posthogCapture('AUTH_ATTEMPT_STARTED', {
           correlation_id: socialCorrelationId,
           method: 'google',
+          stage: 'google_token_exchange',
         });
         const socialLoginStartMs = socialLoginStartMsRef.current ?? Date.now();
         const { data, error } = await runStageWithTimeout(
@@ -902,7 +1013,7 @@ export function SignInForm() {
   return (
     <AnimatedScreen animationType="fade" duration={400}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
@@ -1279,11 +1390,36 @@ export function SignInForm() {
               {isGoogleConfigured && (
                 <TouchableOpacity
                   disabled={isSubmitting || !request || socialAuthLoading}
-                  onPress={() => {
+                  onPress={async () => {
                     setSocialAuthError(null);
                     setSocialAuthLoading(true);
                     socialLoginStartMsRef.current = Date.now();
-                    promptAsync();
+                    // One id for the whole attempt, stashed in the ref so the
+                    // `response` effect above (which fires later, once the
+                    // prompt resolves) reuses it instead of minting its own.
+                    const socialCorrelationId = generateCorrelationId('signin_google');
+                    googleCorrelationIdRef.current = socialCorrelationId;
+                    posthogCapture('AUTH_ATTEMPT_STARTED', {
+                      correlation_id: socialCorrelationId,
+                      method: 'google',
+                      stage: 'google_prompt',
+                    });
+                    try {
+                      // Awaited so a throw from the native prompt surfaces here
+                      // instead of becoming an unhandled rejection that leaves
+                      // the spinner running forever with nothing on screen.
+                      await promptAsync();
+                    } catch (e: any) {
+                      setSocialAuthLoading(false);
+                      setSocialAuthError(getAuthErrorMessage(e));
+                      posthogCapture('AUTH_ATTEMPT_FAILED', {
+                        correlation_id: socialCorrelationId,
+                        method: 'google',
+                        error_code: e?.code ?? 'google_prompt_threw',
+                        failure_stage: 'google_prompt',
+                        outcome: 'rejected',
+                      });
+                    }
                   }}
                   className="w-full rounded py-3 items-center flex-row justify-center mt-2 bg-white"
                   accessibilityRole="button"

@@ -282,6 +282,48 @@ describe('sign-in recovery after a failed attempt', () => {
     await waitFor(() => expect(signInWithPassword).toHaveBeenCalledTimes(1));
   });
 
+  it('does not restart the throttle TTL just because the screen was reopened', async () => {
+    // The production Android trap: the write-back effect stamped
+    // `loginAttemptsAt` with Date.now() every time the screen mounted and
+    // rehydrated a stored count, so the 15-minute TTL restarted on every
+    // visit and could never elapse. A user who once failed three times kept a
+    // permanently-armed CAPTCHA and every later Sign In tap was rejected
+    // locally — production telemetry showed 25 AUTH_CAPTCHA_SHOWN against a
+    // single AUTH_CAPTCHA_SOLVED on Android, with users cycling for 20+
+    // minutes without ever getting in.
+    const originalFailureAt = Date.now() - 14 * 60 * 1000; // 14 min ago: still fresh
+    store.set('loginAttempts', String(CAPTCHA_THRESHOLD));
+    store.set('loginAttemptsAt', String(originalFailureAt));
+
+    // Visit 1: the CAPTCHA is legitimately still armed.
+    const first = render(<SignInForm />);
+    await waitFor(() => expect(first.queryByLabelText(/Enter the answer to/i)).not.toBeNull());
+    first.unmount();
+
+    // The stored timestamp must still describe the ORIGINAL failure, not this
+    // visit. Before the fix it had been rewritten to "now".
+    expect(Number(store.get('loginAttemptsAt'))).toBe(originalFailureAt);
+
+    // Visit 2, past the TTL measured from the original failure: the throttle
+    // must have aged out and the CAPTCHA must be gone.
+    const nowSpy = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(originalFailureAt + 16 * 60 * 1000);
+    try {
+      signInWithPassword.mockResolvedValue({ data: GOOD_SESSION, error: null });
+      const second = render(<SignInForm />);
+      await waitFor(() => expect(second.queryByLabelText(/Enter the answer to/i)).toBeNull());
+
+      fillCredentials(second);
+      await tapSignIn(second);
+
+      // The tap must reach the network, not be rejected locally by the gate.
+      await waitFor(() => expect(signInWithPassword).toHaveBeenCalledTimes(1));
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it('honours a FRESH persisted attempt count', async () => {
     store.set('loginAttempts', String(CAPTCHA_THRESHOLD));
     store.set('loginAttemptsAt', String(Date.now()));

@@ -176,6 +176,51 @@ describe('parseAuthError', () => {
       expect(result.retryable).toBe(true);
     });
   });
+
+  describe('aborted / retryable transport failures', () => {
+    // Regression coverage for the Android P0: authFetchWithTimeout aborts a
+    // stalled /auth/v1/* request, and auth-js's _handleRequest always
+    // re-wraps that abort as `new AuthRetryableFetchError(message, 0)` before
+    // it reaches parseAuthError — it never surfaces as a raw AbortError here.
+    // Every one of these used to fall through every branch (status 0 is
+    // falsy, "Aborted" matches no message check) and report as the literal
+    // string 'unknown', indistinguishable in the funnel from a genuine
+    // server-side rejection.
+    it('categorizes an AuthRetryableFetchError (the shape auth-js actually throws) as network_error, not "unknown"', () => {
+      const err = { name: 'AuthRetryableFetchError', message: 'Aborted', status: 0 };
+      const result = parseAuthError(err);
+      expect(result.category).toBe('network_error');
+      expect(result.retryable).toBe(true);
+      expect(result.userMessage).toMatch(/interrupted/i);
+      expect(result.userMessage).not.toBe('Aborted');
+    });
+
+    it('categorizes an AuthRetryableFetchError with a platform-specific abort message the same way', () => {
+      const err = {
+        name: 'AuthRetryableFetchError',
+        message: 'The user aborted a request.',
+        status: 0,
+      };
+      const result = parseAuthError(err);
+      expect(result.category).toBe('network_error');
+      expect(result.retryable).toBe(true);
+    });
+
+    it('still categorizes a raw AbortError (not wrapped by auth-js) as timeout_error, unchanged', () => {
+      // Guards the ordering fix: the new AuthRetryableFetchError branch must
+      // not swallow the pre-existing, separately-contracted AbortError case
+      // above by also matching on `name === 'AbortError'`.
+      const err = { name: 'AbortError', message: 'Aborted' };
+      const result = parseAuthError(err);
+      expect(result.category).toBe('timeout_error');
+    });
+
+    it('does not miscategorize an unrelated AuthApiError as network_error', () => {
+      const err = { name: 'AuthApiError', message: 'Invalid login credentials', status: 400 };
+      const result = parseAuthError(err);
+      expect(result.category).toBe('invalid_credentials');
+    });
+  });
 });
 
 describe('isTimeoutError', () => {

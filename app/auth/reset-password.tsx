@@ -181,7 +181,7 @@ export function ResetPasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
       <AnimatedScreen>
         <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>

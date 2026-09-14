@@ -172,7 +172,7 @@ export default function UsernameScreen() {
   const handleGooglePress = () => {
     hapticFeedback.light();
     analyticsService.trackEvent('onboarding_auth_started', { method: 'google' });
-    promptGoogleSignIn();
+    void promptGoogleSignIn();
   };
 
   const handleContinueWithEmail = () => {
