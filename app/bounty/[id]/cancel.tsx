@@ -116,21 +116,19 @@ export default function CancellationRequestScreen() {
       );
 
       if (result) {
-        const isForHonorAutoCancel = !!bounty.is_for_honor;
-        if (isForHonorAutoCancel) {
-          // For honor bounties are auto-removed after cancellation — delete locally/server-side so lists update
-          try {
-            await bountyService.delete(bounty.id);
-          } catch (e) {
-            console.error('Error auto-deleting for-honor bounty after cancellation:', e);
-          }
-        }
+        // request_bounty_cancellation already settles a for-honor bounty
+        // server-side (status -> cancelled, request auto-accepted; no money is
+        // held). This screen used to follow up with bountyService.delete() —
+        // the HUNTER deleting the POSTER's listing — which RLS always refused
+        // (delete is poster-only), then told the hunter it was "removed from
+        // your postings". The poster keeps their listing and can repost it.
+        const isForHonorAutoCancel = result.status === 'accepted' || !!bounty.is_for_honor;
 
         Alert.alert(
-          'Success',
+          isForHonorAutoCancel ? 'Bounty cancelled' : 'Request sent',
           isForHonorAutoCancel
-            ? 'For honor bounty cancelled and removed from your postings. No manual dispute review is required.'
-            : 'Cancellation request submitted successfully',
+            ? "You've been released from this bounty and it's now cancelled. No money was held, so there's nothing to refund."
+            : `Your request is waiting for the poster to approve it. If they do, the full $${Number(bounty.amount).toFixed(2)} goes back to them. Message them to let them know.`,
           [
             {
               text: 'OK',

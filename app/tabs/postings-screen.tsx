@@ -520,7 +520,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // ApplicantCard already renders an "Ask a question" button whenever
   // onRequestMoreInfo is supplied; until now neither list passed it, so the
   // button never appeared and accepting was the only way to open a thread.
-  const { handleAskApplicant } = useAskApplicant({ bountyRequests })
+  const { handleAskApplicant, askingRequestId, isAskApplicantBusy } = useAskApplicant({ bountyRequests })
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.
@@ -1046,11 +1046,13 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       onAccept={handleAcceptRequest}
       onReject={handleRejectRequest}
       onRequestMoreInfo={handleAskApplicant}
+      isAskingQuestion={askingRequestId === String(request.id)}
+      isAskQuestionDisabled={isAskApplicantBusy}
       // Ensure returning from profile restores the Postings screen to the
       // Requests tab reliably by directing BountyApp to open postings + requests.
       referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=requests`}
     />
-  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant]);
+  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant, askingRequestId, isAskApplicantBusy]);
 
   if (alternateScreen) {
     return alternateScreen

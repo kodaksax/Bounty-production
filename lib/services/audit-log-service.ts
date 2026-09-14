@@ -1,7 +1,7 @@
 /**
  * Audit Log Service
  *
- * Provides the audit trail behind app/(admin)/audit-logs.tsx.
+ * Provides the audit trail behind app/admin/audit-logs.tsx.
  *
  * This file previously carried a `mockAuditLogs` array of eight fabricated
  * entries ("User @spammer suspended for policy violations", "Escrow released

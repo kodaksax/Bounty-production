@@ -1,6 +1,10 @@
 import type { Notification, NotificationCategory, NotificationType } from '../types';
 import { categoryForNotificationType } from '../config/notification-taxonomy';
 import { isBundled } from '../config/notification-taxonomy';
+import { ROUTES } from '../routes';
+
+/** Inbox → Requests tab, where a poster accepts or declines applications. */
+export const POSTER_REQUESTS_PATH = `${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=requests`;
 
 /**
  * Single source of truth for "where does tapping this notification go" and
@@ -53,6 +57,12 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       // public bounty view -- same reasoning as the quality nudge above.
       if (ctx.type === 'application_pending_reminder' && data.bountyId) {
         return { kind: 'route', path: `/postings/${data.bountyId}` };
+      }
+      // A new application is only ever sent to the poster, and the only thing
+      // to do with it is accept/decline -- land on the Requests tab where that
+      // happens (GitHub #809), even for bundled notifications with no bountyId.
+      if (ctx.type === 'application') {
+        return { kind: 'route', path: POSTER_REQUESTS_PATH };
       }
       if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}?source=notification` };
       return { kind: 'none' };
