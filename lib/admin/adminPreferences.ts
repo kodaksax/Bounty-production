@@ -1,6 +1,6 @@
 // lib/admin/adminPreferences.ts - Persisted preferences for the admin console.
 //
-// Why this exists: app/(admin)/settings/general.tsx held its preferences in
+// Why this exists: app/admin/settings/general.tsx held its preferences in
 // component state and its "Save Settings" button did nothing but show an
 // "Your preferences have been updated successfully." alert. Nothing was
 // persisted, nothing read the values back, and every switch reset the moment
@@ -23,11 +23,11 @@ export type AdminAutoRefreshOption = (typeof ADMIN_AUTO_REFRESH_OPTIONS)[number]
 export interface AdminPreferences {
   /** Rows per page on every admin list. Consumed by hooks/useAdminList.ts. */
   pageSize: AdminPageSizeOption;
-  /** Status the Bounties screen opens on. Consumed by app/(admin)/bounties.tsx. */
+  /** Status the Bounties screen opens on. Consumed by app/admin/bounties.tsx. */
   defaultBountyStatus: AdminBountyStatus | 'all';
   /**
    * Seconds between automatic dashboard refreshes; 0 disables it.
-   * Consumed by app/(admin)/index.tsx.
+   * Consumed by app/admin/index.tsx.
    */
   autoRefreshSeconds: AdminAutoRefreshOption;
   /** Denser list rows. Consumed by the admin list screens. */

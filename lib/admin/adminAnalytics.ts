@@ -1,6 +1,6 @@
 // lib/admin/adminAnalytics.ts - Real analytics for the admin console.
 //
-// Why this exists: app/(admin)/analytics.tsx fetched
+// Why this exists: app/admin/analytics.tsx fetched
 // `${EXPO_PUBLIC_API_URL || 'http://localhost:3001'}/admin/analytics/metrics`,
 // and that Fastify route (services/api/src/routes/analytics.ts) returned a
 // hardcoded object -- `totalUsers: 1250`, `revenueWeek: 3820.5`, a fixed

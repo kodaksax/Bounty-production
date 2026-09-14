@@ -47,3 +47,26 @@ describe('resolveNotificationDeepLink: bounty_nearby (regression guard)', () => 
     expect(action).toEqual({ kind: 'route', path: '/bounty/xyz-789?source=notification' });
   });
 });
+
+describe('resolveNotificationDeepLink: application (GitHub #809)', () => {
+  test('sends the poster to the Requests tab where applications are accepted or declined', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'application',
+      data: { bountyId: 'abc-123', hunterId: 'h-1' },
+    });
+    expect(action).toEqual({
+      kind: 'route',
+      path: '/tabs/bounty-app?screen=messages&initialTab=requests',
+    });
+  });
+
+  test('still routes a bundled application notification that carries no bountyId', () => {
+    const action = resolveNotificationDeepLink({ type: 'application', data: {} });
+    expect(action.kind).toBe('route');
+  });
+
+  test('never resolves to a /bounty/:id URL (which the admin console used to shadow)', () => {
+    const action = resolveNotificationDeepLink({ type: 'application', data: { bountyId: 'abc-123' } });
+    expect(action.kind === 'route' && action.path).not.toMatch(/^\/bounty\//);
+  });
+});

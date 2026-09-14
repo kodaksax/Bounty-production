@@ -17,6 +17,8 @@ interface ApplicantCardProps {
   onAccept: (requestId: string | number) => Promise<void>;
   onReject: (requestId: string | number) => Promise<void>;
   onRequestMoreInfo?: (requestId: string | number) => void;
+  /** True while the "Ask a question" conversation is being opened. */
+  isAskingQuestion?: boolean;
   referrerOverride?: string;
 }
 
@@ -25,6 +27,7 @@ export function ApplicantCard({
   onAccept,
   onReject,
   onRequestMoreInfo,
+  isAskingQuestion = false,
   referrerOverride,
 }: ApplicantCardProps) {
   const { theme } = useAppThemeContext();
@@ -258,13 +261,18 @@ export function ApplicantCard({
           <View style={s.secondaryRow}>
             {onRequestMoreInfo && (
               <TouchableOpacity
-                style={[s.secondaryAction, (isProcessing || request.status !== 'pending') && s.actionDisabled]}
+                style={[s.secondaryAction, (isProcessing || isAskingQuestion || request.status !== 'pending') && s.actionDisabled]}
                 onPress={handleRequestInfo}
-                disabled={isProcessing || request.status !== 'pending'}
+                disabled={isProcessing || isAskingQuestion || request.status !== 'pending'}
                 accessibilityRole="button"
                 accessibilityLabel={`Ask ${applicantName} a question`}
+                accessibilityState={{ busy: isAskingQuestion, disabled: isProcessing || isAskingQuestion || request.status !== 'pending' }}
               >
-                <MaterialIcons name="chat" size={16} color={theme.textSecondary} />
+                {isAskingQuestion ? (
+                  <ActivityIndicator size="small" color={theme.textSecondary} />
+                ) : (
+                  <MaterialIcons name="chat" size={16} color={theme.textSecondary} />
+                )}
                 <Text style={s.secondaryActionText}>Ask a question</Text>
               </TouchableOpacity>
             )}

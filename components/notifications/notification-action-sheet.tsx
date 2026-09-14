@@ -1,10 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { bountyRequestService } from 'lib/services/bounty-request-service';
-import { analyticsService } from 'lib/services/analytics-service';
 import { capture as posthogCapture } from 'lib/posthog';
 import { notificationService } from 'lib/services/notification-service';
-import { resolveNotificationDeepLink } from 'lib/services/notification-deep-links';
+import { POSTER_REQUESTS_PATH, resolveNotificationDeepLink } from 'lib/services/notification-deep-links';
 import { sendMessage } from 'lib/services/supabase-messaging';
 import { categoryForNotificationType, isBundled } from 'lib/config/notification-taxonomy';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
@@ -13,6 +12,7 @@ import type { Notification } from 'lib/types';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -83,36 +83,24 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     }
   };
 
-  const handleAccept = async () => {
-    const requestId = notification?.data?.requestId;
-    if (!requestId) return;
-    setBusy('accept');
-    try {
-      const result = await bountyRequestService.acceptRequest(requestId);
-      if (result) {
-        // useAcceptRequest.ts is the only other place this fires; accepting
-        // from a push notification instead of the in-app list used to skip
-        // it entirely, undercounting the canonical acceptance funnel.
-        void analyticsService
-          .trackEvent('application_accepted', {
-            role: 'poster',
-            bounty_id: notification?.data?.bountyId ? String(notification.data.bountyId) : undefined,
-            application_id: String(requestId),
-            hunter_id: notification?.data?.hunterId ? String(notification.data.hunterId) : undefined,
-          })
-          .catch(() => {});
-      }
-      posthogCapture('notification_action_completed', {
-        notification_type: notification?.type,
-        action: 'accept_application',
-        bounty_id: notification?.data?.bountyId ?? null,
-      });
-      await finishAndClose();
-    } catch (e) {
-      console.error('[NotificationActionSheet] accept failed', e);
-    } finally {
-      setBusy(null);
-    }
+  // Accepting is where money moves under pay-at-accept, so it must go through
+  // the Requests tab's accept flow (useAcceptRequest + useAcceptFunding): that
+  // is what confirms the charge before escrow is reserved and recovers when the
+  // wallet can't cover it. Accepting inline here skipped the confirmation and,
+  // on an `insufficient_funds_for_escrow` / `bounty_not_funded` refusal, only
+  // logged to the console — the poster tapped Accept and nothing happened.
+  const handleAccept = () => {
+    if (!notification) return;
+    posthogCapture('notification_opened', {
+      notification_type: notification.type,
+      category: notification.category,
+      bounty_id: notification.data?.bountyId ?? null,
+      deep_link_kind: 'route',
+      surface: 'action_sheet_accept',
+    });
+    void notificationService.markAsRead([notification.id]).catch(() => {});
+    onClose();
+    router.push(POSTER_REQUESTS_PATH as any);
   };
 
   const handleDecline = async () => {
@@ -124,6 +112,7 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
       await finishAndClose();
     } catch (e) {
       console.error('[NotificationActionSheet] decline failed', e);
+      Alert.alert("Couldn't decline", 'Check your connection and try again. The application is still pending.');
     } finally {
       setBusy(null);
     }
@@ -163,8 +152,14 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
                   <TouchableOpacity style={[s.actionButton, s.declineButton]} onPress={handleDecline} disabled={!!busy}>
                     {busy === 'decline' ? <ActivityIndicator color={theme.error} /> : <Text style={s.declineText}>Decline</Text>}
                   </TouchableOpacity>
-                  <TouchableOpacity style={[s.actionButton, s.acceptButton]} onPress={handleAccept} disabled={!!busy}>
-                    {busy === 'accept' ? <ActivityIndicator color="#fff" /> : <Text style={s.acceptText}>Accept</Text>}
+                  <TouchableOpacity
+                    style={[s.actionButton, s.acceptButton]}
+                    onPress={handleAccept}
+                    disabled={!!busy}
+                    accessibilityRole="button"
+                    accessibilityHint="Opens your requests to review and accept this hunter"
+                  >
+                    <Text style={s.acceptText}>Review & Accept</Text>
                   </TouchableOpacity>
                 </View>
               ) : null}

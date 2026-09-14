@@ -36,71 +36,71 @@ export const ROUTES = {
   // Admin section - Comprehensive routing architecture
   ADMIN: {
     // Root admin dashboard
-    INDEX: '/(admin)',
+    INDEX: '/admin',
 
     // Founder Command Center: marketplace flow, money integrity, live event feed
-    COMMAND_CENTER: '/(admin)/command-center',
+    COMMAND_CENTER: '/admin/command-center',
     /** Financial integrity queue -- everything anomaly detection found. */
-    ANOMALIES: '/(admin)/anomalies',
+    ANOMALIES: '/admin/anomalies',
 
     
     // User Management
-    USERS: '/(admin)/users',
-    USER_DETAIL: (id: string | number) => `/(admin)/user/${id}` as const,
-    BLOCKED_USERS: '/(admin)/blocked-users',
-    VERIFICATIONS: '/(admin)/verifications',
+    USERS: '/admin/users',
+    USER_DETAIL: (id: string | number) => `/admin/user/${id}` as const,
+    BLOCKED_USERS: '/admin/blocked-users',
+    VERIFICATIONS: '/admin/verifications',
     
     // Bounty Management
-    BOUNTIES: '/(admin)/bounties',
-    BOUNTY_DETAIL: (id: string | number) => `/(admin)/bounty/${id}` as const,
+    BOUNTIES: '/admin/bounties',
+    BOUNTY_DETAIL: (id: string | number) => `/admin/bounty/${id}` as const,
     /** Hunter applications for one bounty. */
-    BOUNTY_REQUESTS: (id: string | number) => `/(admin)/bounty/${id}/requests` as const,
+    BOUNTY_REQUESTS: (id: string | number) => `/admin/bounty/${id}/requests` as const,
     /** Completion submissions (proof of work) for one bounty. */
-    BOUNTY_COMPLETIONS: (id: string | number) => `/(admin)/bounty/${id}/completions` as const,
+    BOUNTY_COMPLETIONS: (id: string | number) => `/admin/bounty/${id}/completions` as const,
     /** Canonical event ledger for one bounty: the real lifecycle sequence. */
-    BOUNTY_TIMELINE: (id: string | number) => `/(admin)/bounty/${id}/timeline` as const,
+    BOUNTY_TIMELINE: (id: string | number) => `/admin/bounty/${id}/timeline` as const,
     
     // Financial & Transactions
-    TRANSACTIONS: '/(admin)/transactions',
-    WITHDRAWAL_RECOVERY: '/(admin)/withdrawal-recovery',
-    BALANCE_RECONCILIATION: '/(admin)/balance-reconciliation',
+    TRANSACTIONS: '/admin/transactions',
+    WITHDRAWAL_RECOVERY: '/admin/withdrawal-recovery',
+    BALANCE_RECONCILIATION: '/admin/balance-reconciliation',
     
     // Analytics & Reporting
-    ANALYTICS: '/(admin)/analytics',
-    REPORTS: '/(admin)/reports',
+    ANALYTICS: '/admin/analytics',
+    REPORTS: '/admin/reports',
 
     // Trust & Safety: proactive bounty moderation queue (detect -> review ->
     // approve / hide / remove), separate from the user-report queue above.
-    MODERATION: '/(admin)/moderation',
-    MODERATION_DETAIL: (id: string | number) => `/(admin)/moderation/${id}` as const,
+    MODERATION: '/admin/moderation',
+    MODERATION_DETAIL: (id: string | number) => `/admin/moderation/${id}` as const,
     
     // Dispute Management
-    DISPUTES: '/(admin)/disputes',
-    DISPUTE_DETAIL: (id: string | number) => `/(admin)/disputes/${id}` as const,
+    DISPUTES: '/admin/disputes',
+    DISPUTE_DETAIL: (id: string | number) => `/admin/disputes/${id}` as const,
     
     // Settings section
     SETTINGS: {
-      INDEX: '/(admin)/settings',
-      GENERAL: '/(admin)/settings/general',
-      // NOTIFICATIONS removed: /(admin)/settings/notifications persisted
+      INDEX: '/admin/settings',
+      GENERAL: '/admin/settings/general',
+      // NOTIFICATIONS removed: /admin/settings/notifications persisted
       // nothing and no backend consumed any of its values -- there is no admin
       // alerting system for it to configure.
-      SECURITY: '/(admin)/settings/security',
-      // AUDIT_LOG removed: /(admin)/settings/audit-log rendered a hardcoded
+      SECURITY: '/admin/settings/security',
+      // AUDIT_LOG removed: /admin/settings/audit-log rendered a hardcoded
       // seven-row mock array and shadowed the real, Supabase-backed audit
       // viewer. Settings now links to ADMIN.AUDIT_LOGS below.
     },
     
     // Support section
     SUPPORT: {
-      INDEX: '/(admin)/support',
-      HELP: '/(admin)/support/help',
-      FEEDBACK: '/(admin)/support/feedback',
+      INDEX: '/admin/support',
+      HELP: '/admin/support/help',
+      FEEDBACK: '/admin/support/feedback',
     },
     
     // Error/fallback routes
-    NOT_FOUND: '/(admin)/not-found',
-    AUDIT_LOGS: '/(admin)/audit-logs',
+    NOT_FOUND: '/admin/not-found',
+    AUDIT_LOGS: '/admin/audit-logs',
   },
 } as const;
 

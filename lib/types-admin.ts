@@ -1,4 +1,5 @@
 // lib/types-admin.ts - Admin-specific type definitions
+import type { ParsedBountyAttachments } from './admin/bounty-attachments';
 import type { Money } from './types';
 
 // ─── Canonical status vocabularies ────────────────────────────────────────
@@ -139,6 +140,8 @@ export interface AdminBounty {
   isStale?: boolean;
   staleReason?: string;
   lastModified?: string;
+  /** Parsed from `attachments_json`; only viewable (uploaded) files. */
+  attachments?: ParsedBountyAttachments;
 }
 
 /**

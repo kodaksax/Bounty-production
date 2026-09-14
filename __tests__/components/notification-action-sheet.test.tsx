@@ -1,5 +1,5 @@
-import { fireEvent, render } from '@testing-library/react-native';
-import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
+import { Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { NotificationActionSheet } from '../../components/notifications/notification-action-sheet';
 import type { Notification } from '../../lib/types';
 
@@ -16,11 +16,16 @@ jest.mock('../../components/ui/app-modal', () => ({
 }));
 
 jest.mock('lib/services/notification-service', () => ({
-  notificationService: { markAsRead: jest.fn() },
+  notificationService: { markAsRead: jest.fn(() => Promise.resolve()) },
 }));
 
+const mockAcceptRequest = jest.fn();
+const mockRejectRequest = jest.fn();
 jest.mock('lib/services/bounty-request-service', () => ({
-  bountyRequestService: { acceptRequest: jest.fn(), rejectRequest: jest.fn() },
+  bountyRequestService: {
+    acceptRequest: (...a: unknown[]) => mockAcceptRequest(...a),
+    rejectRequest: (...a: unknown[]) => mockRejectRequest(...a),
+  },
 }));
 
 jest.mock('lib/services/supabase-messaging', () => ({
@@ -28,7 +33,7 @@ jest.mock('lib/services/supabase-messaging', () => ({
 }));
 
 jest.mock('lib/config/notification-taxonomy', () => ({
-  categoryForNotificationType: () => 'messages',
+  categoryForNotificationType: (type: string) => (type === 'application' ? 'marketplace' : 'messages'),
   isBundled: () => false,
 }));
 
@@ -74,5 +79,54 @@ describe('NotificationActionSheet', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith('/tabs/messenger/conversation%2Fid');
+  });
+
+  describe('application notifications', () => {
+    const applicationNotification: Notification = {
+      id: 'app-notification',
+      user_id: 'poster-id',
+      type: 'application',
+      category: 'marketplace',
+      title: 'New Bounty Application',
+      body: 'Someone applied to your bounty',
+      data: { bountyId: 'b1', requestId: 'req-1', hunterId: 'h1' },
+      read: false,
+      created_at: '2026-09-14T00:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      mockAcceptRequest.mockReset();
+      mockRejectRequest.mockReset();
+    });
+
+    it('sends Accept through the Requests tab instead of accepting inline (funding confirmation lives there)', () => {
+      const onClose = jest.fn();
+      const { getByText } = render(
+        <NotificationActionSheet notification={applicationNotification} currentUserId="poster-id" onClose={onClose} />
+      );
+
+      fireEvent.press(getByText('Review & Accept'));
+
+      expect(mockAcceptRequest).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(push).toHaveBeenCalledWith('/tabs/bounty-app?screen=messages&initialTab=requests');
+    });
+
+    it('tells the poster when a decline fails instead of failing silently', async () => {
+      mockRejectRequest.mockRejectedValueOnce(new Error('offline'));
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const { getByText } = render(
+        <NotificationActionSheet notification={applicationNotification} currentUserId="poster-id" onClose={jest.fn()} />
+      );
+
+      await act(async () => {
+        fireEvent.press(getByText('Decline'));
+      });
+
+      expect(mockRejectRequest).toHaveBeenCalledWith('req-1');
+      expect(alertSpy).toHaveBeenCalledWith("Couldn't decline", expect.any(String));
+      jest.restoreAllMocks();
+    });
   });
 });

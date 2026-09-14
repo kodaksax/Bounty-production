@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service';
 import { messageService } from 'lib/services/message-service';
@@ -38,12 +38,33 @@ interface UseAskApplicantParams {
  * id here is correct regardless and is what makes the per-bounty fix a
  * server-side change only.
  */
+/**
+ * How long taps stay ignored after the messenger push, so taps landing during
+ * the screen transition can't stack a second conversation screen.
+ */
+export const ASK_APPLICANT_NAV_LOCK_MS = 1000;
+
 export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
   const router = useRouter();
   const [askingRequestId, setAskingRequestId] = useState<string | null>(null);
+  // Synchronous guard. Opening the thread awaits an RPC before navigating, and
+  // `askingRequestId` state can't block taps that arrive before the next
+  // render, so every tap during that round-trip used to push its own messenger
+  // screen (GitHub #810).
+  const inFlightRef = useRef(false);
+  const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+    },
+    []
+  );
 
   const handleAskApplicant = useCallback(
     async (requestId: string | number) => {
+      if (inFlightRef.current) return;
+
       const request = bountyRequests.find((r) => String(r.id) === String(requestId));
       const hunterId = request?.hunter_id ? String(request.hunter_id) : null;
 
@@ -55,7 +76,9 @@ export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
         return;
       }
 
+      inFlightRef.current = true;
       setAskingRequestId(String(requestId));
+      let navigated = false;
       try {
         const conversation = await messageService.getOrCreateConversation(
           [hunterId],
@@ -91,6 +114,7 @@ export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
           });
 
         router.push(`/tabs/messenger/${encodeURIComponent(String(conversation.id))}` as never);
+        navigated = true;
       } catch (error) {
         logClientError('Failed to open pre-acceptance conversation with applicant', {
           error,
@@ -102,7 +126,16 @@ export function useAskApplicant({ bountyRequests }: UseAskApplicantParams) {
           'Check your connection and try again. Your bounty and this application are unaffected.'
         );
       } finally {
-        setAskingRequestId(null);
+        const release = () => {
+          releaseTimerRef.current = null;
+          inFlightRef.current = false;
+          setAskingRequestId(null);
+        };
+        if (navigated) {
+          releaseTimerRef.current = setTimeout(release, ASK_APPLICANT_NAV_LOCK_MS);
+        } else {
+          release();
+        }
       }
     },
     [bountyRequests, router]

@@ -11,6 +11,7 @@
 // `user_id`/`receiver_id`) and the per-user aggregates are computed
 // server-side by the admin-profiles Edge Function.
 import { supabase } from '../supabase';
+import { parseBountyAttachments, type ParsedBountyAttachments } from './bounty-attachments';
 import {
   ADMIN_PAGE_SIZE,
   type AdminBounty,
@@ -124,6 +125,7 @@ function mapBounty(row: any): AdminBounty {
     isStale: row.is_stale ?? false,
     staleReason: row.stale_reason ?? undefined,
     lastModified: row.updated_at ?? undefined,
+    attachments: row.attachments_json === undefined ? undefined : parseBountyAttachments(row.attachments_json),
   };
 }
 
@@ -334,6 +336,17 @@ export const adminDataClient = {
   },
 
   // Fetch single bounty by ID
+  /** Photos and files on one listing, for screens that don't load the row. */
+  async fetchBountyAttachments(bountyId: string): Promise<ParsedBountyAttachments> {
+    const { data, error } = await supabase
+      .from('bounties')
+      .select('attachments_json')
+      .eq('id', bountyId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return parseBountyAttachments(data?.attachments_json);
+  },
+
   async fetchAdminBountyById(id: string): Promise<AdminBounty | null> {
     const { data, error } = await supabase
       .from('bounties')

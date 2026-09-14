@@ -21,6 +21,7 @@ import { useAuthContext } from '../../hooks/use-auth-context'
 import { useFadeAnimation } from '../../hooks/use-accessible-animation'
 import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
+import { ROUTES } from '../../lib/routes'
 import { screenNameForBountyAppTab } from '../../lib/analytics/screen-name'
 import { trackScreenView } from '../../lib/analytics/screen-tracking'
 import { API_TIMEOUTS } from '../../lib/config/network'
@@ -260,11 +261,25 @@ function BountyAppInner() {
   // If the admin tab is selected, navigate to the admin route from an effect
   // to avoid triggering navigation/state updates during render (which causes
   // the "Cannot update a component while rendering a different component" error).
+  //
+  // The console is its own stack screen, so the shell must not stay parked on
+  // 'admin' (it renders nothing for it): backing out of the console used to
+  // land on an empty shell, and tapping Admin again was a no-op because the
+  // state never changed — the operator was stuck (GitHub #807).
   useEffect(() => {
     if (activeScreen === 'admin' && showAdminTab) {
-      router.push('/(admin)')
+      router.push(ROUTES.ADMIN.INDEX)
+      setActiveScreen('bounty')
     }
   }, [activeScreen, showAdminTab, router])
+
+  const handleNavigate = useCallback((next: string) => {
+    if (next === 'admin') {
+      if (showAdminTab) router.push(ROUTES.ADMIN.INDEX)
+      return
+    }
+    setActiveScreen(next)
+  }, [showAdminTab, router])
 
   // Redirect unauthenticated users immediately — do not wait for AsyncStorage.
   if (!isLoading && !session) {
@@ -371,7 +386,7 @@ function BountyAppInner() {
           </FadeInScreen>
         )}
 
-        {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />}
+        {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={handleNavigate} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />}
 
         {/* Moments Queue host — global, so a contextual activation prompt
             (verify identity, set up payouts, enable notifications, etc.)

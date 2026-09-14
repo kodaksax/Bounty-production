@@ -1,6 +1,6 @@
 // Tests for the admin console preference store.
 //
-// Context: app/(admin)/settings/general.tsx held seven preferences in
+// Context: app/admin/settings/general.tsx held seven preferences in
 // component state and its "Save Settings" button showed
 // "Your preferences have been updated successfully." without writing anything
 // anywhere. Nothing read the values back and they were lost on unmount.
@@ -93,9 +93,9 @@ describe('admin preferences', () => {
     // Guards against the previous failure mode: preferences that exist only as
     // decoration. Each key here has a named consumer.
     expect(Object.keys(DEFAULT_ADMIN_PREFERENCES).sort()).toEqual([
-      'autoRefreshSeconds', // app/(admin)/index.tsx
+      'autoRefreshSeconds', // app/admin/index.tsx
       'compactRows', // admin list screens
-      'defaultBountyStatus', // app/(admin)/bounties.tsx
+      'defaultBountyStatus', // app/admin/bounties.tsx
       'pageSize', // hooks/useAdminList.ts
     ]);
   });

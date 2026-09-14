@@ -69,7 +69,13 @@ export function AdminHeader({
     router.replace((backFallback ?? ROUTES.ADMIN.INDEX) as never);
   }, [onBack, backFallback]);
 
-  const showBackButton = showBack ?? !!onBack;
+  // Every admin screen is pushed from somewhere (the app shell, a dashboard
+  // tile, a list row, a notification), so back is on unless a screen opts out.
+  // It used to default to `!!onBack`, which silently hid the control on every
+  // screen that only declared a `backFallback` (or nothing) — Moderation,
+  // Verifications, Disputes, Withdrawal Recovery, the Dashboard — leaving
+  // "Hide admin tab" as the only exit (GitHub #807).
+  const showBackButton = showBack ?? true;
 
   return (
     <View
