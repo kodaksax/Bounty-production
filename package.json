@@ -60,6 +60,7 @@
     "qa:shoal:ci-secrets": "node qa/shoal/bin/ci-secrets.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:guardrails": "jest --runInBand __tests__/unit/route-url-collisions.test.ts __tests__/unit/no-keyboard-avoiding-view-in-modal.test.ts __tests__/components/app-modal-keyboard.test.tsx __tests__/components/keyboard-avoiding.test.tsx __tests__/unit/verify-issue-closures.test.ts",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "test:verbose": "jest --verbose",
     "test:api": "node scripts/test-api.js",
