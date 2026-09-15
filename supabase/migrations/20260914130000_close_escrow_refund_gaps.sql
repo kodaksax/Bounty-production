@@ -46,7 +46,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_has_escrow   boolean;
+  v_has_funding  boolean;
   v_has_requests boolean;
 BEGIN
   -- funding_mode is immutable. Otherwise the guard below could be sidestepped
@@ -56,18 +56,43 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
+  IF NEW.payment_architecture_version IS DISTINCT FROM OLD.payment_architecture_version THEN
+    RAISE EXCEPTION 'bounty_payment_architecture_version_is_immutable'
+      USING ERRCODE = '42501';
+  END IF;
+
   SELECT EXISTS (
-    SELECT 1 FROM public.wallet_transactions wt
-    WHERE wt.bounty_id = NEW.id
-      AND wt.type      = 'escrow'
-      AND wt.status    = 'completed'
-  ) INTO v_has_escrow;
+    SELECT 1
+    WHERE (
+      COALESCE(NEW.payment_architecture_version, 1) = 1
+      AND EXISTS (
+        SELECT 1 FROM public.wallet_transactions wt
+        WHERE wt.bounty_id = NEW.id
+          AND wt.type      = 'escrow'
+          AND wt.status    = 'completed'
+      )
+    ) OR (
+      COALESCE(NEW.payment_architecture_version, 1) = 2
+      AND EXISTS (
+        SELECT 1 FROM public.bounty_payments bp
+        WHERE bp.bounty_id = NEW.id
+          AND bp.status IN ('authorized', 'captured', 'release_pending', 'refund_pending', 'released', 'refunded', 'canceled')
+      )
+    ) OR (
+      COALESCE(NEW.payment_architecture_version, 1) = 3
+      AND EXISTS (
+        SELECT 1 FROM public.bounty_v3_funding bf
+        WHERE bf.bounty_id = NEW.id
+          AND bf.state IN ('authorized', 'awaiting_hunter_onboarding', 'capturing', 'released', 'expired', 'canceled')
+      )
+    )
+  ) INTO v_has_funding;
 
   -- Price/terms freeze. Once escrow exists, release/refund settle against
   -- whatever was actually escrowed — true for a legacy at_post bounty exactly
   -- as much as a deferred at_accept one. Checked unconditionally, before the
   -- at_accept-only logic below, so it can never be skipped by funding_mode.
-  IF v_has_escrow THEN
+  IF v_has_funding THEN
     IF NEW.amount IS DISTINCT FROM OLD.amount THEN
       RAISE EXCEPTION 'bounty_amount_locked_by_escrow'
         USING ERRCODE = '42501';
@@ -86,7 +111,7 @@ BEGIN
   -- yet, which is what a poster fixing a typo actually needs. Once
   -- applications exist, the amount hunters evaluated must be the amount that
   -- gets escrowed.
-  IF NOT v_has_escrow THEN
+  IF NOT v_has_funding THEN
     SELECT EXISTS (
       SELECT 1 FROM public.bounty_requests br WHERE br.bounty_id = NEW.id
     ) INTO v_has_requests;
@@ -108,7 +133,7 @@ BEGIN
      AND NEW.status IS DISTINCT FROM OLD.status
      AND NEW.is_for_honor IS NOT TRUE
      AND COALESCE(NEW.amount, 0) > 0
-     AND NOT v_has_escrow
+     AND NOT v_has_funding
   THEN
     RAISE EXCEPTION 'bounty_not_funded'
       USING ERRCODE  = '23514',
@@ -121,7 +146,7 @@ BEGIN
      AND NEW.accepted_by IS DISTINCT FROM OLD.accepted_by
      AND NEW.is_for_honor IS NOT TRUE
      AND COALESCE(NEW.amount, 0) > 0
-     AND NOT v_has_escrow
+     AND NOT v_has_funding
   THEN
     RAISE EXCEPTION 'bounty_not_funded'
       USING ERRCODE = '23514',
@@ -179,7 +204,10 @@ BEGIN
             HINT    = 'Set an amount for this bounty instead of switching it to for-honor.';
   END IF;
 
-  IF NEW.amount IS DISTINCT FROM OLD.amount
+  IF (
+       NEW.amount IS DISTINCT FROM OLD.amount
+       OR NEW.is_for_honor IS DISTINCT FROM OLD.is_for_honor
+     )
      AND NOT COALESCE(NEW.is_for_honor, false)
      AND COALESCE(NEW.amount, 0) < v_minimum
   THEN
@@ -224,6 +252,7 @@ AS $$
 DECLARE
   v_bounty    public.bounties%rowtype;
   v_caller    UUID := auth.uid();
+  v_has_v1_escrow boolean;
   v_poster_id UUID;
   v_hunter    TEXT;
   v_title     TEXT;
@@ -254,13 +283,23 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
+  v_has_v1_escrow :=
+    COALESCE(v_bounty.payment_architecture_version, 1) = 1
+    AND EXISTS (
+      SELECT 1 FROM public.wallet_transactions wt
+      WHERE wt.bounty_id = p_bounty_id
+        AND wt.type      = 'escrow'
+        AND wt.status    = 'completed'
+    );
+
   v_poster_id := COALESCE(v_bounty.poster_id, v_bounty.user_id);
   v_hunter    := public.get_display_name(v_caller);
   v_title     := left(COALESCE(NULLIF(TRIM(v_bounty.title), ''), 'your bounty'), 80);
 
-  -- For-honor bounties hold no money, so there is nothing for the poster to
-  -- weigh: they cancel outright, exactly as the old client-side branch did.
-  IF COALESCE(v_bounty.is_for_honor, FALSE) THEN
+  -- For-honor bounties with no legacy v1 escrow hold no money, so there is
+  -- nothing for the poster to weigh: they cancel outright, exactly as the old
+  -- client-side branch did.
+  IF COALESCE(v_bounty.is_for_honor, FALSE) AND NOT v_has_v1_escrow THEN
     UPDATE public.bounties
        SET status = 'cancelled', updated_at = now()
      WHERE id = p_bounty_id;
@@ -360,60 +399,57 @@ DECLARE
 BEGIN
   FOR v_row IN
     SELECT bc.id AS cancellation_id, bc.bounty_id,
-           b.is_for_honor, b.payment_architecture_version
+           b.poster_id, b.user_id
     FROM public.bounty_cancellations bc
     JOIN public.bounties b ON b.id = bc.bounty_id
     WHERE bc.status = 'pending'
       AND b.status::text = 'cancelled'
+      AND COALESCE(b.payment_architecture_version, 1) = 1
     FOR UPDATE OF bc
   LOOP
     v_escrow_tx_id  := NULL;
     v_escrow_amount := NULL;
     v_recipient_id  := NULL;
 
-    IF NOT COALESCE(v_row.is_for_honor, false)
-       AND COALESCE(v_row.payment_architecture_version, 1) = 1
-    THEN
-      SELECT EXISTS (
-        SELECT 1 FROM public.wallet_transactions
-        WHERE bounty_id = v_row.bounty_id
-          AND type IN ('refund', 'release')
-          AND status IN ('completed', 'pending')
-      ) INTO v_already_settled;
+    SELECT EXISTS (
+      SELECT 1 FROM public.wallet_transactions
+      WHERE bounty_id = v_row.bounty_id
+        AND type IN ('refund', 'release')
+        AND status IN ('completed', 'pending')
+    ) INTO v_already_settled;
 
-      IF NOT v_already_settled THEN
-        SELECT id, amount, user_id
-          INTO v_escrow_tx_id, v_escrow_amount, v_recipient_id
-          FROM public.wallet_transactions
-         WHERE bounty_id = v_row.bounty_id
-           AND type      = 'escrow'
-           AND status    = 'completed'
-         LIMIT 1;
+    IF NOT v_already_settled THEN
+      SELECT id, amount, COALESCE(user_id, v_row.poster_id, v_row.user_id)
+        INTO v_escrow_tx_id, v_escrow_amount, v_recipient_id
+        FROM public.wallet_transactions
+       WHERE bounty_id = v_row.bounty_id
+         AND type      = 'escrow'
+         AND status    = 'completed'
+       LIMIT 1;
 
-        IF v_escrow_tx_id IS NOT NULL AND v_recipient_id IS NOT NULL THEN
-          v_escrow_amount := ABS(v_escrow_amount);
+      IF v_escrow_tx_id IS NOT NULL AND v_recipient_id IS NOT NULL THEN
+        v_escrow_amount := ABS(v_escrow_amount);
 
-          INSERT INTO public.wallet_transactions (
-            user_id, bounty_id, type, amount, description, status, metadata
-          ) VALUES (
-            v_recipient_id,
-            v_row.bounty_id,
-            'refund',
-            v_escrow_amount,
-            'Refund for bounty ' || v_row.bounty_id::text || ': stale cancellation request backfill',
-            'completed',
-            jsonb_build_object(
-              'bounty_id',              v_row.bounty_id,
-              'escrow_transaction_id',  v_escrow_tx_id,
-              'reason',                 'stale_cancellation_backfill_20260914',
-              'refund_percentage',      100,
-              'original_escrow_amount', v_escrow_amount,
-              'refunded_at',            now()
-            )
-          );
+        INSERT INTO public.wallet_transactions (
+          user_id, bounty_id, type, amount, description, status, metadata
+        ) VALUES (
+          v_recipient_id,
+          v_row.bounty_id,
+          'refund',
+          v_escrow_amount,
+          'Refund for bounty ' || v_row.bounty_id::text || ': stale cancellation request backfill',
+          'completed',
+          jsonb_build_object(
+            'bounty_id',              v_row.bounty_id,
+            'escrow_transaction_id',  v_escrow_tx_id,
+            'reason',                 'stale_cancellation_backfill_20260914',
+            'refund_percentage',      100,
+            'original_escrow_amount', v_escrow_amount,
+            'refunded_at',            now()
+          )
+        );
 
-          PERFORM public.update_balance(v_recipient_id, v_escrow_amount);
-        END IF;
+        PERFORM public.update_balance(v_recipient_id, v_escrow_amount);
       END IF;
     END IF;
 
