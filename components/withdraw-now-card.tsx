@@ -25,6 +25,16 @@ export interface WithdrawNowCardProps {
   onWithdrawComplete?: () => void;
 }
 
+// Error codes where "Withdrawal failed" would misdescribe what happened: the
+// request was declined with nothing lost, or the payout state is still being
+// verified. These get the same softer wording (neutral title, "schedule"
+// icon) that the sibling WithdrawalResultScreen already uses, so the two
+// components agree on what counts as a failure.
+const SOFT_FAILURE_TITLES: Record<string, string> = {
+  withdrawal_already_in_progress: 'Withdrawal already in progress',
+  unknown_payout_state: 'Verifying your withdrawal',
+};
+
 /** Stripe reports arrival as epoch seconds; render it as a plain date. */
 function formatArrival(arrivalDate: number | null): string {
   if (!arrivalDate) return '1-2 business days';
@@ -128,11 +138,18 @@ export function WithdrawNowCard({ onWithdrawComplete }: WithdrawNowCardProps) {
 
   // --- Failed --------------------------------------------------------------
   if (payout.phase === 'failed' && payout.error) {
+    const softTitle = SOFT_FAILURE_TITLES[payout.error.code];
     return (
       <View style={s.card}>
         <View style={s.statusRow}>
-          <MaterialIcons name="error-outline" size={22} color={theme.error} />
-          <Text style={[s.statusTitle, { color: theme.error }]}>Withdrawal failed</Text>
+          <MaterialIcons
+            name={softTitle ? 'schedule' : 'error-outline'}
+            size={22}
+            color={softTitle ? theme.textSecondary : theme.error}
+          />
+          <Text style={[s.statusTitle, !softTitle && { color: theme.error }]}>
+            {softTitle ?? 'Withdrawal failed'}
+          </Text>
         </View>
         <Text style={s.helperText}>{payout.error.message}</Text>
         <View style={s.actionRow}>

@@ -288,6 +288,25 @@ describe('useConnectPayout', () => {
     );
   });
 
+  it.each(['failed', 'canceled', 'cancelled'])(
+    'does not declare success when the payout status is %s',
+    async status => {
+      mockFetch({ ok: true, json: () => Promise.resolve({ ...SUCCESS, status }) });
+      const { result } = renderHook(() => useConnectPayout());
+
+      await act(async () => {
+        await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+      });
+
+      await waitFor(() => expect(result.current.phase).toBe('failed'));
+      expect(result.current.result).toBeNull();
+      expect(result.current.error).toMatchObject({ code: 'payout_declined', retryable: true });
+      const eventNames = (analyticsService.trackEvent as jest.Mock).mock.calls.map(c => c[0]);
+      expect(eventNames).toEqual(['payout_initiated', 'payout_failed']);
+      expect(eventNames).not.toContain('payout_success');
+    }
+  );
+
   it('fails safely when there is no session', async () => {
     (useAuthContext as jest.Mock).mockReturnValue({ session: null });
     mockFetch({ ok: true, json: () => Promise.resolve(SUCCESS) });
