@@ -3,7 +3,6 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BrandingLogo } from "components/ui/branding-logo"
-import * as DocumentPicker from 'expo-document-picker'
 import { useEffect, useState } from "react"
 import { Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from '../hooks/useAuthProfile'
@@ -159,20 +158,16 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
     return () => clearTimeout(t)
   }, [skills, SKILLS_STORAGE_KEY])
 
-  const attachCredential = async (skillId: string) => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true })
-      if (res.canceled) return
-      if (res.assets && res.assets.length > 0) {
-        const uri = res.assets[0].uri
-        setSkills(prev => prev.map(s => s.id === skillId ? { ...s, credentialUrl: uri } : s))
-        setBanner('Credential attached')
-        setTimeout(()=>setBanner(null), 1200)
-      }
-    } catch (e) {
-      setBanner('Attachment failed')
-      setTimeout(()=>setBanner(null), 1500)
-    }
+  // Disabled: this only ever stored a local file:// URI in this device's
+  // AsyncStorage/React state and was dropped entirely from handleSave's
+  // payload to updateProfile (only skill text is sent) -- no other user or
+  // device could ever see an attached credential, so the button implied an
+  // upload that never happened. Re-enable only once credentials actually
+  // upload to Supabase Storage and persist server-side (see
+  // hooks/use-portfolio-upload.ts for the pattern to reuse).
+  const attachCredential = async (_skillId: string) => {
+    setBanner('Credential uploads are coming soon')
+    setTimeout(()=>setBanner(null), 1500)
   }
 
   const removeCredential = (skillId: string) => {
@@ -311,13 +306,13 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
                   <View className="flex-row">
                     <TouchableOpacity
                       onPress={() => attachCredential(skill.id)}
-                      className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 rounded-lg flex-row items-center justify-center`}
+                      className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 rounded-lg flex-row items-center justify-center opacity-60`}
                       style={{ backgroundColor: theme.surfaceSecondary }}
                       accessibilityRole="button"
-                      accessibilityLabel={skill.credentialUrl ? 'Replace credential file' : 'Attach credential file'}
+                      accessibilityLabel="Attach credential file, coming soon"
                     >
                       <MaterialIcons name="attach-file" size={18} color={theme.primaryLight} accessibilityElementsHidden />
-                      <Text className="text-sm ml-1" style={{ color: theme.primaryLight }}>{skill.credentialUrl ? 'Replace Credential' : 'Attach Credential'}</Text>
+                      <Text className="text-sm ml-1" style={{ color: theme.primaryLight }}>Attach Credential (Coming soon)</Text>
                     </TouchableOpacity>
                     {skill.credentialUrl && (
                       <TouchableOpacity

@@ -27,6 +27,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
 import { ProfileBountyHistorySection } from "../../components/profile-bounty-history-section";
+import { RecentReviewsSection } from "../../components/recent-reviews-section";
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
 import { BrandingLogo } from "../../components/ui/branding-logo";
@@ -36,10 +37,8 @@ import { ScreenHeader } from "../../components/ui/screen-header";
 import { UserProfileScreenSkeleton } from "../../components/ui/skeleton-loaders";
 import { VerificationBadgeChips } from "../../components/ui/verification-badge-chips";
 import { useProfileActivityStats } from "../../hooks/useProfileActivityStats";
-import { useRatings } from "../../hooks/useRatings";
 import { authProfileService } from "../../lib/services/auth-profile-service";
 import { blockingService } from "../../lib/services/blocking-service";
-import { bountyRequestService } from "../../lib/services/bounty-request-service";
 import { messageService } from "../../lib/services/message-service";
 import { navigationIntent } from "../../lib/services/navigation-intent";
 ;
@@ -120,8 +119,6 @@ export default function UserProfileScreen() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([]);
   const { stats: activityStats } = useProfileActivityStats(userId);
-  const { stats: ratingStats } = useRatings(userId);
-  const [jobsAccepted, setJobsAccepted] = useState(0);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   const isOwnProfile = userId === currentUserId;
@@ -164,26 +161,6 @@ export default function UserProfileScreen() {
     };
     checkBlockStatus();
   }, [userId, isOwnProfile]);
-
-  // Hunter-side "jobs accepted" — distinct from activityStats (poster-side
-  // posted/completed, via useProfileActivityStats).
-  useEffect(() => {
-    let cancelled = false;
-    if (!userId) return;
-    bountyRequestService
-      .getByUserId(userId)
-      .then((requests) => {
-        if (!cancelled) {
-          setJobsAccepted(requests.filter((req) => req.status === 'accepted').length);
-        }
-      })
-      .catch((error) => {
-        console.error('[UserProfileScreen] Error fetching accepted jobs:', error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
 
   // Load skills for the user
   useEffect(() => {
@@ -231,12 +208,14 @@ export default function UserProfileScreen() {
           profileSkills.push({ id: 'verified', icon: 'verified-user', text: 'Verified contact' });
         }
 
-        // Add join date
+        // Add join date. No fabricated fallback date if it's unavailable --
+        // "New to Bounty" was previously a hardcoded "Member since 2024",
+        // which was simply false for any account created before or after 2024.
         if (profile.joinDate) {
           const joinDate = new Date(profile.joinDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
           profileSkills.push({ id: 'joined', icon: 'favorite', text: `Joined ${joinDate}` });
         } else {
-          profileSkills.push({ id: 'joined', icon: 'favorite', text: 'Member since 2024' });
+          profileSkills.push({ id: 'joined', icon: 'favorite', text: 'New to Bounty' });
         }
 
         setSkills(profileSkills);
@@ -322,7 +301,7 @@ export default function UserProfileScreen() {
       name: profile?.name || profile?.display_name || undefined,
       username: profile?.username || undefined,
       about: profile?.bio || undefined,
-      completedCount: activityStats.bountiesCompleted,
+      completedCount: activityStats.hunterCompleted,
     });
   };
 
@@ -540,8 +519,7 @@ export default function UserProfileScreen() {
           hideActions={true}
           hideFollowButton={true}
           activityStats={{
-            jobsAccepted,
-            jobsCompleted: activityStats.bountiesCompleted,
+            jobsCompleted: activityStats.hunterCompleted,
             bountiesPosted: activityStats.bountiesPosted,
           }}
         />
@@ -609,21 +587,6 @@ export default function UserProfileScreen() {
           </View>
         )}
 
-        {/* Stats */}
-        {FOLLOW_FEATURE_ENABLED && (
-          <View style={styles.statsContainer}>
-            <TouchableOpacity style={styles.statItem} onPress={handleFollowersPress}>
-              <Text style={styles.statValue}>{followerCount}</Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </TouchableOpacity>
-            <View style={styles.statDivider} />
-            <TouchableOpacity style={styles.statItem} onPress={handleFollowingPress}>
-              <Text style={styles.statValue}>{followingCount}</Text>
-              <Text style={styles.statLabel}>Following</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Profile completion meter — own profile only, encourages personalization */}
         {isOwnProfile && (
           <View style={styles.section}>
@@ -643,6 +606,7 @@ export default function UserProfileScreen() {
         {/* Verification + Milestone Badges */}
         <View style={styles.section}>
           <VerificationBadgeChips
+            isOwnProfile={isOwnProfile}
             input={{
               email_confirmed: profile.email_confirmed,
               phone_verified: profile.phone_verified,
@@ -666,11 +630,15 @@ export default function UserProfileScreen() {
             input={{
               bounties_posted: activityStats.bountiesPosted,
               bounties_completed: activityStats.bountiesCompleted,
-              average_rating: ratingStats.averageRating,
-              rating_count: ratingStats.ratingCount,
+              average_rating: activityStats.ratingAvg ?? undefined,
+              rating_count: activityStats.ratingCount,
             }}
           />
         </View>
+
+        {/* Recent reviews — the comment text behind the star average, previously
+            collected but never rendered anywhere. */}
+        <RecentReviewsSection userId={userId} />
 
         {/* Skillsets */}
         <View style={styles.section}>
@@ -681,8 +649,24 @@ export default function UserProfileScreen() {
         {/* Portfolio */}
         <PortfolioSection userId={userId} isOwnProfile={isOwnProfile} />
 
-        {/* Bounty history — respects moderation/removal via the RPC-backed stats hook's underlying query filter */}
+        {/* Bounties this user has posted — respects moderation/removal via the RPC-backed stats hook's underlying query filter */}
         <ProfileBountyHistorySection userId={userId} isOwnProfile={isOwnProfile} />
+
+        {/* Follower/following counts — social metadata, not a trust signal;
+            kept below the hiring-relevant content rather than beside it. */}
+        {FOLLOW_FEATURE_ENABLED && (
+          <View style={styles.statsContainer}>
+            <TouchableOpacity style={styles.statItem} onPress={handleFollowersPress}>
+              <Text style={styles.statValue}>{followerCount}</Text>
+              <Text style={styles.statLabel}>Followers</Text>
+            </TouchableOpacity>
+            <View style={styles.statDivider} />
+            <TouchableOpacity style={styles.statItem} onPress={handleFollowingPress}>
+              <Text style={styles.statValue}>{followingCount}</Text>
+              <Text style={styles.statLabel}>Following</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* Report Modal */}

@@ -15,6 +15,7 @@ import { blockingService } from 'lib/services/blocking-service';
 import { MAX_PORTFOLIO_ITEMS, portfolioService } from 'lib/services/portfolio-service';
 import type { PortfolioItem } from 'lib/types';
 import { normalizeAuthProfile, type NormalizedProfile } from 'lib/utils/normalize-profile';
+import { MIN_RATING_SAMPLE } from 'lib/utils/trust-summary';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -73,8 +74,9 @@ interface EnhancedProfileSectionProps {
   isOwnProfile?: boolean;
   showPortfolio?: boolean;
   activityStats?: {
+    /** Bounties completed AS THE HUNTER (get_profile_activity_stats.hunter_completed). This is what "Jobs Completed" shows. */
     jobsCompleted?: number;
-    jobsAccepted?: number;
+    /** Bounties this profile POSTED (any status open/in_progress/completed) — shown separately as "Bounties Posted". */
     bountiesPosted?: number;
   };
   hideActions?: boolean;
@@ -279,7 +281,11 @@ export function EnhancedProfileSection({
   } = useFollow(userId || '', authProfileFromHook?.id || '');
 
   const ratingUserId = resolvedUserId === 'current-user' ? undefined : resolvedUserId;
-  const { stats: ratingStats, loading: ratingsLoading } = useRatings(ratingUserId);
+  // Only the aggregated average/count is used here -- skip fetching the
+  // individual ratings rows useRatings would otherwise pull in parallel.
+  const { stats: ratingStats, loading: ratingsLoading } = useRatings(ratingUserId, {
+    includeRatings: false,
+  });
 
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<PortfolioItem | null>(null);
   const [isReordering, setIsReordering] = useState(false);
@@ -383,17 +389,30 @@ export function EnhancedProfileSection({
 
   const renderReputationScore = () => {
     if (ratingsLoading) return null;
+    // Below MIN_RATING_SAMPLE ratings, an average reads as more certain than
+    // it is (a single 5-star rating would show as "★5.0"). Show an honest
+    // review count instead of a misleadingly precise average -- see
+    // lib/utils/trust-summary.ts, which the applicant card uses for the same
+    // rule.
+    if (ratingStats.ratingCount === 0) return null;
+    if (ratingStats.ratingCount < MIN_RATING_SAMPLE) {
+      return (
+        <View className="flex-row items-center mt-1">
+          <Text className="text-xs" style={{ color: theme.textSecondary }}>
+            {ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      );
+    }
     return (
       <View className="flex-row items-center mt-1">
         <ReputationScoreCompact
           averageRating={ratingStats.averageRating}
           ratingCount={ratingStats.ratingCount}
         />
-        {ratingStats.ratingCount > 0 && (
-          <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
-            ({ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''})
-          </Text>
-        )}
+        <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
+          ({ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''})
+        </Text>
       </View>
     );
   };
@@ -640,7 +659,7 @@ export function EnhancedProfileSection({
         <View className="flex-row justify-around mt-4 pt-3 border-t" style={{ borderTopColor: theme.surfaceSecondary }}>
           <View className="items-center">
             <Text className="text-2xl font-bold" style={{ color: theme.text }}>
-              {activityStats?.jobsCompleted ?? activityStats?.jobsAccepted ?? 0}
+              {activityStats?.jobsCompleted ?? 0}
             </Text>
             <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Jobs Completed</Text>
           </View>
@@ -1004,6 +1023,17 @@ export function PortfolioSection({
     ]);
   };
 
+  // Portfolio items are stored per-viewer-device (see lib/services/portfolio-service.ts
+  // and hooks/usePortfolio.ts) — there is no shared backend for them yet, so a
+  // poster viewing a hunter's profile can never actually see the hunter's
+  // items; this section would silently render a false "hasn't added
+  // portfolio items yet" for someone who may well have added several. Hide
+  // the section entirely on another user's profile rather than show a claim
+  // that isn't backed by real data. Do not remove this guard by re-adding a
+  // cross-user empty state — building real cross-user portfolio storage is a
+  // separate, larger change.
+  if (!isOwnProfile) return null;
+
   return (
     <View className="mb-4 px-4" style={{ backgroundColor: theme.background }}>
       <View className="flex-row justify-between items-center mb-2">
@@ -1039,6 +1069,9 @@ export function PortfolioSection({
           </View>
         )}
       </View>
+      <Text className="text-xs mb-2" style={{ color: theme.textSecondary }}>
+        Only visible to you for now.
+      </Text>
       {(isPicking || isUploading) && (
         <UploadProgressBar progress={progress} message={uploadMessage} />
       )}
@@ -1047,9 +1080,7 @@ export function PortfolioSection({
       ) : items.length === 0 && !lastPickedStandalone ? (
         <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
           <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
-            {isOwnProfile
-              ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.'
-              : "This user hasn't added portfolio items yet."}
+            Showcase your work! Tap "Add Item" to upload images, videos, or files.
           </Text>
         </View>
       ) : (

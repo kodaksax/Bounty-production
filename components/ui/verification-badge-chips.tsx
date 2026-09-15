@@ -32,23 +32,46 @@ const HEADER_ICON_COLOR = '#6ee7b7'; // emerald-200
 
 interface VerificationBadgeChipsProps {
   input: VerificationBadgeInput;
+  /**
+   * Defaults to true (self-view: show all badges). When false, this is
+   * someone else's profile — public_profiles never exposes
+   * email_confirmed/phone_verified/age_verified (by design, to protect PII),
+   * so those fields are always undefined here and their badges would always
+   * render as permanently locked regardless of the real value. "Trusted"
+   * requires all of them, so it's unearnable cross-user too. Only badges
+   * this view can actually prove (id_verified, profile_complete) are shown.
+   */
+  isOwnProfile?: boolean;
 }
+
+// Badges that require fields only ever selected for the viewer's own profile
+// (see the comment above) — never render these cross-user, earned or not.
+const OWN_PROFILE_ONLY_BADGES: ReadonlySet<string> = new Set([
+  'email_confirmed',
+  'phone_verified',
+  'age_verified',
+  'trusted',
+]);
 
 /**
  * Renders a row of verification badge chips.
  * Earned badges display in full color; unearned badges are muted/outlined
  * with a lock icon overlay.
  */
-export function VerificationBadgeChips({ input }: VerificationBadgeChipsProps) {
+export function VerificationBadgeChips({ input, isOwnProfile = true }: VerificationBadgeChipsProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const badges = getVerificationBadges(input);
+  const badges = getVerificationBadges(input).filter(
+    (badge) => isOwnProfile || !OWN_PROFILE_ONLY_BADGES.has(badge.id)
+  );
+
+  if (badges.length === 0) return null;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <MaterialIcons name="verified-user" size={16} color={theme.primaryLight} />
-        <Text style={styles.title}>Verification</Text>
+        <Text style={styles.title}>Verified by Bounty</Text>
       </View>
       <View style={styles.chips}>
         {badges.map((badge) => (

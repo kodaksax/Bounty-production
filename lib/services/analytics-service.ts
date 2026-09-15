@@ -388,6 +388,18 @@ export type AnalyticsEvent =
   // event so tutorial completions (there is no fixed demo bounty — see
   // `application_started` below) never contaminate a real liquidity metric.
   | 'bounty_completed'
+  // Ratings/reviews loop (post-completion prompt in poster-review-modal.tsx
+  // and app/postings/[bountyId]/review-and-verify.tsx, plus the 24h
+  // fn_remind_pending_hunter_ratings reminder deep-linking back to the same
+  // step). `rating_submitted` fires on every successful rating (with or
+  // without a comment); `review_submitted` fires additionally when the
+  // submission included written text. `role` is always 'poster' today --
+  // this repo has no hunter-rates-poster UI (see
+  // 20260914150000_ratings_completion_loop.sql's header comment on why).
+  | 'rating_prompt_shown'
+  | 'rating_submitted'
+  | 'rating_skipped'
+  | 'review_submitted'
   | 'bounty_cancelled'
   // Fired once a bounty row is actually removed from the poster's active view
   // (hard delete, or a soft delete to status='deleted' when payment records

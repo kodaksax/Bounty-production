@@ -4,7 +4,10 @@ import { profileStatsService, type ProfileActivityStats } from 'lib/services/pro
 const EMPTY_STATS: ProfileActivityStats = {
   bountiesPosted: 0,
   bountiesCompleted: 0,
+  hunterCompleted: 0,
   firstBountyPostedAt: null,
+  ratingAvg: null,
+  ratingCount: 0,
 };
 
 /**

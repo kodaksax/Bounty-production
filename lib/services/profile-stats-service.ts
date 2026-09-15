@@ -2,15 +2,26 @@ import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
 
 export interface ProfileActivityStats {
+  /** Bounties this user has POSTED (any non-removed status: open/in_progress/completed). */
   bountiesPosted: number;
+  /** Of the bounties this user POSTED, how many reached 'completed'. Poster-side, not a hunter stat. */
   bountiesCompleted: number;
+  /** Bounties this user completed AS THE HUNTER (accepted_by = user AND status = 'completed'). This is "Jobs Completed". */
+  hunterCompleted: number;
   firstBountyPostedAt: string | null;
+  /** Average of ratings RECEIVED by this user, straight from the `ratings` table. Null with zero ratings -- see lib/utils/trust-summary.ts's MIN_RATING_SAMPLE before displaying it. */
+  ratingAvg: number | null;
+  /** Count of ratings RECEIVED by this user. */
+  ratingCount: number;
 }
 
 const EMPTY_STATS: ProfileActivityStats = {
   bountiesPosted: 0,
   bountiesCompleted: 0,
+  hunterCompleted: 0,
   firstBountyPostedAt: null,
+  ratingAvg: null,
+  ratingCount: 0,
 };
 
 // Simple once-per-key logger to avoid spamming console, mirroring
@@ -57,7 +68,10 @@ export const profileStatsService = {
       return {
         bountiesPosted: Number((data as any).bounties_posted) || 0,
         bountiesCompleted: Number((data as any).bounties_completed) || 0,
+        hunterCompleted: Number((data as any).hunter_completed) || 0,
         firstBountyPostedAt: (data as any).first_bounty_posted_at || null,
+        ratingAvg: (data as any).rating_avg == null ? null : Number((data as any).rating_avg),
+        ratingCount: Number((data as any).rating_count) || 0,
       };
     } catch (err) {
       logOnce('profileStats:getActivityStats', 'Error fetching profile activity stats', {

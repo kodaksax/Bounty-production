@@ -126,12 +126,26 @@ export type Profile = {
   // Withdrawal and cancellation tracking
   withdrawal_count?: number
   cancellation_count?: number
-  // Aggregated rating stats (optional; populated by joined queries)
-  averageRating?: number
+  // Aggregated rating stats (optional; populated by joined queries).
+  // averageRating is null (not 0) when no average is available -- see
+  // lib/utils/trust-summary.ts -- so it must never be conflated with a real
+  // zero-star average.
+  averageRating?: number | null
   ratingCount?: number
+  // Bounties completed AS THE HUNTER (optional; populated by joined queries
+  // via get_profile_activity_stats_batch -- see bounty-request-service.ts).
+  // Distinct from bounties_completed, which is poster-side.
+  hunterCompleted?: number
+  skill_categories?: string[]
   // Identity verification (Stripe Identity KYC)
   id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected'
   selfie_submitted_at?: string
+  // Stripe Identity status -- new source of truth for cross-user "ID verified"
+  // badges (public_profiles exposes these two; id_verification_status above is
+  // legacy/self-only). See lib/utils/normalize-profile.ts's
+  // deriveCoarseVerificationStatus.
+  stripe_identity_status?: 'unstarted' | 'requires_input' | 'processing' | 'verified' | 'canceled'
+  verified_since?: string | null
   // Stripe Connect payout account status. Distinct from `onboarding_completed`
   // (app onboarding) — see supabase/migrations/20260714c_rename_onboarding_complete_to_stripe_connect.sql.
   stripe_connect_onboarding_complete?: boolean

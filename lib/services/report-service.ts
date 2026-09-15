@@ -8,7 +8,7 @@ import { getCurrentUserId } from '../utils/data-utils';
 
 export type ReportReasonId = 'spam' | 'harassment' | 'inappropriate' | 'fraud';
 export type ReportStatus = 'pending' | 'reviewed' | 'resolved' | 'dismissed';
-export type ReportContentType = 'bounty' | 'profile' | 'message';
+export type ReportContentType = 'bounty' | 'profile' | 'message' | 'rating';
 
 export interface ReportReason {
   id: ReportReasonId;
@@ -192,6 +192,48 @@ export const reportService = {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to report message',
+      };
+    }
+  },
+
+  /**
+   * Report a rating/review for moderation review. Reuses the same generic
+   * `reports` table as bounty/profile/message reports -- content_type has no
+   * DB check constraint, so 'rating' needed no migration to add.
+   */
+  async reportRating(
+    ratingId: string,
+    reason: 'spam' | 'harassment' | 'inappropriate' | 'fraud',
+    details?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const userId = getCurrentUserId();
+      if (!userId) {
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      const { error } = await supabase.from('reports').insert({
+        reporter_id: userId,
+        content_type: 'rating',
+        content_id: ratingId,
+        reason,
+        details: details || '',
+        status: 'pending',
+      });
+
+      if (error) {
+        console.error('Error submitting rating report:', error);
+        return { success: false, error: error.message };
+      }
+
+      await notifyAdminsOfReport('rating', ratingId, reason, userId);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error reporting rating:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to report rating',
       };
     }
   },

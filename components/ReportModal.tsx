@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { reportService } from '../lib/services/report-service';
 
-type ContentType = 'bounty' | 'profile' | 'message';
+type ContentType = 'bounty' | 'profile' | 'message' | 'rating';
 type ReportReason = 'spam' | 'harassment' | 'inappropriate' | 'fraud';
 
 interface ReportModalProps {
@@ -22,6 +22,8 @@ const getContentTypeLabel = (contentType: ContentType): string => {
       return 'User Profile';
     case 'message':
       return 'Message';
+    case 'rating':
+      return 'Review';
     default:
       return 'Content';
   }
@@ -40,6 +42,8 @@ const submitReport = async (
       result = await reportService.reportBounty(contentId, reason);
     } else if (contentType === 'profile') {
       result = await reportService.reportUser(contentId, reason);
+    } else if (contentType === 'rating') {
+      result = await reportService.reportRating(contentId, reason);
     } else {
       result = await reportService.reportMessage(contentId, reason);
     }

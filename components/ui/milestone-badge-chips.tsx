@@ -42,7 +42,7 @@ export function MilestoneBadgeChips({ input }: MilestoneBadgeChipsProps) {
     <View style={styles.container}>
       <View style={styles.header}>
         <MaterialIcons name="military-tech" size={16} color={theme.primaryLight} />
-        <Text style={styles.title}>Milestones</Text>
+        <Text style={styles.title}>Bounty history</Text>
       </View>
       <View style={styles.chips}>
         {badges.map((badge) => (

@@ -19,11 +19,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
 import { useHapticFeedback } from '../lib/haptic-feedback';
+import { analyticsService } from '../lib/services/analytics-service';
 import { approveAndRelease } from '../lib/services/completion-approval';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
+import { ratingsService } from '../lib/services/ratings';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import type { Attachment } from '../lib/types';
+import { getCurrentUserId } from '../lib/utils/data-utils';
 import { useWallet } from '../lib/wallet-context';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -256,6 +259,7 @@ export function PosterReviewModal({
   const [showPayoutWarning, setShowPayoutWarning] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
+  const ratingPromptLoggedRef = useRef(false);
 
   const formattedPayoutAmount = useMemo(() => {
     try {
@@ -301,8 +305,44 @@ export function PosterReviewModal({
       setIsProcessing(false);
       setSubmission(null);
       setHunterProfile(null);
+      ratingPromptLoggedRef.current = false;
     }
   }, [visible]);
+
+  // Reopening this modal on a submission that's already approved (from the
+  // "Review" tap targets in my-posting-expandable.tsx, or the rating_reminder
+  // notification's deep link) should land straight on the rating step rather
+  // than the read-only submission view -- unless the poster already rated
+  // this hunter for this bounty, in which case there's nothing left to do
+  // here. hasRated is a best-effort check: on failure this falls back to not
+  // auto-opening the form, which just means the poster sees the submission
+  // view instead -- never a hard error.
+  useEffect(() => {
+    let mounted = true;
+    async function checkExistingRating() {
+      if (!visible || !submission || submission.status !== 'approved') return;
+      const targetHunterId = hunterId || submission?.hunter_id || '';
+      const posterId = getCurrentUserId();
+      if (!targetHunterId || !posterId) return;
+      try {
+        const alreadyRated = await ratingsService.hasRated(posterId, bountyId, targetHunterId);
+        if (mounted && !alreadyRated) setShowRatingForm(true);
+      } catch {
+        /* best-effort */
+      }
+    }
+    checkExistingRating();
+    return () => { mounted = false; };
+  }, [visible, submission, hunterId, bountyId]);
+
+  useEffect(() => {
+    if (showRatingForm && !ratingPromptLoggedRef.current) {
+      ratingPromptLoggedRef.current = true;
+      void analyticsService
+        .trackEvent('rating_prompt_shown', { bountyId: String(bountyId), role: 'poster' })
+        .catch(() => {});
+    }
+  }, [showRatingForm, bountyId]);
 
   const loadSubmission = async () => {
     try {
@@ -391,6 +431,7 @@ export function PosterReviewModal({
       Alert.alert('Missing Hunter', 'Could not determine who to rate. Please try again.');
       return;
     }
+    const trimmedComment = ratingComment.trim();
     try {
       setIsProcessing(true);
       await completionService.submitRating({
@@ -398,8 +439,21 @@ export function PosterReviewModal({
         from_user_id: '',
         to_user_id: targetHunterId,
         rating,
-        comment: ratingComment.trim() || undefined,
+        comment: trimmedComment || undefined,
       });
+      void analyticsService
+        .trackEvent('rating_submitted', {
+          bountyId: String(bountyId),
+          role: 'poster',
+          rating,
+          hasComment: trimmedComment.length > 0,
+        })
+        .catch(() => {});
+      if (trimmedComment.length > 0) {
+        void analyticsService
+          .trackEvent('review_submitted', { bountyId: String(bountyId), role: 'poster' })
+          .catch(() => {});
+      }
       Alert.alert(
         'Bounty Complete!',
         `${displayHunterName} has been rated ${rating} stars. ${!isForHonor ? 'Payment has been released.' : 'Thank you for your feedback!'}`,
@@ -413,6 +467,19 @@ export function PosterReviewModal({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Never holds up the bounty -- payment already went out in handleApprove
+  // before this step is ever shown. Skipping just closes the modal; the
+  // rating_reminder cron job (fn_remind_pending_hunter_ratings) is what
+  // brings the poster back to this same rating step ~24h later if the hunter
+  // still has no rating for this bounty.
+  const handleSkipRating = () => {
+    void analyticsService
+      .trackEvent('rating_skipped', { bountyId: String(bountyId), role: 'poster' })
+      .catch(() => {});
+    onClose();
+    onComplete();
   };
 
   const formatFileSize = (bytes?: number) => {
@@ -595,6 +662,15 @@ export function PosterReviewModal({
                   ) : (
                     <Text style={s.buttonText}>Complete Bounty & Rate Hunter</Text>
                   )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.skipRatingButton}
+                  onPress={handleSkipRating}
+                  disabled={isProcessing}
+                  accessibilityRole="button"
+                  accessibilityLabel="Skip rating for now"
+                >
+                  <Text style={s.skipRatingText}>Skip for now</Text>
                 </TouchableOpacity>
               </View>
             </KeyboardAwareScrollView>
@@ -1021,6 +1097,15 @@ function makeStyles(t: AppTheme) {
     buttonText: {
       color: '#fff',
       fontSize: 16,
+      fontWeight: '600',
+    },
+    skipRatingButton: {
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+    },
+    skipRatingText: {
+      color: t.textSecondary,
+      fontSize: 14,
       fontWeight: '600',
     },
     revisionFormContainer: {

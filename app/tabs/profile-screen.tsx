@@ -5,6 +5,7 @@ import { ConnectionStatus } from "components/connection-status";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { ProfileBountyHistorySection } from "components/profile-bounty-history-section";
+import { RecentReviewsSection } from "components/recent-reviews-section";
 import { SkillsetChips } from "components/skillset-chips";
 import { BrandingLogo } from "components/ui/branding-logo";
 import { MilestoneBadgeChips } from "components/ui/milestone-badge-chips";
@@ -13,8 +14,6 @@ import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
 import { TrustBadges } from "components/ui/trust-badges";
 import { VerificationBadgeChips } from "components/ui/verification-badge-chips";
 import { useProfileActivityStats } from "hooks/useProfileActivityStats";
-import { useRatings } from "hooks/useRatings";
-import { bountyRequestService } from "lib/services/bounty-request-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { shareProfile as shareProfileLink } from "lib/utils/share-utils";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
@@ -64,13 +63,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // Determine if viewing own profile (then let EnhancedProfileSection load current-user)
   const isOwnProfile = !!(authUserId && profileUuid && profileUuid === authUserId)
 
-  // Marketplace activity stats — bounties posted/completed via the RPC-backed
-  // hook (replaces a previously-duplicated client-side fetch that never
-  // computed a "completed" count at all), plus hunter-side "jobs accepted"
-  // (a distinct concept, kept as its own lightweight fetch below).
+  // Marketplace activity stats — bounties posted/completed (poster-side) and
+  // hunter_completed ("Jobs Completed", hunter-side) via the RPC-backed hook.
   const { stats: activityStats } = useProfileActivityStats(profileUuid)
-  const { stats: ratingStats } = useRatings(profileUuid)
-  const [jobsAccepted, setJobsAccepted] = useState(0)
 
   // Debounce guard for refreshes triggered by mount/focus
   const lastRefreshAtRef = useRef<number>(0);
@@ -85,28 +80,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     lastRefreshAtRef.current = now;
     return true;
   };
-
-  // Fetch hunter-side "jobs accepted" count, responding to auth user changes
-  useEffect(() => {
-    if (!authUserId || authUserId === CURRENT_USER_ID) {
-      setJobsAccepted(0);
-      return;
-    }
-    let cancelled = false;
-    bountyRequestService
-      .getByUserId(authUserId)
-      .then((acceptedRequests) => {
-        if (!cancelled) {
-          setJobsAccepted(acceptedRequests.filter((req) => req.status === 'accepted').length);
-        }
-      })
-      .catch((error) => {
-        console.error('[ProfileScreen] Error fetching accepted jobs:', error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authUserId]);
 
   // ANNOTATION: The Supabase real-time subscriptions have been removed.
   // To re-implement real-time updates for stats and the activity feed,
@@ -343,8 +316,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             key={profileUuid}
             showPortfolio={false}
             activityStats={{
-              jobsAccepted,
-              jobsCompleted: activityStats.bountiesCompleted,
+              jobsCompleted: activityStats.hunterCompleted,
               bountiesPosted: activityStats.bountiesPosted,
             }}
           />
@@ -411,8 +383,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             input={{
               bounties_posted: activityStats.bountiesPosted,
               bounties_completed: activityStats.bountiesCompleted,
-              average_rating: ratingStats.averageRating,
-              rating_count: ratingStats.ratingCount,
+              average_rating: activityStats.ratingAvg ?? undefined,
+              rating_count: activityStats.ratingCount,
             }}
           />
           {/* Entry point for users who skipped or were rejected to complete ID
@@ -450,6 +422,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             );
           })()}
         </View>
+
+        {/* Recent reviews — same component the poster-facing profile view uses. */}
+        <RecentReviewsSection userId={profileUuid} />
 
         {/* Platform Security & Trust Badges */}
         <View style={styles.section}>

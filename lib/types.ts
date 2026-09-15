@@ -625,6 +625,8 @@ export type NotificationType =
   | 'application_pending_reminder'
   /** Hunter-facing: their application auto-closed after request_expiry_hours of poster silence. Not a rejection -- the poster never decided. */
   | 'application_expired'
+  /** Poster-facing: they approved a hunter's work 24h ago and still haven't rated them. Fires once per completion_submissions row. */
+  | 'rating_reminder'
   | 'account_warning'
   | 'account_restricted'
   | 'payout_paid'

@@ -236,8 +236,12 @@ export class AuthProfileService {
           .from('public_profiles')
           // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
           // to a camelCase property so the app can read `displayName` safely.
+          // `about` is included so the cross-user "Profile Complete" badge
+          // (verification-badges.ts) can actually be earned -- it was
+          // previously omitted here even though public_profiles exposes it,
+          // so that badge always read as unearned for every other user.
           .select(
-            'id,username,displayName:display_name,avatar,banner_url,location,stripe_identity_status,verified_since'
+            'id,username,displayName:display_name,avatar,banner_url,location,about,stripe_identity_status,verified_since'
           )
           .eq('id', userId)
           .maybeSingle();
