@@ -81,6 +81,20 @@ const NON_RETRYABLE_CODES = new Set([
 ]);
 
 /**
+ * Payout statuses that mean the money will not arrive: the payout was created
+ * but the bank/card rejected it ('failed'), or it was reversed before sending
+ * ('canceled'). A 200 carrying one of these is NOT a success — rendering it as
+ * the green "Withdrawal sent" card is the false-success half of the
+ * contradictory-messaging bug. pending / in_transit / paid all mean the money
+ * is on its way or already there.
+ *
+ * Both the Stripe spelling ('canceled') and the ledger spelling ('cancelled')
+ * are covered: a fresh payout carries Stripe's status, but the idempotent
+ * replay of an already-submitted withdrawal returns the ledger status instead.
+ */
+const FAILED_PAYOUT_STATUSES = new Set(['failed', 'canceled', 'cancelled']);
+
+/**
  * Idempotency key for a single withdrawal attempt. Generated client-side and
  * held across retries of that attempt so a network timeout followed by a retry
  * cannot produce two payouts — the server replays the first result instead.
@@ -267,6 +281,38 @@ export function useConnectPayout(): UseConnectPayoutResult {
           message: typeof data.message === 'string' ? data.message : 'Withdrawal sent.',
           requestId,
         };
+
+        // Honor Stripe's own status before declaring success. A payout the
+        // provider created as failed or canceled must not surface as the green
+        // success card.
+        if (FAILED_PAYOUT_STATUSES.has(payoutResult.status)) {
+          // Stripe closed this attempt, so it was not rejected pre-flight —
+          // drop the key so a fresh attempt is treated as genuinely new.
+          idempotencyKeyRef.current = null;
+          void analyticsService
+            .trackEvent('payout_failed', {
+              amount: payoutResult.amountCents / 100,
+              currency: payoutResult.currency,
+              method:
+                input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
+              code: 'payout_declined',
+              reason: `stripe_status_${payoutResult.status}`,
+              payoutId: payoutResult.payoutId ?? undefined,
+              requestId,
+            })
+            .catch(() => {
+              /* analytics is best-effort */
+            });
+          setError({
+            code: 'payout_declined',
+            message:
+              'This withdrawal did not go through, so the money is back in your balance. Check your payout details and try again.',
+            retryable: true,
+            requestId,
+          });
+          setPhase('failed');
+          return null;
+        }
 
         idempotencyKeyRef.current = null;
         void analyticsService
