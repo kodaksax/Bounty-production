@@ -168,11 +168,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${raw.location}` })
           }
 
+          // Only show a join date when we actually have one — never fabricate one.
           if (authProfile?.created_at) {
             const joinDate = new Date(authProfile.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
             defaultSkills.push({ id: '3', icon: 'favorite', text: `Joined ${joinDate}` })
-          } else {
-            defaultSkills.push({ id: '3', icon: 'favorite', text: 'Joined December 28th 2024' })
           }
 
           setSkills(defaultSkills)

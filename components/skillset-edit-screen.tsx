@@ -47,7 +47,6 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   const [skills, setSkills] = useState<Skill[]>(() => initialSkills && initialSkills.length ? initialSkills : [
     { id: "1", icon: "code", text: "Knows English, Spanish" },
     { id: "2", icon: "gps-fixed", text: "Private Investigator Certification" },
-    { id: "3", icon: "favorite", text: "Joined December 28th 2024" },
   ])
 
   // Preset skill-category tags (Tech/Design/Writing/Labor/Delivery/Other),

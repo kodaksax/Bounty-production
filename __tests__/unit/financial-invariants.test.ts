@@ -41,7 +41,7 @@ const paymentIdempotencyMigration = read(
   'supabase/migrations/20260902213000_payment_idempotency_constraints.sql'
 );
 const closeEscrowRefundGapsMigration = read(
-  'supabase/migrations/20260914130000_close_escrow_refund_gaps.sql'
+  'supabase/migrations/20260915055722_close_escrow_refund_gaps.sql'
 );
 
 describe('invariant: one financial event produces one ledger event', () => {

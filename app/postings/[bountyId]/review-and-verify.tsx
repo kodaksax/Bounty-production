@@ -30,6 +30,7 @@ import { ratingsService } from '../../../lib/services/ratings';
 import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
+import { MIN_RATING_SAMPLE } from '../../../lib/utils/trust-summary';
 import { useWallet } from '../../../lib/wallet-context';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
@@ -504,7 +505,8 @@ export default function ReviewAndVerifyScreen() {
               </Avatar>
               <View style={styles.hunterDetails}>
                 <Text style={styles.hunterName}>{hunterProfile.username || 'Unknown Hunter'}</Text>
-                {hunterProfile.averageRating && (
+                {hunterProfile.averageRating &&
+                  (hunterProfile.ratingCount || 0) >= MIN_RATING_SAMPLE && (
                   <View style={styles.ratingRow}>
                     <MaterialIcons name="star" size={16} color="#fcd34d" />
                     <Text style={styles.hunterRating}>

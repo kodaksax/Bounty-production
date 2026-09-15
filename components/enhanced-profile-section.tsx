@@ -680,15 +680,17 @@ export function EnhancedProfileSection({
           )}
         </View>
 
-        {/* Joined Date */}
-        <View className="mt-3 items-center">
-          <Text className="text-xs" style={{ color: theme.textSecondary }}>
-            Joined{' '}
-            {new Date(
-              (effectiveProfile as any).created_at || effectiveProfile.joinDate || Date.now()
-            ).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </Text>
-        </View>
+        {/* Joined Date — only render when we have a real join date; never fabricate one */}
+        {((effectiveProfile as any).created_at || effectiveProfile.joinDate) && (
+          <View className="mt-3 items-center">
+            <Text className="text-xs" style={{ color: theme.textSecondary }}>
+              Joined{' '}
+              {new Date(
+                (effectiveProfile as any).created_at || effectiveProfile.joinDate
+              ).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Text>
+          </View>
+        )}
         </View>
       </View>
 
