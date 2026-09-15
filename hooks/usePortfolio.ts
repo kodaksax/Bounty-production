@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PortfolioItem } from '../lib/types';
 import { portfolioService } from '../lib/services/portfolio-service';
+import { migrateLegacyPortfolioItems } from '../lib/services/portfolio-legacy-migration';
 
 interface UsePortfolioResult {
   items: PortfolioItem[];
@@ -11,7 +12,13 @@ interface UsePortfolioResult {
   refresh: () => Promise<void>;
 }
 
-export function usePortfolio(userId: string): UsePortfolioResult {
+/**
+ * @param isOwnProfile Gates the one-time legacy-AsyncStorage-to-server
+ * migration: it only makes sense to run for the signed-in user's own items,
+ * never while a poster is viewing a hunter's profile (this hook is shared by
+ * both call sites — see components/enhanced-profile-section.tsx).
+ */
+export function usePortfolio(userId: string, isOwnProfile = false): UsePortfolioResult {
   const [items, setItems] = useState<PortfolioItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +27,9 @@ export function usePortfolio(userId: string): UsePortfolioResult {
     try {
       setLoading(true);
       setError(null);
+      if (isOwnProfile) {
+        await migrateLegacyPortfolioItems(userId);
+      }
       const data = await portfolioService.getItems(userId);
       setItems(data);
     } catch (err) {
@@ -78,7 +88,8 @@ export function usePortfolio(userId: string): UsePortfolioResult {
 
   useEffect(() => {
     fetchItems();
-  }, [userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, isOwnProfile]);
 
   return {
     items,

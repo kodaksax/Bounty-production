@@ -2,12 +2,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { type Href, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { usePostingPolicy } from '../../../../hooks/usePostingPolicy';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
+import { detectTrustTier } from '../../../../lib/utils/trust-tier';
 import { validateAmount, validateBalance } from '../../../../lib/utils/bounty-validation';
 import { useWallet } from '../../../../lib/wallet-context';
 import { QuickStepLayout } from './QuickStepLayout';
@@ -177,6 +178,42 @@ export function StepPay({
   const showBalanceWarning =
     !draft.isForHonor && draft.amount > 0 && !validateBalance(draft.amount, balance, false);
 
+  // Bounty-level trust requirement system (lib/utils/trust-tier.ts). Detection
+  // is a recommendation, never a forced category: most bounties (errands,
+  // delivery, general labor, standard writing) match no tier and this card
+  // never renders. Title is the only reliable signal at this step — the
+  // two-step flow publishes after Task + Compensation and defers the
+  // description entirely to post-publish enrichment (see
+  // app/screens/CreateBounty/index.tsx), so draft.description is normally
+  // empty here; detection still runs against it in case a draft carries one.
+  const detection = useMemo(
+    () => detectTrustTier(draft.title, draft.description),
+    [draft.title, draft.description]
+  );
+  const detectionKey = `${draft.title}||${draft.description}`;
+  const dismissedForTextRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!detection.recommendIdVerified) return;
+    // Already reflects this tier (whether auto-applied or the poster's own
+    // prior choice) -- don't stomp a manual toggle within the same tier.
+    if (draft.trustTier === detection.tier) return;
+    // Explicitly dismissed for this exact text -- stays dismissed until the
+    // poster changes the title/description (which changes detectionKey).
+    if (dismissedForTextRef.current === detectionKey) return;
+    onUpdate({ trustTier: detection.tier, requiresIdVerified: detection.defaultIdVerified });
+    // onUpdate is stable from the parent's useCallback; including it would
+    // re-run this on every parent render for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detection.tier, detection.recommendIdVerified, detection.defaultIdVerified, detectionKey, draft.trustTier]);
+
+  const handleDismissTrustTier = () => {
+    dismissedForTextRef.current = detectionKey;
+    onUpdate({ trustTier: 'standard', requiresIdVerified: false });
+  };
+
+  const requiresIdVerified = draft.requiresIdVerified ?? detection.defaultIdVerified;
+
   return (
     <QuickStepLayout
       step={step}
@@ -307,6 +344,30 @@ export function StepPay({
       </TouchableOpacity>
       ) : null}
 
+      {detection.recommendIdVerified ? (
+        <View style={styles.trustCard}>
+          <View style={styles.trustCardHeader}>
+            <MaterialIcons name="shield" size={18} color={theme.text} style={styles.infoIcon} />
+            <Text style={styles.trustCardText}>{detection.bannerCopy}</Text>
+          </View>
+          <View style={styles.trustCardRow}>
+            <Text style={styles.trustCardToggleLabel}>Require ID-verified hunters</Text>
+            <Switch
+              value={requiresIdVerified}
+              onValueChange={(value) => onUpdate({ trustTier: detection.tier, requiresIdVerified: value })}
+              trackColor={{ false: theme.border, true: theme.primary }}
+              thumbColor={requiresIdVerified ? theme.primary : theme.textDisabled}
+              accessibilityLabel="Require ID-verified hunters"
+            />
+          </View>
+          {draft.trustTier === detection.tier ? (
+            <TouchableOpacity onPress={handleDismissTrustTier} accessibilityRole="button">
+              <Text style={styles.trustCardDismiss}>Doesn&apos;t apply? Dismiss</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
       {showBalanceWarning ? (
         // Informational, not a blocker. Posting is free; the charge lands when
         // the poster accepts someone, so the honest message is "you'll need
@@ -369,6 +430,30 @@ function makeStyles(theme: AppTheme) {
       fontSize: 13,
       fontWeight: '700',
       color: theme.primary,
+      textDecorationLine: 'underline',
+    },
+    trustCard: {
+      marginTop: 16,
+      padding: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surfaceSecondary,
+    },
+    trustCardHeader: { flexDirection: 'row', alignItems: 'flex-start' },
+    trustCardText: { flex: 1, fontSize: 13, lineHeight: 18, color: theme.text },
+    trustCardRow: {
+      marginTop: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    trustCardToggleLabel: { fontSize: 13, fontWeight: '600', color: theme.text },
+    trustCardDismiss: {
+      marginTop: 8,
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.textSecondary,
       textDecorationLine: 'underline',
     },
     honorRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center' },

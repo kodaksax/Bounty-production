@@ -547,6 +547,24 @@ export type AnalyticsEvent =
   // Profile events
   | 'profile_viewed'
   | 'profile_updated'
+  // Hunter capability layer — self-reported skills, bounty-specific "why me?"
+  // pitch, and portfolio work samples. See lib/utils/skill-match.ts,
+  // lib/utils/pitch-requirement.ts, lib/services/portfolio-service.ts.
+  | 'skill_added'
+  | 'skill_removed'
+  | 'pitch_started'
+  | 'pitch_submitted'
+  | 'portfolio_item_added'
+  | 'portfolio_item_viewed'
+  // Bounty-level trust requirement system — see lib/utils/trust-tier.ts.
+  // trust_requirement_set fires when a poster publishes a non-standard-tier
+  // bounty; trust_requirement_blocked_apply when an unverified hunter is
+  // stopped before applying to a requires_id_verified bounty;
+  // verification_started_from_requirement when they follow that prompt's
+  // handoff into ID verification.
+  | 'trust_requirement_set'
+  | 'trust_requirement_blocked_apply'
+  | 'verification_started_from_requirement'
   // Sharing events (bounty + profile) — see lib/utils/share-utils.ts.
   // Funnel per share attempt: {bounty,profile}_shared (share sheet opened)
   // -> exactly one of share_completed/share_cancelled/share_link_copied.

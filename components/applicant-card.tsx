@@ -10,6 +10,7 @@ import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils'
 import { deriveCoarseVerificationStatus } from '../lib/utils/normalize-profile';
 import { getRelevantSkills } from '../lib/utils/skill-match';
 import { formatHunterTrustSummary } from '../lib/utils/trust-summary';
+import { isHighRiskTrustTier } from '../lib/utils/trust-tier';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import TextGuard from './ui/TextGuard';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
@@ -134,6 +135,14 @@ export function ApplicantCard({
     [request.profile, request.bounty]
   );
 
+  // High-risk tiers (lib/utils/trust-tier.ts) get an explicit ID-status row
+  // even when NOT verified -- the general "silence is the honest default"
+  // rule above suppresses an unverified badge because most bounties never
+  // asked. Once a poster is evaluating hunters for pet care, home entry,
+  // licensed trades, or care of a vulnerable person, ID status IS one of the
+  // signals they're weighing, whichever way it comes out.
+  const isHighRiskBounty = isHighRiskTrustTier(request.bounty?.trust_tier);
+
   const applicantName = request.profile?.username || 'this hunter';
   const isForHonor = !!request.bounty?.is_for_honor;
   const amount = typeof request.bounty?.amount === 'number' ? request.bounty.amount : 0;
@@ -243,6 +252,12 @@ export function ApplicantCard({
               )}
             </View>
             <Text style={s.trustSummary}>{trustSummary}</Text>
+            {isHighRiskBounty && !isIdentityVerified && (
+              <View style={s.idStatusRow}>
+                <MaterialIcons name="gpp-maybe" size={13} color={theme.textSecondary} />
+                <Text style={s.idStatusText}>Not ID-verified</Text>
+              </View>
+            )}
           </View>
 
           {profileId ? (
@@ -434,6 +449,16 @@ function makeStyles(t: AppTheme) {
     trustSummary: {
       color: t.textSecondary,
       fontSize: 13,
+    },
+    idStatusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 2,
+    },
+    idStatusText: {
+      color: t.textSecondary,
+      fontSize: 12,
     },
     viewProfileHint: {
       flexDirection: 'row',

@@ -34,6 +34,12 @@ export type Bounty = {
   // 'design', 'writing', 'labor', 'delivery', 'other'). See
   // lib/constants/bounty-categories.ts for the canonical list.
   category?: string;
+  // Bounty-level trust requirement system — see lib/utils/trust-tier.ts and
+  // supabase/migrations/*_bounty_trust_tier.sql. 'standard' means no elevated
+  // risk was detected/declared; requires_id_verified is enforced server-side
+  // (a BEFORE INSERT trigger on bounty_requests), not just hidden client UI.
+  trust_tier?: 'standard' | 'digital_skill' | 'home_entry' | 'animal_care' | 'licensed_trades' | 'vulnerable_people';
+  requires_id_verified?: boolean;
   is_time_sensitive?: boolean;
   deadline?: string; // ISO date string when is_time_sensitive === true
   attachments_json?: string; // JSON serialized AttachmentMeta[] (storage format)

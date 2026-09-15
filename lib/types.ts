@@ -180,6 +180,8 @@ export type FollowEdge = Follow;
  * @property {string} [name] - Original file name
  * @property {string} [mimeType] - Content type (e.g., "image/png", "video/mp4")
  * @property {number} [sizeBytes] - File size in bytes
+ * @property {string} [category] - Optional free-form tag (e.g. a bounty category id)
+ * @property {number} [position] - Display order among this user's items (lower first)
  * @property {string} createdAt - ISO 8601 timestamp when created
  */
 export interface PortfolioItem {
@@ -193,6 +195,8 @@ export interface PortfolioItem {
   name?: string;
   mimeType?: string;
   sizeBytes?: number;
+  category?: string;
+  position?: number;
   createdAt: string;
 }
 

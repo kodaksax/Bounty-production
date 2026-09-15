@@ -250,7 +250,16 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
       }
 
       setState(s => ({ ...s, isUploading: true, progress: 0, message: 'Uploading…' }))
+      // Portfolio files go to their own bucket (not the messaging `attachments`
+      // bucket other attachmentService.upload callers use), path-prefixed by
+      // userId so the portfolio_pictures storage.objects RLS policies (owner-
+      // only write, scoped to `${auth.uid()}/...`) apply. That bucket's
+      // allowed_mime_types is images-only (see the portfolio_items migration),
+      // so a video/file pick surfaces as an upload error here rather than
+      // silently succeeding into an unsupported format.
       const uploaded = await attachmentService.upload(attachment, {
+        bucket: 'portfolio_pictures',
+        pathPrefix: currentUserId,
         onProgress: (p: number) => setState(s => ({ ...s, progress: p })),
       })
 

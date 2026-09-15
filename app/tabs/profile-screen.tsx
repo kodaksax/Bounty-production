@@ -327,43 +327,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         )}
 
 
-        {/* Skillsets - simplified chip display */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Skillsets</Text>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => setIsEditing(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Edit skillsets"
-            >
-              <Text style={styles.editButtonText}>Edit</Text>
-            </TouchableOpacity>
-          </View>
-          <SkillsetChips skills={skills} />
-        </View>
-
-        {/* Portfolio (standalone, after skillsets) */}
-        <PortfolioSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} />
-
-        {/* Profile completion meter — encourages personalization on this own-profile-only screen */}
-        <View style={styles.section}>
-          <ProfileCompletionMeter
-            input={{
-              username: authProfile?.username,
-              display_name: authProfile?.display_name,
-              avatar_url: authProfile?.avatar,
-              bio: authProfile?.about,
-              location: authProfile?.location,
-              banner_url: authProfile?.banner_url,
-            }}
-          />
-        </View>
-
-        {/* Bounties Posted */}
-        <ProfileBountyHistorySection userId={profileUuid} isOwnProfile={isOwnProfile} />
-
-        {/* Verification + Milestone Badges */}
+        {/* Verification + Milestone Badges — identity/verified signals, kept
+            with EnhancedProfileSection at the top of the hunter-capability
+            order (identity -> bounty history -> reviews -> skills -> work samples). */}
         <View style={styles.section}>
           <VerificationBadgeChips
             input={{
@@ -423,8 +389,44 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           })()}
         </View>
 
+        {/* Bounties Posted */}
+        <ProfileBountyHistorySection userId={profileUuid} isOwnProfile={isOwnProfile} />
+
         {/* Recent reviews — same component the poster-facing profile view uses. */}
         <RecentReviewsSection userId={profileUuid} />
+
+        {/* Skillsets - simplified chip display */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Skillsets</Text>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => setIsEditing(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit skillsets"
+            >
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
+          <SkillsetChips skills={skills} />
+        </View>
+
+        {/* Portfolio (work samples, after skillsets) */}
+        <PortfolioSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} />
+
+        {/* Profile completion meter — encourages personalization on this own-profile-only screen */}
+        <View style={styles.section}>
+          <ProfileCompletionMeter
+            input={{
+              username: authProfile?.username,
+              display_name: authProfile?.display_name,
+              avatar_url: authProfile?.avatar,
+              bio: authProfile?.about,
+              location: authProfile?.location,
+              banner_url: authProfile?.banner_url,
+            }}
+          />
+        </View>
 
         {/* Platform Security & Trust Badges */}
         <View style={styles.section}>

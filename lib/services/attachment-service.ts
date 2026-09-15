@@ -1,6 +1,33 @@
 import type { AttachmentMeta } from './database.types'
 import { storageService } from './storage-service'
 
+/** Max length for the file-name segment of a generated storage path. */
+const MAX_SANITIZED_FILE_NAME_LENGTH = 100
+
+/**
+ * Normalize a user/device-supplied file name into a safe storage object-key
+ * segment. Buckets like `portfolio_pictures` scope write access to a
+ * `${auth.uid()}/...` path prefix (see storage.objects RLS policies in
+ * supabase/migrations/20260915050320_portfolio_items.sql) -- an
+ * unsanitized name containing `/`, `..`, backslashes, or control characters
+ * could otherwise produce unexpected nested keys under that prefix and
+ * complicate storage policies/cleanup. Falls back to a generic name if
+ * nothing safe remains.
+ */
+function sanitizeFileName(rawName: string): string {
+  const collapsedWhitespace = rawName.replace(/\s+/g, ' ').trim()
+  const stripped = collapsedWhitespace
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .replace(/\.\.+/g, '.')
+    .replace(/[\/\\]/g, '-')
+    .replace(/[^a-zA-Z0-9 ._-]/g, '')
+    .replace(/^[.\s-]+/, '')
+
+  const truncated = stripped.slice(0, MAX_SANITIZED_FILE_NAME_LENGTH)
+  return truncated || 'file'
+}
+
 /**
  * Attachment upload service using Supabase Storage with AsyncStorage fallback.
  */
@@ -13,23 +40,23 @@ export const attachmentService = {
    */
   async upload(
     attachment: AttachmentMeta,
-    opts: { onProgress?: (p: number) => void } = {}
+    opts: { onProgress?: (p: number) => void; bucket?: string; pathPrefix?: string } = {}
   ): Promise<AttachmentMeta> {
-    const { onProgress } = opts
+    const { onProgress, bucket = 'attachments', pathPrefix = 'uploads' } = opts
 
     try {
       onProgress?.(0.1)
 
       // Generate file path
       const timestamp = Date.now()
-      const fileName = attachment.name || `file-${timestamp}`
-      const filePath = `uploads/${timestamp}-${fileName}`
+      const fileName = sanitizeFileName(attachment.name || `file-${timestamp}`)
+      const filePath = `${pathPrefix}/${timestamp}-${fileName}`
 
       onProgress?.(0.2)
 
       // Upload to storage
       const result = await storageService.uploadFile(attachment.uri, {
-        bucket: 'attachments',
+        bucket,
         path: filePath,
         onProgress: (progress) => {
           // Map storage progress to 20-90% range

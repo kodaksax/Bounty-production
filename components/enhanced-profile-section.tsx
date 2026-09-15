@@ -11,6 +11,7 @@ import { useProfileImageViewer } from 'hooks/useProfileImageViewer';
 import { useRatings } from 'hooks/useRatings';
 import { OptimizedImage } from 'lib/components/OptimizedImage';
 import { FOLLOW_FEATURE_ENABLED } from 'lib/feature-flags';
+import { analyticsService } from 'lib/services/analytics-service';
 import { blockingService } from 'lib/services/blocking-service';
 import { MAX_PORTFOLIO_ITEMS, portfolioService } from 'lib/services/portfolio-service';
 import type { PortfolioItem } from 'lib/types';
@@ -241,7 +242,7 @@ export function EnhancedProfileSection({
     deleteItem,
     addItem,
     refresh,
-  } = usePortfolio(resolvedUserId);
+  } = usePortfolio(resolvedUserId, isOwnProfile);
 
   const {
     pickAndUpload,
@@ -264,6 +265,10 @@ export function EnhancedProfileSection({
         Alert.alert("Couldn't save that item", 'Your file uploaded, but we could not add it to your portfolio. Please try again.');
         return;
       }
+      analyticsService.trackEvent('portfolio_item_added', {
+        owner_id: resolvedUserId,
+        item_type: item.type,
+      });
       try {
         await refresh();
       } catch (e) {
@@ -703,7 +708,7 @@ export function EnhancedProfileSection({
         <View className="mb-4">
           <View className="flex-row justify-between items-center mb-2">
             <View className="flex-row items-center">
-              <Text className="text-sm font-medium" style={{ color: theme.text }}>Portfolio</Text>
+              <Text className="text-sm font-medium" style={{ color: theme.text }}>Work Samples</Text>
               <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
                 ({items.length}/{MAX_PORTFOLIO_ITEMS})
               </Text>
@@ -739,6 +744,9 @@ export function EnhancedProfileSection({
               </View>
             )}
           </View>
+          <Text className="text-xs mb-2" style={{ color: theme.textSecondary }}>
+            Work samples — provided by hunter. Not verified by Bounty.
+          </Text>
           {(isPicking || isUploading) && (
             <UploadProgressBar progress={progress} message={uploadMessage} />
           )}
@@ -779,7 +787,16 @@ export function EnhancedProfileSection({
                   <TouchableOpacity
                     key={item.id}
                     className="relative"
-                    onPress={() => !isReordering && setSelectedPortfolioItem(item)}
+                    onPress={() => {
+                      if (isReordering) return;
+                      setSelectedPortfolioItem(item);
+                      analyticsService.trackEvent('portfolio_item_viewed', {
+                        item_id: item.id,
+                        owner_id: resolvedUserId,
+                        is_own_profile: isOwnProfile,
+                        item_type: item.type,
+                      });
+                    }}
                     onLongPress={() =>
                       isOwnProfile && !isReordering && handleDeletePortfolioItem(item.id)
                     }
@@ -971,7 +988,7 @@ export function PortfolioSection({
     deleteItem,
     addItem,
     refresh,
-  } = usePortfolio(resolvedUserId);
+  } = usePortfolio(resolvedUserId, isOwnProfile);
 
   const {
     pickAndUpload,
@@ -994,6 +1011,10 @@ export function PortfolioSection({
         Alert.alert("Couldn't save that item", 'Your file uploaded, but we could not add it to your portfolio. Please try again.');
         return;
       }
+      analyticsService.trackEvent('portfolio_item_added', {
+        owner_id: resolvedUserId,
+        item_type: item.type,
+      });
       try {
         await refresh();
       } catch (e) {
@@ -1023,22 +1044,29 @@ export function PortfolioSection({
     ]);
   };
 
-  // Portfolio items are stored per-viewer-device (see lib/services/portfolio-service.ts
-  // and hooks/usePortfolio.ts) — there is no shared backend for them yet, so a
-  // poster viewing a hunter's profile can never actually see the hunter's
-  // items; this section would silently render a false "hasn't added
-  // portfolio items yet" for someone who may well have added several. Hide
-  // the section entirely on another user's profile rather than show a claim
-  // that isn't backed by real data. Do not remove this guard by re-adding a
-  // cross-user empty state — building real cross-user portfolio storage is a
-  // separate, larger change.
-  if (!isOwnProfile) return null;
+  // Portfolio items are now server-backed (see lib/services/portfolio-service.ts,
+  // supabase/migrations/20260914160000_portfolio_items.sql), so a poster
+  // viewing a hunter's profile sees the hunter's real items. Nothing to show
+  // (and nothing this viewer can do about it) on someone else's empty
+  // portfolio, so skip rendering the section entirely rather than nudge a
+  // viewer who isn't the owner to "Add Item".
+  if (!isOwnProfile && !portfolioLoading && items.length === 0) return null;
+
+  const handleViewItem = (item: PortfolioItem) => {
+    setSelectedPortfolioItem(item);
+    analyticsService.trackEvent('portfolio_item_viewed', {
+      item_id: item.id,
+      owner_id: resolvedUserId,
+      is_own_profile: isOwnProfile,
+      item_type: item.type,
+    });
+  };
 
   return (
     <View className="mb-4 px-4" style={{ backgroundColor: theme.background }}>
       <View className="flex-row justify-between items-center mb-2">
         <View className="flex-row items-center">
-          <Text className="text-lg font-medium" style={{ color: theme.text }}>Portfolio</Text>
+          <Text className="text-lg font-medium" style={{ color: theme.text }}>Work Samples</Text>
           <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
             ({items.length}/{MAX_PORTFOLIO_ITEMS})
           </Text>
@@ -1070,7 +1098,7 @@ export function PortfolioSection({
         )}
       </View>
       <Text className="text-xs mb-2" style={{ color: theme.textSecondary }}>
-        Only visible to you for now.
+        Work samples — provided by hunter. Not verified by Bounty.
       </Text>
       {(isPicking || isUploading) && (
         <UploadProgressBar progress={progress} message={uploadMessage} />
@@ -1078,11 +1106,13 @@ export function PortfolioSection({
       {portfolioLoading ? (
         <PortfolioSkeleton count={3} />
       ) : items.length === 0 && !lastPickedStandalone ? (
-        <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
-          <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
-            Showcase your work! Tap "Add Item" to upload images, videos, or files.
-          </Text>
-        </View>
+        isOwnProfile ? (
+          <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
+            <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
+              Showcase your work! Tap "Add Item" to upload images, videos, or files.
+            </Text>
+          </View>
+        ) : null
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-3">
@@ -1109,7 +1139,7 @@ export function PortfolioSection({
               <TouchableOpacity
                 key={item.id}
                 className="relative"
-                onPress={() => !isReordering && setSelectedPortfolioItem(item)}
+                onPress={() => !isReordering && handleViewItem(item)}
                 onLongPress={() =>
                   isOwnProfile && !isReordering && handleDeletePortfolioItem(item.id)
                 }

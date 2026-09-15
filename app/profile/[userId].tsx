@@ -636,6 +636,11 @@ export default function UserProfileScreen() {
           />
         </View>
 
+        {/* Bounties this user has posted — respects moderation/removal via the RPC-backed stats hook's underlying query filter.
+            Ordered right after identity/verified signals per the hunter-capability
+            profile order: identity -> bounty history -> reviews -> skills -> work samples. */}
+        <ProfileBountyHistorySection userId={userId} isOwnProfile={isOwnProfile} />
+
         {/* Recent reviews — the comment text behind the star average, previously
             collected but never rendered anywhere. */}
         <RecentReviewsSection userId={userId} />
@@ -646,11 +651,8 @@ export default function UserProfileScreen() {
           <SkillsetChips skills={skills} />
         </View>
 
-        {/* Portfolio */}
+        {/* Portfolio (work samples) */}
         <PortfolioSection userId={userId} isOwnProfile={isOwnProfile} />
-
-        {/* Bounties this user has posted — respects moderation/removal via the RPC-backed stats hook's underlying query filter */}
-        <ProfileBountyHistorySection userId={userId} isOwnProfile={isOwnProfile} />
 
         {/* Follower/following counts — social metadata, not a trust signal;
             kept below the hiring-relevant content rather than beside it. */}

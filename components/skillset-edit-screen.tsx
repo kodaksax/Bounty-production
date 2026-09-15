@@ -8,6 +8,7 @@ import { Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories'
+import { analyticsService } from '../lib/services/analytics-service'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 
 import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
@@ -125,6 +126,11 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
       if (updateProfile) {
         // extract text strings to match Profile shape
         const skillTexts = cleaned.map(s => s.text)
+        // Diffed against what was actually persisted before this save (not
+        // local component state, which can churn on every keystroke) so
+        // skill_added/skill_removed fire once per real change, only after
+        // the write actually succeeds below.
+        const previousSkills = authProfile?.skills ?? []
         // Preset skill-category tags persist to the remote profile alongside
         // skills (unlike the free-text skills above, which are also mirrored
         // to AsyncStorage below) so they're available server-side for the
@@ -134,6 +140,10 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
           setBanner('Error saving skills to profile')
           setTimeout(()=>setBanner(null), 1500)
         } else {
+          const added = skillTexts.filter(s => !previousSkills.includes(s))
+          const removed = previousSkills.filter(s => !skillTexts.includes(s))
+          added.forEach(skill => analyticsService.trackEvent('skill_added', { skill }))
+          removed.forEach(skill => analyticsService.trackEvent('skill_removed', { skill }))
           setBanner('Skills saved')
           setTimeout(()=>setBanner(null), 1500)
         }
