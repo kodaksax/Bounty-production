@@ -9,6 +9,8 @@ import { logClientError, logClientInfo } from 'lib/services/monitoring'
 import { navigationIntent } from 'lib/services/navigation-intent'
 import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
 import { supabase } from 'lib/supabase'
+import { wasApplicantProfileViewed } from 'lib/analytics/sessionFlags'
+import { deriveCoarseVerificationStatus } from 'lib/utils/normalize-profile'
 import { router } from 'expo-router'
 import { useCallback } from 'react'
 import { Alert } from 'react-native'
@@ -90,6 +92,13 @@ export function useAcceptRequest({
       // Prepare identifiers and hunter id
       const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
       const resolvedBountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
+
+      // Snapshot the applicant pool size for this bounty BEFORE the
+      // optimistic removal below empties it out from under us -- backs
+      // application_accepted's applicantCount.
+      const applicantCountForBounty = bountyRequests.filter(
+        (req) => String((req as any).bounty_id) === String(resolvedBountyId)
+      ).length
 
       // --- Pay-at-accept gate ------------------------------------------------
       // Runs BEFORE any optimistic UI. Everything below this point tells the
@@ -247,13 +256,29 @@ export function useAcceptRequest({
       // removed for real now.
       try {
         const bountyIdStr = bountyId != null ? String(bountyId) : undefined
+        const hunterIdStr = hunterIdForConv ? String(hunterIdForConv) : undefined
         const acceptProps = {
           role: 'poster' as const,
           bounty_id: bountyIdStr,
           application_id: String(requestId),
-          hunter_id: hunterIdForConv ? String(hunterIdForConv) : undefined,
+          hunter_id: hunterIdStr,
           is_for_honor: !!(request.bounty as any)?.is_for_honor,
           amount: (request.bounty as any)?.amount ?? undefined,
+          // Trust/selection-quality breakdown -- see the header comment on
+          // 'application_accepted' in lib/services/analytics-service.ts.
+          hunterVerified:
+            deriveCoarseVerificationStatus(
+              (request.profile as any)?.stripe_identity_status,
+              (request.profile as any)?.id_verification_status
+            ) === 'verified',
+          hunterCompleted: request.profile?.hunterCompleted ?? 0,
+          hadMessage: !!request.message,
+          trustTier: (request.bounty as any)?.trust_tier || 'standard',
+          applicantCount: applicantCountForBounty,
+          profileViewedBeforeAccept:
+            bountyIdStr != null && hunterIdStr != null
+              ? wasApplicantProfileViewed(bountyIdStr, hunterIdStr)
+              : false,
         }
         await analyticsService.trackEvent('application_accepted', acceptProps)
         // Funded AND in progress — the point past which a hunter may legitimately

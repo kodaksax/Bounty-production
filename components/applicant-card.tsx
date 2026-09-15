@@ -3,6 +3,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { markApplicantProfileViewed } from '../lib/analytics/sessionFlags';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
@@ -45,8 +46,17 @@ export function ApplicantCard({
   const router = useRouter();
   const pathname = usePathname();
   const globalSearchParams = useGlobalSearchParams();
+  // Built with encodeURIComponent rather than the global URLSearchParams --
+  // RN runtimes don't all polyfill it, and this only needs to produce a
+  // query string, not parse one.
   const searchString = Object.keys(globalSearchParams || {}).length
-    ? `?${new URLSearchParams(globalSearchParams as any).toString()}`
+    ? `?${Object.entries(globalSearchParams as Record<string, string | string[]>)
+        .flatMap(([key, value]) =>
+          (Array.isArray(value) ? value : [value]).map(
+            (v) => `${encodeURIComponent(key)}=${encodeURIComponent(v)}`
+          )
+        )
+        .join('&')}`
     : '';
   const referrerValue = `${pathname || ''}${searchString}`;
 
@@ -190,7 +200,25 @@ export function ApplicantCard({
     if (id) {
       setIsNavigatingToProfile(true);
       const finalRef = referrerOverride ?? referrerValue;
-      router.push(`/profile/${id}?referrer=${encodeURIComponent(finalRef)}`);
+      const bountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id;
+      if (bountyId != null) {
+        // Backs application_accepted's profileViewedBeforeAccept -- see
+        // lib/analytics/sessionFlags.ts.
+        markApplicantProfileViewed(String(bountyId), String(id));
+      }
+      // Object-based push (rather than a manually built URL string) lets
+      // expo-router handle encoding and avoids relying on the global
+      // URLSearchParams API, which isn't guaranteed on every RN runtime.
+      router.push({
+        pathname: '/profile/[userId]',
+        params: {
+          userId: String(id),
+          referrer: finalRef,
+          source: 'applicant_card',
+          isApplicant: 'true',
+          ...(bountyId != null ? { bountyId: String(bountyId) } : {}),
+        },
+      } as any);
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);
       }
@@ -200,7 +228,7 @@ export function ApplicantCard({
         }
       }, NAVIGATION_LOADING_TIMEOUT_MS);
     }
-  }, [request, router]);
+  }, [request, router, referrerOverride, referrerValue]);
 
   const profileId = (request as any).hunter_id || (request as any).user_id;
   const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar || request.profile?.avatar_url);

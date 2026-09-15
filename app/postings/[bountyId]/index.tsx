@@ -506,7 +506,13 @@ export default function BountyDashboard() {
               {!!otherParty.id && (
                 <TouchableOpacity
                   style={s.outlineBtn}
-                  onPress={() => router.push(`/profile/${otherParty.id}` as never)}
+                  onPress={() =>
+                    router.push(
+                      `/profile/${otherParty.id}?source=bounty_dashboard&isApplicant=false&bountyId=${encodeURIComponent(
+                        String(bounty.id)
+                      )}` as never
+                    )
+                  }
                   accessibilityRole="button"
                   accessibilityLabel={`View ${hunterName}'s profile`}
                 >

@@ -41,6 +41,7 @@ import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
+import { useApplicantListViewed } from '../../hooks/useApplicantListViewed'
 import { AcceptFundingGate } from '../../components/accept-funding-gate'
 import type { BountyListRow, InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
@@ -403,6 +404,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   })
 
   const { handleRejectRequest } = useRejectRequest({
+    bountyRequests,
     setBountyRequests,
     setIsLoading,
     setError,
@@ -413,6 +415,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   // onRequestMoreInfo is supplied; until now neither list passed it, so the
   // button never appeared and accepting was the only way to open a thread.
   const { handleAskApplicant, askingRequestId, isAskApplicantBusy } = useAskApplicant({ bountyRequests })
+
+  useApplicantListViewed(bountyRequests, activeTab === 'requests', isLoading.requests)
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.

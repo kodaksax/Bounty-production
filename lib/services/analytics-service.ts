@@ -369,7 +369,30 @@ export type AnalyticsEvent =
   // fired from hooks/useAcceptRequest.ts. Was `bounty_claimed` + `bounty_accepted`
   // (a dual-emit) — de-duped into one event on 2026-08-28. Distinct from the
   // hunter-side `application_*` funnel below (different actor, different stage).
+  //
+  // Trust/selection-quality properties added 2026-09-14 (hunterVerified,
+  // hunterCompleted, hadMessage, trustTier, applicantCount,
+  // profileViewedBeforeAccept) so acceptance can be broken down by hunter
+  // trust signal without joining back to bounty_requests/profiles state that
+  // has since moved on. `profileViewedBeforeAccept` reads a session-only flag
+  // (lib/analytics/sessionFlags.ts) set when the poster opened this specific
+  // hunter's profile from the applicant list for this bounty -- it is a
+  // same-session signal, not a lifetime one.
   | 'application_accepted'
+  // The POSTER declined an applicant without accepting them
+  // (hooks/useRejectRequest.ts). `reason` is OMITTED, never inferred: there is
+  // no reason-capture UI on the decline confirmation (Cancel / Decline only),
+  // so a `reason` value would be fabricated. Add the property only if a real
+  // reason-picker ships.
+  | 'application_declined'
+  // The applicant list/queue for a bounty was rendered with results. Fired
+  // once per bounty whose pending-applicant count is shown to the poster
+  // (the "Requests" tab lists pending applications across ALL of a poster's
+  // open bounties in one flat list, so this fires once per distinct bounty
+  // represented, not once per screen view) -- see app/tabs/inbox-screen.tsx.
+  // Refires only when that bounty's visible applicant count actually changes
+  // (a new application arrived), not on every re-render.
+  | 'applicant_list_viewed'
   // The POSTER opened a conversation with an applicant WITHOUT accepting them
   // (the "Ask a question" action on ApplicantCard). Sizes P0-02: accepting used
   // to be the only way to talk to a hunter, so a poster had to commit
@@ -544,7 +567,13 @@ export type AnalyticsEvent =
   | 'message_sent'
   | 'conversation_started'
   | 'conversation_viewed'
-  // Profile events
+  // Profile events. `profile_viewed` fires from app/profile/[userId].tsx once
+  // per mounted profile (guarded so a re-render can't refire it), carrying
+  // `source` (e.g. 'applicant_card', 'bounty_dashboard', 'unknown' for the
+  // many pre-existing navigation call sites this cutover didn't touch),
+  // `isApplicant`, `bountyId` when known, and `hunterId` only when the viewed
+  // profile is genuinely being evaluated as a hunter (isApplicant true) --
+  // this was declared but never actually captured anywhere before 2026-09-14.
   | 'profile_viewed'
   | 'profile_updated'
   // Hunter capability layer — self-reported skills, bounty-specific "why me?"

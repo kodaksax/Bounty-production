@@ -13,3 +13,22 @@ export function consumeIsFirstBountyListViewOfSession(): boolean {
   hasSeenBountyList = true
   return isFirst
 }
+
+// Hunter profiles a poster has opened from an applicant-selection surface
+// this session, keyed by `${bountyId}:${hunterId}`. Backs
+// `application_accepted`'s `profileViewedBeforeAccept` property -- the
+// screens involved (InboxScreen's Requests tab, the profile screen) unmount
+// on navigation (see issue #779), so this can't live in component state.
+const viewedApplicantProfiles = new Set<string>()
+
+function applicantProfileKey(bountyId: string, hunterId: string): string {
+  return `${bountyId}:${hunterId}`
+}
+
+export function markApplicantProfileViewed(bountyId: string, hunterId: string): void {
+  viewedApplicantProfiles.add(applicantProfileKey(bountyId, hunterId))
+}
+
+export function wasApplicantProfileViewed(bountyId: string, hunterId: string): boolean {
+  return viewedApplicantProfiles.has(applicantProfileKey(bountyId, hunterId))
+}

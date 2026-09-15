@@ -8,11 +8,12 @@ import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { ROUTES } from 'lib/routes';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { analyticsService } from "lib/services/analytics-service";
 import { resendVerification } from "lib/services/auth-service";
 import { supabase } from "lib/supabase";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import { shareProfile } from "lib/utils/share-utils";
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -93,7 +94,15 @@ const popoverStyles = StyleSheet.create({
 });
 
 export default function UserProfileScreen() {
-  const { userId, referrer } = useLocalSearchParams<{ userId: string; referrer?: string }>();
+  const { userId, referrer, source, isApplicant, bountyId } = useLocalSearchParams<{
+    userId: string;
+    referrer?: string;
+    /** Where the navigation to this profile originated, e.g. 'applicant_card', 'bounty_dashboard'. */
+    source?: string;
+    /** 'true' when the viewer is evaluating this person as a bounty applicant. */
+    isApplicant?: string;
+    bountyId?: string;
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
@@ -125,6 +134,26 @@ export default function UserProfileScreen() {
   const isEmailVerified = Boolean(
     session?.user?.email_confirmed_at && session?.user?.email
   );
+
+  const isApplicantView = isApplicant === 'true';
+  // Guards against refiring on unrelated re-renders (e.g. follow toggles) --
+  // fires once per successfully-loaded profile per mount, matching the
+  // "events fire exactly once" contract for the rest of the taxonomy.
+  const trackedProfileViewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userId || loading || error || !profile) return;
+    if (trackedProfileViewRef.current === userId) return;
+    trackedProfileViewRef.current = userId;
+    analyticsService.trackEvent('profile_viewed', {
+      source: source || 'unknown',
+      isApplicant: isApplicantView,
+      bountyId: bountyId ? String(bountyId) : undefined,
+      // Only carries an id when this profile is genuinely being evaluated as
+      // a hunter -- an ordinary profile visit (search, messenger, a bounty
+      // card) never sets isApplicant, so hunterId stays omitted there.
+      hunterId: isApplicantView ? String(userId) : undefined,
+    });
+  }, [userId, loading, error, profile, source, isApplicantView, bountyId]);
 
   const handleResendVerification = async () => {
     const email = session?.user?.email;
