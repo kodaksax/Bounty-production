@@ -249,7 +249,8 @@ const mockedService = bountyService as jest.Mocked<typeof bountyService>;
 /** Runs the pre-publish steps and leaves the flow on StepPostPublish. */
 async function publishThenReachConfirmation() {
   render(<CreateBountyFlow entryPoint="test" />);
-  fireEvent.press(screen.getByLabelText('stub-task-next'));
+  fireEvent.press(screen.getByLabelText('stub-task-next')); // Task -> Location
+  fireEvent.press(screen.getByLabelText('stub-where-continue')); // Location -> Compensation
   await act(async () => {
     fireEvent.press(screen.getByLabelText('stub-publish'));
   });

@@ -143,7 +143,7 @@ export function StepPostPublish({
       footerNote={
         draft.isForHonor
           ? 'No payment is involved in a for-honor bounty.'
-          : "You'll only be charged when the job is done."
+          : "You'll only be charged when you choose someone to do it."
       }
     >
       <View style={styles.liveBadge}>
