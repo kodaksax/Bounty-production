@@ -40,6 +40,9 @@ const reconciliationSource = read('supabase/functions/reconciliation/index.ts');
 const paymentIdempotencyMigration = read(
   'supabase/migrations/20260902213000_payment_idempotency_constraints.sql'
 );
+const closeEscrowRefundGapsMigration = read(
+  'supabase/migrations/20260914130000_close_escrow_refund_gaps.sql'
+);
 
 describe('invariant: one financial event produces one ledger event', () => {
   it('the database rejects duplicate live bounty payment rows and duplicate Stripe release evidence', () => {
@@ -362,5 +365,33 @@ describe('Stage A freeze migration is gated', () => {
   it('documents the preconditions and the outage risk', () => {
     expect(freeze).toContain('DO NOT APPLY');
     expect(freeze).toContain('payment_architecture_version = 1');
+  });
+});
+
+describe('close escrow/refund gaps migration invariants', () => {
+  it('locks funded bounties across payment architectures and forbids architecture flips', () => {
+    expect(closeEscrowRefundGapsMigration).toContain(
+      'NEW.payment_architecture_version IS DISTINCT FROM OLD.payment_architecture_version'
+    );
+    expect(closeEscrowRefundGapsMigration).toContain('FROM public.bounty_payments bp');
+    expect(closeEscrowRefundGapsMigration).toContain('FROM public.bounty_v3_funding bf');
+  });
+
+  it('re-checks the posting minimum when a bounty stops being for-honor', () => {
+    expect(closeEscrowRefundGapsMigration).toContain(
+      "OR NEW.is_for_honor IS DISTINCT FROM OLD.is_for_honor"
+    );
+  });
+
+  it('uses actual v1 escrow presence for legacy cancellation refund paths', () => {
+    expect(closeEscrowRefundGapsMigration).toContain(
+      'IF COALESCE(v_bounty.is_for_honor, FALSE) AND NOT v_has_v1_escrow THEN'
+    );
+    expect(closeEscrowRefundGapsMigration).toContain(
+      "AND COALESCE(b.payment_architecture_version, 1) = 1"
+    );
+    expect(closeEscrowRefundGapsMigration).toContain(
+      'COALESCE(user_id, v_row.poster_id, v_row.user_id)'
+    );
   });
 });
