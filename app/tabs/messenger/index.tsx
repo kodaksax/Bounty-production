@@ -7,6 +7,7 @@ import { EmptyState } from "components/ui/empty-state"
 import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
+import { ROUTES } from "lib/routes"
 import React, { useCallback, useMemo, useState } from "react"
 import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native"
 import { Swipeable } from 'react-native-gesture-handler'
@@ -54,6 +55,7 @@ export function MessengerScreen({
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
   const router = useRouter()
+  const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -67,9 +69,21 @@ export function MessengerScreen({
     }
   }, [refresh])
 
-  const handleConversationClick = async (id: string) => {
-    await markConversationReadSafe(id)
-    setActiveConversation(id)
+  const handleConversationClick = async (conversation: Conversation) => {
+    await markConversationReadSafe(conversation.id)
+
+    // A 1:1 row opens the merged thread with that person — the same screen
+    // the profile Message button opens — so every route into a direct
+    // conversation shows the full history, not just this one bounty's chat.
+    const otherUserId = !conversation.isGroup
+      ? conversation.participantIds?.find(id => id !== currentUserId)
+      : undefined
+    if (otherUserId) {
+      router.push(ROUTES.MESSAGES.WITH_USER(otherUserId) as any)
+      return
+    }
+
+    setActiveConversation(conversation.id)
     onConversationModeChange?.(true)
   }
 
@@ -188,7 +202,7 @@ export function MessengerScreen({
   const renderConversationItem = useCallback(({ item }: { item: Conversation }) => (
     <ConversationItem 
       conversation={item} 
-      onPress={() => handleConversationClick(item.id)}
+      onPress={() => handleConversationClick(item)}
       onDelete={() => handleDeleteConversation(item)}
     />
   ), [handleConversationClick, handleDeleteConversation]);

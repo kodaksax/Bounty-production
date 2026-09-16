@@ -24,6 +24,8 @@ jest.mock('../../../lib/services/messaging', () => ({
 
 jest.mock('../../../lib/services/supabase-messaging', () => ({
   fetchConversations: jest.fn(),
+  fetchMessages: jest.fn(),
+  fetchMessagesForConversations: jest.fn(),
   getOrCreateConversation: jest.fn(),
   createConversation: jest.fn(),
 }));
@@ -75,6 +77,7 @@ import { e2eKeyService } from '../../../lib/services/e2e-key-service';
 import { messageService } from '../../../lib/services/message-service';
 import * as localMessaging from '../../../lib/services/messaging';
 import * as supabaseMessaging from '../../../lib/services/supabase-messaging';
+import { supabase } from '../../../lib/supabase';
 
 const mockSupabaseMessaging = supabaseMessaging as jest.Mocked<typeof supabaseMessaging>;
 const mockLocalMessaging = localMessaging as jest.Mocked<typeof localMessaging>;
@@ -460,12 +463,111 @@ describe('Message Service - E2E Encryption', () => {
         'Hello',
         'current-user-id',
         // mediaUrl — no attachment on this message
+        undefined,
+        // replyTo — not a reply
         undefined
       );
     });
   });
 
+  describe('getFullConversationWithUser', () => {
+    const CONV_OLD = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const CONV_NEW = 'bbbbbbbb-2222-4222-8222-222222222222';
+
+    /** conversation_participants.select().eq().is().eq() -> rows */
+    function mockSharedConversations(rows: any[]) {
+      const eq2 = jest.fn().mockResolvedValue({ data: rows, error: null });
+      const is = jest.fn().mockReturnValue({ eq: eq2 });
+      const eq1 = jest.fn().mockReturnValue({ is });
+      const select = jest.fn().mockReturnValue({ eq: eq1 });
+      (supabase.from as jest.Mock).mockReturnValue({ select });
+      return { select, eq1, is, eq2 };
+    }
+
+    it('loads every shared 1:1 conversation with two queries, not one per conversation', async () => {
+      // A user pair can share dozens of conversations (one per bounty).
+      // Opening the DM used to do three sequential lookups and then a
+      // messages request per conversation before anything rendered.
+      const { select, eq1, is, eq2 } = mockSharedConversations([
+        { conversation_id: CONV_OLD, conversations: { id: CONV_OLD, is_group: false, updated_at: '2026-01-01T00:00:00Z' } },
+        { conversation_id: CONV_NEW, conversations: { id: CONV_NEW, is_group: false, updated_at: '2026-02-01T00:00:00Z' } },
+      ]);
+      mockSupabaseMessaging.fetchMessagesForConversations.mockResolvedValue([
+        { id: 'm1', conversationId: CONV_OLD, senderId: 'other-user-id', text: 'first', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'm2', conversationId: CONV_NEW, senderId: 'current-user-id', text: 'latest', createdAt: '2026-02-01T00:00:00Z' },
+      ] as any);
+
+      const result = await messageService.getFullConversationWithUser('other-user-id');
+
+      expect(supabase.from).toHaveBeenCalledTimes(1);
+      expect(supabase.from).toHaveBeenCalledWith('conversation_participants');
+      expect(select).toHaveBeenCalledWith('conversation_id, conversations!inner(id, is_group, updated_at)');
+      expect(eq1).toHaveBeenCalledWith('user_id', 'other-user-id');
+      expect(is).toHaveBeenCalledWith('deleted_at', null);
+      expect(eq2).toHaveBeenCalledWith('conversations.is_group', false);
+
+      expect(mockSupabaseMessaging.fetchMessagesForConversations).toHaveBeenCalledTimes(1);
+      expect(mockSupabaseMessaging.fetchMessagesForConversations).toHaveBeenCalledWith([CONV_NEW, CONV_OLD]);
+      expect(mockSupabaseMessaging.fetchMessages).not.toHaveBeenCalled();
+
+      expect(result?.realConversationId).toBe(CONV_NEW);
+      expect(result?.messages.map(m => m.id)).toEqual(['m1', 'm2']);
+      expect(result?.lastMessage).toBe('latest');
+    });
+
+    it('returns null when the users share no 1:1 conversation', async () => {
+      mockSharedConversations([]);
+
+      const result = await messageService.getFullConversationWithUser('other-user-id');
+
+      expect(result).toBeNull();
+      expect(mockSupabaseMessaging.fetchMessagesForConversations).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getMessages', () => {
+    const SUPABASE_CONV_ID = '11111111-2222-4333-8444-555555555555';
+
+    it('reads Supabase conversations from Supabase, not the local store', async () => {
+      // The merged 1:1 thread loads every past conversation through
+      // getMessages; reading the local AsyncStorage store for a Supabase id
+      // returned an empty history for all but the live thread.
+      const remote = [
+        {
+          id: 'msg-remote',
+          conversationId: SUPABASE_CONV_ID,
+          senderId: 'other-user-id',
+          text: 'from supabase',
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      mockSupabaseMessaging.fetchMessages.mockResolvedValue(remote as any);
+      mockLocalMessaging.getMessages.mockResolvedValue([]);
+
+      const result = await messageService.getMessages(SUPABASE_CONV_ID);
+
+      expect(mockSupabaseMessaging.fetchMessages).toHaveBeenCalledWith(SUPABASE_CONV_ID);
+      expect(mockLocalMessaging.getMessages).not.toHaveBeenCalled();
+      expect(result.map(m => m.id)).toEqual(['msg-remote']);
+    });
+
+    it('still reads local/non-UUID conversations from the local store', async () => {
+      mockLocalMessaging.getMessages.mockResolvedValue([
+        {
+          id: 'msg-local',
+          conversationId: 'conv-1',
+          senderId: 'other-user-id',
+          text: 'local',
+          createdAt: new Date().toISOString(),
+        },
+      ] as any);
+
+      const result = await messageService.getMessages('conv-1');
+
+      expect(mockSupabaseMessaging.fetchMessages).not.toHaveBeenCalled();
+      expect(result.map(m => m.id)).toEqual(['msg-local']);
+    });
+
     it('should decrypt encrypted messages detected by payload shape', async () => {
       const encryptedPayload = JSON.stringify({
         ciphertext: 'abc',

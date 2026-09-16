@@ -172,6 +172,84 @@ export function generateInitials(username?: string, fullName?: string): string {
  * Fetch conversations for a user from Supabase
  * Optimized to eliminate N+1 queries by batching all data fetches
  */
+type LastMessageSummary = { text: string | null; media_url: string | null };
+type ConversationSummaries = {
+  lastMessageMap: Map<string, LastMessageSummary>;
+  unreadCountMap: Map<string, number>;
+};
+
+/**
+ * One RPC for the last message and unread count of every conversation the
+ * caller is in. Returns null when the RPC is unavailable (e.g. the migration
+ * has not been applied to this environment yet) so the caller can fall back.
+ */
+async function fetchConversationSummaries(): Promise<ConversationSummaries | null> {
+  const { data, error } = await supabase.rpc('get_conversation_summaries');
+  if (error || !data) {
+    if (error) console.warn('get_conversation_summaries unavailable, falling back:', error.message);
+    return null;
+  }
+
+  const lastMessageMap = new Map<string, LastMessageSummary>();
+  const unreadCountMap = new Map<string, number>();
+  for (const row of data as any[]) {
+    if (row.last_message_at) {
+      lastMessageMap.set(row.conversation_id, {
+        text: row.last_message_text,
+        media_url: row.last_message_media_url,
+      });
+    }
+    unreadCountMap.set(row.conversation_id, Number(row.unread_count) || 0);
+  }
+  return { lastMessageMap, unreadCountMap };
+}
+
+/** Pre-migration path: two requests per conversation. */
+async function fetchConversationSummariesPerConversation(
+  conversations: { id: string }[],
+  participants: { conversation_id: string; last_read_at: string | null }[],
+  userId: string
+): Promise<ConversationSummaries> {
+  const lastMessagesResults = await Promise.all(
+    conversations.map(conv =>
+      supabase
+        .from('messages')
+        .select('conversation_id, text, created_at, media_url')
+        .eq('conversation_id', conv.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    )
+  );
+  const lastMessageMap = new Map<string, LastMessageSummary>(
+    lastMessagesResults
+      .filter(result => result.data)
+      .map(result => [
+        result.data!.conversation_id,
+        { text: result.data!.text, media_url: result.data!.media_url },
+      ])
+  );
+
+  const unreadCountsResults = await Promise.all(
+    conversations.map(async conv => {
+      const lastReadAt = participants.find(p => p.conversation_id === conv.id)?.last_read_at;
+      if (!lastReadAt) return { conversationId: conv.id, count: 0 };
+
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conv.id)
+        .gt('created_at', lastReadAt)
+        .neq('sender_id', userId);
+
+      return { conversationId: conv.id, count: count || 0 };
+    })
+  );
+  const unreadCountMap = new Map(unreadCountsResults.map(r => [r.conversationId, r.count]));
+
+  return { lastMessageMap, unreadCountMap };
+}
+
 export async function fetchConversations(userId: string): Promise<Conversation[]> {
   if (!userId || userId.trim() === '') return [];
 
@@ -264,46 +342,13 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     // Create a map for quick profile lookups
     const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
 
-    // OPTIMIZATION: Batch fetch last messages for all conversations
-    // Use a window function approach or fetch multiple at once
-    const lastMessagesPromises = conversations.map(conv =>
-      supabase
-        .from('messages')
-        .select('conversation_id, text, created_at, media_url')
-        .eq('conversation_id', conv.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    );
-
-    const lastMessagesResults = await Promise.all(lastMessagesPromises);
-    const lastMessageMap = new Map(
-      lastMessagesResults
-        .filter(result => result.data)
-        .map(result => [result.data!.conversation_id, result.data])
-    );
-
-    // OPTIMIZATION: Batch fetch unread counts for all conversations
-    const unreadCountsPromises = conversations.map(async conv => {
-      const participantRecord = participants.find(p => p.conversation_id === conv.id);
-      const lastReadAt = participantRecord?.last_read_at;
-
-      if (!lastReadAt) {
-        return { conversationId: conv.id, count: 0 };
-      }
-
-      const { count } = await supabase
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('conversation_id', conv.id)
-        .gt('created_at', lastReadAt)
-        .neq('sender_id', userId);
-
-      return { conversationId: conv.id, count: count || 0 };
-    });
-
-    const unreadCountsResults = await Promise.all(unreadCountsPromises);
-    const unreadCountMap = new Map(unreadCountsResults.map(r => [r.conversationId, r.count]));
+    // Last message + unread count for every conversation in one round trip
+    // (get_conversation_summaries, migration 20260916120000). The per
+    // conversation queries below are the pre-migration path and stay as a
+    // fallback only; they cost two requests per conversation.
+    const { lastMessageMap, unreadCountMap } =
+      (await fetchConversationSummaries()) ??
+      (await fetchConversationSummariesPerConversation(conversations, participants, userId));
 
     // Now build enriched conversations using the batched data
     const enrichedConversations: Conversation[] = conversations.map(conv => {
@@ -362,6 +407,23 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** Map a `messages` row to the app's Message shape. */
+function messageFromRow(msg: any): Message {
+  return {
+    id: msg.id,
+    conversationId: msg.conversation_id,
+    senderId: msg.sender_id,
+    text: msg.text,
+    createdAt: msg.created_at,
+    status: 'sent',
+    // Older rows (and some environments) store the attachment under
+    // `attachment_url` instead of `media_url`.
+    mediaUrl: msg.media_url ?? msg.attachment_url ?? undefined,
+    replyTo: msg.reply_to,
+    isPinned: msg.is_pinned,
+  };
+}
+
 export async function fetchMessages(conversationId: string): Promise<Message[]> {
   // Guard: local/fake conv IDs (e.g. "conv-*") are not valid Supabase UUIDs
   if (!conversationId || !UUID_RE.test(conversationId)) {
@@ -376,19 +438,7 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
 
     if (error) throw error;
 
-    const formattedMessages: Message[] = (messages || []).map(msg => ({
-      id: msg.id,
-      conversationId: msg.conversation_id,
-      senderId: msg.sender_id,
-      text: msg.text,
-      createdAt: msg.created_at,
-      status: 'sent',
-      // Older rows (and some environments) store the attachment under
-      // `attachment_url` instead of `media_url`.
-      mediaUrl: msg.media_url ?? msg.attachment_url ?? undefined,
-      replyTo: msg.reply_to,
-      isPinned: msg.is_pinned,
-    }));
+    const formattedMessages: Message[] = (messages || []).map(messageFromRow);
 
     // Cache the messages
     await cacheMessages(conversationId, formattedMessages);
@@ -402,18 +452,49 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
 }
 
 /**
+ * Fetch the messages of several conversations in one round trip, oldest
+ * first across all of them.
+ *
+ * The merged 1:1 thread spans every conversation two users share -- one per
+ * bounty, up to a few dozen -- and fetching each separately made opening a
+ * DM wait on that many parallel requests (and cache writes) before the first
+ * message could render.
+ */
+export async function fetchMessagesForConversations(conversationIds: string[]): Promise<Message[]> {
+  const ids = conversationIds.filter(id => UUID_RE.test(id));
+  if (ids.length === 0) return [];
+
+  const { data: messages, error } = await supabase
+    .from('messages')
+    .select('*')
+    .in('conversation_id', ids)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+
+  return (messages || []).map(messageFromRow);
+}
+
+/**
  * Send a message in a conversation
  */
 export async function sendMessage(
   conversationId: string,
   text: string,
   senderId: string,
-  mediaUrl?: string | null
+  mediaUrl?: string | null,
+  replyTo?: string | null
 ): Promise<Message> {
   try {
     // First, try the canonical column name 'text'
     // Include media_url when provided. Try several candidate field names for text and media.
-    const base = { conversation_id: conversationId, sender_id: senderId };
+    // `reply_to` links a quoted reply to the message it answers (see
+    // 20251002_messaging_schema.sql); it is nullable, so only set it when given.
+    const base = {
+      conversation_id: conversationId,
+      sender_id: senderId,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+    };
     let attemptFields: Record<string, any>[] = [
       { ...base, text, media_url: mediaUrl ?? null },
       { ...base, text, media: mediaUrl ?? null },
@@ -478,7 +559,7 @@ export async function sendMessage(
       createdAt: inserted.created_at,
       status: 'sent',
       mediaUrl: resolvedMedia ?? undefined,
-      replyTo: inserted.reply_to ?? undefined,
+      replyTo: inserted.reply_to ?? replyTo ?? undefined,
       isPinned: inserted.is_pinned ?? undefined,
     };
 

@@ -48,6 +48,47 @@ function tryParseEncryptedPayload(text: string): EncryptedMessage | null {
 const CONVERSATIONS_CACHE_TTL_MS = 2000;
 let conversationsCache: { userId: string; promise: Promise<Conversation[]>; timestamp: number } | null = null;
 
+/**
+ * Decrypt any E2E-encrypted rows in place of their ciphertext JSON. Plaintext
+ * rows pass straight through; the local key pair is only loaded if a row
+ * actually needs it.
+ */
+async function decryptMessages(messages: Message[]): Promise<Message[]> {
+  const userId = getCurrentUserId();
+
+  let keys: { publicKey: string; privateKey: string } | null = null;
+  const getKeys = async () => {
+    if (keys === null) {
+      keys = await e2eKeyService.getOrGenerateKeyPair(userId).catch(() => null);
+    }
+    return keys;
+  };
+
+  return Promise.all(
+    messages.map(async msg => {
+      const payload = tryParseEncryptedPayload(msg.text);
+      if (!payload) return msg;
+
+      try {
+        const localKeys = await getKeys();
+        if (!localKeys) throw new Error('No local key pair');
+
+        const isFromCurrentUser = msg.senderId === userId;
+        const peerPublicKey =
+          isFromCurrentUser && payload.recipientPublicKey
+            ? payload.recipientPublicKey
+            : payload.senderPublicKey;
+
+        const adjustedPayload: EncryptedMessage = { ...payload, senderPublicKey: peerPublicKey };
+        const plaintext = await decryptMessage(adjustedPayload, localKeys.privateKey);
+        return { ...msg, text: plaintext, isEncrypted: true };
+      } catch {
+        return { ...msg, text: '[Encrypted message]', isEncrypted: true };
+      }
+    })
+  );
+}
+
 export const messageService = {
   getConversations: async (): Promise<Conversation[]> => {
     const userId = getCurrentUserId();
@@ -69,40 +110,16 @@ export const messageService = {
   },
 
   getMessages: async (conversationId: string): Promise<Message[]> => {
-    const messages = await messagingService.getMessages(conversationId);
-    const userId = getCurrentUserId();
-
-    let keys: { publicKey: string; privateKey: string } | null = null;
-    const getKeys = async () => {
-      if (keys === null) {
-        keys = await e2eKeyService.getOrGenerateKeyPair(userId).catch(() => null);
-      }
-      return keys;
-    };
-
-    return Promise.all(
-      messages.map(async msg => {
-        const payload = tryParseEncryptedPayload(msg.text);
-        if (!payload) return msg;
-
-        try {
-          const localKeys = await getKeys();
-          if (!localKeys) throw new Error('No local key pair');
-
-          const isFromCurrentUser = msg.senderId === userId;
-          const peerPublicKey =
-            isFromCurrentUser && payload.recipientPublicKey
-              ? payload.recipientPublicKey
-              : payload.senderPublicKey;
-
-          const adjustedPayload: EncryptedMessage = { ...payload, senderPublicKey: peerPublicKey };
-          const plaintext = await decryptMessage(adjustedPayload, localKeys.privateKey);
-          return { ...msg, text: plaintext, isEncrypted: true };
-        } catch {
-          return { ...msg, text: '[Encrypted message]', isEncrypted: true };
-        }
-      })
-    );
+    // Real conversations live in Supabase; the AsyncStorage store only holds
+    // local/offline rows. The merged 1:1 thread (getFullConversationWithUser)
+    // loads every past conversation through here, so reading the local store
+    // for a Supabase id returned an empty history for all but the thread
+    // useMessages happened to be fetching live -- the user saw one
+    // conversation instead of the full history.
+    const messages = UUID_RE.test(conversationId)
+      ? await supabaseMessaging.fetchMessages(conversationId)
+      : await messagingService.getMessages(conversationId);
+    return decryptMessages(messages);
   },
 
   sendMessage: async (
@@ -110,7 +127,8 @@ export const messageService = {
     text: string,
     senderId?: string,
     participantIds?: string[],
-    mediaUrl?: string | null
+    mediaUrl?: string | null,
+    replyTo?: string | null
   ): Promise<{ message: Message; error?: string; encryptionWarning?: string }> => {
     const userId = getCurrentUserId();
     const effectiveSenderId = senderId ?? userId;
@@ -190,6 +208,7 @@ export const messageService = {
         status: 'sending',
         isEncrypted,
         mediaUrl: mediaUrl ?? undefined,
+        replyTo: replyTo ?? undefined,
       };
 
       await offlineQueueService.enqueue('message', {
@@ -199,6 +218,7 @@ export const messageService = {
         tempId: tempMessage.id,
         isEncrypted,
         mediaUrl: mediaUrl ?? undefined,
+        replyTo: replyTo ?? undefined,
       });
 
       return { message: tempMessage, encryptionWarning };
@@ -214,7 +234,8 @@ export const messageService = {
           conversationId,
           finalText,
           effectiveSenderId,
-          mediaUrl
+          mediaUrl,
+          replyTo
         );
         message = { ...localMessage, isEncrypted };
       } else {
@@ -223,7 +244,8 @@ export const messageService = {
           conversationId,
           finalText,
           effectiveSenderId,
-          mediaUrl
+          mediaUrl,
+          replyTo
         );
         message = {
           ...sentMessage,
@@ -417,7 +439,8 @@ export const messageService = {
     conversationId: string,
     text: string,
     senderId: string,
-    mediaUrl?: string | null
+    mediaUrl?: string | null,
+    replyTo?: string | null
   ): Promise<Message> => {
     try {
       const dedupeCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
@@ -459,7 +482,7 @@ export const messageService = {
       // to the normal send rather than blocking queue processing entirely.
     }
 
-    return messagingService.sendMessage(conversationId, text, senderId, mediaUrl);
+    return messagingService.sendMessage(conversationId, text, senderId, mediaUrl, replyTo);
   },
 
   getAllConversationsWithUser: async (otherUserId: string): Promise<Conversation[]> => {
@@ -538,68 +561,44 @@ export const messageService = {
     if (!currentUserId || !otherUserId || currentUserId === otherUserId) return null;
 
     try {
-      const { data: myParticipations, error: myError } = await supabase
+      // One query for the 1:1 conversations the two users share. RLS on
+      // conversation_participants only returns rows for conversations the
+      // current user is an active participant of (is_user_participant), so
+      // the other user's active rows are exactly the shared set -- no need to
+      // first list our own conversations and intersect client-side.
+      //
+      // Only non-group conversations are considered. Without that filter a
+      // shared group chat could become the `realConversationId` and direct
+      // messages would be sent into the group by mistake.
+      const { data: shared, error: sharedError } = await supabase
         .from('conversation_participants')
-        .select('conversation_id')
-        .eq('user_id', currentUserId)
-        .is('deleted_at', null);
-
-      if (myError) throw myError;
-      if (!myParticipations?.length) return null;
-
-      const myConversationIds = myParticipations.map(p => p.conversation_id);
-
-      const { data: sharedParticipations, error: sharedError } = await supabase
-        .from('conversation_participants')
-        .select('conversation_id')
+        .select('conversation_id, conversations!inner(id, is_group, updated_at)')
         .eq('user_id', otherUserId)
-        .in('conversation_id', myConversationIds)
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .eq('conversations.is_group', false);
 
       if (sharedError) throw sharedError;
-      if (!sharedParticipations?.length) return null;
+      if (!shared?.length) return null;
 
-      const sharedConversationIds = sharedParticipations.map(p => p.conversation_id);
+      const nonGroupConvs = shared
+        .map((row: any) => {
+          const conv = Array.isArray(row.conversations) ? row.conversations[0] : row.conversations;
+          return { id: row.conversation_id as string, updated_at: conv?.updated_at as string | undefined };
+        })
+        .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''));
 
-      // Only consider non-group (1:1) conversations between the two users.
-      // If we don't filter here, a shared group chat could be selected
-      // and become the `realConversationId`, causing direct messages to
-      // be sent into the group by mistake.
-      const { data: nonGroupConvs, error: convsError } = await supabase
-        .from('conversations')
-        .select('id, updated_at')
-        .in('id', sharedConversationIds)
-        .eq('is_group', false)
-        .order('updated_at', { ascending: false });
+      const nonGroupIds = nonGroupConvs.map(c => c.id);
 
-      if (convsError) throw convsError;
-      if (!nonGroupConvs?.length) return null;
-
-      const nonGroupIds = nonGroupConvs.map((c: any) => c.id);
-
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('messages')
-        .select('*')
-        .in('conversation_id', nonGroupIds)
-        .order('created_at', { ascending: true });
-
-      if (messagesError) throw messagesError;
-      if (!messagesData?.length) return null;
-
-      const allMessages: Message[] = messagesData.map((msg: any) => ({
-        id: msg.id,
-        conversationId: msg.conversation_id,
-        senderId: msg.sender_id,
-        text: msg.text,
-        createdAt: msg.created_at,
-        replyTo: msg.reply_to ?? undefined,
-        mediaUrl: msg.attachment_url ?? undefined,
-        status: msg.status ?? 'sent',
-        isPinned: msg.is_pinned ?? false,
-      }));
+      // One query for every message across those conversations, decrypted the
+      // same way the single-conversation view decrypts them (reading
+      // `messages.text` raw would render ciphertext JSON in the thread).
+      const allMessages = await decryptMessages(
+        await supabaseMessaging.fetchMessagesForConversations(nonGroupIds)
+      );
 
       // Choose the most recently-updated non-group conversation as the real target
       const realConversationId = nonGroupConvs[0].id;
+      const lastMessage = allMessages[allMessages.length - 1];
 
       const fullConversation: FullConversation = {
         id: `full-${currentUserId}-${otherUserId}`,
@@ -607,7 +606,8 @@ export const messageService = {
         isGroup: false,
         name: 'Conversation',
         participantIds: [currentUserId, otherUserId],
-        updatedAt: allMessages[allMessages.length - 1].createdAt,
+        lastMessage: lastMessage?.text,
+        updatedAt: lastMessage?.createdAt ?? nonGroupConvs[0].updated_at ?? undefined,
         messages: allMessages,
       };
 

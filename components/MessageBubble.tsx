@@ -3,7 +3,37 @@ import { Image } from 'expo-image';
 import React, { memo, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { cn } from '../lib/utils';
-import { getMediaKind, isEmojiOnly, mediaFileName } from '../lib/utils/message-media';
+import { getMediaKind, isEmojiOnly, mediaFileName, mediaPreviewLabel } from '../lib/utils/message-media';
+
+/**
+ * Every text size in a message bubble, in one place. Change these to resize
+ * chat text; the styles below and the message body read from here.
+ */
+export const MESSAGE_FONT_SIZE = {
+  /** The message text itself */
+  body: 18,
+  /** Emoji-only messages, drawn large with no bubble */
+  emojiOnly: 44,
+  /** "Replying to" sender name inside a reply quote */
+  quoteSender: 11,
+  /** Quoted text inside a reply quote */
+  quoteText: 12,
+  /** "Pinned" badge */
+  pinnedBadge: 10,
+  /** File name on a non-previewable attachment chip */
+  fileName: 13,
+  /** "Retry" under a failed message */
+  retry: 12,
+} as const;
+
+/** The message a reply quotes, resolved by the screen from the thread. */
+export interface QuotedMessage {
+  id: string;
+  /** "You" or the sender's display name. */
+  senderLabel: string;
+  text: string;
+  mediaUrl?: string | null;
+}
 
 export interface MessageBubbleProps {
   id: string;
@@ -13,7 +43,17 @@ export interface MessageBubbleProps {
   mediaUrl?: string | null;
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   isPinned?: boolean;
+  /**
+   * The message this one replies to. `null` means it replies to something we
+   * could not find (deleted, or outside the loaded thread); undefined means it
+   * is not a reply.
+   */
+  replyTo?: QuotedMessage | null;
+  /** Briefly emphasised after the viewer jumps here from a reply's quote. */
+  isHighlighted?: boolean;
   onLongPress?: (messageId: string) => void;
+  /** Called with the quoted message's id when the quote block is tapped */
+  onReplyPress?: (messageId: string) => void;
   onRetry?: (messageId: string) => void;
   /** Called with the media URL when the attachment is tapped (opens the viewer) */
   onMediaPress?: (mediaUrl: string) => void;
@@ -30,9 +70,12 @@ export const MessageBubble = memo(({
   mediaUrl,
   status,
   isPinned,
+  replyTo,
+  isHighlighted,
   onLongPress,
   onRetry,
-  onMediaPress
+  onMediaPress,
+  onReplyPress
 }: MessageBubbleProps) => {
   const [mediaFailed, setMediaFailed] = useState(false);
 
@@ -99,6 +142,55 @@ export const MessageBubble = memo(({
     }
   };
 
+  // Quote of the message being replied to. The accent bar on its left edge is
+  // the visual "points at" cue; tapping it jumps the thread to the original.
+  const renderQuote = () => {
+    if (replyTo === undefined) return null;
+
+    const unavailable = replyTo === null;
+    const preview = unavailable
+      ? 'Original message unavailable'
+      : replyTo.text.trim() || mediaPreviewLabel(replyTo.mediaUrl);
+
+    return (
+      <TouchableOpacity
+        style={[styles.quote, isUser ? styles.quoteUser : styles.quoteOther]}
+        onPress={() => replyTo && onReplyPress?.(replyTo.id)}
+        onLongPress={handleLongPress}
+        disabled={unavailable || !onReplyPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={
+          unavailable
+            ? 'Replying to an unavailable message'
+            : `Replying to ${replyTo.senderLabel}: ${preview}`
+        }
+        accessibilityHint={unavailable ? undefined : 'Jumps to the original message'}
+      >
+        <View style={[styles.quoteBar, isUser ? styles.quoteBarUser : styles.quoteBarOther]} />
+        <View style={styles.quoteBody}>
+          {!unavailable && (
+            <View style={styles.quoteHeader}>
+              <MaterialIcons name="reply" size={12} color={isUser ? '#d1fae5' : '#6ee7b7'} />
+              <Text
+                style={[styles.quoteSender, isUser ? styles.quoteSenderUser : styles.quoteSenderOther]}
+                numberOfLines={1}
+              >
+                {replyTo.senderLabel}
+              </Text>
+            </View>
+          )}
+          <Text
+            style={[styles.quoteText, unavailable && styles.quoteTextUnavailable]}
+            numberOfLines={2}
+          >
+            {preview}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderMedia = () => {
     if (!mediaUrl) return null;
 
@@ -158,10 +250,14 @@ export const MessageBubble = memo(({
     );
   };
 
-  if (jumboEmoji) {
+  // An emoji-only reply still needs its quote, so it keeps the bubble layout.
+  if (jumboEmoji && replyTo === undefined) {
     return (
       <TouchableOpacity activeOpacity={0.8} onLongPress={handleLongPress} delayLongPress={500}>
-        <View className={cn('mb-3 px-3 max-w-[80%]', isUser ? 'ml-auto' : 'mr-auto')}>
+        <View
+          className={cn('mb-3 px-3 max-w-[80%]', isUser ? 'ml-auto' : 'mr-auto')}
+          style={isHighlighted ? styles.highlighted : undefined}
+        >
           {isPinned && (
             <View style={styles.pinnedBadge}>
               <MaterialIcons name="push-pin" size={12} color="#fbbf24" />
@@ -183,7 +279,10 @@ export const MessageBubble = memo(({
       onLongPress={handleLongPress}
       delayLongPress={500}
     >
-      <View className={cn('mb-3 px-3 max-w-[80%]', isUser ? 'ml-auto' : 'mr-auto')}>
+      <View
+        className={cn('mb-3 px-3 max-w-[80%]', isUser ? 'ml-auto' : 'mr-auto')}
+        style={isHighlighted ? styles.highlighted : undefined}
+      >
         <View className={cn(
           'px-3 py-2 rounded-2xl',
           isUser
@@ -196,15 +295,11 @@ export const MessageBubble = memo(({
               <Text style={styles.pinnedText}>Pinned</Text>
             </View>
           )}
+          {renderQuote()}
           {renderMedia()}
           {/* Attachment-only messages carry empty text — don't render an empty
               Text node, which would add a stray blank line under the image. */}
-          {hasText && (
-            <Text className={cn(
-              'text-sm',
-              isUser ? 'text-white' : 'text-white'
-            )}>{text}</Text>
-          )}
+          {hasText && <Text style={styles.body}>{text}</Text>}
           {renderStatusIcon()}
         </View>
         {/* Retry button for failed messages */}
@@ -226,6 +321,67 @@ export const MessageBubble = memo(({
 MessageBubble.displayName = 'MessageBubble';
 
 const styles = StyleSheet.create({
+  body: {
+    fontSize: MESSAGE_FONT_SIZE.body,
+    lineHeight: Math.round(MESSAGE_FONT_SIZE.body * 1.45),
+    color: '#FFFFFF',
+  },
+  highlighted: {
+    borderRadius: 18,
+    backgroundColor: 'rgba(110, 231, 183, 0.18)',
+  },
+  quote: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 6,
+    maxWidth: 240,
+  },
+  quoteUser: {
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+  },
+  quoteOther: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  quoteBar: {
+    width: 3,
+    alignSelf: 'stretch',
+  },
+  quoteBarUser: {
+    backgroundColor: '#d1fae5',
+  },
+  quoteBarOther: {
+    backgroundColor: '#6ee7b7',
+  },
+  quoteBody: {
+    flexShrink: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    gap: 2,
+  },
+  quoteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  quoteSender: {
+    fontSize: MESSAGE_FONT_SIZE.quoteSender,
+    fontWeight: '700',
+  },
+  quoteSenderUser: {
+    color: '#d1fae5',
+  },
+  quoteSenderOther: {
+    color: '#6ee7b7',
+  },
+  quoteText: {
+    fontSize: MESSAGE_FONT_SIZE.quoteText,
+    color: 'rgba(255, 255, 255, 0.85)',
+  },
+  quoteTextUnavailable: {
+    fontStyle: 'italic',
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
   statusContainer: {
     alignSelf: 'flex-end',
     marginTop: 4,
@@ -242,7 +398,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   pinnedText: {
-    fontSize: 10,
+    fontSize: MESSAGE_FONT_SIZE.pinnedBadge,
     color: '#fbbf24',
     fontWeight: '600',
   },
@@ -284,12 +440,12 @@ const styles = StyleSheet.create({
   },
   fileChipText: {
     flexShrink: 1,
-    fontSize: 13,
+    fontSize: MESSAGE_FONT_SIZE.fileName,
     color: '#E5E7EB',
   },
   jumboEmoji: {
-    fontSize: 44,
-    lineHeight: 54,
+    fontSize: MESSAGE_FONT_SIZE.emojiOnly,
+    lineHeight: Math.round(MESSAGE_FONT_SIZE.emojiOnly * 1.23),
   },
   jumboEmojiUser: {
     textAlign: 'right',
@@ -308,7 +464,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   retryText: {
-    fontSize: 12,
+    fontSize: MESSAGE_FONT_SIZE.retry,
     color: '#ef4444',
     fontWeight: '600',
   },

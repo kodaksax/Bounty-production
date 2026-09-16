@@ -5,6 +5,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 interface MessageActionsProps {
   visible: boolean;
   onClose: () => void;
+  /** Quote this message in the composer. Omit to hide the option. */
+  onReply?: () => void;
   onPin: () => void;
   onCopy: () => void;
   onReport: () => void;
@@ -19,6 +21,7 @@ interface MessageActionsProps {
 export function MessageActions({ 
   visible, 
   onClose, 
+  onReply,
   onPin, 
   onCopy, 
   onReport,
@@ -51,23 +54,24 @@ export function MessageActions({
             accessibilityRole="menu"
             accessibilityLabel="Message actions"
           >
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => handleAction(onPin)}
-              accessibilityRole="button"
-              accessibilityLabel={isPinned ? 'Unpin message' : 'Pin message'}
-              accessibilityHint={isPinned ? 'Removes message from pinned messages' : 'Pins message to top of conversation'}
-            >
-              <MaterialIcons 
-                name={isPinned ? 'push-pin' : 'push-pin'} 
-                size={22} 
-                color={isPinned ? '#fbbf24' : '#9CA3AF'}
-                accessibilityElementsHidden={true}
-              />
-              <Text style={styles.actionText}>
-                {isPinned ? 'Unpin Message' : 'Pin Message'}
-              </Text>
-            </TouchableOpacity>
+            {onReply && (
+              <>
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => handleAction(onReply)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reply to message"
+                  accessibilityHint="Quotes this message in your reply"
+                >
+                  <MaterialIcons name="reply" size={22} color="#9CA3AF" accessibilityElementsHidden={true} />
+                  <Text style={styles.actionText}>Reply</Text>
+                </TouchableOpacity>
+
+                <View style={styles.divider} />
+              </>
+            )}
+
+            
 
             <View style={styles.divider} />
 
@@ -84,32 +88,9 @@ export function MessageActions({
 
             <View style={styles.divider} />
 
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => handleAction(onReport)}
-              accessibilityRole="button"
-              accessibilityLabel="Report message"
-              accessibilityHint="Reports this message for review"
-            >
-              <MaterialIcons name="flag" size={22} color="#fca5a5" accessibilityElementsHidden={true} />
-              <Text style={[styles.actionText, styles.dangerText]}>Report Message</Text>
-            </TouchableOpacity>
+           
 
-            {showBlockOption && onBlockUser && (
-              <>
-                <View style={styles.divider} />
-
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={() => handleAction(onBlockUser)}
-                  accessibilityLabel="Block this user"
-                  accessibilityHint="Block this user to prevent them from contacting you"
-                >
-                  <MaterialIcons name="block" size={22} color="#fca5a5" />
-                  <Text style={[styles.actionText, styles.dangerText]}>Block User</Text>
-                </TouchableOpacity>
-              </>
-            )}
+          
 
             <View style={styles.divider} />
 

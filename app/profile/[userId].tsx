@@ -40,7 +40,6 @@ import { VerificationBadgeChips } from "../../components/ui/verification-badge-c
 import { useProfileActivityStats } from "../../hooks/useProfileActivityStats";
 import { authProfileService } from "../../lib/services/auth-profile-service";
 import { blockingService } from "../../lib/services/blocking-service";
-import { messageService } from "../../lib/services/message-service";
 import { navigationIntent } from "../../lib/services/navigation-intent";
 ;
 
@@ -128,7 +127,6 @@ export default function UserProfileScreen() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([]);
   const { stats: activityStats } = useProfileActivityStats(userId);
-  const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   const isOwnProfile = userId === currentUserId;
   const isEmailVerified = Boolean(
@@ -255,7 +253,7 @@ export default function UserProfileScreen() {
     loadSkills();
   }, [userId, profile]);
 
-  const handleMessage = async () => {
+  const handleMessage = () => {
     if (!userId || !currentUserId) {
       Alert.alert('Error', 'Unable to start conversation.');
       return;
@@ -267,45 +265,10 @@ export default function UserProfileScreen() {
       return;
     }
 
-    setIsCreatingChat(true);
-    try {
-      // Create or get existing conversation
-      const conversation = await messageService.getOrCreateConversation(
-        [userId],
-        profile?.username || 'User',
-        undefined // no bounty context
-      );
-
-      if (!conversation || !conversation.id) {
-        throw new Error('Conversation created but no ID returned');
-      }
-
-      // Set intent to open this conversation (Messenger will pick this up)
-      await navigationIntent.setPendingConversationId(conversation.id);
-
-      // Navigate into the BountyApp container and request the messenger view so
-      // the BottomNav (tab bar) is preserved. Navigating directly to the
-      // messenger route renders the screen outside the tabs and hides the nav.
-      type BountyAppScreen = "messages";
-      const targetScreen: BountyAppScreen = "messages";
-      const bountyAppRoute = `${ROUTES.TABS.BOUNTY_APP}?screen=${encodeURIComponent(
-        targetScreen
-      )}` as const;
-      router.push(bountyAppRoute as any);
-    } catch (error) {
-      console.error('Error creating conversation:', error);
-      // Ensure we don't navigate on error
-      const errorMessage = error instanceof Error ? error.message : 'Failed to start conversation';
-      Alert.alert('Error', `${errorMessage}. Please try again.`);
-      // Make sure we clear any pending conversation ID on error
-      try {
-        await navigationIntent.setPendingConversationId(null);
-      } catch {
-        // Ignore clearing errors
-      }
-    } finally {
-      setIsCreatingChat(false);
-    }
+    // Same destination as tapping a person in the messages inbox: the merged
+    // 1:1 thread with this user. The route creates the conversation if none
+    // exists yet, so there is nothing to pre-create here.
+    router.push(ROUTES.MESSAGES.WITH_USER(userId) as any);
   };
 
   const handleEditProfile = () => {

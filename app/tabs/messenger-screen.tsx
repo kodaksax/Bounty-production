@@ -7,6 +7,7 @@ import { EmptyState } from "components/ui/empty-state"
 import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
+import { ROUTES } from "lib/routes"
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext"
 import React, { useCallback, useMemo, useRef, useState } from "react"
 import {
@@ -72,6 +73,7 @@ export function MessengerScreen({
   const router = useRouter()
   const isStandalone = !onNavigate
   const { theme } = useAppThemeContext()
+  const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } =
     useConversations()
 
@@ -122,10 +124,21 @@ export function MessengerScreen({
     }
   }
 
-  const handleConversationClick = async (id: string) => {
-    await markConversationReadSafe(id)
+  const handleConversationClick = async (conversation: Conversation) => {
+    await markConversationReadSafe(conversation.id)
 
-    setActiveConversation(id)
+    // A 1:1 row opens the merged thread with that person — the same screen
+    // the profile Message button opens — so every route into a direct
+    // conversation shows the full history, not just this one bounty's chat.
+    const otherUserId = !conversation.isGroup
+      ? conversation.participantIds?.find(id => id !== currentUserId)
+      : undefined
+    if (otherUserId) {
+      router.push(ROUTES.MESSAGES.WITH_USER(otherUserId) as any)
+      return
+    }
+
+    setActiveConversation(conversation.id)
     setShowChat(true)
 
     Animated.timing(slideAnim, {
@@ -176,7 +189,7 @@ export function MessengerScreen({
     ({ item }: { item: Conversation }) => (
       <ConversationItem
         conversation={item}
-        onPress={() => handleConversationClick(item.id)}
+        onPress={() => handleConversationClick(item)}
         onDelete={() => handleDeleteConversation(item)}
       />
     ),
