@@ -38,6 +38,7 @@ import {
   ScrollView,
   TextInput,
   type EasingFunction,
+  type HostInstance,
   type KeyboardEvent,
   type ScrollViewProps,
   type StyleProp,
@@ -276,30 +277,65 @@ export const KeyboardAwareScrollView = forwardRef<ScrollView, KeyboardAwareScrol
   { children, offset = 0, extraScrollPadding = 16, enabled = true, ...rest },
   forwardedRef
 ) {
-  const { inset, height, isVisible } = useKeyboardInset({ offset, enabled });
+  const { inset } = useKeyboardInset({ offset, enabled });
   const scrollRef = useRef<ScrollView>(null);
   // Callers that already held a ref on the ScrollView they replaced keep it.
   useImperativeHandle(forwardedRef, () => scrollRef.current as ScrollView, []);
 
   useEffect(() => {
-    if (!isVisible) return;
-    // `currentlyFocusedInput` is only meaningful once the keyboard is up; a
-    // frame's delay lets the padding above land first so the scroll target is
-    // measured against the final content size.
-    const timer = setTimeout(() => {
+    if (!enabled || Platform.OS !== 'ios') return;
+
+    // Not RN's `scrollResponderScrollNativeHandleToKeyboard`: its arithmetic
+    // "assume[s] the scroll view takes up the entire screen", so under a
+    // header (the dispute modal's title bar and progress strip) it under-
+    // scrolls by exactly the header's height and the input stays covered. We
+    // measure the input where it actually is on screen instead, and only
+    // scroll by however much of it the keyboard hides.
+    //
+    // `keyboardDidShow` rather than `will*`: the scroll target must not be
+    // clamped against a content size that is still growing (the spacer below
+    // animates with the keyboard), so we wait for the keyboard to land.
+    const scrollFocusedInputClear = (event: KeyboardEvent) => {
+      const covered = coveredHeight(event);
+      if (covered <= 0) return;
       // The focused host instance is accepted directly — no `findNodeHandle`,
       // which is a no-op shim under the new architecture.
       const focused = TextInput.State.currentlyFocusedInput();
-      const scroll = scrollRef.current;
-      if (!focused || !scroll) return;
-      scroll.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard?.(
-        focused,
-        extraScrollPadding,
-        true
-      );
-    }, 60);
-    return () => clearTimeout(timer);
-  }, [isVisible, height, extraScrollPadding]);
+      const scroll = scrollRef.current as
+        // `getInnerViewRef` is a public ScrollView method (it backs the
+        // `innerViewRef` prop) that RN's TS typings have not caught up to.
+        | (ScrollView & { getInnerViewRef?: () => HostInstance | null })
+        | null;
+      const content = scroll?.getInnerViewRef?.();
+      const outer = scroll?.getNativeScrollRef();
+      if (!focused || !scroll || !content || !outer) return;
+
+      const keyboardTop = Dimensions.get('window').height - covered;
+      focused.measureInWindow((_x, inputY, _w, inputHeight) => {
+        const hidden = inputY + inputHeight + extraScrollPadding - keyboardTop;
+        // Already clear of the keyboard (and the footer riding on it): leave
+        // the user's scroll position alone rather than yanking the input down
+        // to the keyboard's edge the way RN's helper does.
+        if (hidden <= 0) return;
+        // `scrollTo` wants an absolute offset and there is no synchronous
+        // getter for the current one, so recover it from the same input's
+        // position within the content versus within the window.
+        focused.measureLayout(
+          content,
+          (_l, contentY) => {
+            outer.measureInWindow((_sx, scrollY) => {
+              const current = scrollY + contentY - inputY;
+              scroll.scrollTo({ y: Math.max(0, current + hidden), animated: true });
+            });
+          },
+          () => {}
+        );
+      });
+    };
+
+    const subscription = Keyboard.addListener('keyboardDidShow', scrollFocusedInputClear);
+    return () => subscription.remove();
+  }, [enabled, extraScrollPadding]);
 
   return (
     <ScrollView

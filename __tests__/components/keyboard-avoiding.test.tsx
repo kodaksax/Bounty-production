@@ -9,8 +9,10 @@
  * and the animation timing coming from the OS event rather than a guess.
  */
 import { act, render } from '@testing-library/react-native';
-import { Animated, Keyboard, Platform, Text } from 'react-native';
+import { Component, createRef, type ReactNode } from 'react';
+import { Animated, Keyboard, Platform, type ScrollView, Text, View } from 'react-native';
 import {
+  KeyboardAwareScrollView,
   KeyboardStickyView,
   keyboardAwareListProps,
   useKeyboardInset,
@@ -176,6 +178,129 @@ describe('KeyboardStickyView', () => {
       .filter(([, config]) => config.useNativeDriver)
       .map(([, config]) => config.toValue);
     expect(targets).toContain(-302);
+  });
+});
+
+describe('KeyboardAwareScrollView', () => {
+  // jest.setup.js stubs ScrollView and TextInput as bare host strings, which
+  // yield no ref and carry no `TextInput.State`. The scroll logic needs both,
+  // so swap in stand-ins on the mocked module object (which the component
+  // reads through live bindings) for this block only.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const RN = require('react-native');
+  let focusedInput: unknown = null;
+  const scrollTo = jest.fn();
+  const getInnerViewRef = jest.fn();
+  const getNativeScrollRef = jest.fn();
+  class MockScrollView extends Component<{ children?: ReactNode }> {
+    scrollTo = scrollTo;
+    getInnerViewRef = getInnerViewRef;
+    getNativeScrollRef = getNativeScrollRef;
+    render() {
+      return <View>{this.props.children}</View>;
+    }
+  }
+  const MockTextInput = Object.assign(() => null, {
+    State: { currentlyFocusedInput: () => focusedInput },
+  });
+  const original = { ScrollView: RN.ScrollView, TextInput: RN.TextInput };
+
+  beforeAll(() => {
+    Object.assign(RN, { ScrollView: MockScrollView, TextInput: MockTextInput });
+  });
+  afterAll(() => {
+    Object.assign(RN, original);
+  });
+  beforeEach(() => {
+    focusedInput = null;
+    scrollTo.mockReset();
+    getInnerViewRef.mockReset();
+    getNativeScrollRef.mockReset();
+  });
+
+  /**
+   * Stage a form: the ScrollView starts `scrollY` points down the window (a
+   * header sits above it), the focused input is drawn at `inputY` on screen,
+   * and lives `contentY` points into the scroll content.
+   */
+  function stage({
+    inputY,
+    inputHeight = 100,
+    contentY,
+    scrollY,
+    focused = true,
+  }: {
+    inputY: number;
+    inputHeight?: number;
+    contentY: number;
+    scrollY: number;
+    focused?: boolean;
+  }) {
+    focusedInput = focused
+      ? {
+        measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) =>
+          cb(0, inputY, 335, inputHeight),
+        measureLayout: (_rel: unknown, cb: (x: number, y: number, w: number, h: number) => void) =>
+          cb(0, contentY, 335, inputHeight),
+      }
+      : null;
+    getInnerViewRef.mockReturnValue({});
+    getNativeScrollRef.mockReturnValue({
+      measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) =>
+        cb(0, scrollY, 375, 400),
+    });
+
+    const ref = createRef<ScrollView>();
+    render(
+      <KeyboardAwareScrollView ref={ref}>
+        <Text>form</Text>
+      </KeyboardAwareScrollView>
+    );
+    expect(ref.current).toBeInstanceOf(MockScrollView);
+    return scrollTo;
+  }
+
+  it('scrolls by exactly the part of the input the keyboard hides, header or not', () => {
+    // Input bottom at 600 on screen; keyboard top at 812 - 336 = 476; with the
+    // 16pt default breathing room it is 140pt short. The ScrollView sits 120pt
+    // down the window (RN's own helper would ignore that and under-scroll by
+    // it); current offset recovers as 120 + 700 - 500 = 320.
+    const scrollTo = stage({ inputY: 500, contentY: 700, scrollY: 120 });
+    emit('keyboardDidShow', keyboardEvent(336));
+    expect(scrollTo).toHaveBeenCalledWith({ y: 460, animated: true });
+  });
+
+  it('leaves the scroll position alone when the input is already clear', () => {
+    // Bottom at 400 < 476 - 16: nothing to do, and no yank down to the edge.
+    const scrollTo = stage({ inputY: 300, contentY: 300, scrollY: 120 });
+    emit('keyboardDidShow', keyboardEvent(336));
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('ignores a keyboard frame that sits off-screen (floating / hardware)', () => {
+    const scrollTo = stage({ inputY: 700, contentY: 700, scrollY: 120 });
+    emit('keyboardDidShow', {
+      duration: 250,
+      endCoordinates: { screenY: WINDOW_HEIGHT + 10, height: 336, width: 375, screenX: 0 },
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when no input is focused', () => {
+    const scrollTo = stage({ inputY: 700, contentY: 700, scrollY: 120, focused: false });
+    emit('keyboardDidShow', keyboardEvent(336));
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('never scrolls on Android, where adjustResize handles it', () => {
+    const os = Platform.OS;
+    Platform.OS = 'android';
+    try {
+      stage({ inputY: 700, contentY: 700, scrollY: 120 });
+      expect(listeners.keyboardDidShow ?? []).toHaveLength(0);
+    } finally {
+      Platform.OS = os;
+    }
   });
 });
 
