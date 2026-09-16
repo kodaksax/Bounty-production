@@ -6,10 +6,13 @@
 
 // Expo ticket errors that indicate the token will never deliver again and
 // should be disabled. `DeviceNotRegistered` is the canonical "uninstalled /
-// permission revoked" signal.
+// permission revoked" signal. `MismatchSenderId` means the token belongs to a
+// different sender/credential and can never deliver for this app, so it is
+// permanent too.
 const PERMANENT_TOKEN_ERRORS = new Set([
   'DeviceNotRegistered',
   'InvalidCredentials',
+  'MismatchSenderId',
 ]);
 
 /**
