@@ -39,6 +39,13 @@ describe('extractInvalidTokens', () => {
     expect(extractInvalidTokens(tokens, body)).toEqual([])
   })
 
+  test('flags MismatchSenderId token (wrong sender credential, never delivers)', () => {
+    const body = {
+      data: [{ status: 'error', details: { error: 'MismatchSenderId' } }],
+    }
+    expect(extractInvalidTokens(tokens, body)).toEqual(['ExponentPushToken[a]'])
+  })
+
   test('handles multiple dead tokens', () => {
     const body = {
       data: [
