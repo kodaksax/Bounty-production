@@ -43,6 +43,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { LocationCoordinates } from '../../lib/types';
 import {
     validateAmount,
+    validateContactInfo,
     validateDescription,
     validateTitle,
 } from '../../lib/utils/bounty-validation';
@@ -797,6 +798,15 @@ export default function DetailsScreen() {
     const descriptionError = validateDescription(description);
     if (descriptionError) {
       Alert.alert('Tell us more', descriptionError);
+      return;
+    }
+
+    // Phone numbers, emails, and links are refused before the funding step so
+    // a scammer or promoter never gets as far as a live post. Surfaced the
+    // same way as this composer's other field errors.
+    const contactError = validateContactInfo(description);
+    if (contactError) {
+      Alert.alert("Can't post this", contactError);
       return;
     }
 
