@@ -27,6 +27,7 @@ import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Attachment, Conversation, Message } from "../../lib/types"
 import { getValidAvatarUrl } from "../../lib/utils/avatar-utils"
 import { getMediaKind, getMediaMimeType, mediaFileName, mediaPreviewLabel } from "../../lib/utils/message-media"
+import { messagingStrings } from "../../lib/strings/messaging"
  
 interface ChatDetailScreenProps {
   conversation: Conversation
@@ -349,8 +350,15 @@ export function ChatDetailScreen({
   // remount it on every render (e.g. every keystroke in the composer).
   const renderFooter = useCallback(() => {
     const isTyping = typingUsersRef.current && typingUsersRef.current.size > 0
-    if (!isTyping) return null
-    return <TypingIndicator userName={conversation.name} />
+    return (
+      <View>
+        {isTyping && <TypingIndicator userName={conversation.name} />}
+        {/* Off-platform liability notice: always the last thing under the newest message. */}
+        <Text style={s.disclaimer} accessibilityRole="text">
+          {messagingStrings.offPlatformDisclaimer}
+        </Text>
+      </View>
+    )
   }, [typingUsersRef, conversation.name])
 
   const selectedMessage = messages.find(m => m.id === selectedMessageId)
@@ -700,6 +708,14 @@ function makeStyles(t: AppTheme) {
       // Inverted list: top/bottom are swapped on screen.
       paddingTop: 16,
       paddingBottom: 8,
+    },
+    disclaimer: {
+      fontSize: 11,
+      lineHeight: 15,
+      color: t.textSecondary,
+      textAlign: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 8,
     },
     inputContainer: {
       paddingHorizontal: 12,
