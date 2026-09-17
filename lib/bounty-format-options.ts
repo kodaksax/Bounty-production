@@ -15,10 +15,11 @@ export interface BountyFormatOption {
 export const BOUNTY_FORMAT_OPTIONS: BountyFormatOption[] = [
   {
     value: 'card',
-    icon: '🃏',
+    icon: '□',
     label: 'Card',
     description: 'Big, swipeable cards — one bounty at a time.',
   },
+
   {
     value: 'compact',
     icon: '☰',
