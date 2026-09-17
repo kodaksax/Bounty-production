@@ -11,5 +11,5 @@ export const messagingStrings = {
   // Shown directly above the message input on every DM screen. Puts users on
   // notice that anything taken off the platform is outside BOUNTY's protection.
   offPlatformDisclaimer:
-    'BOUNTY assumes no liability for communications or transactions conducted outside the platform.',
+    'Warning: Working outside the BOUNTY app means you lose escrow protection for your payment. BOUNTY is not liable for messages or transactions made outside the platform.',
 } as const
