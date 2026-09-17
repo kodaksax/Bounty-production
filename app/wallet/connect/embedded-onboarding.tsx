@@ -108,6 +108,10 @@ export default function ConnectOnboardingScreen() {
 
   const [phase, setPhase] = useState<Phase>('starting');
   const [error, setError] = useState<string | null>(null);
+  // Whether the current error can be recovered by pressing "Try again". A
+  // broken platform credential cannot, so retrying only reproduces it — we hide
+  // the retry button in that case (see launchOnboarding).
+  const [canRetry, setCanRetry] = useState(true);
   const [outcome, setOutcome] = useState<ConnectOnboardingOutcome | null>(null);
   const [requirementsCurrentlyDue, setRequirementsCurrentlyDue] = useState<string[]>([]);
   const [disabledReason, setDisabledReason] = useState<string | null>(null);
@@ -241,14 +245,31 @@ export default function ConnectOnboardingScreen() {
     const token = session?.access_token;
     if (!token) {
       setError('You must be signed in to set up payouts.');
+      setCanRetry(false);
       setPhase('error');
+      // This pre-launch bail-out happens before identity_onboarding_started, so
+      // without this event the failed attempt would leave no signal at all.
+      try {
+        await analyticsService.trackEvent('identity_onboarding_outcome', {
+          source: 'stripe_connect_onboarding',
+          outcome: 'verify_error',
+          browserResult: lastBrowserResultRef.current ?? 'opened',
+          reason: 'no_session',
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
       return;
     }
 
     let launchFailureReason = 'launch_failed';
+    // Assume recoverable until an error says otherwise; the server sets this
+    // via the `retryable` field on a create-account-link failure.
+    let launchRetryable = true;
 
     try {
       setError(null);
+      setCanRetry(true);
       setPhase('starting');
 
       try {
@@ -277,8 +298,9 @@ export default function ConnectOnboardingScreen() {
         launchFailureReason = 'create_account_link_failed';
         let message = `Couldn't start Stripe onboarding (${linkRes.status}).`;
         try {
-          const body = (await linkRes.json()) as { error?: string };
+          const body = (await linkRes.json()) as { error?: string; retryable?: boolean };
           if (body?.error) message = body.error;
+          if (typeof body?.retryable === 'boolean') launchRetryable = body.retryable;
         } catch {
           /* non-JSON error body — keep the default message */
         }
@@ -349,6 +371,7 @@ export default function ConnectOnboardingScreen() {
         /* analytics is best-effort */
       }
       setError(message);
+      setCanRetry(launchRetryable);
       setPhase('error');
     }
   }, [session?.access_token, session?.user?.id, verifyOnboardingStatus]);
@@ -465,15 +488,23 @@ export default function ConnectOnboardingScreen() {
             <Text style={styles.message}>{message}</Text>
 
             {phase === 'error' ? (
-              <>
-                <TouchableOpacity style={styles.primaryBtn} onPress={handleRetry}>
-                  <MaterialIcons name="refresh" size={20} color="#ffffff" />
-                  <Text style={styles.primaryBtnText}>Try again</Text>
+              canRetry ? (
+                <>
+                  <TouchableOpacity style={styles.primaryBtn} onPress={handleRetry}>
+                    <MaterialIcons name="refresh" size={20} color="#ffffff" />
+                    <Text style={styles.primaryBtnText}>Try again</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss}>
+                    <Text style={styles.secondaryBtnText}>Back to wallet</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                // Non-retryable failure (e.g. a platform credential problem):
+                // retrying reproduces it instantly, so offer only the exit.
+                <TouchableOpacity style={styles.primaryBtn} onPress={dismiss}>
+                  <Text style={styles.primaryBtnText}>Back to wallet</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss}>
-                  <Text style={styles.secondaryBtnText}>Back to wallet</Text>
-                </TouchableOpacity>
-              </>
+              )
             ) : null}
           </View>
         )}
