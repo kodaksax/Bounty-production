@@ -8,11 +8,18 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React, { Component, ReactNode, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { COLORS, SIZING, SPACING, TYPOGRAPHY } from './constants/accessibility';
+import { captureException as posthogCaptureException } from './posthog';
 import { getSentry } from './services/sentry-init';
 import { getUserFriendlyError, type UserFriendlyError } from './utils/error-messages';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  /**
+   * Identifies which boundary caught the error, tagged on the Sentry and
+   * PostHog reports so a screen-level crash is distinguishable from a
+   * root-level one. Defaults to 'global'.
+   */
+  boundaryName?: string;
   /**
    * Callback when error is caught (for logging, analytics, etc.)
    */
@@ -65,8 +72,21 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       console.error('[ErrorBoundary] Error info:', errorInfo);
     }
 
-    // Send to Sentry for monitoring (if available)
-    try {
+    const boundaryName = this.props.boundaryName ?? 'global';
+
+    const safeReport = (label: string, report: () => void) => {
+      try {
+        report();
+      } catch (reportError) {
+        console.error(`[ErrorBoundary] Failed to send to ${label}:`, reportError);
+      }
+    };
+
+    // Report to both sinks. PostHog's global exception autocapture is disabled
+    // for the shared client (Sentry owns the global handlers), so this explicit
+    // call is the only way a caught render crash reaches PostHog as a
+    // $exception event.
+    safeReport('Sentry', () => {
       const Sentry = getSentry?.();
       if (Sentry && typeof Sentry.captureException === 'function') {
         Sentry.captureException(error, {
@@ -77,13 +97,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           },
           level: 'error',
           tags: {
-            error_boundary: 'global',
+            error_boundary: boundaryName,
           },
         });
       }
-    } catch (sentryError) {
-      console.error('[ErrorBoundary] Failed to send to Sentry:', sentryError);
-    }
+    });
+    safeReport('PostHog', () =>
+      posthogCaptureException(error, {
+        error_boundary: boundaryName,
+        component_stack: errorInfo.componentStack ?? undefined,
+      })
+    );
 
     // Call custom error handler if provided
     if (this.props.onError) {
