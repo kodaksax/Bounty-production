@@ -49,6 +49,8 @@ function isNetworkError(error: unknown): boolean {
   return error instanceof TypeError || (error instanceof Error && /network/i.test(error.message));
 }
 
+const FAILED_WITHDRAWAL_STATUSES = new Set(['failed', 'canceled', 'cancelled']);
+
 export function WithdrawWithBankScreen({
   onBack,
   balance: propBalance,
@@ -336,7 +338,22 @@ export function WithdrawWithBankScreen({
         throw requestError;
       }
 
-      const { transferId } = await response.json();
+      const successData = await response.json();
+      const transferId =
+        typeof successData?.transferId === 'string' || successData?.transferId == null
+          ? successData.transferId
+          : null;
+      const payoutStatus =
+        typeof successData?.status === 'string' ? successData.status.toLowerCase() : null;
+
+      if (payoutStatus && FAILED_WITHDRAWAL_STATUSES.has(payoutStatus)) {
+        const replayError = new Error(
+          'We could not confirm whether this withdrawal completed. Check your withdrawal history before trying again.'
+        ) as Error & { code?: string; stripeAttempted?: boolean };
+        replayError.code = 'transfer_failed';
+        replayError.stripeAttempted = true;
+        throw replayError;
+      }
 
       // Refresh wallet balance from the server -- the withdrawal itself was a
       // direct fetch() to /connect/transfer, not a wallet-context mutation, so
