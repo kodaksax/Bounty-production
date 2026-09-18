@@ -56,6 +56,10 @@ describe('lib/posthog — no POSTHOG_KEY (default test env)', () => {
     expect(() => posthogModule.setPersonProperties({ plan: 'pro' })).not.toThrow();
   });
 
+  test('captureException is a no-op when client is null', () => {
+    expect(() => posthogModule.captureException(new Error('boom'))).not.toThrow();
+  });
+
   test('register is a no-op when client is null', () => {
     expect(() => posthogModule.register({ app_version: '1.0' })).not.toThrow();
   });
@@ -93,6 +97,7 @@ describe('lib/posthog — no POSTHOG_KEY (default test env)', () => {
 
 describe('lib/posthog — with POSTHOG_KEY set', () => {
   const mockCapture = jest.fn();
+  const mockCaptureException = jest.fn();
   const mockIdentify = jest.fn();
   const mockScreen = jest.fn();
   const mockReset = jest.fn();
@@ -106,6 +111,7 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
 
   const MockPostHog = jest.fn().mockImplementation(() => ({
     capture: mockCapture,
+    captureException: mockCaptureException,
     identify: mockIdentify,
     alias: mockAlias,
     getDistinctId: mockGetDistinctId,
@@ -223,6 +229,12 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
     expect(mockIdentify).toHaveBeenCalledWith('user-42', undefined);
   });
 
+  test('captureException calls client.captureException with error and properties', () => {
+    const error = new Error('boundary crash');
+    posthogModule.captureException(error, { boundary: 'chat_detail' });
+    expect(mockCaptureException).toHaveBeenCalledWith(error, { boundary: 'chat_detail' });
+  });
+
   test('setPersonProperties calls client.capture with $set payload', () => {
     posthogModule.setPersonProperties({ tier: 'premium' });
     expect(mockCapture).toHaveBeenCalledWith('$set', { $set: { tier: 'premium' } });
@@ -317,6 +329,19 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
     mockFlush.mockRejectedValueOnce(new Error('flush failed'));
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await expect(posthogModule.flush()).resolves.toBeUndefined();
+    consoleSpy.mockRestore();
+  });
+
+  test('captureException handles client.captureException throwing gracefully', () => {
+    mockCaptureException.mockImplementationOnce(() => {
+      throw new Error('posthog error');
+    });
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => posthogModule.captureException(new Error('boom'))).not.toThrow();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('captureException failed'),
+      expect.any(Error)
+    );
     consoleSpy.mockRestore();
   });
 });

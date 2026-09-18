@@ -24,13 +24,10 @@ jest.mock('../../lib/posthog', () => ({
   captureException: jest.fn(),
 }));
 
+const mockRefresh = jest.fn();
+let mockConversations: Conversation[] = [];
 jest.mock('../../hooks/useConversations', () => ({
-  useConversations: () => ({ conversations: [] }),
-}));
-
-const mockGetConversation = jest.fn();
-jest.mock('../../lib/services/message-service', () => ({
-  messageService: { getConversation: (id: string) => mockGetConversation(id) },
+  useConversations: () => ({ conversations: mockConversations, refresh: mockRefresh }),
 }));
 
 // The route resolves `../chat-detail-screen` to app/tabs/chat-detail-screen —
@@ -54,19 +51,20 @@ const conversation: Conversation = {
 beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => {});
   routerParams = { conversationId: 'conv-1' };
-  mockGetConversation.mockReset();
-  mockGetConversation.mockResolvedValue(conversation);
+  mockConversations = [];
+  mockRefresh.mockReset();
+  mockRefresh.mockResolvedValue([conversation]);
   chatScreenImpl = ({ conversation: c }) => <Text>chat:{c.id}</Text>;
 });
 afterEach(() => {
   (console.error as jest.Mock).mockRestore?.();
 });
 
-it('fetches the conversation directly when it is not in the cached list', async () => {
+it('refreshes participant-scoped conversations when not already loaded', async () => {
   const { findByText } = render(<ConversationRoute />);
 
   expect(await findByText('chat:conv-1')).toBeTruthy();
-  expect(mockGetConversation).toHaveBeenCalledWith('conv-1');
+  await waitFor(() => expect(mockRefresh).toHaveBeenCalledTimes(1));
 });
 
 it('contains a chat-screen crash in its own boundary instead of rethrowing', async () => {

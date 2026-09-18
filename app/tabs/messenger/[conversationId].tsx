@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useConversations } from '../../../hooks/useConversations';
 import { ErrorBoundary } from '../../../lib/error-boundary';
-import { messageService } from '../../../lib/services/message-service';
 import { ChatDetailScreen } from '../chat-detail-screen';
 
 export default function ConversationRoute() {
@@ -21,7 +20,7 @@ export default function ConversationRoute() {
 
 function ConversationRouteContent() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const { conversations } = useConversations();
+  const { conversations, refresh } = useConversations();
   const router = useRouter();
   const [conversation, setConversation] = useState(
     () => conversations.find(c => c.id === conversationId) ?? null
@@ -35,12 +34,13 @@ function ConversationRouteContent() {
     (async () => {
       try {
         // A conversation created just before navigation is often not in the
-        // cached list yet, so fetch it directly from the message store once
-        // (matching app/tabs/messenger/index.tsx) rather than waiting on a list
-        // refresh. Guarded to run once per conversationId.
+        // currently loaded list yet, so refresh the authenticated, participant-
+        // scoped conversation list once (matching useConversations) and resolve
+        // by ID from that result. Guarded to run once per conversationId.
         if (!conversation && conversationId && !triedFetchRef.current) {
           triedFetchRef.current = true;
-          const fetched = await messageService.getConversation(conversationId);
+          const refreshed = await refresh();
+          const fetched = refreshed?.find(c => c.id === conversationId) ?? null;
           if (mounted && fetched) setConversation(fetched);
         }
       } catch (e) {
@@ -52,7 +52,7 @@ function ConversationRouteContent() {
     return () => {
       mounted = false;
     };
-  }, [conversationId]);
+  }, [conversation, conversationId, refresh]);
 
   // If the conversations list is updated elsewhere, pick up the matching
   // conversation without triggering another fetch call.
