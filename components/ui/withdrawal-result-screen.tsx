@@ -9,8 +9,9 @@
  */
 import { MaterialIcons } from '@expo/vector-icons';
 import { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getBottomNavContentGap, getBottomNavOccludedHeight } from '../../lib/constants/navigation';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { formatCurrency } from '../../lib/utils';
@@ -124,6 +125,13 @@ export function WithdrawalResultScreen({
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // This screen renders inside the wallet tab, so the floating BottomNav (and
+  // the center button that overhangs it) sits on top of it. The action row has
+  // to clear that, not just the safe-area inset — derived from the live
+  // viewport + insets so it tracks the device instead of assuming one.
+  const footerClearance =
+    getBottomNavOccludedHeight(insets.bottom, windowWidth) + getBottomNavContentGap(windowHeight);
   const showManagePayoutMethods =
     !!onManagePayoutMethods && !!errorCode && MANAGE_PAYOUT_METHODS_ERROR_CODES.has(errorCode);
   const retryWouldFail = !!errorCode && NO_RETRY_ERROR_CODES.has(errorCode);
@@ -145,7 +153,7 @@ export function WithdrawalResultScreen({
   if (status === 'failure') {
     const message = resolveErrorCopy(errorCode, errorMessage);
     return (
-      <View style={[s.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+      <View style={[s.container, { paddingTop: insets.top + 24, paddingBottom: footerClearance }]}>
         <View style={s.centered}>
           <View style={[s.iconCircle, s.iconCircleError]}>
             <MaterialIcons
@@ -194,7 +202,7 @@ export function WithdrawalResultScreen({
   // success
   const isInstant = method === 'instant' && !fellBackToStandard;
   return (
-    <View style={[s.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+    <View style={[s.container, { paddingTop: insets.top + 24, paddingBottom: footerClearance }]}>
       <View style={s.centered}>
         <View style={[s.iconCircle, s.iconCircleSuccess]}>
           <MaterialIcons name={isInstant ? 'bolt' : 'check'} size={44} color="#22c55e" />
