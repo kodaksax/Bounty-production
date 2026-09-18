@@ -44,11 +44,10 @@ export interface MessageBubbleProps {
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   isPinned?: boolean;
   /**
-   * The message this one replies to. `null` means it replies to something we
-   * could not find (deleted, or outside the loaded thread); undefined means it
-   * is not a reply.
+   * The message this one replies to, when its original is still available in
+   * the loaded thread.
    */
-  replyTo?: QuotedMessage | null;
+  replyTo?: QuotedMessage;
   /** Briefly emphasised after the viewer jumps here from a reply's quote. */
   isHighlighted?: boolean;
   onLongPress?: (messageId: string) => void;
@@ -145,43 +144,34 @@ export const MessageBubble = memo(({
   // Quote of the message being replied to. The accent bar on its left edge is
   // the visual "points at" cue; tapping it jumps the thread to the original.
   const renderQuote = () => {
-    if (replyTo === undefined) return null;
+    if (!replyTo) return null;
 
-    const unavailable = replyTo === null;
-    const preview = unavailable
-      ? 'Original message unavailable'
-      : replyTo.text.trim() || mediaPreviewLabel(replyTo.mediaUrl);
+    const preview = replyTo.text.trim() || mediaPreviewLabel(replyTo.mediaUrl);
 
     return (
       <TouchableOpacity
         style={[styles.quote, isUser ? styles.quoteUser : styles.quoteOther]}
-        onPress={() => replyTo && onReplyPress?.(replyTo.id)}
+        onPress={() => onReplyPress?.(replyTo.id)}
         onLongPress={handleLongPress}
-        disabled={unavailable || !onReplyPress}
+        disabled={!onReplyPress}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={
-          unavailable
-            ? 'Replying to an unavailable message'
-            : `Replying to ${replyTo.senderLabel}: ${preview}`
-        }
-        accessibilityHint={unavailable ? undefined : 'Jumps to the original message'}
+        accessibilityLabel={`Replying to ${replyTo.senderLabel}: ${preview}`}
+        accessibilityHint="Jumps to the original message"
       >
         <View style={[styles.quoteBar, isUser ? styles.quoteBarUser : styles.quoteBarOther]} />
         <View style={styles.quoteBody}>
-          {!unavailable && (
-            <View style={styles.quoteHeader}>
-              <MaterialIcons name="reply" size={12} color={isUser ? '#d1fae5' : '#6ee7b7'} />
-              <Text
-                style={[styles.quoteSender, isUser ? styles.quoteSenderUser : styles.quoteSenderOther]}
-                numberOfLines={1}
-              >
-                {replyTo.senderLabel}
-              </Text>
-            </View>
-          )}
+          <View style={styles.quoteHeader}>
+            <MaterialIcons name="reply" size={12} color={isUser ? '#d1fae5' : '#6ee7b7'} />
+            <Text
+              style={[styles.quoteSender, isUser ? styles.quoteSenderUser : styles.quoteSenderOther]}
+              numberOfLines={1}
+            >
+              {replyTo.senderLabel}
+            </Text>
+          </View>
           <Text
-            style={[styles.quoteText, unavailable && styles.quoteTextUnavailable]}
+            style={styles.quoteText}
             numberOfLines={2}
           >
             {preview}

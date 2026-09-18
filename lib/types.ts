@@ -230,7 +230,7 @@ export interface Message {
   senderId: string;
   text: string;
   createdAt: string;
-  replyTo?: string;
+  replyTo?: string | null;
   mediaUrl?: string;
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   isPinned?: boolean;
@@ -282,6 +282,7 @@ export interface Conversation {
 export interface FullConversation extends Conversation {
   messages: Message[];
   realConversationId: string;
+  backingConversationIds?: string[];
 }
 
 /**

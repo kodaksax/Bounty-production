@@ -252,26 +252,22 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
  );
 
 
- // Resolve each reply's quoted message from the merged thread. `null` marks a
- // reply whose original is gone (deleted, or not in the loaded history) so
- // the bubble can say so instead of silently dropping the quote.
+ // Resolve each reply's quoted message from the merged thread. If the
+ // original is no longer available, skip rendering the quote until reply
+ // metadata exists.
  const quotesById = useMemo(() => {
    const byId = new Map(mergedMessages.map(m => [m.id, m] as const));
-   const quotes = new Map<string, QuotedMessage | null>();
+   const quotes = new Map<string, QuotedMessage>();
    for (const m of mergedMessages) {
      if (!m.replyTo) continue;
      const original = byId.get(m.replyTo);
-     quotes.set(
-       m.id,
-       original
-         ? {
-             id: original.id,
-             senderLabel: senderLabelFor(original.senderId),
-             text: original.text,
-             mediaUrl: original.mediaUrl,
-           }
-         : null
-     );
+     if (!original) continue;
+     quotes.set(m.id, {
+       id: original.id,
+       senderLabel: senderLabelFor(original.senderId),
+       text: original.text,
+       mediaUrl: original.mediaUrl,
+     });
    }
    return quotes;
  }, [mergedMessages, senderLabelFor]);
@@ -367,7 +363,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
        isUser={currentUserId !== null && message.senderId === currentUserId}
        status={message.status}
        isPinned={message.isPinned}
-       replyTo={message.replyTo ? quotesById.get(message.id) ?? null : undefined}
+       replyTo={message.replyTo ? quotesById.get(message.id) : undefined}
        isHighlighted={message.id === highlightedMessageId}
        onLongPress={handleLongPress}
        onRetry={retryMessage}
@@ -401,7 +397,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
        </Text>
      </View>
    );
- }, [typingUsersRef, conversation.name]);
+ }, [typingUsersRef, conversation.name, s.disclaimer]);
 
 
 

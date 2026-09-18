@@ -220,26 +220,21 @@ export function ChatDetailScreen({
     [currentUserId, conversation.isGroup, displayName]
   )
 
-  // Resolve each reply's quoted message from the thread. `null` marks a reply
-  // whose original is gone (deleted, or not in the loaded history) so the
-  // bubble can say so instead of silently dropping the quote.
+  // Resolve each reply's quoted message from the thread. If the original is no
+  // longer available, skip rendering the quote until reply metadata exists.
   const quotesById = useMemo(() => {
     const byId = new Map(messages.map(m => [m.id, m] as const))
-    const quotes = new Map<string, QuotedMessage | null>()
+    const quotes = new Map<string, QuotedMessage>()
     for (const m of messages) {
       if (!m.replyTo) continue
       const original = byId.get(m.replyTo)
-      quotes.set(
-        m.id,
-        original
-          ? {
-              id: original.id,
-              senderLabel: senderLabelFor(original.senderId),
-              text: original.text,
-              mediaUrl: original.mediaUrl,
-            }
-          : null
-      )
+      if (!original) continue
+      quotes.set(m.id, {
+        id: original.id,
+        senderLabel: senderLabelFor(original.senderId),
+        text: original.text,
+        mediaUrl: original.mediaUrl,
+      })
     }
     return quotes
   }, [messages, senderLabelFor])
@@ -327,7 +322,7 @@ export function ChatDetailScreen({
         isUser={currentUserId !== null && message.senderId === currentUserId}
         status={message.status}
         isPinned={message.isPinned}
-        replyTo={message.replyTo ? quotesById.get(message.id) ?? null : undefined}
+        replyTo={message.replyTo ? quotesById.get(message.id) : undefined}
         isHighlighted={message.id === highlightedMessageId}
         onLongPress={handleLongPress}
         onRetry={handleRetry}
@@ -359,7 +354,7 @@ export function ChatDetailScreen({
         </Text>
       </View>
     )
-  }, [typingUsersRef, conversation.name])
+  }, [typingUsersRef, conversation.name, s.disclaimer])
 
   const selectedMessage = messages.find(m => m.id === selectedMessageId)
   // A staged attachment is enough on its own — an image with no caption is a

@@ -129,7 +129,10 @@ describe('fetchConversations', () => {
   it('falls back to per-conversation queries when the RPC is unavailable', async () => {
     (supabase.rpc as jest.Mock).mockResolvedValue({
       data: null,
-      error: { message: 'function public.get_conversation_summaries() does not exist' },
+      error: {
+        code: 'PGRST202',
+        message: 'Could not find the function public.get_conversation_summaries()',
+      },
     });
     const messagesChain = jest.fn(() =>
       chain({ conversation_id: CONV_A, text: 'fallback', created_at: 'x', media_url: null }, { count: 2 })
@@ -142,5 +145,21 @@ describe('fetchConversations', () => {
     expect(messagesChain).toHaveBeenCalledTimes(3);
     expect(result.find(c => c.id === CONV_A)?.lastMessage).toBe('fallback');
     expect(result.find(c => c.id === CONV_A)?.unread).toBe(2);
+  });
+
+  it('does not fall back on unexpected RPC errors', async () => {
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied for function get_conversation_summaries' },
+    });
+    const messagesChain = jest.fn(() =>
+      chain({ conversation_id: CONV_A, text: 'fallback', created_at: 'x', media_url: null }, { count: 2 })
+    );
+    mockTables({ ...baseTables(), messages: messagesChain });
+
+    const result = await fetchConversations(ME);
+
+    expect(messagesChain).not.toHaveBeenCalled();
+    expect(result).toEqual([]);
   });
 });

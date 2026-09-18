@@ -59,15 +59,9 @@ describe('MessageBubble replies', () => {
     expect(onReplyPress).toHaveBeenCalledWith('m1');
   });
 
-  it('says so when the original message is unavailable', () => {
-    const { getByText } = render(<MessageBubble id="m2" text="ok" isUser replyTo={null} />);
-
-    expect(getByText('Original message unavailable')).toBeTruthy();
-  });
-
   it('renders no quote for an ordinary message', () => {
-    const { queryByText } = render(<MessageBubble id="m1" text="hello" isUser />);
+    const { queryByLabelText } = render(<MessageBubble id="m1" text="hello" isUser />);
 
-    expect(queryByText('Original message unavailable')).toBeNull();
+    expect(queryByLabelText(/Replying to/)).toBeNull();
   });
 });

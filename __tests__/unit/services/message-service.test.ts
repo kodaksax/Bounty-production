@@ -511,6 +511,7 @@ describe('Message Service - E2E Encryption', () => {
       expect(mockSupabaseMessaging.fetchMessages).not.toHaveBeenCalled();
 
       expect(result?.realConversationId).toBe(CONV_NEW);
+      expect(result?.backingConversationIds).toEqual([CONV_NEW, CONV_OLD]);
       expect(result?.messages.map(m => m.id)).toEqual(['m1', 'm2']);
       expect(result?.lastMessage).toBe('latest');
     });
@@ -522,6 +523,92 @@ describe('Message Service - E2E Encryption', () => {
 
       expect(result).toBeNull();
       expect(mockSupabaseMessaging.fetchMessagesForConversations).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('processQueuedMessage', () => {
+    it('does not dedupe replies to different originals', async () => {
+      const limit = jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'msg-existing',
+            conversation_id: '11111111-2222-4333-8444-555555555555',
+            sender_id: 'current-user-id',
+            text: 'same text',
+            media_url: 'https://cdn.example.com/a.jpg',
+            reply_to: 'orig-1',
+            created_at: '2026-09-18T00:00:00Z',
+          },
+        ],
+      });
+      const order = jest.fn().mockReturnValue({ limit });
+      const gte = jest.fn().mockReturnValue({ order });
+      const eqSender = jest.fn().mockReturnValue({ gte });
+      const eqConversation = jest.fn().mockReturnValue({ eq: eqSender });
+      const select = jest.fn().mockReturnValue({ eq: eqConversation });
+      (supabase.from as jest.Mock).mockReturnValue({ select });
+
+      const sent = {
+        id: 'msg-new',
+        conversationId: '11111111-2222-4333-8444-555555555555',
+        senderId: 'current-user-id',
+        text: 'same text',
+        mediaUrl: 'https://cdn.example.com/a.jpg',
+        replyTo: 'orig-2',
+        createdAt: '2026-09-18T00:01:00Z',
+        status: 'sent' as const,
+      };
+      mockLocalMessaging.sendMessage.mockResolvedValue(sent as any);
+
+      const result = await messageService.processQueuedMessage(
+        '11111111-2222-4333-8444-555555555555',
+        'same text',
+        'current-user-id',
+        'https://cdn.example.com/a.jpg',
+        'orig-2'
+      );
+
+      expect(mockLocalMessaging.sendMessage).toHaveBeenCalledWith(
+        '11111111-2222-4333-8444-555555555555',
+        'same text',
+        'current-user-id',
+        'https://cdn.example.com/a.jpg',
+        'orig-2'
+      );
+      expect(result.replyTo).toBe('orig-2');
+    });
+
+    it('preserves replyTo when returning a deduped queued message', async () => {
+      const limit = jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'msg-existing',
+            conversation_id: '11111111-2222-4333-8444-555555555555',
+            sender_id: 'current-user-id',
+            text: 'same text',
+            media_url: null,
+            reply_to: 'orig-1',
+            created_at: '2026-09-18T00:00:00Z',
+          },
+        ],
+      });
+      const order = jest.fn().mockReturnValue({ limit });
+      const gte = jest.fn().mockReturnValue({ order });
+      const eqSender = jest.fn().mockReturnValue({ gte });
+      const eqConversation = jest.fn().mockReturnValue({ eq: eqSender });
+      const select = jest.fn().mockReturnValue({ eq: eqConversation });
+      (supabase.from as jest.Mock).mockReturnValue({ select });
+
+      const result = await messageService.processQueuedMessage(
+        '11111111-2222-4333-8444-555555555555',
+        'same text',
+        'current-user-id',
+        null,
+        'orig-1'
+      );
+
+      expect(result.id).toBe('msg-existing');
+      expect(result.replyTo).toBe('orig-1');
     });
   });
 

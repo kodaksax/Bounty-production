@@ -18,12 +18,12 @@ interface MessageActionsProps {
 /**
  * Action sheet for message long-press actions
  */
-export function MessageActions({ 
-  visible, 
-  onClose, 
+export function MessageActions({
+  visible,
+  onClose,
   onReply,
-  onPin, 
-  onCopy, 
+  onPin,
+  onCopy,
   onReport,
   onBlockUser,
   isPinned = false,
@@ -42,21 +42,21 @@ export function MessageActions({
       onRequestClose={onClose}
       accessibilityViewIsModal={true}
     >
-      <Pressable 
-        style={styles.overlay} 
+      <Pressable
+        style={styles.overlay}
         onPress={onClose}
         accessibilityRole="button"
         accessibilityLabel="Close message actions"
       >
         <View style={styles.container}>
-          <View 
+          <View
             style={styles.actionSheet}
             accessibilityRole="menu"
             accessibilityLabel="Message actions"
           >
             {onReply && (
               <>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.actionButton}
                   onPress={() => handleAction(onReply)}
                   accessibilityRole="button"
@@ -71,11 +71,25 @@ export function MessageActions({
               </>
             )}
 
-            
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => handleAction(onPin)}
+              accessibilityRole="button"
+              accessibilityLabel={isPinned ? 'Unpin message' : 'Pin message'}
+              accessibilityHint={isPinned ? 'Removes the pinned message' : 'Pins this message'}
+            >
+              <MaterialIcons
+                name="push-pin"
+                size={22}
+                color="#9CA3AF"
+                accessibilityElementsHidden={true}
+              />
+              <Text style={styles.actionText}>{isPinned ? 'Unpin Message' : 'Pin Message'}</Text>
+            </TouchableOpacity>
 
             <View style={styles.divider} />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.actionButton}
               onPress={() => handleAction(onCopy)}
               accessibilityRole="button"
@@ -88,13 +102,37 @@ export function MessageActions({
 
             <View style={styles.divider} />
 
-           
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => handleAction(onReport)}
+              accessibilityRole="button"
+              accessibilityLabel="Report message"
+              accessibilityHint="Reports this message"
+            >
+              <MaterialIcons name="flag" size={22} color="#fca5a5" accessibilityElementsHidden={true} />
+              <Text style={[styles.actionText, styles.dangerText]}>Report Message</Text>
+            </TouchableOpacity>
 
-          
+            {showBlockOption && onBlockUser && (
+              <>
+                <View style={styles.divider} />
+
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => handleAction(onBlockUser)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Block user"
+                  accessibilityHint="Blocks this user"
+                >
+                  <MaterialIcons name="block" size={22} color="#fca5a5" accessibilityElementsHidden={true} />
+                  <Text style={[styles.actionText, styles.dangerText]}>Block User</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <View style={styles.divider} />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.actionButton}
               onPress={onClose}
               accessibilityRole="button"

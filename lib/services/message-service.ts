@@ -456,10 +456,15 @@ export const messageService = {
       const match = (recent || []).find((row: any) => {
         const rowText = row.text ?? row.body ?? row.message ?? row.content ?? '';
         const rowMedia = row.media_url ?? row.attachment_url ?? null;
+        const rowReplyTo = row.reply_to ?? null;
         // Attachment-only messages all share an empty text, so the media URL
         // has to be part of the comparison or two different photos sent while
         // offline would collapse into one.
-        return rowText === text && rowMedia === (mediaUrl ?? null);
+        return (
+          rowText === text &&
+          rowMedia === (mediaUrl ?? null) &&
+          rowReplyTo === (replyTo ?? null)
+        );
       });
 
       if (match) {
@@ -475,9 +480,10 @@ export const messageService = {
           createdAt: match.created_at,
           status: 'sent',
           mediaUrl: match.media_url ?? match.attachment_url ?? undefined,
+          replyTo: match.reply_to ?? replyTo ?? undefined,
         } as Message;
       }
-    } catch (dedupeCheckError) {
+    } catch {
       // If the dedupe check itself fails (network, RLS, etc.), fall through
       // to the normal send rather than blocking queue processing entirely.
     }
@@ -547,6 +553,7 @@ export const messageService = {
           lastMessage: conv.last_message ?? undefined,
           updatedAt: conv.updated_at ?? undefined,
           unread: conv.unread_count ?? undefined,
+          backingConversationIds: [conv.id],
           messages: await messageService.getMessages(conv.id),
         }))
       );
@@ -603,6 +610,7 @@ export const messageService = {
       const fullConversation: FullConversation = {
         id: `full-${currentUserId}-${otherUserId}`,
         realConversationId,
+        backingConversationIds: nonGroupIds,
         isGroup: false,
         name: 'Conversation',
         participantIds: [currentUserId, otherUserId],

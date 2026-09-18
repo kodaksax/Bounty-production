@@ -185,8 +185,15 @@ type ConversationSummaries = {
  */
 async function fetchConversationSummaries(): Promise<ConversationSummaries | null> {
   const { data, error } = await supabase.rpc('get_conversation_summaries');
-  if (error || !data) {
-    if (error) console.warn('get_conversation_summaries unavailable, falling back:', error.message);
+  if (error) {
+    const isNotFound =
+      error.code === 'PGRST202' || (error.message || '').includes('Could not find the function');
+    if (!isNotFound) throw error;
+    console.warn('get_conversation_summaries unavailable, falling back:', error.message);
+    return null;
+  }
+
+  if (!data) {
     return null;
   }
 
