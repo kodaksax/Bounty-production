@@ -214,7 +214,9 @@ function main() {
     {
       APP_ENV: ENVIRONMENT,
     },
-    { shell: false }
+    // Windows resolves EAS through the generated eas.cmd batch launcher,
+    // which Node cannot spawn with shell disabled.
+    { shell: process.platform === 'win32' }
   );
   if (publishStatus !== 0) {
     console.error('\n[update:production] "eas update" exited non-zero — publish did not succeed.');
