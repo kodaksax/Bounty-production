@@ -218,7 +218,7 @@ function mapStripeTransferError(err: { code?: string; type?: string; message?: s
 
   return {
     error:
-      'The transfer could not be completed. Your balance has not been charged — please try again or contact support.',
+      'We could not confirm whether this withdrawal completed. Check your withdrawal history before trying again — a retry is safe and will not send twice.',
     code: 'transfer_failed',
     status: 502,
   };
@@ -581,9 +581,62 @@ function mapStripePayoutError(err: {
 
   return {
     error:
-      'We could not complete this withdrawal right now. No funds have moved — please try again.',
+      'We could not confirm whether this withdrawal completed. Check your withdrawal history before trying again — a retry is safe and will not send twice.',
     code: 'payout_failed',
     status: 502,
+  };
+}
+
+/**
+ * Maps an unexpected error that reaches the top-level handler — mostly Stripe
+ * SDK errors that escape a route's own try/catch — to a safe, human message.
+ *
+ * The raw Stripe SDK message must never reach the client: it can carry internal
+ * operational detail (for example an "expired API key" notice), which is both a
+ * leak and useless to a hunter setting up payouts. `retryable` tells the client
+ * whether pressing "Try again" can succeed: a broken platform credential cannot,
+ * so retrying only reproduces the failure instantly.
+ */
+function mapPlatformError(error: unknown): {
+  error: string;
+  code: string;
+  status: number;
+  retryable: boolean;
+} {
+  const type = (error as { type?: string })?.type ?? '';
+
+  // Platform credential / permission problems. The hunter cannot fix these and
+  // a retry reproduces them, so mark them non-retryable.
+  if (type === 'StripeAuthenticationError' || type === 'StripePermissionError') {
+    return {
+      error:
+        'Payouts are temporarily unavailable. Our team has been notified — please try again later.',
+      code: 'platform_unavailable',
+      status: 503,
+      retryable: false,
+    };
+  }
+
+  // Transient connectivity or rate-limit errors. A retry can succeed.
+  if (
+    type === 'StripeConnectionError' ||
+    type === 'StripeAPIError' ||
+    type === 'StripeRateLimitError'
+  ) {
+    return {
+      error: 'We could not reach Stripe just now. Please try again in a moment.',
+      code: 'stripe_unavailable',
+      status: 503,
+      retryable: true,
+    };
+  }
+
+  // Anything else — keep the message generic and let the hunter retry.
+  return {
+    error: 'Something went wrong on our end. Please try again.',
+    code: 'internal_error',
+    status: 500,
+    retryable: true,
   };
 }
 
@@ -4086,9 +4139,14 @@ Deno.serve(async (req: Request) => {
     console.warn('[connect] unmatched route', { method: req.method, subPath, userId });
     return jsonResponse({ error: 'Not found' }, 404);
   } catch (error: unknown) {
-    const err = error as { message?: string };
-    console.error('[connect edge fn] Error:', err);
-    return jsonResponse({ error: err.message ?? 'Internal server error' }, 500);
+    // Log the raw error server-side for diagnosis, but never return its message
+    // to the client — map it to a safe, human message instead.
+    console.error('[connect edge fn] Error:', error);
+    const mapped = mapPlatformError(error);
+    return jsonResponse(
+      { error: mapped.error, code: mapped.code, retryable: mapped.retryable },
+      mapped.status
+    );
   }
 });
 

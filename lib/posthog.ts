@@ -147,6 +147,27 @@ export const capture = (event: string, properties?: Record<string, any>): void =
 };
 
 /**
+ * Report an exception to PostHog error tracking as a `$exception` event.
+ *
+ * Global exception/rejection autocapture is disabled for this client (see the
+ * `errorTracking` option above — Sentry owns the global handlers), so an
+ * explicit call is the only way a `$exception` reaches PostHog. The app's error
+ * boundaries use it so a caught render crash is visible in PostHog error
+ * tracking, not just Sentry.
+ * @param error - The thrown value (Error or otherwise).
+ * @param properties - Optional properties to attach to the event.
+ */
+export const captureException = (error: unknown, properties?: Record<string, any>): void => {
+  try {
+    if (!_posthog || typeof _posthog.captureException !== 'function') return;
+    _posthog.captureException(error, properties);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[posthog] captureException failed', e);
+  }
+};
+
+/**
  * Associate the current session with a user and set person properties.
  * @param distinctId - Stable unique user id.
  * @param properties - Person properties to set (e.g. email, name).

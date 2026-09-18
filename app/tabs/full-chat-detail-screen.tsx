@@ -12,8 +12,6 @@ import {
  Alert,
  FlatList,
  Keyboard,
- KeyboardAvoidingView,
- Platform,
  StyleSheet,
  Text,
  TextInput,
@@ -25,21 +23,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentViewerModal } from '../../components/attachment-viewer-modal';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { MessageActions } from '../../components/MessageActions';
-import { MessageBubble } from '../../components/MessageBubble';
+import { MessageBubble, type QuotedMessage } from '../../components/MessageBubble';
+import { mediaPreviewLabel } from '../../lib/utils/message-media';
 import { PinnedMessageHeader } from '../../components/PinnedMessageHeader';
 import { ReportModal } from '../../components/ReportModal';
 import { TypingIndicator } from '../../components/TypingIndicator';
+import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 import { useAttachmentUpload } from '../../hooks/use-attachment-upload';
 import { useMessages } from '../../hooks/useMessages';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useTypingIndicator } from '../../hooks/useSocketStub';
 import { useValidUserId } from '../../hooks/useValidUserId';
-import { getBottomNavKeyboardOffset } from '../../lib/constants/navigation';
 import { blockingService } from '../../lib/services/blocking-service';
 import { generateInitials } from '../../lib/services/supabase-messaging';
 import type { Attachment, FullConversation, Message } from '../../lib/types';
 import { getValidAvatarUrl } from '../../lib/utils/avatar-utils';
 import { getMediaKind, getMediaMimeType, mediaFileName } from '../../lib/utils/message-media';
+import { messagingStrings } from '../../lib/strings/messaging';
 
 
 interface ChatDetailScreenProps {
@@ -51,7 +51,6 @@ interface ChatDetailScreenProps {
 export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps) {
  const router = useRouter();
  const insets = useSafeAreaInsets();
- const bottomNavOffset = getBottomNavKeyboardOffset(insets.bottom);
  const { theme } = useAppThemeContext();
  const s = useMemo(() => makeStyles(theme), [theme]);
 
@@ -90,22 +89,20 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
  const [pendingAttachment, setPendingAttachment] = useState<Attachment | null>(null);
  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
  const [viewerAttachment, setViewerAttachment] = useState<Attachment | null>(null);
+ // Message quoted by the reply being composed, shown above the input.
+ const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+ // Briefly emphasised after jumping to it from a reply's quote.
+ const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+ const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+ const inputRef = useRef<TextInput>(null);
 
 
  const listRef = useRef<FlatList<Message>>(null);
- const hasScrolledToBottom = useRef(false);
+ // The list is `inverted`, so it opens on the newest message with no scroll
+ // choreography: index 0 is the bottom of the screen. Data is therefore
+ // newest-first; `mergedMessages` stays oldest-first for everything else.
+ const listData = useMemo(() => [...mergedMessages].reverse(), [mergedMessages]);
  const typingUsersRef = useTypingIndicator(conversation.realConversationId);
-
- // Scroll to bottom once when messages are first available
- useEffect(() => {
-   if (mergedMessages.length > 0 && !hasScrolledToBottom.current) {
-     const timer = setTimeout(() => {
-       listRef.current?.scrollToEnd({ animated: false })
-       hasScrolledToBottom.current = true
-     }, 80)
-     return () => clearTimeout(timer)
-   }
- }, [mergedMessages.length])
 
 
  // Wait for currentUserId to resolve before picking a participant — while
@@ -139,11 +136,14 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
  );
 
 
- const handleSendMessage = async (text: string, mediaUrl?: string | null) => {
-   await sendMessage(text, mediaUrl);
-   setTimeout(() => {
-     listRef.current?.scrollToEnd({ animated: true });
-   }, 100);
+ const handleSendMessage = async (
+   text: string,
+   mediaUrl?: string | null,
+   replyTo?: string | null
+ ) => {
+   await sendMessage(text, mediaUrl, replyTo);
+   // Offset 0 is the newest message in an inverted list.
+   setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
  };
 
 
@@ -174,17 +174,20 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
    // a staged attachment, and a local file:// path would be a dead link for
    // the recipient.
    const mediaUrl = attachment?.remoteUri ?? null;
+   const quoted = replyingTo;
    if (!textToSend && !mediaUrl) return;
 
    setInputText('');
    setPendingAttachment(null);
+   setReplyingTo(null);
    setShowEmojiPicker(false);
    try {
-     await handleSendMessage(textToSend, mediaUrl);
+     await handleSendMessage(textToSend, mediaUrl, quoted?.id ?? null);
    } catch {
      // Restore the composer so nothing the user typed or picked is lost.
      setInputText(inputText);
      setPendingAttachment(attachment);
+     setReplyingTo(quoted);
    }
  };
 
@@ -193,6 +196,14 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
    setInputText(prev => prev + emoji);
  }, []);
 
+
+ // Focusing the composer means "I want to write" -- bring the thread back to
+ // the newest message (offset 0 in the inverted list) if the viewer had
+ // scrolled up through history.
+ const handleInputFocus = useCallback(() => {
+   setShowEmojiPicker(false);
+   listRef.current?.scrollToOffset({ offset: 0, animated: true });
+ }, []);
 
  const handleToggleEmojiPicker = useCallback(() => {
    setShowEmojiPicker(prev => {
@@ -219,6 +230,68 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
    setSelectedMessageId(messageId);
    setShowActions(true);
  }, []);
+
+
+ const handleReply = () => {
+   if (!selectedMessageId) return;
+   const message = mergedMessages.find(m => m.id === selectedMessageId);
+   if (!message) return;
+   setReplyingTo(message);
+   setShowEmojiPicker(false);
+   // Bring the keyboard up so the reply can be typed straight away.
+   setTimeout(() => inputRef.current?.focus(), 50);
+ };
+
+
+ const senderLabelFor = useCallback(
+   (senderId: string) => {
+     if (currentUserId !== null && senderId === currentUserId) return 'You';
+     return conversation.isGroup ? 'Group member' : displayName;
+   },
+   [currentUserId, conversation.isGroup, displayName]
+ );
+
+
+ // Resolve each reply's quoted message from the merged thread. If the
+ // original is no longer available, skip rendering the quote until reply
+ // metadata exists.
+ const quotesById = useMemo(() => {
+   const byId = new Map(mergedMessages.map(m => [m.id, m] as const));
+   const quotes = new Map<string, QuotedMessage>();
+   for (const m of mergedMessages) {
+     if (!m.replyTo) continue;
+     const original = byId.get(m.replyTo);
+     if (!original) continue;
+     quotes.set(m.id, {
+       id: original.id,
+       senderLabel: senderLabelFor(original.senderId),
+       text: original.text,
+       mediaUrl: original.mediaUrl,
+     });
+   }
+   return quotes;
+ }, [mergedMessages, senderLabelFor]);
+
+
+ const handleQuotePress = useCallback(
+   (messageId: string) => {
+     const index = listData.findIndex(m => m.id === messageId);
+     if (index === -1) return;
+     listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+     setHighlightedMessageId(messageId);
+     if (highlightTimer.current) clearTimeout(highlightTimer.current);
+     highlightTimer.current = setTimeout(() => setHighlightedMessageId(null), 1600);
+   },
+   [listData]
+ );
+
+
+ useEffect(
+   () => () => {
+     if (highlightTimer.current) clearTimeout(highlightTimer.current);
+   },
+   []
+ );
 
 
  const handlePin = async () => {
@@ -274,7 +347,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
  const handlePinnedMessagePress = () => {
    if (!pinnedMessage) return;
-   const index = mergedMessages.findIndex(m => m.id === pinnedMessage.id);
+   const index = listData.findIndex(m => m.id === pinnedMessage.id);
    if (index !== -1) {
      listRef.current?.scrollToIndex({ index, animated: true });
    }
@@ -290,34 +363,55 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
        isUser={currentUserId !== null && message.senderId === currentUserId}
        status={message.status}
        isPinned={message.isPinned}
+       replyTo={message.replyTo ? quotesById.get(message.id) : undefined}
+       isHighlighted={message.id === highlightedMessageId}
        onLongPress={handleLongPress}
        onRetry={retryMessage}
        onMediaPress={handleMediaPress}
+       onReplyPress={handleQuotePress}
      />
    ),
-   [handleLongPress, retryMessage, handleMediaPress, currentUserId]
+   [
+     handleLongPress,
+     retryMessage,
+     handleMediaPress,
+     handleQuotePress,
+     currentUserId,
+     quotesById,
+     highlightedMessageId,
+   ]
  );
 
 
- // Stable identity so ListFooterComponent isn't remounted by FlatList on
- // every render (e.g. every keystroke in the composer).
+ // Rendered as ListHeaderComponent: in an inverted list the header sits at
+ // the bottom, under the newest message. Stable identity so FlatList doesn't
+ // remount it on every render (e.g. every keystroke in the composer).
  const renderFooter = useCallback(() => {
    const isTyping = typingUsersRef.current && typingUsersRef.current.size > 0;
-   if (!isTyping) return null;
-   return <TypingIndicator userName={conversation.name} />;
- }, [typingUsersRef, conversation.name]);
+   return (
+     <View>
+       {isTyping && <TypingIndicator userName={conversation.name} />}
+       {/* Off-platform liability notice: always the last thing under the newest message. */}
+       <Text style={s.disclaimer} accessibilityRole="text">
+         {messagingStrings.offPlatformDisclaimer}
+       </Text>
+     </View>
+   );
+ }, [typingUsersRef, conversation.name, s.disclaimer]);
 
 
 
 
  const selectedMessage = mergedMessages.find(m => m.id === selectedMessageId);
+ const canReplyToSelectedMessage =
+   !!selectedMessage && selectedMessage.status !== 'sending' && selectedMessage.status !== 'failed';
  // A staged attachment is enough on its own — an image with no caption is a
  // perfectly valid message.
  const canSend = inputText.trim().length > 0 || !!pendingAttachment?.remoteUri;
 
 
  return (
-   <View style={[s.container, { paddingBottom: Math.max(insets.bottom || 0, bottomNavOffset + 8) }]}>
+   <View style={s.container}>
      {/* Header */}
      <View style={s.header}>
        <View style={s.headerInner}>
@@ -381,36 +475,28 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
      )}
 
 
-     {/* Messages and Input */}
-     <KeyboardAvoidingView
-       style={s.keyboardAvoidingContainer}
-       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-       keyboardVerticalOffset={bottomNavOffset}
-     >
+     {/* Messages and Input. This screen is a full-bleed Stack route with no
+         bottom nav under it, so the composer docks to the very bottom edge:
+         `offset={insets.bottom}` makes KeyboardAvoidingScreen pad exactly the
+         home-indicator area while the keyboard is closed and exactly the
+         keyboard's overlap while it is open -- never both, so there is no
+         gap above the keyboard and no dead space below the composer. */}
+     <KeyboardAvoidingScreen style={s.keyboardAvoidingContainer} offset={insets.bottom}>
        <View style={{ flex: 1 }}>
          <FlatList
            ref={listRef}
-           data={mergedMessages}
+           data={listData}
+           inverted
            renderItem={renderMessage}
            keyExtractor={item => item.id}
            contentContainerStyle={s.messageList}
-           ListFooterComponent={renderFooter}
+           ListHeaderComponent={renderFooter}
            maxToRenderPerBatch={20}
            initialNumToRender={15}
            windowSize={10}
-           removeClippedSubviews={true}
-           onLayout={() => {
-             if (!hasScrolledToBottom.current) {
-               listRef.current?.scrollToEnd({ animated: false })
-               hasScrolledToBottom.current = true
-             }
-           }}
-           onContentSizeChange={() => {
-             if (!hasScrolledToBottom.current) {
-               listRef.current?.scrollToEnd({ animated: false })
-               hasScrolledToBottom.current = true
-             }
-           }}
+           // Follow new messages while the viewer is at (or within 80px of)
+           // the bottom; hold their place if they have scrolled up to read.
+           maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 80 }}
            onScrollToIndexFailed={info => {
              const wait = new Promise(resolve => setTimeout(resolve, 500));
              wait.then(() => {
@@ -421,7 +507,29 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
 
          {/* Message Input */}
-         <View style={[s.inputContainer, { paddingBottom: showEmojiPicker ? 12 : Math.max(insets.bottom || 0, 12) }]}>
+         <View style={s.inputContainer}>
+           {/* Message being replied to */}
+           {replyingTo && (
+             <View style={s.replyRow} accessibilityLabel={`Replying to ${senderLabelFor(replyingTo.senderId)}`}>
+               <View style={s.replyBar} />
+               <View style={s.replyBody}>
+                 <Text style={s.replyLabel} numberOfLines={1}>
+                   Replying to {senderLabelFor(replyingTo.senderId)}
+                 </Text>
+                 <Text style={s.replyPreview} numberOfLines={1}>
+                   {replyingTo.text.trim() || mediaPreviewLabel(replyingTo.mediaUrl)}
+                 </Text>
+               </View>
+               <TouchableOpacity
+                 onPress={() => setReplyingTo(null)}
+                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                 accessibilityRole="button"
+                 accessibilityLabel="Cancel reply"
+               >
+                 <MaterialIcons name="close" size={20} color={theme.textSecondary} />
+               </TouchableOpacity>
+             </View>
+           )}
            {/* Staged attachment preview */}
            {pendingAttachment && (
              <View style={s.pendingRow}>
@@ -482,11 +590,14 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
                />
              </TouchableOpacity>
              <TextInput
+               ref={inputRef}
                style={s.inlineTextInput}
                value={inputText}
                onChangeText={setInputText}
-               onFocus={() => setShowEmojiPicker(false)}
-               placeholder={pendingAttachment ? 'Add a caption...' : 'Type a message...'}
+               onFocus={handleInputFocus}
+               placeholder={
+                 replyingTo ? 'Write a reply...' : pendingAttachment ? 'Add a caption...' : 'Type a message...'
+               }
                placeholderTextColor={theme.textSecondary}
                multiline
                textAlignVertical="center"
@@ -511,16 +622,16 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
            visible={showEmojiPicker}
            onSelect={handleInsertEmoji}
            onClose={() => setShowEmojiPicker(false)}
-           bottomInset={insets.bottom || 0}
          />
        </View>
-     </KeyboardAvoidingView>
+     </KeyboardAvoidingScreen>
 
 
      {/* Message Actions Modal */}
      <MessageActions
        visible={showActions}
        onClose={() => setShowActions(false)}
+       onReply={canReplyToSelectedMessage ? handleReply : undefined}
        onPin={handlePin}
        onCopy={handleCopy}
        onReport={handleReport}
@@ -570,6 +681,7 @@ function makeStyles(t: AppTheme) {
      flex: 1,
      backgroundColor: t.background,
    },
+   
    header: {
      backgroundColor: t.background,
      paddingTop: 48,
@@ -638,12 +750,23 @@ function makeStyles(t: AppTheme) {
    },
    messageList: {
      paddingHorizontal: 12,
+     // Inverted list: top/bottom are swapped on screen.
+     paddingTop: 16,
+     paddingBottom: 8,
+   },
+   disclaimer: {
+     fontSize: 11,
+     lineHeight: 15,
+     color: t.textSecondary,
+     textAlign: 'center',
+     paddingHorizontal: 16,
      paddingTop: 8,
-     paddingBottom: 16,
    },
    inputContainer: {
      paddingHorizontal: 12,
      paddingTop: 10,
+     // Safe area is handled by KeyboardAvoidingScreen, not here.
+     paddingBottom: 10,
      backgroundColor: t.background,
      borderTopWidth: 1,
      borderTopColor: t.border,
@@ -663,6 +786,39 @@ function makeStyles(t: AppTheme) {
      marginRight: 8,
      marginBottom: 2,
      alignSelf: 'flex-end',
+   },
+   replyRow: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 10,
+     marginBottom: 8,
+     paddingVertical: 8,
+     paddingRight: 10,
+     borderRadius: 12,
+     overflow: 'hidden',
+     backgroundColor: t.surfaceSecondary,
+     borderWidth: 1,
+     borderColor: t.border,
+   },
+   replyBar: {
+     width: 3,
+     alignSelf: 'stretch',
+     marginLeft: 8,
+     borderRadius: 2,
+     backgroundColor: t.primary,
+   },
+   replyBody: {
+     flex: 1,
+     gap: 2,
+   },
+   replyLabel: {
+     fontSize: 12,
+     fontWeight: '700',
+     color: t.primary,
+   },
+   replyPreview: {
+     fontSize: 13,
+     color: t.textSecondary,
    },
    pendingRow: {
      flexDirection: 'row',

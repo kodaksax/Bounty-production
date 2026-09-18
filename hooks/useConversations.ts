@@ -97,9 +97,14 @@ export function useConversations(): UseConversationsResult {
     }
   };
 
-  const refresh = async (): Promise<Conversation[] | null> => {
-    return fetchConversations();
-  };
+  // Memoized so callers can safely use it as an effect dependency. The
+  // messenger screens (app/tabs/messenger/index.tsx) list it in useEffect
+  // dependency arrays; an unstable identity re-ran those effects on every
+  // render.
+  const refresh = useCallback(
+    async (): Promise<Conversation[] | null> => fetchConversations(),
+    [fetchConversations]
+  );
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;

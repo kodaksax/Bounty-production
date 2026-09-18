@@ -18,6 +18,7 @@
  * Usage:
  *   npm run update:production
  *   npm run update:production -- --platforms=ios      # only publish/verify iOS
+ *   npm run update:production -- --message "fix: ..." # no TTY: skip the prompt
  *
  * See docs/deployment/EAS_UPDATE_POLICY.md.
  */
@@ -71,10 +72,10 @@ function parsePlatforms(argv) {
   return [...new Set(platforms)];
 }
 
-function runInherited(cmd, args, extraEnv) {
+function runInherited(cmd, args, extraEnv, options) {
   const result = spawnSync(cmd, args, {
     stdio: 'inherit',
-    shell: true,
+    shell: options?.shell ?? true,
     env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
   });
   if (result.error) {
@@ -90,8 +91,30 @@ function runCaptured(cmd, args) {
   return spawnSync(cmd, args, { encoding: 'utf8', shell: true, maxBuffer: 20 * 1024 * 1024 });
 }
 
+/**
+ * Resolve the update message from `--message=...` or `--message ...`.
+ *
+ * Without it `eas update` prompts for one, which only works on a TTY: in a
+ * non-interactive shell (an agent, a script, a CI job that bypassed the
+ * workflow) eas exits non-zero *after* the guardrail has already passed, with
+ * "--branch and --message ... are required when updating in non-interactive
+ * mode". Optional so the interactive prompt path keeps working unchanged.
+ */
+function parseMessage(argv) {
+  const index = argv.findIndex(arg => arg === '--message' || arg.startsWith('--message='));
+  if (index === -1) return null;
+  const flag = argv[index];
+  const message = flag.includes('=') ? flag.slice('--message='.length) : argv[index + 1];
+  if (!message || !message.trim()) {
+    console.error('[update:production] BLOCKED: --message was given without a value.');
+    process.exit(1);
+  }
+  return message.trim();
+}
+
 function main() {
   const platforms = parsePlatforms(process.argv.slice(2));
+  const message = parseMessage(process.argv.slice(2));
 
   console.log('='.repeat(72));
   console.log('[update:production] Publishing a PRODUCTION EAS Update (OTA JS update)');
@@ -173,7 +196,7 @@ function main() {
   // 4. Publish.
   console.log('\n[update:production] Guardrails passed. Publishing...\n');
   const publishStatus = runInherited(
-    'eas',
+    process.platform === 'win32' ? 'eas.cmd' : 'eas',
     [
       'update',
       '--branch',
@@ -186,10 +209,12 @@ function main() {
       // still looks like a successful publish in `eas update:list`.
       '--platform',
       platforms.length === ALL_PLATFORMS.length ? 'all' : platforms[0],
+      ...(message ? ['--message', message, '--non-interactive'] : []),
     ],
     {
       APP_ENV: ENVIRONMENT,
-    }
+    },
+    { shell: false }
   );
   if (publishStatus !== 0) {
     console.error('\n[update:production] "eas update" exited non-zero — publish did not succeed.');

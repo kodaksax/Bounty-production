@@ -192,8 +192,18 @@ function normalizeDataKeys(data: Record<string, unknown>): Record<string, unknow
   return out
 }
 
+// Inlined from ./push-token-validation
+const RAW_DEVICE_TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const EXPO_PUSH_TOKEN = /^Expo(nent)?PushToken\[[^\]\s]+\]$/
+function isValidExpoPushToken(token: unknown): boolean {
+  if (typeof token !== 'string') return false
+  const t = token.trim()
+  if (EXPO_PUSH_TOKEN.test(t)) return true
+  return RAW_DEVICE_TOKEN.test(t)
+}
+
 // Inlined from ./push-receipts
-const PERMANENT_TOKEN_ERRORS = new Set(['DeviceNotRegistered', 'InvalidCredentials'])
+const PERMANENT_TOKEN_ERRORS = new Set(['DeviceNotRegistered', 'InvalidCredentials', 'MismatchSenderId'])
 function extractInvalidTokens(chunkTokens: string[], expoResponseBody: unknown): string[] {
   const tickets = (expoResponseBody as { data?: unknown })?.data
   if (!Array.isArray(tickets)) return []
@@ -514,16 +524,44 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Failed to lookup tokens' }, 500)
     }
 
-    const tokenRows = ((tokens || []) as { profile_id: string; token: string }[]).filter((r) => !!r.token && !!r.profile_id)
+    const tokenRows = ((tokens || []) as Array<{ profile_id: string | null; token: string | null }>).filter((r) => !!r.profile_id)
+    const normalizedTokenRows = tokenRows.map((r) => ({
+      profile_id: r.profile_id as string,
+      rawToken: r.token,
+      normalizedToken: typeof r.token === 'string' ? r.token.trim() : '',
+    }))
+
+    // A malformed token makes Expo reject the whole send chunk, so it fails
+    // every co-batched recipient on every notification and is never pruned.
+    // Drop malformed tokens before building the chunk and disable them so they
+    // stop poisoning future sends.
+    const validTokenRows = normalizedTokenRows.filter((r) => isValidExpoPushToken(r.normalizedToken))
+    const malformedTokenRows = normalizedTokenRows.filter((r) => !isValidExpoPushToken(r.normalizedToken))
+    const malformedOwners = new Set(malformedTokenRows.map((r) => r.profile_id))
+    if (malformedTokenRows.length > 0) {
+      const malformedTokens = malformedTokenRows
+        .map((r) => r.rawToken)
+        .filter((token): token is string => typeof token === 'string')
+      if (malformedTokens.length > 0) {
+        const { error: disableMalformedErr } = await supabaseAdmin
+          .from('push_tokens')
+          .update({ enabled: false, last_failed_at: new Date().toISOString() })
+          .in('token', malformedTokens)
+        if (disableMalformedErr) {
+          console.error('[process-notification] failed to disable malformed tokens', disableMalformedErr)
+        }
+      }
+    }
+
     // Positionally aligned: tokensList[i] belongs to tokenOwners[i]. Kept as
     // parallel arrays (not objects) because createMessages/extractInvalidTokens
     // already index by position.
-    const tokensList = tokenRows.map((r) => r.token)
-    const tokenOwners = tokenRows.map((r) => r.profile_id)
+    const tokensList = validTokenRows.map((r) => r.normalizedToken)
+    const tokenOwners = validTokenRows.map((r) => r.profile_id)
 
-    // A recipient who wanted a push but has zero enabled tokens is a delivery
-    // failure for THEM specifically, whether or not other recipients on the
-    // same outbox row have deliverable devices.
+    // A recipient who wanted a push but has zero deliverable tokens is a
+    // delivery failure for THEM specifically, whether or not other recipients
+    // on the same outbox row have deliverable devices.
     const recipientsWithToken = new Set(tokenOwners)
     const recipientsWithoutToken = pushRecipients.filter((userId) => !recipientsWithToken.has(userId))
     if (recipientsWithoutToken.length > 0) {
@@ -539,7 +577,13 @@ Deno.serve(async (req: Request) => {
         posthogEvents.push({
           event: 'notification_failed',
           distinct_id: userId,
-          properties: { notification_type: notificationType, category, reason: 'no_deliverable_token' },
+          // A user whose only token was malformed gets a distinct reason so the
+          // failure is diagnosable rather than an opaque "no token".
+          properties: {
+            notification_type: notificationType,
+            category,
+            reason: malformedOwners.has(userId) ? 'invalid_token_format' : 'no_deliverable_token',
+          },
         })
       }
     }
@@ -567,9 +611,15 @@ Deno.serve(async (req: Request) => {
     // one device means the push was genuinely attempted-and-accepted for that
     // recipient, so 'sent' always wins over a 'failed' recorded for a
     // different (or earlier-processed) device of the same person.
-    const outcomeByUser = new Map<string, 'sent' | 'failed'>()
-    const markOutcome = (userId: string, outcome: 'sent' | 'failed') => {
-      if (outcome === 'sent' || outcomeByUser.get(userId) !== 'sent') outcomeByUser.set(userId, outcome)
+    const outcomeByUser = new Map<string, { status: 'sent' | 'failed'; error?: string }>()
+    const markOutcome = (userId: string, status: 'sent' | 'failed', error?: string) => {
+      if (status === 'sent') {
+        outcomeByUser.set(userId, { status: 'sent' })
+        return
+      }
+      const prev = outcomeByUser.get(userId)
+      if (prev?.status === 'sent') return
+      outcomeByUser.set(userId, { status: 'failed', error: error ?? prev?.error })
     }
 
     for (let i = 0; i < messages.length; i += chunkSize) {
@@ -586,7 +636,7 @@ Deno.serve(async (req: Request) => {
         if (!resp.ok) {
           const text = await resp.text().catch(() => '')
           errors.push({ status: resp.status, body: text })
-          for (const userId of chunkOwners) markOutcome(userId, 'failed')
+          for (const userId of chunkOwners) markOutcome(userId, 'failed', `http_${resp.status}`)
           continue
         }
 
@@ -598,8 +648,9 @@ Deno.serve(async (req: Request) => {
           tickets.forEach((ticket: unknown, index: number) => {
             const owner = chunkOwners[index]
             if (!owner) return
-            const isError = !!ticket && (ticket as { status?: string }).status === 'error'
-            markOutcome(owner, isError ? 'failed' : 'sent')
+            const t = ticket as { status?: string; details?: { error?: string } } | null
+            const isError = !!t && t.status === 'error'
+            markOutcome(owner, isError ? 'failed' : 'sent', isError ? (t?.details?.error || 'unknown') : undefined)
           })
         } else {
           // Unexpected response shape from an otherwise-ok HTTP response —
@@ -614,13 +665,13 @@ Deno.serve(async (req: Request) => {
         sent += chunk.length
       } catch (e) {
         errors.push(String(e))
-        for (const userId of chunkOwners) markOutcome(userId, 'failed')
+        for (const userId of chunkOwners) markOutcome(userId, 'failed', 'exception')
       }
     }
 
     for (const [userId, outcome] of outcomeByUser.entries()) {
       posthogEvents.push(
-        outcome === 'sent'
+        outcome.status === 'sent'
           ? {
               event: 'notification_sent',
               distinct_id: userId,
@@ -629,7 +680,10 @@ Deno.serve(async (req: Request) => {
           : {
               event: 'notification_failed',
               distinct_id: userId,
-              properties: { notification_type: notificationType, category, reason: 'push_send_error' },
+              // expo_error carries the Expo ticket error code (or the HTTP /
+              // exception marker) so a push_send_error is diagnosable instead of
+              // opaque — the gap the failure metric could not previously explain.
+              properties: { notification_type: notificationType, category, reason: 'push_send_error', expo_error: outcome.error ?? null },
             }
       )
     }
@@ -637,13 +691,12 @@ Deno.serve(async (req: Request) => {
     // Disable tokens Expo reported as permanently undeliverable so future
     // sends skip them and deliverability metrics stay healthy.
     if (invalidTokens.length > 0) {
-      try {
-        await supabaseAdmin
-          .from('push_tokens')
-          .update({ enabled: false, last_failed_at: new Date().toISOString() })
-          .in('token', invalidTokens)
-      } catch (e) {
-        console.error('[process-notification] failed to disable invalid tokens', e)
+      const { error: disableInvalidErr } = await supabaseAdmin
+        .from('push_tokens')
+        .update({ enabled: false, last_failed_at: new Date().toISOString() })
+        .in('token', invalidTokens)
+      if (disableInvalidErr) {
+        console.error('[process-notification] failed to disable invalid tokens', disableInvalidErr)
       }
     }
 

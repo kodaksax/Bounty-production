@@ -54,10 +54,15 @@ describe('handleUndeliveredPayout (payout.failed / payout.canceled)', () => {
     expect(body).toContain('payout.amount / 100');
   });
 
-  test('applies the refund and failed-status transition through one atomic RPC', () => {
+  test('still applies legacy-path refunds through one atomic RPC', () => {
     expect(body).toContain("rpc('fail_legacy_withdrawal'");
-    expect(body).not.toContain(".update({\n          status: 'failed'");
     expect(body).not.toContain("rpc('update_balance'");
+  });
+
+  test('connect-native payouts are marked failed without refunding profiles.balance', () => {
+    expect(body).toContain('candidateMetadata.connect_native === true');
+    expect(body).toContain("status: 'failed'");
+    expect(body).toContain('connect-native row already advanced');
   });
 });
 
