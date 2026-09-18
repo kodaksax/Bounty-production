@@ -53,4 +53,20 @@ describe('MessageActions', () => {
     expect(getByText('Unpin Message')).toBeTruthy();
     expect(queryByText('Block User')).toBeNull();
   });
+
+  it('hides reply when the caller omits the reply action', () => {
+    const { queryByText } = render(
+      <MessageActions
+        visible
+        onClose={jest.fn()}
+        onPin={jest.fn()}
+        onCopy={jest.fn()}
+        onReport={jest.fn()}
+        isPinned={false}
+        showBlockOption={false}
+      />
+    );
+
+    expect(queryByText('Reply')).toBeNull();
+  });
 });

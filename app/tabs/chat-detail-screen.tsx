@@ -357,6 +357,8 @@ export function ChatDetailScreen({
   }, [typingUsersRef, conversation.name, s.disclaimer])
 
   const selectedMessage = messages.find(m => m.id === selectedMessageId)
+  const canReplyToSelectedMessage =
+    !!selectedMessage && selectedMessage.status !== 'sending' && selectedMessage.status !== 'failed'
   // A staged attachment is enough on its own — an image with no caption is a
   // perfectly valid message.
   const canSend = inputText.trim().length > 0 || !!pendingAttachment?.remoteUri
@@ -581,7 +583,7 @@ export function ChatDetailScreen({
       <MessageActions
         visible={showActions}
         onClose={() => setShowActions(false)}
-        onReply={handleReply}
+        onReply={canReplyToSelectedMessage ? handleReply : undefined}
         onPin={handlePin}
         onCopy={handleCopy}
         onReport={handleReport}
