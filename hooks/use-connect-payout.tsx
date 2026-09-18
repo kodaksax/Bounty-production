@@ -286,9 +286,16 @@ export function useConnectPayout(): UseConnectPayoutResult {
         // provider created as failed or canceled must not surface as the green
         // success card.
         if (FAILED_PAYOUT_STATUSES.has(payoutResult.status)) {
-          // Stripe closed this attempt, so it was not rejected pre-flight —
-          // drop the key so a fresh attempt is treated as genuinely new.
-          idempotencyKeyRef.current = null;
+          // A brand-new payout can be returned here as failed/canceled before
+          // the webhook settles the local row; keep the key pinned so Retry
+          // safely replays this attempt rather than creating a second payout.
+          //
+          // Once the row is terminal and we're seeing an idempotent replay of
+          // that terminal state, allow the next tap to start a genuinely new
+          // attempt by rotating the key.
+          if (payoutResult.duplicate) {
+            idempotencyKeyRef.current = null;
+          }
           void analyticsService
             .trackEvent('payout_failed', {
               amount: payoutResult.amountCents / 100,
@@ -304,9 +311,10 @@ export function useConnectPayout(): UseConnectPayoutResult {
               /* analytics is best-effort */
             });
           setError({
-            code: 'payout_declined',
-            message:
-              'This withdrawal did not go through, so the money is back in your balance. Check your payout details and try again.',
+            code: payoutResult.duplicate ? 'payout_declined' : 'unknown_payout_state',
+            message: payoutResult.duplicate
+              ? 'This withdrawal did not go through. Check your payout details and try again.'
+              : 'Your withdrawal status is still being finalized. Do not submit it again — retrying will safely check the same request.',
             retryable: true,
             requestId,
           });

@@ -43,10 +43,25 @@ function mockFailed(error: { code: string; message: string; retryable: boolean }
 
 describe('WithdrawNowCard failed state', () => {
   it('shows "Withdrawal failed" for a genuine provider failure', () => {
-    mockFailed({ code: 'payout_failed', message: 'We could not confirm whether this completed.', retryable: true });
+    mockFailed({
+      code: 'destination_account_invalid',
+      message: 'Your linked bank account cannot receive transfers right now.',
+      retryable: false,
+    });
     const { getByText, queryByText } = render(<WithdrawNowCard />);
     expect(getByText('Withdrawal failed')).toBeTruthy();
     expect(queryByText('Verifying your withdrawal')).toBeNull();
+  });
+
+  it('uses a neutral title for unknown-outcome payout_failed errors', () => {
+    mockFailed({
+      code: 'payout_failed',
+      message: 'We could not confirm whether this withdrawal completed.',
+      retryable: true,
+    });
+    const { getByText, queryByText } = render(<WithdrawNowCard />);
+    expect(getByText('Verifying your withdrawal')).toBeTruthy();
+    expect(queryByText('Withdrawal failed')).toBeNull();
   });
 
   it('uses a neutral title when the payout state is still being verified', () => {

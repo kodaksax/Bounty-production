@@ -33,6 +33,7 @@ export interface WithdrawNowCardProps {
 const SOFT_FAILURE_TITLES: Record<string, string> = {
   withdrawal_already_in_progress: 'Withdrawal already in progress',
   unknown_payout_state: 'Verifying your withdrawal',
+  payout_failed: 'Verifying your withdrawal',
 };
 
 /** Stripe reports arrival as epoch seconds; render it as a plain date. */
