@@ -20,6 +20,12 @@ export const ROUTES = {
     PROFILE: '/tabs/profile-screen',
     SEARCH: '/tabs/search',
   },
+  // Messaging
+  MESSAGES: {
+    // The merged 1:1 thread with a user (every message ever exchanged with
+    // them). Both the inbox rows and the profile Message button open this.
+    WITH_USER: (userId: string) => `/tabs/messenger/user/${encodeURIComponent(userId)}` as const,
+  },
   // Bounty detail flows
   BOUNTY: {
     // Smart router that determines user role and redirects

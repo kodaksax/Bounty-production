@@ -9,7 +9,7 @@
  * - listConversations(userId: string): Promise<Conversation[]>
  * - getConversation(conversationId: string): Promise<Conversation | null>
  * - getMessages(conversationId: string): Promise<Message[]>
- * - sendMessage(conversationId: string, text: string, senderId: string, mediaUrl?: string | null): Promise<Message>
+ * - sendMessage(conversationId: string, text: string, senderId: string, mediaUrl?: string | null, replyTo?: string | null): Promise<Message>
  * - createConversation(participantIds: string[], name: string, isGroup?: boolean, bountyId?: string): Promise<Conversation>
  * - markAsRead(conversationId: string, userId: string): Promise<void>
  * - getOrCreateConversation(participantIds: string[], name: string, bountyId?: string): Promise<Conversation>
@@ -128,7 +128,8 @@ export async function sendMessage(
   conversationId: string,
   text: string,
   senderId: string,
-  mediaUrl?: string | null
+  mediaUrl?: string | null,
+  replyTo?: string | null
 ): Promise<Message> {
   const messages = await loadMessages();
   const conversations = await loadConversations();
@@ -141,6 +142,7 @@ export async function sendMessage(
     createdAt: new Date().toISOString(),
     status: 'sent',
     mediaUrl: mediaUrl ?? undefined,
+    replyTo: replyTo ?? undefined,
   };
 
   messages.push(message);

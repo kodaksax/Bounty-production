@@ -15,7 +15,8 @@ interface UseMessagesResult {
   loading: boolean;
   error: string | null;
   pinnedMessage: Message | null;
-  sendMessage: (text: string, mediaUrl?: string | null) => Promise<void>;
+  /** `replyTo` is the id of the message being quoted, when this is a reply. */
+  sendMessage: (text: string, mediaUrl?: string | null, replyTo?: string | null) => Promise<void>;
   retryMessage: (messageId: string) => Promise<void>;
   pinMessage: (messageId: string) => Promise<void>;
   unpinMessage: (messageId: string) => Promise<void>;
@@ -61,7 +62,11 @@ export function useMessages(conversationId: string): UseMessagesResult {
   // (MessageBubble); an unstable function here silently busts that memo on
   // every render, forcing every visible message bubble to re-render (e.g. on
   // every keystroke in the composer).
-  const sendMessage = useCallback(async (text: string, mediaUrl?: string | null) => {
+  const sendMessage = useCallback(async (
+    text: string,
+    mediaUrl?: string | null,
+    replyTo?: string | null
+  ) => {
     let tempMessage: Message | undefined;
     try {
       setError(null);
@@ -73,6 +78,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
         senderId: currentUserId,
         text,
         mediaUrl: mediaUrl ?? undefined,
+        replyTo: replyTo ?? undefined,
         createdAt: new Date().toISOString(),
         status: 'sending',
       };
@@ -89,7 +95,8 @@ export function useMessages(conversationId: string): UseMessagesResult {
             text,
             currentUserId,
             undefined,
-            mediaUrl
+            mediaUrl,
+            replyTo
           );
           // A rejected send comes back as `{ message: {}, error }` rather than
           // throwing; without this check the temp message was replaced by an
@@ -123,7 +130,8 @@ export function useMessages(conversationId: string): UseMessagesResult {
         conversationId,
         text,
         currentUserId,
-        mediaUrl ?? null
+        mediaUrl ?? null,
+        replyTo ?? null
       );
 
       // Replace temp message with real one
@@ -170,7 +178,11 @@ export function useMessages(conversationId: string): UseMessagesResult {
       return;
     }
     setMessages(prev => prev.filter(m => m.id !== messageId));
-    await sendMessage(failedMessage.text, failedMessage.mediaUrl ?? null);
+    await sendMessage(
+      failedMessage.text,
+      failedMessage.mediaUrl ?? null,
+      failedMessage.replyTo ?? null
+    );
   }, [messages, fetchMessages, sendMessage]);
 
   const pinMessage = useCallback(async (messageId: string) => {

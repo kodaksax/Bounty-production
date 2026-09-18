@@ -23,6 +23,55 @@ describe('useMessages (local conversation)', () => {
     jest.clearAllMocks();
   });
 
+  it('forwards replyTo and shows it on the optimistic message', async () => {
+    (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue('user-1');
+
+    let resolveSend: (value: unknown) => void = () => {};
+    (messageService.messageService.sendMessage as jest.Mock).mockReturnValue(
+      new Promise(resolve => {
+        resolveSend = resolve;
+      })
+    );
+
+    const { useMessages } = require('../../../hooks/useMessages');
+    const { result } = renderHook(() => useMessages('conv-1'));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.sendMessage('yes', null, 'orig-1');
+    });
+
+    // The quote must show immediately, before the server round-trip.
+    expect(result.current.messages[0].replyTo).toBe('orig-1');
+    expect(messageService.messageService.sendMessage).toHaveBeenCalledWith(
+      'conv-1',
+      'yes',
+      'user-1',
+      undefined,
+      null,
+      'orig-1'
+    );
+
+    await act(async () => {
+      resolveSend({
+        message: {
+          id: 'real-1',
+          conversationId: 'conv-1',
+          senderId: 'user-1',
+          text: 'yes',
+          createdAt: new Date().toISOString(),
+          status: 'sent',
+          replyTo: 'orig-1',
+        },
+      });
+    });
+
+    expect(result.current.messages[0].replyTo).toBe('orig-1');
+  });
+
   it('replaces temp message with sent message on success', async () => {
     (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue('user-1');
 
@@ -146,7 +195,9 @@ describe('useMessages (local conversation)', () => {
       '',
       'user-1',
       undefined,
-      'https://cdn.example.com/photo.jpg'
+      'https://cdn.example.com/photo.jpg',
+      // replyTo — not a reply
+      undefined
     );
     expect(result.current.messages).toEqual([sentMessage]);
   });
