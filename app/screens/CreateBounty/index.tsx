@@ -55,11 +55,15 @@ interface CreateBountyFlowProps {
 }
 
 /**
- * The two-step flow publishes after the title and the amount — everything
- * else is offered afterwards, on StepPostPublish, against the live bounty.
+ * The flow publishes after the task, the location, and the amount. Location is
+ * a required step because an in-person bounty needs coordinates to reach nearby
+ * hunters (hunter_service_areas proximity notifications + the feed's radius
+ * search) — without them the bounty is live but unmatchable. The remaining
+ * details (photos, timing) stay optional and are offered afterwards, on
+ * StepPostPublish, against the live bounty.
  */
-const TOTAL_STEPS = 2;
-const STEP_TITLES = ['Task', 'Compensation'];
+const TOTAL_STEPS = 3;
+const STEP_TITLES = ['Task', 'Location', 'Compensation'];
 
 /**
  * Identifies this posting surface in the shared posting funnel. The onboarding
@@ -70,13 +74,13 @@ const POST_SURFACE = 'create_flow';
 
 /**
  * The `variant` prop on the post-flow "graveyard" funnel events (see
- * analytics-service.ts). This surface is now the deferred-detail fast path
- * described in useBountyPublish.ts's "6-step (control) and 2-step (two_step)"
- * note, so it reports as `two_step` — funnel comparisons against the old
- * six-step numbers must filter on this, since step_index/step_name no longer
- * mean the same thing.
+ * analytics-service.ts). This surface gates publishing on task, location, and
+ * amount, so it reports as `three_step`. The value changed from `two_step` when
+ * the required Location step returned: step_index/step_name no longer mean the
+ * same thing, so funnel comparisons against the old two-step numbers must
+ * filter on this to stay honest.
  */
-const POST_FLOW_VARIANT = 'two_step';
+const POST_FLOW_VARIANT = 'three_step';
 
 /**
  * A poster can leave the app open on a step for a very long time without
@@ -728,7 +732,7 @@ export function CreateBountyFlow({
 
         <StepDirectionContext.Provider value={stepDirection}>
           <View className="flex-1">
-            {/* --- Pre-publish: the two steps that gate posting --- */}
+            {/* --- Pre-publish: the three steps that gate posting --- */}
             {!postedBountyId && currentStep === 1 && (
               <StepTask
                 draft={draft}
@@ -739,13 +743,26 @@ export function CreateBountyFlow({
                 totalSteps={TOTAL_STEPS}
               />
             )}
+            {/* Location is required here: StepWhere forward-geocodes a typed
+                address before advancing, so an in-person bounty carries
+                coordinates by the time it publishes. */}
             {!postedBountyId && currentStep === 2 && (
+              <StepWhere
+                draft={draft}
+                onUpdate={handleDraftUpdate}
+                onNext={handleNext}
+                onBack={handleBack}
+                step={2}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {!postedBountyId && currentStep === 3 && (
               <StepPay
                 draft={draft}
                 onUpdate={handleDraftUpdate}
                 onNext={handlePublishFromAmountStep}
                 onBack={handleBack}
-                step={2}
+                step={3}
                 totalSteps={TOTAL_STEPS}
                 onInsufficientBalance={showInsufficientBalanceFromAmountStep}
                 ctaLabel="Post Bounty"

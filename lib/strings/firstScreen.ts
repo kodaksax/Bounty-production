@@ -11,7 +11,7 @@
 
 export const firstScreenStrings = {
   headline: "You've walked past it four hundred times.",
-  primaryCta: 'Make today pay.',
+  primaryCta: 'Get it done today.',
   secondaryCta: "I'd rather earn",
 
   proofCardCompletedBody: (firstName: string, taskSummary: string, neighborhood: string): string =>

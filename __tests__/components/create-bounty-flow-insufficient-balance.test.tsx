@@ -294,9 +294,10 @@ jest.mock('components/add-money-screen', () => ({
 
 import { CreateBountyFlow } from 'app/screens/CreateBounty/index';
 
-/** Compensation is step 2 of 2 — a single advance off the Task step. */
+/** Compensation is step 3 of 3 — advance past Task and Location. */
 function goToStepPay() {
-  fireEvent.press(screen.getByLabelText('stub-next')); // Task -> Pay
+  fireEvent.press(screen.getByLabelText('stub-next')); // Task -> Location
+  fireEvent.press(screen.getByLabelText('stub-next')); // Location -> Pay
 }
 
 describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
