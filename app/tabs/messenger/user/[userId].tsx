@@ -101,10 +101,11 @@ export default function UserConversationRoute() {
 
   useEffect(() => {
     if (!userId || backingConversationIds.length === 0) return;
+    let active = true;
 
     const refreshConversation = async () => {
       const refreshed = await loadConversation();
-      if (refreshed) {
+      if (active && refreshed) {
         setConversation(refreshed);
       }
     };
@@ -118,6 +119,7 @@ export default function UserConversationRoute() {
       );
 
     return () => {
+      active = false;
       unsubscribes.forEach(unsubscribe => unsubscribe());
     };
   }, [backingConversationIds, conversation?.realConversationId, loadConversation, userId]);
