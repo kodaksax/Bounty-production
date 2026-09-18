@@ -142,7 +142,10 @@ test('create queues bounty when offline', async () => {
   jest.doMock('lib/services/offline-queue-service', () => ({
     offlineQueueService: { enqueue: jest.fn(async () => ({ id: 'queued-1' })) },
   }));
-  jest.doMock('lib/utils/bounty-validation', () => ({ validateTitle: () => undefined }));
+  jest.doMock('lib/utils/bounty-validation', () => ({
+    validateTitle: () => undefined,
+    validateContactInfo: () => null,
+  }));
   // Simulate offline
   jest.doMock('@react-native-community/netinfo', () => ({
     fetch: jest.fn(async () => ({ isConnected: false })),
@@ -153,6 +156,31 @@ test('create queues bounty when offline', async () => {
   const tmp = await bountyService.create({ title: 'A valid title for test' } as any);
   expect(tmp).toBeTruthy();
   expect((tmp as any).id).toBeDefined();
+});
+
+test('create rejects contact info before any network or database work', async () => {
+  jest.doMock('lib/supabase', () => ({ isSupabaseConfigured: false, supabase: {} }));
+  jest.doMock('lib/utils/network', () => ({ getReachableApiBaseUrl: () => 'http://api.test' }));
+  jest.doMock('@react-native-community/netinfo', () => ({
+    fetch: jest.fn(async () => ({ isConnected: true })),
+  }));
+  jest.doMock('lib/utils/bounty-validation', () => ({
+    validateTitle: () => null,
+    validateContactInfo: () => 'contact info blocked',
+  }));
+
+  (global as any).fetch = jest.fn();
+
+  const { bountyService } = await import('../bounty-service');
+
+  await expect(
+    bountyService.create({
+      title: 'Call me at 410-555-1212',
+      description: 'Valid description text that is long enough.',
+    } as any)
+  ).rejects.toThrow('contact info blocked');
+
+  expect((global as any).fetch).not.toHaveBeenCalled();
 });
 
 test('updateStatus returns null when update fails and returns result otherwise', async () => {

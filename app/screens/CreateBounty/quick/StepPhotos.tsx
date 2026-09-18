@@ -14,6 +14,7 @@ interface StepPhotosProps {
   onUpdate: (data: Partial<BountyDraft>) => void;
   onNext: () => void;
   onBack: () => void;
+  detailsError?: string | null;
   /** True while the parent persists this step onto a live bounty. */
   isSaving?: boolean;
   step: number;
@@ -29,14 +30,23 @@ interface StepPhotosProps {
  * description; it is optional because nothing on the create path validates it,
  * and step 1's title already carries the essential ask.
  */
-export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, step, totalSteps }: StepPhotosProps) {
+export function StepPhotos({
+  draft,
+  onUpdate,
+  onNext,
+  onBack,
+  detailsError = null,
+  isSaving = false,
+  step,
+  totalSteps,
+}: StepPhotosProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [detailsFocused, setDetailsFocused] = useState(false);
   // Shown under the details field when Continue is refused; cleared on the
   // next edit so the poster sees it go away as they remove the offending text.
-  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [inlineDetailsError, setInlineDetailsError] = useState<string | null>(null);
 
   const attachments = draft.attachments || [];
   // Drives "Skip for now" vs "Continue" — either kind of context counts.
@@ -74,7 +84,7 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, 
   };
 
   const handleDetailsChange = (value: string) => {
-    setDetailsError(null);
+    setInlineDetailsError(null);
     onUpdate({ description: value });
   };
 
@@ -85,11 +95,13 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, 
   const handleContinue = () => {
     const contactError = validateContactInfo(draft.description);
     if (contactError) {
-      setDetailsError(contactError);
+      setInlineDetailsError(contactError);
       return;
     }
     onNext();
   };
+
+  const renderedDetailsError = inlineDetailsError ?? detailsError;
 
   return (
     <QuickStepLayout
@@ -114,11 +126,13 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, 
         textAlignVertical="top"
         style={[
           styles.details,
-          { borderColor: detailsError ? theme.error : detailsFocused ? theme.primary : theme.border },
+          {
+            borderColor: renderedDetailsError ? theme.error : detailsFocused ? theme.primary : theme.border,
+          },
         ]}
         accessibilityLabel="Additional details about the task"
       />
-      {detailsError ? <Text style={styles.detailsError}>{detailsError}</Text> : null}
+      {renderedDetailsError ? <Text style={styles.detailsError}>{renderedDetailsError}</Text> : null}
 
       {/* Gallery drop zone */}
       <TouchableOpacity

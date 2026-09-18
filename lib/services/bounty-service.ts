@@ -1,7 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import type { Bounty, BountyStatus } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
-import { validateTitle } from 'lib/utils/bounty-validation';
+import { validateContactInfo, validateTitle } from 'lib/utils/bounty-validation';
 import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
 import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
@@ -802,6 +802,11 @@ export const bountyService = {
       const titleError = validateTitle(bounty.title);
       if (titleError) {
         throw new Error(titleError);
+      }
+
+      const contactInfoError = validateContactInfo(bounty.title, bounty.description);
+      if (contactInfoError) {
+        throw new Error(contactInfoError);
       }
 
       // Spam prevention: rate limiting - max 10 bounties per day
