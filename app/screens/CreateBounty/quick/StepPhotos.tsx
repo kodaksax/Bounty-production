@@ -4,6 +4,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
+import { validateContactInfo } from '../../../../lib/utils/bounty-validation';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { QuickStepLayout } from './QuickStepLayout';
@@ -13,6 +14,7 @@ interface StepPhotosProps {
   onUpdate: (data: Partial<BountyDraft>) => void;
   onNext: () => void;
   onBack: () => void;
+  detailsError?: string | null;
   /** True while the parent persists this step onto a live bounty. */
   isSaving?: boolean;
   step: number;
@@ -28,11 +30,23 @@ interface StepPhotosProps {
  * description; it is optional because nothing on the create path validates it,
  * and step 1's title already carries the essential ask.
  */
-export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, step, totalSteps }: StepPhotosProps) {
+export function StepPhotos({
+  draft,
+  onUpdate,
+  onNext,
+  onBack,
+  detailsError = null,
+  isSaving = false,
+  step,
+  totalSteps,
+}: StepPhotosProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [detailsFocused, setDetailsFocused] = useState(false);
+  // Shown under the details field when Continue is refused; cleared on the
+  // next edit so the poster sees it go away as they remove the offending text.
+  const [inlineDetailsError, setInlineDetailsError] = useState<string | null>(null);
 
   const attachments = draft.attachments || [];
   // Drives "Skip for now" vs "Continue" — either kind of context counts.
@@ -69,6 +83,26 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, 
     onUpdate({ attachments: attachments.filter((a) => a.id !== attachmentId) });
   };
 
+  const handleDetailsChange = (value: string) => {
+    setInlineDetailsError(null);
+    onUpdate({ description: value });
+  };
+
+  // The description is the one free-text field posters actually fill in, and
+  // it lands on the live bounty when this step saves — so this is where a
+  // phone number, email, or link has to be stopped. Same rule and same red
+  // error line as the amount floor on StepPay.
+  const handleContinue = () => {
+    const contactError = validateContactInfo(draft.description);
+    if (contactError) {
+      setInlineDetailsError(contactError);
+      return;
+    }
+    onNext();
+  };
+
+  const renderedDetailsError = inlineDetailsError ?? detailsError;
+
   return (
     <QuickStepLayout
       step={step}
@@ -78,12 +112,12 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, 
       subtitle="Optional — photos and extra context help people understand the task."
       ctaLabel={hasContext ? 'Continue' : 'Skip for now'}
       ctaBusy={busy}
-      onCta={onNext}
+      onCta={handleContinue}
     >
       {/* Extra written detail — becomes the bounty description */}
       <TextInput
         value={draft.description}
-        onChangeText={(value) => onUpdate({ description: value })}
+        onChangeText={handleDetailsChange}
         onFocus={() => setDetailsFocused(true)}
         onBlur={() => setDetailsFocused(false)}
         placeholder="Anything else they should know?"
@@ -92,10 +126,13 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, 
         textAlignVertical="top"
         style={[
           styles.details,
-          { borderColor: detailsFocused ? theme.primary : theme.border },
+          {
+            borderColor: renderedDetailsError ? theme.error : detailsFocused ? theme.primary : theme.border,
+          },
         ]}
         accessibilityLabel="Additional details about the task"
       />
+      {renderedDetailsError ? <Text style={styles.detailsError}>{renderedDetailsError}</Text> : null}
 
       {/* Gallery drop zone */}
       <TouchableOpacity
@@ -189,6 +226,9 @@ function makeStyles(theme: AppTheme) {
       lineHeight: 23,
       marginBottom: 16,
     },
+    // Pulls up under the field so the red line reads as part of it, then
+    // restores the field's 16px gap before the drop zone.
+    detailsError: { marginTop: -8, marginBottom: 16, fontSize: 13, color: theme.error },
     dropZone: {
       height: 180,
       borderRadius: 24,

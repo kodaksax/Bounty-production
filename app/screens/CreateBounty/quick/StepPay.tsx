@@ -9,7 +9,7 @@ import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/c
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { detectTrustTier } from '../../../../lib/utils/trust-tier';
-import { validateAmount, validateBalance } from '../../../../lib/utils/bounty-validation';
+import { validateAmount, validateBalance, validateContactInfo } from '../../../../lib/utils/bounty-validation';
 import { useWallet } from '../../../../lib/wallet-context';
 import { QuickStepLayout } from './QuickStepLayout';
 
@@ -40,6 +40,9 @@ interface StepPayProps {
 }
 
 const AMOUNT_PRESETS = [20, 40, 60, 100, 150];
+
+// Temporarily hides the "Posting is free" balance note under the amount field.
+const SHOW_BALANCE_WARNING = false;
 
 /**
  * Step 5 — compensation, including the for-honor option.
@@ -144,6 +147,17 @@ export function StepPay({
       return;
     }
 
+    // Same gate as the amount floor, same red line under the CTA: a title or
+    // description carrying a phone number, email, or link never publishes.
+    // Both fields are scanned because this is the last stop before the
+    // bounty exists — the description is usually empty here (it's added
+    // post-publish, see StepPhotos), but a restored draft can carry one.
+    const contactError = validateContactInfo(draft.title, draft.description);
+    if (contactError) {
+      setError(contactError);
+      return;
+    }
+
     const amountCovered = !isForHonor && amount > 0 && balance >= amount;
 
     // No balance gate here. Posting never debits the wallet, so an amount the
@@ -175,7 +189,11 @@ export function StepPay({
     onNext({ amount, isForHonor });
   };
 
+  // Hidden for now: the "Posting is free — you'll be charged … when you
+  // accept someone" note. Flip SHOW_BALANCE_WARNING to bring it back; the
+  // balance check itself is kept so nothing else has to change.
   const showBalanceWarning =
+    SHOW_BALANCE_WARNING &&
     !draft.isForHonor && draft.amount > 0 && !validateBalance(draft.amount, balance, false);
 
   // Bounty-level trust requirement system (lib/utils/trust-tier.ts). Detection

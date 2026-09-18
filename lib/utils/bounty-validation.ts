@@ -190,3 +190,54 @@ export function validateAmount(
 
   return null;
 }
+
+/**
+ * Off-platform contact detection for poster-written text (title, description).
+ *
+ * Scammers and promoters use the free-text fields of a post to move people
+ * off the app — a phone number to text, an email to write to, a site to visit.
+ * Each pattern below targets one of those channels:
+ *
+ * - PHONE: seven or more digits in a run, allowing the separators people put
+ *   inside a phone number (spaces, dots, dashes, parentheses). Ordinary
+ *   numbers in a task — "2 bags", "3pm", "55 inch TV", "$1,200" — stay well
+ *   under seven consecutive digits and are not flagged.
+ * - EMAIL: anything shaped like local@domain.tld.
+ * - LINK: an explicit scheme or www. prefix, or a bare domain on a common TLD
+ *   ("bit.ly/x", "mysite.com"). The TLD list is deliberately the handful that
+ *   show up in promotional text, not the full registry, so a sentence that
+ *   ends with "...in the U.S." or "e.g." is not treated as a link.
+ */
+const PHONE_PATTERN = /(?:\d[\s().-]*){7,}/;
+const EMAIL_PATTERN = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+const LINK_PATTERN =
+  /(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|co|app|me|ly|gg|xyz|info|biz|us|tv|link|site|online|shop|store|dev|ai|edu)\b(?:\/\S*)?/i;
+
+/** The single error shown wherever contact info is refused, so every composer says the same thing. */
+export const CONTACT_INFO_ERROR =
+  "Numbers, links, or emails were detected. This bounty can't be posted with them — scammers and promoters use these fields to reach people off the app. Remove them and try again.";
+
+/**
+ * True when `value` contains a phone number, email address, or website link.
+ * Exposed separately from validateContactInfo for callers that want the
+ * boolean (analytics, inline hints) rather than the error string.
+ */
+export function containsContactInfo(value: string | undefined | null): boolean {
+  const text = value ?? '';
+  if (text.length === 0) return false;
+  return PHONE_PATTERN.test(text) || EMAIL_PATTERN.test(text) || LINK_PATTERN.test(text);
+}
+
+/**
+ * Validates poster-written text for off-platform contact details. Follows the
+ * same contract as validateTitle / validateAmount: error string when the text
+ * must be refused, null when it is fine. Pass every free-text field the poster
+ * controls (title and description) — checking one and not the other just
+ * moves the phone number.
+ *
+ * @param values - One or more raw strings to scan
+ * @returns CONTACT_INFO_ERROR if any value contains contact info, null otherwise
+ */
+export function validateContactInfo(...values: (string | undefined | null)[]): string | null {
+  return values.some(containsContactInfo) ? CONTACT_INFO_ERROR : null;
+}

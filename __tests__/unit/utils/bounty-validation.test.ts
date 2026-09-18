@@ -2,7 +2,16 @@
  * Unit tests for Bounty Validation Utilities
  */
 
-import { validateBalance, getAmountNeeded, getInsufficientBalanceMessage, validateAmount, validateTitle } from '../../../lib/utils/bounty-validation';
+import {
+  validateBalance,
+  getAmountNeeded,
+  getInsufficientBalanceMessage,
+  validateAmount,
+  validateTitle,
+  validateContactInfo,
+  containsContactInfo,
+  CONTACT_INFO_ERROR,
+} from '../../../lib/utils/bounty-validation';
 
 describe('Bounty Validation Utils', () => {
   describe('validateTitle', () => {
@@ -266,6 +275,57 @@ describe('Bounty Validation Utils', () => {
       expect(validateAmount(5, true, 5)).toBe('Honor bounties must have a $0 amount');
       expect(validateAmount(0.01, true, 5)).toBe('Honor bounties must have a $0 amount');
       expect(validateAmount(-0.01, true, 5)).toBe('Amount must be at least $0');
+    });
+  });
+
+  describe('validateContactInfo', () => {
+    it('should accept ordinary task text with no contact details', () => {
+      expect(validateContactInfo('Help me move furniture')).toBeNull();
+      expect(validateContactInfo('Pick up 2 bags of groceries at 3pm')).toBeNull();
+      expect(validateContactInfo('Mount my 55 inch TV')).toBeNull();
+      expect(validateContactInfo('Budget is about $1,200 total')).toBeNull();
+      expect(validateContactInfo('Meet me in the U.S. e.g. downtown')).toBeNull();
+    });
+
+    it('should accept empty, null, and undefined', () => {
+      expect(validateContactInfo('')).toBeNull();
+      expect(validateContactInfo(null)).toBeNull();
+      expect(validateContactInfo(undefined)).toBeNull();
+      expect(validateContactInfo(undefined, null, '')).toBeNull();
+    });
+
+    it('should reject phone numbers in common formats', () => {
+      expect(validateContactInfo('text me at 5551234567')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('call (555) 123-4567')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('call 555.123.4567')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('call 555 123 4567')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('+1 555-123-4567')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('my number is 123-4567')).toBe(CONTACT_INFO_ERROR);
+    });
+
+    it('should reject email addresses', () => {
+      expect(validateContactInfo('email me at someone@example.com')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('reach me: first.last+tag@mail.co.uk')).toBe(CONTACT_INFO_ERROR);
+    });
+
+    it('should reject website links', () => {
+      expect(validateContactInfo('see https://example.com/deal')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('see http://example.org')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('go to www.example.net')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('go to bit.ly/abc')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('check out mysite.com for more')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('DM me on cool-brand.io')).toBe(CONTACT_INFO_ERROR);
+    });
+
+    it('should scan every value passed and reject if any one contains contact info', () => {
+      expect(validateContactInfo('Clean title', 'but text 555-123-4567')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('visit www.example.com', 'clean description')).toBe(CONTACT_INFO_ERROR);
+      expect(validateContactInfo('Clean title', 'clean description')).toBeNull();
+    });
+
+    it('containsContactInfo should return the boolean form of the same check', () => {
+      expect(containsContactInfo('call 5551234567')).toBe(true);
+      expect(containsContactInfo('Walk my dog')).toBe(false);
     });
   });
 });

@@ -207,6 +207,7 @@ jest.mock('app/screens/CreateBounty/quick/StepPhotos', () => ({
     return (
       <View>
         <Text>StepPhotos</Text>
+        {props.detailsError ? <Text>{props.detailsError}</Text> : null}
         <TouchableOpacity
           accessibilityLabel="stub-photos-continue"
           onPress={() => {
@@ -224,6 +225,15 @@ jest.mock('app/screens/CreateBounty/quick/StepPhotos', () => ({
           }}
         >
           <Text>Continue</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityLabel="stub-photos-invalid-continue"
+          onPress={() => {
+            props.onUpdate({ description: 'Text me at 410-555-1212' });
+            props.onNext();
+          }}
+        >
+          <Text>Continue with invalid details</Text>
         </TouchableOpacity>
       </View>
     );
@@ -347,5 +357,18 @@ describe('post-publish detail saves', () => {
     expect(retryDraft.attachments).toHaveLength(2);
     expect(retryDraft.description).toBe('Third floor walk-up');
     await waitFor(() => expect(screen.getByText('StepPostPublish')).toBeTruthy());
+  });
+
+  it('blocks a same-tick invalid details edit by validating the authoritative pending draft', async () => {
+    await publishThenReachConfirmation();
+
+    fireEvent.press(screen.getByLabelText('stub-add-photos'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('stub-photos-invalid-continue'));
+    });
+
+    expect(mockedService.updateBountyDetails).not.toHaveBeenCalled();
+    expect(screen.getByText("Numbers, links, or emails were detected. This bounty can't be posted with them — scammers and promoters use these fields to reach people off the app. Remove them and try again.")).toBeTruthy();
+    expect(screen.getByText('StepPhotos')).toBeTruthy();
   });
 });

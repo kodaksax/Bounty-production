@@ -20,6 +20,7 @@ import { markPosterActivated } from 'lib/analytics/lifecycle';
 import { analyticsService } from 'lib/services/analytics-service';
 import { useStripe } from 'lib/stripe-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import { validateContactInfo } from 'lib/utils/bounty-validation';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { createForegroundTimer, getMonotonicNow } from 'lib/utils/foreground-timer';
 import { useWallet } from 'lib/wallet-context';
@@ -119,6 +120,7 @@ export function CreateBountyFlow({
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
   const [detailDraft, setDetailDraft] = useState<BountyDraft | null>(null);
   const [isSavingDetail, setIsSavingDetail] = useState(false);
+  const [detailValidationError, setDetailValidationError] = useState<string | null>(null);
   // The authoritative copy of the in-progress detail edits. `detailDraft`
   // state drives rendering; this ref is what actually gets persisted. They
   // exist separately because the step screens patch and advance within a
@@ -371,6 +373,7 @@ export function CreateBountyFlow({
     if (!postedDraft) return;
     detailDraftRef.current = postedDraft;
     setDetailDraft(postedDraft);
+    setDetailValidationError(null);
     setDetailTarget(target);
     setStepDirection(1);
   };
@@ -386,12 +389,14 @@ export function CreateBountyFlow({
     if (!base) return;
     const next = { ...base, ...patch };
     detailDraftRef.current = next;
+    setDetailValidationError(null);
     setDetailDraft(next);
   };
 
   /** Back out of a detail screen, discarding its unsaved edits. */
   const handleCancelDetail = () => {
     detailDraftRef.current = null;
+    setDetailValidationError(null);
     setDetailTarget(null);
     setDetailDraft(null);
     setStepDirection(-1);
@@ -408,11 +413,21 @@ export function CreateBountyFlow({
     // screen that patches and advances in one tick has not re-rendered yet.
     const pendingDraft = detailDraftRef.current;
     if (!postedBountyId || !pendingDraft || isSavingDetail) return;
+
+    if (detailTarget === 'photos') {
+      const contactError = validateContactInfo(pendingDraft.description);
+      if (contactError) {
+        setDetailValidationError(contactError);
+        return;
+      }
+    }
+
     setIsSavingDetail(true);
     try {
       await bountyService.updateBountyDetails(postedBountyId, pendingDraft);
       setPostedDraft(pendingDraft);
       detailDraftRef.current = null;
+      setDetailValidationError(null);
       setDetailTarget(null);
       setDetailDraft(null);
       setStepDirection(-1);
@@ -772,6 +787,7 @@ export function CreateBountyFlow({
                 onUpdate={applyDetailPatch}
                 onNext={handleSaveDetail}
                 onBack={handleCancelDetail}
+                detailsError={detailValidationError}
                 isSaving={isSavingDetail}
                 step={TOTAL_STEPS}
                 totalSteps={TOTAL_STEPS}
