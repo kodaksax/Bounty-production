@@ -467,70 +467,117 @@ async function handleUndeliveredPayout(
     if (action.kind === 'noop') {
       console.log(`[webhooks] payout.${outcome} ${payout.id}: no ledger action (${action.reason})`);
     } else {
+      const isConnectNative = candidateMetadata.connect_native === true;
       const refundAmount = Math.abs(candidateTxRow.amount);
-      const { data: failedTx, error: failedTxError } = await supabase
-        .rpc('fail_legacy_withdrawal', {
-          p_transaction_id: candidateTxRow.id,
-          p_user_id: profile.id,
-          p_stripe_payout_id: payout.id,
-          p_metadata_patch: {
-            ...candidateMetadata,
-            payout_status: outcome,
-            payout_failure_code:
-              payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
-            payout_failure_message: payout.failure_message ?? null,
-            payout_id: payout.id,
-          },
-        })
-        .single();
+      if (isConnectNative) {
+        const { data: failedNativeTx, error: failedNativeTxError } = await supabase
+          .from('wallet_transactions')
+          .update({
+            status: 'failed',
+            stripe_payout_status: outcome,
+            metadata: {
+              ...candidateMetadata,
+              payout_status: outcome,
+              payout_failure_code:
+                payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
+              payout_failure_message: payout.failure_message ?? null,
+              payout_id: payout.id,
+            },
+          })
+          .eq('id', candidateTxRow.id)
+          .eq('status', candidateTx.status)
+          .select('id')
+          .maybeSingle();
 
-      if (failedTxError) {
-        console.error(`[webhooks] Failed to apply atomic refund for payout.${outcome}`, {
-          transactionId: candidateTxRow.id,
-          payoutId: payout.id,
-          error: failedTxError,
-        });
-        throw failedTxError;
+        if (failedNativeTxError) {
+          console.error(`[webhooks] Failed to mark connect-native payout.${outcome} as failed`, {
+            transactionId: candidateTxRow.id,
+            payoutId: payout.id,
+            error: failedNativeTxError,
+          });
+          throw failedNativeTxError;
+        }
+
+        if (!failedNativeTx) {
+          console.log(
+            `[webhooks] payout.${outcome} ${payout.id}: connect-native row already advanced by another delivery`
+          );
+        } else {
+          console.log(
+            `[webhooks] Marked connect-native withdrawal ${candidateTxRow.id} as failed for payout.${outcome} ${payout.id}`
+          );
+        }
+      } else {
+        const { data: failedTx, error: failedTxError } = await supabase
+          .rpc('fail_legacy_withdrawal', {
+            p_transaction_id: candidateTxRow.id,
+            p_user_id: profile.id,
+            p_stripe_payout_id: payout.id,
+            p_metadata_patch: {
+              ...candidateMetadata,
+              payout_status: outcome,
+              payout_failure_code:
+                payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
+              payout_failure_message: payout.failure_message ?? null,
+              payout_id: payout.id,
+            },
+          })
+          .single();
+
+        if (failedTxError) {
+          console.error(`[webhooks] Failed to apply atomic refund for payout.${outcome}`, {
+            transactionId: candidateTxRow.id,
+            payoutId: payout.id,
+            error: failedTxError,
+          });
+          throw failedTxError;
+        }
+
+        const refundResult = failedTx as {
+          refunded?: boolean | null;
+          refund_amount?: number | null;
+        } | null;
+        if (!refundResult?.refunded) {
+          console.log(
+            `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
+          );
+        } else {
+          console.log(
+            `[webhooks] Refunded $${refundAmount} to user ${profile.id} for ${outcome} payout ${payout.id}`
+          );
+        }
       }
 
-      const refundResult = failedTx as {
-        refunded?: boolean | null;
-        refund_amount?: number | null;
-      } | null;
-      if (!refundResult?.refunded) {
-        console.log(
-          `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
+      await writePayoutAudit(supabase, {
+        userId: profile.id,
+        event: 'withdrawal_failed',
+        payoutMethod:
+          (candidateTxRow.payout_method as 'instant' | 'standard' | null) ?? null,
+        amountCents: Math.round(refundAmount * 100),
+        currency: payout.currency,
+        stripePayoutId: payout.id,
+        stripeConnectAccountId: accountId,
+        errorCode: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
+        errorMessage: payout.failure_message ?? null,
+        detail: {
+          transactionId: candidateTxRow.id,
+          source: `payout.${outcome}`,
+          connectNative: isConnectNative,
+        },
+      });
+      try {
+        await heycatch.trackEvent(
+          'payout_failed',
+          {
+            amount: refundAmount,
+            outcome,
+            failure_code: payout.failure_code ?? null,
+            connect_native: isConnectNative,
+          },
+          { userId: profile.id }
         );
-      } else {
-        console.log(
-          `[webhooks] Refunded $${refundAmount} to user ${profile.id} for ${outcome} payout ${payout.id}`
-        );
-        await writePayoutAudit(supabase, {
-          userId: profile.id,
-          event: 'withdrawal_failed',
-          payoutMethod:
-            (candidateTxRow.payout_method as 'instant' | 'standard' | null) ?? null,
-          amountCents: Math.round(refundAmount * 100),
-          currency: payout.currency,
-          stripePayoutId: payout.id,
-          stripeConnectAccountId: accountId,
-          errorCode: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
-          errorMessage: payout.failure_message ?? null,
-          detail: { transactionId: candidateTxRow.id, source: `payout.${outcome}` },
-        });
-        try {
-          await heycatch.trackEvent(
-            'payout_failed',
-            {
-              amount: refundAmount,
-              outcome,
-              failure_code: payout.failure_code ?? null,
-            },
-            { userId: profile.id }
-          );
-        } catch (analyticsErr) {
-          console.warn('[webhooks] HeyCatch trackEvent failed (non-fatal)', analyticsErr);
-        }
+      } catch (analyticsErr) {
+        console.warn('[webhooks] HeyCatch trackEvent failed (non-fatal)', analyticsErr);
       }
     }
   }
