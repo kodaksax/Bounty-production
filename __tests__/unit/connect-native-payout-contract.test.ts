@@ -328,3 +328,28 @@ describe('connect edge function — create-account-link capability regression', 
     expect(backfillBlock).toContain('card_payments: { requested: true }');
   });
 });
+
+describe('connect edge function — top-level error sanitization', () => {
+  test('final catch maps unexpected errors instead of returning error.message', () => {
+    const catchStart = connectSource.indexOf('} catch (error: unknown) {');
+    expect(catchStart).toBeGreaterThan(-1);
+    const catchBlock = connectSource.slice(catchStart, catchStart + 500);
+    expect(catchBlock).toContain('const mapped = mapPlatformError(error);');
+    expect(catchBlock).toContain(
+      '{ error: mapped.error, code: mapped.code, retryable: mapped.retryable }'
+    );
+    expect(catchBlock).not.toContain('error.message');
+    expect(catchBlock).not.toContain('err.message');
+  });
+
+  test('platform Stripe credential failures are marked non-retryable', () => {
+    const mapStart = connectSource.indexOf('function mapPlatformError(error: unknown):');
+    const mapEnd = connectSource.indexOf('interface NativePayoutParams', mapStart);
+    expect(mapStart).toBeGreaterThan(-1);
+    expect(mapEnd).toBeGreaterThan(mapStart);
+    const mapPlatformErrorBody = connectSource.slice(mapStart, mapEnd);
+    expect(mapPlatformErrorBody).toContain("type === 'StripeAuthenticationError'");
+    expect(mapPlatformErrorBody).toContain("type === 'StripePermissionError'");
+    expect(mapPlatformErrorBody).toContain('retryable: false');
+  });
+});
