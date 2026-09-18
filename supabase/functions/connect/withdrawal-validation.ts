@@ -160,7 +160,7 @@ export function mapStripeTransferError(err: {
 
   return {
     error:
-      'The transfer could not be completed. Your balance has not been charged — please try again or contact support.',
+      'We could not confirm whether this withdrawal completed. Check your withdrawal history before trying again — a retry is safe and will not send twice.',
     code: 'transfer_failed',
     status: 502,
   };

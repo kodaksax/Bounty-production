@@ -218,7 +218,7 @@ function mapStripeTransferError(err: { code?: string; type?: string; message?: s
 
   return {
     error:
-      'The transfer could not be completed. Your balance has not been charged — please try again or contact support.',
+      'We could not confirm whether this withdrawal completed. Check your withdrawal history before trying again — a retry is safe and will not send twice.',
     code: 'transfer_failed',
     status: 502,
   };
@@ -581,7 +581,7 @@ function mapStripePayoutError(err: {
 
   return {
     error:
-      'We could not complete this withdrawal right now. No funds have moved — please try again.',
+      'We could not confirm whether this withdrawal completed. Check your withdrawal history before trying again — a retry is safe and will not send twice.',
     code: 'payout_failed',
     status: 502,
   };

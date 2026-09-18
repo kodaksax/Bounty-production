@@ -4,32 +4,44 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useConversations } from '../../../hooks/useConversations';
+import { ErrorBoundary } from '../../../lib/error-boundary';
 import { ChatDetailScreen } from '../chat-detail-screen';
 
 export default function ConversationRoute() {
+  // A throw inside the chat screen (or the hooks it renders) must not unmount
+  // the whole app — before this boundary the only one above it was the root
+  // boundary in app/_layout.tsx, so a chat crash killed the entire app.
+  return (
+    <ErrorBoundary boundaryName="chat_detail">
+      <ConversationRouteContent />
+    </ErrorBoundary>
+  );
+}
+
+function ConversationRouteContent() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const { conversations, refresh } = useConversations();
   const router = useRouter();
   const [conversation, setConversation] = useState(
-    conversations.find(c => c.id === conversationId) || null
+    () => conversations.find(c => c.id === conversationId) ?? null
   );
   const [loading, setLoading] = useState(!conversation);
 
-  const triedRefreshRef = useRef(false);
+  const triedFetchRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        // Only attempt a refresh once per conversationId to avoid refresh ->
-        // conversations state change -> re-run loops when the conversation
-        // is still not found.
-        if (!conversation && conversationId && !triedRefreshRef.current) {
-          triedRefreshRef.current = true;
-          const updated = await refresh(); // fetch the latest list and receive fresh data
-          const list = Array.isArray(updated) ? updated : conversations;
-          const found = list.find(c => c.id === conversationId);
-          if (mounted && found) setConversation(found);
+        // A conversation created just before navigation is often not in the
+        // currently loaded list yet, so refresh the authenticated, participant-
+        // scoped conversation list once (matching useConversations) and resolve
+        // by ID from that result. Guarded to run once per conversationId.
+        if (!conversation && conversationId && !triedFetchRef.current) {
+          triedFetchRef.current = true;
+          const refreshed = await refresh();
+          const fetched = refreshed?.find(c => c.id === conversationId) ?? null;
+          if (mounted && fetched) setConversation(fetched);
         }
       } catch (e) {
         console.log('Failed to load conversation', { err: String(e), conversationId });
@@ -40,10 +52,10 @@ export default function ConversationRoute() {
     return () => {
       mounted = false;
     };
-  }, [conversationId, refresh]);
+  }, [conversation, conversationId, refresh]);
 
   // If the conversations list is updated elsewhere, pick up the matching
-  // conversation without triggering another refresh call.
+  // conversation without triggering another fetch call.
   useEffect(() => {
     if (!conversation && conversationId) {
       const found = conversations.find(c => c.id === conversationId);

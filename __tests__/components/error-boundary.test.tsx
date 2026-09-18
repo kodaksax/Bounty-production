@@ -15,11 +15,16 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { Text } from 'react-native';
+import { captureException as posthogCaptureException } from '../../lib/posthog';
 import {
   ErrorBoundary,
   formatTechnicalDetails,
   redactSensitiveTechnicalDetails,
 } from '../../lib/error-boundary';
+
+jest.mock('../../lib/posthog', () => ({
+  captureException: jest.fn(),
+}));
 
 // Silence the dev-mode console noise from componentDidCatch / React.
 beforeEach(() => {
@@ -252,5 +257,21 @@ describe('ErrorBoundary fallback UI', () => {
     expect(getByText('Something Went Wrong')).toBeTruthy();
     fireEvent.press(getByLabelText('Show technical details'));
     expect(getAllByText(/Cannot read property string of undefined/).length).toBeGreaterThan(0);
+  });
+
+  it('reports the caught error to PostHog error tracking', () => {
+    (posthogCaptureException as jest.Mock).mockClear();
+    const err = new Error('report me to posthog');
+
+    render(
+      <ErrorBoundary boundaryName="chat_detail">
+        <Boom error={err} />
+      </ErrorBoundary>
+    );
+
+    expect(posthogCaptureException).toHaveBeenCalledWith(
+      err,
+      expect.objectContaining({ error_boundary: 'chat_detail' })
+    );
   });
 });

@@ -288,6 +288,55 @@ describe('useConnectPayout', () => {
     );
   });
 
+  it.each(['failed', 'canceled', 'cancelled'])(
+    'keeps the attempt keyed when Stripe reports %s before webhook settlement',
+    async status => {
+      mockFetch({ ok: true, json: () => Promise.resolve({ ...SUCCESS, status }) });
+      const { result } = renderHook(() => useConnectPayout());
+
+      await act(async () => {
+        await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+      });
+
+      await waitFor(() => expect(result.current.phase).toBe('failed'));
+      expect(result.current.result).toBeNull();
+      expect(result.current.error).toMatchObject({ code: 'unknown_payout_state', retryable: true });
+      const eventNames = (analyticsService.trackEvent as jest.Mock).mock.calls.map(c => c[0]);
+      expect(eventNames).toEqual(['payout_initiated', 'payout_failed']);
+      expect(eventNames).not.toContain('payout_success');
+    }
+  );
+
+  it('retains the idempotency key until a failed status is replayed from a duplicate row', async () => {
+    mockFetch({ ok: true, json: () => Promise.resolve({ ...SUCCESS, status: 'failed' }) });
+    const { result } = renderHook(() => useConnectPayout());
+
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+    });
+    await waitFor(() => expect(result.current.phase).toBe('failed'));
+    const firstKey = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).idempotencyKey;
+
+    mockFetch({
+      ok: true,
+      json: () => Promise.resolve({ ...SUCCESS, status: 'failed', duplicate: true }),
+    });
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+    });
+    await waitFor(() => expect(result.current.phase).toBe('failed'));
+    const replayKey = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).idempotencyKey;
+    expect(replayKey).toBe(firstKey);
+    expect(result.current.error?.code).toBe('payout_declined');
+
+    mockFetch({ ok: true, json: () => Promise.resolve(SUCCESS) });
+    await act(async () => {
+      await result.current.withdraw({ amountCents: 1250, method: 'standard' });
+    });
+    const newAttemptKey = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).idempotencyKey;
+    expect(newAttemptKey).not.toBe(firstKey);
+  });
+
   it('fails safely when there is no session', async () => {
     (useAuthContext as jest.Mock).mockReturnValue({ session: null });
     mockFetch({ ok: true, json: () => Promise.resolve(SUCCESS) });
