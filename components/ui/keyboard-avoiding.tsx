@@ -333,8 +333,23 @@ export const KeyboardAwareScrollView = forwardRef<ScrollView, KeyboardAwareScrol
       });
     };
 
-    const subscription = Keyboard.addListener('keyboardDidShow', scrollFocusedInputClear);
-    return () => subscription.remove();
+    let keyboardVisible = false;
+    const showSubscription = Keyboard.addListener('keyboardDidShow', event => {
+      keyboardVisible = true;
+      scrollFocusedInputClear(event);
+    });
+    const changeFrameSubscription = Keyboard.addListener('keyboardDidChangeFrame', event => {
+      if (!keyboardVisible) return;
+      scrollFocusedInputClear(event);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardVisible = false;
+    });
+    return () => {
+      showSubscription.remove();
+      changeFrameSubscription.remove();
+      hideSubscription.remove();
+    };
   }, [enabled, extraScrollPadding]);
 
   return (

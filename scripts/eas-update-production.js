@@ -72,10 +72,10 @@ function parsePlatforms(argv) {
   return [...new Set(platforms)];
 }
 
-function runInherited(cmd, args, extraEnv) {
+function runInherited(cmd, args, extraEnv, options) {
   const result = spawnSync(cmd, args, {
     stdio: 'inherit',
-    shell: true,
+    shell: options?.shell ?? true,
     env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
   });
   if (result.error) {
@@ -196,7 +196,7 @@ function main() {
   // 4. Publish.
   console.log('\n[update:production] Guardrails passed. Publishing...\n');
   const publishStatus = runInherited(
-    'eas',
+    process.platform === 'win32' ? 'eas.cmd' : 'eas',
     [
       'update',
       '--branch',
@@ -209,13 +209,12 @@ function main() {
       // still looks like a successful publish in `eas update:list`.
       '--platform',
       platforms.length === ALL_PLATFORMS.length ? 'all' : platforms[0],
-      // runInherited spawns through a shell, so the message has to be quoted
-      // or a multi-word message splits into stray arguments.
-      ...(message ? ['--message', JSON.stringify(message), '--non-interactive'] : []),
+      ...(message ? ['--message', message, '--non-interactive'] : []),
     ],
     {
       APP_ENV: ENVIRONMENT,
-    }
+    },
+    { shell: false }
   );
   if (publishStatus !== 0) {
     console.error('\n[update:production] "eas update" exited non-zero — publish did not succeed.');

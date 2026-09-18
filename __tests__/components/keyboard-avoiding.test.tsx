@@ -270,6 +270,18 @@ describe('KeyboardAwareScrollView', () => {
     expect(scrollTo).toHaveBeenCalledWith({ y: 460, animated: true });
   });
 
+  it('waits for keyboardDidShow before reacting to later frame changes', () => {
+    const scrollTo = stage({ inputY: 400, contentY: 400, scrollY: 120 });
+    emit('keyboardDidChangeFrame', keyboardEvent(360));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    emit('keyboardDidShow', keyboardEvent(280));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    emit('keyboardDidChangeFrame', keyboardEvent(360));
+    expect(scrollTo).toHaveBeenCalledWith({ y: 184, animated: true });
+  });
+
   it('leaves the scroll position alone when the input is already clear', () => {
     // Bottom at 400 < 476 - 16: nothing to do, and no yank down to the edge.
     const scrollTo = stage({ inputY: 300, contentY: 300, scrollY: 120 });
@@ -298,6 +310,7 @@ describe('KeyboardAwareScrollView', () => {
     try {
       stage({ inputY: 700, contentY: 700, scrollY: 120 });
       expect(listeners.keyboardDidShow ?? []).toHaveLength(0);
+      expect(listeners.keyboardDidChangeFrame ?? []).toHaveLength(0);
     } finally {
       Platform.OS = os;
     }
