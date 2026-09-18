@@ -99,7 +99,7 @@ describe('getScheduleChip', () => {
 
   test('flexible falls back to a duration hint or a generic label', () => {
     expect(getScheduleChip('flexible', null, null, 240)).toEqual({
-      label: '~~4 hrs',
+      label: '~4 hrs',
       icon: '⏱',
       variant: 'muted',
     });
@@ -167,7 +167,7 @@ describe('getScheduleChip', () => {
   describe('scheduled — no dates', () => {
     test('uses duration as a fallback when present', () => {
       const chip = getScheduleChip('scheduled', null, null, 120);
-      expect(chip).toEqual({ label: '~~2 hrs', icon: '⌛', variant: 'muted' });
+      expect(chip).toEqual({ label: '~2 hrs', icon: '⌛', variant: 'muted' });
     });
 
     test('returns null when nothing else is known', () => {

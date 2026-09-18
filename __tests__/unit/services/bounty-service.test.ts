@@ -5,7 +5,10 @@ jest.mock('../../../lib/supabase', () => ({
   supabase: { from: jest.fn() },
   isSupabaseConfigured: true,
 }));
-jest.mock('../../../lib/utils/bounty-validation', () => ({ validateTitle: jest.fn() }));
+jest.mock('../../../lib/utils/bounty-validation', () => ({
+  validateTitle: jest.fn(),
+  validateContactInfo: jest.fn(() => null),
+}));
 jest.mock('../../../lib/utils/error-logger', () => ({
   logger: { error: jest.fn(), warning: jest.fn() },
 }));
