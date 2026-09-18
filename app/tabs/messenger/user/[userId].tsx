@@ -97,7 +97,7 @@ export default function UserConversationRoute() {
         supabaseMessaging.markAsRead(conversationId, currentUserId).catch(() => {})
       )
     );
-  }, [backingConversationIds, conversation?.updatedAt]);
+  }, [backingConversationIds]);
 
   useEffect(() => {
     if (!userId || backingConversationIds.length === 0) return;
