@@ -235,6 +235,8 @@ export const bountyService = {
         neighborhood: draft.workType === 'in_person' ? draft.neighborhood || undefined : undefined,
         work_type: draft.workType,
         category: draft.category || undefined,
+        trust_tier: draft.trustTier || 'standard',
+        requires_id_verified: !!draft.requiresIdVerified,
         timeline: draft.timeline || '',
         skills_required: draft.skills || '',
         poster_id: posterId,

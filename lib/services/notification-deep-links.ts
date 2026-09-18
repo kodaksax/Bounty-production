@@ -66,6 +66,13 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'application_pending_reminder' && bountyId) {
         return { kind: 'route', path: `/postings/${bountyId}` };
       }
+      // Poster-facing "you never rated your hunter" nudge: go to the poster's
+      // own bounty management screen, where my-posting-expandable.tsx's
+      // review button re-opens PosterReviewModal straight onto the rating
+      // step (it re-shows automatically for an approved, unrated submission).
+      if (ctx.type === 'rating_reminder' && bountyId) {
+        return { kind: 'route', path: `/postings/${bountyId}` };
+      }
       // A new application is only ever sent to the poster, and the only thing
       // to do with it is accept/decline -- land on the Requests tab where that
       // happens (GitHub #809), even for bundled notifications with no bountyId.

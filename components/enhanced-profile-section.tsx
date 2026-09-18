@@ -11,10 +11,12 @@ import { useProfileImageViewer } from 'hooks/useProfileImageViewer';
 import { useRatings } from 'hooks/useRatings';
 import { OptimizedImage } from 'lib/components/OptimizedImage';
 import { FOLLOW_FEATURE_ENABLED } from 'lib/feature-flags';
+import { analyticsService } from 'lib/services/analytics-service';
 import { blockingService } from 'lib/services/blocking-service';
 import { MAX_PORTFOLIO_ITEMS, portfolioService } from 'lib/services/portfolio-service';
 import type { PortfolioItem } from 'lib/types';
 import { normalizeAuthProfile, type NormalizedProfile } from 'lib/utils/normalize-profile';
+import { MIN_RATING_SAMPLE } from 'lib/utils/trust-summary';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -73,8 +75,9 @@ interface EnhancedProfileSectionProps {
   isOwnProfile?: boolean;
   showPortfolio?: boolean;
   activityStats?: {
+    /** Bounties completed AS THE HUNTER (get_profile_activity_stats.hunter_completed). This is what "Jobs Completed" shows. */
     jobsCompleted?: number;
-    jobsAccepted?: number;
+    /** Bounties this profile POSTED (any status open/in_progress/completed) — shown separately as "Bounties Posted". */
     bountiesPosted?: number;
   };
   hideActions?: boolean;
@@ -239,7 +242,7 @@ export function EnhancedProfileSection({
     deleteItem,
     addItem,
     refresh,
-  } = usePortfolio(resolvedUserId);
+  } = usePortfolio(resolvedUserId, isOwnProfile);
 
   const {
     pickAndUpload,
@@ -262,6 +265,10 @@ export function EnhancedProfileSection({
         Alert.alert("Couldn't save that item", 'Your file uploaded, but we could not add it to your portfolio. Please try again.');
         return;
       }
+      analyticsService.trackEvent('portfolio_item_added', {
+        owner_id: resolvedUserId,
+        item_type: item.type,
+      });
       try {
         await refresh();
       } catch (e) {
@@ -279,7 +286,11 @@ export function EnhancedProfileSection({
   } = useFollow(userId || '', authProfileFromHook?.id || '');
 
   const ratingUserId = resolvedUserId === 'current-user' ? undefined : resolvedUserId;
-  const { stats: ratingStats, loading: ratingsLoading } = useRatings(ratingUserId);
+  // Only the aggregated average/count is used here -- skip fetching the
+  // individual ratings rows useRatings would otherwise pull in parallel.
+  const { stats: ratingStats, loading: ratingsLoading } = useRatings(ratingUserId, {
+    includeRatings: false,
+  });
 
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<PortfolioItem | null>(null);
   const [isReordering, setIsReordering] = useState(false);
@@ -383,17 +394,30 @@ export function EnhancedProfileSection({
 
   const renderReputationScore = () => {
     if (ratingsLoading) return null;
+    // Below MIN_RATING_SAMPLE ratings, an average reads as more certain than
+    // it is (a single 5-star rating would show as "★5.0"). Show an honest
+    // review count instead of a misleadingly precise average -- see
+    // lib/utils/trust-summary.ts, which the applicant card uses for the same
+    // rule.
+    if (ratingStats.ratingCount === 0) return null;
+    if (ratingStats.ratingCount < MIN_RATING_SAMPLE) {
+      return (
+        <View className="flex-row items-center mt-1">
+          <Text className="text-xs" style={{ color: theme.textSecondary }}>
+            {ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      );
+    }
     return (
       <View className="flex-row items-center mt-1">
         <ReputationScoreCompact
           averageRating={ratingStats.averageRating}
           ratingCount={ratingStats.ratingCount}
         />
-        {ratingStats.ratingCount > 0 && (
-          <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
-            ({ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''})
-          </Text>
-        )}
+        <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
+          ({ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''})
+        </Text>
       </View>
     );
   };
@@ -640,7 +664,7 @@ export function EnhancedProfileSection({
         <View className="flex-row justify-around mt-4 pt-3 border-t" style={{ borderTopColor: theme.surfaceSecondary }}>
           <View className="items-center">
             <Text className="text-2xl font-bold" style={{ color: theme.text }}>
-              {activityStats?.jobsCompleted ?? activityStats?.jobsAccepted ?? 0}
+              {activityStats?.jobsCompleted ?? 0}
             </Text>
             <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Jobs Completed</Text>
           </View>
@@ -656,15 +680,17 @@ export function EnhancedProfileSection({
           )}
         </View>
 
-        {/* Joined Date */}
-        <View className="mt-3 items-center">
-          <Text className="text-xs" style={{ color: theme.textSecondary }}>
-            Joined{' '}
-            {new Date(
-              (effectiveProfile as any).created_at || effectiveProfile.joinDate || Date.now()
-            ).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </Text>
-        </View>
+        {/* Joined Date — only render when we have a real join date; never fabricate one */}
+        {((effectiveProfile as any).created_at || effectiveProfile.joinDate) && (
+          <View className="mt-3 items-center">
+            <Text className="text-xs" style={{ color: theme.textSecondary }}>
+              Joined{' '}
+              {new Date(
+                (effectiveProfile as any).created_at || effectiveProfile.joinDate
+              ).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Text>
+          </View>
+        )}
         </View>
       </View>
 
@@ -684,7 +710,7 @@ export function EnhancedProfileSection({
         <View className="mb-4">
           <View className="flex-row justify-between items-center mb-2">
             <View className="flex-row items-center">
-              <Text className="text-sm font-medium" style={{ color: theme.text }}>Portfolio</Text>
+              <Text className="text-sm font-medium" style={{ color: theme.text }}>Work Samples</Text>
               <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
                 ({items.length}/{MAX_PORTFOLIO_ITEMS})
               </Text>
@@ -720,6 +746,9 @@ export function EnhancedProfileSection({
               </View>
             )}
           </View>
+          <Text className="text-xs mb-2" style={{ color: theme.textSecondary }}>
+            Work samples — provided by hunter. Not verified by Bounty.
+          </Text>
           {(isPicking || isUploading) && (
             <UploadProgressBar progress={progress} message={uploadMessage} />
           )}
@@ -760,7 +789,16 @@ export function EnhancedProfileSection({
                   <TouchableOpacity
                     key={item.id}
                     className="relative"
-                    onPress={() => !isReordering && setSelectedPortfolioItem(item)}
+                    onPress={() => {
+                      if (isReordering) return;
+                      setSelectedPortfolioItem(item);
+                      analyticsService.trackEvent('portfolio_item_viewed', {
+                        item_id: item.id,
+                        owner_id: resolvedUserId,
+                        is_own_profile: isOwnProfile,
+                        item_type: item.type,
+                      });
+                    }}
                     onLongPress={() =>
                       isOwnProfile && !isReordering && handleDeletePortfolioItem(item.id)
                     }
@@ -952,7 +990,7 @@ export function PortfolioSection({
     deleteItem,
     addItem,
     refresh,
-  } = usePortfolio(resolvedUserId);
+  } = usePortfolio(resolvedUserId, isOwnProfile);
 
   const {
     pickAndUpload,
@@ -975,6 +1013,10 @@ export function PortfolioSection({
         Alert.alert("Couldn't save that item", 'Your file uploaded, but we could not add it to your portfolio. Please try again.');
         return;
       }
+      analyticsService.trackEvent('portfolio_item_added', {
+        owner_id: resolvedUserId,
+        item_type: item.type,
+      });
       try {
         await refresh();
       } catch (e) {
@@ -1004,11 +1046,29 @@ export function PortfolioSection({
     ]);
   };
 
+  // Portfolio items are now server-backed (see lib/services/portfolio-service.ts,
+  // supabase/migrations/20260914160000_portfolio_items.sql), so a poster
+  // viewing a hunter's profile sees the hunter's real items. Nothing to show
+  // (and nothing this viewer can do about it) on someone else's empty
+  // portfolio, so skip rendering the section entirely rather than nudge a
+  // viewer who isn't the owner to "Add Item".
+  if (!isOwnProfile && !portfolioLoading && items.length === 0) return null;
+
+  const handleViewItem = (item: PortfolioItem) => {
+    setSelectedPortfolioItem(item);
+    analyticsService.trackEvent('portfolio_item_viewed', {
+      item_id: item.id,
+      owner_id: resolvedUserId,
+      is_own_profile: isOwnProfile,
+      item_type: item.type,
+    });
+  };
+
   return (
     <View className="mb-4 px-4" style={{ backgroundColor: theme.background }}>
       <View className="flex-row justify-between items-center mb-2">
         <View className="flex-row items-center">
-          <Text className="text-lg font-medium" style={{ color: theme.text }}>Portfolio</Text>
+          <Text className="text-lg font-medium" style={{ color: theme.text }}>Work Samples</Text>
           <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
             ({items.length}/{MAX_PORTFOLIO_ITEMS})
           </Text>
@@ -1039,19 +1099,22 @@ export function PortfolioSection({
           </View>
         )}
       </View>
+      <Text className="text-xs mb-2" style={{ color: theme.textSecondary }}>
+        Work samples — provided by hunter. Not verified by Bounty.
+      </Text>
       {(isPicking || isUploading) && (
         <UploadProgressBar progress={progress} message={uploadMessage} />
       )}
       {portfolioLoading ? (
         <PortfolioSkeleton count={3} />
       ) : items.length === 0 && !lastPickedStandalone ? (
-        <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
-          <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
-            {isOwnProfile
-              ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.'
-              : "This user hasn't added portfolio items yet."}
-          </Text>
-        </View>
+        isOwnProfile ? (
+          <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
+            <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
+              Showcase your work! Tap "Add Item" to upload images, videos, or files.
+            </Text>
+          </View>
+        ) : null
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-3">
@@ -1078,7 +1141,7 @@ export function PortfolioSection({
               <TouchableOpacity
                 key={item.id}
                 className="relative"
-                onPress={() => !isReordering && setSelectedPortfolioItem(item)}
+                onPress={() => !isReordering && handleViewItem(item)}
                 onLongPress={() =>
                   isOwnProfile && !isReordering && handleDeletePortfolioItem(item.id)
                 }

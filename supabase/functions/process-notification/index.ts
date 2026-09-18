@@ -83,7 +83,7 @@ const TYPE_CATEGORY: Record<string, Category> = {
   stale_bounty: 'marketplace', stale_bounty_cancelled: 'marketplace', stale_bounty_reposted: 'marketplace',
   update: 'marketplace', bounty_nearby: 'marketplace', bounty_expiry: 'marketplace', review_needed: 'marketplace',
   bounty_quality_nudge: 'marketplace',
-  application_pending_reminder: 'marketplace', application_expired: 'marketplace',
+  application_pending_reminder: 'marketplace', application_expired: 'marketplace', rating_reminder: 'marketplace',
   message: 'messages',
   payment: 'payments', payout_paid: 'payments', payout_failed: 'payments', payout_canceled: 'payments',
   withdrawal_reversed: 'payments', bank_disconnected: 'payments', payout_method_changed: 'payments',

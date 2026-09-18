@@ -55,6 +55,7 @@ import { getBountyStages } from '../../../lib/utils/bounty-lifecycle';
 import type { BountyActionKey } from '../../../lib/utils/bounty-lifecycle';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { bountyHoldsUnreleasedEscrow } from '../../../lib/utils/payment-architecture';
+import { getTrustTierLabel } from '../../../lib/utils/trust-tier';
 import { shareBounty } from '../../../lib/utils/share-utils';
 
 /** Requests tab inside the Inbox shell — where applications are reviewed. */
@@ -399,6 +400,21 @@ export default function BountyDashboard() {
               />
             )}
           </View>
+
+          {/* Bounty-level trust requirement system (lib/utils/trust-tier.ts):
+              tells the poster WHY their applicant pool is filtered, without
+              re-litigating the choice — there's no edit-after-posting UI for
+              this in scope. */}
+          {bounty.requires_id_verified && (
+            <View style={s.metaRow}>
+              <MetaChip
+                icon="verified-user"
+                label={`Only ID-verified hunters can apply — ${getTrustTierLabel(bounty.trust_tier)}`}
+                s={s}
+                color={theme.primary}
+              />
+            </View>
+          )}
         </View>
 
         {/* ── The command center: what's happening, what's next, what to do ── */}
@@ -490,7 +506,13 @@ export default function BountyDashboard() {
               {!!otherParty.id && (
                 <TouchableOpacity
                   style={s.outlineBtn}
-                  onPress={() => router.push(`/profile/${otherParty.id}` as never)}
+                  onPress={() =>
+                    router.push(
+                      `/profile/${otherParty.id}?source=bounty_dashboard&isApplicant=false&bountyId=${encodeURIComponent(
+                        String(bounty.id)
+                      )}` as never
+                    )
+                  }
                   accessibilityRole="button"
                   accessibilityLabel={`View ${hunterName}'s profile`}
                 >

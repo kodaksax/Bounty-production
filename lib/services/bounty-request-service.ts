@@ -22,6 +22,49 @@ const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   (typeof __DEV__ !== 'undefined' && __DEV__ ? getApiBase() : 'http://localhost:3001');
 
+export interface BatchedProfileStats {
+  hunterCompleted: number;
+  /** Null (not 0) when no average is available -- see lib/utils/trust-summary.ts. */
+  averageRating: number | null;
+  ratingCount: number;
+}
+
+/**
+ * Batched hunter-side stats (completed count + rating average/count) for a
+ * list of user ids, via get_profile_activity_stats_batch
+ * (20260914140000_batch_hunter_completed_stats.sql, extended with
+ * rating_avg/rating_count by 20260914150000_ratings_completion_loop.sql).
+ * One RPC call for the whole applicant list instead of one per applicant, and
+ * instead of the two separate hand-rolled `ratings` aggregations this used to
+ * do here (getAllWithDetails and getAllWithDetailsBatch each ran their own).
+ * Never throws: a stats hiccup must not block the applicant list from
+ * rendering, so callers get an empty map (and therefore a "New to Bounty" /
+ * 0-completed fallback) on failure.
+ */
+async function fetchBatchedProfileStats(userIds: string[]): Promise<Map<string, BatchedProfileStats>> {
+  const map = new Map<string, BatchedProfileStats>();
+  if (userIds.length === 0) return map;
+  try {
+    const { data, error } = await supabase.rpc('get_profile_activity_stats_batch', {
+      target_user_ids: userIds,
+    });
+    if (error) throw error;
+    for (const row of (data || []) as any[]) {
+      map.set(String(row.user_id), {
+        hunterCompleted: Number(row.hunter_completed) || 0,
+        averageRating: row.rating_avg == null ? null : Number(row.rating_avg),
+        ratingCount: Number(row.rating_count) || 0,
+      });
+    }
+  } catch (err) {
+    logger.warning('Failed to load batched profile stats for bounty requests', {
+      error: err,
+      userIds,
+    });
+  }
+  return map;
+}
+
 /**
  * Emits `first_submission_received` when the application just inserted is the
  * first one on its bounty — the second half of the posting funnel and the
@@ -255,7 +298,7 @@ export const bountyRequestService = {
           );
         }
 
-        const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }] =
+        const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }, profileStatsMap] =
           await Promise.all([
             bountyIds.length
               ? supabase.from('bounties').select('*').in('id', bountyIds)
@@ -268,61 +311,24 @@ export const bountyRequestService = {
                   // poster's bounty-request list, and base-table SELECT RLS is
                   // self-only (`auth.uid() = id`), so `profiles` returns nothing
                   // here. See docs/withdrawals/08-profiles-rls-migration-strategy.md.
-                  .select('id, username, display_name, avatar, location, about, verification_status, created_at')
+                  //
+                  // stripe_identity_status/verified_since are included so
+                  // applicant-card.tsx can show the real ID-verification
+                  // state -- this select previously omitted them entirely,
+                  // so every applicant card showed "unverified" regardless
+                  // of actual status. `verification_status` (no stripe_
+                  // prefix) is a different, unrelated risk-management
+                  // column -- see 20260725000000_add_stripe_identity_columns.sql
+                  // -- kept here only because existing code may still read it.
+                  // skills/skill_categories back the applicant card's "skills
+                  // relevant to this bounty" row.
+                  .select('id, username, display_name, avatar, location, about, verification_status, created_at, stripe_identity_status, verified_since, skills, skill_categories')
                   .in('id', userIds)
               : Promise.resolve({ data: [], error: null } as any),
+            fetchBatchedProfileStats(userIds),
           ]);
         if (bErr) throw bErr;
         if (pErr) throw pErr;
-
-        const ratingStatsMap = new Map<string, { averageRating: number; ratingCount: number }>();
-        if (userIds.length > 0) {
-          try {
-            const { data: ratingRows, error: ratingsErr } = await supabase
-              .from('ratings')
-              .select('to_user_id, rating')
-              .in('to_user_id', userIds);
-
-            if (ratingsErr) throw ratingsErr;
-
-            for (const row of (ratingRows || []) as any[]) {
-              const userId = String(row.to_user_id);
-              const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 };
-              const nextCount = current.ratingCount + 1;
-              const nextAvg =
-                (current.averageRating * current.ratingCount + Number(row.rating || 0)) / nextCount;
-              ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount });
-            }
-          } catch (ratingsErr) {
-            logger.warning(
-              'Primary ratings query failed; falling back to legacy user_ratings table for bounty requests',
-              { error: ratingsErr, userIds }
-            );
-            // Backward compatibility for environments still using legacy `user_ratings`.
-            try {
-              const { data: ratingRowsLegacy, error: legacyErr } = await supabase
-                .from('user_ratings')
-                .select('user_id, score')
-                .in('user_id', userIds);
-
-              if (legacyErr) throw legacyErr;
-
-              for (const row of (ratingRowsLegacy || []) as any[]) {
-                const userId = String(row.user_id);
-                const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 };
-                const nextCount = current.ratingCount + 1;
-                const nextAvg =
-                  (current.averageRating * current.ratingCount + Number(row.score || 0)) /
-                  nextCount;
-                ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount });
-              }
-            } catch (legacyRatingErr) {
-              logger.warning('Failed to load rating aggregates for bounty requests', {
-                error: legacyRatingErr,
-              });
-            }
-          }
-        }
 
         const bountyMap = new Map<string, Bounty>(
           (bounties as any[]).map((b: any) => [b.id, b as Bounty])
@@ -331,14 +337,20 @@ export const bountyRequestService = {
           (profiles as any[]).map((p: any) => [p.id, p as Profile])
         );
 
-        const result: BountyRequestWithDetails[] = requests.map(r => ({
-          ...(r as any),
-          bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
-          profile: {
-            ...(profileMap.get(String((r as any).hunter_id)) as Profile),
-            ...(ratingStatsMap.get(String((r as any).hunter_id)) || {}),
-          } as Profile,
-        }));
+        const result: BountyRequestWithDetails[] = requests.map(r => {
+          const hunterId = String((r as any).hunter_id);
+          const stats = profileStatsMap.get(hunterId);
+          return {
+            ...(r as any),
+            bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
+            profile: {
+              ...(profileMap.get(hunterId) as Profile),
+              averageRating: stats?.averageRating ?? null,
+              ratingCount: stats?.ratingCount ?? 0,
+              hunterCompleted: stats?.hunterCompleted ?? 0,
+            } as Profile,
+          };
+        });
         return result;
       }
 
@@ -429,7 +441,7 @@ export const bountyRequestService = {
           )
         );
 
-        const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }] =
+        const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }, profileStatsMap] =
           await Promise.all([
             bountyIdsSet.length
               ? supabase.from('bounties').select('*').in('id', bountyIdsSet)
@@ -442,37 +454,17 @@ export const bountyRequestService = {
                   // poster's bounty-request list, and base-table SELECT RLS is
                   // self-only (`auth.uid() = id`), so `profiles` returns nothing
                   // here. See docs/withdrawals/08-profiles-rls-migration-strategy.md.
-                  .select('id, username, display_name, avatar, location, about, verification_status, created_at')
+                  //
+                  // stripe_identity_status/verified_since included -- see the
+                  // matching comment in getAllWithDetails above. skills/
+                  // skill_categories back the applicant card's relevant-skills row.
+                  .select('id, username, display_name, avatar, location, about, verification_status, created_at, stripe_identity_status, verified_since, skills, skill_categories')
                   .in('id', userIds)
               : Promise.resolve({ data: [], error: null } as any),
+            fetchBatchedProfileStats(userIds),
           ]);
         if (bErr) throw bErr;
         if (pErr) throw pErr;
-
-        const ratingStatsMap = new Map<string, { averageRating: number; ratingCount: number }>();
-        if (userIds.length > 0) {
-          try {
-            const { data: ratingRows, error: ratingsErr } = await supabase
-              .from('ratings')
-              .select('to_user_id, rating')
-              .in('to_user_id', userIds);
-
-            if (ratingsErr) throw ratingsErr;
-
-            for (const row of (ratingRows || []) as any[]) {
-              const userId = String(row.to_user_id);
-              const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 };
-              const nextCount = current.ratingCount + 1;
-              const nextAvg =
-                (current.averageRating * current.ratingCount + Number(row.rating || 0)) / nextCount;
-              ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount });
-            }
-          } catch (ratingsErr) {
-            logger.warning('Failed to load rating aggregates for batch requests', {
-              error: ratingsErr,
-            });
-          }
-        }
 
         const bountyMap = new Map<string, Bounty>(
           (bounties as any[]).map((b: any) => [b.id, b as Bounty])
@@ -481,14 +473,20 @@ export const bountyRequestService = {
           (profiles as any[]).map((p: any) => [p.id, p as Profile])
         );
 
-        const result: BountyRequestWithDetails[] = requests.map(r => ({
-          ...(r as any),
-          bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
-          profile: {
-            ...(profileMap.get(String((r as any).hunter_id)) as Profile),
-            ...(ratingStatsMap.get(String((r as any).hunter_id)) || {}),
-          } as Profile,
-        }));
+        const result: BountyRequestWithDetails[] = requests.map(r => {
+          const hunterId = String((r as any).hunter_id);
+          const stats = profileStatsMap.get(hunterId);
+          return {
+            ...(r as any),
+            bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
+            profile: {
+              ...(profileMap.get(hunterId) as Profile),
+              averageRating: stats?.averageRating ?? null,
+              ratingCount: stats?.ratingCount ?? 0,
+              hunterCompleted: stats?.hunterCompleted ?? 0,
+            } as Profile,
+          };
+        });
         return result;
       }
 

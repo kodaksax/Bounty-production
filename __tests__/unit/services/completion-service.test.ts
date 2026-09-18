@@ -616,6 +616,19 @@ describe('CompletionService', () => {
       expect(mockSupabase.from).toHaveBeenCalledWith('completion_submissions');
     });
 
+    it('should stamp reviewed_at so fn_remind_pending_hunter_ratings has a watermark', async () => {
+      const updateMock = jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error: null }),
+      });
+      mockSupabase.from.mockReturnValue({ update: updateMock });
+
+      await completionService.approveCompletion('submission123');
+
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'approved', reviewed_at: expect.any(String) })
+      );
+    });
+
     it('should throw error on approval failure', async () => {
       mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnValue({
@@ -847,6 +860,23 @@ describe('CompletionService', () => {
       await expect(completionService.submitRating(mockRating)).rejects.toThrow(
         'Constraint violation'
       );
+    });
+
+    it('should treat a duplicate rating (unique constraint violation) as a no-op instead of throwing', async () => {
+      mockSupabase.from.mockReturnValue({
+        insert: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnValue({
+            single: jest.fn().mockResolvedValue({
+              data: null,
+              error: { code: '23505', message: 'duplicate key value violates unique constraint "ratings_bounty_from_to_uidx"' },
+            }),
+          }),
+        }),
+      });
+
+      const result = await completionService.submitRating(mockRating);
+
+      expect(result).toBeNull();
     });
   });
 

@@ -802,7 +802,10 @@ export const completionService = {
       if (isSupabaseConfigured) {
         const { error } = await supabase
           .from('completion_submissions')
-          .update({ status: 'approved' })
+          // reviewed_at doubles as the watermark fn_remind_pending_hunter_ratings
+          // uses to decide whether a poster is overdue on rating this hunter --
+          // see supabase/migrations/20260914150000_ratings_completion_loop.sql.
+          .update({ status: 'approved', reviewed_at: new Date().toISOString() })
           .eq('id', submissionId);
 
         if (error) throw error;
@@ -1051,6 +1054,16 @@ export const completionService = {
 
         if (!error) {
           return data as Rating;
+        }
+
+        if (error.code === '23505') {
+          // ratings_bounty_from_to_uidx already has a row for this
+          // (bounty, rater, ratee) triple -- a duplicate submission (double
+          // tap, or re-opening the rating step after already rating).
+          // Treat as a no-op success rather than surfacing "Rating Error" for
+          // something that already succeeded.
+          logger.warning('Duplicate rating submission ignored', { rating: payload });
+          return null;
         }
 
         const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();

@@ -3,12 +3,12 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BrandingLogo } from "components/ui/branding-logo"
-import * as DocumentPicker from 'expo-document-picker'
 import { useEffect, useState } from "react"
 import { Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories'
+import { analyticsService } from '../lib/services/analytics-service'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 
 import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
@@ -47,7 +47,6 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   const [skills, setSkills] = useState<Skill[]>(() => initialSkills && initialSkills.length ? initialSkills : [
     { id: "1", icon: "code", text: "Knows English, Spanish" },
     { id: "2", icon: "gps-fixed", text: "Private Investigator Certification" },
-    { id: "3", icon: "favorite", text: "Joined December 28th 2024" },
   ])
 
   // Preset skill-category tags (Tech/Design/Writing/Labor/Delivery/Other),
@@ -126,6 +125,11 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
       if (updateProfile) {
         // extract text strings to match Profile shape
         const skillTexts = cleaned.map(s => s.text)
+        // Diffed against what was actually persisted before this save (not
+        // local component state, which can churn on every keystroke) so
+        // skill_added/skill_removed fire once per real change, only after
+        // the write actually succeeds below.
+        const previousSkills = authProfile?.skills ?? []
         // Preset skill-category tags persist to the remote profile alongside
         // skills (unlike the free-text skills above, which are also mirrored
         // to AsyncStorage below) so they're available server-side for the
@@ -135,6 +139,10 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
           setBanner('Error saving skills to profile')
           setTimeout(()=>setBanner(null), 1500)
         } else {
+          const added = skillTexts.filter(s => !previousSkills.includes(s))
+          const removed = previousSkills.filter(s => !skillTexts.includes(s))
+          added.forEach(skill => analyticsService.trackEvent('skill_added', { skill }))
+          removed.forEach(skill => analyticsService.trackEvent('skill_removed', { skill }))
           setBanner('Skills saved')
           setTimeout(()=>setBanner(null), 1500)
         }
@@ -159,20 +167,16 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
     return () => clearTimeout(t)
   }, [skills, SKILLS_STORAGE_KEY])
 
-  const attachCredential = async (skillId: string) => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true })
-      if (res.canceled) return
-      if (res.assets && res.assets.length > 0) {
-        const uri = res.assets[0].uri
-        setSkills(prev => prev.map(s => s.id === skillId ? { ...s, credentialUrl: uri } : s))
-        setBanner('Credential attached')
-        setTimeout(()=>setBanner(null), 1200)
-      }
-    } catch (e) {
-      setBanner('Attachment failed')
-      setTimeout(()=>setBanner(null), 1500)
-    }
+  // Disabled: this only ever stored a local file:// URI in this device's
+  // AsyncStorage/React state and was dropped entirely from handleSave's
+  // payload to updateProfile (only skill text is sent) -- no other user or
+  // device could ever see an attached credential, so the button implied an
+  // upload that never happened. Re-enable only once credentials actually
+  // upload to Supabase Storage and persist server-side (see
+  // hooks/use-portfolio-upload.ts for the pattern to reuse).
+  const attachCredential = async (_skillId: string) => {
+    setBanner('Credential uploads are coming soon')
+    setTimeout(()=>setBanner(null), 1500)
   }
 
   const removeCredential = (skillId: string) => {
@@ -311,13 +315,13 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
                   <View className="flex-row">
                     <TouchableOpacity
                       onPress={() => attachCredential(skill.id)}
-                      className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 rounded-lg flex-row items-center justify-center`}
+                      className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 rounded-lg flex-row items-center justify-center opacity-60`}
                       style={{ backgroundColor: theme.surfaceSecondary }}
                       accessibilityRole="button"
-                      accessibilityLabel={skill.credentialUrl ? 'Replace credential file' : 'Attach credential file'}
+                      accessibilityLabel="Attach credential file, coming soon"
                     >
                       <MaterialIcons name="attach-file" size={18} color={theme.primaryLight} accessibilityElementsHidden />
-                      <Text className="text-sm ml-1" style={{ color: theme.primaryLight }}>{skill.credentialUrl ? 'Replace Credential' : 'Attach Credential'}</Text>
+                      <Text className="text-sm ml-1" style={{ color: theme.primaryLight }}>Attach Credential (Coming soon)</Text>
                     </TouchableOpacity>
                     {skill.credentialUrl && (
                       <TouchableOpacity

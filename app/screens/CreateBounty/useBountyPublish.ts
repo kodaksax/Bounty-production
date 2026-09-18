@@ -256,6 +256,19 @@ export function useBountyPublish(params: UseBountyPublishParams) {
         throw new Error('Failed to create bounty');
       }
 
+      // Read back what the server actually stored, not what the draft asked
+      // for -- trust_tier/requires_id_verified are ordinary columns (unlike
+      // funding_mode below, nothing server-side overrides them), but this
+      // keeps the analytics payload honest against the real row regardless.
+      const createdTrustTier = (createdBounty as { trust_tier?: string }).trust_tier ?? 'standard';
+      if (createdTrustTier !== 'standard') {
+        analyticsService.trackEvent('trust_requirement_set', {
+          trustTier: createdTrustTier,
+          requiresIdVerified: !!(createdBounty as { requires_id_verified?: boolean }).requires_id_verified,
+          bountyId: String(createdBounty.id),
+        });
+      }
+
       // Read back what the SERVER actually granted rather than what we asked
       // for: trg_bounties_normalize_funding_mode silently downgrades an
       // ineligible request, and the confirmation copy ("you'll be charged when

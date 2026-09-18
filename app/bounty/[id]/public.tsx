@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useAuthProfile } from '../../../hooks/useAuthProfile';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
@@ -32,6 +33,9 @@ import { HunterEarningsCard } from '../../../components/ui/hunter-earnings-card'
 import { calculateHunterEarnings } from '../../../lib/constants/fees';
 import { ROUTES } from '../../../lib/routes';
 import { getUserFriendlyError } from '../../../lib/utils/error-messages';
+import { ApplicationPitchModal } from '../../../components/application-pitch-modal';
+import { IdRequirementModal } from '../../../components/id-requirement-modal';
+import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
 
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
@@ -41,6 +45,7 @@ export default function PublicBountyDetail() {
   const { pushColor, popColor } = useBackgroundColor();
   const { session, isEmailVerified } = useAuthContext();
   const currentUserId = session?.user?.id ?? null;
+  const { profile: authProfile } = useAuthProfile();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,6 +53,8 @@ export default function PublicBountyDetail() {
 
   const [hasApplied, setHasApplied] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [showPitchModal, setShowPitchModal] = useState(false);
+  const [showIdRequirementModal, setShowIdRequirementModal] = useState(false);
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(id) ? id[0] : id;
@@ -197,17 +204,18 @@ export default function PublicBountyDetail() {
     return `${diffDays}d ago`;
   };
 
+  const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
+    if (!bounty) return;
+    analyticsService.trackEvent('application_failed', {
+      role: 'hunter',
+      bounty_id: String(bounty.id),
+      reason,
+      is_onboarding_demo: false,
+    });
+  };
+
   const handleApply = async () => {
     if (!bounty) return;
-
-    const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
-      analyticsService.trackEvent('application_failed', {
-        role: 'hunter',
-        bounty_id: String(bounty.id),
-        reason,
-        is_onboarding_demo: false,
-      });
-    };
 
     analyticsService.trackEvent('application_started', {
       role: 'hunter',
@@ -233,91 +241,110 @@ export default function PublicBountyDetail() {
       return;
     }
 
-    const earnings = calculateHunterEarnings(bounty.amount);
-    Alert.alert(
-      bounty.is_for_honor ? 'Apply for this bounty?' : `Apply and earn $${earnings.net.toFixed(2)}?`,
-      bounty.is_for_honor
-        ? "The poster gets your application and can accept it. You'll be notified either way — you can withdraw it any time before they accept."
-        : `The poster gets your application and can accept it. If they do, $${earnings.gross.toFixed(2)} is held in escrow before you start, and $${earnings.net.toFixed(2)} lands in your wallet once they approve your work. You can withdraw the application any time before they accept.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Apply',
-          onPress: async () => {
-            setIsApplying(true);
-            try {
-              const result = await bountyRequestService.create({
-                bounty_id: bounty.id,
-                hunter_id: currentUserId,
-                status: 'pending',
-                poster_id: bounty.poster_id || bounty.user_id,
-                message: null,
-              } as any);
+    // Bounty-level trust requirement system (lib/utils/trust-tier.ts). The
+    // real gate is server-side (a BEFORE INSERT trigger on bounty_requests —
+    // see supabase/migrations/20260915053615_bounty_trust_tier.sql); this
+    // stops an unverified hunter before they invest time in a pitch they
+    // could never submit.
+    if (bounty.requires_id_verified) {
+      const verificationStatus = deriveCoarseVerificationStatus(
+        authProfile?.stripe_identity_status,
+        authProfile?.id_verification_status
+      );
+      if (verificationStatus !== 'verified') {
+        claimFailed('not_eligible');
+        analyticsService.trackEvent('trust_requirement_blocked_apply', {
+          trustTier: bounty.trust_tier || 'standard',
+          requiresIdVerified: true,
+          bountyId: String(bounty.id),
+        });
+        setShowIdRequirementModal(true);
+        return;
+      }
+    }
 
-              if (result && (result as any).success) {
-                setHasApplied(true);
-                const applicationId =
-                  (result as any)?.request?.id != null
-                    ? String((result as any).request.id)
-                    : undefined;
-                analyticsService.trackEvent('application_submitted', {
-                  role: 'hunter',
-                  bounty_id: String(bounty.id),
-                  application_id: applicationId,
-                  amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
-                  is_for_honor: Boolean(bounty.is_for_honor),
-                  source: typeof source === 'string' ? source : 'public_route',
-                  is_onboarding_demo: false,
-                  seconds_from_view_to_submit: Math.max(0, Math.round((Date.now() - viewedAtRef.current) / 1000)),
-                  had_message: false,
-                  attachment_count: 0,
-                });
-                // First accepted... no — first SUBMITTED application is the
-                // hunter-activation milestone (there is no guarantee any will
-                // be accepted). Once per device — see lib/analytics/lifecycle.ts.
-                void markHunterActivated(currentUserId, {
-                  bounty_id: String(bounty.id),
-                  application_id: applicationId,
-                });
-                Alert.alert(
-                  'Application sent',
-                  "The poster has been notified. You'll get a notification as soon as they respond — nothing to do until then.",
-                  [
-                    {
-                      text: 'Track it',
-                      onPress: () => router.push(`/in-progress/${bounty.id}/hunter`),
-                    },
-                    { text: 'Keep browsing', style: 'cancel' },
-                  ]
-                );
-              } else {
-                const errorMsg = (result && (result as any).error) || 'Failed to apply.';
-                claimFailed(/banned|suspended/i.test(errorMsg) ? 'not_eligible' : 'validation');
-                // getUserFriendlyError keeps genuinely user-actionable copy
-                // (e.g. "no longer accepting applications") and replaces the
-                // rest, so a PostgREST string is never shown.
-                const friendly = getUserFriendlyError(
-                  typeof errorMsg === 'string' ? new Error(errorMsg) : errorMsg
-                );
-                Alert.alert(friendly.title, friendly.message);
-                // A bounty that closed under the visitor makes the CTA stale —
-                // reload so the screen stops offering an action that cannot work.
-                if (friendly.type === 'state_conflict' && routeBountyId) {
-                  void loadBounty(routeBountyId);
-                }
-              }
-            } catch (err) {
-              console.error('Error applying:', err);
-              claimFailed('network');
-              const friendly = getUserFriendlyError(err);
-              Alert.alert(friendly.title, friendly.message);
-            } finally {
-              setIsApplying(false);
-            }
-          }
+    // The pitch modal (components/application-pitch-modal.tsx) replaces the
+    // old bare confirm Alert — it shows the same money-line copy plus a
+    // "why me?" pitch field whose prominence scales with the bounty amount,
+    // and calls submitApplication with the trimmed text on confirm.
+    setShowPitchModal(true);
+  };
+
+  const submitApplication = async (pitch: string | null) => {
+    if (!bounty || !currentUserId) return;
+    setIsApplying(true);
+    try {
+      const result = await bountyRequestService.create({
+        bounty_id: bounty.id,
+        hunter_id: currentUserId,
+        status: 'pending',
+        poster_id: bounty.poster_id || bounty.user_id,
+        message: pitch,
+      } as any);
+
+      if (result && (result as any).success) {
+        setShowPitchModal(false);
+        setHasApplied(true);
+        const applicationId =
+          (result as any)?.request?.id != null
+            ? String((result as any).request.id)
+            : undefined;
+        analyticsService.trackEvent('application_submitted', {
+          role: 'hunter',
+          bounty_id: String(bounty.id),
+          application_id: applicationId,
+          amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
+          is_for_honor: Boolean(bounty.is_for_honor),
+          source: typeof source === 'string' ? source : 'public_route',
+          is_onboarding_demo: false,
+          seconds_from_view_to_submit: Math.max(0, Math.round((Date.now() - viewedAtRef.current) / 1000)),
+          had_message: !!pitch,
+          attachment_count: 0,
+        });
+        // First accepted... no — first SUBMITTED application is the
+        // hunter-activation milestone (there is no guarantee any will
+        // be accepted). Once per device — see lib/analytics/lifecycle.ts.
+        void markHunterActivated(currentUserId, {
+          bounty_id: String(bounty.id),
+          application_id: applicationId,
+        });
+        Alert.alert(
+          'Application sent',
+          "The poster has been notified. You'll get a notification as soon as they respond — nothing to do until then.",
+          [
+            {
+              text: 'Track it',
+              onPress: () => router.push(`/in-progress/${bounty.id}/hunter`),
+            },
+            { text: 'Keep browsing', style: 'cancel' },
+          ]
+        );
+      } else {
+        const errorMsg = (result && (result as any).error) || 'Failed to apply.';
+        claimFailed(/banned|suspended/i.test(errorMsg) ? 'not_eligible' : 'validation');
+        // getUserFriendlyError keeps genuinely user-actionable copy
+        // (e.g. "no longer accepting applications") and replaces the
+        // rest, so a PostgREST string is never shown.
+        const friendly = getUserFriendlyError(
+          typeof errorMsg === 'string' ? new Error(errorMsg) : errorMsg
+        );
+        setShowPitchModal(false);
+        Alert.alert(friendly.title, friendly.message);
+        // A bounty that closed under the visitor makes the CTA stale —
+        // reload so the screen stops offering an action that cannot work.
+        if (friendly.type === 'state_conflict' && routeBountyId) {
+          void loadBounty(routeBountyId);
         }
-      ]
-    );
+      }
+    } catch (err) {
+      console.error('Error applying:', err);
+      claimFailed('network');
+      const friendly = getUserFriendlyError(err);
+      setShowPitchModal(false);
+      Alert.alert(friendly.title, friendly.message);
+    } finally {
+      setIsApplying(false);
+    }
   };
 
   if (isLoading) {
@@ -545,6 +572,13 @@ export default function PublicBountyDetail() {
               <Text style={s.actionButtonText}>View your application</Text>
             </TouchableOpacity>
           ) : bounty.status === 'open' ? (
+            <>
+              {bounty.requires_id_verified && (
+                <View style={s.idRequiredNotice}>
+                  <MaterialIcons name="verified-user" size={14} color={theme.textSecondary} />
+                  <Text style={s.idRequiredNoticeText}>This poster requires ID verification to apply.</Text>
+                </View>
+              )}
             <TouchableOpacity
               style={[s.actionButton, isApplying && { opacity: 0.8 }]}
               onPress={handleApply}
@@ -571,6 +605,7 @@ export default function PublicBountyDetail() {
                 </Text>
               )}
             </TouchableOpacity>
+            </>
           ) : (
             // A closed bounty used to render a dead disabled button and nothing
             // else, which is a dead end: the visitor cannot act and is given
@@ -598,6 +633,45 @@ export default function PublicBountyDetail() {
           )}
         </View>
       </SafeAreaView>
+      {bounty && (
+        <ApplicationPitchModal
+          visible={showPitchModal}
+          bounty={{ amount: bounty.amount, is_for_honor: bounty.is_for_honor, category: bounty.category }}
+          netEarnings={calculateHunterEarnings(bounty.amount).net}
+          grossAmount={calculateHunterEarnings(bounty.amount).gross}
+          isSubmitting={isApplying}
+          onCancel={() => setShowPitchModal(false)}
+          onSubmit={submitApplication}
+          onPitchStarted={() =>
+            analyticsService.trackEvent('pitch_started', {
+              bounty_id: String(bounty.id),
+              amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
+            })
+          }
+          onPitchSubmitted={(pitch) =>
+            analyticsService.trackEvent('pitch_submitted', {
+              bounty_id: String(bounty.id),
+              amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
+              pitch_length: pitch.length,
+            })
+          }
+        />
+      )}
+      {bounty && (
+        <IdRequirementModal
+          visible={showIdRequirementModal}
+          onCancel={() => setShowIdRequirementModal(false)}
+          onVerify={() => {
+            analyticsService.trackEvent('verification_started_from_requirement', {
+              trustTier: bounty.trust_tier || 'standard',
+              requiresIdVerified: true,
+              bountyId: String(bounty.id),
+            });
+            setShowIdRequirementModal(false);
+            router.push('/verification/onboarding-explainer');
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -896,6 +970,17 @@ function makeStyles(t: AppTheme) {
       color: t.textSecondary,
       fontSize: 13,
       lineHeight: 18,
+    },
+    idRequiredNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 10,
+    },
+    idRequiredNoticeText: {
+      flex: 1,
+      color: t.textSecondary,
+      fontSize: 12,
     },
     actionButton: {
       height: 56,

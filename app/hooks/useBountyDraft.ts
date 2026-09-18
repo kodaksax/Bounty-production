@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { storage } from '../../lib/storage';
 import type { Attachment } from '../../lib/types';
+import type { TrustTier } from '../../lib/utils/trust-tier';
 
 const DRAFT_KEY_PREFIX = 'bounty-draft-v1';
 
@@ -48,6 +49,11 @@ export interface BountyDraft {
   latestArrivalTime?: string;   // ISO 8601
   durationMinutes?: number;
   conditionalEndNote?: string;
+  // Bounty-level trust requirement system (see lib/utils/trust-tier.ts).
+  // Poster-controlled, seeded from detectTrustTier's recommendation at the
+  // review step; 'standard'/false when never touched.
+  trustTier?: TrustTier;
+  requiresIdVerified?: boolean;
 }
 
 const defaultDraft: BountyDraft = {

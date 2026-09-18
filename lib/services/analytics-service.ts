@@ -369,7 +369,30 @@ export type AnalyticsEvent =
   // fired from hooks/useAcceptRequest.ts. Was `bounty_claimed` + `bounty_accepted`
   // (a dual-emit) — de-duped into one event on 2026-08-28. Distinct from the
   // hunter-side `application_*` funnel below (different actor, different stage).
+  //
+  // Trust/selection-quality properties added 2026-09-14 (hunterVerified,
+  // hunterCompleted, hadMessage, trustTier, applicantCount,
+  // profileViewedBeforeAccept) so acceptance can be broken down by hunter
+  // trust signal without joining back to bounty_requests/profiles state that
+  // has since moved on. `profileViewedBeforeAccept` reads a session-only flag
+  // (lib/analytics/sessionFlags.ts) set when the poster opened this specific
+  // hunter's profile from the applicant list for this bounty -- it is a
+  // same-session signal, not a lifetime one.
   | 'application_accepted'
+  // The POSTER declined an applicant without accepting them
+  // (hooks/useRejectRequest.ts). `reason` is OMITTED, never inferred: there is
+  // no reason-capture UI on the decline confirmation (Cancel / Decline only),
+  // so a `reason` value would be fabricated. Add the property only if a real
+  // reason-picker ships.
+  | 'application_declined'
+  // The applicant list/queue for a bounty was rendered with results. Fired
+  // once per bounty whose pending-applicant count is shown to the poster
+  // (the "Requests" tab lists pending applications across ALL of a poster's
+  // open bounties in one flat list, so this fires once per distinct bounty
+  // represented, not once per screen view) -- see app/tabs/inbox-screen.tsx.
+  // Refires only when that bounty's visible applicant count actually changes
+  // (a new application arrived), not on every re-render.
+  | 'applicant_list_viewed'
   // The POSTER opened a conversation with an applicant WITHOUT accepting them
   // (the "Ask a question" action on ApplicantCard). Sizes P0-02: accepting used
   // to be the only way to talk to a hunter, so a poster had to commit
@@ -388,6 +411,18 @@ export type AnalyticsEvent =
   // event so tutorial completions (there is no fixed demo bounty — see
   // `application_started` below) never contaminate a real liquidity metric.
   | 'bounty_completed'
+  // Ratings/reviews loop (post-completion prompt in poster-review-modal.tsx
+  // and app/postings/[bountyId]/review-and-verify.tsx, plus the 24h
+  // fn_remind_pending_hunter_ratings reminder deep-linking back to the same
+  // step). `rating_submitted` fires on every successful rating (with or
+  // without a comment); `review_submitted` fires additionally when the
+  // submission included written text. `role` is always 'poster' today --
+  // this repo has no hunter-rates-poster UI (see
+  // 20260914150000_ratings_completion_loop.sql's header comment on why).
+  | 'rating_prompt_shown'
+  | 'rating_submitted'
+  | 'rating_skipped'
+  | 'review_submitted'
   | 'bounty_cancelled'
   // Fired once a bounty row is actually removed from the poster's active view
   // (hard delete, or a soft delete to status='deleted' when payment records
@@ -532,9 +567,33 @@ export type AnalyticsEvent =
   | 'message_sent'
   | 'conversation_started'
   | 'conversation_viewed'
-  // Profile events
+  // Profile events. `profile_viewed` fires from app/profile/[userId].tsx once
+  // per mounted profile (guarded so a re-render can't refire it), carrying
+  // `source` (e.g. 'applicant_card', 'bounty_dashboard', 'unknown' for the
+  // many pre-existing navigation call sites this cutover didn't touch),
+  // `isApplicant`, `bountyId` when known, and `hunterId` only when the viewed
+  // profile is genuinely being evaluated as a hunter (isApplicant true) --
+  // this was declared but never actually captured anywhere before 2026-09-14.
   | 'profile_viewed'
   | 'profile_updated'
+  // Hunter capability layer — self-reported skills, bounty-specific "why me?"
+  // pitch, and portfolio work samples. See lib/utils/skill-match.ts,
+  // lib/utils/pitch-requirement.ts, lib/services/portfolio-service.ts.
+  | 'skill_added'
+  | 'skill_removed'
+  | 'pitch_started'
+  | 'pitch_submitted'
+  | 'portfolio_item_added'
+  | 'portfolio_item_viewed'
+  // Bounty-level trust requirement system — see lib/utils/trust-tier.ts.
+  // trust_requirement_set fires when a poster publishes a non-standard-tier
+  // bounty; trust_requirement_blocked_apply when an unverified hunter is
+  // stopped before applying to a requires_id_verified bounty;
+  // verification_started_from_requirement when they follow that prompt's
+  // handoff into ID verification.
+  | 'trust_requirement_set'
+  | 'trust_requirement_blocked_apply'
+  | 'verification_started_from_requirement'
   // Sharing events (bounty + profile) — see lib/utils/share-utils.ts.
   // Funnel per share attempt: {bounty,profile}_shared (share sheet opened)
   // -> exactly one of share_completed/share_cancelled/share_link_copied.

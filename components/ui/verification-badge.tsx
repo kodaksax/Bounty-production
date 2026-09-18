@@ -28,9 +28,9 @@ const VERIFICATION_CONFIGS: Record<VerificationLevel, VerificationConfig> = {
   verified: {
     icon: 'verified',
     color: '#059669',
-    label: 'Verified',
-    title: 'Verified Account',
-    description: 'This user has completed identity verification through our secure process. Their email is confirmed, and their payment methods are validated. You can trust transactions with verified users.',
+    label: 'ID verified',
+    title: 'ID Verified',
+    description: 'This user has verified their government-issued ID through Stripe Identity. This confirms their identity document -- it is not a background check or a general safety guarantee.',
   },
   pending: {
     icon: 'schedule',
@@ -141,15 +141,7 @@ export function VerificationBadge({
               <View style={s.verificationDetails}>
                 <View style={s.detailRow}>
                   <MaterialIcons name="check-circle" size={16} color="#059669" />
-                  <Text style={s.detailText}>Email confirmed</Text>
-                </View>
-                <View style={s.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color="#059669" />
-                  <Text style={s.detailText}>Payment method validated</Text>
-                </View>
-                <View style={s.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color="#059669" />
-                  <Text style={s.detailText}>Identity verified</Text>
+                  <Text style={s.detailText}>Government-issued ID verified via Stripe Identity</Text>
                 </View>
               </View>
             )}
@@ -158,7 +150,7 @@ export function VerificationBadge({
               <View style={s.tipBox}>
                 <MaterialIcons name="lightbulb-outline" size={16} color="#fbbf24" />
                 <Text style={s.tipText}>
-                  Tip: Verified users complete transactions 3x faster and have higher trust ratings.
+                  Tip: ID-verified users tend to build trust with posters faster.
                 </Text>
               </View>
             )}

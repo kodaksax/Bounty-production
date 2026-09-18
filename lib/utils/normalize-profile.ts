@@ -47,7 +47,7 @@ export type NormalizedProfile = {
  * stripe_identity_status (new) / id_verification_status (legacy, for
  * profiles verified before the Stripe Identity migration) instead.
  */
-function deriveCoarseVerificationStatus(
+export function deriveCoarseVerificationStatus(
   stripeIdentityStatus?: string,
   legacyIdVerificationStatus?: string,
 ): string {

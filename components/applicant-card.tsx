@@ -3,12 +3,16 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { markApplicantProfileViewed } from '../lib/analytics/sessionFlags';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
+import { deriveCoarseVerificationStatus } from '../lib/utils/normalize-profile';
+import { getRelevantSkills } from '../lib/utils/skill-match';
+import { formatHunterTrustSummary } from '../lib/utils/trust-summary';
+import { isHighRiskTrustTier } from '../lib/utils/trust-tier';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { ReputationScoreCompact } from './ui/reputation-score';
 import TextGuard from './ui/TextGuard';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
 
@@ -42,8 +46,17 @@ export function ApplicantCard({
   const router = useRouter();
   const pathname = usePathname();
   const globalSearchParams = useGlobalSearchParams();
+  // Built with encodeURIComponent rather than the global URLSearchParams --
+  // RN runtimes don't all polyfill it, and this only needs to produce a
+  // query string, not parse one.
   const searchString = Object.keys(globalSearchParams || {}).length
-    ? `?${new URLSearchParams(globalSearchParams as any).toString()}`
+    ? `?${Object.entries(globalSearchParams as Record<string, string | string[]>)
+        .flatMap(([key, value]) =>
+          (Array.isArray(value) ? value : [value]).map(
+            (v) => `${encodeURIComponent(key)}=${encodeURIComponent(v)}`
+          )
+        )
+        .join('&')}`
     : '';
   const referrerValue = `${pathname || ''}${searchString}`;
 
@@ -85,6 +98,60 @@ export function ApplicantCard({
       setActionType(null);
     }
   };
+
+  // Derived from the actual Stripe Identity state (stripe_identity_status,
+  // with legacy id_verification_status as a fallback for pre-migration
+  // profiles) via the same helper every other profile surface uses --
+  // this used to read a `verificationStatus` field that bounty-request-service
+  // never populated, so every applicant showed "unverified" regardless of
+  // real status. See lib/utils/normalize-profile.ts.
+  const identityStatus = useMemo(
+    () =>
+      deriveCoarseVerificationStatus(
+        (request.profile as any)?.stripe_identity_status,
+        (request.profile as any)?.id_verification_status
+      ) as VerificationLevel,
+    [request.profile]
+  );
+  // Row 1 shows an EARNED badge only -- an "Unverified"/"Pending" pill reads
+  // as a claim we checked and found lacking, when really we just don't have
+  // a signal either way. Silence is the honest default; only "verified" is
+  // something Bounty actually confirmed.
+  const isIdentityVerified = identityStatus === 'verified';
+
+  // Row 2: "3 bounties done · ★4.9 (4)" / "3 bounties done" / "New to Bounty".
+  // Suppresses the average below MIN_RATING_SAMPLE ratings -- see
+  // lib/utils/trust-summary.ts.
+  const trustSummary = useMemo(
+    () =>
+      formatHunterTrustSummary({
+        hunterCompleted: request.profile?.hunterCompleted,
+        averageRating: request.profile?.averageRating,
+        ratingCount: request.profile?.ratingCount,
+      }),
+    [request.profile]
+  );
+
+  // Row 3: up to 3 of the hunter's self-reported skills that share a word
+  // with this specific bounty. Omitted entirely when nothing matches --
+  // this is a relevance filter, not a skills list.
+  const relevantSkills = useMemo(
+    () =>
+      getRelevantSkills(request.profile?.skills, {
+        title: request.bounty?.title,
+        description: request.bounty?.description,
+        category: request.bounty?.category,
+      }),
+    [request.profile, request.bounty]
+  );
+
+  // High-risk tiers (lib/utils/trust-tier.ts) get an explicit ID-status row
+  // even when NOT verified -- the general "silence is the honest default"
+  // rule above suppresses an unverified badge because most bounties never
+  // asked. Once a poster is evaluating hunters for pet care, home entry,
+  // licensed trades, or care of a vulnerable person, ID status IS one of the
+  // signals they're weighing, whichever way it comes out.
+  const isHighRiskBounty = isHighRiskTrustTier(request.bounty?.trust_tier);
 
   const applicantName = request.profile?.username || 'this hunter';
   const isForHonor = !!request.bounty?.is_for_honor;
@@ -133,7 +200,25 @@ export function ApplicantCard({
     if (id) {
       setIsNavigatingToProfile(true);
       const finalRef = referrerOverride ?? referrerValue;
-      router.push(`/profile/${id}?referrer=${encodeURIComponent(finalRef)}`);
+      const bountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id;
+      if (bountyId != null) {
+        // Backs application_accepted's profileViewedBeforeAccept -- see
+        // lib/analytics/sessionFlags.ts.
+        markApplicantProfileViewed(String(bountyId), String(id));
+      }
+      // Object-based push (rather than a manually built URL string) lets
+      // expo-router handle encoding and avoids relying on the global
+      // URLSearchParams API, which isn't guaranteed on every RN runtime.
+      router.push({
+        pathname: '/profile/[userId]',
+        params: {
+          userId: String(id),
+          referrer: finalRef,
+          source: 'applicant_card',
+          isApplicant: 'true',
+          ...(bountyId != null ? { bountyId: String(bountyId) } : {}),
+        },
+      } as any);
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);
       }
@@ -143,7 +228,7 @@ export function ApplicantCard({
         }
       }, NAVIGATION_LOADING_TIMEOUT_MS);
     }
-  }, [request, router]);
+  }, [request, router, referrerOverride, referrerValue]);
 
   const profileId = (request as any).hunter_id || (request as any).user_id;
   const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar || request.profile?.avatar_url);
@@ -185,59 +270,77 @@ export function ApplicantCard({
               <Text style={s.applicantName}>
                 {request.profile?.username || 'Unknown User'}
               </Text>
-              <VerificationBadge
-                status={
-                  typeof (request.profile as any)?.verificationStatus === 'string'
-                    ? ((request.profile as any).verificationStatus as VerificationLevel)
-                    : 'unverified'
-                }
-                size="small"
-                showLabel={false}
-                showExplanation={true}
-              />
+              {isIdentityVerified && (
+                <VerificationBadge
+                  status="verified"
+                  size="small"
+                  showLabel={true}
+                  showExplanation={true}
+                />
+              )}
             </View>
-            <View style={s.ratingContainer}>
-              <ReputationScoreCompact
-                averageRating={request.profile?.averageRating || 0}
-                ratingCount={request.profile?.ratingCount || 0}
-              />
-              {request.profile?.ratingCount ? (
-                <Text style={s.ratingText}>
-                  ({request.profile.ratingCount} review{request.profile.ratingCount !== 1 ? 's' : ''})
-                </Text>
-              ) : null}
-            </View>
+            <Text style={s.trustSummary}>{trustSummary}</Text>
+            {isHighRiskBounty && !isIdentityVerified && (
+              <View style={s.idStatusRow}>
+                <MaterialIcons name="gpp-maybe" size={13} color={theme.textSecondary} />
+                <Text style={s.idStatusText}>Not ID-verified</Text>
+              </View>
+            )}
           </View>
 
           {profileId ? (
-            <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} style={{ marginLeft: 'auto' }} />
+            <View style={s.viewProfileHint}>
+              <Text style={s.viewProfileText}>View profile</Text>
+              <MaterialIcons name="chevron-right" size={18} color={theme.textSecondary} />
+            </View>
           ) : null}
         </TouchableOpacity>
 
-        {/* Bounty details */}
-        <View style={s.bountySection}>
-          <Text style={s.sectionLabel}>Applied for:</Text>
-          <Text style={s.bountyTitle}>{request.bounty?.title || 'Untitled Bounty'}</Text>
-          {request.bounty?.amount > 0 && !request.bounty?.is_for_honor && (
-            <View style={s.amountBadge}>
-              <Text style={s.amountText}>${request.bounty.amount}</Text>
+        {/* Relevant skills — only rendered when something actually matches
+            this bounty; self-reported, so labeled as such rather than
+            implying Bounty verified them. */}
+        {relevantSkills.length > 0 && (
+          <View style={s.skillsSection}>
+            <Text style={s.skillsLabel}>Relevant skills (self-reported)</Text>
+            <View style={s.skillsRow}>
+              {relevantSkills.map((skill) => (
+                <View key={skill} style={s.skillChip}>
+                  <Text style={s.skillChipText}>{skill}</Text>
+                </View>
+              ))}
             </View>
-          )}
-          {request.bounty?.is_for_honor && (
-            <View style={s.honorBadge}>
-              <MaterialIcons name="favorite" size={14} color="#fff" />
-              <Text style={s.honorText}>For Honor</Text>
-            </View>
-          )}
-        </View>
+          </View>
+        )}
 
-        {/* Hunter's application message */}
+        {/* Application pitch — the strongest pre-hire capability signal
+            available, so it gets prominent placement rather than being
+            buried under bounty details the poster already knows. */}
         {request.message ? (
-          <View style={s.messageSection}>
-            <Text style={s.messageSectionLabel}>Message from applicant</Text>
-            <Text style={s.messageText}>{request.message}</Text>
+          <View style={s.pitchSection}>
+            <MaterialIcons name="format-quote" size={16} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+            <Text style={s.pitchText}>{request.message}</Text>
           </View>
         ) : null}
+
+        {/* Condensed bounty context. This card also renders in the poster's
+            cross-bounty "Requests" list, so which bounty an application is
+            for still needs to be legible -- just not as its own prominent
+            section repeating what the poster is usually already looking at. */}
+        <View style={s.bountyContextRow}>
+          <Text style={s.bountyContextText} numberOfLines={1}>
+            Applying to: {request.bounty?.title || 'Untitled Bounty'}
+          </Text>
+          {isForHonor ? (
+            <View style={s.honorBadgeSmall}>
+              <MaterialIcons name="favorite" size={10} color="#fff" />
+              <Text style={s.honorTextSmall}>Honor</Text>
+            </View>
+          ) : amount > 0 ? (
+            <Text style={s.bountyContextAmount}>
+              ${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2)}
+            </Text>
+          ) : null}
+        </View>
 
         {/* Actions. Choosing a hunter is the decision this screen exists for,
             so it is a full-width primary; declining is a quieter secondary
@@ -371,28 +474,35 @@ function makeStyles(t: AppTheme) {
       fontSize: 16,
       fontWeight: '600',
     },
-    ratingContainer: {
+    trustSummary: {
+      color: t.textSecondary,
+      fontSize: 13,
+    },
+    idStatusRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 4,
+      marginTop: 2,
     },
-    ratingText: {
+    idStatusText: {
       color: t.textSecondary,
       fontSize: 12,
     },
-    bountySection: {
-      marginBottom: 16,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+    viewProfileHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      marginLeft: 'auto',
     },
-    messageSection: {
-      marginBottom: 16,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: t.isDark ? 'rgba(110,231,183,0.15)' : t.border,
+    viewProfileText: {
+      color: t.textSecondary,
+      fontSize: 11,
+      fontWeight: '500',
     },
-    messageSectionLabel: {
+    skillsSection: {
+      marginBottom: 12,
+    },
+    skillsLabel: {
       color: t.textSecondary,
       fontSize: 11,
       fontWeight: '600',
@@ -400,49 +510,73 @@ function makeStyles(t: AppTheme) {
       letterSpacing: 0.4,
       marginBottom: 6,
     },
-    messageText: {
+    skillsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    skillChip: {
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    skillChipText: {
+      color: t.text,
+      fontSize: 12,
+      fontWeight: '500',
+    },
+    pitchSection: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 6,
+      marginBottom: 12,
+      paddingLeft: 10,
+      borderLeftWidth: 2,
+      borderLeftColor: t.isDark ? '#6ee7b7' : t.primary,
+    },
+    pitchText: {
+      flex: 1,
       color: t.text,
       fontSize: 14,
       lineHeight: 20,
+      fontStyle: 'italic',
     },
-    sectionLabel: {
+    bountyContextRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 16,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: t.isDark ? 'rgba(110,231,183,0.15)' : t.border,
+    },
+    bountyContextText: {
+      flex: 1,
       color: t.textSecondary,
       fontSize: 12,
-      marginBottom: 4,
     },
-    bountyTitle: {
-      color: t.text,
-      fontSize: 15,
-      fontWeight: '500',
-      marginBottom: 8,
-    },
-    amountBadge: {
-      backgroundColor: t.isDark ? '#064e3b' : 'rgba(5,150,105,0.12)',
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 6,
-      alignSelf: 'flex-start',
-    },
-    amountText: {
+    bountyContextAmount: {
       color: t.isDark ? '#6ee7b7' : t.primary,
       fontWeight: '600',
-      fontSize: 14,
+      fontSize: 13,
     },
     // Unique color — kept as designed
-    honorBadge: {
+    honorBadgeSmall: {
       backgroundColor: '#ef4444',
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 6,
-      alignSelf: 'flex-start',
+      gap: 3,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 5,
     },
-    honorText: {
+    honorTextSmall: {
       color: '#fff',
       fontWeight: '600',
-      fontSize: 12,
+      fontSize: 10,
     },
     actions: {
       gap: 10,

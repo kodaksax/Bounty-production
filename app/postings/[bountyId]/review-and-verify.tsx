@@ -1,7 +1,7 @@
 // app/postings/[bountyId]/review-and-verify.tsx - Review & Verify Screen
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
 import { Avatar, AvatarFallback, AvatarImage } from '../../../components/ui/avatar';
 import { ROUTES } from '../../../lib/routes';
+import { analyticsService } from '../../../lib/services/analytics-service';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { approveAndRelease } from '../../../lib/services/completion-approval';
@@ -29,6 +30,7 @@ import { ratingsService } from '../../../lib/services/ratings';
 import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
+import { MIN_RATING_SAMPLE } from '../../../lib/utils/trust-summary';
 import { useWallet } from '../../../lib/wallet-context';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
@@ -64,10 +66,20 @@ export default function ReviewAndVerifyScreen() {
   const [isViewerVisible, setIsViewerVisible] = useState(false);
   const [isRequestingRevision, setIsRequestingRevision] = useState(false);
   const { releaseFunds } = useWallet();
+  const ratingPromptLoggedRef = useRef(false);
 
   useEffect(() => {
     loadBounty();
   }, [bountyId]);
+
+  useEffect(() => {
+    if (reviewSubmission?.status === 'pending' && !ratingPromptLoggedRef.current && bounty?.id) {
+      ratingPromptLoggedRef.current = true;
+      void analyticsService
+        .trackEvent('rating_prompt_shown', { bountyId: String(bounty.id), role: 'poster' })
+        .catch(() => {});
+    }
+  }, [reviewSubmission, bounty?.id]);
 
   useEffect(() => {
     if (bounty) {
@@ -281,11 +293,10 @@ export default function ReviewAndVerifyScreen() {
   };
 
   const handleApprove = async () => {
-    if (rating === 0) {
-      Alert.alert('Rating Required', 'Please provide a rating before approving.');
-      return;
-    }
-
+    // Rating is optional -- approving and releasing payment must never
+    // depend on it. A poster who skips (rating stays 0) still gets a
+    // rating_reminder notification ~24h later if they never come back to
+    // rate the hunter (see fn_remind_pending_hunter_ratings).
     if (
       !bounty ||
       !hunterProfile ||
@@ -332,19 +343,42 @@ export default function ReviewAndVerifyScreen() {
         return;
       }
 
-      // Submit rating
+      // Rating is optional and submitted only after approval/payout already
+      // succeeded above -- never a precondition for either.
       const targetHunterId = hunterProfile?.id || bounty.accepted_by;
-      if (!targetHunterId) {
-        throw new Error('Could not resolve hunter for rating submission');
+      const trimmedComment = ratingComment.trim();
+      if (rating === 0) {
+        void analyticsService
+          .trackEvent('rating_skipped', { bountyId: String(bounty.id), role: 'poster' })
+          .catch(() => {});
+      } else if (targetHunterId) {
+        try {
+          await completionService.submitRating({
+            bounty_id: String(bounty.id),
+            from_user_id: currentUserId,
+            to_user_id: targetHunterId,
+            rating,
+            comment: trimmedComment || undefined,
+          });
+          void analyticsService
+            .trackEvent('rating_submitted', {
+              bountyId: String(bounty.id),
+              role: 'poster',
+              rating,
+              hasComment: trimmedComment.length > 0,
+            })
+            .catch(() => {});
+          if (trimmedComment.length > 0) {
+            void analyticsService
+              .trackEvent('review_submitted', { bountyId: String(bounty.id), role: 'poster' })
+              .catch(() => {});
+          }
+        } catch (ratingErr) {
+          // Work is already approved and paid -- a rating failure here must
+          // never look like the approval itself failed.
+          console.error('Error submitting rating (approval already succeeded):', ratingErr);
+        }
       }
-
-      await completionService.submitRating({
-        bounty_id: String(bounty.id),
-        from_user_id: currentUserId,
-        to_user_id: targetHunterId,
-        rating,
-        comment: ratingComment.trim() || undefined,
-      });
 
       Alert.alert('Work Approved', 'The work has been approved and the hunter will be paid.', [
         {
@@ -471,7 +505,8 @@ export default function ReviewAndVerifyScreen() {
               </Avatar>
               <View style={styles.hunterDetails}>
                 <Text style={styles.hunterName}>{hunterProfile.username || 'Unknown Hunter'}</Text>
-                {hunterProfile.averageRating && (
+                {hunterProfile.averageRating &&
+                  (hunterProfile.ratingCount || 0) >= MIN_RATING_SAMPLE && (
                   <View style={styles.ratingRow}>
                     <MaterialIcons name="star" size={16} color="#fcd34d" />
                     <Text style={styles.hunterRating}>
@@ -547,9 +582,9 @@ export default function ReviewAndVerifyScreen() {
 
         {/* Rating Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Rate the Work</Text>
+          <Text style={styles.sectionTitle}>Rate the Work (optional)</Text>
           <Text style={styles.sectionSubtitle}>
-            Provide a rating to help the hunter build their reputation
+            A quick rating helps other posters choose this hunter. You can skip this and approving still releases payment right away.
           </Text>
 
           {/* Star Rating */}

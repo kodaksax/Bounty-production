@@ -180,6 +180,8 @@ export type FollowEdge = Follow;
  * @property {string} [name] - Original file name
  * @property {string} [mimeType] - Content type (e.g., "image/png", "video/mp4")
  * @property {number} [sizeBytes] - File size in bytes
+ * @property {string} [category] - Optional free-form tag (e.g. a bounty category id)
+ * @property {number} [position] - Display order among this user's items (lower first)
  * @property {string} createdAt - ISO 8601 timestamp when created
  */
 export interface PortfolioItem {
@@ -193,6 +195,8 @@ export interface PortfolioItem {
   name?: string;
   mimeType?: string;
   sizeBytes?: number;
+  category?: string;
+  position?: number;
   createdAt: string;
 }
 
@@ -625,6 +629,8 @@ export type NotificationType =
   | 'application_pending_reminder'
   /** Hunter-facing: their application auto-closed after request_expiry_hours of poster silence. Not a rejection -- the poster never decided. */
   | 'application_expired'
+  /** Poster-facing: they approved a hunter's work 24h ago and still haven't rated them. Fires once per completion_submissions row. */
+  | 'rating_reminder'
   | 'account_warning'
   | 'account_restricted'
   | 'payout_paid'
