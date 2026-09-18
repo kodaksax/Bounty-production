@@ -16,6 +16,9 @@ describe('isValidExpoPushToken', () => {
 
   test('rejects malformed tokens that Expo would reject', () => {
     expect(isValidExpoPushToken('ExponentPushToken[abc')).toBe(false)
+    expect(isValidExpoPushToken('ExponentPushToken[]')).toBe(false)
+    expect(isValidExpoPushToken('ExponentPushToken[a b c]')).toBe(false)
+    expect(isValidExpoPushToken('ExponentPushToken[abc]]')).toBe(false)
     expect(isValidExpoPushToken('not-a-token')).toBe(false)
     expect(isValidExpoPushToken('fcm:APA91bF...')).toBe(false)
     expect(isValidExpoPushToken('')).toBe(false)

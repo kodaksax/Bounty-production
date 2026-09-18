@@ -10,17 +10,19 @@
 // A bare UUID is the legacy raw device-token form that Expo still accepts
 // alongside the ExponentPushToken[...] / ExpoPushToken[...] forms.
 const RAW_DEVICE_TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EXPO_PUSH_TOKEN = /^Expo(nent)?PushToken\[[^\]\s]+\]$/;
 
 /**
  * Return true when `token` is a shape the Expo Push API accepts: an
  * `ExponentPushToken[...]` / `ExpoPushToken[...]` value or a legacy raw device
- * token. Mirrors the acceptance rule of expo-server-sdk's `isExpoPushToken`,
- * so a valid token is never dropped.
+ * token. The bracketed forms must contain a non-empty token body with no
+ * embedded whitespace or stray closing bracket so malformed values are pruned
+ * before they can poison a whole Expo send chunk.
  */
 export function isValidExpoPushToken(token: unknown): boolean {
   if (typeof token !== 'string') return false;
   const t = token.trim();
-  if ((t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[')) && t.endsWith(']')) {
+  if (EXPO_PUSH_TOKEN.test(t)) {
     return true;
   }
   return RAW_DEVICE_TOKEN.test(t);

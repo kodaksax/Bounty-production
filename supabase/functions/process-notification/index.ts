@@ -194,10 +194,11 @@ function normalizeDataKeys(data: Record<string, unknown>): Record<string, unknow
 
 // Inlined from ./push-token-validation
 const RAW_DEVICE_TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const EXPO_PUSH_TOKEN = /^Expo(nent)?PushToken\[[^\]\s]+\]$/
 function isValidExpoPushToken(token: unknown): boolean {
   if (typeof token !== 'string') return false
   const t = token.trim()
-  if ((t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[')) && t.endsWith(']')) return true
+  if (EXPO_PUSH_TOKEN.test(t)) return true
   return RAW_DEVICE_TOKEN.test(t)
 }
 
@@ -523,30 +524,39 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Failed to lookup tokens' }, 500)
     }
 
-    const tokenRows = ((tokens || []) as { profile_id: string; token: string }[]).filter((r) => !!r.token && !!r.profile_id)
+    const tokenRows = ((tokens || []) as Array<{ profile_id: string | null; token: string | null }>).filter((r) => !!r.profile_id)
+    const normalizedTokenRows = tokenRows.map((r) => ({
+      profile_id: r.profile_id as string,
+      rawToken: r.token,
+      normalizedToken: typeof r.token === 'string' ? r.token.trim() : '',
+    }))
 
     // A malformed token makes Expo reject the whole send chunk, so it fails
     // every co-batched recipient on every notification and is never pruned.
     // Drop malformed tokens before building the chunk and disable them so they
     // stop poisoning future sends.
-    const validTokenRows = tokenRows.filter((r) => isValidExpoPushToken(r.token))
-    const malformedTokenRows = tokenRows.filter((r) => !isValidExpoPushToken(r.token))
+    const validTokenRows = normalizedTokenRows.filter((r) => isValidExpoPushToken(r.normalizedToken))
+    const malformedTokenRows = normalizedTokenRows.filter((r) => !isValidExpoPushToken(r.normalizedToken))
     const malformedOwners = new Set(malformedTokenRows.map((r) => r.profile_id))
     if (malformedTokenRows.length > 0) {
-      try {
-        await supabaseAdmin
+      const malformedTokens = malformedTokenRows
+        .map((r) => r.rawToken)
+        .filter((token): token is string => typeof token === 'string')
+      if (malformedTokens.length > 0) {
+        const { error: disableMalformedErr } = await supabaseAdmin
           .from('push_tokens')
           .update({ enabled: false, last_failed_at: new Date().toISOString() })
-          .in('token', malformedTokenRows.map((r) => r.token))
-      } catch (e) {
-        console.error('[process-notification] failed to disable malformed tokens', e)
+          .in('token', malformedTokens)
+        if (disableMalformedErr) {
+          console.error('[process-notification] failed to disable malformed tokens', disableMalformedErr)
+        }
       }
     }
 
     // Positionally aligned: tokensList[i] belongs to tokenOwners[i]. Kept as
     // parallel arrays (not objects) because createMessages/extractInvalidTokens
     // already index by position.
-    const tokensList = validTokenRows.map((r) => r.token)
+    const tokensList = validTokenRows.map((r) => r.normalizedToken)
     const tokenOwners = validTokenRows.map((r) => r.profile_id)
 
     // A recipient who wanted a push but has zero deliverable tokens is a
@@ -681,13 +691,12 @@ Deno.serve(async (req: Request) => {
     // Disable tokens Expo reported as permanently undeliverable so future
     // sends skip them and deliverability metrics stay healthy.
     if (invalidTokens.length > 0) {
-      try {
-        await supabaseAdmin
-          .from('push_tokens')
-          .update({ enabled: false, last_failed_at: new Date().toISOString() })
-          .in('token', invalidTokens)
-      } catch (e) {
-        console.error('[process-notification] failed to disable invalid tokens', e)
+      const { error: disableInvalidErr } = await supabaseAdmin
+        .from('push_tokens')
+        .update({ enabled: false, last_failed_at: new Date().toISOString() })
+        .in('token', invalidTokens)
+      if (disableInvalidErr) {
+        console.error('[process-notification] failed to disable invalid tokens', disableInvalidErr)
       }
     }
 
