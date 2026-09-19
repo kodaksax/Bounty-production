@@ -102,9 +102,22 @@ describe('getBountyDisplayStatus', () => {
     expect(getBountyDisplayStatus({ bounty: { status: 'cancellation_requested' } })).toBe(
       'cancellation_requested'
     );
+    expect(getBountyDisplayStatus({ bounty: { status: 'deleted' } })).toBe('deleted');
   });
 
-  it('falls back to open for an unknown status', () => {
+  // BNTY-11: a hunter's pending request on a bounty the poster deleted used to
+  // fall through to the unknown-status default and read 'open' — the hunter
+  // saw "Application sent" on a bounty that no longer exists.
+  it('reports deleted, not open, for a pending request on a deleted bounty', () => {
+    expect(
+      getBountyDisplayStatus({
+        bounty: { status: 'deleted', end_date: FUTURE },
+        requestStatus: 'pending',
+      })
+    ).toBe('deleted');
+  });
+
+  it('falls back to open only for a genuinely unknown status', () => {
     expect(getBountyDisplayStatus({ bounty: { status: 'something_new' } })).toBe('open');
     expect(getBountyDisplayStatus({ bounty: {} })).toBe('open');
   });
