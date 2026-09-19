@@ -17,6 +17,7 @@ function makeContext(overrides: Partial<MomentContext> = {}): MomentContext {
     accountCreatedAt: new Date().toISOString(),
     sessionCount: 1,
     activeScreen: null,
+    hasEngaged: false,
     profile: {
       hasAvatar: false,
       hasBio: false,
