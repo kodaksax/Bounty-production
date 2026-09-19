@@ -131,6 +131,11 @@ export interface Rating {
   created_at?: string;
 }
 
+// Records the last logged getReady failure per bounty. The 3-second poll loop
+// in subscribeReady calls getReady on every tick, so this stops one persistent
+// failure from re-logging the same message every 3 seconds per posting.
+const lastReadyFetchFailure = new Map<string, string>();
+
 export const completionService = {
   /**
    * Submit completion for review
@@ -667,6 +672,8 @@ export const completionService = {
     bountyId: string
   ): Promise<{ bounty_id: string; hunter_id: string; ready_at: string } | null> {
     try {
+      let record: { bounty_id: string; hunter_id: string; ready_at: string } | null = null;
+
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('completion_ready')
@@ -676,17 +683,30 @@ export const completionService = {
           .maybeSingle();
 
         if (error) throw error;
-        return data || null;
+        record = data || null;
+      } else {
+        const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}/ready`);
+        if (!response.ok) {
+          if (response.status !== 404) throw new Error('Failed to fetch ready state');
+        } else {
+          record = await response.json();
+        }
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}/ready`);
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error('Failed to fetch ready state');
-      }
-      return await response.json();
+      // Clear any prior failure so a new failure episode logs again.
+      lastReadyFetchFailure.delete(bountyId);
+      return record;
     } catch (err) {
-      logger.error('Error fetching ready state', { bountyId, error: (err as any)?.message });
+      // Callers treat a missing ready state as non-fatal, so log at warning level:
+      // console.error paints a LogBox banner over the bottom nav in dev builds.
+      // Normalize like postReady so a Supabase-shaped error prints its message,
+      // and skip the log when the poll loop re-fires the same failure.
+      const normalized =
+        err instanceof Error ? err : new Error(typeof err === 'string' ? err : JSON.stringify(err));
+      if (lastReadyFetchFailure.get(bountyId) !== normalized.message) {
+        lastReadyFetchFailure.set(bountyId, normalized.message);
+        logger.warning('Error fetching ready state', { bountyId, error: normalized.message });
+      }
       return null;
     }
   },

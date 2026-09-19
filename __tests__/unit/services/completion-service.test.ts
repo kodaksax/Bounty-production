@@ -600,6 +600,51 @@ describe('CompletionService', () => {
 
       expect(result).toBeNull();
     });
+
+    it('should log a ready-state fetch failure at warning level, not error', async () => {
+      const { logger } = require('../../../lib/utils/error-logger');
+      mockSupabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            limit: jest.fn().mockReturnValue({
+              maybeSingle: jest
+                .fn()
+                .mockResolvedValue({ data: null, error: { message: 'db down' } }),
+            }),
+          }),
+        }),
+      });
+
+      const result = await completionService.getReady('bounty-warn');
+
+      expect(result).toBeNull();
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warning).toHaveBeenCalledWith(
+        'Error fetching ready state',
+        expect.objectContaining({ bountyId: 'bounty-warn' })
+      );
+    });
+
+    it('should not re-log an identical ready-state failure on repeated polls', async () => {
+      const { logger } = require('../../../lib/utils/error-logger');
+      mockSupabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            limit: jest.fn().mockReturnValue({
+              maybeSingle: jest
+                .fn()
+                .mockResolvedValue({ data: null, error: { message: 'db down' } }),
+            }),
+          }),
+        }),
+      });
+
+      await completionService.getReady('bounty-dedup');
+      await completionService.getReady('bounty-dedup');
+      await completionService.getReady('bounty-dedup');
+
+      expect(logger.warning).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('approveCompletion', () => {
