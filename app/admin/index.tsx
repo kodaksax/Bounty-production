@@ -68,6 +68,13 @@ const NAV_GROUPS: NavGroup[] = [
         icon: 'rule',
         route: ROUTES.ADMIN.ANOMALIES,
       },
+      {
+        id: 'liquidity-board',
+        title: 'Liquidity Board',
+        description: 'Open demand that is stuck: no location, no applications, unopened, no hire, gone-dark posters',
+        icon: 'waves',
+        route: ROUTES.ADMIN.LIQUIDITY_BOARD,
+      },
     ],
   },
   {
@@ -407,7 +414,7 @@ export default function AdminDashboard() {
                     completed wallet ledger. */}
                 <AdminMetricTile
                   label="Escrow held"
-                  value={formatMoney(metrics.heldEscrowVolume)}
+                  value={formatMoney(metrics.heldEscrowVolume)} 
                   icon="lock"
                   tone="warning"
                   hint="Currently held for users"
