@@ -23,6 +23,7 @@ import {
     forwardRef,
     useCallback,
     useEffect,
+    useId,
     useImperativeHandle,
     useMemo,
     useRef,
@@ -732,12 +733,21 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [loadBounties, loadUserApplications, refreshActiveCount]);
 
+  // Per-mount id that makes the realtime topic unique to this instance.
+  // supabase-js returns the same channel object for a topic that already exists
+  // on the client, and removeChannel() on unmount is async. So a fixed topic can
+  // hand a brief double mount an already-subscribed channel, and adding a
+  // postgres_changes handler after subscribe() then throws. A unique topic gives
+  // each mount its own channel, like the per-user/row topics the wallet and
+  // inbox channels already use.
+  const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '');
+
   // Realtime: patch/remove already-loaded bounties in place (safe regardless
   // of pagination), and surface new open-bounty INSERTs as a count rather
   // than splicing them into the paginated list.
   useEffect(() => {
     const channel = supabase
-      .channel('bounty-feed:bounties')
+      .channel(`bounty-feed:bounties:${instanceId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bounties', filter: 'status=eq.open' },
@@ -782,7 +792,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         // best-effort cleanup
       }
     };
-  }, []);
+  }, [instanceId]);
 
   useImperativeHandle(
     ref,
