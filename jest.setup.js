@@ -212,6 +212,14 @@ jest.mock('react-native', () => {
     Alert: {
       alert: jest.fn(),
     },
+    // Declared with an implementation (not mockReturnValue) so a suite's
+    // jest.clearAllMocks() can't strip it. Suites that need to drive a
+    // foreground/background transition capture the listener via
+    // AppState.addEventListener.mock.calls (see use-accept-funding.test.tsx).
+    AppState: {
+      currentState: 'active',
+      addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    },
     Modal: 'Modal',
     Image: 'Image',
   };

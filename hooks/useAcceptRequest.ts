@@ -38,7 +38,10 @@ interface UseAcceptRequestParams {
    * which is safe, because an unfunded bounty is rejected by the DB trigger
    * rather than by this hook. Omitting it costs UX, never integrity.
    */
-  ensureFunded?: (bountyId: string | number, context?: { hunterName?: string; variant?: string }) => Promise<boolean>
+  ensureFunded?: (
+    bountyId: string | number,
+    context?: { hunterName?: string; hunterAvatar?: string | null; variant?: string }
+  ) => Promise<boolean>
   /**
    * Pulls the authoritative wallet balance from the server. Called immediately
    * after a successful pay-at-accept acceptance, because that transaction is
@@ -52,7 +55,7 @@ interface UseAcceptRequestParams {
   handleAcceptFailure?: (
     error: unknown,
     bountyId: string | number,
-    context?: { hunterName?: string; variant?: string }
+    context?: { hunterName?: string; hunterAvatar?: string | null; variant?: string }
   ) => Promise<boolean>
 }
 
@@ -112,6 +115,9 @@ export function useAcceptRequest({
       const wasDeferredFunding = (request.bounty as any)?.funding_mode === 'at_accept'
       const fundingContext = {
         hunterName: request.profile?.username || undefined,
+        // The pay sheet shows who is being hired next to the amount, so the
+        // charge reads as "pay to hire Ada" rather than an anonymous top-up.
+        hunterAvatar: request.profile?.avatar || (request.profile as any)?.avatar_url || null,
         variant: wasDeferredFunding ? 'deferred' : 'control',
       }
       if (ensureFunded && resolvedBountyId != null) {
