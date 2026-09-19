@@ -89,9 +89,12 @@ export default function MfaChallengeScreen() {
   };
 
   const handleCancelSignIn = async () => {
-    // Sign out so the existing session is invalidated and cannot be used to bypass MFA.
+    // Sign out so the existing (pre-MFA) session is invalidated and cannot be
+    // used to bypass MFA. Scoped to this device only (`scope: 'local'`) — the
+    // SDK default (`scope: 'global'`) would also revoke this user's already
+    // MFA-verified sessions on their other devices.
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' } as any);
     } catch {
       // Proceed to sign-in regardless
     }
