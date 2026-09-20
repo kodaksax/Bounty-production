@@ -33,11 +33,17 @@ jest.mock('../../../lib/config/api', () => ({
   FINANCIAL_API_BASE_URL: 'https://api.example.com',
 }));
 
-// Mock logger
+// Mock logger, but mirror the real module's console routing (info -> log,
+// warning -> warn, error -> error) so tests can assert against the actual
+// console path instead of just "some logger method was called". That's the
+// only way to catch a regression where a "quiet" log still goes through
+// console.warn/console.error, which React Native's LogBox surfaces as a dev
+// overlay same as console.error.
 jest.mock('../../../lib/utils/error-logger', () => ({
   logger: {
-    error: jest.fn(),
-    warning: jest.fn(),
+    error: jest.fn((...args: unknown[]) => console.error(...args)),
+    warning: jest.fn((...args: unknown[]) => console.warn(...args)),
+    info: jest.fn((...args: unknown[]) => console.log(...args)),
   },
 }));
 
@@ -601,8 +607,12 @@ describe('CompletionService', () => {
       expect(result).toBeNull();
     });
 
-    it('should log a ready-state fetch failure at warning level, not error', async () => {
+    it('logs a ready-state fetch failure via console.log, never console.warn/error, with the extracted message', async () => {
       const { logger } = require('../../../lib/utils/error-logger');
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
       mockSupabase.from.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
@@ -619,10 +629,23 @@ describe('CompletionService', () => {
 
       expect(result).toBeNull();
       expect(logger.error).not.toHaveBeenCalled();
-      expect(logger.warning).toHaveBeenCalledWith(
+      expect(logger.warning).not.toHaveBeenCalled();
+      // console.warn AND console.error both paint a LogBox dev overlay, so
+      // this diagnostic must go through neither -- only logger.info's plain
+      // console.log path is silent.
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+      // The Supabase-shaped error is `{ message: 'db down' }`, a plain object
+      // rather than an Error instance. The logged value must be the extracted
+      // string, not the serialized object (`{"message":"db down"}`).
+      expect(logSpy).toHaveBeenCalledWith(
         'Error fetching ready state',
-        expect.objectContaining({ bountyId: 'bounty-warn' })
+        expect.objectContaining({ bountyId: 'bounty-warn', error: 'db down' })
       );
+
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
     });
 
     it('should not re-log an identical ready-state failure on repeated polls', async () => {
@@ -643,7 +666,7 @@ describe('CompletionService', () => {
       await completionService.getReady('bounty-dedup');
       await completionService.getReady('bounty-dedup');
 
-      expect(logger.warning).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledTimes(1);
     });
   });
 
