@@ -162,19 +162,32 @@ async function main() {
     // bug (see the note this script's caller should have surfaced alongside
     // it) that currently means EVERY open, non-test production bounty has
     // geom = NULL (verified 2026-09-19: 11/11). Disabling these two triggers
-    // for this transaction only (rolled back below either way) is the only
-    // way to fixture the positive "has a geom" control until that bug is fixed.
-    await client.query('ALTER TABLE public.bounties DISABLE TRIGGER trg_bounties_notify_radius_matched');
-    await client.query('ALTER TABLE public.bounties DISABLE TRIGGER trg_bounties_notify_radius_on_location_added');
-    const bWithGeom = await makeBounty({ title: 'LB has geom', createdHoursAgo: 1 });
-    await client.query('UPDATE bounties SET latitude = $2, longitude = $3 WHERE id = $1',
-      [bWithGeom, 37.7749, -122.4194]);
-    const geomLanded = (await client.query('SELECT geom IS NOT NULL AS ok FROM bounties WHERE id = $1', [bWithGeom])).rows[0].ok;
-    record('fixture: latitude/longitude actually produced a geom', geomLanded === true);
-    record('open bounty with a geom is NOT flagged no_geom',
-      !(await bucketFor(bWithGeom)).includes('no_geom'));
-    await client.query('ALTER TABLE public.bounties ENABLE TRIGGER trg_bounties_notify_radius_matched');
-    await client.query('ALTER TABLE public.bounties ENABLE TRIGGER trg_bounties_notify_radius_on_location_added');
+    // is the only way to fixture the positive "has a geom" control until
+    // that bug is fixed -- but ALTER TABLE ... DISABLE TRIGGER takes an
+    // ACCESS EXCLUSIVE lock on bounties that is held for the rest of THIS
+    // transaction, not just until ENABLE TRIGGER runs. With the whole script
+    // sharing one outer transaction (BEGIN ... ROLLBACK, up to the 600s
+    // statement_timeout above), that lock would otherwise sit on a live
+    // production table blocking every bounty write for the remainder of the
+    // script. A SAVEPOINT rolled back immediately after the assertion
+    // releases locks acquired since the savepoint right away, so the
+    // exclusive lock's lifetime is bounded to this one fixture instead of
+    // the whole run. The bounty and its geom are gone after the rollback, so
+    // every assertion that needs them runs before it.
+    await client.query('SAVEPOINT sp_geom_trigger');
+    try {
+      await client.query('ALTER TABLE public.bounties DISABLE TRIGGER trg_bounties_notify_radius_matched');
+      await client.query('ALTER TABLE public.bounties DISABLE TRIGGER trg_bounties_notify_radius_on_location_added');
+      const bWithGeom = await makeBounty({ title: 'LB has geom', createdHoursAgo: 1 });
+      await client.query('UPDATE bounties SET latitude = $2, longitude = $3 WHERE id = $1',
+        [bWithGeom, 37.7749, -122.4194]);
+      const geomLanded = (await client.query('SELECT geom IS NOT NULL AS ok FROM bounties WHERE id = $1', [bWithGeom])).rows[0].ok;
+      record('fixture: latitude/longitude actually produced a geom', geomLanded === true);
+      record('open bounty with a geom is NOT flagged no_geom',
+        !(await bucketFor(bWithGeom)).includes('no_geom'));
+    } finally {
+      await client.query('ROLLBACK TO SAVEPOINT sp_geom_trigger');
+    }
 
     // ── Fixture 2: zero_applications ─────────────────────────────────────
     const bZeroApps = await makeBounty({ title: 'LB zero apps', createdHoursAgo: 3 });
@@ -250,16 +263,22 @@ async function main() {
       [poster, hunter]
     )).rows[0]?.id;
     if (darkPoster) {
-      const prevSeen = (await client.query('SELECT last_seen_at FROM profiles WHERE id = $1', [darkPoster])).rows[0].last_seen_at;
-      await client.query("UPDATE profiles SET last_seen_at = now() - interval '72 hours' WHERE id = $1", [darkPoster]);
+      // Regression guard: production activity lives in last_session_at
+      // (see providers/moments-provider.tsx), not the dead last_seen_at
+      // column -- admin_liquidity_board() reads last_session_at for exactly
+      // this reason. Manufacturing last_seen_at here instead would make this
+      // fixture pass even if the RPC regressed back to the dead column,
+      // since it would never touch the value this test sets.
+      const prevSeen = (await client.query('SELECT last_session_at FROM profiles WHERE id = $1', [darkPoster])).rows[0].last_session_at;
+      await client.query("UPDATE profiles SET last_session_at = now() - interval '72 hours' WHERE id = $1", [darkPoster]);
       const bDark = (await client.query(
         `INSERT INTO bounties (title, description, amount, is_for_honor, poster_id, user_id, status, work_type)
          VALUES ('LB gone dark poster','rolled back',$2,false,$1,$1,'open','online') RETURNING id`,
         [darkPoster, AMOUNT]
       )).rows[0].id;
-      record('open bounty whose poster has not been seen in 72h is flagged poster_gone_dark',
+      record('open bounty whose poster has not been active in 72h is flagged poster_gone_dark',
         (await bucketFor(bDark)).includes('poster_gone_dark'));
-      await client.query('UPDATE profiles SET last_seen_at = $1 WHERE id = $2', [prevSeen, darkPoster]);
+      await client.query('UPDATE profiles SET last_session_at = $1 WHERE id = $2', [prevSeen, darkPoster]);
     } else {
       record('poster_gone_dark fixture (skipped -- fewer than 3 non-internal profiles in this DB)', true);
     }
@@ -281,8 +300,8 @@ async function main() {
 
     // ── Grant / RLS: anon and authenticated (non-admin) cannot execute ──
     const grants = await client.query(
-      `SELECT has_function_privilege('anon', 'public.admin_liquidity_board(integer)'::regprocedure, 'EXECUTE') AS anon_can,
-              has_function_privilege('authenticated', 'public.admin_liquidity_board(integer)'::regprocedure, 'EXECUTE') AS authenticated_can`
+      `SELECT has_function_privilege('anon', 'public.admin_liquidity_board(integer, integer)'::regprocedure, 'EXECUTE') AS anon_can,
+              has_function_privilege('authenticated', 'public.admin_liquidity_board(integer, integer)'::regprocedure, 'EXECUTE') AS authenticated_can`
     );
     record('anon has no EXECUTE on admin_liquidity_board', grants.rows[0].anon_can === false);
     record('authenticated (the role, independent of JWT claims) HAS EXECUTE -- the admin_assert_role() guard inside the function is the real boundary',

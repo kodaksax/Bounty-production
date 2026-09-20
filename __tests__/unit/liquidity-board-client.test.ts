@@ -38,6 +38,7 @@ describe('mapLiquidityRow', () => {
       stuck_since: '2026-09-18T10:00:00Z',
       stuck_hours: 26,
       detail: { reason: 'No location set; excluded from nearby search' },
+      bucket_total: 42,
     });
     expect(row).toEqual({
       bucket: 'no_geom',
@@ -51,7 +52,13 @@ describe('mapLiquidityRow', () => {
       stuckSince: '2026-09-18T10:00:00Z',
       stuckHours: 26,
       detail: { reason: 'No location set; excluded from nearby search' },
+      bucketTotal: 42,
     });
+  });
+
+  test('a missing bucket_total maps to undefined, not 0 or NaN', () => {
+    const row = mapLiquidityRow({ bucket: 'no_geom', bounty_id: 'b1', stuck_hours: 1 });
+    expect(row.bucketTotal).toBeUndefined();
   });
 
   test('an unrecognised bucket degrades to zero_applications rather than crashing', () => {

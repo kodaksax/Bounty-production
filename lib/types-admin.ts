@@ -520,6 +520,13 @@ export interface AdminLiquidityRow {
   stuckSince: string;
   stuckHours: number;
   detail: Record<string, unknown>;
+  /**
+   * True count of this row's bucket before the RPC's per-bucket cap, so the
+   * client can tell a genuinely small bucket from one that got truncated
+   * (e.g. render "showing 100 of 412"). Undefined only for payloads that
+   * predate this field.
+   */
+  bucketTotal?: number;
 }
 
 export interface AdminFeedFilters {

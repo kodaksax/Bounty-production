@@ -45,6 +45,7 @@ export function mapLiquidityRow(row: any): AdminLiquidityRow {
     stuckSince: row.stuck_since ?? new Date().toISOString(),
     stuckHours: Number(row.stuck_hours) || 0,
     detail: (row.detail ?? {}) as Record<string, unknown>,
+    bucketTotal: optionalNumber(row.bucket_total),
   };
 }
 
