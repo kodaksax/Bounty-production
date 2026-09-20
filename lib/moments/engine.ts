@@ -54,6 +54,27 @@ function prerequisitesMet(def: MomentDefinition, states: Map<MomentType, MomentS
 }
 
 /**
+ * For state-derived moments, has the underlying goal already been met right
+ * now — independent of whatever status happens to be persisted? Checked
+ * ahead of selection (not just after presenting, as MomentsProvider's
+ * auto-complete effect also does) so a moment whose goal was met before it
+ * was ever shown — e.g. notifications permission already granted, or a
+ * profile that already has a bio/location — is never selected in the first
+ * place, instead of flashing on screen for one render while the async
+ * markCompleted write catches up. That auto-complete effect still runs and
+ * persists 'completed' for bookkeeping; this only stops presentation.
+ */
+function goalAlreadyMet(def: MomentDefinition, ctx: MomentContext): boolean {
+  if (!def.checkCompleted) return false;
+  try {
+    return def.checkCompleted(ctx);
+  } catch (err) {
+    console.error(`[moments] checkCompleted threw for "${def.type}"`, err);
+    return false;
+  }
+}
+
+/**
  * Returns every moment currently eligible to show, sorted by priority
  * (highest priority — lowest number — first). Most callers want
  * evaluateNextMoment instead; this is exposed for surfaces that might want
@@ -68,6 +89,7 @@ export function evaluateEligibleMoments(
   const eligible = registry.filter(def => {
     const state = states.get(def.type) ?? null;
     if (isRetired(def, state)) return false;
+    if (goalAlreadyMet(def, ctx)) return false;
     if (isOnCooldown(def, state)) return false;
     if (!prerequisitesMet(def, states)) return false;
     try {

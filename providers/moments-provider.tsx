@@ -56,7 +56,66 @@ interface MomentsContextValue {
   refresh: () => Promise<void>;
 }
 
+/**
+ * Has this user published a bounty or submitted an application (a
+ * bounty_requests row), ever? Backs MomentContext.hasEngaged — see
+ * registry.ts's hasClearedFirstSession for why this is the one thing that
+ * lets a first-session user still see a passive activation prompt. Two
+ * cheap head-count queries; safe to run on every refresh() alongside the
+ * permission checks it's batched with below.
+ */
+async function fetchHasEngaged(userId: string): Promise<boolean> {
+  const [{ count: bountyCount }, { count: requestCount }] = await Promise.all([
+    supabase.from('bounties').select('id', { count: 'exact', head: true }).eq('poster_id', userId),
+    supabase
+      .from('bounty_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('hunter_id', userId),
+  ]);
+  return !!bountyCount || !!requestCount;
+}
+
 const MomentsContext = createContext<MomentsContextValue | null>(null);
+
+/**
+ * Module-level "who's driving" slot backing MomentsProvider's dedupe guard
+ * (see mountTokenRef below). A duplicate mount happens when navigation pushes a
+ * route that re-renders app/tabs/bounty-app.tsx on top of itself (several
+ * moment actions `router.push` to '/tabs/bounty-app' — see registry.ts),
+ * stacking a second instance on top of the one that's still alive
+ * underneath instead of the intended single tab shell. Without a guard, both
+ * instances independently fetch state, evaluate, and fire markShown +
+ * moment_shown for the same user — this is the "shows ~7 times" symptom in
+ * BNTY-09's PostHog evidence, not just repeated real activations. Whichever
+ * instance mounts FIRST claims the slot and keeps driving the queue for its
+ * whole lifetime; later instances render children but stay inert (no
+ * fetch/evaluate/present), so at most one MomentsProvider is ever "live" at
+ * a time. This is a defensive backstop, not a fix for the duplicate
+ * navigation itself — that's a separate, larger change to the moments that
+ * `router.push('/tabs/bounty-app')` from an already-mounted bounty-app.
+ *
+ * When the primary instance unmounts, it releases the slot and notifies
+ * every still-mounted demoted instance (see momentsSlotListeners below) so
+ * one of them can take over instead of every remaining duplicate staying
+ * permanently inert for the rest of the app session.
+ */
+let liveMomentsInstance: object | null = null;
+const momentsSlotListeners = new Set<() => void>();
+
+function claimMomentsSlot(token: object): boolean {
+  if (liveMomentsInstance === null) {
+    liveMomentsInstance = token;
+    return true;
+  }
+  return false;
+}
+
+function releaseMomentsSlot(token: object) {
+  if (liveMomentsInstance === token) {
+    liveMomentsInstance = null;
+    momentsSlotListeners.forEach(listener => listener());
+  }
+}
 
 /** Resolvers for MomentAction.inline — kept here, not in the registry, since they need live services/hooks. */
 const INLINE_HANDLERS: Record<string, () => Promise<boolean>> = {
@@ -94,6 +153,11 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   const { session } = useAuthContext();
   const { profile } = useAuthProfile();
   const userId = session?.user?.id ?? null;
+  // Always the latest userId, read synchronously (not via an effect) so an
+  // in-flight refresh() can tell, after each await, whether the signed-in
+  // user changed out from under it — see refresh()'s staleness checks.
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
 
   const [states, setStates] = useState<Map<MomentType, MomentState>>(new Map());
   const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'undetermined'>(
@@ -103,9 +167,52 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     'undetermined'
   );
   const [sessionCount, setSessionCount] = useState(0);
+  // True once refresh() has resolved the real notifications/location
+  // permission status at least once. Until then, notifPermission/
+  // locPermission above still hold their 'undetermined' initial values,
+  // which are placeholders, not a real read. Gating buildContext on this
+  // (see below) is what "evaluate the permission before activation" means
+  // in practice: a permission-type moment can only ever be picked as
+  // activeMoment once its real status is known, closing the window where a
+  // brand-new mount would otherwise treat "not fetched yet" as "undetermined,
+  // ask the user" and briefly present + mark-shown a permission the user had
+  // in fact already granted.
+  const [permissionsChecked, setPermissionsChecked] = useState(false);
+  const [hasEngaged, setHasEngaged] = useState(false);
   const [activeMoment, setActiveMoment] = useState<MomentDefinition | null>(null);
   const [activeContent, setActiveContent] = useState<MomentContent | null>(null);
   const shownAtRef = useRef<number | null>(null);
+  // Dedupe guard for duplicate MomentsProvider mounts (see liveMomentsInstance
+  // doc comment above). Claiming the slot happens in an effect — not during
+  // render — so an interrupted/discarded render (concurrent React) can never
+  // claim the slot without actually committing. Declared before every other
+  // effect below so isPrimary() is already correct by the time they run in
+  // this same commit (passive effects fire in declaration order).
+  const mountTokenRef = useRef<object>({});
+  const isPrimaryRef = useRef(false);
+  const isPrimary = useCallback(() => isPrimaryRef.current, []);
+  // Bumped whenever this instance transitions from demoted to primary (a
+  // takeover — see momentsSlotListeners above). isPrimaryRef alone can't
+  // retrigger the effects below since mutating a ref isn't a React
+  // dependency change; this state value is what actually wakes a
+  // taken-over instance up to fetch and start evaluating.
+  const [primaryVersion, setPrimaryVersion] = useState(0);
+  useEffect(() => {
+    const token = mountTokenRef.current;
+    const tryClaim = () => {
+      if (isPrimaryRef.current) return;
+      if (claimMomentsSlot(token)) {
+        isPrimaryRef.current = true;
+        setPrimaryVersion(v => v + 1);
+      }
+    };
+    tryClaim();
+    momentsSlotListeners.add(tryClaim);
+    return () => {
+      momentsSlotListeners.delete(tryClaim);
+      releaseMomentsSlot(token);
+    };
+  }, []);
   // In-flight guard for the auto-complete/expire effect below. That effect's
   // dependency array includes buildContext, whose identity changes on nearly
   // every screen navigation or profile refresh — far more often than the
@@ -125,37 +232,59 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   const backfillAttemptedForUserRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!userId) {
+    // A demoted (non-primary) instance never fetches, evaluates, or writes —
+    // see liveMomentsInstance's doc comment. Its own `states`/`activeMoment`
+    // simply stay at their inert initial values.
+    if (!isPrimary()) return;
+    const requestUserId = userId;
+    if (!requestUserId) {
       setStates(new Map());
       setActiveMoment(null);
       setActiveContent(null);
       return;
     }
-    const [fetchedStates, notifStatus, locStatus] = await Promise.all([
-      momentsService.fetchStates(userId),
+    const [fetchedStates, notifStatus, locStatus, engaged] = await Promise.all([
+      momentsService.fetchStates(requestUserId),
       notificationService.getPermissionStatus(),
       locationService.getPermissionStatus(),
+      fetchHasEngaged(requestUserId),
     ]);
+    // The signed-in user can change while the fetch above is in flight
+    // (sign-out/sign-in racing this request). Bail out rather than applying
+    // a late response for a user who is no longer current — the [userId,
+    // primaryVersion] reset effect below already wiped this state for
+    // whoever is current now, and a stale apply here would resurrect it.
+    if (userIdRef.current !== requestUserId) return;
     setNotifPermission(notifStatus);
     setLocPermission(locStatus.status);
+    setHasEngaged(engaged);
 
     // Backfill event-triggered moments for users who onboarded before this
     // wiring existed (new users get these enqueued directly in
     // app/onboarding/done.tsx instead). Gated to once per user per app
     // session; safe to skip entirely once state rows exist (the common case).
-    if (backfillAttemptedForUserRef.current !== userId) {
-      backfillAttemptedForUserRef.current = userId;
-      await backfillEventMoments(userId, profile?.primary_role, fetchedStates).catch(() => {
+    let resolvedStates = fetchedStates;
+    if (backfillAttemptedForUserRef.current !== requestUserId) {
+      backfillAttemptedForUserRef.current = requestUserId;
+      await backfillEventMoments(requestUserId, profile?.primary_role, fetchedStates).catch(() => {
         // Best-effort — if this fails, it'll be retried next session since
         // no state row will have been created.
         backfillAttemptedForUserRef.current = null;
       });
+      if (userIdRef.current !== requestUserId) return;
       // Re-fetch so a moment enqueued/completed by the backfill above is
       // reflected in this refresh cycle instead of waiting for the next one.
-      setStates(await momentsService.fetchStates(userId));
-    } else {
-      setStates(fetchedStates);
+      resolvedStates = await momentsService.fetchStates(requestUserId);
+      if (userIdRef.current !== requestUserId) return;
     }
+    // Install the real state map and flip readiness in the same tick, so
+    // buildContext/evaluateNextMoment can never observe permissionsChecked
+    // === true against a still-empty or stale `states` map. That gap used
+    // to let evaluateNextMoment pick up an existing dismissed/snoozed/
+    // completed moment before the real map landed and mark it shown again
+    // — see permissionsChecked's doc comment.
+    setStates(resolvedStates);
+    setPermissionsChecked(true);
 
     // Session tracking for inactive_user_return + future lifecycle
     // campaigns (see lib/moments/sessionTracking.ts). Read-then-write against
@@ -164,28 +293,51 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     const lastSessionAt = profile?.last_session_at ?? null;
     const { isReturning, daysSinceLastSession } = evaluateReturningUser(lastSessionAt);
     if (isReturning) {
-      momentsService.enqueue(userId, 'inactive_user_return', { daysSinceLastSession });
+      momentsService.enqueue(requestUserId, 'inactive_user_return', { daysSinceLastSession });
     }
     if (shouldRecordSession(lastSessionAt)) {
       // Same throttle window doubles as this device's session-boundary
       // definition — see MomentContext.sessionCount doc comment.
-      incrementSessionCount(userId).then(setSessionCount);
+      incrementSessionCount(requestUserId).then(count => {
+        if (userIdRef.current === requestUserId) setSessionCount(count);
+      });
       supabase
         .from('profiles')
         .update({ last_session_at: new Date().toISOString() })
-        .eq('id', userId)
+        .eq('id', requestUserId)
         .then(({ error }) => {
           if (error) console.error('[moments] failed to record last_session_at', error);
         });
     } else {
-      getSessionCount(userId).then(setSessionCount);
+      getSessionCount(requestUserId).then(count => {
+        if (userIdRef.current === requestUserId) setSessionCount(count);
+      });
     }
-  }, [userId, profile?.primary_role, profile?.last_session_at]);
+  }, [userId, profile?.primary_role, profile?.last_session_at, isPrimary]);
 
   useEffect(() => {
+    // Reset every user-scoped readiness/data field immediately on any
+    // signed-in-user change (including sign-out to null) or slot takeover,
+    // rather than waiting for refresh() to resolve. Without this,
+    // permissionsChecked/hasEngaged/states from the previous user stayed
+    // true/populated while a new user's refresh() was still in flight,
+    // letting the new user's context be evaluated with the old user's
+    // permission/engagement/moment state — including first-session
+    // eligibility — until that fetch landed. A takeover resets a demoted
+    // instance's already-default state too, which is a harmless no-op, but
+    // also (re-)triggers refresh() so a newly-promoted instance actually
+    // fetches instead of waiting for the next userId change or app-foreground.
+    setStates(new Map());
+    setPermissionsChecked(false);
+    setHasEngaged(false);
+    setNotifPermission('undetermined');
+    setLocPermission('undetermined');
+    setActiveMoment(null);
+    setActiveContent(null);
+    backfillAttemptedForUserRef.current = null;
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, primaryVersion]);
 
   /**
    * Applies a status/metadata change to the in-memory `states` map
@@ -237,12 +389,17 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   }, [refresh]);
 
   const buildContext = useCallback((): MomentCtx | null => {
-    if (!userId || !profile) return null;
+    // permissionsChecked gates the whole context, not just the permission
+    // fields, so that no moment of any kind can be selected before we've
+    // resolved the real notifications/location status even once — see
+    // permissionsChecked's doc comment above.
+    if (!userId || !profile || !permissionsChecked) return null;
     return {
       userId,
       accountCreatedAt: profile.created_at ?? null,
       sessionCount,
       activeScreen,
+      hasEngaged,
       profile: {
         hasAvatar: !!profile.avatar,
         hasBio: !!profile.about,
@@ -260,12 +417,22 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
         location: locPermission,
       },
     };
-  }, [userId, profile, notifPermission, locPermission, sessionCount, activeScreen]);
+  }, [
+    userId,
+    profile,
+    permissionsChecked,
+    notifPermission,
+    locPermission,
+    sessionCount,
+    activeScreen,
+    hasEngaged,
+  ]);
 
   // Auto-complete state-derived moments whose underlying goal was met after
   // they were shown (e.g. user added an avatar via the profile screen, not
   // by tapping "Accept" here) — see MomentDefinition.checkCompleted.
   useEffect(() => {
+    if (!isPrimary()) return;
     const ctx = buildContext();
     if (!ctx || !userId) return;
 
@@ -287,11 +454,14 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
         // user completes Stripe Connect via the wallet screen's own button
         // after having dismissed/snoozed the prompt. Keeps the persisted
         // status an accurate "completed" rather than stuck on whatever it
-        // last was.
+        // last was. A missing state (never enqueued/shown at all — e.g. a
+        // permission that was already granted before this device ever hit
+        // the engine's checkCompleted short-circuit in engine.ts) is treated
+        // the same way, so the persisted record still ends up 'completed'
+        // for backlog/reporting accuracy even though the user never saw a
+        // prompt — see engine.ts's goalAlreadyMet.
         if (
-          state &&
-          state.status !== 'completed' &&
-          state.status !== 'expired' &&
+          (!state || (state.status !== 'completed' && state.status !== 'expired')) &&
           def.checkCompleted?.(ctx)
         ) {
           resolvingMomentsRef.current.add(def.type);
@@ -300,7 +470,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
             patchState(def.type, { status: 'completed', completedAt: new Date().toISOString() });
             analyticsService.trackEvent('moment_completed', {
               momentType: def.type,
-              source: 'auto_detected',
+              source: state ? 'auto_detected' : 'auto_detected_never_shown',
               // Permission-type moments (enable_notifications, enable_location)
               // resolve to 'completed' on denial as well as grant — checkCompleted
               // only observes "no longer undetermined." Surface the outcome
@@ -311,7 +481,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
                   : def.type === 'enable_location'
                     ? ctx.permissions.location === 'granted'
                     : undefined,
-              msSinceShown: state.lastShownAt
+              msSinceShown: state?.lastShownAt
                 ? Date.now() - new Date(state.lastShownAt).getTime()
                 : undefined,
             });
@@ -342,12 +512,15 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
         }
       }
     })();
-  }, [states, buildContext, userId, patchState]);
+  }, [states, buildContext, userId, patchState, isPrimary]);
 
   // Compute the single next-eligible moment. Structurally impossible to
   // surface more than one at a time — evaluateNextMoment always returns
-  // at most one definition.
+  // at most one definition. Also guarded by isPrimary: a demoted duplicate
+  // instance must never present anything of its own (see
+  // liveMomentsInstance's doc comment) — its activeMoment simply stays null.
   useEffect(() => {
+    if (!isPrimary()) return;
     const ctx = buildContext();
     if (!ctx || !userId) {
       setActiveMoment(null);
@@ -365,7 +538,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       }
       return next;
     });
-  }, [states, buildContext, userId]);
+  }, [states, buildContext, userId, isPrimary]);
 
   // Present (mark shown) whenever a new moment becomes active.
   useEffect(() => {
