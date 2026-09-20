@@ -30,7 +30,8 @@ export type BountyDisplayStatus =
   | 'completed'
   | 'archived'
   | 'cancelled'
-  | 'cancellation_requested';
+  | 'cancellation_requested'
+  | 'deleted';
 
 export interface BountyDisplayStatusInput {
   /** The bounty's own status column plus the deadline used for the overlay. */
@@ -71,6 +72,8 @@ export function getBountyDisplayStatus({
       return 'cancelled';
     case 'cancellation_requested':
       return 'cancellation_requested';
+    case 'deleted':
+      return 'deleted';
     default:
       return 'open';
   }
@@ -89,6 +92,7 @@ export const BOUNTY_DISPLAY_STATUS_LABELS: Record<BountyDisplayStatus, string> =
   archived: 'ARCHIVED',
   cancelled: 'CANCELLED',
   cancellation_requested: 'CANCELLATION PENDING',
+  deleted: 'REMOVED',
 };
 
 /** Badge background color shown on the card for each display status. */
@@ -104,4 +108,5 @@ export const BOUNTY_DISPLAY_STATUS_COLORS: Record<BountyDisplayStatus, string> =
   archived: '#6b7280', // gray-500
   cancelled: '#ef4444', // red-500
   cancellation_requested: '#f97316', // orange-500
+  deleted: '#6b7280', // gray-500, same treatment as archived
 };

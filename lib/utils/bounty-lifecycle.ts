@@ -605,6 +605,20 @@ function resolvePoster(args: {
         secondaryActions: [],
       });
 
+    case 'deleted':
+      return finalize({
+        status,
+        headline: 'Removed',
+        explanation: 'You deleted this posting.',
+        nextStep: 'Post it again as a new bounty if you still need it done.',
+        waitingOn: 'nobody',
+        needsAttention: false,
+        tone: 'neutral',
+        stageIndex: 0,
+        primaryAction: action('repost'),
+        secondaryActions: [],
+      });
+
     default:
       return finalize({
         status,
@@ -819,6 +833,20 @@ function resolveHunter(args: {
         secondaryActions: [],
       });
 
+    case 'deleted':
+      return finalize({
+        status,
+        headline: 'No longer available',
+        explanation: 'The poster removed this bounty, so no work is expected.',
+        nextStep: 'There are other bounties open right now.',
+        waitingOn: 'nobody',
+        needsAttention: false,
+        tone: 'neutral',
+        stageIndex: 0,
+        primaryAction: action('find_bounties'),
+        secondaryActions: [],
+      });
+
     case 'open':
     default:
       // An open bounty the hunter has no pending request on — they withdrew, or
@@ -869,7 +897,7 @@ export function getBountyAttentionGroup(
   state: Pick<BountyLifecycleState, 'needsAttention' | 'waitingOn' | 'status'>
 ): BountyAttentionGroup {
   if (state.needsAttention) return 'attention';
-  const terminal: BountyDisplayStatus[] = ['completed', 'cancelled', 'archived', 'rejected'];
+  const terminal: BountyDisplayStatus[] = ['completed', 'cancelled', 'archived', 'rejected', 'deleted'];
   if (terminal.includes(state.status)) return 'past';
   if (state.waitingOn === 'other' || state.waitingOn === 'support') return 'waiting';
   return 'active';
