@@ -96,16 +96,33 @@ ALTER TABLE public.notifications
 -- and notifications_outbox), not to NEW itself, so there is nothing to
 -- contribute back to the bounties row being written.
 --
--- Wrapped in its own exception handler, same pattern as
--- fn_stamp_poster_interaction_on_message: a poster cancelling or deleting
--- their bounty must never fail because a secondary cleanup write hit an
--- unrelated problem.
+-- This also fires during fn_accept_bounty_request, which sets
+-- accepted_request_id in the very same UPDATE that flips status to
+-- 'in_progress' -- so NEW.accepted_request_id is already populated by the
+-- time this trigger runs, and the request being accepted is excluded from
+-- the cleanup below. Without that exclusion the request being accepted would
+-- itself get rejected here (status='pending' at this point -- the accept
+-- flow's own UPDATE to status='accepted' hasn't run yet) and would carry a
+-- stale rejection_source/rejected_at forward even after being re-marked
+-- 'accepted' a moment later, plus wrongly notify the accepted hunter that
+-- their application was auto-closed.
+--
+-- The rejection UPDATE and the notification INSERT are two separate
+-- statements (not one WITH ... INSERT), and the INSERT is wrapped in its own
+-- nested exception block, which gets its own savepoint: if notification
+-- delivery fails, only that insert is rolled back. Folding both into one
+-- statement under the outer handler below would roll the rejection UPDATE
+-- back too when the insert fails, silently leaving the pending request
+-- behind -- the exact zombie state this trigger exists to prevent.
 CREATE OR REPLACE FUNCTION public.fn_reject_pending_requests_on_bounty_close()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public', 'pg_catalog', 'pg_temp'
 AS $$
+DECLARE
+  v_closed_ids     uuid[];
+  v_closed_hunters uuid[];
 BEGIN
   IF NEW.status IS DISTINCT FROM OLD.status AND NEW.status::text <> 'open' THEN
     WITH closed AS (
@@ -116,16 +133,25 @@ BEGIN
       WHERE br.bounty_id = NEW.id
         AND br.status = 'pending'
         AND br.hunter_id IS NOT NULL
+        AND (NEW.accepted_request_id IS NULL OR br.id <> NEW.accepted_request_id)
       RETURNING br.id, br.hunter_id
     )
-    INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
-    SELECT
-      jsonb_build_array(c.hunter_id),
-      'Application no longer available',
-      'This bounty is no longer available, so your application was closed automatically -- this wasn''t a rejection.',
-      jsonb_build_object('type', 'application_bounty_closed', 'bountyId', NEW.id, 'applicationId', c.id),
-      NEW.id::text
-    FROM closed c;
+    SELECT array_agg(id), array_agg(hunter_id) INTO v_closed_ids, v_closed_hunters FROM closed;
+
+    IF v_closed_ids IS NOT NULL THEN
+      BEGIN
+        INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
+        SELECT
+          jsonb_build_array(t.hunter_id),
+          'Application no longer available',
+          'This bounty is no longer available, so your application was closed automatically -- this wasn''t a rejection.',
+          jsonb_build_object('type', 'application_bounty_closed', 'bountyId', NEW.id, 'applicationId', t.request_id),
+          NEW.id::text
+        FROM unnest(v_closed_ids, v_closed_hunters) AS t(request_id, hunter_id);
+      EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'fn_reject_pending_requests_on_bounty_close: notification enqueue failed for bounty %: %', NEW.id, SQLERRM;
+      END;
+    END IF;
   END IF;
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
@@ -145,7 +171,7 @@ CREATE TRIGGER trg_bounties_reject_pending_requests_on_close
   EXECUTE FUNCTION public.fn_reject_pending_requests_on_bounty_close();
 
 COMMENT ON FUNCTION public.fn_reject_pending_requests_on_bounty_close() IS
-  'BNTY-11: a bounty leaving status=open closes out any bounty_requests row still pending against it (rejection_source=system_bounty_closed), regardless of which path moved the bounty -- delete, cancel, accept, admin action. fn_accept_bounty_request already rejects sibling requests explicitly as part of accepting one, so by the time this fires for an accept there is normally nothing left for it to do; it exists as a backstop that holds even when a new removal path forgets to do that cleanup itself.';
+  'BNTY-11: a bounty leaving status=open closes out every OTHER bounty_requests row still pending against it (rejection_source=system_bounty_closed), regardless of which path moved the bounty -- delete, cancel, accept, admin action. The row named by NEW.accepted_request_id, if any, is excluded: fn_accept_bounty_request sets accepted_request_id in the same UPDATE that flips status to in_progress, so this trigger fires before that function marks the request accepted, and would otherwise reject-then-reaccept it with a stale rejection_source/rejected_at and a wrongful "closed" notification.';
 
 -- ─── One-time backfill of existing zombie rows ─────────────────────────────
 -- Same 14-day notify cutoff as the file header: close every one of them, but
