@@ -32,10 +32,11 @@ import { stripeService } from 'lib/services/stripe-service';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -150,38 +151,21 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   const busy = isProcessing || settling;
 
   // --- Deposit outcome -> gate --------------------------------------------
-  // use-wallet-deposit reports success by setting `successInfo` (the wallet's
-  // keypad shows a "Success!" modal on it). Here nothing is shown: the gate
-  // re-checks the server and, if covered, the hire proceeds on its own.
-  const outcomeHandledRef = useRef(false);
-  useEffect(() => {
-    if (!successInfo) return;
-    outcomeHandledRef.current = true;
-    const paid = successInfo.amount;
-    setSuccessInfo(null);
-    gate.onPaymentSucceeded(paid);
-    // gate callbacks are recreated per render; the effect is keyed on the
-    // outcome, not the handler identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [successInfo]);
-
-  // A charge that ended without `successInfo` either errored (the hook set
-  // `error`) or was dismissed (Apple Pay cancel sets nothing at all). Both are
-  // "nothing charged, sheet stays up"; they differ only in the reason the
-  // funnel records.
-  const wasProcessingRef = useRef(false);
-  useEffect(() => {
-    if (isProcessing) {
-      wasProcessingRef.current = true;
-      outcomeHandledRef.current = false;
-      return;
+  // payWithCard/payWithApplePay return a definitive outcome for every exit
+  // path — including validation and preflight failures that never touch
+  // Stripe/Apple Pay — so the gate is driven directly from that return value
+  // rather than inferred from `isProcessing` transitioning. Inferring it that
+  // way missed any exit that never set `isProcessing`, which left
+  // `paymentInFlightRef` stuck and could race a background/cancel event
+  // against a still-in-flight attempt.
+  const resolveOutcome = (outcome: 'succeeded' | 'cancelled' | 'failed', paid: number) => {
+    if (outcome === 'succeeded') {
+      setSuccessInfo(null);
+      gate.onPaymentSucceeded(paid);
+    } else {
+      gate.onPaymentFailed(outcome);
     }
-    if (!wasProcessingRef.current) return;
-    wasProcessingRef.current = false;
-    if (outcomeHandledRef.current || successInfo) return;
-    gate.onPaymentFailed(error ? 'failed' : 'cancelled');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isProcessing]);
+  };
 
   // --- Actions --------------------------------------------------------------
   const handleConfirm = () => {
@@ -202,14 +186,16 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
       return;
     }
     gate.onPaymentStarted('card');
-    await payWithCard(chargeAmount);
+    const outcome = await payWithCard(chargeAmount);
+    resolveOutcome(outcome, chargeAmount);
   };
 
   const handleApplePay = async () => {
     if (busy) return;
     hapticFeedback.light();
     gate.onPaymentStarted('applePay');
-    await payWithApplePay(chargeAmount);
+    const outcome = await payWithApplePay(chargeAmount);
+    resolveOutcome(outcome, chargeAmount);
   };
 
   const handleCancel = () => {
@@ -255,16 +241,24 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
 
   return (
     <View style={styles.root}>
-      {/* One column, no ScrollView: the information and the buttons share a
-          single flex container so they are always on screen together. The
-          info block sits at the top, the actions at the bottom, and whatever
-          room is left over goes between them rather than below the fold. */}
+      {/* Single column: getGateMetrics sizes everything to fit the info block
+          and the actions on screen together without scrolling in the common
+          case. But those metrics only account for viewport size — not Dynamic
+          Type, an unusually long hunter name, or a multi-line error banner —
+          so the info block scrolls (as add-money-screen's keypad does) rather
+          than clip. The actions stay outside the ScrollView so "Pay"/"Not
+          now" are always reachable even when the info above them overflows. */}
       <View
         style={[
           styles.sheet,
           { paddingTop: insets.top + metrics.topPadding, paddingBottom: footerClearance },
         ]}
       >
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
         <View style={styles.info}>
           <Text style={styles.eyebrow}>{needsPayment ? 'PAY & HIRE' : 'HIRE'}</Text>
 
@@ -319,7 +313,9 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
                 error?.type === 'payment'
                   ? () => {
                       gate.onPaymentStarted('card');
-                      void payWithCard(chargeAmount);
+                      void payWithCard(chargeAmount).then(outcome =>
+                        resolveOutcome(outcome, chargeAmount)
+                      );
                     }
                   : stripeError
                   ? () => loadPaymentMethods()
@@ -375,6 +371,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             </Text>
           )}
         </View>
+        </ScrollView>
 
         <View style={styles.actions}>
           {showApplePay && (
@@ -456,13 +453,19 @@ const ON_PRIMARY_TEXT = '#052e1b';
 const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: theme.background },
-    // The single container for everything: info pinned to the top, actions to
-    // the bottom, spare room between. No scrolling, no separate footer.
+    // The scrollable info block and the fixed actions footer as siblings:
+    // actions size to their own content and stay pinned below the scroll
+    // area, so they're reachable regardless of how much room the info block
+    // needs.
     sheet: {
       flex: 1,
-      justifyContent: 'space-between',
       paddingHorizontal: metrics.horizontalPadding,
     },
+    scroll: { flex: 1 },
+    // flexGrow + centering means short content (the common case, thanks to
+    // getGateMetrics) is centered in the available space exactly as before;
+    // content that doesn't fit scrolls from the top instead of clipping.
+    scrollContent: { flexGrow: 1, justifyContent: 'center' },
     info: { gap: metrics.sectionGap },
     eyebrow: {
       color: theme.textSecondary,

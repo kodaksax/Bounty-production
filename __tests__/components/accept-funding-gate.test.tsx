@@ -21,7 +21,7 @@
  *   * sub-minimum shortfall -> charged at Stripe's $0.50 floor, not refused
  */
 
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { Platform } from 'react-native';
 
@@ -246,20 +246,14 @@ describe('AcceptFundingGate', () => {
       expect(chargeAmountForShortfall(NaN)).toBe(0);
     });
 
-    test('a captured deposit reaches the gate with the paid amount and no modal to dismiss', () => {
+    test('a captured deposit reaches the gate with the paid amount and no modal to dismiss', async () => {
+      mockPayWithCard.mockResolvedValue('succeeded');
       const gate = makeGate();
-      const { rerender, queryByText } = render(<AcceptFundingGate gate={gate} />);
+      const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
-      depositState = { ...depositState, isProcessing: true };
-      rerender(<AcceptFundingGate gate={gate} />);
-      depositState = {
-        ...depositState,
-        isProcessing: false,
-        successInfo: { amount: 30, persisted: true, via: 'card' },
-      };
-      rerender(<AcceptFundingGate gate={gate} />);
+      fireEvent.press(getByText('Pay $30.00 & hire'));
 
-      expect(gate.onPaymentSucceeded).toHaveBeenCalledWith(30);
+      await waitFor(() => expect(gate.onPaymentSucceeded).toHaveBeenCalledWith(30));
       expect(gate.onPaymentSucceeded).toHaveBeenCalledTimes(1);
       expect(gate.onPaymentFailed).not.toHaveBeenCalled();
       // The wallet keypad's "Success!" modal is not part of this sheet.
@@ -267,36 +261,41 @@ describe('AcceptFundingGate', () => {
       expect(queryByText('Success!')).toBeNull();
     });
 
-    test('a dismissed Apple Pay sheet is reported as cancelled and the sheet stays up', () => {
+    test('a dismissed Apple Pay sheet is reported as cancelled and the sheet stays up', async () => {
+      // use-wallet-deposit sets no error/successInfo on a user cancel — the
+      // outcome is carried entirely by the resolved value.
+      mockPayWithApplePay.mockResolvedValue('cancelled');
       const gate = makeGate();
-      const { rerender, getByText } = render(<AcceptFundingGate gate={gate} />);
+      const { getByLabelText, getByText } = render(<AcceptFundingGate gate={gate} />);
 
-      depositState = { ...depositState, isProcessing: true };
-      rerender(<AcceptFundingGate gate={gate} />);
-      // use-wallet-deposit sets nothing at all on a user cancel.
-      depositState = { ...depositState, isProcessing: false };
-      rerender(<AcceptFundingGate gate={gate} />);
+      fireEvent.press(getByLabelText('Pay 30.00 dollars with Apple Pay and hire'));
 
-      expect(gate.onPaymentFailed).toHaveBeenCalledWith('cancelled');
+      await waitFor(() => expect(gate.onPaymentFailed).toHaveBeenCalledWith('cancelled'));
       expect(gate.onPaymentSucceeded).not.toHaveBeenCalled();
       expect(getByText('Pay $30.00 & hire')).toBeTruthy();
     });
 
-    test('a declined charge is reported as failed and shown in place', () => {
+    test('a declined charge is reported as failed and shown in place', async () => {
+      mockPayWithCard.mockImplementation(async () => {
+        depositState = {
+          ...depositState,
+          error: { message: 'Your card was declined.', type: 'payment' },
+        };
+        return 'failed';
+      });
       const gate = makeGate();
-      const { rerender, getByText } = render(<AcceptFundingGate gate={gate} />);
+      const { getByText, rerender } = render(<AcceptFundingGate gate={gate} />);
 
-      depositState = { ...depositState, isProcessing: true };
-      rerender(<AcceptFundingGate gate={gate} />);
-      depositState = {
-        ...depositState,
-        isProcessing: false,
-        error: { message: 'Your card was declined.', type: 'payment' },
-      };
-      rerender(<AcceptFundingGate gate={gate} />);
+      fireEvent.press(getByText('Pay $30.00 & hire'));
 
-      expect(gate.onPaymentFailed).toHaveBeenCalledWith('failed');
+      await waitFor(() => expect(gate.onPaymentFailed).toHaveBeenCalledWith('failed'));
       expect(gate.onPaymentSucceeded).not.toHaveBeenCalled();
+
+      // In the real hook, `setError` is React state on the same component and
+      // its own state change triggers this re-render; here the mock hook
+      // returns a plain snapshot of `depositState`, so the render that picks
+      // up the mutation above has to be asked for explicitly.
+      rerender(<AcceptFundingGate gate={gate} />);
       expect(getByText('banner:Your card was declined.')).toBeTruthy();
       expect(getByText('Pay $30.00 & hire')).toBeTruthy();
     });
