@@ -1,7 +1,7 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import { schedulePresetToDates } from 'lib/utils/schedule-utils';
+import { isToday, isTomorrow, schedulePresetToDates } from 'lib/utils/schedule-utils';
 import React, { useMemo, useState } from 'react';
 import { Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
@@ -91,10 +91,16 @@ export function StepWhen({ draft, onUpdate, onNext, onBack, isSaving = false, st
     });
   };
 
-  const pickedDateLabel =
-    selected === 'custom' && draft.startDate
-      ? new Date(draft.startDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-      : null;
+  // A date of today rendered as "Sat, Sep 19" reads as the app having ignored
+  // "this afternoon" and picked some other day. Name the two days a poster is
+  // most likely to have asked for; everything else keeps the dated form.
+  const pickedDateLabel = (() => {
+    if (selected !== 'custom' || !draft.startDate) return null;
+    const picked = new Date(draft.startDate);
+    if (isToday(picked)) return 'Today';
+    if (isTomorrow(picked)) return 'Tomorrow';
+    return picked.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  })();
 
   return (
     <QuickStepLayout
