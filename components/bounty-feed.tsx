@@ -23,6 +23,7 @@ import {
     forwardRef,
     useCallback,
     useEffect,
+    useId,
     useImperativeHandle,
     useMemo,
     useRef,
@@ -157,6 +158,13 @@ function nearbyToBounty(nb: NearbyBounty): Bounty {
     distance_miles: nb.distance_miles,
   };
 }
+
+// useId() is deterministic and can repeat when a component unmounts and
+// remounts at the same tree position, so it alone doesn't guarantee a fresh
+// realtime topic (see instanceId below). This counter is bumped exactly once
+// per mount via a useState lazy initializer, so appending it makes every
+// mount's topic unique even during a rapid unmount/remount.
+let bountyFeedMountCounter = 0;
 
 export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(
   { activeScreen, setActiveScreen, currentUserId },
@@ -732,12 +740,32 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [loadBounties, loadUserApplications, refreshActiveCount]);
 
+  // Per-mount id that makes the realtime topic unique to this instance.
+  // supabase-js returns the same channel object for a topic that already exists
+  // on the client, and removeChannel() on unmount is async. So a fixed topic can
+  // hand a brief double mount an already-subscribed channel, and adding a
+  // postgres_changes handler after subscribe() then throws. A unique topic gives
+  // each mount its own channel, like the per-user/row topics the wallet and
+  // inbox channels already use.
+  //
+  // useId() alone isn't enough: it's deterministic per tree position, so a
+  // remount at the same spot (e.g. a brief double-mount while the previous
+  // instance's removeChannel() is still in flight) can produce the same id
+  // and reintroduce the exact collision this is guarding against. The
+  // mount-counter suffix, captured once via useState's lazy initializer,
+  // guarantees distinct topics across successive mounts regardless of tree
+  // position or timing.
+  const reactId = useId();
+  const [instanceId] = useState(
+    () => `${reactId.replace(/[^a-zA-Z0-9]/g, '')}-${++bountyFeedMountCounter}`
+  );
+
   // Realtime: patch/remove already-loaded bounties in place (safe regardless
   // of pagination), and surface new open-bounty INSERTs as a count rather
   // than splicing them into the paginated list.
   useEffect(() => {
     const channel = supabase
-      .channel('bounty-feed:bounties')
+      .channel(`bounty-feed:bounties:${instanceId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bounties', filter: 'status=eq.open' },
@@ -782,7 +810,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         // best-effort cleanup
       }
     };
-  }, []);
+  }, [instanceId]);
 
   useImperativeHandle(
     ref,
