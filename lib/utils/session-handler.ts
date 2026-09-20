@@ -169,7 +169,11 @@ export async function handleSessionExpiration(): Promise<void> {
     // This will trigger the SIGNED_OUT event in setupAuthStateListener.
     // Since handleSessionExpiration is only called by session monitoring (not user action),
     // isIntentionalSignOut will be false, so the callback will be triggered by the listener.
-    await supabase.auth.signOut();
+    // Local scope only: this device's session already expired, so there's
+    // nothing to revoke server-side for it, but we must not use the SDK
+    // default (`scope: 'global'`) here, which would revoke this user's
+    // still-valid sessions on their other devices too.
+    await supabase.auth.signOut({ scope: 'local' } as any);
 
     // Clear any local session data
     await AsyncStorage.removeItem(SESSION_CHECK_KEY);

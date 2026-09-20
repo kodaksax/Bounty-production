@@ -199,7 +199,9 @@ granted it.
 | Failed payment leaves a falsely funded bounty | Impossible — the escrow row and the status change are the same transaction. |
 | Unfunded bounty refunded into free money | `POST /wallet/refund` requires an existing completed escrow row and 404s without one. |
 | Release on an unfunded bounty | Cannot reach `status='completed'` without escrow (the guard covers `completed` too). |
-| Partial top-up | `useAcceptFunding.onTopUpComplete` re-reads the requirement **from the server**, never from the typed amount, and returns to the shortfall summary if still short. |
+| Partial deposit | `useAcceptFunding.onPaymentSucceeded` re-reads the requirement **from the server**, never from the amount the sheet reported, waits a bounded time for a slow webhook, and re-prompts the pay sheet for exactly the remainder if still short. |
+| Cancelled / declined charge | The pay sheet stays up with nothing charged and the bounty still `'open'`; `accept_funding_failed` carries `payment_cancelled` / `payment_failed`. |
+| Sub-$0.50 shortfall | Charged at Stripe's floor (`MIN_SHORTFALL_CHARGE`); the excess is ordinary wallet balance, not a fee. |
 | Webhook/client ordering | Unchanged from today. Deposits are the only webhook-driven step and they precede acceptance; acceptance itself is synchronous and local. |
 | Client believes it failed but it succeeded | Retry hits `request_not_pending` (no second charge) and `apply_escrow` would no-op anyway. |
 | Retry loop hammering the money path | `useAcceptRequest` retries **exactly once** after a recovered failure. |
@@ -226,9 +228,13 @@ events are **reused, not replaced**, so current insights keep working.
 | 10. `bounty_work_started` | **`bounty_work_started`** | new |
 | 11. `bounty_completed` | `bounty_completed` | existing |
 
-Plus **`accept_funding_abandoned`** — the poster opened the pay gate and backed
-out, which has no existing equivalent and is the metric that decides whether
-this experiment worked.
+Plus **`accept_funding_abandoned`** — the poster opened the pay gate and left
+without hiring, which has no existing equivalent and is the metric that decides
+whether this experiment worked. `trigger` says how they left: `cancel` (tapped
+"Not now"), `background` (app backgrounded with the sheet up — not emitted while
+a charge is in flight, since Apple Pay / 3DS can background the app), or
+`unmount` (screen went away with the sheet up; this also resolves the gate
+`false` so nothing is accepted for a sheet nobody can see).
 
 ### Properties
 
@@ -237,9 +243,11 @@ Every event in the block carries `variant` (`control`/`deferred`),
 separable without a join. Amounts are **bucketed** by `amountBucket()`
 (`lt_25`, `25_49`, `50_99`, `100_249`, `gte_250`) — never exact. Failure causes
 are bucketed by `classifyAcceptFundingError()` into a closed set
-(`insufficient_funds`, `state_conflict`, `terms_locked`, `not_authorized`,
-`account_inactive`, `network`, `unknown`) so no raw DB message — which
-interpolates balances and user ids — can reach PostHog.
+(`insufficient_funds`, `not_funded`, `state_conflict`, `terms_locked`,
+`not_authorized`, `account_inactive`, `network`, `unknown`) so no raw DB
+message — which interpolates balances and user ids — can reach PostHog. The pay
+sheet's own outcomes share the set: `payment_cancelled`, `payment_failed`,
+`partial_deposit`.
 
 ### Reading the experiment
 
@@ -308,7 +316,7 @@ lifting that cap is the one thing that needs a further migration.
 | `lib/experiments/deferred-funding-variant.ts` | PostHog arm resolution, mirroring `first-screen-variant.ts` |
 | `lib/services/bounty-funding-service.ts` | the only window onto the new RPCs; failure classification; amount bucketing |
 | `hooks/useAcceptFunding.ts` | the pay-at-accept gate state machine |
-| `components/accept-funding-gate.tsx` | its three screens (confirm / shortfall / top-up), reusing the posting flow's own funding screens |
+| `components/accept-funding-gate.tsx` | the single pay-at-accept sheet: "Confirm & hire" when the balance covers it, "Pay $shortfall & hire" (card / Apple Pay via `use-wallet-deposit`) when it is short; resolves on its own once the server confirms the balance |
 | `hooks/useAcceptRequest.ts` | runs the gate **before** any optimistic UI; one bounded retry on recoverable failure; new funnel events |
 | `app/screens/CreateBounty/useBountyPublish.ts` | requests the deferral, skips the balance gate and the post-time escrow when granted |
 | `app/services/bountyService.ts` | `CreateBountyOptions.fundingMode` |

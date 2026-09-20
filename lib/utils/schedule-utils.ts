@@ -32,7 +32,7 @@ export function formatDuration(minutes: number): string {
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 
-function isToday(date: Date): boolean {
+export function isToday(date: Date): boolean {
   const now = new Date();
   return (
     date.getFullYear() === now.getFullYear() &&
@@ -41,7 +41,7 @@ function isToday(date: Date): boolean {
   );
 }
 
-function isTomorrow(date: Date): boolean {
+export function isTomorrow(date: Date): boolean {
   const tom = new Date();
   tom.setDate(tom.getDate() + 1);
   return (

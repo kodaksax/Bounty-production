@@ -86,6 +86,15 @@ export interface MomentContext {
    * interrupting whatever else they're doing.
    */
   activeScreen: string | null;
+  /**
+   * True once the user has published at least one bounty or submitted at
+   * least one application (bounty_requests row), regardless of role. This is
+   * the "they've done something real" signal that lets a moment bypass the
+   * first-session suppression (see registry.ts's hasClearedFirstSession) —
+   * a brand-new session that already contains genuine marketplace activity
+   * is treated differently from a passive first look around the app.
+   */
+  hasEngaged: boolean;
   profile: {
     hasAvatar: boolean;
     hasBio: boolean;

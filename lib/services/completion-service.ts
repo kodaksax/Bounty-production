@@ -131,6 +131,28 @@ export interface Rating {
   created_at?: string;
 }
 
+// Records the last logged getReady failure per bounty. The 3-second poll loop
+// in subscribeReady calls getReady on every tick, so this stops one persistent
+// failure from re-logging the same message every 3 seconds per posting.
+const lastReadyFetchFailure = new Map<string, string>();
+
+// Supabase client errors are plain objects like { message, code, details,
+// hint }, not Error instances, so `err instanceof Error` fails for them. Pull
+// the `.message` out before falling back to JSON.stringify, or callers end up
+// logging (and deduping on) the serialized object instead of its message.
+function normalizeCaughtError(err: unknown): Error {
+  if (err instanceof Error) return err;
+  if (typeof err === 'string') return new Error(err);
+  if (err && typeof err === 'object' && typeof (err as any).message === 'string') {
+    return new Error((err as any).message);
+  }
+  try {
+    return new Error(JSON.stringify(err));
+  } catch {
+    return new Error(String(err));
+  }
+}
+
 export const completionService = {
   /**
    * Submit completion for review
@@ -646,10 +668,7 @@ export const completionService = {
 
       return await postReadyViaRelayApi(bountyId, hunterId);
     } catch (err) {
-      // Ensure we log a meaningful error message even when a non-Error
-      // object is thrown by a library (e.g. Supabase's error object).
-      const normalized =
-        err instanceof Error ? err : new Error(typeof err === 'string' ? err : JSON.stringify(err));
+      const normalized = normalizeCaughtError(err);
       logger.error('Error marking ready', {
         bountyId,
         hunterId,
@@ -667,6 +686,8 @@ export const completionService = {
     bountyId: string
   ): Promise<{ bounty_id: string; hunter_id: string; ready_at: string } | null> {
     try {
+      let record: { bounty_id: string; hunter_id: string; ready_at: string } | null = null;
+
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('completion_ready')
@@ -676,17 +697,30 @@ export const completionService = {
           .maybeSingle();
 
         if (error) throw error;
-        return data || null;
+        record = data || null;
+      } else {
+        const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}/ready`);
+        if (!response.ok) {
+          if (response.status !== 404) throw new Error('Failed to fetch ready state');
+        } else {
+          record = await response.json();
+        }
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}/ready`);
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error('Failed to fetch ready state');
-      }
-      return await response.json();
+      // Clear any prior failure so a new failure episode logs again.
+      lastReadyFetchFailure.delete(bountyId);
+      return record;
     } catch (err) {
-      logger.error('Error fetching ready state', { bountyId, error: (err as any)?.message });
+      // Callers treat a missing ready state as non-fatal. Both console.error
+      // AND console.warn paint a LogBox banner over the bottom nav in dev
+      // builds, so this can't go through logger.error OR logger.warning --
+      // use logger.info, the only level that routes to plain console.log.
+      // Skip the log entirely when the poll loop re-fires the same failure.
+      const normalized = normalizeCaughtError(err);
+      if (lastReadyFetchFailure.get(bountyId) !== normalized.message) {
+        lastReadyFetchFailure.set(bountyId, normalized.message);
+        logger.info('Error fetching ready state', { bountyId, error: normalized.message });
+      }
       return null;
     }
   },

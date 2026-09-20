@@ -421,7 +421,9 @@ export default function UserProfileScreen() {
                 style={[styles.retryButton, { marginTop: 12, backgroundColor: '#ef4444' }]}
                 onPress={async () => {
                   try {
-                    await supabase.auth.signOut();
+                    // Local scope only: don't revoke this user's sessions on
+                    // their other devices just because this screen errored.
+                    await supabase.auth.signOut({ scope: 'local' } as any);
                   } catch (err) {
                     console.error('[UserProfileScreen] Sign out failed:', err);
                     Alert.alert(
