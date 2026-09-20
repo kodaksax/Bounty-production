@@ -31,10 +31,15 @@ const scoreAndNudgeMigration = stripSqlComments(
 );
 
 // fn_escalate_stale_bounty_liquidity (which owns the stage-2 follow-up) was
-// redefined again in a later migration (bounding the online-bounty candidate
-// query) — that file, not the original, is the live definition.
+// redefined again in a later migration (BNTY-02: only advance liquidity_stage
+// when dispatch actually reached a candidate, plus the in_person/no-geom
+// parking branch). That migration restates the whole function body, including
+// the online-bounty candidate query -- which it deliberately reverted back to
+// unbounded, dropping the 90-day/LIMIT-500 cap from the migration before it
+// (see the migration's own header comment). This file, not either predecessor,
+// is the live definition.
 const escalationMigration = stripSqlComments(
-  read('supabase/migrations/20260912152257_bound_online_liquidity_escalation_candidates.sql')
+  read('supabase/migrations/20260919120000_liquidity_escalation_requires_candidates.sql')
 );
 
 describe('stage 1: post-time nudge', () => {
@@ -105,13 +110,43 @@ describe('stage 2: 2h liquidity-checkpoint follow-up', () => {
   });
 });
 
-describe('the online-bounty candidate pool is bounded', () => {
-  test("work_type = 'online' no longer aggregates every profile unfiltered", () => {
+describe('the online-bounty candidate pool is unbounded (cap reverted 2026-09-19)', () => {
+  test("work_type = 'online' aggregates every non-deleted profile, with no activity or row-count bound", () => {
+    // The 90-day-activity / LIMIT 500 cap from
+    // 20260912152257_bound_online_liquidity_escalation_candidates.sql was
+    // deliberately reverted in prod; this migration restates the unbounded
+    // query rather than reintroducing the cap, so asserting its absence here
+    // (not its presence) is what matches the live behavior.
     const onlineBranch = escalationMigration.slice(
       escalationMigration.indexOf("IF v_bounty.work_type = 'online' THEN"),
       escalationMigration.indexOf('ELSIF v_bounty.geom IS NOT NULL THEN')
     );
-    expect(onlineBranch).toMatch(/LIMIT 500/);
-    expect(onlineBranch).toMatch(/last_session_at/);
+    expect(onlineBranch).not.toMatch(/LIMIT 500/);
+    expect(onlineBranch).not.toMatch(/last_session_at/);
+    expect(onlineBranch).toMatch(/p\.deleted_at IS NULL/);
+  });
+});
+
+describe('liquidity_stage only advances when candidates were actually reached (BNTY-02)', () => {
+  test('fn_score_and_dispatch_bounty_notification returns the number of hunters dispatched', () => {
+    expect(escalationMigration).toMatch(/RETURNS integer/);
+    expect(escalationMigration).toMatch(/RETURN v_dispatched;/);
+  });
+
+  test('the sweep advances liquidity_stage only when v_dispatched > 0, otherwise only stamps the attempt', () => {
+    const advanceBranch = escalationMigration.match(
+      /IF v_dispatched > 0 THEN\s+UPDATE public\.bounties\s+SET liquidity_stage = v_bounty\.liquidity_stage \+ 1,\s+liquidity_last_escalated_at = now\(\)\s+WHERE id = v_bounty\.id;\s+ELSE\s+UPDATE public\.bounties\s+SET liquidity_last_escalated_at = now\(\)\s+WHERE id = v_bounty\.id;\s+END IF;/
+    );
+    expect(advanceBranch).not.toBeNull();
+  });
+
+  test('an in_person bounty with no geom is parked at its current stage, never advanced', () => {
+    const parkedBranch = escalationMigration.slice(
+      escalationMigration.indexOf("IF v_bounty.work_type = 'in_person' AND v_bounty.geom IS NULL THEN"),
+      escalationMigration.indexOf('CONTINUE;')
+    );
+    expect(parkedBranch.length).toBeGreaterThan(0);
+    expect(parkedBranch).not.toMatch(/liquidity_stage\s*=/);
+    expect(parkedBranch).toMatch(/liquidity_last_escalated_at = now\(\)/);
   });
 });
