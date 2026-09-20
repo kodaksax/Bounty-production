@@ -118,14 +118,34 @@ export function AppModal({
     if (visible) {
       setMounted(true);
       progress.value = withTiming(1, { duration: MODAL_OPEN_DURATION, easing: MODAL_EASE_OUT });
-    } else {
-      progress.value = withTiming(0, { duration: MODAL_CLOSE_DURATION, easing: MODAL_EASE_OUT }, (finished) => {
-        if (finished) {
-          runOnJS(setMounted)(false);
-          if (onClosed) runOnJS(onClosed)();
-        }
-      });
+      return;
     }
+
+    // Unmount the native <Modal> once the close settles. Run it at most once
+    // per close, whether the animation reports completion or the fallback
+    // below fires first.
+    let settled = false;
+    let fallback: ReturnType<typeof setTimeout>;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallback);
+      setMounted(false);
+      onClosed?.();
+    };
+
+    progress.value = withTiming(0, { duration: MODAL_CLOSE_DURATION, easing: MODAL_EASE_OUT }, (finished) => {
+      if (finished) runOnJS(settle)();
+    });
+
+    // Safety net for an interrupted close. `finished` is false when a rapid
+    // reopen restarts the animation on the shared value (the cleanup below
+    // cancels this timer, so the modal correctly stays up), but it can also be
+    // dropped on the UI thread — which used to leave the Modal mounted at zero
+    // opacity, swallowing every touch behind it. Force the unmount once the
+    // close window has passed so a stuck callback can never leave that overlay.
+    fallback = setTimeout(settle, MODAL_CLOSE_DURATION + 80);
+    return () => clearTimeout(fallback);
     // onClosed is intentionally excluded: it's a completion callback, not a
     // dependency the animation should restart for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,7 +176,10 @@ export function AppModal({
       onRequestClose={onRequestClose}
       statusBarTranslucent={statusBarTranslucent}
     >
-      <View style={StyleSheet.absoluteFill}>
+      {/* Gate touches on `visible`, not opacity: a closing (or stuck-mounted)
+          modal must stop intercepting the instant it is no longer open, without
+          waiting for the fade or the unmount to land. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
         {/* Backdrop covers the keyboard too, so a tap anywhere still dismisses. */}
         <Reanimated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
           <Pressable

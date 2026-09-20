@@ -25,6 +25,8 @@ export interface ApplicationPitchModalProps {
   onPitchStarted?: () => void;
   /** Fired when the primary action is pressed with a non-empty pitch. */
   onPitchSubmitted?: (pitch: string) => void;
+  /** Fired when the primary action is pressed but the pitch is still too short. */
+  onPitchBlocked?: (pitchLength: number) => void;
 }
 
 /**
@@ -44,16 +46,21 @@ export function ApplicationPitchModal({
   onSubmit,
   onPitchStarted,
   onPitchSubmitted,
+  onPitchBlocked,
 }: ApplicationPitchModalProps) {
   const { theme } = useAppThemeContext();
   const styles = React.useMemo(() => makeStyles(theme), [theme]);
 
   const [pitch, setPitch] = React.useState('');
+  // Set the first time a required pitch is submitted too short, so the button
+  // reads as blocked-with-a-reason instead of silently disabled.
+  const [showError, setShowError] = React.useState(false);
   const startedRef = React.useRef(false);
 
   React.useEffect(() => {
     if (visible) {
       setPitch('');
+      setShowError(false);
       startedRef.current = false;
     }
   }, [visible]);
@@ -64,6 +71,8 @@ export function ApplicationPitchModal({
   const isForHonor = !!bounty.is_for_honor;
 
   const canSubmit = requirement !== 'required' || trimmed.length >= PITCH_REQUIRED_MIN_LENGTH;
+  // A required pitch the hunter already tried to submit too short.
+  const showRequiredError = showError && !canSubmit;
 
   const handleChangeText = (text: string) => {
     setPitch(text);
@@ -74,7 +83,15 @@ export function ApplicationPitchModal({
   };
 
   const handleSubmit = () => {
-    if (!canSubmit || isSubmitting) return;
+    if (isSubmitting) return;
+    // Let the press land even when the pitch is short: show an inline reason
+    // and record the blocked tap, instead of a dead disabled button that gives
+    // no feedback and no signal.
+    if (!canSubmit) {
+      setShowError(true);
+      onPitchBlocked?.(trimmed.length);
+      return;
+    }
     if (trimmed.length > 0) {
       onPitchSubmitted?.(trimmed);
     }
@@ -116,10 +133,17 @@ export function ApplicationPitchModal({
           {requirement === 'encouraged' && trimmed.length === 0 && (
             <Text style={styles.encouragedHint}>Applications with a pitch get chosen more often.</Text>
           )}
-          {requirement === 'required' && trimmed.length > 0 && trimmed.length < PITCH_REQUIRED_MIN_LENGTH && (
-            <Text style={styles.requiredHint}>
-              {PITCH_REQUIRED_MIN_LENGTH - trimmed.length} more characters needed for this bounty.
-            </Text>
+          {requirement === 'required' && (
+            <View style={styles.requiredFooter}>
+              {showRequiredError && (
+                <Text style={styles.errorHint} accessibilityLiveRegion="polite">
+                  Write at least {PITCH_REQUIRED_MIN_LENGTH} characters to apply for this bounty.
+                </Text>
+              )}
+              <Text style={[styles.counter, showRequiredError && styles.counterError]}>
+                {trimmed.length}/{PITCH_REQUIRED_MIN_LENGTH}
+              </Text>
+            </View>
           )}
         </View>
 
@@ -130,9 +154,9 @@ export function ApplicationPitchModal({
           <Button
             variant="default"
             onPress={handleSubmit}
-            disabled={!canSubmit || isSubmitting}
+            disabled={isSubmitting}
             style={styles.submitButton}
-            accessibilityState={{ disabled: !canSubmit || isSubmitting }}
+            accessibilityState={{ disabled: isSubmitting }}
           >
             {isSubmitting ? <ActivityIndicator size="small" color="#fff" /> : primaryLabel}
           </Button>
@@ -214,10 +238,26 @@ function makeStyles(theme: AppTheme) {
       color: theme.warning,
       marginTop: 6,
     },
-    requiredHint: {
+    requiredFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      marginTop: 6,
+    },
+    errorHint: {
+      flex: 1,
+      fontSize: 12,
+      color: theme.error,
+    },
+    counter: {
+      marginLeft: 'auto',
       fontSize: 12,
       color: theme.textSecondary,
-      marginTop: 6,
+    },
+    counterError: {
+      color: theme.error,
+      fontWeight: '600',
     },
     actions: {
       flexDirection: 'row',
