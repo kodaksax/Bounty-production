@@ -60,6 +60,12 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'bounty_quality_nudge' && bountyId) {
         return { kind: 'route', path: `/postings/${bountyId}?openEdit=true` };
       }
+      // Poster-facing "add a location" nudge (BNTY-02): an in-person bounty
+      // with no geom can never be matched, so the CTA is to edit the Where
+      // section. Same landing as the quality nudge -- the edit modal.
+      if (ctx.type === 'bounty_location_nudge' && bountyId) {
+        return { kind: 'route', path: `/postings/${bountyId}?openEdit=true` };
+      }
       // Poster-facing pending-application nudge: go straight to the
       // applicant management screen (where Accept/Decline live), not the
       // public bounty view -- same reasoning as the quality nudge above.

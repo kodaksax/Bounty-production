@@ -54,6 +54,8 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     ? 'View Requests'
     : notification?.type === 'bounty_quality_nudge'
     ? 'Add Details'
+    : notification?.type === 'bounty_location_nudge'
+    ? 'Add Location'
     : category === 'marketplace' ? 'View Bounty'
     : category === 'messages' ? 'View Conversation'
     : 'View';
