@@ -164,7 +164,11 @@ describe('startSessionMonitoring immediate check', () => {
     stop = startSessionMonitoring();
     await flush();
 
-    expect(supabase.auth.signOut).toHaveBeenCalled();
+    // Must stay device-local: the SDK default (`scope: 'global'`) would also
+    // revoke this user's still-valid sessions on their other devices. A
+    // regression back to a bare/global signOut() call must fail this test,
+    // not just "was signOut called at all".
+    expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 
   it('never signs out when no session could be read at all', async () => {

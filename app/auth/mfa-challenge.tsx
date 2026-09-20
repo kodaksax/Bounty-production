@@ -19,12 +19,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedScreen } from '../../components/ui/animated-screen';
 import { useTwoFactorAuth } from '../../hooks/use-two-factor-auth';
+import { clearAllSessionData } from '../../lib/auth-session-storage';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { ROUTES } from '../../lib/routes';
-import { supabase } from '../../lib/supabase';
+import { PROJECT_STORAGE_KEY, supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
@@ -89,12 +91,30 @@ export default function MfaChallengeScreen() {
   };
 
   const handleCancelSignIn = async () => {
-    // Sign out so the existing session is invalidated and cannot be used to bypass MFA.
+    // Sign out so the existing (pre-MFA) session cannot be used to bypass
+    // MFA. Scoped to this device only (`scope: 'local'`) — the SDK default
+    // (`scope: 'global'`) would also revoke this user's already
+    // MFA-verified sessions on their other devices.
+    //
+    // signOut() with a live network call is how the pre-MFA session's
+    // refresh token actually gets revoked server-side; but the SDK swallows
+    // a failed revocation into a returned `{ error }` rather than a thrown
+    // rejection (see GoTrueClient._signOut), and on that path it also skips
+    // clearing local storage — so a network error here would silently leave
+    // the un-revoked session sitting on disk. Unconditionally wiping local
+    // session storage afterward, regardless of whether the network call
+    // succeeded, is what actually guarantees this device can't reuse that
+    // session — the server-side revocation alone is not enough to rely on.
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' } as any);
     } catch {
       // Proceed to sign-in regardless
     }
+    await Promise.all([
+      clearAllSessionData(PROJECT_STORAGE_KEY).catch(() => undefined),
+      SecureStore.deleteItemAsync('sb-access-token').catch(() => undefined),
+      SecureStore.deleteItemAsync('sb-refresh-token').catch(() => undefined),
+    ]).catch(() => undefined);
     router.replace(ROUTES.AUTH.SIGN_IN);
     try { markInitialNavigationDone(); } catch { /* ignore */ }
   };
