@@ -48,6 +48,8 @@ export const ROUTES = {
     COMMAND_CENTER: '/admin/command-center',
     /** Financial integrity queue -- everything anomaly detection found. */
     ANOMALIES: '/admin/anomalies',
+    /** Stuck demand: open bounties and posters that aren't moving. */
+    LIQUIDITY_BOARD: '/admin/liquidity-board',
 
     
     // User Management
