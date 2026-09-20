@@ -55,7 +55,19 @@ export type AcceptFundingFailureReason =
   | 'not_authorized'
   | 'account_inactive'
   | 'network'
-  | 'unknown';
+  | 'unknown'
+  /**
+   * Outcomes of the pay-at-accept sheet itself (hooks/useAcceptFunding), not
+   * of the acceptance RPC. They live in the same set so the funnel's
+   * `accept_funding_failed` by `reason` cut covers the whole hire attempt:
+   *   payment_cancelled — poster dismissed Apple Pay / the card sheet
+   *   payment_failed    — Stripe or the network refused the shortfall charge
+   *   partial_deposit   — the deposit landed but the server still reports a
+   *                       shortfall, so the sheet re-prompted for the rest
+   */
+  | 'payment_cancelled'
+  | 'payment_failed'
+  | 'partial_deposit';
 
 const NO_FUNDING_REQUIRED: Omit<BountyFundingRequirement, 'bountyId'> = {
   fundingMode: 'at_post',

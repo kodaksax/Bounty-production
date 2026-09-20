@@ -17,6 +17,15 @@ export interface DepositSuccessInfo {
 }
 
 /**
+ * How a `payWithCard` / `payWithApplePay` attempt ended. Callers that need to
+ * react to the outcome (e.g. the pay-at-accept gate) should use this return
+ * value rather than inferring it from `isProcessing` transitioning — that
+ * inference misses any exit that never sets `isProcessing` at all, such as a
+ * validation failure or a preflight availability check.
+ */
+export type DepositOutcome = 'succeeded' | 'cancelled' | 'failed';
+
+/**
  * Shared wallet-deposit business logic behind both the general "Add Cash"
  * keypad screen (components/add-money-screen.tsx) and the fixed-amount
  * onboarding funding confirmation (components/onboarding/PosterFundingScreen.tsx).
@@ -133,12 +142,12 @@ export function useWalletDeposit() {
     };
   }, []);
 
-  const payWithCard = async (numAmount: number) => {
+  const payWithCard = async (numAmount: number): Promise<DepositOutcome> => {
     if (isNaN(numAmount) || numAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount greater than $0.', [
         { text: 'OK' },
       ]);
-      return;
+      return 'failed';
     }
 
     if (paymentMethods.length === 0) {
@@ -150,7 +159,7 @@ export function useWalletDeposit() {
           { text: 'Add Payment Method', onPress: () => setShowPaymentMethodsModal(true) },
         ]
       );
-      return;
+      return 'failed';
     }
 
     setIsProcessing(true);
@@ -200,63 +209,74 @@ export function useWalletDeposit() {
         }
 
         setSuccessInfo({ amount: numAmount, persisted, via: 'card' });
+        return 'succeeded';
       } else {
         const errorMsg = getPaymentErrorMessage(result.error);
         setError({ message: errorMsg, type: 'payment' });
+        return 'failed';
       }
     } catch (err: any) {
       console.error('Payment error:', err);
       setError(err);
+      return 'failed';
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const payWithApplePay = async (numAmount: number) => {
+  const payWithApplePay = async (numAmount: number): Promise<DepositOutcome> => {
     if (isNaN(numAmount) || numAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount');
-      return;
+      return 'failed';
     }
 
     if (numAmount < 0.5) {
       Alert.alert('Minimum Amount', 'Amount must be at least $0.50');
-      return;
+      return 'failed';
     }
 
-    // Apple Pay may not be set up on this device (no card provisioned in the
-    // Wallet app). Re-check availability on tap so the button stays discoverable
-    // — this is also what App Review needs to locate the integration — and guide
-    // the user to set it up instead of silently failing.
-    let available = isApplePayAvailable;
-    if (!available) {
-      available = await applePayService.isAvailable();
-      setIsApplePayAvailable(available);
-    }
-    if (!available) {
-      // This dead-ends before any backend call, so without an explicit event
-      // it's invisible in analytics — it can look identical to a genuine
-      // "no card in Wallet" case even when it's actually a config/entitlement
-      // problem (see docs/payments/APPLE_PAY_PRODUCTION_FAILURE_REPORT.md).
-      try {
-        await analyticsService.trackEvent('apple_pay_unavailable', {
-          platform: Platform.OS,
-          screen: 'wallet_deposit',
-        });
-      } catch {
-        /* analytics is best-effort */
-      }
-      Alert.alert(
-        'Apple Pay Not Set Up',
-        'Apple Pay isn’t set up on this device. Open the Wallet app and add a card to pay with Apple Pay, or use a linked card or bank account below.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
+    // Locked before the availability re-check below (which is async) so a
+    // caller gating a "cancel"/"not now" affordance on `isProcessing` can't
+    // race a still-pending check with a user cancel — the whole attempt, not
+    // just the eventual charge, is "busy". The try/finally guarantees this
+    // clears again on every exit, including the preflight ones that return
+    // before ever reaching Apple Pay.
     setIsProcessing(true);
     setError(null);
 
     try {
+      // Apple Pay may not be set up on this device (no card provisioned in
+      // the Wallet app). Re-check availability on tap so the button stays
+      // discoverable — this is also what App Review needs to locate the
+      // integration — and guide the user to set it up instead of silently
+      // failing.
+      let available = isApplePayAvailable;
+      if (!available) {
+        available = await applePayService.isAvailable();
+        setIsApplePayAvailable(available);
+      }
+      if (!available) {
+        // This dead-ends before any backend call, so without an explicit
+        // event it's invisible in analytics — it can look identical to a
+        // genuine "no card in Wallet" case even when it's actually a
+        // config/entitlement problem (see
+        // docs/payments/APPLE_PAY_PRODUCTION_FAILURE_REPORT.md).
+        try {
+          await analyticsService.trackEvent('apple_pay_unavailable', {
+            platform: Platform.OS,
+            screen: 'wallet_deposit',
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
+        Alert.alert(
+          'Apple Pay Not Set Up',
+          'Apple Pay isn’t set up on this device. Open the Wallet app and add a card to pay with Apple Pay, or use a linked card or bank account below.',
+          [{ text: 'OK' }]
+        );
+        return 'failed';
+      }
+
       const result = await applePayService.processPayment(
         {
           amount: numAmount,
@@ -291,17 +311,21 @@ export function useWalletDeposit() {
         }
 
         setSuccessInfo({ amount: numAmount, persisted, via: 'applePay' });
+        return 'succeeded';
       } else if (result.errorCode === 'cancelled') {
         // user cancelled - no alert
+        return 'cancelled';
       } else {
         setError({
           message: result.error || 'Unable to process Apple Pay payment.',
           type: 'payment',
         });
+        return 'failed';
       }
     } catch (err) {
       console.error('Apple Pay error:', err);
       setError(err);
+      return 'failed';
     } finally {
       setIsProcessing(false);
     }
