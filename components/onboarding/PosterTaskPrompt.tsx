@@ -35,7 +35,7 @@ type PosterTaskPromptProps = {
   onBack: () => void;
 };
 
-// Poster branch, step 2 of 4: sign in -> [this] -> fund/confirm -> done.
+// Poster branch, step 4 of 6: sign in -> role select -> style -> [this] -> fund/confirm -> done.
 export function PosterTaskPrompt({
   theme,
   styles,
@@ -90,7 +90,7 @@ export function PosterTaskPrompt({
         </TouchableOpacity>
       </View>
 
-      <OnboardingProgressDots total={5} activeIndex={2} style={styles.progressContainer} />
+      <OnboardingProgressDots total={6} activeIndex={3} style={styles.progressContainer} />
 
       <View style={[styles.posterContent, { paddingBottom: insets.bottom }]}>
         <Text style={styles.posterHeading} accessibilityRole="header">

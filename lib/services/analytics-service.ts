@@ -129,21 +129,27 @@ export type AnalyticsEvent =
   | 'onboarding_resumed'
   // Canonical: the user picked poster / hunter intent (was `onboarding_role_selected`).
   | 'role_selected'
-  // Fired by app/onboarding/welcome.tsx (the poster_first design, formerly
-  // the 'test' arm of the now-concluded 'welcome-page-redesign' PostHog
-  // experiment — the 'control' layout it was compared against was deleted
-  // 2026-08-24). `variant` is always 'poster_first' now; kept as a payload
-  // field for continuity with historical events grouped by it.
+  // Fired by app/onboarding/welcome.tsx. `variant` was 'poster_first' for the
+  // role-CTA design (formerly the 'test' arm of the now-concluded
+  // 'welcome-page-redesign' PostHog experiment — the 'control' layout it was
+  // compared against was deleted 2026-08-24); it's 'carousel' for the
+  // swipeable-carousel redesign that replaced it, which dropped pre-auth role
+  // selection in favor of WelcomeCarousel.tsx's fixed Sign Up / Log In footer.
   | 'first_screen_viewed'
   | 'first_screen_proof_impression'
   | 'first_screen_cta_tapped'
   | 'first_screen_how_it_works_tapped'
+  // One per settled swipe on the carousel redesign (WelcomeCarousel.tsx).
+  | 'first_screen_carousel_slide_viewed'
   // Historical only — fired by the "Get started" CTA of the now-deleted
   // 'onboarding-skip-role-selection' test arm. No longer emitted; kept so
   // past events remain queryable under this type.
   | 'onboarding_role_selection_skipped'
   | 'onboarding_intent_switched'
   | 'onboarding_login_tapped'
+  // Sign Up tap on the carousel redesign's fixed footer (WelcomeCarousel.tsx)
+  // — role-agnostic, since intent is no longer picked on this screen.
+  | 'onboarding_signup_tapped'
   // Sign-in screen rendered its intent-aware "why sign in / what's next" line
   // to a visitor who picked a role but hasn't authenticated yet.
   | 'onboarding_signin_context_shown'

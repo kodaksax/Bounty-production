@@ -35,7 +35,7 @@ type PosterFundingScreenProps = {
 // the dark-on-green convention used across onboarding/wallet.
 const ON_PRIMARY_TEXT = '#052e1b';
 
-// Poster branch, step 3 of 4. Confirms funding for the exact bounty amount
+// Poster branch, step 5 of 6. Confirms funding for the exact bounty amount
 // chosen on the previous step (no editable keypad here — that decision was
 // already made) so this reads as a single, purpose-built payment
 // confirmation rather than a generic wallet top-up dropped into onboarding.
@@ -106,7 +106,7 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
         <View style={styles.fundingHeaderButton} />
       </View>
 
-      <OnboardingProgressDots total={5} activeIndex={3} />
+      <OnboardingProgressDots total={6} activeIndex={4} />
 
       <ScrollView
         style={styles.fundingScroll}

@@ -25,10 +25,10 @@ import { hapticFeedback } from '../../lib/haptic-feedback';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
-// Generic (no intent) is a 4-step flow; poster/hunter branches are 5 steps.
+// Generic (no intent) is a 5-step flow; poster/hunter branches are 6 steps.
 // See app/onboarding/username.tsx's totalStepsFor for the matching logic.
 function totalStepsFor(intent: 'poster' | 'hunter' | null) {
-  return intent ? 5 : 4;
+  return intent ? 6 : 5;
 }
 
 export default function DoneScreen() {

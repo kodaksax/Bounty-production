@@ -32,6 +32,45 @@ jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: 'SafeAreaView',
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
+jest.mock('lib/storage/onboarding', () => ({
+  markDeviceHasSignedIn: jest.fn(),
+  hasLocalOnboardingFlag: jest.fn().mockResolvedValue(false),
+}));
+jest.mock('lib/services/userProfile', () => ({
+  isUsernameUnique: jest.fn().mockResolvedValue(true),
+  validateUsername: jest.fn(() => ({ valid: true })),
+}));
+// sign-up-form.tsx now shares its OAuth entry points (useSocialAuth) with
+// sign-in-form.tsx — see WelcomeCarousel.tsx's top comment for why. These
+// native-only modules need stubbing for the same reason the ones above do.
+jest.mock('react-native-svg', () => ({
+  __esModule: true,
+  default: 'Svg',
+  Svg: 'Svg',
+  Path: 'Path',
+}));
+jest.mock('expo-web-browser', () => ({ maybeCompleteAuthSession: jest.fn() }));
+jest.mock('expo-apple-authentication', () => ({
+  AppleAuthenticationButton: 'AppleAuthenticationButton',
+  AppleAuthenticationButtonType: { SIGN_IN: 0 },
+  AppleAuthenticationButtonStyle: { BLACK: 0 },
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  signInAsync: jest.fn(),
+}));
+jest.mock('expo-auth-session', () => ({ ResponseType: { IdToken: 'id_token' } }));
+jest.mock('expo-auth-session/providers/google', () => ({
+  useIdTokenAuthRequest: () => [null, null, jest.fn()],
+}));
+jest.mock('lib/posthog', () => ({
+  capture: jest.fn(),
+  identify: jest.fn(),
+}));
+jest.mock('lib/utils/auth-diagnostics', () => ({
+  emitAuthLoginSuccess: jest.fn().mockResolvedValue(undefined),
+  runAuthStageWithTimeout: ({ run }: { run: (s: AbortSignal) => PromiseLike<unknown> }) =>
+    Promise.resolve(run(new AbortController().signal)),
+}));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { signInAfterRegister } = require('../../../app/auth/sign-up-form');

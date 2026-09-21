@@ -1,11 +1,13 @@
 'use client';
-import { MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { Session } from '@supabase/supabase-js';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -18,17 +20,20 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';
-import { Button } from '../../components/ui/button';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { ROUTES } from '../../lib/routes';
 import { storage } from '../../lib/storage';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { darkTheme } from '../../lib/themes/darkTheme';
+import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
-import { markDeviceHasSignedIn } from '../../lib/storage/onboarding';
+import { hasLocalOnboardingFlag, markDeviceHasSignedIn } from '../../lib/storage/onboarding';
+import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { useSocialAuth } from '../../hooks/useSocialAuth';
+import { GoogleLogo } from '../../components/ui/google-logo';
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors';
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation';
 import {
@@ -130,17 +135,62 @@ export async function signInAfterRegister(
   throw lastError ?? new Error('Sign-in after registration returned no session');
 }
 
+// After a real Apple/Google sign-in, decide whether this is an existing,
+// fully-onboarded account (go straight to the app) or a new/incomplete one
+// (continue onboarding at role-select). Mirrors
+// app/onboarding/username.tsx's routeAfterSocialSignIn — kept as a separate
+// copy rather than a shared import because the two screens' surrounding
+// state (loading flags, analytics context) differ enough that a shared
+// helper would need its own prop-drilling just to stay thin.
+async function routeAfterAuth(userId: string, router: ReturnType<typeof useRouter>) {
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('username, onboarding_completed')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      analyticsService.trackEvent('onboarding_auth_completed', { method: 'social', outcome: 'new_account' });
+      router.replace('/onboarding/role-select' as Href);
+      return;
+    }
+
+    const onboarded =
+      profile?.username &&
+      (profile.onboarding_completed === true || (await hasLocalOnboardingFlag(userId)));
+
+    if (onboarded) {
+      analyticsService.trackEvent('onboarding_auth_completed', { method: 'social', outcome: 'existing_onboarded' });
+      router.replace('/tabs/bounty-app' as Href);
+    } else {
+      analyticsService.trackEvent('onboarding_auth_completed', { method: 'social', outcome: 'existing_incomplete' });
+      router.replace('/onboarding/role-select' as Href);
+    }
+  } catch {
+    router.replace('/onboarding/role-select' as Href);
+  }
+}
+
+// Forced dark, not the app's ambient light/dark preference — this screen is
+// part of the same dark "getting started" funnel as welcome.tsx (the
+// carousel) and role-select.tsx. See welcome.tsx's top comment for why a
+// saved light-mode preference must not leak into this funnel.
+const theme = darkTheme;
+
 export default function SignUpRoute() {
   return <SignUpForm />;
 }
 
+type UsernameAvailability = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
+
 export function SignUpForm() {
-  const { theme } = useAppThemeContext();
   useScreenBackground(theme.background);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [usernameAvailability, setUsernameAvailability] = useState<UsernameAvailability>('idle');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -148,6 +198,17 @@ export function SignUpForm() {
   const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const {
+    isAppleAvailable,
+    isGoogleConfigured,
+    googleRequest,
+    promptGoogleSignIn,
+    googleSessionReady,
+    signInWithApple,
+    loading: socialLoading,
+    error: socialError,
+    clearError: clearSocialError,
+  } = useSocialAuth();
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [ageVerified, setAgeVerified] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -168,6 +229,81 @@ export function SignUpForm() {
   useEffect(() => {
     setPasswordStrength(password ? calculatePasswordStrength(password) : null);
   }, [password]);
+
+  // Live username availability — debounced so every keystroke doesn't hit
+  // Supabase. isUsernameUnique already falls back to a local check when the
+  // query fails, but the final DB UNIQUE constraint at submit time is what
+  // actually decides this, never this indicator alone.
+  useEffect(() => {
+    if (!username) {
+      setUsernameAvailability('idle');
+      return;
+    }
+    const format = validateUsername(username);
+    if (!format.valid) {
+      setUsernameAvailability('invalid');
+      return;
+    }
+
+    setUsernameAvailability('checking');
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const unique = await isUsernameUnique(username);
+        if (!cancelled) setUsernameAvailability(unique ? 'available' : 'taken');
+      } catch {
+        if (!cancelled) setUsernameAvailability('idle');
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [username]);
+
+  useEffect(() => {
+    if (socialError) {
+      Alert.alert('Sign-in failed', socialError, [{ text: 'OK', onPress: clearSocialError }]);
+    }
+  }, [socialError, clearSocialError]);
+
+  // Google's OAuth redirect resolves asynchronously — once a session exists,
+  // route the same way a fresh email registration would.
+  useEffect(() => {
+    if (!googleSessionReady) return;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user?.id;
+      if (!userId) {
+        router.replace('/onboarding/role-select' as Href);
+        return;
+      }
+      await routeAfterAuth(userId, router);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleSessionReady]);
+
+  const handleAppleContinue = async () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_auth_started', { method: 'apple' });
+    const success = await signInWithApple();
+    if (!success) return;
+
+    const { data } = await supabase.auth.getSession();
+    const userId = data.session?.user?.id;
+    if (!userId) {
+      router.replace('/onboarding/role-select' as Href);
+      return;
+    }
+    await routeAfterAuth(userId, router);
+  };
+
+  const handleGooglePress = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_auth_started', { method: 'google' });
+    void promptGoogleSignIn();
+  };
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
@@ -437,8 +573,10 @@ export function SignUpForm() {
         // Route straight to the first post-auth onboarding step rather than to
         // the /onboarding gate. The gate has to re-derive state that is
         // already known here, and any gap in that derivation used to surface
-        // as the pre-auth welcome screen.
-        router.replace((onboardingComplete ? '/tabs/bounty-app' : '/onboarding/style') as Href);
+        // as the pre-auth welcome screen. Role (poster/hunter) is no longer
+        // asked pre-auth, so a brand-new account always lands on role-select
+        // first — see app/onboarding/role-select.tsx.
+        router.replace((onboardingComplete ? '/tabs/bounty-app' : '/onboarding/role-select') as Href);
         try {
           markInitialNavigationDone();
         } catch {}
@@ -512,9 +650,15 @@ export function SignUpForm() {
           usually a brief connection problem. Sign in once and you&apos;re in.
         </Text>
         <View className="w-full mt-8">
-          <Button onPress={handleGoToSignIn} accessibilityLabel="Go to sign in">
-            Sign In
-          </Button>
+          <TouchableOpacity
+            onPress={handleGoToSignIn}
+            className="items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.primary, height: 56 }}
+            accessibilityRole="button"
+            accessibilityLabel="Go to sign in"
+          >
+            <Text style={{ color: theme.background, fontSize: 18, fontWeight: '700' }}>Sign In</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -539,38 +683,69 @@ export function SignUpForm() {
             <View className="flex-row items-center justify-center mb-10">
               <BrandingLogo size="large" />
             </View>
+
+            {(Platform.OS === 'ios' || isGoogleConfigured) && (
+              <View className="gap-3 mb-5">
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    onPress={handleAppleContinue}
+                    disabled={socialLoading || !isAppleAvailable}
+                    className="flex-row items-center justify-center rounded-full py-4"
+                    style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Apple"
+                    accessibilityState={{ disabled: socialLoading || !isAppleAvailable }}
+                  >
+                    {socialLoading ? (
+                      <ActivityIndicator color={theme.foreground} style={{ marginRight: 8 }} />
+                    ) : (
+                      <FontAwesome name="apple" size={18} color={theme.foreground} style={{ marginRight: 8 }} />
+                    )}
+                    <Text style={{ color: theme.foreground, fontSize: 16, fontWeight: '700' }}>
+                      Continue with Apple
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {isGoogleConfigured && (
+                  <TouchableOpacity
+                    onPress={handleGooglePress}
+                    disabled={!googleRequest || socialLoading}
+                    className="flex-row items-center justify-center rounded-full py-4"
+                    style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Google"
+                    accessibilityState={{ disabled: !googleRequest || socialLoading }}
+                  >
+                    {socialLoading ? (
+                      <ActivityIndicator color={theme.text} style={{ marginRight: 8 }} />
+                    ) : (
+                      <View style={{ marginRight: 8 }}>
+                        <GoogleLogo size={18} />
+                      </View>
+                    )}
+                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>
+                      Continue with Google
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                <View className="flex-row items-center mt-1">
+                  <View className="flex-1 h-px" style={{ backgroundColor: theme.border }} />
+                  <Text className="mx-3 text-xs" style={{ color: theme.textSecondary }}>
+                    or
+                  </Text>
+                  <View className="flex-1 h-px" style={{ backgroundColor: theme.border }} />
+                </View>
+              </View>
+            )}
+
             <View className="gap-5">
               {authError ? (
                 <View className="bg-red-500/20 border border-red-400 rounded p-3">
                   <Text style={{ color: theme.isDark ? '#fecaca' : '#991b1b', fontSize: 14 }}>{authError}</Text>
                 </View>
               ) : null}
-
-              <View>
-                <Text className="text-sm mb-1" style={{ color: theme.text }}>Username</Text>
-                <TextInput
-                  value={username}
-                  onChangeText={text => {
-                    // Normalize to lowercase to match onboarding rules
-                    setUsername(text.toLowerCase());
-                    if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }));
-                  }}
-                  placeholder="Choose a username (3-24 chars)"
-                  autoCapitalize="none"
-                  autoComplete="username-new"
-                  textContentType={Platform.OS === 'ios' ? 'username' : undefined}
-                  editable={!isLoading}
-                  className={`w-full rounded px-3 py-3 ${fieldErrors.username ? 'border border-red-400' : ''}`}
-                  style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
-                  placeholderTextColor={theme.textDisabled}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => {
-                    /* focus next field (email) */
-                  }}
-                />
-                {fieldErrors.username ? <ValidationMessage message={fieldErrors.username} /> : null}
-              </View>
 
               <View>
                 <Text className="text-sm mb-1" style={{ color: theme.text }}>Email</Text>
@@ -594,7 +769,9 @@ export function SignUpForm() {
                   placeholderTextColor={theme.textDisabled}
                   returnKeyType="next"
                   blurOnSubmit={false}
-                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  onSubmitEditing={() => {
+                    /* focus next field (username) */
+                  }}
                 />
                 {fieldErrors.email ? <ValidationMessage message={fieldErrors.email} /> : null}
                 {emailSuggestion ? (
@@ -611,6 +788,61 @@ export function SignUpForm() {
                       Did you mean <Text className="underline font-medium">{emailSuggestion}</Text>?
                     </Text>
                   </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <View>
+                <Text className="text-sm mb-1" style={{ color: theme.text }}>Username</Text>
+                <View className="relative">
+                  <TextInput
+                    value={username}
+                    onChangeText={text => {
+                      // Normalize to lowercase to match onboarding rules
+                      setUsername(text.toLowerCase());
+                      if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }));
+                    }}
+                    placeholder="Choose a username (3-24 chars)"
+                    autoCapitalize="none"
+                    autoComplete="username-new"
+                    textContentType={Platform.OS === 'ios' ? 'username' : undefined}
+                    editable={!isLoading}
+                    className={`w-full rounded px-3 py-3 pr-10 ${fieldErrors.username || usernameAvailability === 'taken' ? 'border border-red-400' : usernameAvailability === 'available' ? 'border' : ''}`}
+                    style={{
+                      backgroundColor: theme.surfaceSecondary,
+                      color: theme.text,
+                      ...(usernameAvailability === 'available' ? { borderColor: theme.primary } : {}),
+                    }}
+                    placeholderTextColor={theme.textDisabled}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                  />
+                  {usernameAvailability === 'checking' && (
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.textSecondary}
+                      style={{ position: 'absolute', right: 12, top: 14 }}
+                    />
+                  )}
+                  {usernameAvailability === 'available' && (
+                    <MaterialIcons
+                      name="check-circle"
+                      size={20}
+                      color={theme.primary}
+                      style={{ position: 'absolute', right: 10, top: 12 }}
+                    />
+                  )}
+                </View>
+                {fieldErrors.username ? (
+                  <ValidationMessage message={fieldErrors.username} />
+                ) : usernameAvailability === 'available' ? (
+                  <Text className="text-xs mt-1" style={{ color: theme.primary }}>
+                    @{username} is available
+                  </Text>
+                ) : usernameAvailability === 'taken' ? (
+                  <Text className="text-xs mt-1" style={{ color: '#fca5a5' }}>
+                    @{username} is already taken
+                  </Text>
                 ) : null}
               </View>
 
@@ -792,13 +1024,24 @@ export function SignUpForm() {
                 ) : null}
               </View>
 
-              <Button
+              {/* A plain TouchableOpacity, not the shared <Button> — Button reads
+                  theme from useAppThemeContext() internally, which would follow
+                  the ambient light/dark preference and mismatch this screen's
+                  forced-dark background (see the `theme` comment above). */}
+              <TouchableOpacity
                 onPress={handleSubmit}
-                loading={isLoading}
+                disabled={isLoading}
+                className="flex-row items-center justify-center rounded-full"
+                style={{ backgroundColor: theme.primary, height: 56 }}
+                accessibilityRole="button"
                 accessibilityLabel="Create account"
+                accessibilityState={{ disabled: isLoading, busy: isLoading }}
               >
-                Create Account
-              </Button>
+                {isLoading && <ActivityIndicator color={theme.background} style={{ marginRight: 8 }} />}
+                <Text style={{ color: theme.background, fontSize: 18, fontWeight: '700' }}>
+                  Create Account
+                </Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => router.replace(ROUTES.AUTH.SIGN_IN as Href)}

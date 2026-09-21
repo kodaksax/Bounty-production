@@ -27,11 +27,11 @@ import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
-// Generic (no intent picked) is a 4-step flow: sign in -> style -> about you
-// -> done. Poster/hunter branches are 5 steps: sign in -> style -> details ->
-// confirm -> done.
+// Generic (no intent picked) is a 5-step flow: sign in -> role select ->
+// style -> about you -> done. Poster/hunter branches are 6 steps: sign in ->
+// role select -> style -> details -> confirm -> done.
 function totalStepsFor(intent: 'poster' | 'hunter' | null) {
-  return intent ? 5 : 4;
+  return intent ? 6 : 5;
 }
 
 // After a real sign-in, decide whether this is an existing, fully-onboarded
@@ -51,7 +51,7 @@ async function routeAfterSocialSignIn(
     if (error) {
       // No profile row (brand new account) or lookup failed — continue onboarding.
       analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'new_account' });
-      router.push('/onboarding/style');
+      router.push('/onboarding/role-select');
       return;
     }
 
@@ -64,11 +64,11 @@ async function routeAfterSocialSignIn(
       router.replace('/tabs/bounty-app');
     } else {
       analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'existing_incomplete' });
-      router.push('/onboarding/style');
+      router.push('/onboarding/role-select');
     }
   } catch {
     // On any unexpected error, don't block the user — continue onboarding.
-    router.push('/onboarding/style');
+    router.push('/onboarding/role-select');
   }
 }
 
@@ -143,7 +143,7 @@ export default function UsernameScreen() {
       if (userId) {
         await routeAfterSocialSignIn(userId, router, 'google');
       } else {
-        router.push('/onboarding/style');
+        router.push('/onboarding/role-select');
       }
     })();
   }, [googleSessionReady, router]);
@@ -165,7 +165,7 @@ export default function UsernameScreen() {
     if (userId) {
       await routeAfterSocialSignIn(userId, router, 'apple');
     } else {
-      router.push('/onboarding/style');
+      router.push('/onboarding/role-select');
     }
   };
 
@@ -201,7 +201,7 @@ export default function UsernameScreen() {
     // Already signed in (e.g. reached this screen mid-onboarding) — safe to
     // continue straight through. If not, there's no session yet for the
     // next screen to save data against, so send them to create an account.
-    router.push(isLoggedIn ? '/onboarding/style' : '/auth/sign-up-form');
+    router.push(isLoggedIn ? '/onboarding/role-select' : '/auth/sign-up-form');
   };
 
   return (

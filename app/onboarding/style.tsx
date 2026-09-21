@@ -1,11 +1,11 @@
 /**
  * Onboarding Style Screen
- * Fourth step (poster/hunter) or third step (generic), inserted right after
- * sign-in and before the profile-details form: a fast, zero-cost
- * personalization moment that reuses the exact same BountyFormat picker as
- * Settings (lib/bounty-format-context.tsx) — no separate style system, no
- * duplicated persistence. See app/onboarding/username.tsx's totalStepsFor
- * for the matching step-count logic.
+ * Third step, right after sign-in and role selection (app/onboarding/role-select.tsx)
+ * and before the profile-details form: a fast, zero-cost personalization
+ * moment that reuses the exact same BountyFormat picker as Settings
+ * (lib/bounty-format-context.tsx) — no separate style system, no duplicated
+ * persistence. See app/onboarding/username.tsx's totalStepsFor for the
+ * matching step-count logic.
  */
 
 import { useEffect, useRef, useState, useMemo } from 'react';
@@ -37,11 +37,11 @@ import { analyticsService } from '../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
-// Generic (no intent) is a 4-step flow; poster/hunter branches are 5 steps —
-// one more than before, now that this style step sits between sign-in and
-// details. See done.tsx for the matching logic.
+// Generic (no intent) is a 5-step flow; poster/hunter branches are 6 steps —
+// one more than before, now that role-select.tsx sits between sign-in and
+// this style step. See done.tsx for the matching logic.
 function totalStepsFor(intent: 'poster' | 'hunter' | null) {
-  return intent ? 5 : 4;
+  return intent ? 6 : 5;
 }
 
 export default function StyleScreen() {
@@ -131,7 +131,7 @@ export default function StyleScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <OnboardingProgressDots total={totalSteps} activeIndex={1} style={styles.dotsContainer} />
+      <OnboardingProgressDots total={totalSteps} activeIndex={2} style={styles.dotsContainer} />
 
       <Text style={styles.heading}>Make Bounty feel like yours</Text>
       <Text style={styles.subheading}>

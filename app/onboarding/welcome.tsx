@@ -1,6 +1,9 @@
 /**
  * Onboarding Welcome
- * First screen of onboarding: logo + social proof + role/intent pick.
+ * Pre-auth entry screen: a 3-slide swipeable carousel behind a fixed Sign
+ * Up / Log In footer (components/onboarding/WelcomeCarousel.tsx). Role
+ * (poster vs. hunter) is picked on its own screen after auth — see that
+ * component's top comment for why.
  *
  * This used to A/B this screen's whole layout ('control' vs 'poster_first',
  * PostHog flag 'welcome-page-redesign') and, within the control layout,
@@ -21,29 +24,31 @@
 
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PosterFirstWelcome } from '../../components/onboarding/PosterFirstWelcome';
-import type { ProofCardActiveItem } from '../../components/onboarding/ProofCard';
+import { WelcomeCarousel } from '../../components/onboarding/WelcomeCarousel';
+import type { WelcomeCarouselSlide } from '../../lib/strings/welcomeCarousel';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
-import { useOnboarding } from '../../lib/context/onboarding-context';
 import { analyticsService } from '../../lib/services/analytics-service';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { darkTheme } from '../../lib/themes/darkTheme';
+
+// Dark-only by design, not by following the app's light/dark preference —
+// see WelcomeCarousel.tsx's top comment. useAppThemeContext() would follow
+// the visitor's system scheme or a previously-saved light-mode preference
+// (theme_mode persists across account deletion), which is exactly the "no
+// light theme, no variations" case this screen must not show.
+const theme = darkTheme;
 
 export default function OnboardingWelcome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme } = useAppThemeContext();
   const { isLoggedIn, isLoading: authLoading } = useAuthContext();
-  const { updateData } = useOnboarding();
 
   const mountedAtRef = useRef(Date.now());
-  const activeProofRef = useRef<ProofCardActiveItem>({ index: 0, proofState: 'fallback', bountyId: null });
-  const [ctaStopped, setCtaStopped] = useState(false);
 
-  // This is the PRE-AUTH entry screen: it offers "Log In" and the role CTAs.
+  // This is the PRE-AUTH entry screen: it offers "Sign Up" and "Log In".
   // Showing it to someone who already has a session tells them their account
   // doesn't exist and invites them to authenticate a second time — the exact
   // "successful sign-up sends me back to Welcome" beta failure. The gate in
@@ -61,35 +66,31 @@ export default function OnboardingWelcome() {
   useEffect(() => {
     if (isLoggedIn) return;
     analyticsService.trackEvent('onboarding_welcome_viewed');
-    analyticsService.trackEvent('first_screen_viewed', { variant: 'poster_first' });
+    analyticsService.trackEvent('first_screen_viewed', { variant: 'carousel' });
   }, [isLoggedIn]);
 
-  const trackCtaTapped = (side: 'poster' | 'hunter' | 'login') => {
+  const trackCtaTapped = (side: 'signup' | 'login') => {
     const secondsOnScreen = (Date.now() - mountedAtRef.current) / 1000;
     analyticsService.trackEvent('first_screen_cta_tapped', {
       side,
-      variant: 'poster_first',
+      variant: 'carousel',
       seconds_on_screen: secondsOnScreen,
-      proof_index_at_tap: activeProofRef.current.index,
     });
   };
 
-  const handleSelectIntent = (intent: 'poster' | 'hunter') => {
+  // Role (poster vs. hunter) is no longer asked on this screen — it's picked
+  // on its own screen after auth. Sign Up is role-agnostic: onboarding-context
+  // already supports intent === null (see lib/context/onboarding-context.tsx
+  // and app/onboarding/username.tsx's "generic, no intent picked" 4-step path).
+  const handleSignUp = () => {
     hapticFeedback.light();
-    setCtaStopped(true);
-    analyticsService.trackEvent('role_selected', { role: intent, surface: 'onboarding' });
-    trackCtaTapped(intent);
-    updateData({ intent });
-    // push (not replace): keeps this screen on the stack so the next screen's
-    // back control can return here. Safe against the "signed-in user lands
-    // back on Welcome" bug this used to guard against — the redirect effect
-    // above still fires and routes any signed-in visitor away immediately.
-    router.push('/onboarding/username');
+    analyticsService.trackEvent('onboarding_signup_tapped');
+    trackCtaTapped('signup');
+    router.push('/auth/sign-up-form');
   };
 
   const handleLogIn = () => {
     hapticFeedback.light();
-    setCtaStopped(true);
     analyticsService.trackEvent('onboarding_login_tapped');
     trackCtaTapped('login');
     router.push('/auth/sign-in-form');
@@ -97,7 +98,7 @@ export default function OnboardingWelcome() {
 
   const handleHowItWorks = () => {
     hapticFeedback.light();
-    analyticsService.trackEvent('first_screen_how_it_works_tapped', { variant: 'poster_first' });
+    analyticsService.trackEvent('first_screen_how_it_works_tapped', { variant: 'carousel' });
     router.push('/legal/how-it-works' as Href);
   };
 
@@ -108,24 +109,18 @@ export default function OnboardingWelcome() {
   }
 
   return (
-    <PosterFirstWelcome
+    <WelcomeCarousel
       theme={theme}
       insets={insets}
-      stopped={ctaStopped}
-      onProofActiveChange={item => {
-        activeProofRef.current = item;
-      }}
-      onProofImpression={item => {
-        analyticsService.trackEvent('first_screen_proof_impression', {
-          bounty_id: item.bountyId ?? 'fallback',
-          proof_state: item.proofState,
-          index: item.index,
-        });
-      }}
-      onPosterPress={() => handleSelectIntent('poster')}
-      onHunterPress={() => handleSelectIntent('hunter')}
+      onSignUpPress={handleSignUp}
       onLoginPress={handleLogIn}
       onHowItWorksPress={handleHowItWorks}
+      onSlideChange={(slide: WelcomeCarouselSlide, index: number) => {
+        analyticsService.trackEvent('first_screen_carousel_slide_viewed', {
+          slide: slide.key,
+          index,
+        });
+      }}
     />
   );
 }

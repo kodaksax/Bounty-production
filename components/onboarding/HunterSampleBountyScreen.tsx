@@ -37,7 +37,7 @@ type HunterSampleBountyScreenProps = {
   onBack: () => void;
 };
 
-// Hunter branch, step 3 of 4: sign in -> location -> [this] -> done.
+// Hunter branch, step 5 of 6: sign in -> role select -> style -> location -> [this] -> done.
 export function HunterSampleBountyScreen({
   theme,
   styles,
@@ -142,7 +142,7 @@ export function HunterSampleBountyScreen({
       <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         {backButton}
         <View style={styles.hunterContent}>
-          <OnboardingProgressDots total={5} activeIndex={3} style={{ marginTop: 16, marginBottom: 24 }} />
+          <OnboardingProgressDots total={6} activeIndex={4} style={{ marginTop: 16, marginBottom: 24 }} />
           <Skeleton style={{ height: 96, borderRadius: 16, marginBottom: 16 }} />
           <Skeleton style={{ height: 120, borderRadius: 16 }} />
         </View>
@@ -162,7 +162,7 @@ export function HunterSampleBountyScreen({
       <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         {backButton}
         <View style={styles.hunterContent}>
-          <OnboardingProgressDots total={5} activeIndex={3} style={{ marginTop: 16, marginBottom: 24 }} />
+          <OnboardingProgressDots total={6} activeIndex={4} style={{ marginTop: 16, marginBottom: 24 }} />
 
           {discoveryError ? (
             <View style={styles.discoveryErrorWrapper}>
@@ -264,7 +264,7 @@ export function HunterSampleBountyScreen({
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {backButton}
       <View style={styles.hunterContent}>
-        <OnboardingProgressDots total={5} activeIndex={3} style={{ marginTop: 16, marginBottom: 8 }} />
+        <OnboardingProgressDots total={6} activeIndex={4} style={{ marginTop: 16, marginBottom: 8 }} />
 
         {discoveryError ? (
           <View style={styles.discoveryErrorWrapper}>

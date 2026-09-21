@@ -50,7 +50,7 @@ function PreviewCardRow({ card, styles }: { card: PreviewCard; styles: Onboardin
   );
 }
 
-// Hunter branch, step 2 of 4: sign in -> [this] -> nearby feed -> done.
+// Hunter branch, step 4 of 6: sign in -> role select -> style -> [this] -> nearby feed -> done.
 export function HunterLocationPrompt({
   theme,
   styles,
@@ -146,7 +146,7 @@ export function HunterLocationPrompt({
       </View>
 
       <View style={styles.hunterStatusRow}>
-        <OnboardingProgressDots total={5} activeIndex={2} />
+        <OnboardingProgressDots total={6} activeIndex={3} />
         <Text style={styles.hunterStatusSeparator}>·</Text>
         <Text style={styles.hunterStatusText}>
           Hunting as <Text style={styles.hunterStatusName}>{displayName}</Text>

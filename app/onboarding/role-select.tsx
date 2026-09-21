@@ -1,0 +1,262 @@
+/**
+ * Onboarding Role Select
+ * Second step, right after account creation (app/auth/sign-up-form.tsx) and
+ * before style (app/onboarding/style.tsx): "What brings you to Bounty?"
+ *
+ * Role selection used to happen on the pre-auth welcome screen as two bare
+ * CTA buttons ("Make today pay." / "I'd rather earn"), which the redesign
+ * doc flagged as a problem — a CTA button doubling as a role picker reads as
+ * an earning pitch, not a neutral choice, and there's no room under a button
+ * for the one line that actually explains what each path means. Moving the
+ * choice to its own screen after auth fixes both: it's not competing with
+ * "sign up now," and each option gets a description line under it.
+ *
+ * Forced dark, like welcome.tsx and sign-up-form.tsx — this screen is the
+ * last stop in the same dark "getting started" funnel those two are part of
+ * before onboarding hands off to the rest of the flow (style.tsx onward),
+ * which continues to follow the app's normal light/dark theme unchanged.
+ */
+
+import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
+import { useOnboarding } from '../../lib/context/onboarding-context';
+import { hapticFeedback } from '../../lib/haptic-feedback';
+import { analyticsService } from '../../lib/services/analytics-service';
+import { darkTheme } from '../../lib/themes/darkTheme';
+import type { AppTheme } from '../../lib/themes/types';
+
+const theme: AppTheme = darkTheme;
+
+type Intent = 'poster' | 'hunter';
+
+const ROLE_OPTIONS: {
+  intent: Intent;
+  icon: 'post-add' | 'explore';
+  title: string;
+  body: string;
+}[] = [
+  {
+    intent: 'poster',
+    icon: 'post-add',
+    title: 'Make today pay.',
+    body: 'Post what you need done and set your price.',
+  },
+  {
+    intent: 'hunter',
+    icon: 'explore',
+    title: "I'd rather earn",
+    body: 'Browse paid tasks near you and get picked.',
+  },
+];
+
+// Matches app/onboarding/username.tsx's totalStepsFor: generic 5 steps,
+// poster/hunter branches 6. Intent is null until a card is tapped below, so
+// this starts at 5 and becomes 6 the moment a role is picked.
+function totalStepsFor(intent: Intent | null) {
+  return intent ? 6 : 5;
+}
+
+export default function RoleSelectScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { data: onboardingData, updateData } = useOnboarding();
+  const [selected, setSelected] = useState<Intent | null>(onboardingData.intent);
+
+  const totalSteps = totalStepsFor(selected);
+
+  const handleSelect = (intent: Intent) => {
+    hapticFeedback.light();
+    setSelected(intent);
+  };
+
+  const handleContinue = () => {
+    if (!selected) return;
+    hapticFeedback.light();
+    analyticsService.trackEvent('role_selected', { role: selected, surface: 'onboarding' });
+    updateData({ intent: selected });
+    router.push('/onboarding/style');
+  };
+
+  // Reached via router.replace() right after account creation (see
+  // sign-up-form.tsx / username.tsx), so there's usually no back history —
+  // "back" would only be a same-screen no-op via the /onboarding gate. Only
+  // show the button when it would actually go somewhere.
+  const canGoBack = router.canGoBack();
+
+  const handleBack = () => {
+    hapticFeedback.light();
+    router.back();
+  };
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      {canGoBack && (
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
+        </TouchableOpacity>
+      )}
+
+      <OnboardingProgressDots total={totalSteps} activeIndex={1} style={styles.dotsContainer} />
+
+      <View style={styles.content}>
+        <Text style={styles.heading} accessibilityRole="header">
+          What brings you to Bounty?
+        </Text>
+        <Text style={styles.subheading}>Pick the one that fits today.</Text>
+
+        <View style={styles.optionsList}>
+          {ROLE_OPTIONS.map(option => {
+            const isSelected = selected === option.intent;
+            return (
+              <TouchableOpacity
+                key={option.intent}
+                style={[
+                  styles.optionCard,
+                  { borderColor: isSelected ? theme.primary : theme.border },
+                  isSelected && { backgroundColor: `${theme.primary}14` },
+                ]}
+                onPress={() => handleSelect(option.intent)}
+                activeOpacity={0.85}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
+                accessibilityLabel={`${option.title} — ${option.body}`}
+              >
+                <View style={[styles.optionIconWrap, { backgroundColor: theme.surfaceSecondary }]}>
+                  <MaterialIcons name={option.icon} size={20} color={theme.primary} />
+                </View>
+                <View style={styles.optionTextWrap}>
+                  <Text style={styles.optionTitle}>{option.title}</Text>
+                  <Text style={styles.optionBody}>{option.body}</Text>
+                </View>
+                <MaterialIcons
+                  name={isSelected ? 'radio-button-checked' : 'radio-button-unchecked'}
+                  size={22}
+                  color={isSelected ? theme.primary : theme.textSecondary}
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.footer}>
+        <Text style={styles.footerHint}>You can switch or do both any time.</Text>
+        <TouchableOpacity
+          style={[
+            styles.continueButton,
+            { backgroundColor: theme.primary },
+            !selected && styles.continueButtonDisabled,
+          ]}
+          onPress={handleContinue}
+          disabled={!selected}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Continue"
+          accessibilityState={{ disabled: !selected }}
+        >
+          <Text style={styles.continueButtonText}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.background,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    padding: 8,
+    marginTop: 8,
+    marginLeft: 16,
+  },
+  dotsContainer: {
+    paddingTop: 16,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
+  heading: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '700',
+    color: theme.text,
+    letterSpacing: -0.5,
+  },
+  subheading: {
+    fontSize: 15,
+    color: theme.textSecondary,
+    marginTop: 8,
+  },
+  optionsList: {
+    marginTop: 28,
+    gap: 12,
+  },
+  optionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1.5,
+    borderRadius: theme.radius.xl,
+    padding: 16,
+  },
+  optionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionTextWrap: {
+    flex: 1,
+  },
+  optionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  optionBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.textSecondary,
+    marginTop: 2,
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+    paddingTop: 8,
+    gap: 12,
+  },
+  footerHint: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    textAlign: 'center',
+  },
+  continueButton: {
+    height: 56,
+    borderRadius: theme.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueButtonDisabled: {
+    opacity: 0.5,
+  },
+  continueButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.background,
+  },
+});
