@@ -66,6 +66,18 @@ describe('ApplicationPitchModal required-pitch gate', () => {
     fireEvent.changeText(getByLabelText('Application pitch'), 'x'.repeat(PITCH_REQUIRED_MIN_LENGTH));
     expect(queryByText(/Write at least/)).toBeNull();
   });
+
+  it('announces the blocked-tap reason to screen readers on both platforms', () => {
+    const { getByText } = renderModal();
+
+    fireEvent.press(getByText('Apply — earn $180.00'));
+
+    const errorText = getByText(/Write at least/);
+    // accessibilityLiveRegion alone only announces on Android; accessibilityRole
+    // "alert" is what gets this spoken by VoiceOver on iOS too.
+    expect(errorText.props.accessibilityRole).toBe('alert');
+    expect(errorText.props.accessibilityLiveRegion).toBe('assertive');
+  });
 });
 
 describe('ApplicationPitchModal optional pitch', () => {

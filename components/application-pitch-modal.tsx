@@ -136,7 +136,7 @@ export function ApplicationPitchModal({
           {requirement === 'required' && (
             <View style={styles.requiredFooter}>
               {showRequiredError && (
-                <Text style={styles.errorHint} accessibilityLiveRegion="polite">
+                <Text style={styles.errorHint} accessibilityRole="alert" accessibilityLiveRegion="assertive">
                   Write at least {PITCH_REQUIRED_MIN_LENGTH} characters to apply for this bounty.
                 </Text>
               )}

@@ -1,15 +1,23 @@
 /**
- * AppModal unmount hardening.
+ * AppModal close hardening.
  *
- * The native <Modal> unmounts only once the close animation settles. The
- * close callback reports `finished === false` when it is interrupted, and on
- * the UI thread that report can also be dropped entirely — which used to leave
- * the Modal mounted at zero opacity, an invisible overlay that swallowed every
- * touch behind it (the dead-button reports on the feed detail modal). A
- * fallback timer now forces the unmount so a stuck callback cannot strand it.
+ * The native <Modal> is a separate OS window/view controller that remains
+ * the top-level touch target for as long as it's presented, no matter what
+ * `pointerEvents` its children carry — so on close it is torn down
+ * immediately, before any fade plays, and a plain (non-Modal) view finishes
+ * the fade-out in its place. That view is always `pointerEvents="none"`, so
+ * it can never strand a touch-blocking overlay the way the old
+ * animation-gated unmount could (the dead-button reports on the feed detail
+ * modal).
  *
- * This file overrides the global reanimated mock so `withTiming` never reports
- * completion, reproducing the interrupted-close condition.
+ * The close-completion callback (from `withTiming`) can also be interrupted
+ * or arrive late — e.g. after a rapid reopen has already cancelled that
+ * close attempt. A fallback timer covers the "never arrives" case; cleanup
+ * marking the attempt `settled` covers the "arrives late" case.
+ *
+ * This file overrides the global reanimated mock so `withTiming`'s
+ * completion callback is captured instead of invoked, letting tests fire it
+ * (or not) on their own schedule to reproduce both cases.
  */
 import { act, render } from '@testing-library/react-native';
 import { Text } from 'react-native';
@@ -25,8 +33,13 @@ jest.mock('react-native-reanimated', () => {
     useSharedValue: (initial: unknown) => ({ value: initial }),
     useAnimatedStyle: () => ({}),
     interpolate: identity,
-    // The interrupted close: start the animation but never report completion.
-    withTiming: (value: unknown) => value,
+    // Captures the completion callback instead of invoking it, so a test can
+    // fire it whenever it likes (or never) to reproduce an interrupted,
+    // dropped, or late-arriving report from the UI thread.
+    withTiming: (value: unknown, _config: unknown, callback?: (finished: boolean) => void) => {
+      (global as any).__reanimatedCloseCallback = callback ?? null;
+      return value;
+    },
     Easing: { out: (fn: unknown) => fn || ((t: number) => t), cubic: (t: number) => t },
     runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
   };
@@ -47,11 +60,14 @@ function findGate(node: any): any {
   return undefined;
 }
 
-describe('AppModal unmount hardening', () => {
-  beforeEach(() => jest.useFakeTimers());
+describe('AppModal close hardening', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    (global as any).__reanimatedCloseCallback = null;
+  });
   afterEach(() => jest.useRealTimers());
 
-  it('stops intercepting touches the moment it starts closing, before it unmounts', () => {
+  it('stops intercepting touches the moment it starts closing, before the fade settles', () => {
     const { rerender, toJSON } = render(
       <AppModal visible onRequestClose={jest.fn()} onClosed={jest.fn()}>
         <Text>content</Text>
@@ -64,12 +80,12 @@ describe('AppModal unmount hardening', () => {
         <Text>content</Text>
       </AppModal>
     );
-    // Still mounted (the animation never reported completion, timers not
-    // advanced), but already inert so it can't swallow taps behind it.
+    // The close callback hasn't reported and the fallback timer hasn't fired,
+    // so the fade-out view is still up — but it's already inert.
     expect(findGate(toJSON()).props.pointerEvents).toBe('none');
   });
 
-  it('unmounts and fires onClosed even when the close callback never completes', () => {
+  it('settles and fires onClosed even when the close callback never arrives', () => {
     const onClosed = jest.fn();
     const { rerender, toJSON } = render(
       <AppModal visible onRequestClose={jest.fn()} onClosed={onClosed}>
@@ -83,8 +99,8 @@ describe('AppModal unmount hardening', () => {
         <Text>content</Text>
       </AppModal>
     );
-    // The animation callback never fired, so without the fallback the Modal
-    // would still be mounted here.
+    // The animation callback never fired, so without the fallback the
+    // fade-out view would still be rendered here.
     act(() => {
       jest.advanceTimersByTime(500);
     });
@@ -93,7 +109,7 @@ describe('AppModal unmount hardening', () => {
     expect(toJSON()).toBeNull();
   });
 
-  it('stays mounted when a reopen interrupts the close before the fallback fires', () => {
+  it('stays open when a reopen interrupts the close before the fallback fires', () => {
     const onClosed = jest.fn();
     const { rerender, toJSON } = render(
       <AppModal visible onRequestClose={jest.fn()} onClosed={onClosed}>
@@ -114,6 +130,41 @@ describe('AppModal unmount hardening', () => {
     );
     act(() => {
       jest.advanceTimersByTime(500);
+    });
+
+    expect(onClosed).not.toHaveBeenCalled();
+    expect(toJSON()).not.toBeNull();
+  });
+
+  it('ignores a close callback that lands late, after a reopen already cancelled it', () => {
+    const onClosed = jest.fn();
+    const { rerender, toJSON } = render(
+      <AppModal visible onRequestClose={jest.fn()} onClosed={onClosed}>
+        <Text>content</Text>
+      </AppModal>
+    );
+
+    rerender(
+      <AppModal visible={false} onRequestClose={jest.fn()} onClosed={onClosed}>
+        <Text>content</Text>
+      </AppModal>
+    );
+    const staleCallback = (global as any).__reanimatedCloseCallback;
+    expect(typeof staleCallback).toBe('function');
+
+    // Reopen before that report arrives — this must cancel the close attempt
+    // outright, not just its fallback timer.
+    rerender(
+      <AppModal visible onRequestClose={jest.fn()} onClosed={onClosed}>
+        <Text>content</Text>
+      </AppModal>
+    );
+
+    // The stale callback from the cancelled close lands late, the way a
+    // delayed (not dropped) UI-thread report can. It must be a no-op: it
+    // belongs to a close attempt that's no longer current.
+    act(() => {
+      staleCallback(true);
     });
 
     expect(onClosed).not.toHaveBeenCalled();
