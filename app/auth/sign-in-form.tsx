@@ -7,7 +7,7 @@ import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -126,11 +126,19 @@ export function SignInForm() {
   const attemptsAtRef = useRef<number | null>(null);
   console.log('[sign-in] Component rendered', { loginAttempts, lockoutUntil, captchaVerified });
   const passwordRef = useRef<TextInput>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const captchaRef = useRef<View>(null);
+  // Re-render source for the live lockout countdown; only ticks while locked out.
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   // Derive active lockout and CAPTCHA requirement each render so expired
   // lockout timestamps are handled correctly without an extra state update.
   const isLockoutActive = lockoutUntil !== null && Date.now() < lockoutUntil;
   const captchaRequired = loginAttempts >= CAPTCHA_THRESHOLD && !isLockoutActive;
+  // Seconds left in the current lockout, driven by `nowTick` so the Sign In
+  // label counts down live instead of showing one stale, broken-looking value.
+  const lockoutSecondsRemaining =
+    lockoutUntil !== null ? Math.max(0, Math.ceil((lockoutUntil - nowTick) / 1000)) : 0;
   const [socialAuthLoading, setSocialAuthLoading] = useState(false);
   const [socialAuthError, setSocialAuthError] = useState<string | null>(null);
   const socialLoginStartMsRef = useRef<number | null>(null);
@@ -765,6 +773,53 @@ export function SignInForm() {
     }
   }, [captchaRequired, loginAttempts]);
 
+  // Tick once a second while locked out so the Sign In label shows a live
+  // countdown. Runs only during the lockout, so it costs nothing otherwise.
+  useEffect(() => {
+    if (!isLockoutActive) return;
+    setNowTick(Date.now());
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isLockoutActive]);
+
+  // Bring the CAPTCHA into view. When the challenge arms it renders below the
+  // fold, so a user who never scrolls sees only a Sign In button that rejects
+  // every tap — the "greyed out and untappable" report. Optional chaining keeps
+  // this safe under test renderers that stub the native measure methods.
+  const scrollToCaptcha = useCallback(() => {
+    const scroll = scrollViewRef.current;
+    const target = captchaRef.current;
+    if (!scroll || !target?.measureLayout) return;
+    const scrollNode = scroll.getScrollableNode?.() ?? scroll;
+    target.measureLayout(
+      scrollNode,
+      (_x: number, y: number) => scroll.scrollTo({ y: Math.max(0, y - 16), animated: true }),
+      () => {}
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!captchaRequired) return;
+    // Defer one tick so the challenge has laid out before we measure it.
+    const id = setTimeout(scrollToCaptcha, 50);
+    return () => clearTimeout(id);
+  }, [captchaRequired, scrollToCaptcha]);
+
+  // Wrap submission so a tap blocked by the CAPTCHA also scrolls the challenge
+  // into view, instead of only dropping a message into the banner above.
+  const onSignInPress = useCallback(() => {
+    if (!isLockoutActive && captchaRequired && !captchaVerified) {
+      scrollToCaptcha();
+    }
+    handleSubmit();
+  }, [isLockoutActive, captchaRequired, captchaVerified, scrollToCaptcha, handleSubmit]);
+
+  const signInLabel = isLockoutActive
+    ? `Try again in ${lockoutSecondsRemaining}s`
+    : captchaRequired && !captchaVerified
+      ? 'Complete the security check'
+      : 'Sign In';
+
   const getFieldError = (field: string) => fieldErrors[field];
 
   const validateForm = () => {
@@ -1016,7 +1071,11 @@ export function SignInForm() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
             <TouchableOpacity
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/onboarding/welcome'))}
@@ -1170,7 +1229,7 @@ export function SignInForm() {
               </View>
 
               {captchaRequired && (
-                <View className="mt-4">
+                <View ref={captchaRef} className="mt-4">
                   <Text className="text-xs mb-2" style={{ color: theme.text }}>
                     Please complete the security check below to continue signing in.
                   </Text>
@@ -1189,8 +1248,19 @@ export function SignInForm() {
                 </View>
               )}
 
-              <Button onPress={handleSubmit} loading={isSubmitting} accessibilityLabel="Sign in">
-                Sign In
+              <Button
+                onPress={onSignInPress}
+                loading={isSubmitting}
+                accessibilityLabel="Sign in"
+                accessibilityHint={
+                  isLockoutActive
+                    ? `Sign-in is paused. Try again in ${lockoutSecondsRemaining} seconds.`
+                    : captchaRequired && !captchaVerified
+                      ? 'Complete the security check below first, then sign in.'
+                      : undefined
+                }
+              >
+                {signInLabel}
               </Button>
 
               {Platform.OS === 'ios' && (
