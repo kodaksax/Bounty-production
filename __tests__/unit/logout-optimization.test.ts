@@ -3,6 +3,8 @@
  * Verifies that logout operations complete quickly and cleanup happens in background
  */
 
+import { performLogout } from '../../lib/services/logout-service';
+
 // Test timeouts
 const SLOW_TEST_TIMEOUT_MS = 5000; // Timeout for tests with async operations
 
@@ -18,17 +20,26 @@ describe('Logout Speed Optimization', () => {
   });
 
   describe('Local Signout Priority', () => {
-    it('should call local signout immediately', async () => {
-      // Mock supabase
+    it('calls the real performLogout with scope: local, not the SDK global default', async () => {
+      // Exercises the actual production dependency (performLogout), not a
+      // standalone mock disconnected from it — a standalone mock can never
+      // catch a regression in the real call site.
       const mockSignOut = jest.fn().mockResolvedValue({ error: null });
-      const mockSupabase = {
-        auth: {
-          signOut: mockSignOut,
-        },
-      };
+      const mockSupabase = { auth: { signOut: mockSignOut } } as any;
 
-      // Simulate local signout call
-      await mockSupabase.auth.signOut({ scope: 'local' });
+      await performLogout({
+        supabase: mockSupabase,
+        authProfileService: {
+          clearUserDraftData: jest.fn().mockResolvedValue(undefined),
+          setSession: jest.fn().mockResolvedValue(undefined),
+        } as any,
+        SecureStore: { deleteItemAsync: jest.fn().mockResolvedValue(undefined) } as any,
+        markIntentionalSignOut: jest.fn(),
+        router: { replace: jest.fn() },
+        currentUserId: null,
+        deregisterPushToken: jest.fn().mockResolvedValue(undefined),
+        clearNotificationCache: jest.fn().mockResolvedValue(undefined),
+      });
 
       expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
       expect(mockSignOut).toHaveBeenCalledTimes(1);

@@ -20,6 +20,7 @@ function makeContext(overrides: Partial<MomentContext> = {}): MomentContext {
     accountCreatedAt: new Date().toISOString(),
     sessionCount: 1,
     activeScreen: null,
+    hasEngaged: false,
     profile: {
       hasAvatar: false,
       hasBio: false,
@@ -151,6 +152,47 @@ describe('evaluateNextMoment cooldown handling', () => {
     const states = new Map<MomentType, MomentState>([[def.type, state]]);
 
     expect(evaluateNextMoment(makeContext(), states, [def])).toBeNull();
+  });
+
+  // BNTY-09: enable_notifications/complete_profile could flash on screen for
+  // one render even though their goal was already met (permission already
+  // granted, bio/location already filled in) — evaluateNextMoment used to
+  // rely solely on isEligible + persisted status, and only the separate,
+  // async MomentsProvider auto-complete effect ever consulted
+  // checkCompleted, which raced against selection. checkCompleted is now
+  // checked at selection time too, so a moment whose goal is already met is
+  // never selected regardless of what status happens to be persisted.
+  it.each(['pending', 'shown', 'dismissed', 'snoozed'] as const)(
+    'does not select a moment whose checkCompleted already returns true, even with a %s persisted status',
+    status => {
+      const def = makeDef({
+        isEligible: () => true,
+        checkCompleted: () => true,
+      });
+      const state = makeState({
+        status,
+        shownCount: 1,
+        snoozedUntil:
+          status === 'snoozed' ? new Date(Date.now() + 1 * HOUR_MS).toISOString() : null,
+      });
+      const states = new Map<MomentType, MomentState>([[def.type, state]]);
+
+      expect(evaluateNextMoment(makeContext(), states, [def])).toBeNull();
+    }
+  );
+
+  it('does not select a moment whose checkCompleted already returns true even with no persisted state at all', () => {
+    // The "already granted before this device ever showed anything" case —
+    // no user_activation_moments row exists yet.
+    const def = makeDef({ isEligible: () => true, checkCompleted: () => true });
+
+    expect(evaluateNextMoment(makeContext(), new Map(), [def])).toBeNull();
+  });
+
+  it('still selects a moment whose checkCompleted returns false', () => {
+    const def = makeDef({ isEligible: () => true, checkCompleted: () => false });
+
+    expect(evaluateNextMoment(makeContext(), new Map(), [def])?.type).toBe(def.type);
   });
 
   it('never surfaces more than one eligible moment at a time', () => {

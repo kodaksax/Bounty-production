@@ -59,18 +59,24 @@ export async function performLogout(deps: LogoutDeps = {}) {
   // session is still available when currentUserId wasn't supplied.
   await clearNotificationCache(currentUserId).catch(() => undefined);
 
-  // Try a full sign-out and wait for it (short timeout), fall back to local sign-out
+  // Sign out this device only. `scope: 'local'` revokes just the current
+  // session's refresh token instead of the SDK default (`scope: 'global'`),
+  // which revokes EVERY session for the account. A global sign-out here was
+  // silently kicking a user's *other* signed-in devices (e.g. logging out on
+  // one phone invalidated the session on a different phone that was mid
+  // bounty-submission), surfacing there as an unrelated-looking
+  // "Failed to mark Ready" error. See lib/services/completion-service.ts.
   // Track whether sign-out ultimately failed so we only retry in background when needed
   let signOutFailed = false;
   try {
     await Promise.race([
-      sup.auth.signOut(),
+      sup.auth.signOut({ scope: 'local' } as any),
       new Promise((_, reject) => setTimeout(() => reject(new Error('signOut timeout')), 3000)),
     ]);
     signOutFailed = false;
   } catch (err) {
     signOutFailed = true;
-    // fallback to local sign-out for immediate UI update
+    // retry once more, still local-scoped, for immediate UI update
     try {
       await sup.auth.signOut({ scope: 'local' } as any);
       // fallback succeeded, no need for further background retry
@@ -115,7 +121,7 @@ export async function performLogout(deps: LogoutDeps = {}) {
   ];
 
   if (signOutFailed) {
-    backgroundTasks.push(sup.auth.signOut().catch(() => undefined));
+    backgroundTasks.push(sup.auth.signOut({ scope: 'local' } as any).catch(() => undefined));
   }
 
   void Promise.all(backgroundTasks).catch(() => undefined);

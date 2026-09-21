@@ -494,6 +494,41 @@ export interface AdminSuspiciousApplication {
   detectedAt: string;
 }
 
+// ─── Liquidity Board (BNTY-10) ─────────────────────────────────────────────
+// admin_liquidity_board() in 20260919120000_admin_liquidity_board.sql. Every
+// row is a piece of stuck demand: an open, non-test bounty (or its poster)
+// that isn't moving. See that migration for the exact rule behind each
+// bucket.
+export const ADMIN_LIQUIDITY_BUCKETS = [
+  'no_geom',
+  'zero_applications',
+  'unopened_applications',
+  'funding_required_no_hire',
+  'poster_gone_dark',
+] as const;
+export type AdminLiquidityBucket = (typeof ADMIN_LIQUIDITY_BUCKETS)[number];
+
+export interface AdminLiquidityRow {
+  bucket: AdminLiquidityBucket;
+  bountyId: string;
+  posterId?: string;
+  posterUsername?: string;
+  title?: string;
+  amount?: Money;
+  status?: string;
+  fundingMode?: string;
+  stuckSince: string;
+  stuckHours: number;
+  detail: Record<string, unknown>;
+  /**
+   * True count of this row's bucket before the RPC's per-bucket cap, so the
+   * client can tell a genuinely small bucket from one that got truncated
+   * (e.g. render "showing 100 of 412"). Undefined only for payloads that
+   * predate this field.
+   */
+  bucketTotal?: number;
+}
+
 export interface AdminFeedFilters {
   limit?: number;
   /** Keyset cursor: pass the last row's occurredAt/id to fetch the next page. */

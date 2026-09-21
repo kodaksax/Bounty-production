@@ -107,11 +107,18 @@ jest.mock('../../../../lib/supabase', () => ({
       update: jest.fn(() => ({
         eq: jest.fn(() => Promise.resolve({ error: null })),
       })),
+      // Backs fetchHasEngaged's two head-count queries (bounties/
+      // bounty_requests) — mocked as "never engaged" by default so it
+      // doesn't interfere with the first-session-suppression gate.
+      select: jest.fn(() => ({
+        eq: jest.fn(() => Promise.resolve({ count: 0, error: null })),
+      })),
     })),
   },
 }));
 
 import { MomentsProvider, useMoments } from '../../../../providers/moments-provider';
+import { analyticsService } from '../../../../lib/services/analytics-service';
 
 let latest: ReturnType<typeof useMoments> | null = null;
 
@@ -181,5 +188,70 @@ describe('MomentsProvider — dismiss does not reopen on subsequent re-renders',
       rerender(<Root activeScreen="wallet" />);
     });
     expect(latest?.activeMoment).toBeNull();
+  });
+});
+
+// BNTY-09: enable_notifications was firing moment_shown ~7 times per user and
+// complete_profile was flashing on/off within 300ms — traced to two gaps:
+// (1) evaluateNextMoment could select a moment for one render before the
+// separate, async auto-complete effect had a chance to mark it resolved, and
+// (2) a duplicate MomentsProvider mount (e.g. a moment's own
+// `router.push('/tabs/bounty-app')` stacking a second bounty-app screen on
+// top of the one still mounted underneath) doubled every fetch/evaluate/
+// present pass. These tests cover both fixes.
+describe('MomentsProvider — a single activation presents at most once', () => {
+  beforeEach(() => {
+    latest = null;
+    (analyticsService.trackEvent as jest.Mock).mockClear();
+  });
+
+  function shownEventsFor(momentType: string) {
+    return (analyticsService.trackEvent as jest.Mock).mock.calls.filter(
+      ([event, payload]) => event === 'moment_shown' && payload?.momentType === momentType
+    );
+  }
+
+  it('emits moment_shown exactly once for a single activation, even as buildContext keeps recomputing', async () => {
+    render(<Root activeScreen="wallet" />);
+
+    await waitFor(() => expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding'));
+
+    // Let any further passes (e.g. sessionCount resolving asynchronously,
+    // which changes buildContext's identity) settle before asserting.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(shownEventsFor('stripe_connect_onboarding')).toHaveLength(1);
+  });
+
+  it('dedupes a duplicate provider mount so only one instance ever presents a moment', async () => {
+    const first = render(<Root activeScreen="wallet" />);
+    await waitFor(() => expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding'));
+
+    // Simulate the duplicate-mount bug: a second MomentsProvider mounts
+    // (e.g. a second, stacked bounty-app screen instance) while the first
+    // is still alive underneath.
+    let second: ReturnType<typeof useMoments> | null = null;
+    function CaptureSecond() {
+      second = useMoments();
+      return null;
+    }
+    const other = render(
+      <MomentsProvider activeScreen="wallet">
+        <CaptureSecond />
+      </MomentsProvider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // The demoted duplicate stays inert — it never becomes active on its own.
+    expect(second?.activeMoment).toBeNull();
+    expect(shownEventsFor('stripe_connect_onboarding')).toHaveLength(1);
+
+    first.unmount();
+    other.unmount();
   });
 });

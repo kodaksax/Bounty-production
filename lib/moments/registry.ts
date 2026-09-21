@@ -72,6 +72,23 @@ const MIN_SESSIONS_FOR_ACTIVATION_PROMPT = 2;
 const MIN_SESSIONS_FOR_PROFILE_PHOTO = 3;
 
 /**
+ * Blanket "not in the very first session" rule for passive, state-derived
+ * moments (permissions, profile completeness). A first-time user's initial
+ * pass through the app shouldn't be interrupted by anything before they've
+ * done something real — publishing a bounty or submitting an application
+ * (ctx.hasEngaged) is treated as "no longer a passive first look," so those
+ * users can still see a contextually relevant prompt (e.g. fund_wallet)
+ * without waiting for a second app open. identity_verification and
+ * stripe_connect_onboarding keep their own narrower "strong reason"
+ * exceptions (see below) rather than this one, since a wallet-screen visit
+ * or a high balance is a stronger, more specific signal than mere session
+ * count for those two.
+ */
+function hasClearedFirstSession(ctx: MomentContext): boolean {
+  return ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT || ctx.hasEngaged;
+}
+
+/**
  * Screens where trust/payout prompts (identity verification, Connect setup)
  * are directly relevant to what the user is doing right now — a "strong
  * reason" to offer them even to a brand-new user in their very first
@@ -99,7 +116,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'engagement',
     cooldownHours: 72,
     maxShownCount: 3,
-    isEligible: ctx => ctx.permissions.notifications === 'undetermined',
+    isEligible: ctx => hasClearedFirstSession(ctx) && ctx.permissions.notifications === 'undetermined',
     checkCompleted: ctx => ctx.permissions.notifications !== 'undetermined',
     content: () => ({
       icon: 'notifications-none',
@@ -126,6 +143,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // the Profile screen, which is the one place this prompt isn't an
     // interruption — it's exactly what they're there to do.
     isEligible: ctx =>
+      hasClearedFirstSession(ctx) &&
       !ctx.profile.hasAvatar &&
       (ctx.sessionCount >= MIN_SESSIONS_FOR_PROFILE_PHOTO || ctx.activeScreen === 'profile'),
     checkCompleted: ctx => ctx.profile.hasAvatar,
@@ -147,7 +165,9 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     cooldownHours: 96,
     maxShownCount: 2,
     isEligible: ctx =>
-      accountAgeDays(ctx) >= 1 && (!ctx.profile.hasBio || !ctx.profile.hasLocation),
+      hasClearedFirstSession(ctx) &&
+      accountAgeDays(ctx) >= 1 &&
+      (!ctx.profile.hasBio || !ctx.profile.hasLocation),
     checkCompleted: ctx => ctx.profile.hasBio && ctx.profile.hasLocation,
     content: () => ({
       icon: 'person-outline',
@@ -166,7 +186,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'engagement',
     cooldownHours: 72,
     maxShownCount: 3,
-    isEligible: ctx => ctx.permissions.location === 'undetermined',
+    isEligible: ctx => hasClearedFirstSession(ctx) && ctx.permissions.location === 'undetermined',
     checkCompleted: ctx => ctx.permissions.location !== 'undetermined',
     content: () => ({
       icon: 'location-on',

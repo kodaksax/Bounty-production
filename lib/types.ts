@@ -626,10 +626,14 @@ export type NotificationType =
   | 'bounty_expiry'
   /** Poster-facing: their bounty is missing information hunters look for, or has gotten little response. */
   | 'bounty_quality_nudge'
+  /** Poster-facing: their in-person bounty has no location, so no hunter can ever be matched to it. Sent once by fn_escalate_stale_bounty_liquidity. */
+  | 'bounty_location_nudge'
   /** Poster-facing: a hunter's application has sat pending with no decision for 1h/24h (data.stage). Carries requestId so it can be actioned from NotificationActionSheet. */
   | 'application_pending_reminder'
   /** Hunter-facing: their application auto-closed after request_expiry_hours of poster silence. Not a rejection -- the poster never decided. */
   | 'application_expired'
+  /** Hunter-facing: their pending application auto-closed because the bounty itself left status='open' (deleted, cancelled, filled by another hunter). Not a rejection -- the poster never decided on this request. */
+  | 'application_bounty_closed'
   /** Poster-facing: they approved a hunter's work 24h ago and still haven't rated them. Fires once per completion_submissions row. */
   | 'rating_reminder'
   | 'account_warning'

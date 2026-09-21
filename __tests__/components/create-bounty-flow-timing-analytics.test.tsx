@@ -166,13 +166,21 @@ jest.mock('app/screens/CreateBounty/quick/StepPhotos', () => ({
     );
   },
 }));
+// StepWhere is a required pre-publish step (Task -> Location -> Compensation),
+// so this stub also exposes a back control for the cases that leave and
+// re-enter a step.
 jest.mock('app/screens/CreateBounty/quick/StepWhere', () => ({
   StepWhere: (props: any) => {
-    const { TouchableOpacity, Text } = require('react-native');
+    const { TouchableOpacity, Text, View } = require('react-native');
     return (
-      <TouchableOpacity accessibilityLabel="stub-next" onPress={props.onNext}>
-        <Text>StepWhere</Text>
-      </TouchableOpacity>
+      <View>
+        <TouchableOpacity accessibilityLabel="stub-next" onPress={props.onNext}>
+          <Text>StepWhere</Text>
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="stub-back" onPress={props.onBack}>
+          <Text>Back</Text>
+        </TouchableOpacity>
+      </View>
     );
   },
 }));
@@ -496,7 +504,7 @@ describe('CreateBountyFlow — post_step_viewed fires once per step entry', () =
     expect(viewed[0]).toMatchObject({ step_index: 1, step_name: 'Task', direction: 'forward' });
     expect(viewed[1]).toMatchObject({
       step_index: 2,
-      step_name: 'Compensation',
+      step_name: 'Location',
       direction: 'forward',
     });
   });
@@ -854,7 +862,8 @@ describe('CreateBountyFlow — abandonment is not the only way out', () => {
 
     const { unmount } = render(<CreateBountyFlow />);
     fireEvent(screen.getByLabelText('stub-title-input'), 'focus');
-    fireEvent.press(screen.getByLabelText('stub-next')); // step 1 -> 2
+    fireEvent.press(screen.getByLabelText('stub-next')); // step 1 -> 2 (Location)
+    fireEvent.press(screen.getByLabelText('stub-next')); // step 2 -> 3 (Compensation)
     await act(async () => {
       fireEvent.press(screen.getByLabelText('stub-next')); // StepPay CTA publishes
     });

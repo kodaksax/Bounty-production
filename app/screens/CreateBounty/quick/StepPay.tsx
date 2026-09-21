@@ -260,7 +260,10 @@ export function StepPay({
           value={draft.isForHonor ? '0' : draft.amount > 0 ? String(draft.amount) : ''}
           onChangeText={handleCustomAmount}
           editable={!draft.isForHonor}
-          placeholder="50"
+          // "50" alone reads as a filled-in amount next to the $ glyph: a poster
+          // typed nothing, pressed the CTA and got "set a price" for a field that
+          // looked answered. "e.g." is what makes it unmistakably a hint.
+          placeholder="e.g. 50"
           placeholderTextColor={theme.textDisabled}
           keyboardType="number-pad"
           style={[

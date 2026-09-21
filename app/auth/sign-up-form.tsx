@@ -222,6 +222,17 @@ export function SignUpForm() {
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
 
+  // The error banner renders at the TOP of a form whose submit button is at the
+  // BOTTOM. Without this, a failed "Create Account" shows a spinner, returns to
+  // its resting label and looks like a dead button -- the reason it failed is
+  // one full screen above the finger that pressed it.
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (authError || Object.keys(fieldErrors).length > 0) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, [authError, fieldErrors]);
+
   // Password strength tracking — same rules/UI pattern as the reset-password
   // flow (lib/utils/password-validation.ts), so sign-up and password reset
   // never disagree about what makes a valid password.
@@ -670,7 +681,7 @@ export function SignUpForm() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
             <TouchableOpacity
               onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.AUTH.SIGN_IN as Href))}
@@ -742,7 +753,11 @@ export function SignUpForm() {
 
             <View className="gap-5">
               {authError ? (
-                <View className="bg-red-500/20 border border-red-400 rounded p-3">
+                <View
+                  className="bg-red-500/20 border border-red-400 rounded p-3"
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                >
                   <Text style={{ color: theme.isDark ? '#fecaca' : '#991b1b', fontSize: 14 }}>{authError}</Text>
                 </View>
               ) : null}

@@ -498,7 +498,9 @@ export type AnalyticsEvent =
   //   bounty_viewed                (existing) — a hunter saw it
   //   first_submission_received    (existing) — a hunter applied
   //   accept_funding_required      (NEW)      — poster tapped Select; a charge is due
-  //   accept_funding_started       (NEW)      — poster confirmed the charge
+  //   accept_funding_started       (NEW)      — poster tapped "Confirm & hire"
+  //                                              or "Pay $X & hire"
+  //                                              (paymentRequired: bool)
   //   payment_sca_required         (existing) — top-up needed 3DS/SCA
   //   payment_completed            (existing) — top-up deposit succeeded
   //   accept_funding_succeeded     (NEW)      — escrow reserved + hunter accepted
@@ -515,7 +517,9 @@ export type AnalyticsEvent =
   //   accept_funding_failed        (NEW) — carries `reason` from
   //                                        classifyAcceptFundingError, never a
   //                                        raw DB/Stripe message
-  //   accept_funding_abandoned     (NEW) — poster backed out of the pay gate
+  //   accept_funding_abandoned     (NEW) — poster left the pay gate without
+  //                                        hiring; `trigger` says how:
+  //                                        cancel | background | unmount
   //
   // Every event in this block carries `variant` (control | deferred),
   // `fundingMode` ('at_post' | 'at_accept') and `firstBounty`, so the two arms

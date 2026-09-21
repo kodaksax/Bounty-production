@@ -29,7 +29,10 @@ describe('performLogout', () => {
     expect(mockMarkIntent).toHaveBeenCalled();
     expect(mockDeregisterPushToken).toHaveBeenCalled();
     expect(mockClearNotificationCache).toHaveBeenCalledWith('user-1');
-    expect(mockSupabase.auth.signOut).toHaveBeenCalled();
+    // Must be device-local, not the SDK's global default — a regression here
+    // would silently kick this user's OTHER signed-in devices. Asserting the
+    // call args (not just "was it called") is what actually catches that.
+    expect(mockSupabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(mockProfileSvc.clearUserDraftData).toHaveBeenCalledWith('user-1');
     expect(mockProfileSvc.setSession).toHaveBeenCalledWith(null);
     expect(mockRouter.replace).toHaveBeenCalledWith('/auth/sign-in-form');
@@ -58,6 +61,13 @@ describe('performLogout', () => {
 
     // Even if signOut failed, we still call setSession(null)
     expect(mockProfileSvc.setSession).toHaveBeenCalledWith(null);
+    // Every retry/fallback attempt must stay local-scoped too — a regression
+    // to a bare/global call on the retry path would still leave this test
+    // green if we only checked that signOut was called.
+    for (const call of badSupabase.auth.signOut.mock.calls) {
+      expect(call[0]).toEqual({ scope: 'local' });
+    }
+    expect(badSupabase.auth.signOut.mock.calls.length).toBeGreaterThan(0);
   });
 
   it('still completes logout when deregisterPushToken fails', async () => {
@@ -82,6 +92,6 @@ describe('performLogout', () => {
 
     // Logout should still navigate even if token deregistration fails
     expect(mockRouter.replace).toHaveBeenCalledWith('/auth/sign-in-form');
-    expect(mockSupabase.auth.signOut).toHaveBeenCalled();
+    expect(mockSupabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 });

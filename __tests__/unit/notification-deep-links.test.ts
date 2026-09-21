@@ -120,3 +120,26 @@ describe('resolveNotificationDeepLink: application (GitHub #809)', () => {
     expect(action.kind === 'route' && action.path).not.toMatch(/^\/bounty\//);
   });
 });
+
+describe('resolveNotificationDeepLink: bounty_location_nudge', () => {
+  // BNTY-02: an in-person bounty with no location can never be matched, so the
+  // liquidity sweep nudges the poster once. It must land on the poster's own
+  // bounty-management screen with the edit modal open (where the Where field
+  // lives), exactly like the quality nudge -- never the public bounty view.
+  test('routes to the poster bounty-management screen with the edit modal pre-opened', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'bounty_location_nudge',
+      data: { bountyId: 'abc-123', section: 'where' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123?openEdit=true' });
+  });
+
+  test('resolves to none when the payload is missing bountyId', () => {
+    const action = resolveNotificationDeepLink({ type: 'bounty_location_nudge', data: {} });
+    expect(action).toEqual({ kind: 'none' });
+  });
+
+  test('supports the rich action sheet like other marketplace notifications', () => {
+    expect(supportsActionSheet({ type: 'bounty_location_nudge', data: { bountyId: 'abc-123' } })).toBe(true);
+  });
+});

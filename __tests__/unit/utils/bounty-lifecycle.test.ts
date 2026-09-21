@@ -134,8 +134,8 @@ describe('resolveBountyLifecycle — poster lifecycle', () => {
     expect(keys).not.toContain('cancel_bounty');
   });
 
-  it('cancelled and archived postings are terminal and offer a repost', () => {
-    for (const status of ['cancelled', 'archived']) {
+  it('cancelled, archived and deleted postings are terminal and offer a repost', () => {
+    for (const status of ['cancelled', 'archived', 'deleted']) {
       const s = resolveBountyLifecycle({ bounty: bounty({ status }), role: 'poster' });
       expect(s.needsAttention).toBe(false);
       expect(s.group).toBe('past');
@@ -171,6 +171,23 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     // detail screen (rather than the postings list, which had its own ad-hoc
     // discard handler) had no way to manage a rejected application at all.
     expect(s.secondaryActions.map(a => a.key)).toContain('discard_application');
+  });
+
+  // BNTY-11: getBountyDisplayStatus used to have no case for a deleted bounty,
+  // so this fell through to its unknown-status default of 'open' — a hunter
+  // whose application was still pending when the poster deleted the bounty
+  // saw "Application sent" on a bounty that no longer exists.
+  it('a pending application on a deleted bounty reads as no longer available, not open', () => {
+    const s = resolveBountyLifecycle({
+      bounty: bounty({ status: 'deleted' }),
+      role: 'hunter',
+      requestStatus: 'pending',
+    });
+    expect(s.status).toBe('deleted');
+    expect(s.headline).toBe('No longer available');
+    expect(s.needsAttention).toBe(false);
+    expect(s.primaryAction?.key).toBe('find_bounties');
+    expect(s.group).toBe('past');
   });
 
   it('accepted work is the hunter’s action item', () => {
