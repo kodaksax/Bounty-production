@@ -15,15 +15,20 @@ import { useBackHandler } from '../../hooks/useBackHandler';
 import { useCompleteOnboarding } from '../../hooks/useCompleteOnboarding';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
+import { useRouter } from 'expo-router';
 import { ROUTES } from '../../lib/routes';
 import { analyticsService } from '../../lib/services/analytics-service';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { darkTheme } from '../../lib/themes/darkTheme';
 import type { AppTheme } from '../../lib/themes/types';
+
+// Forced dark, not the app's ambient light/dark preference — same dark
+// onboarding funnel as welcome.tsx / role-select.tsx / details.tsx.
+const theme = darkTheme;
 
 export default function BountyPostedScreen() {
   const insets = useSafeAreaInsets();
-  const { theme } = useAppThemeContext();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const router = useRouter();
+  const styles = useMemo(() => makeStyles(theme), []);
   const { data: onboardingData } = useOnboarding();
   const { complete, isLoading } = useCompleteOnboarding(ROUTES.TABS.BOUNTY_APP);
 
@@ -50,9 +55,14 @@ export default function BountyPostedScreen() {
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   };
 
+  // Route into phone verification rather than finishing onboarding directly
+  // — this is the poster branch's last stop before done.tsx, completing the
+  // "secure your account" step that verify-phone.tsx/done.tsx already handle
+  // (both of those terminate onboarding themselves, so this screen no longer
+  // needs to call complete() on its own primary path).
   const handlePrimaryCta = () => {
     hapticFeedback.light();
-    complete();
+    router.push('/onboarding/phone');
   };
 
   const goToRequests = () => {
@@ -147,10 +157,10 @@ export default function BountyPostedScreen() {
             onPress={handlePrimaryCta}
             disabled={isLoading}
             accessibilityRole="button"
-            accessibilityLabel="Start exploring Bounty"
+            accessibilityLabel="Continue to phone verification"
             accessibilityState={{ disabled: isLoading, busy: isLoading }}
           >
-            <Text style={styles.primaryButtonText}>Start Exploring Bounty</Text>
+            <Text style={styles.primaryButtonText}>Continue</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
           </TouchableOpacity>
         </Animated.View>

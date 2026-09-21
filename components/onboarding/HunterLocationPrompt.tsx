@@ -249,7 +249,8 @@ export function HunterLocationPrompt({
               </TouchableOpacity>
 
               <Text style={styles.hunterFootnote}>
-                Only your area is stored — never your exact address.
+                Only your area is stored — never your exact address.{'\n'}
+                Posters see a neighbourhood and a rating.
               </Text>
             </>
           )}

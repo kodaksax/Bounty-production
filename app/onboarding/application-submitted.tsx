@@ -17,13 +17,16 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { ROUTES } from '../../lib/routes';
 import { analyticsService } from '../../lib/services/analytics-service';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { darkTheme } from '../../lib/themes/darkTheme';
 import type { AppTheme } from '../../lib/themes/types';
+
+// Forced dark, not the app's ambient light/dark preference — same dark
+// onboarding funnel as welcome.tsx / role-select.tsx / details.tsx.
+const theme = darkTheme;
 
 export default function ApplicationSubmittedScreen() {
   const insets = useSafeAreaInsets();
-  const { theme } = useAppThemeContext();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const styles = useMemo(() => makeStyles(theme), []);
   const { data: onboardingData } = useOnboarding();
   const { complete, isLoading } = useCompleteOnboarding(ROUTES.TABS.BOUNTY_APP);
 

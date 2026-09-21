@@ -6,7 +6,7 @@ import { buildDepositSuccessMessage, useWalletDeposit } from '../../hooks/use-wa
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import type { OnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
 import { stripeService } from '../../lib/services/stripe-service';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { darkTheme } from '../../lib/themes/darkTheme';
 import { getUserFriendlyError } from '../../lib/utils/error-messages';
 import { ErrorBanner } from '../error-banner';
 import { PaymentMethodsModal } from '../payment-methods-modal';
@@ -44,7 +44,11 @@ const ON_PRIMARY_TEXT = '#052e1b';
 // which is why this funding step exists as a distinct step from the task
 // composer.
 export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, onSkip }: PosterFundingScreenProps) {
-  const { theme } = useAppThemeContext();
+  // Forced dark, matching the `styles` prop it's already given (built from
+  // darkTheme in details.tsx) — this component used to source its own theme
+  // independently via useAppThemeContext(), which would have followed the
+  // ambient light/dark preference and mismatched the now-forced-dark styles.
+  const theme = darkTheme;
   const insets = useSafeAreaInsets();
   const amount = Number(price) || 0;
   // Read inside the component rather than taking it as a prop: the defect this

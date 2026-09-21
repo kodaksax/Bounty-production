@@ -39,7 +39,7 @@ import { locationService } from '../../lib/services/location-service';
 import { notificationService } from '../../lib/services/notification-service';
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding';
 import { supabase } from '../../lib/supabase';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { darkTheme } from '../../lib/themes/darkTheme';
 import type { LocationCoordinates } from '../../lib/types';
 import {
     validateAmount,
@@ -70,7 +70,11 @@ export default function DetailsScreen() {
   // validateAmount's historical $1 default while production enforced $5, so a
   // poster was told $2 was fine and then refused at publish.
   const { minimumAmount: postingMinimumAmount } = usePostingPolicy();
-  const { theme } = useAppThemeContext();
+  // Forced dark, not the app's ambient light/dark preference — this screen
+  // (and everything it renders: PosterTaskPrompt, PosterFundingScreen,
+  // HunterLocationPrompt, HunterSampleBountyScreen, ProfileDetailsForm) is
+  // part of the same dark onboarding funnel as welcome.tsx / role-select.tsx.
+  const theme = darkTheme;
   const styles = useMemo(() => makeOnboardingDetailsStyles(theme), [theme]);
 
   // Initialize from context, then fallback to profile data
