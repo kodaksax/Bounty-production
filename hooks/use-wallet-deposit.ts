@@ -125,6 +125,8 @@ export function useWalletDeposit() {
     loadPaymentMethods,
   } = useStripe();
   const { session } = useAuthContext();
+  const cardPaymentMethods = paymentMethods.filter(method => method.type === 'card');
+  const primaryCardPaymentMethod = cardPaymentMethods[0] ?? null;
 
   // Check Apple Pay availability on mount
   useEffect(() => {
@@ -150,7 +152,18 @@ export function useWalletDeposit() {
       return 'failed';
     }
 
-    if (paymentMethods.length === 0) {
+    if (!primaryCardPaymentMethod) {
+      if (paymentMethods.length > 0) {
+        Alert.alert(
+          'Card Required',
+          'Add Money currently charges a saved card. Please add a card or use Apple Pay.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Add Card', onPress: () => setShowPaymentMethodsModal(true) },
+          ]
+        );
+        return 'failed';
+      }
       Alert.alert(
         'No Payment Method',
         'You need to add a payment method before you can add money to your wallet. Choose from cards or bank accounts.',
@@ -174,7 +187,7 @@ export function useWalletDeposit() {
       const result = await processPaymentSecure(numAmount, {
         userId: session?.user?.id,
         purpose: 'wallet_deposit',
-        paymentMethodId: paymentMethods[0]?.id,
+        paymentMethodId: primaryCardPaymentMethod.id,
       });
 
       if (result.success) {
@@ -341,6 +354,8 @@ export function useWalletDeposit() {
     showPaymentMethodsModal,
     setShowPaymentMethodsModal,
     paymentMethods,
+    cardPaymentMethods,
+    primaryCardPaymentMethod,
     stripeLoading,
     stripeError,
     loadPaymentMethods,

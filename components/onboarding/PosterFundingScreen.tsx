@@ -57,11 +57,11 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
     error, setError,
     successInfo, setSuccessInfo,
     showPaymentMethodsModal, setShowPaymentMethodsModal,
-    paymentMethods, stripeLoading, stripeError, loadPaymentMethods,
+    primaryCardPaymentMethod, stripeLoading, stripeError, loadPaymentMethods,
     payWithCard, payWithApplePay,
   } = useWalletDeposit();
 
-  const hasPaymentMethod = paymentMethods.length > 0;
+  const hasPaymentMethod = !!primaryCardPaymentMethod;
   const busy = isProcessing || stripeLoading || posting;
 
   const applePayBg = theme.isDark ? '#ffffff' : '#000000';
@@ -157,14 +157,14 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
               style={styles.fundingPaymentCard}
               onPress={() => setShowPaymentMethodsModal(true)}
               accessibilityRole="button"
-              accessibilityLabel={`Change payment method, currently ${stripeService.formatCardDisplay(paymentMethods[0])}`}
+              accessibilityLabel={`Change payment method, currently ${stripeService.formatCardDisplay(primaryCardPaymentMethod)}`}
             >
               <View style={styles.fundingPaymentCardIcon}>
                 <MaterialIcons name="credit-card" size={20} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.fundingPaymentCardText}>{stripeService.formatCardDisplay(paymentMethods[0])}</Text>
-                <Text style={styles.fundingPaymentCardSub}>Default payment method</Text>
+                <Text style={styles.fundingPaymentCardText}>{stripeService.formatCardDisplay(primaryCardPaymentMethod)}</Text>
+                <Text style={styles.fundingPaymentCardSub}>Saved card for this payment</Text>
               </View>
               <Text style={styles.fundingChangeLink}>Change</Text>
             </TouchableOpacity>

@@ -39,7 +39,7 @@ jest.mock('../../lib/wallet-context', () => ({
 jest.mock('../../lib/stripe-context', () => ({
   useStripe: jest.fn(() => ({
     processPaymentSecure: mockProcessPaymentSecure,
-    paymentMethods: [{ id: 'pm_test_123' }],
+    paymentMethods: [{ id: 'pm_test_123', type: 'card' }],
     isLoading: false,
     error: null,
     loadPaymentMethods: jest.fn(),

@@ -49,7 +49,7 @@ const resetDepositState = (overrides: Partial<DepositState> = {}) => {
     isProcessing: false,
     error: null,
     successInfo: null,
-    paymentMethods: [{ id: 'pm_1', card: { brand: 'visa', last4: '4242' } }],
+    paymentMethods: [{ id: 'pm_1', type: 'card', card: { brand: 'visa', last4: '4242' } }],
     stripeLoading: false,
     stripeError: null,
     showPaymentMethodsModal: false,
@@ -60,6 +60,8 @@ const resetDepositState = (overrides: Partial<DepositState> = {}) => {
 jest.mock('hooks/use-wallet-deposit', () => ({
   useWalletDeposit: () => ({
     ...depositState,
+    primaryCardPaymentMethod:
+      depositState.paymentMethods.find((method: any) => method.type === 'card') ?? null,
     isApplePayAvailable: true,
     setError: mockSetError,
     setSuccessInfo: mockSetSuccessInfo,
@@ -217,6 +219,27 @@ describe('AcceptFundingGate', () => {
       expect(mockPayWithCard).not.toHaveBeenCalled();
       expect(gate.onPaymentStarted).not.toHaveBeenCalled();
       // No "Paying with … Change" row to change a card that does not exist.
+      expect(queryByText('Paying with')).toBeNull();
+    });
+
+    test('a linked bank account alone still prompts for a card instead of trying to charge the bank as a card', () => {
+      resetDepositState({
+        paymentMethods: [
+          {
+            id: 'ba_1',
+            type: 'us_bank_account',
+            us_bank_account: { bank_name: 'Test Bank', last4: '6789' },
+          },
+        ],
+      });
+      const gate = makeGate();
+      const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
+
+      fireEvent.press(getByText('Link a card to pay $30.00'));
+
+      expect(mockSetShowPaymentMethodsModal).toHaveBeenCalledWith(true);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      expect(gate.onPaymentStarted).not.toHaveBeenCalled();
       expect(queryByText('Paying with')).toBeNull();
     });
 
