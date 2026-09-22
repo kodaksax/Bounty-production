@@ -97,6 +97,21 @@ export interface CreateBountyOptions {
    * produce an unfunded bounty the server did not authorise.
    */
   fundingMode?: 'at_post' | 'at_accept';
+
+  /**
+   * The `bounty_posting_checkouts.posting_attempt_id` this bounty was already
+   * paid for, in the $1 posting-fee experiment's treatment arm — where the
+   * service fee AND the full reward are collected before the bounty exists.
+   *
+   * Like `fundingMode`, this is a CLAIM rather than an instruction, and for the
+   * same reason: trg_bounties_normalize_funding_mode verifies it against a
+   * paid checkout row belonging to this poster with a matching reward amount
+   * before it will fund the bounty at post. An unverifiable value is NULLed out
+   * server-side and the bounty falls back to ordinary pay-at-accept — so
+   * sending it is safe even from a hostile client, and a stale one degrades to
+   * today's behaviour rather than to a free bounty.
+   */
+  postingCheckoutAttemptId?: string | null;
 }
 
 /**
@@ -258,6 +273,12 @@ export const bountyService = {
         // to a pre-experiment one. See CreateBountyOptions.fundingMode for why
         // sending it is safe even from a hostile client.
         ...(options.fundingMode === 'at_accept' ? { funding_mode: 'at_accept' as const } : {}),
+        // Only sent when a checkout was actually settled, so a control-arm
+        // insert stays byte-identical to a pre-experiment one. The server
+        // verifies it before honouring it — see CreateBountyOptions.
+        ...(options.postingCheckoutAttemptId
+          ? { posting_checkout_attempt_id: options.postingCheckoutAttemptId }
+          : {}),
       };
 
       // If offline, enqueue the bounty for later processing and return an optimistic temp object

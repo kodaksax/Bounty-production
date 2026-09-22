@@ -1,6 +1,7 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { bountyService } from 'app/services/bountyService';
 import { useFormSubmission } from 'hooks/useFormSubmission';
+import { POSTING_FEE_CENTS } from 'lib/constants/posting-fee';
 import { useDeferredFundingVariant } from 'lib/experiments/deferred-funding-variant';
 import { analyticsService } from 'lib/services/analytics-service';
 import { amountBucket, canDeferBountyFunding } from 'lib/services/bounty-funding-service';
@@ -43,6 +44,15 @@ export interface PublishedBountyMeta {
   funded: boolean;
   workType?: string;
   queuedOffline: boolean;
+  /**
+   * True when this bounty's reward was collected BEFORE the insert, at a
+   * posting checkout ($1 posting-fee experiment). Such a bounty funds at post
+   * rather than at accept, so `funded` is true and nothing further is charged
+   * when a hunter is hired.
+   */
+  prepaid: boolean;
+  /** The posting service fee actually charged, in cents. 0 for control. */
+  feeCents: number;
 }
 
 /** Props matching InsufficientBalanceScreen/AddMoneyScreen exactly, so
@@ -92,6 +102,40 @@ export interface UseBountyPublishParams {
   suppressSuccessAlert?: boolean;
 }
 
+/** Per-call options for publish(). */
+export interface PublishOptions {
+  /**
+   * Set by the treatment arm of the $1 posting-fee experiment once a checkout
+   * has been SETTLED — i.e. the server has verified with Stripe that the fee
+   * and the full reward were captured, and has credited the reward to the
+   * poster's wallet.
+   *
+   * Non-null changes three things about the publish, all of them consequences
+   * of the money having already moved:
+   *
+   *   1. the wallet balance gate is skipped (see publish() for why the local
+   *      `balance` value is necessarily stale at this point);
+   *   2. the bounty is posted with fundingMode 'at_post' and this attempt id,
+   *      so the server escrows the reward at insert instead of deferring it;
+   *   3. the checkout is consumed by an AFTER INSERT trigger, binding the fee
+   *      to the bounty it paid for.
+   *
+   * WHY THIS IS A PUBLISH ARGUMENT AND NOT A HOOK PARAM. The composer calls
+   * publish() in the same tick that the payment resolves, so a value routed
+   * through React state or a render-assigned ref would still be null here —
+   * no re-render has happened yet. That is not a theoretical race: it was the
+   * actual behaviour, and it posted a paid bounty as 'at_accept', which left
+   * the prepaid reward sitting in the poster's wallet as spendable balance and
+   * would have charged them a second time at acceptance. Passing it as an
+   * argument makes the value synchronous and the bug unrepresentable.
+   *
+   * Must be null/absent unless a checkout genuinely settled. Passing it
+   * speculatively would send a poster down the pre-funded path with no money
+   * behind it.
+   */
+  prepaidCheckoutAttemptId?: string | null;
+}
+
 export function useBountyPublish(params: UseBountyPublishParams) {
   const {
     surface,
@@ -107,6 +151,13 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     onCancelGate,
     suppressSuccessAlert = false,
   } = params;
+
+  // Set synchronously by publish() from its own argument, NOT assigned during
+  // render — see PublishOptions.prepaidCheckoutAttemptId for why that
+  // distinction is load-bearing. Deliberately persists after publish() so the
+  // ErrorBanner's retry(), which calls submit() directly, re-runs the same
+  // attempt as prepaid rather than silently downgrading it.
+  const prepaidAttemptRef = useRef<string | null>(null);
 
   const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
@@ -230,8 +281,17 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // which a deferred publish never reaches — so the ref is false there,
       // which is also correct: that poster has just pre-funded.
       const deferFunding = deferredGrantRef.current;
+      const prepaidAttemptId = prepaidAttemptRef.current;
 
+      // A settled checkout has ALREADY credited the reward to this poster's
+      // wallet server-side. The `balance` closed over here is React state that
+      // has not seen that credit yet, so checking it would reject a poster who
+      // has just paid in full — the one case where the gate is guaranteed
+      // wrong. The DB is the real check either way: fn_reserve_bounty_escrow
+      // raises on insufficient funds at INSERT, which aborts the whole
+      // transaction rather than posting an unfunded bounty.
       if (
+        !prepaidAttemptId &&
         !deferFunding &&
         !useStripeNativePayments &&
         !validateBalance(publishDraft.amount, balance, publishDraft.isForHonor)
@@ -247,7 +307,15 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       }
 
       const { bounty: createdBounty, created } = await bountyService.createBounty(publishDraft, {
-        fundingMode: deferFunding ? 'at_accept' : 'at_post',
+        // A prepaid bounty must never ask to defer — its reward is already
+        // collected, so deferring would leave that money loose in the wallet
+        // and charge the poster a second time at acceptance.
+        fundingMode: deferFunding && !prepaidAttemptId ? 'at_accept' : 'at_post',
+        // Omitted entirely rather than passed as null, so a control-arm
+        // publish calls createBounty with exactly the options it did before
+        // this feature existed — same reasoning as the funding_mode spread in
+        // bountyService.createBounty.
+        ...(prepaidAttemptId ? { postingCheckoutAttemptId: prepaidAttemptId } : {}),
       });
       let paymentArchitectureVersion: 1 | 2 | 3 = 1;
       paymentArchitectureVersion = useStripeNativePayments ? 2 : 1;
@@ -292,8 +360,17 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // Deliberately NOT falling back to `deferFunding`: since the server now
       // grants at_accept from the bounty's own columns and ignores what the
       // client asked, our request is no longer evidence of what it decided.
+      //
+      // The unknown-case default flips for a PREPAID bounty. The reasoning
+      // above assumes nothing has been charged yet, which is what makes
+      // 'at_accept' the safe guess; once a checkout has settled, the poster's
+      // money is already collected and the safe guess is the opposite. Guessing
+      // 'at_accept' here would emit bounty_posted_unfunded for a bounty that
+      // was paid in full and would tell the poster, on the confirmation screen,
+      // that they will be charged later — for money we already took.
       const grantedFundingMode =
-        (createdBounty as { funding_mode?: string | null }).funding_mode ?? 'at_accept';
+        (createdBounty as { funding_mode?: string | null }).funding_mode ??
+        (prepaidAttemptId ? 'at_post' : 'at_accept');
       const postedUnfunded = grantedFundingMode === 'at_accept';
 
       // Skip the post-time escrow for a granted deferred bounty. The DB trigger
@@ -413,6 +490,11 @@ export function useBountyPublish(params: UseBountyPublishParams) {
                 bountyId: String(createdBounty.id),
                 architecture: 'v1',
                 amount: publishDraft.amount,
+                // The experiment's central metric: WHEN the reward entered
+                // escrow. 'at_post' here vs 'at_accept' on the acceptance path
+                // is the whole behavioural difference between the two arms.
+                timing: 'at_post',
+                prepaid: !!prepaidAttemptId,
               });
             } catch {
               /* analytics is best-effort */
@@ -483,6 +565,8 @@ export function useBountyPublish(params: UseBountyPublishParams) {
         funded: !publishDraft.isForHonor && publishDraft.amount > 0 && !postedUnfunded,
         workType: publishDraft.workType,
         queuedOffline: !isOnline,
+        prepaid: !!prepaidAttemptId,
+        feeCents: prepaidAttemptId ? POSTING_FEE_CENTS : 0,
       };
       const finish = () => onPublished(createdBounty.id.toString(), meta);
 
@@ -504,7 +588,12 @@ export function useBountyPublish(params: UseBountyPublishParams) {
             ? // Sets the expectation the whole experiment depends on, in one
               // line, without explaining escrow mechanics.
               "Your bounty is live. You'll only be charged when you choose someone to do it."
-            : 'Your bounty has been posted successfully. Hunters will be able to see it and apply.',
+            : prepaidAttemptId
+              ? // The mirror expectation for the paid arm: they have already
+                // paid in full, so the one thing they must not be left
+                // wondering is whether hiring costs more.
+                "Your bounty is live and fully funded. Nothing more to pay — the reward is held in escrow until you approve the work."
+              : 'Your bounty has been posted successfully. Hunters will be able to see it and apply.',
         [
           {
             text: isOnline ? 'View Bounty' : 'OK',
@@ -559,8 +648,11 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     submit();
   };
 
-  const publish = (publishDraft: BountyDraft = draft) => {
+  const publish = (publishDraft: BountyDraft = draft, options: PublishOptions = {}) => {
     publishDraftRef.current = publishDraft;
+    // Always assigned, so a prepaid claim from an earlier attempt can never
+    // leak into a later publish that has no payment behind it.
+    prepaidAttemptRef.current = options.prepaidCheckoutAttemptId ?? null;
     const useStripeNativePayments =
       !publishDraft.isForHonor && publishDraft.amount > 0 && shouldUseStripeNativeFunding();
 
@@ -574,6 +666,17 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     // i.e. the pre-funded path. That is the safe direction to be wrong in: the
     // poster is asked to fund up front, and the server still refuses to debit at
     // insert if it independently decides the bounty defers.
+    // A settled checkout already collected the reward, so this publish must
+    // skip BOTH the deferral decision and the balance gate. The gate in
+    // particular would misfire: the wallet credit happened server-side and the
+    // local `balance` has not caught up, so a poster who just paid in full
+    // would be sent to a top-up screen asking for money they have handed over.
+    if (prepaidAttemptRef.current) {
+      deferredGrantRef.current = false;
+      submit();
+      return;
+    }
+
     const deferred =
       !useStripeNativePayments &&
       !publishDraft.isForHonor &&

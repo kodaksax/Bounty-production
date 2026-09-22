@@ -526,6 +526,61 @@ export type AnalyticsEvent =
   | 'accept_funding_succeeded'
   | 'accept_funding_failed'
   | 'accept_funding_abandoned'
+  // ---------------------------------------------------------------------
+  // "$1 posting service fee" experiment
+  // (PostHog flag 'posting-service-fee', see
+  //  lib/experiments/posting-fee-variant.ts).
+  //
+  // In the treatment arm the poster passes through a checkout BEFORE the
+  // bounty row is created, paying the flat service fee AND the full bounty
+  // reward in one charge; the bounty is then published already funded. Control
+  // is today's flow: publishing is free and the reward escrows at acceptance.
+  //
+  // Following the same policy as the pay-at-accept block above, these are
+  // ONLY the events the existing funnel cannot express. Everything already
+  // measurable is measured by reusing the canonical event with an added
+  // `postingFeeVariant` property rather than by minting a parallel funnel:
+  //
+  //   composer_opened            (existing) — posting flow entered
+  //     + postingFeeVariant                   (this IS the exposure event)
+  //   bounty_submitted           (existing) — poster committed a publish
+  //   posting_checkout_shown     (NEW)      — the itemised checkout rendered
+  //   posting_checkout_started   (NEW)      — poster authorised the charge
+  //   posting_checkout_succeeded (NEW)      — fee + reward captured and split
+  //   posting_checkout_failed    (NEW)      — carries `stage` + `reason`
+  //   posting_checkout_abandoned (NEW)      — left the checkout without paying
+  //   posting_checkout_reused    (NEW)      — an already-paid checkout was
+  //                                           consumed instead of re-charged
+  //                                           (the duplicate-charge canary)
+  //   bounty_published           (existing) — bounty is live
+  //     + postingFeeVariant / feeCents / rewardCents / prepaid
+  //   escrow_funded              (existing) — reward moved into escrow. Fires
+  //                                           with timing:'at_post' for
+  //                                           treatment and 'at_accept' for
+  //                                           control, which is the whole
+  //                                           behavioural difference in one
+  //                                           property.
+  //   application_accepted       (existing) — bounty later accepted
+  //   bounty_completed           (existing)
+  //
+  // DOWNSTREAM ATTRIBUTION. The events after publish (acceptance, completion)
+  // fire from screens this experiment does not touch, so rather than threading
+  // a variant prop through the accept/complete paths, the arm is also written
+  // as a PERSON property (`posting_fee_variant`) when it resolves. Every
+  // downstream event by that user is then filterable by arm at query time with
+  // no instrumentation on those paths. Use the person property for the
+  // post-publish funnel and the event property for the checkout funnel.
+  //
+  // MONEY SAFETY. None of these ever carries a card, token, client secret,
+  // PaymentIntent id, customer id or exact wallet balance. Amounts here are
+  // the fee and reward in CENTS, which are already shown to the poster on the
+  // checkout screen, plus amountBucket() for distribution cuts.
+  | 'posting_checkout_shown'
+  | 'posting_checkout_started'
+  | 'posting_checkout_succeeded'
+  | 'posting_checkout_failed'
+  | 'posting_checkout_abandoned'
+  | 'posting_checkout_reused'
   // Stripe Phase 2 (payment_architecture_version=2) bounty escrow routing —
   // see lib/utils/payment-architecture.ts. escrow_funded/escrow_released/
   // escrow_refunded above are reused for both architectures (properties
