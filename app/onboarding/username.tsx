@@ -13,7 +13,10 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
+import {
+  ONBOARDING_TOTAL_STEPS,
+  OnboardingProgressDots,
+} from '../../components/onboarding/OnboardingProgressDots';
 import { SkipAuthLink } from '../../components/onboarding/SkipAuthLink';
 import { GoogleLogo } from '../../components/ui/google-logo';
 import { useAuthContext } from '../../hooks/use-auth-context';
@@ -26,13 +29,6 @@ import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
-
-// Generic (no intent picked) is a 5-step flow: sign in -> role select ->
-// style -> about you -> done. Poster/hunter branches are 6 steps: sign in ->
-// role select -> style -> details -> confirm -> done.
-function totalStepsFor(intent: 'poster' | 'hunter' | null) {
-  return intent ? 6 : 5;
-}
 
 // After a real sign-in, decide whether this is an existing, fully-onboarded
 // account (go straight to the app) or a new/incomplete one (continue onboarding).
@@ -51,7 +47,7 @@ async function routeAfterSocialSignIn(
     if (error) {
       // No profile row (brand new account) or lookup failed — continue onboarding.
       analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'new_account' });
-      router.push('/onboarding/role-select');
+      router.push('/onboarding/style');
       return;
     }
 
@@ -64,11 +60,11 @@ async function routeAfterSocialSignIn(
       router.replace('/tabs/bounty-app');
     } else {
       analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'existing_incomplete' });
-      router.push('/onboarding/role-select');
+      router.push('/onboarding/style');
     }
   } catch {
     // On any unexpected error, don't block the user — continue onboarding.
-    router.push('/onboarding/role-select');
+    router.push('/onboarding/style');
   }
 }
 
@@ -112,7 +108,6 @@ export default function UsernameScreen() {
     ? `Use ${oneTapProvider} for one-tap, password-free sign-up — or continue with email. We never post or share anything without asking.`
     : 'Create your account with an email address and password. We never post or share anything without asking.';
 
-  const totalSteps = totalStepsFor(onboardingData.intent);
 
   // Visitors who picked a role on the welcome screen land here without knowing
   // why sign-in is required or what happens after it — the biggest drop-off in
@@ -143,7 +138,7 @@ export default function UsernameScreen() {
       if (userId) {
         await routeAfterSocialSignIn(userId, router, 'google');
       } else {
-        router.push('/onboarding/role-select');
+        router.push('/onboarding/style');
       }
     })();
   }, [googleSessionReady, router]);
@@ -165,7 +160,7 @@ export default function UsernameScreen() {
     if (userId) {
       await routeAfterSocialSignIn(userId, router, 'apple');
     } else {
-      router.push('/onboarding/role-select');
+      router.push('/onboarding/style');
     }
   };
 
@@ -201,7 +196,7 @@ export default function UsernameScreen() {
     // Already signed in (e.g. reached this screen mid-onboarding) — safe to
     // continue straight through. If not, there's no session yet for the
     // next screen to save data against, so send them to create an account.
-    router.push(isLoggedIn ? '/onboarding/role-select' : '/auth/sign-up-form');
+    router.push(isLoggedIn ? '/onboarding/style' : '/auth/sign-up-form');
   };
 
   return (
@@ -215,7 +210,11 @@ export default function UsernameScreen() {
         <MaterialIcons name="arrow-back" size={24} color={theme.text} />
       </TouchableOpacity>
 
-      <OnboardingProgressDots total={totalSteps} activeIndex={0} style={styles.dotsContainer} />
+      <OnboardingProgressDots
+        total={ONBOARDING_TOTAL_STEPS}
+        activeIndex={0}
+        style={styles.dotsContainer}
+      />
 
       <Text style={styles.heading}>Sign up in seconds</Text>
       <Text style={styles.subheading}>{subheading}</Text>

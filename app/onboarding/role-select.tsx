@@ -22,7 +22,10 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
+import {
+  ONBOARDING_TOTAL_STEPS,
+  OnboardingProgressDots,
+} from '../../components/onboarding/OnboardingProgressDots';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
@@ -53,20 +56,12 @@ const ROLE_OPTIONS: {
   },
 ];
 
-// Matches app/onboarding/username.tsx's totalStepsFor: generic 5 steps,
-// poster/hunter branches 6. Intent is null until a card is tapped below, so
-// this starts at 5 and becomes 6 the moment a role is picked.
-function totalStepsFor(intent: Intent | null) {
-  return intent ? 6 : 5;
-}
-
 export default function RoleSelectScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: onboardingData, updateData } = useOnboarding();
   const [selected, setSelected] = useState<Intent | null>(onboardingData.intent);
 
-  const totalSteps = totalStepsFor(selected);
 
   const handleSelect = (intent: Intent) => {
     hapticFeedback.light();
@@ -78,11 +73,16 @@ export default function RoleSelectScreen() {
     hapticFeedback.light();
     analyticsService.trackEvent('role_selected', { role: selected, surface: 'onboarding' });
     updateData({ intent: selected });
-    router.push('/onboarding/style');
+    // Both roles go to payout setup next, not straight into their branch
+    // (the poster task composer / hunter location prompt). Posters need a
+    // payout account for refunds, hunters for earnings, so the step is shared
+    // — see app/onboarding/payouts.tsx, which continues on to style.
+    router.push('/onboarding/payouts');
   };
 
-  // Reached via router.replace() right after account creation (see
-  // sign-up-form.tsx / username.tsx), so there's usually no back history —
+  // Reached from the style step (app/onboarding/style.tsx), which itself is
+  // reached via router.replace() right after account creation (see
+  // sign-up-form.tsx / username.tsx), so back history can be empty —
   // "back" would only be a same-screen no-op via the /onboarding gate. Only
   // show the button when it would actually go somewhere.
   const canGoBack = router.canGoBack();
@@ -105,7 +105,11 @@ export default function RoleSelectScreen() {
         </TouchableOpacity>
       )}
 
-      <OnboardingProgressDots total={totalSteps} activeIndex={1} style={styles.dotsContainer} />
+      <OnboardingProgressDots
+        total={ONBOARDING_TOTAL_STEPS}
+        activeIndex={3}
+        style={styles.dotsContainer}
+      />
 
       <View style={styles.content}>
         <Text style={styles.heading} accessibilityRole="header">

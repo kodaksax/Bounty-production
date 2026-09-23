@@ -1,7 +1,8 @@
 /**
  * Onboarding Style Screen
- * Third step, right after sign-in and role selection (app/onboarding/role-select.tsx)
- * and before the profile-details form: a fast, zero-cost personalization
+ * Second step, the first thing shown after sign-up/sign-in and before the
+ * location step (app/onboarding/location.tsx) and role selection
+ * (app/onboarding/role-select.tsx): a fast, zero-cost personalization
  * moment that reuses the exact same BountyFormat picker as Settings
  * (lib/bounty-format-context.tsx) — no separate style system, no duplicated
  * persistence. See app/onboarding/username.tsx's totalStepsFor for the
@@ -22,7 +23,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BountyFormatPreview } from '../../components/onboarding/BountyFormatPreview';
-import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
+import {
+  ONBOARDING_TOTAL_STEPS,
+  OnboardingProgressDots,
+} from '../../components/onboarding/OnboardingProgressDots';
 import { useAccessibleAnimation } from '../../hooks/use-accessible-animation';
 import { type BountyFormat, useBountyFormat } from '../../lib/bounty-format-context';
 import {
@@ -31,24 +35,15 @@ import {
   formatForScrollOffset,
   indexForFormat,
 } from '../../lib/bounty-format-options';
-import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
-// Generic (no intent) is a 5-step flow; poster/hunter branches are 6 steps —
-// one more than before, now that role-select.tsx sits between sign-in and
-// this style step. See done.tsx for the matching logic.
-function totalStepsFor(intent: 'poster' | 'hunter' | null) {
-  return intent ? 6 : 5;
-}
-
 export default function StyleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
-  const { data: onboardingData } = useOnboarding();
   const { bountyFormat, setBountyFormat } = useBountyFormat();
   const { prefersReducedMotion } = useAccessibleAnimation();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -71,7 +66,6 @@ export default function StyleScreen() {
   // never fight an in-progress gesture.
   const hasUserInteractedRef = useRef(false);
 
-  const totalSteps = totalStepsFor(onboardingData.intent);
   const initialIndex = indexForFormat(bountyFormat);
 
   useEffect(() => {
@@ -126,12 +120,16 @@ export default function StyleScreen() {
   };
 
   const handleContinue = () => {
-    router.push('/onboarding/details');
+    router.push('/onboarding/location');
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <OnboardingProgressDots total={totalSteps} activeIndex={2} style={styles.dotsContainer} />
+      <OnboardingProgressDots
+        total={ONBOARDING_TOTAL_STEPS}
+        activeIndex={1}
+        style={styles.dotsContainer}
+      />
 
       <Text style={styles.heading}>Make Bounty feel like yours</Text>
       <Text style={styles.subheading}>

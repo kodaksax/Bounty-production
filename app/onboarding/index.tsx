@@ -106,19 +106,21 @@ export default function OnboardingIndex() {
       // created, sign in again" — the reported beta failure. A signed-in user
       // always resumes at the first post-auth step instead.
       //
-      // Role (poster/hunter) is picked on its own screen now
-      // (app/onboarding/role-select.tsx), right after account creation — send
-      // an authenticated user there unless a role was already picked (e.g.
-      // resuming a draft, or an existing-but-incomplete account signing back
-      // in), in which case skip straight to style.tsx. Role stays optional
-      // for the rest of the flow either way — totalStepsFor(null) in
-      // username.tsx already covers the no-intent variant.
+      // The card-style pick (app/onboarding/style.tsx) is the first post-auth
+      // step, and role (poster/hunter) follows it on its own screen
+      // (app/onboarding/role-select.tsx) — send an authenticated user to style
+      // unless a role was already picked (e.g. resuming a draft, or an
+      // existing-but-incomplete account signing back in), which means both of
+      // those steps are behind them, so resume at payouts.tsx instead. Role
+      // stays optional for the rest of the flow either way —
+      // totalStepsFor(null) in username.tsx already covers the no-intent
+      // variant.
       if (isAuthenticated) {
         analyticsService.trackEvent(
           onboardingData.intent ? 'onboarding_resumed' : 'onboarding_started',
           { intent: onboardingData.intent ?? 'none', authenticated: true }
         );
-        router.replace(onboardingData.intent ? '/onboarding/style' : '/onboarding/role-select');
+        router.replace(onboardingData.intent ? '/onboarding/payouts' : '/onboarding/style');
         return;
       }
 
@@ -140,8 +142,8 @@ export default function OnboardingIndex() {
       router.replace(
         isAuthenticated
           ? onboardingData.intent
-            ? '/onboarding/style'
-            : '/onboarding/role-select'
+            ? '/onboarding/payouts'
+            : '/onboarding/style'
           : '/onboarding/welcome'
       );
     }

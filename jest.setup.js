@@ -154,14 +154,20 @@ jest.mock('react-native', () => {
         setValue: jest.fn(),
         interpolate: jest.fn().mockReturnValue(value),
       })),
-      timing: jest.fn().mockReturnValue({ start: jest.fn() }),
-      spring: jest.fn().mockReturnValue({ start: jest.fn() }),
+      // Every composite carries `stop` as well as `start`: components
+      // legitimately stop an animation in their effect cleanup (see
+      // app/onboarding/founder-note.tsx), and a composite without it throws
+      // on unmount rather than in the test that would explain why.
+      timing: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
+      spring: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
       loop: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
-      sequence: jest.fn().mockReturnValue({ start: jest.fn() }),
-      parallel: jest.fn().mockReturnValue({ start: jest.fn() }),
-      stagger: jest.fn().mockReturnValue({ start: jest.fn() }),
+      sequence: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
+      parallel: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
+      stagger: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
+      delay: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
       createAnimatedComponent: jest.fn(component => component),
       View: 'Animated.View',
+      Text: 'Animated.Text',
     },
     Easing: {
       ease: jest.fn(t => t),

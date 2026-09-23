@@ -89,14 +89,11 @@ jest.mock('lib/utils/auth-diagnostics', () => ({
 const { SignUpForm } = require('../../app/auth/sign-up-form');
 
 function fillValidForm(utils: ReturnType<typeof render>) {
-  fireEvent.changeText(utils.getByPlaceholderText('Choose a username (3-24 chars)'), 'tester');
+  fireEvent.changeText(utils.getByPlaceholderText('username'), 'tester');
   fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'new@user.test');
   fireEvent.changeText(utils.getByPlaceholderText('At least 8 characters'), 'CorrectHorse1!');
-  fireEvent.changeText(utils.getByPlaceholderText('Confirm password'), 'CorrectHorse1!');
-  // Age + Terms checkboxes (no accessibility label, so match on the role prop).
-  utils.UNSAFE_getAllByProps({ accessibilityRole: 'checkbox' }).forEach(box =>
-    fireEvent.press(box)
-  );
+  // No confirm-password field or age/terms checkboxes: pressing "Create
+  // Account" is itself the consent (see the legal line in sign-up-form.tsx).
 }
 
 describe('sign-up failure analytics', () => {

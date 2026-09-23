@@ -4,23 +4,27 @@ import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { Session } from '@supabase/supabase-js';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
     Modal,
     Platform,
     ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';
-import { BrandingLogo } from '../../components/ui/branding-logo';
+import {
+  ONBOARDING_TOTAL_STEPS,
+  OnboardingProgressDots,
+} from '../../components/onboarding/OnboardingProgressDots';
 import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
@@ -41,7 +45,6 @@ import {
     getStrengthColor,
     getStrengthWidth,
     validateNewPassword,
-    validatePasswordMatch,
     type PasswordStrengthResult,
 } from '../../lib/utils/password-validation';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
@@ -137,7 +140,7 @@ export async function signInAfterRegister(
 
 // After a real Apple/Google sign-in, decide whether this is an existing,
 // fully-onboarded account (go straight to the app) or a new/incomplete one
-// (continue onboarding at role-select). Mirrors
+// (continue onboarding at style, the first post-auth step). Mirrors
 // app/onboarding/username.tsx's routeAfterSocialSignIn — kept as a separate
 // copy rather than a shared import because the two screens' surrounding
 // state (loading flags, analytics context) differ enough that a shared
@@ -152,7 +155,7 @@ async function routeAfterAuth(userId: string, router: ReturnType<typeof useRoute
 
     if (error) {
       analyticsService.trackEvent('onboarding_auth_completed', { method: 'social', outcome: 'new_account' });
-      router.replace('/onboarding/role-select' as Href);
+      router.replace('/onboarding/style' as Href);
       return;
     }
 
@@ -165,10 +168,10 @@ async function routeAfterAuth(userId: string, router: ReturnType<typeof useRoute
       router.replace('/tabs/bounty-app' as Href);
     } else {
       analyticsService.trackEvent('onboarding_auth_completed', { method: 'social', outcome: 'existing_incomplete' });
-      router.replace('/onboarding/role-select' as Href);
+      router.replace('/onboarding/style' as Href);
     }
   } catch {
-    router.replace('/onboarding/role-select' as Href);
+    router.replace('/onboarding/style' as Href);
   }
 }
 
@@ -177,6 +180,11 @@ async function routeAfterAuth(userId: string, router: ReturnType<typeof useRoute
 // carousel) and role-select.tsx. See welcome.tsx's top comment for why a
 // saved light-mode preference must not leak into this funnel.
 const theme = darkTheme;
+
+// Sign-up is the auth step of the onboarding flow — the same step
+// app/onboarding/username.tsx renders at activeIndex 0, so it shows the same
+// total. See ONBOARDING_TOTAL_STEPS for what the steps are.
+const SIGNUP_TOTAL_STEPS = ONBOARDING_TOTAL_STEPS;
 
 export default function SignUpRoute() {
   return <SignUpForm />;
@@ -188,11 +196,15 @@ export function SignUpForm() {
   useScreenBackground(theme.background);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const { styles, icons } = useMemo(
+    () => makeLayout(width, height, insets.top, insets.bottom),
+    [width, height, insets.top, insets.bottom]
+  );
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [usernameAvailability, setUsernameAvailability] = useState<UsernameAvailability>('idle');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
@@ -209,9 +221,6 @@ export function SignUpForm() {
     error: socialError,
     clearError: clearSocialError,
   } = useSocialAuth();
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [ageVerified, setAgeVerified] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
   // Terminal-but-recoverable state: the account WAS created, but the sign-in
   // that normally follows it could not establish a session. Re-submitting the
@@ -220,7 +229,6 @@ export function SignUpForm() {
   const [accountCreatedNeedsSignIn, setAccountCreatedNeedsSignIn] = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
-  const confirmPasswordRef = useRef<TextInput>(null);
 
   // The error banner renders at the TOP of a form whose submit button is at the
   // BOTTOM. Without this, a failed "Create Account" shows a spinner, returns to
@@ -287,7 +295,7 @@ export function SignUpForm() {
       const { data } = await supabase.auth.getSession();
       const userId = data.session?.user?.id;
       if (!userId) {
-        router.replace('/onboarding/role-select' as Href);
+        router.replace('/onboarding/style' as Href);
         return;
       }
       await routeAfterAuth(userId, router);
@@ -304,7 +312,7 @@ export function SignUpForm() {
     const { data } = await supabase.auth.getSession();
     const userId = data.session?.user?.id;
     if (!userId) {
-      router.replace('/onboarding/role-select' as Href);
+      router.replace('/onboarding/style' as Href);
       return;
     }
     await routeAfterAuth(userId, router);
@@ -336,17 +344,9 @@ export function SignUpForm() {
     const passwordError = validateNewPassword(password);
     if (passwordError) errors.password = passwordError;
 
-    // Validate password match
-    const confirmError = validatePasswordMatch(password, confirmPassword);
-    if (confirmError) errors.confirmPassword = confirmError;
-
-    // Require age verification per App Store policy
-    if (!ageVerified) {
-      errors.ageVerified = 'You must confirm you are 18 or older to create an account.';
-    }
-    if (!termsAccepted) {
-      errors.termsAccepted = 'You must accept the Terms & Privacy policy to continue.';
-    }
+    // The 18+ attestation and Terms/Privacy acceptance are no longer separate
+    // checkboxes: pressing "Create Account" IS the acceptance, and the consent
+    // line above the button states both. Keep that copy in sync with this.
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -525,9 +525,6 @@ export function SignUpForm() {
         // kept: if the session could not be established it is prefilled on the
         // sign-in screen, and it is never a secret.
         setPassword('');
-        setConfirmPassword('');
-        setAgeVerified(false);
-        setTermsAccepted(false);
 
         if (!session) {
           // The backend creates users with `email_confirm: true`
@@ -584,10 +581,10 @@ export function SignUpForm() {
         // Route straight to the first post-auth onboarding step rather than to
         // the /onboarding gate. The gate has to re-derive state that is
         // already known here, and any gap in that derivation used to surface
-        // as the pre-auth welcome screen. Role (poster/hunter) is no longer
-        // asked pre-auth, so a brand-new account always lands on role-select
-        // first — see app/onboarding/role-select.tsx.
-        router.replace((onboardingComplete ? '/tabs/bounty-app' : '/onboarding/role-select') as Href);
+        // as the pre-auth welcome screen. The card-style pick is the first
+        // thing a new account sees — see app/onboarding/style.tsx, which
+        // continues on to role-select.
+        router.replace((onboardingComplete ? '/tabs/bounty-app' : '/onboarding/style') as Href);
         try {
           markInitialNavigationDone();
         } catch {}
@@ -603,7 +600,6 @@ export function SignUpForm() {
           reason: parseAuthError(err, correlationId).category,
         });
         setPassword('');
-        setConfirmPassword('');
         // Prefill the sign-in screen so the recovery costs one tap, not a
         // retype (app/auth/sign-in-form.tsx reads this key on mount).
         try {
@@ -677,398 +673,307 @@ export function SignUpForm() {
 
   return (
     <>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        <ScrollView ref={scrollRef} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
-            <TouchableOpacity
-              onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.AUTH.SIGN_IN as Href))}
-              className="self-start p-2 mb-4"
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
+      {/* Deliberately NOT a KeyboardAvoidingView: that resized this container,
+          which dragged the docked button up so it rode on top of the keyboard.
+          The screen keeps its full height and the keyboard simply covers the
+          button; dismissing the keyboard reveals it again. The scroll view
+          takes the keyboard as an inset instead, so the focused field stays
+          visible without anything outside the scroll area moving. */}
+      <View style={styles.flex}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+        >
+          <TouchableOpacity
+            onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.AUTH.SIGN_IN as Href))}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialIcons name="arrow-back" size={icons.back} color={theme.text} />
+          </TouchableOpacity>
+
+          <OnboardingProgressDots
+            total={SIGNUP_TOTAL_STEPS}
+            activeIndex={0}
+            style={styles.dots}
+            activeColor={theme.primary}
+            inactiveColor={theme.border}
+          />
+
+          <Text style={styles.heading}>Create your account.</Text>
+
+          {authError ? (
+            <View
+              style={styles.errorBanner}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
             >
-              <MaterialIcons name="arrow-back" size={24} color={theme.text} />
-            </TouchableOpacity>
-            <View className="flex-row items-center justify-center mb-10">
-              <BrandingLogo size="large" />
+              <Text style={styles.errorBannerText}>{authError}</Text>
             </View>
+          ) : null}
 
-            {(Platform.OS === 'ios' || isGoogleConfigured) && (
-              <View className="gap-3 mb-5">
-                {Platform.OS === 'ios' && (
-                  <TouchableOpacity
-                    onPress={handleAppleContinue}
-                    disabled={socialLoading || !isAppleAvailable}
-                    className="flex-row items-center justify-center rounded-full py-4"
-                    style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Continue with Apple"
-                    accessibilityState={{ disabled: socialLoading || !isAppleAvailable }}
-                  >
-                    {socialLoading ? (
-                      <ActivityIndicator color={theme.foreground} style={{ marginRight: 8 }} />
-                    ) : (
-                      <FontAwesome name="apple" size={18} color={theme.foreground} style={{ marginRight: 8 }} />
-                    )}
-                    <Text style={{ color: theme.foreground, fontSize: 16, fontWeight: '700' }}>
-                      Continue with Apple
-                    </Text>
-                  </TouchableOpacity>
-                )}
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              onPress={handleAppleContinue}
+              disabled={socialLoading || !isAppleAvailable}
+              style={styles.appleButton}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Apple"
+              accessibilityState={{ disabled: socialLoading || !isAppleAvailable, busy: socialLoading }}
+            >
+              {socialLoading ? (
+                <ActivityIndicator color="#000000" style={styles.buttonIcon} />
+              ) : (
+                <FontAwesome name="apple" size={icons.field} color="#000000" style={styles.buttonIcon} />
+              )}
+              <Text style={styles.appleButtonText}>Continue with Apple</Text>
+            </TouchableOpacity>
+          )}
 
-                {isGoogleConfigured && (
-                  <TouchableOpacity
-                    onPress={handleGooglePress}
-                    disabled={!googleRequest || socialLoading}
-                    className="flex-row items-center justify-center rounded-full py-4"
-                    style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Continue with Google"
-                    accessibilityState={{ disabled: !googleRequest || socialLoading }}
-                  >
-                    {socialLoading ? (
-                      <ActivityIndicator color={theme.text} style={{ marginRight: 8 }} />
-                    ) : (
-                      <View style={{ marginRight: 8 }}>
-                        <GoogleLogo size={18} />
-                      </View>
-                    )}
-                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>
-                      Continue with Google
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                <View className="flex-row items-center mt-1">
-                  <View className="flex-1 h-px" style={{ backgroundColor: theme.border }} />
-                  <Text className="mx-3 text-xs" style={{ color: theme.textSecondary }}>
-                    or
-                  </Text>
-                  <View className="flex-1 h-px" style={{ backgroundColor: theme.border }} />
-                </View>
+          {/* Always rendered: Google is part of this screen's design, so a build
+              missing EXPO_PUBLIC_GOOGLE_*_CLIENT_ID shows it visibly disabled
+              rather than silently dropping a sign-in method. The disabled state
+              is on the element itself, so assistive tech doesn't read an inert
+              button as actionable. */}
+          <TouchableOpacity
+            onPress={handleGooglePress}
+            disabled={!isGoogleConfigured || !googleRequest || socialLoading}
+            style={[styles.googleButton, !isGoogleConfigured && styles.buttonUnavailable]}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+            accessibilityState={{
+              disabled: !isGoogleConfigured || !googleRequest || socialLoading,
+              busy: socialLoading,
+            }}
+          >
+            {socialLoading ? (
+              <ActivityIndicator color={theme.text} style={styles.buttonIcon} />
+            ) : (
+              <View style={styles.buttonIcon}>
+                <GoogleLogo size={icons.field} />
               </View>
             )}
+            <Text style={styles.googleButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
 
-            <View className="gap-5">
-              {authError ? (
-                <View
-                  className="bg-red-500/20 border border-red-400 rounded p-3"
-                  accessibilityRole="alert"
-                  accessibilityLiveRegion="polite"
-                >
-                  <Text style={{ color: theme.isDark ? '#fecaca' : '#991b1b', fontSize: 14 }}>{authError}</Text>
-                </View>
-              ) : null}
-
-              <View>
-                <Text className="text-sm mb-1" style={{ color: theme.text }}>Email</Text>
-                <TextInput
-                  value={email}
-                  onChangeText={text => {
-                    setEmail(text);
-                    if (fieldErrors.email) {
-                      setFieldErrors(prev => ({ ...prev, email: '' }));
-                    }
-                    setEmailSuggestion(suggestEmailCorrection(text));
-                  }}
-                  placeholder="you@example.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
-                  editable={!isLoading}
-                  className={`w-full rounded px-3 py-3 ${fieldErrors.email ? 'border border-red-400' : ''}`}
-                  style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
-                  placeholderTextColor={theme.textDisabled}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => {
-                    /* focus next field (username) */
-                  }}
-                />
-                {fieldErrors.email ? <ValidationMessage message={fieldErrors.email} /> : null}
-                {emailSuggestion ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setEmail(emailSuggestion);
-                      setEmailSuggestion(null);
-                      setFieldErrors(prev => ({ ...prev, email: '' }));
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Use suggested email: ${emailSuggestion}`}
-                  >
-                    <Text className="text-yellow-300 text-xs mt-1">
-                      Did you mean <Text className="underline font-medium">{emailSuggestion}</Text>?
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-
-              <View>
-                <Text className="text-sm mb-1" style={{ color: theme.text }}>Username</Text>
-                <View className="relative">
-                  <TextInput
-                    value={username}
-                    onChangeText={text => {
-                      // Normalize to lowercase to match onboarding rules
-                      setUsername(text.toLowerCase());
-                      if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }));
-                    }}
-                    placeholder="Choose a username (3-24 chars)"
-                    autoCapitalize="none"
-                    autoComplete="username-new"
-                    textContentType={Platform.OS === 'ios' ? 'username' : undefined}
-                    editable={!isLoading}
-                    className={`w-full rounded px-3 py-3 pr-10 ${fieldErrors.username || usernameAvailability === 'taken' ? 'border border-red-400' : usernameAvailability === 'available' ? 'border' : ''}`}
-                    style={{
-                      backgroundColor: theme.surfaceSecondary,
-                      color: theme.text,
-                      ...(usernameAvailability === 'available' ? { borderColor: theme.primary } : {}),
-                    }}
-                    placeholderTextColor={theme.textDisabled}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => passwordRef.current?.focus()}
-                  />
-                  {usernameAvailability === 'checking' && (
-                    <ActivityIndicator
-                      size="small"
-                      color={theme.textSecondary}
-                      style={{ position: 'absolute', right: 12, top: 14 }}
-                    />
-                  )}
-                  {usernameAvailability === 'available' && (
-                    <MaterialIcons
-                      name="check-circle"
-                      size={20}
-                      color={theme.primary}
-                      style={{ position: 'absolute', right: 10, top: 12 }}
-                    />
-                  )}
-                </View>
-                {fieldErrors.username ? (
-                  <ValidationMessage message={fieldErrors.username} />
-                ) : usernameAvailability === 'available' ? (
-                  <Text className="text-xs mt-1" style={{ color: theme.primary }}>
-                    @{username} is available
-                  </Text>
-                ) : usernameAvailability === 'taken' ? (
-                  <Text className="text-xs mt-1" style={{ color: '#fca5a5' }}>
-                    @{username} is already taken
-                  </Text>
-                ) : null}
-              </View>
-
-              <View>
-                <Text className="text-sm mb-1" style={{ color: theme.text }}>Password</Text>
-                <View className="relative">
-                  <TextInput
-                    ref={passwordRef}
-                    value={password}
-                    onChangeText={text => {
-                      setPassword(text);
-                      if (fieldErrors.password) {
-                        setFieldErrors(prev => ({ ...prev, password: '' }));
-                      }
-                    }}
-                    placeholder="At least 8 characters"
-                    secureTextEntry={!showPassword}
-                    autoComplete="password-new"
-                    textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
-                    passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
-                    editable={!isLoading}
-                    className={`w-full rounded px-3 py-3 pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
-                    style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
-                    placeholderTextColor={theme.textDisabled}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => confirmPasswordRef.current?.focus()}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(s => !s)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    <MaterialIcons
-                      name={showPassword ? 'visibility-off' : 'visibility'}
-                      size={20}
-                      color={theme.text}
-                    />
-                  </TouchableOpacity>
-                </View>
-                {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
-
-                {passwordStrength && (
-                  <View className="mt-3">
-                    <View className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
-                      <View
-                        style={{
-                          width: `${getStrengthWidth(passwordStrength.score)}%`,
-                          height: '100%',
-                          backgroundColor: getStrengthColor(passwordStrength.level),
-                          borderRadius: 4,
-                        }}
-                      />
-                    </View>
-                    <Text
-                      style={{ color: getStrengthColor(passwordStrength.level) }}
-                      className="text-xs mt-1 capitalize"
-                    >
-                      {passwordStrength.level.replace('-', ' ')}
-                    </Text>
-                    <View className="mt-2 rounded-lg p-3" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
-                      {passwordStrength.requirements.map((req) => (
-                        <View key={req.id} className="flex-row items-center mb-1">
-                          <MaterialIcons
-                            name={req.met ? 'check-circle' : 'radio-button-unchecked'}
-                            size={14}
-                            color={req.met ? theme.primary : theme.textSecondary}
-                          />
-                          <Text
-                            className="text-xs ml-2"
-                            style={{ color: req.met ? theme.primary : theme.textSecondary }}
-                          >
-                            {req.label}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              <View>
-                <Text className="text-sm mb-1" style={{ color: theme.text }}>Confirm Password</Text>
-                <View className="relative">
-                  <TextInput
-                    ref={confirmPasswordRef}
-                    value={confirmPassword}
-                    onChangeText={text => {
-                      setConfirmPassword(text);
-                      if (fieldErrors.confirmPassword) {
-                        setFieldErrors(prev => ({ ...prev, confirmPassword: '' }));
-                      }
-                    }}
-                    placeholder="Confirm password"
-                    secureTextEntry={!showConfirmPassword}
-                    autoComplete="password-new"
-                    textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
-                    passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
-                    editable={!isLoading}
-                    className={`w-full rounded px-3 py-3 pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
-                    style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
-                    placeholderTextColor={theme.textDisabled}
-                    returnKeyType="done"
-                    onSubmitEditing={handleSubmit}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowConfirmPassword(s => !s)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
-                  >
-                    <MaterialIcons
-                      name={showConfirmPassword ? 'visibility-off' : 'visibility'}
-                      size={20}
-                      color={theme.text}
-                    />
-                  </TouchableOpacity>
-                </View>
-                {fieldErrors.confirmPassword ? (
-                  <ValidationMessage message={fieldErrors.confirmPassword} />
-                ) : null}
-              </View>
-
-              <View className="flex-row items-center mt-2">
-                <TouchableOpacity
-                  onPress={() => setAgeVerified(v => !v)}
-                  className="mr-3"
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: ageVerified }}
-                >
-                  <MaterialIcons
-                    name={ageVerified ? 'check-box' : 'check-box-outline-blank'}
-                    size={22}
-                    color={ageVerified ? theme.primary : theme.text}
-                  />
-                </TouchableOpacity>
-                <Text style={{ color: theme.text }}>I confirm I am 18 years or older</Text>
-              </View>
-              {fieldErrors.ageVerified ? (
-                <ValidationMessage message={fieldErrors.ageVerified} />
-              ) : null}
-
-              <View className="mt-3">
-                <View className="flex-row items-start">
-                  <TouchableOpacity
-                    onPress={() => setTermsAccepted(v => !v)}
-                    className="mr-3 mt-0.5"
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: termsAccepted }}
-                  >
-                    <MaterialIcons
-                      name={termsAccepted ? 'check-box' : 'check-box-outline-blank'}
-                      size={22}
-                      color={termsAccepted ? theme.primary : theme.text}
-                    />
-                  </TouchableOpacity>
-                  <View className="flex-1 flex-row flex-wrap">
-                    <Text style={{ color: theme.text }}>I accept the </Text>
-                    <TouchableOpacity
-                      onPress={() => setLegalModal('terms')}
-                      accessibilityRole="link"
-                      accessibilityLabel="View Terms of Service"
-                    >
-                      <Text className="underline" style={{ color: theme.text }}>Terms of Service</Text>
-                    </TouchableOpacity>
-                    <Text style={{ color: theme.text }}> and </Text>
-                    <TouchableOpacity
-                      onPress={() => setLegalModal('privacy')}
-                      accessibilityRole="link"
-                      accessibilityLabel="View Privacy Policy"
-                    >
-                      <Text className="underline" style={{ color: theme.text }}>Privacy Policy</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                {fieldErrors.termsAccepted ? (
-                  <View className="ml-9">
-                    <ValidationMessage message={fieldErrors.termsAccepted} />
-                  </View>
-                ) : null}
-              </View>
-
-              {/* A plain TouchableOpacity, not the shared <Button> — Button reads
-                  theme from useAppThemeContext() internally, which would follow
-                  the ambient light/dark preference and mismatch this screen's
-                  forced-dark background (see the `theme` comment above). */}
-              <TouchableOpacity
-                onPress={handleSubmit}
-                disabled={isLoading}
-                className="flex-row items-center justify-center rounded-full"
-                style={{ backgroundColor: theme.primary, height: 56 }}
-                accessibilityRole="button"
-                accessibilityLabel="Create account"
-                accessibilityState={{ disabled: isLoading, busy: isLoading }}
-              >
-                {isLoading && <ActivityIndicator color={theme.background} style={{ marginRight: 8 }} />}
-                <Text style={{ color: theme.background, fontSize: 18, fontWeight: '700' }}>
-                  Create Account
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => router.replace(ROUTES.AUTH.SIGN_IN as Href)}
-                accessibilityRole="button"
-                accessibilityLabel="Back to sign in"
-              >
-                <Text className="text-center mt-6" style={{ color: theme.text }}>Back to Sign In</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
           </View>
+
+          <Text style={styles.fieldLabel}>Email</Text>
+          <View style={[styles.field, !!fieldErrors.email && styles.fieldInvalid]}>
+            <MaterialIcons name="mail-outline" size={icons.field} color={theme.textSecondary} />
+            <TextInput
+              value={email}
+              onChangeText={text => {
+                setEmail(text);
+                if (fieldErrors.email) {
+                  setFieldErrors(prev => ({ ...prev, email: '' }));
+                }
+                setEmailSuggestion(suggestEmailCorrection(text));
+              }}
+              placeholder="you@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
+              editable={!isLoading}
+              style={styles.fieldInput}
+              placeholderTextColor={theme.textDisabled}
+              returnKeyType="next"
+              blurOnSubmit={false}
+            />
+          </View>
+          {fieldErrors.email ? <ValidationMessage message={fieldErrors.email} /> : null}
+          {emailSuggestion ? (
+            <TouchableOpacity
+              onPress={() => {
+                setEmail(emailSuggestion);
+                setEmailSuggestion(null);
+                setFieldErrors(prev => ({ ...prev, email: '' }));
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Use suggested email: ${emailSuggestion}`}
+            >
+              <Text style={styles.helperWarning}>
+                Did you mean <Text style={styles.helperWarningStrong}>{emailSuggestion}</Text>?
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <Text style={styles.fieldLabel}>Username</Text>
+          <View
+            style={[
+              styles.field,
+              usernameAvailability === 'available' && styles.fieldValid,
+              (!!fieldErrors.username || usernameAvailability === 'taken') && styles.fieldInvalid,
+            ]}
+          >
+            <Text style={styles.fieldPrefix}>@</Text>
+            <TextInput
+              value={username}
+              onChangeText={text => {
+                // Normalize to lowercase to match onboarding rules
+                setUsername(text.toLowerCase());
+                if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }));
+              }}
+              placeholder="username"
+              autoCapitalize="none"
+              autoComplete="username-new"
+              textContentType={Platform.OS === 'ios' ? 'username' : undefined}
+              editable={!isLoading}
+              style={styles.fieldInput}
+              placeholderTextColor={theme.textDisabled}
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => passwordRef.current?.focus()}
+            />
+            {usernameAvailability === 'checking' && (
+              <ActivityIndicator size="small" color={theme.textSecondary} />
+            )}
+            {usernameAvailability === 'available' && (
+              <MaterialIcons name="check-circle" size={icons.status} color={theme.primary} />
+            )}
+          </View>
+          {/* Height is reserved whether or not a hint is showing, so the
+              availability result doesn't shove the rest of the form downward. */}
+          <View style={styles.helperSlot}>
+            {fieldErrors.username ? (
+              <ValidationMessage message={fieldErrors.username} />
+            ) : usernameAvailability === 'available' ? (
+              <Text style={styles.helperSuccess}>@{username} is available</Text>
+            ) : usernameAvailability === 'taken' ? (
+              <Text style={styles.helperError}>@{username} is already taken</Text>
+            ) : null}
+          </View>
+
+          <Text style={styles.fieldLabel}>Password</Text>
+          <View style={[styles.field, !!fieldErrors.password && styles.fieldInvalid]}>
+            <MaterialIcons name="lock-outline" size={icons.field} color={theme.textSecondary} />
+            <TextInput
+              ref={passwordRef}
+              value={password}
+              onChangeText={text => {
+                setPassword(text);
+                if (fieldErrors.password) {
+                  setFieldErrors(prev => ({ ...prev, password: '' }));
+                }
+              }}
+              placeholder="At least 8 characters"
+              secureTextEntry={!showPassword}
+              autoComplete="password-new"
+              textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
+              passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
+              editable={!isLoading}
+              style={styles.fieldInput}
+              placeholderTextColor={theme.textDisabled}
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(s => !s)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            >
+              <MaterialIcons
+                name={showPassword ? 'visibility-off' : 'visibility'}
+                size={icons.field}
+                color={theme.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+          {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
+          {/* Same reservation as the username hint: the meter fades in on the
+              first keystroke and must not change the form's height when it does. */}
+          <View style={styles.strengthRow}>
+            {passwordStrength ? (
+              <>
+                <View style={styles.strengthTrack}>
+                <View
+                  style={[
+                    styles.strengthFill,
+                    {
+                      width: `${getStrengthWidth(passwordStrength.score)}%`,
+                      backgroundColor: getStrengthColor(passwordStrength.level),
+                    },
+                    ]}
+                  />
+                </View>
+                <Text
+                  style={[styles.strengthLabel, { color: getStrengthColor(passwordStrength.level) }]}
+                >
+                  {passwordStrength.level.replace('-', ' ')}
+                </Text>
+              </>
+            ) : null}
+          </View>
+
+          {/* Sits at the bottom of the form on a tall device and tightens up on
+              a short one, which keeps the blurb below visible without scrolling. */}
+          <View style={styles.spacer} />
+
+          {/* Pressing "Create Account" IS the acceptance — this line carries the
+              18+ attestation and the Terms/Privacy consent that used to be two
+              separate checkboxes. Keep it in sync with validateForm. */}
+          <Text style={styles.legalText}>
+            By continuing you confirm you&apos;re 18 or older and agree to our{' '}
+            <Text
+              style={styles.legalLink}
+              onPress={() => setLegalModal('terms')}
+              accessibilityRole="link"
+            >
+              Terms
+            </Text>
+            {' and '}
+            <Text
+              style={styles.legalLink}
+              onPress={() => setLegalModal('privacy')}
+              accessibilityRole="link"
+            >
+              Privacy Policy
+            </Text>
+            .
+          </Text>
+
+          <Text style={styles.reassuranceText}>
+            Takes about a minute. We save as you go, and you can change anything later.
+          </Text>
         </ScrollView>
-      </KeyboardAvoidingView>
+
+        {/* Only the action is docked. Anything that grows inside the form (the
+            strength meter, a username hint, a field error) used to push this
+            button below the fold; keeping it outside the ScrollView makes that
+            structurally impossible. */}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            onPress={handleSubmit}
+            disabled={isLoading}
+            style={styles.submitButton}
+            accessibilityRole="button"
+            accessibilityLabel="Create account"
+            accessibilityState={{ disabled: isLoading, busy: isLoading }}
+          >
+            {isLoading && <ActivityIndicator color={theme.background} style={styles.buttonIcon} />}
+            <Text style={styles.submitButtonText}>Create Account</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.replace(ROUTES.AUTH.SIGN_IN as Href)}
+            accessibilityRole="button"
+            accessibilityLabel="Already have an account? Sign in"
+          >
+            <Text style={styles.signInLink}>Already have an account? Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
       <Modal
         visible={legalModal !== null}
         animationType="slide"
@@ -1121,4 +1026,270 @@ export function SignUpForm() {
       </Modal>
     </>
   );
+}
+
+// Layout reference: an iPhone 14 viewport (390 x 844) minus its safe-area
+// insets (47 top, 34 bottom). Every value below was budgeted against that
+// usable height so the "Create Account" button lands above the fold, and is
+// then scaled to the real device rather than shipped as fixed pixels.
+const BASE_WIDTH = 390;
+const BASE_USABLE_HEIGHT = 763;
+
+const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
+
+function makeLayout(width: number, height: number, insetTop: number, insetBottom: number) {
+  // Icons, radii and horizontal padding track the width. Vertical rhythm and
+  // control heights track the usable height instead, so a short device tightens
+  // the gaps rather than pushing content off-screen. Both are clamped so a
+  // tablet doesn't render a comically oversized phone form.
+  const hScale = clamp(width / BASE_WIDTH, 0.85, 1.3);
+  const vScale = clamp(
+    (height - insetTop - insetBottom) / BASE_USABLE_HEIGHT,
+    0.8,
+    1.15
+  );
+  // Type follows whichever axis is tighter: a short screen has to shrink its
+  // text as well as its gaps, or four lines of legal copy eat the room the
+  // consent blurb needs to stay on screen.
+  const tScale = Math.min(hScale, vScale);
+  const f = (n: number) => Math.round(n * hScale);
+  const v = (n: number) => Math.round(n * vScale);
+  const t = (n: number) => Math.round(n * tScale);
+
+  return {
+    icons: { back: f(24), field: f(20), status: f(22) },
+    styles: StyleSheet.create({
+      flex: {
+        flex: 1,
+        backgroundColor: theme.background,
+      },
+      scroll: {
+        flex: 1,
+        backgroundColor: theme.background,
+      },
+      scrollContent: {
+        flexGrow: 1,
+        paddingHorizontal: f(24),
+        paddingTop: insetTop + v(4),
+        // The pinned footer below carries the bottom inset.
+        paddingBottom: v(2),
+      },
+      backButton: {
+        alignSelf: 'flex-start',
+        padding: f(6),
+        marginLeft: -f(6),
+      },
+      dots: {
+        paddingTop: v(4),
+      },
+      heading: {
+        fontSize: t(30),
+        lineHeight: t(36),
+        fontWeight: '800',
+        letterSpacing: -0.5 * tScale,
+        color: theme.text,
+        marginTop: v(14),
+        marginBottom: v(16),
+      },
+      errorBanner: {
+        borderRadius: f(14),
+        padding: f(14),
+        marginBottom: v(16),
+        backgroundColor: 'rgba(239,68,68,0.15)',
+        borderWidth: 1,
+        borderColor: 'rgba(248,113,113,0.6)',
+      },
+      errorBannerText: {
+        color: '#fecaca',
+        fontSize: t(14),
+        lineHeight: t(20),
+      },
+      appleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: v(52),
+        borderRadius: 999,
+        backgroundColor: '#FFFFFF',
+      },
+      appleButtonText: {
+        color: '#000000',
+        fontSize: t(16),
+        fontWeight: '700',
+      },
+      googleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: v(52),
+        borderRadius: 999,
+        marginTop: v(10),
+        backgroundColor: theme.background,
+        borderWidth: 1,
+        borderColor: theme.border,
+      },
+      googleButtonText: {
+        color: theme.text,
+        fontSize: t(16),
+        fontWeight: '700',
+      },
+      buttonIcon: {
+        marginRight: f(10),
+      },
+      buttonUnavailable: {
+        opacity: 0.45,
+      },
+      dividerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: v(16),
+      },
+      dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: theme.border,
+      },
+      dividerText: {
+        marginHorizontal: f(14),
+        fontSize: t(13),
+        color: theme.textSecondary,
+      },
+      fieldLabel: {
+        fontSize: t(14),
+        fontWeight: '600',
+        color: theme.textSecondary,
+        marginTop: v(14),
+        marginBottom: v(6),
+      },
+      field: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: f(12),
+        height: v(52),
+        paddingHorizontal: f(16),
+        borderRadius: f(14),
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.border,
+      },
+      fieldValid: {
+        borderColor: theme.primary,
+      },
+      fieldInvalid: {
+        borderColor: '#f87171',
+      },
+      fieldInput: {
+        flex: 1,
+        fontSize: t(16),
+        color: theme.text,
+        // Android gives TextInput its own vertical padding, which would make
+        // the row taller than the fixed-height field it sits in.
+        padding: 0,
+      },
+      fieldPrefix: {
+        fontSize: t(16),
+        color: theme.textSecondary,
+      },
+      helperSuccess: {
+        fontSize: t(12.5),
+        color: theme.primaryLight,
+      },
+      helperError: {
+        fontSize: t(12.5),
+        color: '#fca5a5',
+      },
+      helperWarning: {
+        fontSize: t(12.5),
+        color: '#fde68a',
+        marginTop: v(6),
+      },
+      helperWarningStrong: {
+        fontWeight: '600',
+        textDecorationLine: 'underline',
+      },
+      // One hint line, always occupying the same room whether filled or empty.
+      helperSlot: {
+        minHeight: t(13) + v(6),
+        justifyContent: 'center',
+      },
+      strengthRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: f(10),
+        marginTop: v(6),
+        minHeight: t(14),
+      },
+      strengthTrack: {
+        flex: 1,
+        height: v(6),
+        borderRadius: 999,
+        overflow: 'hidden',
+        backgroundColor: theme.overlay,
+      },
+      strengthFill: {
+        height: '100%',
+        borderRadius: 999,
+      },
+      strengthLabel: {
+        fontSize: t(12),
+        fontWeight: '600',
+        textTransform: 'capitalize',
+        minWidth: f(76),
+        textAlign: 'right',
+      },
+      // Absorbs leftover height so the blurb below it sits at the foot of the
+      // form on a tall device, and collapses to nothing on a short one.
+      spacer: {
+        flex: 1,
+      },
+      // Pinned below the scroll area, so nothing the form does can move it.
+      footer: {
+        paddingHorizontal: f(24),
+        paddingTop: v(8),
+        paddingBottom: insetBottom + v(6),
+        backgroundColor: theme.background,
+      },
+      legalText: {
+        fontSize: t(13),
+        lineHeight: t(18),
+        color: theme.textSecondary,
+        marginTop: v(12),
+      },
+      legalLink: {
+        color: theme.text,
+        textDecorationLine: 'underline',
+      },
+      reassuranceText: {
+        fontSize: t(13),
+        lineHeight: t(18),
+        color: theme.textSecondary,
+        marginTop: v(6),
+      },
+      submitButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: v(54),
+        borderRadius: 999,
+        backgroundColor: theme.primary,
+        shadowColor: theme.primary,
+        shadowOpacity: 0.45,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 8,
+      },
+      submitButtonText: {
+        color: theme.background,
+        fontSize: t(17),
+        fontWeight: '700',
+      },
+      signInLink: {
+        textAlign: 'center',
+        fontSize: t(13),
+        fontWeight: '600',
+        color: theme.textSecondary,
+        marginTop: v(12),
+      },
+    }),
+  };
 }

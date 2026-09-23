@@ -21,11 +21,9 @@ export default function OnboardingLayout() {
         <Stack.Screen name="welcome" />
         <Stack.Screen name="username" />
         <Stack.Screen name="style" />
-        <Stack.Screen name="details" />
-        <Stack.Screen name="bounty-posted" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="application-submitted" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="phone" />
-        <Stack.Screen name="done" />
+        <Stack.Screen name="location" />
+        <Stack.Screen name="payouts" />
+        <Stack.Screen name="founder-note" />
       </Stack>
     </OnboardingProvider>
   );
