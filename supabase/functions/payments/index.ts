@@ -9,6 +9,8 @@
 //   POST   /payments/methods
 //   DELETE /payments/methods/:id
 //   POST   /payments/confirm
+//   POST   /payments/posting-checkout/intent
+//   POST   /payments/posting-checkout/settle
 
 // Local type shims so `tsc --noEmit` (Node tooling) doesn't error on Deno
 // runtime imports and globals. These are intentionally loose (`any`) so
@@ -81,6 +83,27 @@ function sanitizePositiveNumber(input: unknown): number {
     throw new Error('Must be a positive number');
   }
   return num;
+}
+
+/**
+ * Flat posting service fee, in cents. MUST match POSTING_FEE_CENTS in
+ * lib/constants/posting-fee.ts, which the checkout screen uses to itemise the
+ * total before this round-trip. This copy is the authoritative one: the client
+ * only ever displays a fee, it never names the one it is charged.
+ */
+const POSTING_FEE_CENTS = 100;
+
+/**
+ * Sanity ceiling on a single posting checkout's reward, in cents ($10,000).
+ * Not a product rule — a blast radius limit, so a client bug or a tampered
+ * request cannot open a five-figure PaymentIntent against a poster's card.
+ */
+const POSTING_MAX_REWARD_CENTS = 1_000_000;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_RE.test(value);
 }
 
 function isValidEmail(email: string): boolean {
@@ -1189,6 +1212,432 @@ Deno.serve(async (req: Request) => {
         success: confirmedIntent.status === 'succeeded',
         status: confirmedIntent.status,
         paymentIntentId: confirmedIntent.id,
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // POST /payments/posting-checkout/intent
+    //
+    // Opens (or re-opens) the pre-publish checkout for the $1 posting service
+    // fee experiment. Charges the fee AND the full bounty reward in ONE
+    // PaymentIntent, itemised for the poster by the client.
+    //
+    // The client names only the reward. The fee comes from POSTING_FEE_CENTS
+    // here, so a tampered or stale client cannot change the price — it can
+    // only decline to use the flow.
+    //
+    // Duplicate protection is structural rather than best-effort:
+    //   * bounty_posting_checkouts.posting_attempt_id is UNIQUE, so one
+    //     posting attempt can only ever own one checkout row.
+    //   * The Stripe idempotency key is derived from (attempt id, total), so a
+    //     retried request for the same total returns the SAME PaymentIntent
+    //     from Stripe rather than creating a second one.
+    //   * An attempt whose total CHANGED (the poster edited the amount and
+    //     came back) gets a new key, and the superseded intent is cancelled
+    //     before the new one is stored.
+    // ─────────────────────────────────────────────────────────────────────
+    if (req.method === 'POST' && subPath === '/posting-checkout/intent') {
+      const body = await req.json().catch(() => ({}));
+      const { postingAttemptId, rewardAmountCents, paymentMethodId } = body ?? {};
+
+      if (!isUuid(postingAttemptId)) {
+        return reply(
+          { error: 'A valid postingAttemptId is required.', code: 'invalid_attempt_id' },
+          400
+        );
+      }
+
+      let rewardCents: number;
+      try {
+        rewardCents = sanitizePositiveNumber(rewardAmountCents);
+      } catch {
+        return reply(
+          {
+            error: 'Invalid bounty amount. Must be a positive number in cents.',
+            code: 'invalid_amount',
+          },
+          400
+        );
+      }
+      if (!Number.isInteger(rewardCents) || rewardCents > POSTING_MAX_REWARD_CENTS) {
+        return reply(
+          {
+            error: 'Invalid bounty amount. Must be a whole number of cents within the allowed range.',
+            code: 'invalid_amount',
+          },
+          400
+        );
+      }
+
+      const feeCents = POSTING_FEE_CENTS;
+      const totalCents = rewardCents + feeCents;
+
+      // Existing row for this attempt, if any.
+      const { data: existing } = (await withDbTimeout(
+        supabaseAdmin
+          .from('bounty_posting_checkouts')
+          .select(
+            'id, poster_id, status, stripe_payment_intent_id, fee_amount_cents, reward_amount_cents, total_amount_cents'
+          )
+          .eq('posting_attempt_id', postingAttemptId)
+          .maybeSingle()
+      )) as any;
+
+      if (existing && existing.poster_id !== userId) {
+        // Another user's attempt id. Never disclose that it exists.
+        return reply(
+          { error: 'Not authorized for this posting attempt.', code: 'not_authorized' },
+          403
+        );
+      }
+
+      // Already paid (or already spent on a bounty) — do NOT charge again. The
+      // client's correct response is to skip the sheet and publish.
+      if (existing && (existing.status === 'paid' || existing.status === 'consumed')) {
+        return reply({
+          alreadyPaid: true,
+          status: existing.status,
+          paymentIntentId: existing.stripe_payment_intent_id,
+          feeCents: existing.fee_amount_cents,
+          rewardCents: existing.reward_amount_cents,
+          totalCents: existing.total_amount_cents,
+        });
+      }
+
+      const customerResult = await resolveStripeCustomerForUser({
+        supabaseAdmin,
+        stripe,
+        userId,
+        userEmail,
+      });
+      if (customerResult.error || !customerResult.customerId) {
+        return reply(
+          {
+            error: customerResult.error ?? 'Unable to create customer profile',
+            code: 'customer_resolution_failed',
+          },
+          customerResult.status ?? 400
+        );
+      }
+
+      // The poster edited the amount after an intent was already opened for
+      // this attempt. Cancel the superseded intent so it cannot be confirmed
+      // later by a stale client holding its client secret — otherwise the
+      // poster could be charged the OLD total for the NEW bounty.
+      if (
+        existing?.stripe_payment_intent_id &&
+        existing.total_amount_cents !== totalCents
+      ) {
+        try {
+          await stripe.paymentIntents.cancel(existing.stripe_payment_intent_id);
+        } catch (cancelErr) {
+          // A PI that is already succeeded/canceled cannot be cancelled again.
+          // If it actually succeeded we must not open a second charge — bail
+          // and let the client settle the one that went through.
+          const already = await stripe.paymentIntents
+            .retrieve(existing.stripe_payment_intent_id)
+            .catch(() => null);
+          if (already?.status === 'succeeded' || already?.status === 'processing') {
+            // Narrow but real: the charge for the PREVIOUS amount went through,
+            // settlement never completed, and the poster then edited the amount.
+            //
+            // Refusing is the only non-lossy option. Opening a second charge
+            // would bill them twice; settling the old one and posting the new
+            // amount would leave the paid reward and the bounty disagreeing,
+            // which the DB's prepaid amount check would reject anyway. So we
+            // stop, say exactly what happened, and leave the original charge
+            // recoverable — retrying at the original amount finds it via the
+            // alreadyPaid branch above and consumes it.
+            console.warn('[payments/posting-checkout] amount changed after a charge landed', {
+              requestId,
+              userId,
+              chargedCents: existing.total_amount_cents,
+              requestedCents: totalCents,
+            });
+            return reply(
+              {
+                error: `You've already paid $${(existing.total_amount_cents / 100).toFixed(
+                  2
+                )} for this bounty. Set the reward back to $${(
+                  existing.reward_amount_cents / 100
+                ).toFixed(2)} to finish posting it, or contact support to change it.`,
+                code: 'checkout_already_charged',
+                chargedTotalCents: existing.total_amount_cents,
+                chargedRewardCents: existing.reward_amount_cents,
+              },
+              409
+            );
+          }
+          console.warn('[payments/posting-checkout] stale intent cancel failed', {
+            requestId,
+            cancelErr,
+          });
+        }
+      }
+
+      const piParams: Stripe.PaymentIntentCreateParams = {
+        amount: totalCents,
+        currency: 'usd',
+        customer: customerResult.customerId,
+        // `purpose` is what routes this intent in the webhooks function. It is
+        // deliberately NOT 'wallet_deposit' or 'bounty_escrow': crediting the
+        // whole total to the wallet would hand the poster their $1 fee back as
+        // balance, and treating it as escrow would bypass the fee record.
+        metadata: {
+          user_id: userId,
+          purpose: 'bounty_posting_checkout',
+          posting_attempt_id: String(postingAttemptId),
+          fee_cents: String(feeCents),
+          reward_cents: String(rewardCents),
+        },
+        automatic_payment_methods: { enabled: true },
+      };
+      if (typeof paymentMethodId === 'string' && paymentMethodId.startsWith('pm_')) {
+        piParams.payment_method = paymentMethodId;
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create(piParams, {
+        // Deterministic in (attempt, total). This single line is what makes a
+        // duplicate charge impossible across client retries, unlike
+        // generateStripeIdempotencyKey() on the client, which is nonce-based
+        // by design and so cannot protect a lost response.
+        idempotencyKey: `posting_checkout_${postingAttemptId}_${totalCents}`,
+      });
+
+      // Record/refresh the attempt row. Keyed on posting_attempt_id, so a
+      // concurrent duplicate request resolves to one row rather than two.
+      const { error: upsertErr } = (await withDbTimeout(
+        supabaseAdmin.from('bounty_posting_checkouts').upsert(
+          {
+            poster_id: userId,
+            posting_attempt_id: postingAttemptId,
+            stripe_payment_intent_id: paymentIntent.id,
+            fee_amount_cents: feeCents,
+            reward_amount_cents: rewardCents,
+            status: 'pending',
+            variant: 'fee',
+          },
+          { onConflict: 'posting_attempt_id' }
+        )
+      )) as any;
+
+      if (upsertErr) {
+        console.error('[payments/posting-checkout] failed to record checkout row', {
+          requestId,
+          userId,
+          upsertErr,
+        });
+        // Fail the request. Returning a client secret for a charge we have no
+        // record of would create a payment we cannot later reconcile, refund,
+        // or recognise as already-paid on retry.
+        return reply(
+          {
+            error: 'Could not start checkout. Please try again.',
+            code: 'checkout_record_failed',
+            retryable: true,
+          },
+          500
+        );
+      }
+
+      return reply({
+        alreadyPaid: false,
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        status: paymentIntent.status,
+        feeCents,
+        rewardCents,
+        totalCents,
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // POST /payments/posting-checkout/settle
+    //
+    // Verifies the checkout charge with Stripe and splits it:
+    //   reward -> apply_deposit (poster's custodial wallet, then escrowed by
+    //             the ordinary at_post trigger when the bounty is inserted)
+    //   fee    -> recorded on the checkout row as platform revenue, and
+    //             deliberately NOT credited to the wallet
+    //
+    // Idempotent at every step: apply_deposit dedupes on the PaymentIntent id
+    // and the status transition is non-regressing, so the webhook and this
+    // route can both run in either order without double-crediting.
+    // ─────────────────────────────────────────────────────────────────────
+    if (req.method === 'POST' && subPath === '/posting-checkout/settle') {
+      const body = await req.json().catch(() => ({}));
+      const { postingAttemptId } = body ?? {};
+
+      if (!isUuid(postingAttemptId)) {
+        return reply(
+          { error: 'A valid postingAttemptId is required.', code: 'invalid_attempt_id' },
+          400
+        );
+      }
+
+      const { data: row } = (await withDbTimeout(
+        supabaseAdmin
+          .from('bounty_posting_checkouts')
+          .select(
+            'id, poster_id, status, stripe_payment_intent_id, fee_amount_cents, reward_amount_cents, total_amount_cents'
+          )
+          .eq('posting_attempt_id', postingAttemptId)
+          .maybeSingle()
+      )) as any;
+
+      if (!row) {
+        return reply(
+          { error: 'No checkout found for this posting attempt.', code: 'checkout_not_found' },
+          404
+        );
+      }
+      if (row.poster_id !== userId) {
+        return reply(
+          { error: 'Not authorized for this posting attempt.', code: 'not_authorized' },
+          403
+        );
+      }
+
+      // Already settled — idempotent success.
+      if (row.status === 'paid' || row.status === 'consumed') {
+        return reply({
+          status: row.status,
+          paid: true,
+          paymentIntentId: row.stripe_payment_intent_id,
+          feeCents: row.fee_amount_cents,
+          rewardCents: row.reward_amount_cents,
+        });
+      }
+
+      if (!row.stripe_payment_intent_id) {
+        return reply(
+          { error: 'This checkout has no payment to settle.', code: 'checkout_not_started' },
+          409
+        );
+      }
+
+      const intent = await stripe.paymentIntents.retrieve(row.stripe_payment_intent_id);
+
+      // Re-verify ownership and purpose from Stripe's own copy of the
+      // metadata, not from our row — this is the authorization boundary for
+      // crediting a wallet.
+      if (
+        String(intent.metadata?.user_id ?? '') !== String(userId) ||
+        intent.metadata?.purpose !== 'bounty_posting_checkout'
+      ) {
+        return reply(
+          { error: 'Not authorized to settle this payment.', code: 'not_authorized' },
+          403
+        );
+      }
+
+      // Amount tampering guard: the charge must be exactly what we recorded.
+      if (intent.amount !== row.total_amount_cents) {
+        console.error('[payments/posting-checkout] intent/row amount mismatch', {
+          requestId,
+          intentAmount: intent.amount,
+          rowTotal: row.total_amount_cents,
+        });
+        return reply(
+          { error: 'Payment amount mismatch. Please contact support.', code: 'amount_mismatch' },
+          409
+        );
+      }
+
+      if (intent.status === 'processing') {
+        // ACH and some wallets settle asynchronously. Nothing is credited yet;
+        // the webhook will finish it. The poster must not publish on this.
+        return reply({ status: 'pending', paid: false, processing: true });
+      }
+
+      if (intent.status !== 'succeeded') {
+        const failureCode =
+          (intent.last_payment_error?.decline_code as string | undefined) ??
+          (intent.last_payment_error?.code as string | undefined) ??
+          'not_succeeded';
+        await withDbTimeout(
+          supabaseAdmin
+            .from('bounty_posting_checkouts')
+            .update({ status: 'failed', failure_code: sanitizeText(failureCode).slice(0, 80) })
+            .eq('id', row.id)
+            .eq('status', 'pending')
+        );
+        return reply({ status: 'failed', paid: false, code: failureCode }, 402);
+      }
+
+      // Credit ONLY the reward portion to the wallet. apply_deposit is
+      // idempotent on the intent id, so the webhook running first (or later)
+      // is a safe no-op rather than a second credit.
+      //
+      // Ordering matters: credit BEFORE flipping the row to 'paid'. If the
+      // credit fails we stay 'pending' and a retry re-attempts it; the other
+      // order would mark the checkout paid with the poster's reward money
+      // nowhere, which the bounty INSERT would then fail to escrow.
+      if (row.reward_amount_cents > 0) {
+        const { error: applyErr } = (await withDbTimeout(
+          supabaseAdmin.rpc('apply_deposit', {
+            p_user_id: userId,
+            p_amount: row.reward_amount_cents / 100,
+            p_payment_intent_id: intent.id,
+            p_metadata: {
+              purpose: 'bounty_posting_checkout',
+              posting_attempt_id: String(postingAttemptId),
+              // Recorded so a wallet statement can explain why this credit
+              // appeared and immediately left again as escrow.
+              fee_cents: row.fee_amount_cents,
+              reward_cents: row.reward_amount_cents,
+            },
+          })
+        )) as any;
+
+        if (applyErr) {
+          console.error('[payments/posting-checkout] apply_deposit failed — staying pending', {
+            requestId,
+            userId,
+            intentId: intent.id,
+            applyErr,
+          });
+          return reply(
+            {
+              error: 'Payment went through but could not be applied. Please try again.',
+              code: 'deposit_apply_failed',
+              retryable: true,
+            },
+            500
+          );
+        }
+      }
+
+      const { error: paidErr } = (await withDbTimeout(
+        supabaseAdmin
+          .from('bounty_posting_checkouts')
+          .update({ status: 'paid', paid_at: new Date().toISOString(), failure_code: null })
+          .eq('id', row.id)
+          .in('status', ['pending', 'failed'])
+      )) as any;
+
+      if (paidErr) {
+        console.error('[payments/posting-checkout] failed to mark paid', {
+          requestId,
+          userId,
+          paidErr,
+        });
+        return reply(
+          {
+            error: 'Payment applied but could not be recorded. Please try again.',
+            code: 'checkout_record_failed',
+            retryable: true,
+          },
+          500
+        );
+      }
+
+      return reply({
+        status: 'paid',
+        paid: true,
+        paymentIntentId: intent.id,
+        feeCents: row.fee_amount_cents,
+        rewardCents: row.reward_amount_cents,
       });
     }
 
