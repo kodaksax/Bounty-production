@@ -57,11 +57,11 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
     error, setError,
     successInfo, setSuccessInfo,
     showPaymentMethodsModal, setShowPaymentMethodsModal,
-    paymentMethods, stripeLoading, stripeError, loadPaymentMethods,
+    primaryCardPaymentMethod, stripeLoading, stripeError, loadPaymentMethods,
     payWithCard, payWithApplePay,
   } = useWalletDeposit();
 
-  const hasPaymentMethod = paymentMethods.length > 0;
+  const hasPaymentMethod = !!primaryCardPaymentMethod;
   const busy = isProcessing || stripeLoading || posting;
 
   const applePayBg = theme.isDark ? '#ffffff' : '#000000';
@@ -85,7 +85,7 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
 
   let primaryLabel: string;
   if (posting) primaryLabel = 'Posting…';
-  else if (!hasPaymentMethod) primaryLabel = 'Link Payment Method';
+  else if (!hasPaymentMethod) primaryLabel = 'Link a Card';
   else if (isProcessing) primaryLabel = 'Processing…';
   else if (stripeLoading) primaryLabel = 'Checking Methods…';
   else primaryLabel = `Add $${price || '0'} & Post Bounty`;
@@ -157,14 +157,14 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
               style={styles.fundingPaymentCard}
               onPress={() => setShowPaymentMethodsModal(true)}
               accessibilityRole="button"
-              accessibilityLabel={`Change payment method, currently ${stripeService.formatCardDisplay(paymentMethods[0])}`}
+              accessibilityLabel={`Change payment method, currently ${stripeService.formatCardDisplay(primaryCardPaymentMethod)}`}
             >
               <View style={styles.fundingPaymentCardIcon}>
                 <MaterialIcons name="credit-card" size={20} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.fundingPaymentCardText}>{stripeService.formatCardDisplay(paymentMethods[0])}</Text>
-                <Text style={styles.fundingPaymentCardSub}>Default payment method</Text>
+                <Text style={styles.fundingPaymentCardText}>{stripeService.formatCardDisplay(primaryCardPaymentMethod)}</Text>
+                <Text style={styles.fundingPaymentCardSub}>Saved card for this payment</Text>
               </View>
               <Text style={styles.fundingChangeLink}>Change</Text>
             </TouchableOpacity>
@@ -173,12 +173,12 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
               style={styles.fundingPaymentCard}
               onPress={() => setShowPaymentMethodsModal(true)}
               accessibilityRole="button"
-              accessibilityLabel="Link a card or bank account"
+              accessibilityLabel="Link a card to pay"
             >
               <View style={styles.fundingPaymentCardIcon}>
                 <MaterialIcons name="add" size={20} color={theme.primary} />
               </View>
-              <Text style={[styles.fundingPaymentCardText, { flex: 1 }]}>Link a card or bank account</Text>
+              <Text style={[styles.fundingPaymentCardText, { flex: 1 }]}>Link a card to pay</Text>
               <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           )}
@@ -213,7 +213,7 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
           onPress={!hasPaymentMethod ? () => setShowPaymentMethodsModal(true) : handleCardPayment}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel={!hasPaymentMethod ? 'Link a payment method' : `Add $${price || '0'} and post bounty`}
+          accessibilityLabel={!hasPaymentMethod ? 'Link a card to pay' : `Add $${price || '0'} and post bounty`}
           accessibilityState={{ disabled: busy, busy }}
         >
           {busy && (
@@ -258,6 +258,7 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
       {showPaymentMethodsModal && (
         <PaymentMethodsModal
           isOpen={showPaymentMethodsModal}
+          preferredType="card"
           onClose={() => {
             setShowPaymentMethodsModal(false);
             loadPaymentMethods();
