@@ -786,13 +786,16 @@ export function SignInForm() {
   // fold, so a user who never scrolls sees only a Sign In button that rejects
   // every tap — the "greyed out and untappable" report. Optional chaining keeps
   // this safe under test renderers that stub the native measure methods.
+  // Measure against the ScrollView's inner content view, not its viewport:
+  // scrollTo takes an absolute content offset, and a viewport-relative y shifts
+  // by the current scroll position, so a tap after scrolling would jump back up.
   const scrollToCaptcha = useCallback(() => {
     const scroll = scrollViewRef.current;
     const target = captchaRef.current;
-    if (!scroll || !target?.measureLayout) return;
-    const scrollNode = scroll.getScrollableNode?.() ?? scroll;
+    const contentNode = scroll?.getInnerViewNode?.();
+    if (!scroll || !target?.measureLayout || !contentNode) return;
     target.measureLayout(
-      scrollNode,
+      contentNode,
       (_x: number, y: number) => scroll.scrollTo({ y: Math.max(0, y - 16), animated: true }),
       () => {}
     );
