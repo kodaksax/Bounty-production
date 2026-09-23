@@ -156,7 +156,9 @@ export function useWalletDeposit() {
       if (paymentMethods.length > 0) {
         Alert.alert(
           'Card Required',
-          'Add Money currently charges a saved card. Please add a card or use Apple Pay.',
+Platform.OS === 'ios'
+            ? 'Add Money currently charges a saved card. Please add a card or use Apple Pay.'
+            : 'Add Money currently charges a saved card. Please add a card.',
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Add Card', onPress: () => setShowPaymentMethodsModal(true) },
