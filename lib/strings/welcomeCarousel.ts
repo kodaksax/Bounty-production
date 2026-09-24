@@ -85,12 +85,12 @@ export const welcomeCarouselStrings = {
     {
       key: 'help',
       headline: 'Help in any form.',
-      body: "A mounted TV. A hauled mattress. A closet door that finally closes.",
+      body: "Big, small, weird, or specific. Someone can help.",
     },
     {
       key: 'proof',
-      headline: 'Real jobs, real money, right nearby.',
-      body: 'A real bounty, really completed. Never a mock-up.',
+      headline: 'Anything can be a bounty',
+      body: 'Even the things you’d never think to ask someone to do.',
     },
     {
       key: 'escrow',
