@@ -25,7 +25,7 @@
  * branded splash.
  *
  * The staging is sequential and all of one piece: the quote types itself out,
- * then the signature types itself out in the same face at the same pace, with
+ * then the signature types straight on in the same face at the same pace, with
  * the one caret moving from the end of the quote to the signature line as it
  * goes; the CTA follows. The signature was previously set in a handwriting
  * face and revealed by a sliding cover — it's deliberately the same typewriter
@@ -66,11 +66,11 @@ const TYPE_MS_PER_CHAR = 80;
 const NEWLINE_EXTRA_MS = 320;
 const TYPE_START_DELAY_MS = 450;
 const REVEAL_MS = 700;
-// Beats in the post-typing reveal: a pause after the last character lands
-// before the signature starts, then a hold once it's fully in before the CTA
-// follows. Without the second hold the two fades run back-to-back and read as
-// one movement rather than signature-then-way-out.
-const SIGNATURE_DELAY_MS = 300;
+// Beat in the post-typing reveal: a hold once the signature is fully in
+// before the CTA follows. Without it the two movements run back-to-back and
+// read as one rather than signature-then-way-out. The signature itself gets
+// no lead-in — it picks up on the quote's own per-character beat, so the two
+// lines are one unbroken run of typing.
 const CTA_DELAY_MS = 500;
 // Held after the signature's last character before the CTA fade starts, so the
 // name gets a beat on its own rather than being stepped on by the way out.
@@ -96,8 +96,8 @@ export default function FounderNoteScreen() {
   const [typedCount, setTypedCount] = useState(0);
   const typingDone = typedCount >= quote.length;
 
-  // The same, for the signature line, which starts typing a beat after the
-  // quote finishes.
+  // The same, for the signature line, which picks up the moment the quote
+  // finishes.
   const [signatureTypedCount, setSignatureTypedCount] = useState(0);
   const signatureTypingDone = signatureTypedCount >= signatureLine.length;
 
@@ -190,10 +190,7 @@ export default function FounderNoteScreen() {
       if (cancelled || index > signatureLine.length) return;
       setSignatureTypedCount(index);
       if (index === signatureLine.length) return;
-      timer = setTimeout(
-        () => typeNext(index + 1),
-        index === 0 ? SIGNATURE_DELAY_MS : TYPE_MS_PER_CHAR
-      );
+      timer = setTimeout(() => typeNext(index + 1), TYPE_MS_PER_CHAR);
     };
 
     typeNext(0);
@@ -366,7 +363,9 @@ function makeStyles(theme: AppTheme) {
     },
     signatureBlock: {
       alignItems: 'center',
-      marginBottom: spacing['3xl'],
+      // Sits clear of the CTA rather than just above it — the name reads as
+      // the close of the note, not as a label on the button.
+      marginBottom: spacing['4xl'],
     },
     signature: {
       // The quote's face, deliberately: same typewriter, same type.
