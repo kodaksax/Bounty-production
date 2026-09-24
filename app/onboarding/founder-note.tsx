@@ -60,10 +60,10 @@ import type { AppTheme } from '../../lib/themes/types';
 
 // Typewriter pacing. Slow enough to be read along with rather than watched —
 // this is the one screen in the funnel with nothing to do but read, so the
-// words arrive at reading speed. Newlines get an extra beat, the way a real
-// line break lands.
+// words arrive at reading speed. Every character gets the same beat, line
+// breaks included: the note is one continuous run of typing from the first
+// word to the last of the signature, with nothing held anywhere in between.
 const TYPE_MS_PER_CHAR = 80;
-const NEWLINE_EXTRA_MS = 320;
 const TYPE_START_DELAY_MS = 450;
 const REVEAL_MS = 700;
 // Beat in the post-typing reveal: a hold once the signature is fully in
@@ -117,8 +117,8 @@ export default function FounderNoteScreen() {
   }, [onboardingData.intent]);
 
   // Typewriter. A self-rescheduling timeout rather than a single interval, so
-  // the per-character delay can vary (see NEWLINE_EXTRA_MS) and so the timer
-  // is always cleanly cancellable on unmount.
+  // the lead-in before the first character can differ from the steady beat
+  // that follows, and so the timer is always cleanly cancellable on unmount.
   useEffect(() => {
     if (prefersReducedMotion) {
       setTypedCount(quote.length);
@@ -133,11 +133,10 @@ export default function FounderNoteScreen() {
       if (cancelled || index > quote.length) return;
       setTypedCount(index);
       if (index === quote.length) return;
-      const delay =
-        index === 0
-          ? TYPE_START_DELAY_MS
-          : TYPE_MS_PER_CHAR + (quote[index - 1] === '\n' ? NEWLINE_EXTRA_MS : 0);
-      timer = setTimeout(() => typeNext(index + 1), delay);
+      timer = setTimeout(
+        () => typeNext(index + 1),
+        index === 0 ? TYPE_START_DELAY_MS : TYPE_MS_PER_CHAR
+      );
     };
 
     typeNext(0);
@@ -174,7 +173,7 @@ export default function FounderNoteScreen() {
 
   // Signature typewriter — the quote's, with the same per-character pacing, so
   // the two lines read as one continuous piece of typing rather than two
-  // effects that happen to follow each other. No newline beat: it's one line.
+  // effects that happen to follow each other.
   useEffect(() => {
     if (prefersReducedMotion) {
       setSignatureTypedCount(signatureLine.length);
