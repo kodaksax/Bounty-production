@@ -617,6 +617,9 @@ export type AnalyticsEvent =
   | 'skill_removed'
   | 'pitch_started'
   | 'pitch_submitted'
+  // Fired when a hunter taps apply on a required-pitch bounty with a pitch
+  // still too short — the tap the old disabled button swallowed silently.
+  | 'pitch_blocked'
   | 'portfolio_item_added'
   | 'portfolio_item_viewed'
   // Bounty-level trust requirement system — see lib/utils/trust-tier.ts.

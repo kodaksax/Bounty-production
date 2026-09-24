@@ -655,6 +655,13 @@ export default function PublicBountyDetail() {
               pitch_length: pitch.length,
             })
           }
+          onPitchBlocked={(pitchLength) =>
+            analyticsService.trackEvent('pitch_blocked', {
+              bounty_id: String(bounty.id),
+              amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
+              pitch_length: pitchLength,
+            })
+          }
         />
       )}
       {bounty && (
