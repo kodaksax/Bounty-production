@@ -28,6 +28,7 @@ import { analyticsService } from '../../lib/services/analytics-service';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
 
 // After a real sign-in, decide whether this is an existing, fully-onboarded
@@ -239,9 +240,11 @@ export default function UsernameScreen() {
             accessibilityState={{ disabled: loading, busy: loading }}
           >
             {loading ? (
-              <ActivityIndicator color="#ffffff" style={styles.buttonIcon} />
+              // White on the black Apple pill, black on the white Google one:
+              // both sit on a brand fill, not on the themed surface.
+              <ActivityIndicator color={palette.white} style={styles.buttonIcon} />
             ) : (
-              <FontAwesome name="apple" size={20} color="#ffffff" style={styles.buttonIcon} />
+              <FontAwesome name="apple" size={20} color={palette.white} style={styles.buttonIcon} />
             )}
             <Text style={styles.appleButtonText}>Continue with Apple</Text>
           </TouchableOpacity>
@@ -260,7 +263,7 @@ export default function UsernameScreen() {
             accessibilityState={{ disabled: !googleRequest || loading, busy: loading }}
           >
             {loading ? (
-              <ActivityIndicator color="#000000" style={styles.buttonIcon} />
+              <ActivityIndicator color={palette.black} style={styles.buttonIcon} />
             ) : (
               <View style={styles.buttonIcon}>
                 <GoogleLogo size={18} />
@@ -347,16 +350,24 @@ function makeStyles(theme: AppTheme) {
       paddingBottom: 40,
       gap: 12,
     },
+    // Apple and Google both mandate the fill and label colours of their
+    // sign-in buttons, so these two stay brand colours (palette.black /
+    // palette.white) rather than theme tokens. What IS theme-aware is the
+    // border: the black Apple pill would otherwise have no edge on the dark
+    // theme's near-black background, and the white Google pill none on the
+    // light theme's white one.
     appleButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#000000',
+      backgroundColor: palette.black,
+      borderWidth: 1,
+      borderColor: theme.border,
       paddingVertical: 16,
       borderRadius: 999,
     },
     appleButtonText: {
-      color: '#ffffff',
+      color: palette.white,
       fontSize: 18,
       fontWeight: 'bold',
     },
@@ -364,14 +375,14 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#ffffff',
-      borderWidth: 2,
-      borderColor: '#000000',
+      backgroundColor: palette.white,
+      borderWidth: 1,
+      borderColor: theme.border,
       paddingVertical: 16,
       borderRadius: 999,
     },
     googleButtonText: {
-      color: '#000000',
+      color: palette.black,
       fontSize: 18,
       fontWeight: 'bold',
     },

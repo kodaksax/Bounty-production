@@ -38,6 +38,7 @@ import {
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
 
 export default function StyleScreen() {
@@ -280,7 +281,7 @@ function makeStyles(theme: AppTheme) {
     chipLabelActive: {
       fontSize: 12,
       fontWeight: '600',
-      color: '#ffffff',
+      color: palette.white,
       marginTop: 2,
     },
     chipLabelInactive: {
@@ -300,7 +301,7 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
     },
     continueButtonText: {
-      color: '#ffffff',
+      color: palette.white,
       fontSize: 18,
       fontWeight: 'bold',
     },

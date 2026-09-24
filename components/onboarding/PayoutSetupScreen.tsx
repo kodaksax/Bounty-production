@@ -44,6 +44,7 @@ import {
   View,
 } from 'react-native';
 import type { EdgeInsets } from 'react-native-safe-area-context';
+import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
 import {
   PAYOUT_COUNTRIES,
@@ -156,7 +157,9 @@ export function PayoutSetupScreen({
               />
             </View>
             <View style={[styles.markCircle, styles.stripeMark]}>
-              <MaterialIcons name="bolt" size={26} color="#ffffff" />
+              {/* White on Stripe's brand purple below — the third-party mark,
+                  not a themed surface. */}
+              <MaterialIcons name="bolt" size={26} color={palette.white} />
             </View>
             {/* Absolutely centered over the row, so the plus lands on the exact
                 midpoint of the pair no matter how the two circles are sized or
@@ -430,6 +433,9 @@ function makeStyles(t: AppTheme) {
     getStartedText: { fontSize: 16, fontWeight: '700', color: t.text },
     skipLink: { alignSelf: 'center', marginTop: 20, padding: 8 },
     skipLinkText: { fontSize: 14, color: t.textSecondary, fontWeight: '500' },
+    // Scrims stay black in both themes, matching components/ui/app-modal.tsx:
+    // they dim whatever is behind them, so theme.overlay (a 5-10% button tint)
+    // would be nearly invisible here.
     scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
     sheet: {
       position: 'absolute',

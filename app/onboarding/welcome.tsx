@@ -32,18 +32,18 @@ import type { WelcomeCarouselSlide } from '../../lib/strings/welcomeCarousel';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
-import { darkTheme } from '../../lib/themes/darkTheme';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
-// Dark-only by design, not by following the app's light/dark preference —
-// see WelcomeCarousel.tsx's top comment. useAppThemeContext() would follow
-// the visitor's system scheme or a previously-saved light-mode preference
-// (theme_mode persists across account deletion), which is exactly the "no
-// light theme, no variations" case this screen must not show.
-const theme = darkTheme;
 
 export default function OnboardingWelcome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Follows the app's light/dark preference like every other step. This screen
+  // was pinned to darkTheme for its carousel art; the carousel takes every
+  // colour from the theme it's handed (see WelcomeCarousel.tsx), so it renders
+  // correctly in either mode and a light-mode visitor is no longer flipped to
+  // dark for the first three screens of the funnel.
+  const { theme } = useAppThemeContext();
   const { isLoggedIn, isLoading: authLoading } = useAuthContext();
 
   const mountedAtRef = useRef(Date.now());

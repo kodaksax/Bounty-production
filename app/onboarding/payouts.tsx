@@ -22,7 +22,8 @@
  * `returnTo` it replaces itself with the next funnel step instead, so finishing
  * — or backing out of — Stripe continues the flow either way.
  *
- * Forced dark, like welcome/role-select: same "getting started" funnel.
+ * Theme-aware like every other step: the theme handed to PayoutSetupScreen
+ * comes from useAppThemeContext(), not a pinned darkTheme.
  */
 
 import { type Href, useRouter } from 'expo-router';
@@ -36,13 +37,14 @@ import {
     DEFAULT_PAYOUT_COUNTRY,
     type PayoutCountry,
 } from '../../lib/strings/payoutSetup';
-import { darkTheme } from '../../lib/themes/darkTheme';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
 const NEXT_STEP: Href = '/onboarding/founder-note';
 
 export default function PayoutsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useAppThemeContext();
   const { data: onboardingData } = useOnboarding();
   const [country, setCountry] = useState<PayoutCountry>(DEFAULT_PAYOUT_COUNTRY);
   // Set once a CTA has navigated, so a second tap during the push transition
@@ -89,7 +91,7 @@ export default function PayoutsScreen() {
 
   return (
     <PayoutSetupScreen
-      theme={darkTheme}
+      theme={theme}
       insets={insets}
       country={country}
       onChangeCountry={setCountry}

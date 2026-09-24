@@ -166,7 +166,7 @@ export default function OnboardingIndex() {
         </Text>
         <TouchableOpacity style={styles.retryButton} onPress={handleManualRetry} disabled={retrying}>
           {retrying ? (
-            <ActivityIndicator size="small" color="#052e1b" />
+            <ActivityIndicator size="small" color={theme.background} />
           ) : (
             <Text style={styles.retryButtonText}>Retry</Text>
           )}
@@ -215,7 +215,10 @@ function makeStyles(theme: AppTheme) {
       alignSelf: 'center',
     },
     retryButtonText: {
-      color: '#052e1b',
+      // theme.background, not a fixed dark green: it's the on-primary colour
+      // and inverts with the theme, dark-on-green in dark mode and
+      // light-on-green in light mode. Matches role-select's continue button.
+      color: theme.background,
       fontSize: 16,
       fontWeight: 'bold',
     },

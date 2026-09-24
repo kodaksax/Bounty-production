@@ -37,6 +37,7 @@ import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { locationService } from '../../lib/services/location-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
 
 type LocationPrecision = 'precise' | 'approximate' | 'denied' | 'skipped';
@@ -169,7 +170,7 @@ export default function LocationScreen() {
           accessibilityState={{ disabled: pendingAction !== null, busy: pendingAction === 'precise' }}
         >
           {pendingAction === 'precise' ? (
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={palette.white} />
           ) : (
             <Text style={styles.primaryButtonText}>Allow location</Text>
           )}
@@ -268,7 +269,7 @@ function makeStyles(theme: AppTheme) {
       opacity: 0.7,
     },
     primaryButtonText: {
-      color: '#ffffff',
+      color: palette.white,
       fontSize: 18,
       fontWeight: 'bold',
     },

@@ -11,15 +11,17 @@
  * choice to its own screen after auth fixes both: it's not competing with
  * "sign up now," and each option gets a description line under it.
  *
- * Forced dark, like welcome.tsx and sign-up-form.tsx — this screen is the
- * last stop in the same dark "getting started" funnel those two are part of
- * before onboarding hands off to the rest of the flow (style.tsx onward),
- * which continues to follow the app's normal light/dark theme unchanged.
+ * Theme-aware like every other step: colors come from useAppThemeContext(),
+ * never a pinned theme. This screen used to force darkTheme to match the
+ * pre-auth funnel, which meant a light-mode user watched the app flip to dark
+ * for three screens and back. The tokens carry the contrast instead — note
+ * `continueButtonText` takes theme.background, which is dark-on-primary in
+ * dark mode and light-on-primary in light mode without a second rule.
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -29,10 +31,8 @@ import {
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
-import { darkTheme } from '../../lib/themes/darkTheme';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
-
-const theme: AppTheme = darkTheme;
 
 type Intent = 'poster' | 'hunter';
 
@@ -58,6 +58,8 @@ const ROLE_OPTIONS: {
 
 export default function RoleSelectScreen() {
   const router = useRouter();
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const { data: onboardingData, updateData } = useOnboarding();
   const [selected, setSelected] = useState<Intent | null>(onboardingData.intent);
@@ -174,7 +176,8 @@ export default function RoleSelectScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -263,4 +266,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.background,
   },
-});
+  });
+}

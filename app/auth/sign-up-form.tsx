@@ -30,7 +30,9 @@ import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { ROUTES } from '../../lib/routes';
 import { storage } from '../../lib/storage';
-import { darkTheme } from '../../lib/themes/darkTheme';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { palette } from '../../lib/themes/colors';
+import type { AppTheme } from '../../lib/themes/types';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { hasLocalOnboardingFlag, markDeviceHasSignedIn } from '../../lib/storage/onboarding';
@@ -175,12 +177,6 @@ async function routeAfterAuth(userId: string, router: ReturnType<typeof useRoute
   }
 }
 
-// Forced dark, not the app's ambient light/dark preference — this screen is
-// part of the same dark "getting started" funnel as welcome.tsx (the
-// carousel) and role-select.tsx. See welcome.tsx's top comment for why a
-// saved light-mode preference must not leak into this funnel.
-const theme = darkTheme;
-
 // Sign-up is the auth step of the onboarding flow — the same step
 // app/onboarding/username.tsx renders at activeIndex 0, so it shows the same
 // total. See ONBOARDING_TOTAL_STEPS for what the steps are.
@@ -193,13 +189,19 @@ export default function SignUpRoute() {
 type UsernameAvailability = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 export function SignUpForm() {
+  // Follows the app's light/dark preference. This screen used to pin
+  // darkTheme to match the pre-auth funnel; the theme now flows into
+  // makeLayout, which is why it's a parameter there rather than a module
+  // const — the StyleSheet has to be rebuilt when the theme changes, not
+  // only when the viewport does.
+  const { theme } = useAppThemeContext();
   useScreenBackground(theme.background);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { styles, icons } = useMemo(
-    () => makeLayout(width, height, insets.top, insets.bottom),
-    [width, height, insets.top, insets.bottom]
+    () => makeLayout(theme, width, height, insets.top, insets.bottom),
+    [theme, width, height, insets.top, insets.bottom]
   );
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -727,9 +729,16 @@ export function SignUpForm() {
               accessibilityState={{ disabled: socialLoading || !isAppleAvailable, busy: socialLoading }}
             >
               {socialLoading ? (
-                <ActivityIndicator color="#000000" style={styles.buttonIcon} />
+                // Black on the white Apple button, per Apple's guidelines — not a
+                // theme colour, and correct in both modes.
+                <ActivityIndicator color={palette.black} style={styles.buttonIcon} />
               ) : (
-                <FontAwesome name="apple" size={icons.field} color="#000000" style={styles.buttonIcon} />
+                <FontAwesome
+                  name="apple"
+                  size={icons.field}
+                  color={palette.black}
+                  style={styles.buttonIcon}
+                />
               )}
               <Text style={styles.appleButtonText}>Continue with Apple</Text>
             </TouchableOpacity>
@@ -1037,7 +1046,13 @@ const BASE_USABLE_HEIGHT = 763;
 
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
 
-function makeLayout(width: number, height: number, insetTop: number, insetBottom: number) {
+function makeLayout(
+  theme: AppTheme,
+  width: number,
+  height: number,
+  insetTop: number,
+  insetBottom: number
+) {
   // Icons, radii and horizontal padding track the width. Vertical rhythm and
   // control heights track the usable height instead, so a short device tightens
   // the gaps rather than pushing content off-screen. Both are clamped so a
@@ -1095,25 +1110,32 @@ function makeLayout(width: number, height: number, insetTop: number, insetBottom
         borderRadius: f(14),
         padding: f(14),
         marginBottom: v(16),
-        backgroundColor: 'rgba(239,68,68,0.15)',
+        // Error tint derived from the token rather than a fixed rgba() red, so
+        // the wash tracks the theme: 15% fill, 60% border.
+        backgroundColor: `${theme.error}26`,
         borderWidth: 1,
-        borderColor: 'rgba(248,113,113,0.6)',
+        borderColor: `${theme.error}99`,
       },
       errorBannerText: {
-        color: '#fecaca',
+        color: theme.error,
         fontSize: t(14),
         lineHeight: t(20),
       },
+      // Apple's Sign in with Apple button is brand-mandated: white fill,
+      // black mark and label, not theme colours. The border is ours — without
+      // it a white pill on the light theme's white background has no edge.
       appleButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         height: v(52),
         borderRadius: 999,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: palette.white,
+        borderWidth: 1,
+        borderColor: theme.border,
       },
       appleButtonText: {
-        color: '#000000',
+        color: palette.black,
         fontSize: t(16),
         fontWeight: '700',
       },
@@ -1176,7 +1198,7 @@ function makeLayout(width: number, height: number, insetTop: number, insetBottom
         borderColor: theme.primary,
       },
       fieldInvalid: {
-        borderColor: '#f87171',
+        borderColor: theme.error,
       },
       fieldInput: {
         flex: 1,
@@ -1196,11 +1218,11 @@ function makeLayout(width: number, height: number, insetTop: number, insetBottom
       },
       helperError: {
         fontSize: t(12.5),
-        color: '#fca5a5',
+        color: theme.error,
       },
       helperWarning: {
         fontSize: t(12.5),
-        color: '#fde68a',
+        color: theme.warning,
         marginTop: v(6),
       },
       helperWarningStrong: {

@@ -17,8 +17,10 @@
  * under each option instead of doubling as an earning-vs-posting CTA choice
  * made before the visitor has even created an account.
  *
- * Dark-only. Colors come from theme tokens alone — no new hex here beyond
- * what darkTheme.ts already exposes (see lib/themes/colors.ts).
+ * Colors come from the theme it's handed, via tokens alone — no hex here (see
+ * lib/themes/colors.ts). It was built dark-only, and welcome.tsx used to pin
+ * darkTheme for it; because every colour is a token it renders correctly in
+ * light mode too, which is what welcome.tsx now hands it.
  */
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
