@@ -1,4 +1,5 @@
 import { ThemeProvider } from 'components/theme-provider';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
@@ -7,7 +8,7 @@ import { Slot, useGlobalSearchParams, useRouter, useSegments } from 'expo-router
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import '../global.css';
@@ -17,6 +18,7 @@ import { AdminProvider } from '../lib/admin-context';
 import { BountyFormatProvider } from '../lib/bounty-format-context';
 import { COLORS } from '../lib/constants/accessibility';
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
+import { TopInsetOverlayProvider, useTopInsetOverlay } from '../lib/context/TopInsetOverlayContext';
 import { NotificationProvider } from '../lib/context/notification-context';
 import { ProfileImageViewerProvider } from '../lib/context/ProfileImageViewerContext';
 import { ErrorBoundary } from '../lib/error-boundary';
@@ -129,10 +131,15 @@ const RootFrame = ({
   bgColor?: string;
 }) => {
   const insets = useSafeAreaInsets();
-  const barStyle = getBarStyleForHex(bgColor);
+  // A screen can hand up the gradient it draws directly below the strip (see
+  // TopInsetOverlayContext); the strip then shows that gradient's true top
+  // slice instead of a flat color, and the status-bar icons take their
+  // contrast from it.
+  const overlay = useTopInsetOverlay()?.overlay ?? null;
+  const barStyle = getBarStyleForHex(overlay?.barColor ?? bgColor);
 
   const topInsetStyle = useMemo(
-    () => ({ height: insets.top, backgroundColor: bgColor }),
+    () => ({ height: insets.top, backgroundColor: bgColor, overflow: 'hidden' as const }),
     [insets.top, bgColor]
   );
   const bottomInsetStyle = useMemo(
@@ -143,7 +150,34 @@ const RootFrame = ({
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
       {/* top safe area behind status icons (time, battery, network) */}
-      <View style={topInsetStyle} />
+      <View style={topInsetStyle}>
+        {overlay ? (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: Math.max(overlay.height, insets.top),
+              transform: [
+                {
+                  translateY: overlay.scrollY
+                    ? Animated.multiply(overlay.scrollY, -1)
+                    : 0,
+                },
+              ],
+            }}
+          >
+            <LinearGradient
+              colors={overlay.colors}
+              start={overlay.start ?? { x: 0, y: 0 }}
+              end={overlay.end ?? { x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+        ) : null}
+      </View>
 
       {/* app content */}
       <View style={styles.content}>{children}</View>
@@ -385,7 +419,9 @@ function RootLayout({ children }: { children: React.ReactNode }) {
           <AppThemeProvider>
             <BountyFormatProvider>
               <BackgroundColorProvider>
-                <LayoutContent />
+                <TopInsetOverlayProvider>
+                  <LayoutContent />
+                </TopInsetOverlayProvider>
               </BackgroundColorProvider>
             </BountyFormatProvider>
           </AppThemeProvider>

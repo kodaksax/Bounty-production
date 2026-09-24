@@ -1,15 +1,18 @@
 'use client';
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Image as ExpoImage } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile';
+import { useCountdown } from '../hooks/useCountdown';
 import { useHapticFeedback } from '../lib/haptic-feedback';
+import type { AttachmentMeta } from '../lib/services/database.types';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { getScheduleChip } from '../lib/utils/schedule-utils';
 import { BountyDetailModal } from './bountydetailmodal';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { CountdownBadge } from './ui/countdown-badge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -19,20 +22,39 @@ const H_PAD = 16;
 const COL_GAP = 10;
 export const GRID_CARD_WIDTH = (SCREEN_WIDTH - H_PAD * 2 - COL_GAP) / 2;
 
-// Every gap / pad / box dimension inside the card is a fraction of the card's
-// own width (itself derived from the device width above), so the card's
-// internal rhythm scales with the screen instead of being pinned to fixed px.
-// This is also what keeps spacing identical across cards: the footer is placed
-// by `content: flex 1`, not by how much meta a given bounty happens to have.
+// Same anatomy as the featured carousel card (bounty-featured-item.tsx): a
+// cover with its chips overlaid, then an info block of fixed-height slots with
+// the price row pinned to the bottom. Only the scale differs — this card keeps
+// its existing square, two-per-row footprint, so every box below is a fraction
+// of the card's own width rather than a copy of the featured card's pixels.
+//
+// Fixed slots are what make the format hold: a one-line title, a missing
+// description or an incomplete listing changes what's in a slot, never where
+// the slots are, so titles and prices line up across both columns.
 const CW = GRID_CARD_WIDTH;
-const SPACE = {
-  pad: Math.round(CW * 0.082), // outer card padding
-  gapTight: Math.round(CW * 0.018), // inside a text group (username ↔ meta line)
-  gapRow: Math.round(CW * 0.034), // between stacked body rows
-  gapBlock: Math.round(CW * 0.055), // header ↔ body, and body ↔ footer divider
+const COVER_HEIGHT = Math.round(CW * 0.42);
+const INFO_PADDING = Math.round(CW * 0.058);
+const TITLE_LINE_HEIGHT = Math.round(CW * 0.085);
+/** Two lines, reserved whether the title wraps or not. */
+const TITLE_HEIGHT = TITLE_LINE_HEIGHT * 2;
+const DESCRIPTION_HEIGHT = Math.round(CW * 0.075);
+const LOCATION_HEIGHT = Math.round(CW * 0.065);
+const META_HEIGHT = Math.round(CW * 0.105);
+/** Gaps between the text slots; the gap above the meta row is elastic. */
+const SLOT_GAP = Math.max(2, Math.round(CW * 0.012));
+
+const FONT = {
+  title: Math.round(CW * 0.072),
+  description: Math.round(CW * 0.06),
+  location: Math.round(CW * 0.055),
+  price: Math.round(CW * 0.085),
+  username: Math.round(CW * 0.06),
+  chip: Math.round(CW * 0.055),
 };
-const AVATAR = Math.round(CW * 0.185);
-const DOT = Math.round(CW * 0.035);
+
+// Fixed-height text slots only hold if the text can't grow without bound.
+// Matches the cap on the featured card.
+const CARD_MAX_FONT_SCALE = 1.2;
 
 export interface BountyGridItemProps {
   id: string | number;
@@ -47,6 +69,13 @@ export interface BountyGridItemProps {
   work_type?: 'online' | 'in_person';
   poster_avatar?: string | null;
   end_date?: string | null;
+  /** Cover image source — same first-image-wins rule as the featured card. */
+  attachments_json?: string;
+  // Schedule fields, for the chip overlaid on the cover.
+  schedule_type?: 'asap' | 'scheduled' | 'flexible' | null;
+  start_date?: string | null;
+  duration_minutes?: number | null;
+  is_time_sensitive?: boolean;
   /** Category accent (same palette as the featured carousel cards). */
   categoryColor?: string;
   categoryLabel?: string;
@@ -69,6 +98,11 @@ function BountyGridItemComponent({
   work_type,
   poster_avatar,
   end_date,
+  attachments_json,
+  schedule_type,
+  start_date,
+  duration_minutes,
+  is_time_sensitive,
   categoryColor,
   categoryLabel,
   incomplete,
@@ -78,7 +112,6 @@ function BountyGridItemComponent({
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const [showDetail, setShowDetail] = useState(false);
-  const router = useRouter();
   const { triggerHaptic } = useHapticFeedback();
   const hasJoinedPosterIdentity = typeof username === 'string' && poster_avatar !== undefined;
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(
@@ -88,7 +121,6 @@ function BountyGridItemComponent({
     { enabled: !hasJoinedPosterIdentity }
   );
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...');
-  const avatarUrl = poster_avatar || posterProfile?.avatar;
 
   useEffect(() => {
     if (username) {
@@ -102,14 +134,29 @@ function BountyGridItemComponent({
     setResolvedUsername(profileLoading ? 'Loading...' : 'Anonymous');
   }, [username, posterProfile?.username, profileLoading]);
 
-  const handleAvatarPress = useCallback(
-    (e: any) => {
-      e.stopPropagation();
-      triggerHaptic('light');
-      if (user_id) router.push(`/profile/${user_id}`);
-    },
-    [user_id, router, triggerHaptic]
-  );
+  const firstImageUri = useMemo(() => {
+    if (!attachments_json) return null;
+    try {
+      const attachments: AttachmentMeta[] = JSON.parse(attachments_json);
+      const found = attachments.find(a => a.remoteUri && a.mimeType?.startsWith('image/'));
+      return found?.remoteUri ?? null;
+    } catch {
+      return null;
+    }
+  }, [attachments_json]);
+
+  const scheduleChip = useMemo(() => {
+    if (schedule_type) {
+      return getScheduleChip(schedule_type, start_date, end_date, duration_minutes);
+    }
+    if (is_time_sensitive) {
+      return { label: 'URGENT', icon: '🔴', variant: 'urgent' as const };
+    }
+    return null;
+  }, [schedule_type, start_date, end_date, duration_minutes, is_time_sensitive]);
+
+  // Under 24h to the deadline, a live countdown takes the chip's place.
+  const { isWithin24h: showCountdown } = useCountdown(end_date);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -149,101 +196,133 @@ function BountyGridItemComponent({
           accessibilityLabel={`${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}`}
           accessibilityHint="Tap to view bounty details"
         >
-          {/* ── Top content: fills the square, clipped so it never pushes
-                the footer out of the fixed-height card ───────────────── */}
-          <View style={s.content}>
-            {/* Header: avatar + username */}
-            <View style={s.header}>
-              <TouchableOpacity
-                onPress={handleAvatarPress}
-                disabled={!user_id}
-                accessibilityRole="button"
-                accessibilityLabel={`View ${resolvedUsername}'s profile`}
-              >
-                <Avatar style={s.avatar}>
-                  <AvatarImage
-                    src={avatarUrl || '/placeholder.svg?height=32&width=32'}
-                    alt={resolvedUsername}
-                  />
-                  <AvatarFallback style={s.avatarFallback}>
-                    <Text style={s.avatarText}>{resolvedUsername.substring(0, 2).toUpperCase()}</Text>
-                  </AvatarFallback>
-                </Avatar>
-              </TouchableOpacity>
-              <View style={s.headerMeta}>
-                <Text style={s.username} numberOfLines={1}>
-                  {resolvedUsername}
-                </Text>
-                <View style={s.metaLine}>
-                  {categoryColor && (
-                    <View
-                      style={[s.categoryDot, { backgroundColor: categoryColor }]}
-                      accessibilityLabel={categoryLabel ? `Category: ${categoryLabel}` : undefined}
-                    />
-                  )}
-                  {work_type === 'online' ? (
-                    <View style={s.workChip}>
-                      <MaterialIcons name="wifi" size={10} color={theme.primaryLight} />
-                      <Text style={s.workChipText}>Remote</Text>
-                    </View>
-                  ) : location ? (
-                    <Text style={s.distanceText} numberOfLines={1}>{location}</Text>
-                  ) : distance !== null ? (
-                    <Text style={s.distanceText}>{distance} mi</Text>
-                  ) : (
-                    <Text style={s.distanceText}>In Person</Text>
-                  )}
-                </View>
-              </View>
-            </View>
+          {/* Cover — image or category gradient placeholder */}
+          {firstImageUri ? (
+            <ExpoImage
+              source={{ uri: firstImageUri }}
+              style={s.cover}
+              contentFit="cover"
+              recyclingKey={firstImageUri}
+            />
+          ) : (
+            <LinearGradient
+              colors={[
+                (categoryColor || theme.primary) + 'cc',
+                (categoryColor || theme.primary) + '66',
+                '#064e3b',
+              ]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.cover}
+            >
+              <MaterialIcons
+                name="work-outline"
+                size={Math.round(CW * 0.15)}
+                color="rgba(255,255,255,0.25)"
+              />
+            </LinearGradient>
+          )}
 
-            {/* Countdown: only shown when the deadline is <24h away */}
-            <CountdownBadge endDate={end_date} style={s.countdownBadge} />
-
-            {/* Title */}
-            <Text style={s.title} numberOfLines={2}>
-              {title}
-            </Text>
-
-            {/* Description — suppressed on incomplete cards: the "Limited
-                details" badge below already tells the hunter what's missing,
-                and dropping it keeps the clipped content box from eating the
-                title on a dense card. */}
-            {description && !incomplete ? (
-              <Text style={s.description} numberOfLines={1}>
-                {description}
-              </Text>
-            ) : null}
-          </View>
-
-          {/* Limited-details badge — a sibling of the footer, NOT inside the
-              clipped content box, so this logistics warning is always visible
-              in full even when the body has to clip. */}
+          {/* "Limited details" rides the cover rather than the info block: in
+              the flow below it would push the title, description and price
+              down on exactly the cards that have it. */}
           {incomplete ? (
             <View style={s.limitedBadge}>
-              <MaterialIcons
-                name="info-outline"
-                size={11}
-                color={theme.isDark ? theme.warning : theme.textSecondary}
-              />
-              <Text style={s.limitedText} numberOfLines={1}>
+              <MaterialIcons name="info-outline" size={10} color="rgba(255,255,255,0.85)" />
+              <Text
+                style={s.limitedText}
+                numberOfLines={1}
+                maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+              >
                 {missingSummary || 'Limited details'}
               </Text>
             </View>
           ) : null}
 
-          {/* ── Footer: price / honor + View button ─────────── */}
-          <View style={s.footer}>
-            {isForHonor ? (
-              <View style={s.honorBadge}>
-                <MaterialIcons name="favorite" size={12} color="#059669" />
-                <Text style={s.honorText}>For Honor</Text>
+          {/* Category chip overlaid on the cover's bottom-left */}
+          {categoryLabel ? (
+            <View style={[s.coverChip, { backgroundColor: categoryColor || theme.primary }]}>
+              <Text
+                style={s.coverChipText}
+                numberOfLines={1}
+                maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+              >
+                {categoryLabel}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Schedule chip overlaid top-right — a live countdown takes over
+              once the deadline is under 24h away. */}
+          {showCountdown ? (
+            <CountdownBadge
+              endDate={end_date}
+              size="sm"
+              style={[s.scheduleChip, s.scheduleChipUrgent]}
+            />
+          ) : (
+            scheduleChip && (
+              <View
+                style={[
+                  s.scheduleChip,
+                  scheduleChip.variant === 'urgent' && s.scheduleChipUrgent,
+                  scheduleChip.variant === 'warning' && s.scheduleChipWarning,
+                ]}
+              >
+                <Text
+                  style={s.scheduleChipText}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+                >
+                  {scheduleChip.icon} {scheduleChip.label}
+                </Text>
               </View>
-            ) : (
-              <Text style={s.amount}>${price}</Text>
-            )}
-            <View style={s.viewBtn}>
-              <Text style={s.viewBtnText}>View</Text>
+            )
+          )}
+
+          {/* Info below cover — each slot keeps its height whether or not it
+              has content; the description renders as an empty line rather
+              than collapsing. */}
+          <View style={s.info}>
+            <Text style={s.title} numberOfLines={2} maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}>
+              {title}
+            </Text>
+            <Text
+              style={s.description}
+              numberOfLines={1}
+              maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+            >
+              {description || ''}
+            </Text>
+            <Text
+              style={s.location}
+              numberOfLines={1}
+              maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+            >
+              {work_type === 'online'
+                ? 'Remote'
+                : location || (distance !== null ? `${distance} mi` : 'In Person')}
+            </Text>
+            <View style={s.metaRow}>
+              {isForHonor ? (
+                <View style={s.honorBadge}>
+                  <MaterialIcons name="favorite" size={10} color={theme.primary} />
+                  <Text style={s.honorText} maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}>
+                    For Honor
+                  </Text>
+                </View>
+              ) : (
+                <Text style={s.amount} maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}>
+                  ${price}
+                </Text>
+              )}
+              <Text
+                style={s.username}
+                numberOfLines={1}
+                maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+              >
+                @{resolvedUsername}
+              </Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -292,11 +371,11 @@ function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     card: {
       width: GRID_CARD_WIDTH,
+      // Unchanged: the square, two-per-row footprint the grid places today.
       aspectRatio: 1,
       overflow: 'hidden',
       backgroundColor: t.surface,
       borderRadius: 16,
-      padding: SPACE.pad,
       borderWidth: 1,
       borderColor: t.border,
       shadowColor: '#000',
@@ -305,130 +384,115 @@ function makeStyles(t: AppTheme) {
       shadowRadius: 8,
       elevation: 5,
     },
-    // flex 1 (not flexShrink) so the body always occupies the full space above
-    // the footer — the footer lands at the same Y on every card regardless of
-    // how much meta a bounty has. overflow hidden so a content-heavy card
-    // clips its own body instead of bleeding text down onto the price.
-    content: {
-      flex: 1,
-      overflow: 'hidden',
-      paddingBottom: SPACE.gapRow,
-    },
 
-    // Header
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: SPACE.gapRow,
-      marginBottom: SPACE.gapBlock,
-    },
-    avatar: {
-      width: AVATAR,
-      height: AVATAR,
-      borderRadius: AVATAR / 2,
-      borderWidth: 2,
-      borderColor: t.border,
-    },
-    avatarFallback: {
-      backgroundColor: t.surfaceSecondary,
-      width: AVATAR,
-      height: AVATAR,
-      borderRadius: AVATAR / 2,
+    // ── Cover ────────────────────────────────────────────────────────────
+    cover: {
+      width: '100%',
+      height: COVER_HEIGHT,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    avatarText: {
-      fontSize: 11,
-      fontWeight: '800',
-      color: t.text,
+    coverChip: {
+      position: 'absolute',
+      top: COVER_HEIGHT - Math.round(CW * 0.12),
+      left: Math.round(CW * 0.045),
+      maxWidth: '60%',
+      paddingHorizontal: Math.round(CW * 0.04),
+      paddingVertical: 2,
+      borderRadius: 20,
     },
-    headerMeta: {
-      flex: 1,
-      gap: SPACE.gapTight,
+    coverChipText: {
+      fontSize: FONT.chip,
+      fontWeight: '700',
+      color: '#fff',
     },
-    username: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: t.text,
+    scheduleChip: {
+      position: 'absolute',
+      top: Math.round(CW * 0.04),
+      right: Math.round(CW * 0.04),
+      maxWidth: '55%',
+      paddingHorizontal: Math.round(CW * 0.035),
+      paddingVertical: 2,
+      borderRadius: 10,
+      backgroundColor: 'rgba(0,0,0,0.55)',
     },
-    metaLine: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: SPACE.gapTight,
+    scheduleChipUrgent: {
+      backgroundColor: 'rgba(220,38,38,0.85)',
     },
-    categoryDot: {
-      width: DOT,
-      height: DOT,
-      borderRadius: DOT / 2,
+    scheduleChipWarning: {
+      backgroundColor: 'rgba(180,100,0,0.85)',
     },
-    workChip: {
+    scheduleChipText: {
+      fontSize: FONT.chip,
+      fontWeight: '700',
+      color: '#fff',
+    },
+    limitedBadge: {
+      position: 'absolute',
+      top: Math.round(CW * 0.04),
+      left: Math.round(CW * 0.04),
+      // Leaves the opposite corner to the schedule chip / countdown.
+      maxWidth: '55%',
       flexDirection: 'row',
       alignItems: 'center',
       gap: 3,
-    },
-    workChipText: {
-      fontSize: 10,
-      color: t.textSecondary,
-    },
-    distanceText: {
-      fontSize: 10,
-      color: t.textSecondary,
-      flexShrink: 1,
-    },
-    countdownBadge: {
-      marginBottom: SPACE.gapRow,
-    },
-
-    // Body
-    title: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: t.text,
-      lineHeight: 18,
-      marginBottom: SPACE.gapTight,
-    },
-    description: {
-      fontSize: 12,
-      color: t.textSecondary,
-      lineHeight: 17,
-      marginBottom: SPACE.gapTight,
-    },
-    limitedBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'flex-start',
-      gap: SPACE.gapTight,
-      paddingHorizontal: SPACE.gapRow,
-      paddingVertical: SPACE.gapTight,
+      paddingHorizontal: Math.round(CW * 0.035),
+      paddingVertical: 2,
       borderRadius: 999,
-      // Dark mode: a crisp outlined amber chip rather than a low-alpha fill,
-      // which over the dark surface just muddied into an opaque brown block
-      // and let the grey text disappear.
-      backgroundColor: t.isDark ? 'transparent' : 'rgba(245,158,11,0.12)',
+      backgroundColor: 'rgba(0,0,0,0.55)',
       borderWidth: 1,
-      borderColor: t.isDark ? t.warning : 'rgba(245,158,11,0.28)',
-      marginBottom: SPACE.gapRow,
+      borderColor: 'rgba(255,255,255,0.28)',
     },
     limitedText: {
-      fontSize: 10,
-      fontWeight: t.isDark ? '700' : '600',
-      color: t.isDark ? t.warning : t.textSecondary,
+      fontSize: FONT.chip,
+      fontWeight: '700',
+      color: 'rgba(255,255,255,0.9)',
       flexShrink: 1,
     },
 
-    // Footer — pinned to the bottom by `content: flex 1`, so its top edge is at
-    // an identical Y on every card. The gap above the divider is owned by
-    // `content.paddingBottom`, so a clipped body can't crowd the price.
-    footer: {
+    // ── Info ─────────────────────────────────────────────────────────────
+    // flex:1 rather than a height: the card is square and the cover is fixed,
+    // so this takes the remainder and any rounding lands in the elastic gap
+    // above metaRow.
+    info: {
+      flex: 1,
+      padding: INFO_PADDING,
+      backgroundColor: t.surface,
+    },
+    title: {
+      fontSize: FONT.title,
+      fontWeight: '800',
+      color: t.text,
+      lineHeight: TITLE_LINE_HEIGHT,
+      height: TITLE_HEIGHT,
+      letterSpacing: -0.2,
+    },
+    description: {
+      fontSize: FONT.description,
+      color: t.textSecondary,
+      lineHeight: DESCRIPTION_HEIGHT,
+      height: DESCRIPTION_HEIGHT,
+      marginTop: SLOT_GAP,
+    },
+    location: {
+      fontSize: FONT.location,
+      color: t.textDisabled,
+      lineHeight: LOCATION_HEIGHT,
+      height: LOCATION_HEIGHT,
+      marginTop: SLOT_GAP,
+    },
+    metaRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingTop: SPACE.gapBlock,
-      borderTopWidth: 1,
-      borderTopColor: t.surfaceSecondary,
+      height: META_HEIGHT,
+      // Pinned to the bottom of the info block, so the price sits on the same
+      // line on every card no matter what the slots above hold.
+      marginTop: 'auto',
     },
     amount: {
-      fontSize: 18,
+      fontSize: FONT.price,
+      lineHeight: META_HEIGHT,
       fontWeight: '800',
       color: t.primary,
     },
@@ -437,30 +501,23 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       backgroundColor: t.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(5,150,105,0.1)',
       borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
+      paddingHorizontal: Math.round(CW * 0.04),
+      paddingVertical: 2,
       borderWidth: 1,
       borderColor: t.isDark ? 'rgba(16,185,129,0.35)' : 'rgba(5,150,105,0.3)',
-      gap: 4,
+      gap: 3,
     },
     honorText: {
       color: t.primary,
       fontWeight: '800',
-      fontSize: 11,
+      fontSize: FONT.chip,
     },
-    viewBtn: {
-      paddingHorizontal: 14,
-      paddingVertical: 7,
-      borderRadius: 10,
-      backgroundColor: t.text,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    viewBtnText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: t.background,
-      letterSpacing: 0.2,
+    username: {
+      fontSize: FONT.username,
+      color: t.textSecondary,
+      flexShrink: 1,
+      marginLeft: 6,
+      textAlign: 'right',
     },
   });
 }

@@ -29,6 +29,7 @@ import {
     useRef,
     useState,
 } from 'react';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import {
     Animated,
     FlatList,
@@ -46,6 +47,7 @@ import { useShowTestBounties } from '../hooks/useShowTestBounties';
 import { useValidUserId } from '../hooks/useValidUserId';
 import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags';
 import { useBountyFormat } from '../lib/bounty-format-context';
+import { useTopInsetOverlay } from '../lib/context/TopInsetOverlayContext';
 import { API_TIMEOUTS } from '../lib/config/network';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
 import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories';
@@ -102,6 +104,15 @@ interface BountyFeedProps {
 }
 
 const PAGE_SIZE = 10;
+
+// Grid banner gradient, top-left to bottom-right. The first stop is also what
+// RootFrame paints behind the status bar while the banner is at the top of the
+// screen (see gridBannerCoversStatusBar), so the green reads as one unbroken
+// block from the very top of the display down through the banner.
+const GRID_BANNER_GRADIENT: readonly [string, string, string] = ['#064e3b', '#059669', '#10b981'];
+const GRID_BANNER_TOP_COLOR = GRID_BANNER_GRADIENT[0];
+const GRID_BANNER_GRADIENT_START = { x: 0, y: 0 };
+const GRID_BANNER_GRADIENT_END = { x: 1, y: 1 };
 
 // 'off' = no distance filter (existing behavior, unchanged). A number is a
 // radius in miles. `null` is the explicit "Anywhere" preset — still uses
@@ -182,8 +193,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [refreshing, setRefreshing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | 'all'>('all');
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilterValue>(DISTANCE_OFF);
-  // Independent of category/distance — a hunter can combine "Labor" with
-  // "Online" with "Highest pay" all at once.
+  // Part of the filter bar's single selection group — see selectOnlyFilter.
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [sortByHighestPay, setSortByHighestPay] = useState(false);
   // Count of newly-posted open bounties observed via realtime since the last
@@ -211,9 +221,27 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const { bountyFormat } = useBountyFormat();
   const isCompact = bountyFormat === 'compact';
   const insets = useSafeAreaInsets();
+  // Grid layout only. RootFrame (app/_layout.tsx) paints the status-bar strip
+  // itself — app content is laid out beneath it and can't draw there — so the
+  // grid banner, which is pulled flush to the top of the content frame, used to
+  // butt up against a white (light) / black (dark) bar. Handing RootFrame the
+  // banner's own gradient makes that strip the banner's true top slice, so the
+  // green runs unbroken from the top of the display through the banner.
+  //
+  // `useTopInsetOverlay` is null outside the provider (tests,
+  // BountyFormatPreview), where there is no inset to paint.
+  const topInsetOverlay = useTopInsetOverlay();
+  // Measured rather than assumed: the banner's height is both the gradient's
+  // full extent and how far you can scroll before it stops touching the top,
+  // and it varies with the active-hunters row and the viewer's font scale.
+  const [gridBannerHeight, setGridBannerHeight] = useState(0);
+  const [gridBannerCoversStatusBar, setGridBannerCoversStatusBar] = useState(true);
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const scrollY = useRef(new Animated.Value(0)).current;
+  // Drives the status-bar overlay's translateY so the seam with the banner
+  // holds while the grid scrolls, without re-rendering RootFrame per frame.
+  const gridScrollY = useRef(new Animated.Value(0)).current;
   const bountyListRef = useRef<FlatList>(null);
   const offsetRef = useRef(0);
 
@@ -578,6 +606,79 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       }
     };
   }, []);
+
+  // The filter carousel is ONE selection group: at most a single chip can read
+  // as active at a time. Category, Online, Highest pay and Distance used to be
+  // independent pieces of state, so "For You" (the neutral category) stayed lit
+  // while Online or Highest pay was also lit. Every chip now routes its
+  // activation through here, which clears the other three lanes.
+  const selectOnlyFilter = useCallback(
+    (next: {
+      category?: string | 'all';
+      onlineOnly?: boolean;
+      sortByHighestPay?: boolean;
+      distance?: DistanceFilterValue;
+    }) => {
+      handleSetActiveCategory(next.category ?? 'all');
+      setOnlineOnly(next.onlineOnly ?? false);
+      setSortByHighestPay(next.sortByHighestPay ?? false);
+      setDistanceFilter(next.distance ?? DISTANCE_OFF);
+    },
+    [handleSetActiveCategory]
+  );
+
+  // "For You" is the no-filter state, so it's only active when nothing else is.
+  const isForYouActive =
+    activeCategory === 'all' &&
+    !onlineOnly &&
+    !sortByHighestPay &&
+    distanceFilter === DISTANCE_OFF;
+
+  // The grid list is shifted up by (insets.top + 8) and its content starts with
+  // 8px of padding, so at scroll offset 0 the banner's top edge lands exactly at
+  // the top of the display. It therefore still spans the status-bar strip while
+  // y <= bannerHeight - insets.top. Past that the green would be a floating
+  // stripe over ordinary cards, so the strip returns to the theme background.
+  const handleGridScroll = useMemo(
+    () =>
+      Animated.event([{ nativeEvent: { contentOffset: { y: gridScrollY } } }], {
+        // The overlay's translateY reads this value; the JS driver is what lets
+        // a plain (non-Animated) FlatList feed it.
+        useNativeDriver: false,
+        listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+          const y = e.nativeEvent.contentOffset.y;
+          const covers = gridBannerHeight === 0 || y <= gridBannerHeight - insets.top;
+          setGridBannerCoversStatusBar(prev => (prev === covers ? prev : covers));
+        },
+      }),
+    [gridScrollY, gridBannerHeight, insets.top]
+  );
+
+  const setTopInsetOverlay = topInsetOverlay?.setOverlay;
+  useEffect(() => {
+    const tinted =
+      bountyFormat === 'grid' && activeScreen === 'bounty' && gridBannerCoversStatusBar;
+    if (!tinted || !setTopInsetOverlay) return;
+    setTopInsetOverlay({
+      colors: GRID_BANNER_GRADIENT,
+      start: GRID_BANNER_GRADIENT_START,
+      end: GRID_BANNER_GRADIENT_END,
+      // The strip is the top `insets.top` of a gradient this tall — the same
+      // slice the banner's own gradient draws and the inset then hides.
+      height: gridBannerHeight || insets.top,
+      scrollY: gridScrollY,
+      barColor: GRID_BANNER_TOP_COLOR,
+    });
+    return () => setTopInsetOverlay(null);
+  }, [
+    bountyFormat,
+    activeScreen,
+    gridBannerCoversStatusBar,
+    gridBannerHeight,
+    insets.top,
+    gridScrollY,
+    setTopInsetOverlay,
+  ]);
 
   const loadBounties = useCallback(
     async ({ reset = false }: { reset?: boolean } = {}) => {
@@ -1000,11 +1101,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
             No bounties match {clearsMultiple ? 'these filters' : 'this filter'}.
           </Text>
           <TouchableOpacity
-            onPress={() => {
-              if (hasCategoryFilter) handleSetActiveCategory('all');
-              if (hasDistanceFilter) setDistanceFilter(DISTANCE_OFF);
-              if (hasOnlineFilter) setOnlineOnly(false);
-            }}
+            onPress={() => selectOnlyFilter({})}
             accessibilityRole="button"
             accessibilityLabel={clearsMultiple ? 'Clear filters' : 'Clear filter'}
             style={{
@@ -1040,7 +1137,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     activeCategory,
     distanceFilter,
     onlineOnly,
-    handleSetActiveCategory,
+    selectOnlyFilter,
     theme,
     router,
   ]);
@@ -1081,7 +1178,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 value={distanceFilter}
                 neutralValue={DISTANCE_OFF}
                 options={DISTANCE_OPTIONS}
-                onChange={setDistanceFilter}
+                onChange={value => selectOnlyFilter({ distance: value })}
                 description="Show bounties within a radius of you."
                 hint={
                   permission?.granted
@@ -1099,7 +1196,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 label="Online"
                 icon="language"
                 active={onlineOnly}
-                onPress={() => setOnlineOnly(v => !v)}
+                onPress={() => selectOnlyFilter({ onlineOnly: !onlineOnly })}
                 accessibilityLabel={`Filter by Online${onlineOnly ? ', currently active' : ''}`}
                 accessibilityHint={
                   onlineOnly
@@ -1117,7 +1214,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 label="Highest pay"
                 icon="attach-money"
                 active={sortByHighestPay}
-                onPress={() => setSortByHighestPay(v => !v)}
+                onPress={() => selectOnlyFilter({ sortByHighestPay: !sortByHighestPay })}
                 accessibilityLabel={`Sort by highest pay${sortByHighestPay ? ', currently active' : ''}`}
                 accessibilityHint={
                   sortByHighestPay
@@ -1128,14 +1225,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               />
             );
           }
-          const isActive = activeCategory === item.id;
+          const isActive = item.id === 'all' ? isForYouActive : activeCategory === item.id;
           return (
             <FilterChip
               key={item.id}
               label={item.label}
               icon={item.icon}
               active={isActive}
-              onPress={() => handleSetActiveCategory(isActive ? 'all' : (item.id as any))}
+              onPress={() => selectOnlyFilter({ category: isActive ? 'all' : (item.id as any) })}
               accessibilityLabel={`Filter by ${item.label}${isActive ? ', currently active' : ''}`}
               accessibilityHint={
                 isActive
@@ -1233,14 +1330,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           <BountyGridFeed
             bounties={filteredBounties}
             bountyDistances={bountyDistances}
+            onScroll={handleGridScroll}
             listHeader={
               <View>
                 {/* Banner */}
-                <View style={[s.gridBanner, { paddingTop: insets.top + 2 }]}>
+                <View
+                  style={[s.gridBanner, { paddingTop: insets.top + 2 }]}
+                  onLayout={e => setGridBannerHeight(e.nativeEvent.layout.height)}
+                >
                   <LinearGradient
-                    colors={['#064e3b', '#059669', '#10b981']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
+                    colors={GRID_BANNER_GRADIENT}
+                    start={GRID_BANNER_GRADIENT_START}
+                    end={GRID_BANNER_GRADIENT_END}
                     style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
                   />
                   <Text style={s.gridBannerTitle}>Find a Bounty</Text>
