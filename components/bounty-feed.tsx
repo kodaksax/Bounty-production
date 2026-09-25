@@ -588,30 +588,13 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [validUserId, currentUserId]);
 
-  const activeCategoryTimerRef = useRef<number | null>(null);
-  const handleSetActiveCategory = useCallback((val: string | 'all') => {
-    if (activeCategoryTimerRef.current) clearTimeout(activeCategoryTimerRef.current);
-    // @ts-ignore
-    activeCategoryTimerRef.current = setTimeout(() => {
-      setActiveCategory(val);
-    }, 250) as unknown as number;
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (activeCategoryTimerRef.current) {
-        clearTimeout(activeCategoryTimerRef.current);
-        // @ts-ignore
-        activeCategoryTimerRef.current = null;
-      }
-    };
-  }, []);
-
   // The filter carousel is ONE selection group: at most a single chip can read
   // as active at a time. Category, Online, Highest pay and Distance used to be
   // independent pieces of state, so "For You" (the neutral category) stayed lit
   // while Online or Highest pay was also lit. Every chip now routes its
-  // activation through here, which clears the other three lanes.
+  // activation through here, which clears the other three lanes. All four
+  // lanes update in the same synchronous batch so two chips never read as
+  // active at once; only the network count query is debounced (countCategory).
   const selectOnlyFilter = useCallback(
     (next: {
       category?: string | 'all';
@@ -619,12 +602,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       sortByHighestPay?: boolean;
       distance?: DistanceFilterValue;
     }) => {
-      handleSetActiveCategory(next.category ?? 'all');
+      setActiveCategory(next.category ?? 'all');
       setOnlineOnly(next.onlineOnly ?? false);
       setSortByHighestPay(next.sortByHighestPay ?? false);
       setDistanceFilter(next.distance ?? DISTANCE_OFF);
     },
-    [handleSetActiveCategory]
+    []
   );
 
   // "For You" is the no-filter state, so it's only active when nothing else is.
@@ -810,12 +793,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // Server-side total of open bounties for the active category. Cheap
   // (head/count query, no rows) and independent of pagination, so the "N active"
   // badge stays stable while the user scrolls. Refreshes on mount + category
-  // change (via the effect below) and on pull-to-refresh.
+  // change (via the effect below) and on pull-to-refresh. Keyed on a debounced
+  // copy of the category so rapid chip taps don't fire a query per tap.
+  const [countCategory, setCountCategory] = useState<string | 'all'>(activeCategory);
+  useEffect(() => {
+    const t = setTimeout(() => setCountCategory(activeCategory), 250);
+    return () => clearTimeout(t);
+  }, [activeCategory]);
+
   const refreshActiveCount = useCallback(async () => {
     setActiveCount(null);
-    const c = await bountyService.getOpenCount({ category: activeCategory, includeTest: includeTestBounties });
+    const c = await bountyService.getOpenCount({ category: countCategory, includeTest: includeTestBounties });
     setActiveCount(c);
-  }, [activeCategory, includeTestBounties]);
+  }, [countCategory, includeTestBounties]);
 
   useEffect(() => {
     refreshActiveCount();

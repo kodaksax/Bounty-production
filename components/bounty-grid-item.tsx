@@ -355,6 +355,9 @@ export const BountyGridItem = React.memo(
   (prev, next) =>
     prev.id === next.id &&
     prev.title === next.title &&
+    prev.username === next.username &&
+    prev.description === next.description &&
+    prev.isForHonor === next.isForHonor &&
     prev.price === next.price &&
     prev.distance === next.distance &&
     prev.location === next.location &&
@@ -362,7 +365,13 @@ export const BountyGridItem = React.memo(
     prev.work_type === next.work_type &&
     prev.poster_avatar === next.poster_avatar &&
     prev.end_date === next.end_date &&
+    prev.attachments_json === next.attachments_json &&
+    prev.schedule_type === next.schedule_type &&
+    prev.start_date === next.start_date &&
+    prev.duration_minutes === next.duration_minutes &&
+    prev.is_time_sensitive === next.is_time_sensitive &&
     prev.categoryColor === next.categoryColor &&
+    prev.categoryLabel === next.categoryLabel &&
     prev.incomplete === next.incomplete &&
     prev.missingSummary === next.missingSummary
 );

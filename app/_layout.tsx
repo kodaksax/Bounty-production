@@ -185,8 +185,10 @@ const RootFrame = ({
       {/* bottom safe area behind home indicator */}
       <View style={bottomInsetStyle} />
 
-      {/* status bar; expo-status-bar maps to appropriate platform APIs */}
-      <StatusBar style={barStyle} backgroundColor={bgColor} />
+      {/* status bar icons only. Android is edge-to-edge (enforced since SDK 54),
+          so the bar is always translucent and the top-inset view above is what
+          shows through it; a StatusBar backgroundColor would be a no-op. */}
+      <StatusBar style={barStyle} />
     </View>
   );
 };
