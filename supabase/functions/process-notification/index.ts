@@ -204,7 +204,10 @@ function isValidExpoPushToken(token: unknown): boolean {
 }
 
 // Inlined from ./push-receipts
-const PERMANENT_TOKEN_ERRORS = new Set(['DeviceNotRegistered', 'InvalidCredentials', 'MismatchSenderId'])
+// Only DeviceNotRegistered means the token itself is dead. InvalidCredentials /
+// MismatchSenderId are project-credential errors that fail every token on a
+// platform at once (see push-receipts.ts) and must never prune.
+const PERMANENT_TOKEN_ERRORS = new Set(['DeviceNotRegistered'])
 function extractInvalidTokens(chunkTokens: string[], expoResponseBody: unknown): string[] {
   const tickets = (expoResponseBody as { data?: unknown })?.data
   if (!Array.isArray(tickets)) return []
@@ -220,6 +223,47 @@ function extractInvalidTokens(chunkTokens: string[], expoResponseBody: unknown):
   })
   return invalid
 }
+
+// Inlined from ./email-fallback
+const POSTER_EMAIL_FALLBACK_TYPES = new Set(['application', 'application_pending_reminder'])
+function isPosterFallbackType(type: string): boolean {
+  return POSTER_EMAIL_FALLBACK_TYPES.has(type)
+}
+const MAX_ERROR_MESSAGE_LENGTH = 300
+function truncateMessage(value: unknown): string | null {
+  if (value == null) return null
+  const text = String(value)
+  if (!text) return null
+  return text.length > MAX_ERROR_MESSAGE_LENGTH ? `${text.slice(0, MAX_ERROR_MESSAGE_LENGTH)}…` : text
+}
+function describeTicketError(ticket: unknown): { code: string; message: string | null } {
+  const t = (ticket ?? {}) as { message?: unknown; details?: { error?: unknown } }
+  const code = typeof t.details?.error === 'string' && t.details.error ? t.details.error : 'unknown'
+  return { code, message: truncateMessage(t.message) }
+}
+function fallbackDedupeKey(data: Record<string, unknown>, outboxId: string): string {
+  const requestId = data.requestId ?? data.request_id
+  if (typeof requestId === 'string' && requestId.trim()) return `request:${requestId.trim()}`
+  return `outbox:${outboxId}`
+}
+function applicantListLink(base: string, bountyId: string): string {
+  const normalized = base.endsWith('/') ? base : `${base}/`
+  return `${normalized}postings/${encodeURIComponent(bountyId)}`
+}
+function buildPosterFallbackEmail(params: { bountyTitle: string | null; applicantCount: number }): { title: string; body: string } {
+  const bountyTitle = (params.bountyTitle ?? '').trim() || 'your bounty'
+  const count = Math.max(1, Math.floor(params.applicantCount || 0))
+  const title = count === 1 ? `Someone applied to "${bountyTitle}"` : `${count} applicants are waiting on "${bountyTitle}"`
+  const body =
+    count === 1
+      ? `A hunter applied to "${bountyTitle}" and is waiting for your answer. Accept or decline in the Bounty app — unanswered applications close automatically.`
+      : `${count} hunters applied to "${bountyTitle}" and are waiting for your answer. Accept or decline in the Bounty app — unanswered applications close automatically.`
+  return { title, body }
+}
+// Where the fallback email's button points. Defaults to the app's custom
+// scheme; set to an HTTPS handoff once bountyfinder.app serves TLS, since some
+// mail clients (notably Gmail web) strip non-http(s) links.
+const APP_LINK_BASE = Deno.env.get('NOTIFICATION_APP_LINK_BASE') || 'bountyexpo-workspace://'
 
 // PostHog delivery-funnel instrumentation (notification_generated/sent/failed).
 // Same HTTP capture pattern as process-analytics-person/index.ts. Every event
@@ -418,13 +462,17 @@ Deno.serve(async (req: Request) => {
     const inAppRecipients: string[] = []
     const pushRecipients: string[] = []
     const emailRecipients: string[] = []
+    // Push held back by quiet hours is a deliberate suppression, not a delivery
+    // failure, so it does not trigger the poster email fallback.
+    const quietHoursBlocked = new Set<string>()
     for (const userId of recipients) {
       if (isChannelEnabled(prefMap, userId, 'in_app', category)) inAppRecipients.push(userId)
 
       if (isChannelEnabled(prefMap, userId, 'push', category)) {
         const qh = quietHoursByUser.get(userId)
         const blocked = !urgent && qh ? isInQuietHours(qh.start, qh.end, qh.tz) : false
-        if (!blocked) pushRecipients.push(userId)
+        if (blocked) quietHoursBlocked.add(userId)
+        else pushRecipients.push(userId)
       }
 
       if (isChannelEnabled(prefMap, userId, 'email', category)) emailRecipients.push(userId)
@@ -463,6 +511,7 @@ Deno.serve(async (req: Request) => {
     // every outbox-driven event (messages, applications, acceptances, etc.).
     // Guard on 'pending' so a retry of a previously-'failed' row does not
     // create duplicate bell entries (the rows were inserted on the first pass).
+    let inAppInserted = false
     if (!skipInApp && rows.status === 'pending' && inAppRecipients.length > 0) {
       const notificationRows = inAppRecipients.map((userId) => ({
         user_id: userId,
@@ -479,11 +528,18 @@ Deno.serve(async (req: Request) => {
         // the 2026-07-25 CHECK-constraint migration this should no longer
         // silently drop known outbox types the way it previously did.
         console.error('[process-notification] failed to insert in-app notifications', insertErr)
+      } else {
+        inAppInserted = true
       }
     }
 
+    // Poster-facing application types get email ONLY as a fallback for a push
+    // that could not reach the poster (see the fallback step below), capped at
+    // one email per application. Every other type keeps the blanket fan-out.
+    const posterFallback = isPosterFallbackType(notificationType)
+
     // Fire email fan-out (best-effort, does not block push delivery below).
-    if (emailRecipients.length > 0) {
+    if (!posterFallback && emailRecipients.length > 0) {
       try {
         await fetch(`${supabaseUrl}/functions/v1/send-notification-email`, {
           method: 'POST',
@@ -502,216 +558,381 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (pushRecipients.length === 0) {
-      // No one wants a push for this event; in-app rows (if any) are saved.
-      schedulePostHogCapture(posthogEvents)
-      await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts: (rows.attempts || 0) + 1 }).eq('id', id)
-      return jsonResponse({ message: 'In-app notifications saved; no push recipients', inApp: inAppRecipients.length })
+    // Per-recipient push result. Absent = push was never attempted for that
+    // recipient (push channel off, or quiet hours).
+    type PushOutcome =
+      | { status: 'sent' }
+      | { status: 'failed'; reason: string; code: string | null; message: string | null }
+    const pushOutcome = new Map<string, PushOutcome>()
+    const markOutcome = (userId: string, outcome: PushOutcome) => {
+      // A success on any one device means the push was genuinely accepted for
+      // that recipient, so 'sent' always wins over a 'failed' recorded for a
+      // different (or earlier-processed) device of the same person.
+      if (outcome.status === 'sent') {
+        pushOutcome.set(userId, outcome)
+        return
+      }
+      if (pushOutcome.get(userId)?.status === 'sent') return
+      pushOutcome.set(userId, outcome)
     }
 
-    // Fetch enabled tokens for push recipients, keeping the owning profile_id
-    // so delivery outcomes can be attributed to the specific recipient rather
-    // than reported for the whole pushRecipients set.
-    const { data: tokens, error: tokenErr } = await supabaseAdmin
-      .from('push_tokens')
-      .select('profile_id, token')
-      .in('profile_id', pushRecipients)
-      .eq('enabled', true)
+    // Provider errors persisted on the outbox row (delivery_errors), so a
+    // failure is nameable from the DB as well as from PostHog. Never contains
+    // tokens or email addresses: user id + provider code/message only.
+    const deliveryErrors: Array<Record<string, unknown>> = []
+    // HTTP-level / exception failures: the row is marked 'failed' for retry.
+    const errors: any[] = []
+    const invalidTokens: string[] = []
+    let sent = 0
 
-    if (tokenErr) {
-      console.error('[process-notification] token lookup error', tokenErr)
-      schedulePostHogCapture(posthogEvents)
-      await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: String(tokenErr), attempts: (rows.attempts || 0) + 1 }).eq('id', id)
-      return jsonResponse({ error: 'Failed to lookup tokens' }, 500)
-    }
+    if (pushRecipients.length > 0) {
+      // Fetch enabled tokens for push recipients, keeping the owning profile_id
+      // so delivery outcomes can be attributed to the specific recipient rather
+      // than reported for the whole pushRecipients set.
+      const { data: tokens, error: tokenErr } = await supabaseAdmin
+        .from('push_tokens')
+        .select('profile_id, token')
+        .in('profile_id', pushRecipients)
+        .eq('enabled', true)
 
-    const tokenRows = ((tokens || []) as Array<{ profile_id: string | null; token: string | null }>).filter((r) => !!r.profile_id)
-    const normalizedTokenRows = tokenRows.map((r) => ({
-      profile_id: r.profile_id as string,
-      rawToken: r.token,
-      normalizedToken: typeof r.token === 'string' ? r.token.trim() : '',
-    }))
+      if (tokenErr) {
+        console.error('[process-notification] token lookup error', tokenErr)
+        schedulePostHogCapture(posthogEvents)
+        await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: String(tokenErr), attempts: (rows.attempts || 0) + 1 }).eq('id', id)
+        return jsonResponse({ error: 'Failed to lookup tokens' }, 500)
+      }
 
-    // A malformed token makes Expo reject the whole send chunk, so it fails
-    // every co-batched recipient on every notification and is never pruned.
-    // Drop malformed tokens before building the chunk and disable them so they
-    // stop poisoning future sends.
-    const validTokenRows = normalizedTokenRows.filter((r) => isValidExpoPushToken(r.normalizedToken))
-    const malformedTokenRows = normalizedTokenRows.filter((r) => !isValidExpoPushToken(r.normalizedToken))
-    const malformedOwners = new Set(malformedTokenRows.map((r) => r.profile_id))
-    if (malformedTokenRows.length > 0) {
-      const malformedTokens = malformedTokenRows
-        .map((r) => r.rawToken)
-        .filter((token): token is string => typeof token === 'string')
-      if (malformedTokens.length > 0) {
-        const { error: disableMalformedErr } = await supabaseAdmin
+      const tokenRows = ((tokens || []) as Array<{ profile_id: string | null; token: string | null }>).filter((r) => !!r.profile_id)
+      const normalizedTokenRows = tokenRows.map((r) => ({
+        profile_id: r.profile_id as string,
+        rawToken: r.token,
+        normalizedToken: typeof r.token === 'string' ? r.token.trim() : '',
+      }))
+
+      // A malformed token makes Expo reject the whole send chunk, so it fails
+      // every co-batched recipient on every notification and is never pruned.
+      // Drop malformed tokens before building the chunk and disable them so they
+      // stop poisoning future sends.
+      const validTokenRows = normalizedTokenRows.filter((r) => isValidExpoPushToken(r.normalizedToken))
+      const malformedTokenRows = normalizedTokenRows.filter((r) => !isValidExpoPushToken(r.normalizedToken))
+      const malformedOwners = new Set(malformedTokenRows.map((r) => r.profile_id))
+      if (malformedTokenRows.length > 0) {
+        const malformedTokens = malformedTokenRows
+          .map((r) => r.rawToken)
+          .filter((token): token is string => typeof token === 'string')
+        if (malformedTokens.length > 0) {
+          // push_tokens has no last_failed_at column in production; writing one
+          // made this update (and the old dead-token prune) fail on every call.
+          const { error: disableMalformedErr } = await supabaseAdmin
+            .from('push_tokens')
+            .update({ enabled: false })
+            .in('token', malformedTokens)
+          if (disableMalformedErr) {
+            console.error('[process-notification] failed to disable malformed tokens', disableMalformedErr)
+          }
+        }
+      }
+
+      // Positionally aligned: tokensList[i] belongs to tokenOwners[i]. Kept as
+      // parallel arrays (not objects) because createMessages/extractInvalidTokens
+      // already index by position.
+      const tokensList = validTokenRows.map((r) => r.normalizedToken)
+      const tokenOwners = validTokenRows.map((r) => r.profile_id)
+
+      // A recipient who wanted a push but has zero deliverable tokens is a
+      // delivery failure for THEM specifically, whether or not other recipients
+      // on the same outbox row have deliverable devices.
+      const recipientsWithToken = new Set(tokenOwners)
+      const recipientsWithoutToken = pushRecipients.filter((userId) => !recipientsWithToken.has(userId))
+      if (recipientsWithoutToken.length > 0) {
+        // Absence of a deliverable token is otherwise indistinguishable from a
+        // healthy send; the warning (and the notification_failed events below)
+        // are the only signal that a delivery gap exists.
+        console.warn(
+          '[process-notification] some push recipients have no deliverable token',
+          buildZeroTokenWarning({ notificationId: id, notificationType, pushRecipients: recipientsWithoutToken })
+        )
+        for (const userId of recipientsWithoutToken) {
+          // A user whose only token was malformed gets a distinct reason so the
+          // failure is diagnosable rather than an opaque "no token".
+          const reason = malformedOwners.has(userId) ? 'invalid_token_format' : 'no_deliverable_token'
+          markOutcome(userId, { status: 'failed', reason, code: null, message: null })
+        }
+      }
+
+      // Build Expo messages, keeping them positionally aligned with tokensList so
+      // we can map Expo error tickets back to the originating token (and, via
+      // tokenOwners, the originating recipient).
+      const messages = createMessages(tokensList, { title: rows.title || '', body: rows.body || '', data: outboxData, sound: 'default' })
+
+      // Chunk and send directly to Expo Push API
+      const chunkSize = 100
+      for (let i = 0; i < messages.length; i += chunkSize) {
+        const chunk = messages.slice(i, i + chunkSize)
+        const chunkTokens = tokensList.slice(i, i + chunkSize)
+        const chunkOwners = tokenOwners.slice(i, i + chunkSize)
+        try {
+          const resp = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(chunk),
+          })
+
+          if (!resp.ok) {
+            const text = await resp.text().catch(() => '')
+            errors.push({ status: resp.status, body: text })
+            for (const userId of chunkOwners) {
+              markOutcome(userId, { status: 'failed', reason: 'push_send_error', code: `http_${resp.status}`, message: truncateMessage(text) })
+            }
+            continue
+          }
+
+          // Inspect per-message tickets to detect dead tokens for pruning, and
+          // to attribute this chunk's actual per-recipient outcome.
+          const respBody = await resp.json().catch(() => null)
+          const tickets = (respBody as { data?: unknown } | null)?.data
+          if (Array.isArray(tickets)) {
+            tickets.forEach((ticket: unknown, index: number) => {
+              const owner = chunkOwners[index]
+              if (!owner) return
+              const isError = !!ticket && (ticket as { status?: string }).status === 'error'
+              if (!isError) {
+                markOutcome(owner, { status: 'sent' })
+                return
+              }
+              const { code, message } = describeTicketError(ticket)
+              markOutcome(owner, { status: 'failed', reason: 'push_send_error', code, message })
+            })
+          } else {
+            // Unexpected response shape from an otherwise-ok HTTP response:
+            // no per-ticket detail to attribute, so treat the chunk as sent
+            // rather than silently dropping its recipients from both funnels.
+            for (const userId of chunkOwners) markOutcome(userId, { status: 'sent' })
+          }
+          for (const dead of extractInvalidTokens(chunkTokens, respBody)) {
+            invalidTokens.push(dead)
+          }
+
+          sent += chunk.length
+        } catch (e) {
+          errors.push(String(e))
+          for (const userId of chunkOwners) {
+            markOutcome(userId, { status: 'failed', reason: 'push_send_error', code: 'exception', message: truncateMessage(e) })
+          }
+        }
+      }
+
+      // Delete tokens Expo reported as DeviceNotRegistered. The app re-registers
+      // a fresh token on its next foreground, so deleting is safe; retrying a
+      // dead token forever is not.
+      if (invalidTokens.length > 0) {
+        const { error: pruneErr } = await supabaseAdmin
           .from('push_tokens')
-          .update({ enabled: false, last_failed_at: new Date().toISOString() })
-          .in('token', malformedTokens)
-        if (disableMalformedErr) {
-          console.error('[process-notification] failed to disable malformed tokens', disableMalformedErr)
+          .delete()
+          .in('token', invalidTokens)
+        if (pruneErr) {
+          console.error('[process-notification] failed to delete dead tokens', pruneErr)
         }
       }
     }
 
-    // Positionally aligned: tokensList[i] belongs to tokenOwners[i]. Kept as
-    // parallel arrays (not objects) because createMessages/extractInvalidTokens
-    // already index by position.
-    const tokensList = validTokenRows.map((r) => r.normalizedToken)
-    const tokenOwners = validTokenRows.map((r) => r.profile_id)
+    for (const [userId, outcome] of pushOutcome.entries()) {
+      if (outcome.status === 'failed') {
+        deliveryErrors.push({ user_id: userId, channel: 'push', reason: outcome.reason, code: outcome.code, message: outcome.message })
+      }
+    }
 
-    // A recipient who wanted a push but has zero deliverable tokens is a
-    // delivery failure for THEM specifically, whether or not other recipients
-    // on the same outbox row have deliverable devices.
-    const recipientsWithToken = new Set(tokenOwners)
-    const recipientsWithoutToken = pushRecipients.filter((userId) => !recipientsWithToken.has(userId))
-    if (recipientsWithoutToken.length > 0) {
-      // Absence of a deliverable token is otherwise indistinguishable from a
-      // healthy send — the warning (and the notification_failed events below)
-      // are the only signal that a delivery gap exists. Their absence is how
-      // a push regression can run for months without surfacing anywhere.
-      console.warn(
-        '[process-notification] some push recipients have no deliverable token',
-        buildZeroTokenWarning({ notificationId: id, notificationType, pushRecipients: recipientsWithoutToken })
-      )
-      for (const userId of recipientsWithoutToken) {
+    // ── Poster email fallback ─────────────────────────────────────────────
+    // For application / application_pending_reminder only: when push could
+    // not reach the poster (failed, no token, or push turned off), send ONE
+    // email per application, respecting both preference tables.
+    type FallbackResult = 'sent' | 'already_emailed' | 'opted_out' | 'no_provider' | 'failed' | 'no_bounty'
+    const fallbackResult = new Map<string, FallbackResult>()
+    if (posterFallback) {
+      const candidates = recipients.filter((userId) => {
+        const outcome = pushOutcome.get(userId)
+        if (outcome) return outcome.status === 'failed'
+        return !quietHoursBlocked.has(userId)
+      })
+
+      if (candidates.length > 0) {
+        // Legacy per-type toggles (notification_preferences). Row-absent = allow,
+        // matching the channel-preference fail-open default.
+        const legacyOptOut = new Set<string>()
+        try {
+          const { data: legacyRows } = await supabaseAdmin
+            .from('notification_preferences')
+            .select('user_id, applications_enabled, reminders_enabled')
+            .in('user_id', candidates)
+          for (const p of ((legacyRows || []) as Array<{ user_id: string; applications_enabled: boolean | null; reminders_enabled: boolean | null }>)) {
+            if (p.applications_enabled === false) legacyOptOut.add(p.user_id)
+            if (notificationType === 'application_pending_reminder' && p.reminders_enabled === false) legacyOptOut.add(p.user_id)
+          }
+        } catch (e) {
+          console.error('[process-notification] legacy preference lookup failed (continuing with defaults)', e)
+        }
+
+        const bountyId = typeof outboxData.bountyId === 'string' ? outboxData.bountyId : null
+        let bountyTitle: string | null = null
+        let applicantCount = 1
+        if (bountyId) {
+          const [{ data: bountyRow }, { count: pendingCount }] = await Promise.all([
+            supabaseAdmin.from('bounties').select('title').eq('id', bountyId).maybeSingle(),
+            supabaseAdmin.from('bounty_requests').select('id', { count: 'exact', head: true }).eq('bounty_id', bountyId).eq('status', 'pending'),
+          ])
+          bountyTitle = (bountyRow as { title?: string } | null)?.title ?? null
+          if (typeof pendingCount === 'number' && pendingCount > 0) applicantCount = pendingCount
+        }
+
+        const dedupeKey = fallbackDedupeKey(outboxData, id)
+        for (const userId of candidates) {
+          if (!emailRecipients.includes(userId) || legacyOptOut.has(userId)) {
+            fallbackResult.set(userId, 'opted_out')
+            continue
+          }
+          if (!bountyId) {
+            // No bounty to link to or count applicants for; nothing useful to send.
+            fallbackResult.set(userId, 'no_bounty')
+            continue
+          }
+
+          // Claim first (insert-or-nothing on the dedupe key) so concurrent
+          // invocations and outbox retries can never double-send.
+          const outcome = pushOutcome.get(userId)
+          const pushReason = outcome?.status === 'failed' ? outcome.reason : 'push_disabled'
+          const { data: claimed, error: claimErr } = await supabaseAdmin
+            .from('notification_email_fallbacks')
+            .upsert(
+              { dedupe_key: dedupeKey, user_id: userId, notification_type: notificationType, outbox_id: id, bounty_id: bountyId, push_failure_reason: pushReason },
+              { onConflict: 'dedupe_key', ignoreDuplicates: true }
+            )
+            .select('dedupe_key')
+          if (claimErr) {
+            console.error('[process-notification] email fallback claim failed', claimErr)
+            fallbackResult.set(userId, 'failed')
+            deliveryErrors.push({ user_id: userId, channel: 'email', reason: 'fallback_claim_failed', code: claimErr.code ?? null, message: truncateMessage(claimErr.message) })
+            continue
+          }
+          if (!claimed || claimed.length === 0) {
+            fallbackResult.set(userId, 'already_emailed')
+            continue
+          }
+
+          const { title: emailTitle, body: emailBody } = buildPosterFallbackEmail({ bountyTitle, applicantCount })
+          let result: FallbackResult = 'failed'
+          let emailError: string | null = null
+          try {
+            const resp = await fetch(`${supabaseUrl}/functions/v1/send-notification-email`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceRoleKey}` },
+              body: JSON.stringify({
+                userIds: [userId],
+                category,
+                type: notificationType,
+                title: emailTitle,
+                body: emailBody,
+                data: {
+                  ...outboxData,
+                  ctaUrl: applicantListLink(APP_LINK_BASE, bountyId),
+                  ctaLabel: applicantCount === 1 ? 'Review applicant' : `Review ${applicantCount} applicants`,
+                },
+              }),
+            })
+            const json = (await resp.json().catch(() => null)) as { sent?: number; providerConfigured?: boolean; error?: string } | null
+            if (resp.ok && json && typeof json.sent === 'number' && json.sent > 0) {
+              result = 'sent'
+            } else if (json && json.providerConfigured === false) {
+              result = 'no_provider'
+            } else {
+              emailError = truncateMessage(json?.error ?? `http_${resp.status}`)
+            }
+          } catch (e) {
+            emailError = truncateMessage(e)
+          }
+
+          if (result !== 'sent') {
+            // Release the claim so a later notification for the same
+            // application can try again: the cap is one DELIVERED email.
+            await supabaseAdmin.from('notification_email_fallbacks').delete().eq('dedupe_key', dedupeKey)
+            deliveryErrors.push({ user_id: userId, channel: 'email', reason: `fallback_${result}`, code: null, message: emailError })
+          }
+          fallbackResult.set(userId, result)
+        }
+      }
+    }
+
+    // ── Delivery events ───────────────────────────────────────────────────
+    // One outcome per recipient: notification_sent (with
+    // notification_delivered_via = push | email | in_app) or
+    // notification_failed. A push failure rescued by the email fallback is a
+    // delivery, so it is reported as sent-via-email with the push error kept
+    // as properties, never as both a failure and a send.
+    const baseProps = { notification_type: notificationType, category, bounty_id: outboxData.bountyId ?? null }
+    for (const userId of recipients) {
+      const outcome = pushOutcome.get(userId)
+      const fallback = fallbackResult.get(userId)
+      if (outcome?.status === 'sent') {
+        posthogEvents.push({
+          event: 'notification_sent',
+          distinct_id: userId,
+          properties: { ...baseProps, channel: 'push', notification_delivered_via: 'push' },
+        })
+      } else if (fallback === 'sent') {
+        posthogEvents.push({
+          event: 'notification_sent',
+          distinct_id: userId,
+          properties: {
+            ...baseProps,
+            channel: 'email',
+            notification_delivered_via: 'email',
+            push_failure_reason: outcome?.status === 'failed' ? outcome.reason : 'push_disabled',
+            provider_error_code: outcome?.status === 'failed' ? outcome.code : null,
+            provider_error_message: outcome?.status === 'failed' ? outcome.message : null,
+          },
+        })
+      } else if (outcome?.status === 'failed') {
         posthogEvents.push({
           event: 'notification_failed',
           distinct_id: userId,
-          // A user whose only token was malformed gets a distinct reason so the
-          // failure is diagnosable rather than an opaque "no token".
           properties: {
-            notification_type: notificationType,
-            category,
-            reason: malformedOwners.has(userId) ? 'invalid_token_format' : 'no_deliverable_token',
+            ...baseProps,
+            reason: outcome.reason,
+            // The Expo/APNs/FCM code and message (or HTTP status / exception),
+            // so a push_send_error is nameable instead of opaque.
+            provider_error_code: outcome.code,
+            provider_error_message: outcome.message,
+            email_fallback: posterFallback ? (fallback ?? 'not_attempted') : 'not_applicable',
           },
         })
-      }
-    }
-
-    if (tokensList.length === 0) {
-      // Nobody has a deliverable token at all. The row is still marked
-      // 'sent' below, because retrying cannot conjure a device.
-      schedulePostHogCapture(posthogEvents)
-      await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts: (rows.attempts || 0) + 1 }).eq('id', id)
-      return jsonResponse({ message: 'In-app notifications saved; no tokens for recipients', inApp: inAppRecipients.length })
-    }
-
-    // Build Expo messages, keeping them positionally aligned with tokensList so
-    // we can map Expo error tickets back to the originating token (and, via
-    // tokenOwners, the originating recipient).
-    const messages = createMessages(tokensList, { title: rows.title || '', body: rows.body || '', data: outboxData, sound: 'default' })
-
-    // Chunk and send directly to Expo Push API
-    const chunkSize = 100
-    const fetchImpl = fetch
-    let sent = 0
-    const errors: any[] = []
-    const invalidTokens: string[] = []
-    // Per-recipient outcome across all their tokens/chunks. A success on any
-    // one device means the push was genuinely attempted-and-accepted for that
-    // recipient, so 'sent' always wins over a 'failed' recorded for a
-    // different (or earlier-processed) device of the same person.
-    const outcomeByUser = new Map<string, { status: 'sent' | 'failed'; error?: string }>()
-    const markOutcome = (userId: string, status: 'sent' | 'failed', error?: string) => {
-      if (status === 'sent') {
-        outcomeByUser.set(userId, { status: 'sent' })
-        return
-      }
-      const prev = outcomeByUser.get(userId)
-      if (prev?.status === 'sent') return
-      outcomeByUser.set(userId, { status: 'failed', error: error ?? prev?.error })
-    }
-
-    for (let i = 0; i < messages.length; i += chunkSize) {
-      const chunk = messages.slice(i, i + chunkSize)
-      const chunkTokens = tokensList.slice(i, i + chunkSize)
-      const chunkOwners = tokenOwners.slice(i, i + chunkSize)
-      try {
-        const resp = await fetchImpl('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify(chunk),
+      } else if (inAppInserted && inAppRecipients.includes(userId)) {
+        // Push was intentionally not attempted (channel off / quiet hours) and
+        // no email went out; the bell entry is this recipient's delivery.
+        posthogEvents.push({
+          event: 'notification_sent',
+          distinct_id: userId,
+          properties: { ...baseProps, channel: 'in_app', notification_delivered_via: 'in_app' },
         })
-
-        if (!resp.ok) {
-          const text = await resp.text().catch(() => '')
-          errors.push({ status: resp.status, body: text })
-          for (const userId of chunkOwners) markOutcome(userId, 'failed', `http_${resp.status}`)
-          continue
-        }
-
-        // Inspect per-message tickets to detect dead tokens for pruning, and
-        // to attribute this chunk's actual per-recipient outcome.
-        const respBody = await resp.json().catch(() => null)
-        const tickets = (respBody as { data?: unknown } | null)?.data
-        if (Array.isArray(tickets)) {
-          tickets.forEach((ticket: unknown, index: number) => {
-            const owner = chunkOwners[index]
-            if (!owner) return
-            const t = ticket as { status?: string; details?: { error?: string } } | null
-            const isError = !!t && t.status === 'error'
-            markOutcome(owner, isError ? 'failed' : 'sent', isError ? (t?.details?.error || 'unknown') : undefined)
-          })
-        } else {
-          // Unexpected response shape from an otherwise-ok HTTP response —
-          // no per-ticket detail to attribute, so treat the chunk as sent
-          // rather than silently dropping its recipients from both funnels.
-          for (const userId of chunkOwners) markOutcome(userId, 'sent')
-        }
-        for (const dead of extractInvalidTokens(chunkTokens, respBody)) {
-          invalidTokens.push(dead)
-        }
-
-        sent += chunk.length
-      } catch (e) {
-        errors.push(String(e))
-        for (const userId of chunkOwners) markOutcome(userId, 'failed', 'exception')
       }
     }
-
-    for (const [userId, outcome] of outcomeByUser.entries()) {
-      posthogEvents.push(
-        outcome.status === 'sent'
-          ? {
-              event: 'notification_sent',
-              distinct_id: userId,
-              properties: { notification_type: notificationType, category, channel: 'push', bounty_id: outboxData.bountyId ?? null },
-            }
-          : {
-              event: 'notification_failed',
-              distinct_id: userId,
-              // expo_error carries the Expo ticket error code (or the HTTP /
-              // exception marker) so a push_send_error is diagnosable instead of
-              // opaque — the gap the failure metric could not previously explain.
-              properties: { notification_type: notificationType, category, reason: 'push_send_error', expo_error: outcome.error ?? null },
-            }
-      )
-    }
-
-    // Disable tokens Expo reported as permanently undeliverable so future
-    // sends skip them and deliverability metrics stay healthy.
-    if (invalidTokens.length > 0) {
-      const { error: disableInvalidErr } = await supabaseAdmin
-        .from('push_tokens')
-        .update({ enabled: false, last_failed_at: new Date().toISOString() })
-        .in('token', invalidTokens)
-      if (disableInvalidErr) {
-        console.error('[process-notification] failed to disable invalid tokens', disableInvalidErr)
-      }
-    }
-
-    if (errors.length > 0) {
-      schedulePostHogCapture(posthogEvents)
-      await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: JSON.stringify(errors), attempts: (rows.attempts || 0) + 1 }).eq('id', id)
-      return jsonResponse({ ok: false, sent, errors, prunedTokens: invalidTokens.length }, 500)
-    }
-
-    await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts: (rows.attempts || 0) + 1 }).eq('id', id)
 
     schedulePostHogCapture(posthogEvents)
 
-    return jsonResponse({ ok: true, sent, inApp: inAppRecipients.length, prunedTokens: invalidTokens.length })
+    const attempts = (rows.attempts || 0) + 1
+    const deliveryErrorsValue = deliveryErrors.length > 0 ? deliveryErrors : null
+    if (errors.length > 0) {
+      await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: JSON.stringify(errors), attempts, delivery_errors: deliveryErrorsValue }).eq('id', id)
+      return jsonResponse({ ok: false, sent, errors, prunedTokens: invalidTokens.length }, 500)
+    }
+
+    await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts, delivery_errors: deliveryErrorsValue }).eq('id', id)
+
+    return jsonResponse({
+      ok: true,
+      sent,
+      inApp: inAppRecipients.length,
+      prunedTokens: invalidTokens.length,
+      emailFallbacks: [...fallbackResult.values()].filter((r) => r === 'sent').length,
+    })
   } catch (error) {
     console.error('[process-notification] error', error)
     // Best-effort: persist the failure reason on the outbox row so the cause is
