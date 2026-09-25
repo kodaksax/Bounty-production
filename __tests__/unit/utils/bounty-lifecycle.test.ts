@@ -173,6 +173,35 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     expect(s.secondaryActions.map(a => a.key)).toContain('discard_application');
   });
 
+  // Every request the expiry job closed rendered "Not selected — went with
+  // another hunter", contradicting the "this wasn't a rejection" notification.
+  it.each(['system_expiry', 'system_poster_absent', 'system_bounty_closed'])(
+    'a %s closure is not described as the poster choosing someone else',
+    (source) => {
+      const s = resolveBountyLifecycle({
+        bounty: bounty(),
+        role: 'hunter',
+        requestStatus: 'rejected',
+        requestRejectionSource: source,
+      });
+      expect(s.status).toBe('rejected');
+      expect(s.headline).toBe('Application closed');
+      expect(s.explanation).not.toMatch(/another hunter/);
+      expect(s.primaryAction?.key).toBe('find_bounties');
+      expect(s.secondaryActions.map(a => a.key)).toContain('discard_application');
+    }
+  );
+
+  it('a poster-sourced rejection keeps the "Not selected" copy', () => {
+    const s = resolveBountyLifecycle({
+      bounty: bounty(),
+      role: 'hunter',
+      requestStatus: 'rejected',
+      requestRejectionSource: 'poster',
+    });
+    expect(s.headline).toBe('Not selected');
+  });
+
   // BNTY-11: getBountyDisplayStatus used to have no case for a deleted bounty,
   // so this fell through to its unknown-status default of 'open' — a hunter
   // whose application was still pending when the poster deleted the bounty

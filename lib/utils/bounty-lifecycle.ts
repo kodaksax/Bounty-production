@@ -142,6 +142,13 @@ export interface BountyLifecycleInput {
   role: BountyRole;
   /** The viewer's own application row status, when they are a hunter. */
   requestStatus?: string | null;
+  /**
+   * bounty_requests.rejection_source for a rejected application. Anything
+   * starting with `system_` means nobody chose against the hunter (the poster
+   * never answered, went inactive, or the bounty itself closed), so the copy
+   * must not say they were passed over.
+   */
+  requestRejectionSource?: string | null;
   /** Status of the latest completion submission on this bounty. */
   submissionStatus?: string | null;
   /** True when the latest submission belongs to the viewing hunter. */
@@ -275,6 +282,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
     bounty,
     role,
     requestStatus = null,
+    requestRejectionSource = null,
     submissionStatus = null,
     submissionIsMine = false,
     applicationCount = 0,
@@ -358,7 +366,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
 
   return isPoster
     ? resolvePoster({ status, bounty, applicationCount, hunter, reward, submissionStatus, paymentState, revisionRequested, submissionPending })
-    : resolveHunter({ status, bounty, requestStatus, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState });
+    : resolveHunter({ status, bounty, requestStatus, requestRejectionSource, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState });
 }
 
 function resolveVisitor(
@@ -639,6 +647,7 @@ function resolveHunter(args: {
   status: BountyDisplayStatus;
   bounty: BountyLifecycleInput['bounty'];
   requestStatus: string | null;
+  requestRejectionSource: string | null;
   poster: string;
   reward: string;
   revisionRequested: boolean;
@@ -646,7 +655,7 @@ function resolveHunter(args: {
   submissionIsMine: boolean;
   paymentState: BountyLifecycleInput['paymentState'];
 }): BountyLifecycleState {
-  const { status, bounty, requestStatus, poster, reward, revisionRequested, paymentState } = args;
+  const { status, bounty, requestStatus, requestRejectionSource, poster, reward, revisionRequested, paymentState } = args;
 
   // A hunter whose application is still `pending` on a bounty that has already
   // moved on was passed over — the poster accepted someone else and the row was
@@ -699,6 +708,26 @@ function resolveHunter(args: {
       });
 
     case 'rejected':
+      // A system closure is not a decision against the hunter. Saying "went
+      // with another hunter" here contradicted the application_expired
+      // notification ("this wasn't a rejection") for every expired request.
+      if (typeof requestRejectionSource === 'string' && requestRejectionSource.startsWith('system_')) {
+        return finalize({
+          status,
+          headline: 'Application closed',
+          explanation:
+            requestRejectionSource === 'system_bounty_closed'
+              ? 'This bounty is no longer available, so your application closed automatically.'
+              : `${poster} didn't respond in time, so your application closed automatically. This wasn't a rejection.`,
+          nextStep: 'There are other bounties open now.',
+          waitingOn: 'nobody',
+          needsAttention: false,
+          tone: 'neutral',
+          stageIndex: 0,
+          primaryAction: action('find_bounties'),
+          secondaryActions: [action('discard_application')],
+        });
+      }
       return finalize({
         status,
         headline: 'Not selected',
