@@ -80,6 +80,12 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'unauthorized' }, 401);
     }
 
+    // Auth-only probe from public.ops_smoke_check_edge_auth(): proves the
+    // caller's credential is accepted without expiring anything.
+    if (req.headers.get('x-auth-probe') === '1') {
+      return jsonResponse({ ok: true, probe: true });
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !serviceRoleKey) {
@@ -112,6 +118,20 @@ Deno.serve(async (req: Request) => {
       }));
 
     await capturePostHogEvents(events);
+
+    // Heartbeat for fn_check_job_health(): a run that expires nothing is still
+    // a successful run, and has no other output row to observe. A run we
+    // cannot observe is reported as a failure (500) so it shows up in
+    // net._http_response and the edge-auth-or-5xx probe. The expiry above has
+    // already committed; the next run simply finds nothing new to expire.
+    const { error: beatError } = await supabase.rpc('record_job_heartbeat', {
+      p_job_name: 'expire-stale-bounty-requests',
+      p_detail: { expired: rows.length },
+    });
+    if (beatError) {
+      console.error('[expire-bounty-requests] heartbeat write failed', beatError);
+      return jsonResponse({ ok: false, expired: rows.length, error: 'heartbeat_write_failed' }, 500);
+    }
 
     return jsonResponse({ ok: true, expired: rows.length });
   } catch (error) {

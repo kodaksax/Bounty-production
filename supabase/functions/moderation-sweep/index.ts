@@ -74,6 +74,12 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Unauthorized' }, 401);
   }
 
+  // Auth-only probe from public.ops_smoke_check_edge_auth(): proves the
+  // caller's credential is accepted without running a sweep.
+  if (req.headers.get('x-auth-probe') === '1') {
+    return jsonResponse({ ok: true, probe: true });
+  }
+
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
