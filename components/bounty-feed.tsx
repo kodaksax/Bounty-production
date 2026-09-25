@@ -3,6 +3,11 @@ import { useLocation } from 'app/hooks/useLocation';
 import { BountyCompactItem } from 'components/bounty-compact-item';
 import { BountyGridFeed } from 'components/bounty-grid-feed';
 import { BountyListItem } from 'components/bounty-list-item';
+import {
+    MyBountyProgressCarousel,
+    sortByProgress,
+    type MyBountyProgressItem,
+} from 'components/my-bounty-progress-banner';
 import { NotificationBell } from 'components/notifications/notification-bell';
 import {
     ActiveHuntersPill,
@@ -54,6 +59,7 @@ import { authProfileService } from '../lib/services/auth-profile-service';
 import { searchBountiesNearby, type NearbyBounty } from '../lib/services/bounty-location-service';
 import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { bountyService } from '../lib/services/bounty-service';
+import { completionService } from '../lib/services/completion-service';
 import type { Bounty } from '../lib/services/database.types';
 import { locationService } from '../lib/services/location-service';
 import { storage } from '../lib/storage';
@@ -102,6 +108,9 @@ interface BountyFeedProps {
 }
 
 const PAGE_SIZE = 10;
+// Most live bounties a poster realistically has at once; also caps the
+// per-bounty submission lookups behind the progress cards.
+const MY_ACTIVE_BOUNTIES_LIMIT = 20;
 
 // 'off' = no distance filter (existing behavior, unchanged). A number is a
 // radius in miles. `null` is the explicit "Anywhere" preset — still uses
@@ -197,6 +206,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // on count-fetch failure), in which case the badge falls back to the loaded
   // count. See bountyService.getOpenCount.
   const [activeCount, setActiveCount] = useState<number | null>(null);
+  // The viewer's own live bounties (open, in progress, or waiting on their
+  // review), furthest-along first. Drives the swipeable progress cards floating
+  // at the top of the feed, in every layout. See sortByProgress.
+  const [myActiveBounties, setMyActiveBounties] = useState<MyBountyProgressItem[]>([]);
 
   // "See test bounties anyway" — internal accounts only (bounty_test_flag_
   // and_internal_profiles migration). isInternal reads the already-fetched
@@ -560,6 +573,51 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [validUserId, currentUserId]);
 
+  // Non-fatal, like loadUserApplications: on failure the banner keeps its
+  // last-known value rather than flickering away on a flaky network.
+  const loadMyActiveBounties = useCallback(async () => {
+    const uid = validUserId ?? currentUserId;
+    if (!uid) {
+      setMyActiveBounties([]);
+      return;
+    }
+    try {
+      const rows = await withTimeout(
+        bountyService.getAll({
+          userId: uid,
+          statuses: ['open', 'in_progress'],
+          limit: MY_ACTIVE_BOUNTIES_LIMIT,
+        }),
+        API_TIMEOUTS.DEFAULT
+      );
+      // An open bounty past its deadline can't be taken by anyone, so it isn't
+      // "live" progress worth a card.
+      const live = rows.filter(b => b.status === 'in_progress' || !isBountyDeadlinePassed(b));
+      const items = await Promise.all(
+        live.map(async (bounty): Promise<MyBountyProgressItem> => {
+          if (bounty.status === 'open') return { bounty, stage: 'open' };
+          const submission = await withTimeout(
+            completionService.getSubmission(String(bounty.id)),
+            API_TIMEOUTS.DEFAULT
+          );
+          return { bounty, stage: submission?.status === 'pending' ? 'review' : 'in_progress' };
+        })
+      );
+      setMyActiveBounties(sortByProgress(items));
+    } catch (error) {
+      logger.warning('feed.my_active_bounties.request_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, [validUserId, currentUserId]);
+
+  // The realtime handler below is bound once per mount, so it reads the
+  // latest loader through a ref instead of re-subscribing when the user changes.
+  const loadMyActiveBountiesRef = useRef(loadMyActiveBounties);
+  loadMyActiveBountiesRef.current = loadMyActiveBounties;
+  const validUserIdRef = useRef(validUserId ?? currentUserId);
+  validUserIdRef.current = validUserId ?? currentUserId;
+
   const activeCategoryTimerRef = useRef<number | null>(null);
   const handleSetActiveCategory = useCallback((val: string | 'all') => {
     if (activeCategoryTimerRef.current) clearTimeout(activeCategoryTimerRef.current);
@@ -732,13 +790,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           console.error('Failed to refresh user applications:', err)
         ),
         refreshActiveCount().catch(err => console.error('Failed to refresh active count:', err)),
+        loadMyActiveBounties(),
       ]);
     } catch (error) {
       console.error('Error refreshing bounties:', error);
     } finally {
       setRefreshing(false);
     }
-  }, [loadBounties, loadUserApplications, refreshActiveCount]);
+  }, [loadBounties, loadUserApplications, refreshActiveCount, loadMyActiveBounties]);
 
   // Per-mount id that makes the realtime topic unique to this instance.
   // supabase-js returns the same channel object for a topic that already exists
@@ -769,12 +828,23 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bounties', filter: 'status=eq.open' },
-        () => {
+        payload => {
           setNewBountiesCount(prev => prev + 1);
+          const inserted = payload.new as Bounty;
+          const uid = validUserIdRef.current;
+          if (uid && (inserted.poster_id === uid || inserted.user_id === uid)) {
+            loadMyActiveBountiesRef.current();
+          }
         }
       )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bounties' }, payload => {
         const updated = payload.new as Bounty;
+        // One of the viewer's own bounties changed — it may have just been
+        // accepted (card advances) or completed/cancelled (card goes away).
+        const uid = validUserIdRef.current;
+        if (uid && (updated.poster_id === uid || updated.user_id === uid)) {
+          loadMyActiveBountiesRef.current();
+        }
         // A bounty that's no longer open (accepted/completed/cancelled/removed)
         // should drop out of the open-bounties feed rather than linger with a
         // stale status — and must stay out even if an in-flight or cached
@@ -812,6 +882,43 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     };
   }, [instanceId]);
 
+  // A hunter submitting work (or the poster sending it back) moves a card
+  // between "In progress" and "Needs review" without touching the bounty row,
+  // so the bounties channel above never sees it. One feed-owned channel over
+  // every working bounty's submissions — not completionService.subscribeSubmission
+  // per bounty, whose fixed per-bounty topic My Postings also subscribes to
+  // while this feed stays mounted.
+  const workingBountyIdsKey = myActiveBounties
+    .filter(i => i.stage !== 'open')
+    .map(i => String(i.bounty.id))
+    .sort()
+    .join(',');
+  useEffect(() => {
+    if (!workingBountyIdsKey) return;
+    const channel = supabase
+      .channel(`bounty-feed:my-submissions:${instanceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'completion_submissions',
+          filter: `bounty_id=in.(${workingBountyIdsKey})`,
+        },
+        () => {
+          loadMyActiveBountiesRef.current();
+        }
+      )
+      .subscribe();
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        // best-effort cleanup
+      }
+    };
+  }, [instanceId, workingBountyIdsKey]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -846,8 +953,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   useEffect(() => {
     if (activeScreen === 'bounty') {
       loadUserApplications();
+      loadMyActiveBounties();
     }
-  }, [activeScreen, loadUserApplications]);
+  }, [activeScreen, loadUserApplications, loadMyActiveBounties]);
 
   // Silently reload feed data when the app returns from the background.
   // Requests started before backgrounding can be dropped by the OS and
@@ -873,7 +981,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           error: err instanceof Error ? err.message : String(err),
         });
       });
-    }, [activeScreen, loadBounties, loadUserApplications])
+      loadMyActiveBounties();
+    }, [activeScreen, loadBounties, loadUserApplications, loadMyActiveBounties])
   );
 
   useEffect(() => {
@@ -1374,6 +1483,24 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         style={s.bottomFade}
         pointerEvents="none"
       />
+
+      {/* Your bounties' progress — every layout (card, compact, grid). Floats
+          over the top of the feed (last child, so it layers above everything,
+          the grid's green banner and the fade included)
+          and can be swiped up out of the way, leaving a small tab. One card
+          per live bounty, paged sideways; tapping opens the poster's command
+          center for it. */}
+      {myActiveBounties.length > 0 && (
+        <MyBountyProgressCarousel
+          items={myActiveBounties}
+          onPressItem={bounty =>
+            router.push({
+              pathname: '/postings/[bountyId]',
+              params: { bountyId: String(bounty.id) },
+            } as never)
+          }
+        />
+      )}
     </View>
   );
 });

@@ -162,6 +162,7 @@ jest.mock('react-native', () => {
       stagger: jest.fn().mockReturnValue({ start: jest.fn() }),
       createAnimatedComponent: jest.fn(component => component),
       View: 'Animated.View',
+      Text: 'Animated.Text',
     },
     Easing: {
       ease: jest.fn(t => t),
@@ -335,6 +336,14 @@ jest.mock('expo-haptics', () => ({
     Error: 'Error',
   },
 }));
+
+// Mock expo-blur (ships untranspiled ESM; the blur itself is visual only)
+jest.mock('expo-blur', () => {
+  const React = require('react');
+  return {
+    BlurView: ({ children, ...props }) => React.createElement('BlurView', props, children),
+  };
+});
 
 // Mock expo-secure-store
 jest.mock('expo-secure-store', () => ({

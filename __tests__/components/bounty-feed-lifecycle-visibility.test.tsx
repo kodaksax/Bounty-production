@@ -84,6 +84,7 @@ jest.mock('react-native', () => {
     event: jest.fn().mockReturnValue(jest.fn()),
     createAnimatedComponent: (c: any) => c,
     timing: jest.fn(immediate),
+    spring: jest.fn(immediate),
     parallel: jest.fn(immediate),
     sequence: jest.fn(immediate),
     stagger: jest.fn(immediate),
@@ -108,6 +109,8 @@ jest.mock('react-native', () => {
     TouchableOpacity: passthrough('TouchableOpacity'),
     ScrollView: passthrough('ScrollView'),
     Alert: { alert: jest.fn() },
+    // The progress cards above the feed are draggable.
+    PanResponder: { create: () => ({ panHandlers: {} }) },
     Easing: {
       in: (fn: any) => fn,
       out: (fn: any) => fn,
@@ -245,6 +248,11 @@ const renderFeed = (ref?: React.Ref<any>) =>
 const titles = (queryAllByTestId: any) =>
   queryAllByTestId('bounty-item').map((n: any) => n.props.children);
 
+// Open-feed page loads only — excludes the "your bounty in progress" banner's
+// own getAll({ status: 'in_progress' }) lookup.
+const feedLoadCalls = () =>
+  bountyService.getAll.mock.calls.filter((c: any[]) => c[0]?.status === 'open').length;
+
 describe('BountyFeed lifecycle visibility', () => {
   beforeAll(() => {
     ({ BountyFeed } = require('../../components/bounty-feed'));
@@ -317,7 +325,7 @@ describe('BountyFeed lifecycle visibility', () => {
     });
 
     await waitFor(() => {
-      expect(bountyService.getAll).toHaveBeenCalledTimes(2);
+      expect(feedLoadCalls()).toBe(2);
     });
     await waitFor(() => {
       expect(titles(queryAllByTestId)).toEqual(['Still open']);
@@ -347,7 +355,7 @@ describe('BountyFeed lifecycle visibility', () => {
     });
 
     await waitFor(() => {
-      expect(bountyService.getAll).toHaveBeenCalledTimes(2);
+      expect(feedLoadCalls()).toBe(2);
     });
     await waitFor(() => {
       expect(titles(queryAllByTestId)).toEqual(['Still open']);

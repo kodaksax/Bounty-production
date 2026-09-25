@@ -13,7 +13,7 @@ import {
   toCents,
   validateBalance,
 } from 'lib/utils/bounty-validation';
-import { getUserFriendlyError } from 'lib/utils/error-messages';
+import { getBountyPublishError } from 'lib/utils/bounty-publish-error';
 import { shouldUseStripeNativeFunding } from 'lib/utils/payment-architecture';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
@@ -520,7 +520,9 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // after a fast local failure (e.g. the email-verification check) with no
       // error and no spinner — presenting as a dead Post Bounty button.
       onError: error => {
-        const userError = getUserFriendlyError(error);
+        // General, fixed copy only — the raw error is for the log line below,
+        // never the poster (see getBountyPublishError).
+        const userError = getBountyPublishError(error);
         console.error('[CreateBounty] bounty_create failed:', error?.message ?? error);
         if (Platform.OS === 'web') {
           // Error is already surfaced via the ErrorBanner component below
