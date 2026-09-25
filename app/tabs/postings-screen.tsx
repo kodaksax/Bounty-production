@@ -922,16 +922,11 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const keyExtractorRow = React.useCallback((item: BountyListRow) => item.id, []);
   const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
 
-  // NOTE: Do NOT provide getItemLayout for expandable / variable-height rows.
-  // MyPostingExpandable rows can change height when expanded/collapsed, so passing
-  // a fixed getItemLayout would break virtualization and scroll offsets.
-  // Only use getItemLayout for truly fixed-height items like ApplicantCard.
-
-  const getItemLayoutRequest = React.useCallback((_data: any, index: number) => ({
-    length: 120, // Approximate applicant card height
-    offset: 120 * index,
-    index,
-  }), []);
+  // NOTE: Do NOT provide getItemLayout for any of these lists. MyPostingExpandable
+  // rows change height when expanded, and ApplicantCard height varies with the
+  // pitch message, skills row and ID-status row (~280-400px). A fixed guess makes
+  // FlatList compute wrong offsets, unmount rows that are still on screen and
+  // snap the scroll position back while the user is scrolling.
 
   // Memoized render functions for better performance
   const renderMyPostingItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
@@ -1366,7 +1361,6 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   {...keyboardAwareListProps}
                   data={bountyRequests}
                   keyExtractor={keyExtractorRequest}
-                  getItemLayout={getItemLayoutRequest}
                   renderItem={renderRequestItem}
                   ListHeaderComponent={<BountyWorkflowGuide variant="poster-requests" />}
                   ListEmptyComponent={
@@ -1411,11 +1405,15 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     else if (y <= 2 && showShadow) setShowShadow(false)
                   }}
                   scrollEventThrottle={16}
-                  // Performance optimizations
-                  removeClippedSubviews={true}
-                  maxToRenderPerBatch={5}
-                  windowSize={5}
-                  initialNumToRender={5}
+                  // Performance optimizations. ApplicantCards are tall and variable-height,
+                  // so keep a wider render window (the default of 21 is overkill, 5 was too
+                  // small and caused blank gaps / remounts mid-fling). removeClippedSubviews
+                  // is left off: with measured variable-height rows it causes flicker and
+                  // content jumps on iOS.
+                  maxToRenderPerBatch={4}
+                  updateCellsBatchingPeriod={30}
+                  windowSize={9}
+                  initialNumToRender={4}
                 />
               ) : activeTab === "myPostings" ? (
                 <FlatList
