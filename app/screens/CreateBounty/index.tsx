@@ -28,12 +28,14 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
+  Dimensions,
   Platform,
   Text,
   View,
 } from 'react-native';
-import { KeyboardAvoidingScreen } from '../../../components/ui/keyboard-avoiding';
+import { useKeyboardInset } from '../../../components/ui/keyboard-avoiding';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -125,6 +127,19 @@ export function CreateBountyFlow({
   const [detailDraft, setDetailDraft] = useState<BountyDraft | null>(null);
   const [isSavingDetail, setIsSavingDetail] = useState(false);
   const [detailValidationError, setDetailValidationError] = useState<string | null>(null);
+  // How far the flow's bottom edge sits above the screen's bottom edge. Both
+  // hosts lift the flow clear of the BottomNav (+ safe area), and the keyboard
+  // covers that strip too — so the keyboard padding must skip it, or the CTA
+  // floats that far above the keyboard.
+  const flowRootRef = useRef<View>(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const measureKeyboardOffset = () => {
+    flowRootRef.current?.measureInWindow((_x, y, _w, height) => {
+      const below = Math.max(0, Math.round(Dimensions.get('window').height - (y + height)));
+      setKeyboardOffset(prev => (prev === below ? prev : below));
+    });
+  };
+  const { inset: keyboardInset } = useKeyboardInset({ offset: keyboardOffset });
   // The authoritative copy of the in-progress detail edits. `detailDraft`
   // state drives rendering; this ref is what actually gets persisted. They
   // exist separately because the step screens patch and advance within a
@@ -733,14 +748,16 @@ export function CreateBountyFlow({
   }
 
   return (
-    // The flow is full-bleed from y=0, so the container gives up exactly the
-    // keyboard's height: the step's scroll body shrinks and its pinned CTA
-    // stays above the keyboard. (The `KeyboardAvoidingView` this replaces
-    // passed `keyboardVerticalOffset={insets.top}`, which is the distance from
-    // the *window* top to the view's top — zero here — so it over-shifted the
-    // whole flow by the status-bar inset.)
-    <KeyboardAvoidingScreen
-      style={{ flex: 1, backgroundColor: theme.background }}
+    // The container gives up only the part of the keyboard that overlaps the
+    // flow itself: the step's scroll body shrinks and its pinned CTA sits just
+    // above the keyboard. The strip under the flow (BottomNav + safe area) is
+    // already covered by the keyboard, so it is excluded via keyboardOffset.
+    // (KeyboardAvoidingScreen's `offset` isn't used here — it keeps that
+    // offset as padding at rest, which suits safe-area-inset containers, not
+    // this one.)
+    <View ref={flowRootRef} onLayout={measureKeyboardOffset} style={{ flex: 1 }}>
+    <Animated.View
+      style={{ flex: 1, backgroundColor: theme.background, paddingBottom: keyboardInset }}
     >
       <View className="flex-1">
         {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
@@ -845,7 +862,8 @@ export function CreateBountyFlow({
           </View>
         )}
       </View>
-    </KeyboardAvoidingScreen>
+    </Animated.View>
+    </View>
   );
 }
 
