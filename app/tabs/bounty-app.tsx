@@ -204,7 +204,7 @@ function BountyAppInner() {
 
   // Reports this tab shell's visible screen for analytics. Switching tabs
   // here (via BottomNav) never changes the route, so ScreenTracker in
-  // app/_layout.tsx can't see it — this shell owns its own screen_viewed
+  // app/_layout.tsx can't see it — this shell owns its own screen-view
   // calls instead, including the initial tab on arrival (tagged
   // 'notification' when opened from a notification deep link, 'push'
   // otherwise; later same-session tab switches are always 'tab').

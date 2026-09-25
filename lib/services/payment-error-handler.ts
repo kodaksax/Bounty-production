@@ -9,8 +9,6 @@
  * - Duplicate payment submission protection
  */
 
-import { analyticsService } from './analytics-service';
-
 /**
  * Payment error categories for better error handling
  */
@@ -209,7 +207,13 @@ export function parsePaymentError(error: any): PaymentError {
 }
 
 /**
- * Log payment error with analytics
+ * Log a payment error for debugging.
+ *
+ * This used to also emit a `payment_error` analytics event. That event was
+ * retired 2026-09-25: every caller wraps a stripe-service method that has
+ * already emitted `payment_failed` for the same failure (3ms earlier, same
+ * reason), so the pair double-counted every decline. `payment_failed` now
+ * carries `error_code` itself via failureEventProps().
  */
 export async function logPaymentError(
   error: PaymentError,
@@ -228,20 +232,6 @@ export async function logPaymentError(
     message: error.message,
     ...context,
   });
-
-  // Track with analytics
-  try {
-    await analyticsService.trackEvent('payment_error', {
-      error_category: error.category,
-      error_code: error.code,
-      retryable: error.retryable,
-      recovery_action: error.recoveryAction,
-      ...context,
-    });
-  } catch (analyticsError) {
-    // Don't let analytics errors affect payment flow
-    console.error('[PaymentError] Analytics tracking failed:', analyticsError);
-  }
 }
 
 /**

@@ -32,8 +32,8 @@ import { RuntimeReporters } from '../providers/runtime-reporters';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 import {
-    isInitialNavigationDone,
-    onInitialNavigationDone,
+  isInitialNavigationDone,
+  onInitialNavigationDone,
 } from './initial-navigation/initialNavigation';
 
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
@@ -65,6 +65,10 @@ import { registerDeviceSession } from '../lib/services/auth-service';
 //
 // Re-introduce only behind a lazy import() inside an effect, wrapped in
 // try/catch, and after deduping posthog-react-native.
+
+// One-time, process-wide startup work (error handlers, Sentry, app_opened).
+// See runStartup in RootLayout.
+let processStartupInitDone = false;
 
 // Lazily require Sentry to avoid importing native module at module-evaluation time
 let Sentry: any = null;
@@ -259,39 +263,45 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       if (startedRef.started) return;
       startedRef.started = true;
 
-      try {
-        initGlobalErrorHandlers();
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[ErrorHandling] failed to init global handlers', e);
-      }
-
-      try {
-        initializeSentry();
-        getSentryFromInit();
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[Sentry] startup init failed:', e);
-      }
-
-      try {
-        // Removed Page View emission to consolidate duplicate events
-        // Initialize the unified analytics surface (PostHog is the single
-        // source of truth) and emit the funnel "install/visit" event so we can
-        // measure acquisition → activation drop-off.
+      // startedRef only guards this effect run, and the effect runs again
+      // when fontsLoaded flips — so without this, everything in the block
+      // ran twice per cold start (app_opened fired exactly 2x per session).
+      if (!processStartupInitDone) {
+        processStartupInitDone = true;
         try {
-          await analyticsService.initialize();
-        } catch {
-          /* ignore */
+          initGlobalErrorHandlers();
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[ErrorHandling] failed to init global handlers', e);
         }
+
         try {
-          await analyticsService.trackEvent('app_opened', { phase: 'startup' });
-        } catch {
-          /* ignore */
+          initializeSentry();
+          getSentryFromInit();
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[Sentry] startup init failed:', e);
         }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[Analytics] startup init failed', e);
+
+        try {
+          // Removed Page View emission to consolidate duplicate events
+          // Initialize the unified analytics surface (PostHog is the single
+          // source of truth) and emit the funnel "install/visit" event so we can
+          // measure acquisition → activation drop-off.
+          try {
+            await analyticsService.initialize();
+          } catch {
+            /* ignore */
+          }
+          try {
+            await analyticsService.trackEvent('app_opened', { phase: 'startup' });
+          } catch {
+            /* ignore */
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[Analytics] startup init failed', e);
+        }
       }
 
       try {
@@ -413,7 +423,7 @@ function trackDeepLinkOpen(url: string | null) {
     const [first, second] = path.split('/').filter(Boolean);
     const contentType = first ? DEEP_LINK_CONTENT_TYPES[first] : undefined;
     if (!contentType || !second) return;
-    // The resulting screen_viewed (fired by ScreenTracker once expo-router
+    // The resulting $screen (fired by ScreenTracker once expo-router
     // finishes navigating to this URL) should be tagged as a deep link, not
     // a generic push.
     markPendingNavigationSource('deep_link');
@@ -426,7 +436,7 @@ function trackDeepLinkOpen(url: string | null) {
   }
 }
 
-// Fires a normalized `screen_viewed` event per real expo-router navigation.
+// Fires a normalized `$screen` event per real expo-router navigation.
 // `useSegments()` returns literal route filenames (e.g. "[id]", never
 // resolved IDs) so the resulting screen_name is always ID-free — see
 // lib/analytics/screen-name.ts.

@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/success-animation';
 import { analyticsService } from '../../../lib/services/analytics-service';
+import { failureEventProps } from '../../../lib/utils/stripe-error';
 import {
     BountyPaymentError,
     bountyPaymentsService,
@@ -141,6 +142,7 @@ export default function PayoutScreen() {
               bountyId: String(bounty.id),
               architecture: useV3 ? 'v3' : 'v2',
               stage: 'release',
+              ...failureEventProps(releaseErr),
             });
           } catch {
             /* analytics is best-effort */

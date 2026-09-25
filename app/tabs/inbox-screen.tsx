@@ -5,6 +5,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
+import { failureEventProps } from "lib/utils/stripe-error"
 import { discardApplication, withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
@@ -600,6 +601,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                       bountyId: String(bounty.id),
                       architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                       stage: 'cancel',
+                      ...failureEventProps(refundError),
                     })
                   } catch {
                     /* analytics is best-effort */

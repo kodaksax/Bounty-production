@@ -1,22 +1,22 @@
 // lib/analytics/screen-tracking.ts
 //
-// Emits `screen_viewed` for real navigation events — a route change from
-// expo-router (see the ScreenTracker in app/_layout.tsx), or an in-app tab
-// switch inside the bounty-app shell (see app/tabs/bounty-app.tsx), which
-// never changes the route so expo-router alone can't see it.
+// Emits PostHog's native `$screen` event (via `screen()`) for real navigation
+// events — a route change from expo-router (see the ScreenTracker in
+// app/_layout.tsx), or an in-app tab switch inside the bounty-app shell (see
+// app/tabs/bounty-app.tsx), which never changes the route so expo-router alone
+// can't see it. autocapture's captureScreens is off (see app/_layout.tsx)
+// because expo-router exposes no NavigationContainer ref for it to hook, so
+// this is the only source of $screen.
 //
-// Deliberately fire-and-forget: `capture()` in lib/posthog.ts already queues
-// and flushes in the background, so nothing here blocks the UI thread.
+// `$screen` carries this module's navigation properties (screen_name,
+// previous_screen, navigation_source, seconds_on_previous_screen) and feeds
+// PostHog's own surfaces (paths, the replay event overlay, DAU/WAU). The
+// custom `screen_viewed` event it used to be mirrored from was retired
+// 2026-09-25: the two matched 1:1, property for property.
 //
-// Alongside the app's own `screen_viewed` taxonomy event, this also mirrors
-// every navigation into PostHog's native `$screen` event (via `screen()`,
-// which sets $screen_name and fires the SDK's built-in screen call). Nothing
-// else emits $screen — autocapture's captureScreens is off (see
-// app/_layout.tsx) because expo-router exposes no NavigationContainer ref for
-// it to hook. Without this mirror, PostHog surfaces that key off $screen
-// (native path analysis, the replay event overlay, web-analytics-style
-// summaries) render empty even though screen_viewed is being captured fine.
-import { capture as posthogCapture, screen as posthogScreen } from '../posthog';
+// Deliberately fire-and-forget: lib/posthog.ts already queues and flushes in
+// the background, so nothing here blocks the UI thread.
+import { screen as posthogScreen } from '../posthog';
 
 export type NavigationSource = 'tab' | 'push' | 'deep_link' | 'back' | 'notification';
 
@@ -31,7 +31,7 @@ const state: { screenName: string | null; viewedAt: number | null; stack: string
 let pendingSource: NavigationSource | null = null;
 
 /**
- * Marks the *next* screen_viewed call as originating from the given source,
+ * Marks the *next* screen view as originating from the given source,
  * for cases the navigation itself can't tell us (e.g. a deep link is resolved
  * before expo-router finishes navigating to it). Consumed once.
  */
@@ -86,7 +86,6 @@ export function trackScreenView(
     ...opts.properties,
   };
 
-  posthogCapture('screen_viewed', eventProperties);
   posthogScreen(screenName, eventProperties);
 }
 

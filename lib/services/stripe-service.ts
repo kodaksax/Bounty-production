@@ -24,7 +24,7 @@
  */
 import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
-import { serializeStripeError } from '../utils/stripe-error';
+import { failureEventProps, getPaymentIntentIdFromClientSecret } from '../utils/stripe-error';
 import { connectService } from './connect-service';
 import { escrowService } from './escrow-service';
 import {
@@ -293,7 +293,7 @@ class StripeService {
       await analyticsService.trackEvent('payment_failed', {
         amount,
         currency,
-        ...serializeStripeError(error),
+        ...failureEventProps(error),
         stage: 'initiate',
       });
 
@@ -457,7 +457,8 @@ class StripeService {
 
       await analyticsService.trackEvent('payment_failed', {
         paymentMethodId,
-        ...serializeStripeError(error),
+        payment_intent_id: getPaymentIntentIdFromClientSecret(paymentIntentClientSecret),
+        ...failureEventProps(error),
         stage: 'confirm',
       });
 
@@ -736,7 +737,7 @@ class StripeService {
       // Parse and log the error
       const paymentError = parsePaymentError(error);
       await logPaymentError(paymentError, {
-        paymentIntentId: paymentIntentClientSecret.split('_secret_')[0],
+        paymentIntentId: getPaymentIntentIdFromClientSecret(paymentIntentClientSecret),
         userId,
         stage: 'confirm',
       });
