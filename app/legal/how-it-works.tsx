@@ -1,9 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SettingsScreenHeader } from '../../components/ui/settings-screen-header';
 import { PLATFORM_FEE_DISPLAY } from '../../lib/constants/fees';
+import { EMAIL_SUBJECTS, SUPPORT_EMAIL } from '../../lib/constants/support';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -30,9 +31,13 @@ type Section = {
 const SECTIONS: Section[] = [
   {
     icon: 'sell',
-    title: 'Posting is free',
+    title: 'No fee to post',
+    // Deliberately does not promise "not charged when you post": pay-at-accept
+    // only applies to some first bounties (lib/experiments/deferred-funding-variant.ts
+    // plus server eligibility); everyone else funds at posting. Shoal 2026-09-19
+    // posters read the old wording and then hit the funding step.
     body:
-      `Creating a bounty costs nothing, and you are not charged when you post. You are charged the amount you named when you accept a hunter. A ${PLATFORM_FEE_DISPLAY} service fee is deducted from that amount when it is released, so the hunter takes home the rest — both of you see the exact numbers before you commit.`,
+      `There is no charge for posting beyond the reward itself. You pay the amount you named either when you post or, for some first bounties, when you accept a hunter — the app tells you which before any money moves. A ${PLATFORM_FEE_DISPLAY} service fee is deducted from that amount when it is released, so the hunter takes home the rest — both of you see the exact numbers before you commit.`,
     terms: 'Terms §30 (Payments & Escrow)',
   },
   {
@@ -43,10 +48,13 @@ const SECTIONS: Section[] = [
     terms: 'Terms §30 (Payments & Escrow)',
   },
   {
-    icon: 'verified-user',
-    title: 'Hunters verify their identity',
+    // Not a shield icon and not "verify their identity" on its own: 5 Shoal
+    // agents (2026-09-19) read that as hunter screening, and the ones who
+    // worked out it was only payout KYC trusted the page less for it.
+    icon: 'badge',
+    title: 'Hunters verify with Stripe to get paid',
     body:
-      'Before a hunter can be paid, they must provide accurate identity and banking details to create or link a Stripe account. Payout timing and limits are set by Stripe and the receiving bank.',
+      'Before a hunter can be paid, Stripe checks their identity and banking details — the check any payout account requires. It confirms who receives the money. It is not a background check and does not vouch for a hunter’s skills or conduct; their profile and ratings are the place to judge that. Payout timing and limits are set by Stripe and the receiving bank.',
     terms: 'Terms §30 (Stripe Connect and Payouts)',
   },
   {
@@ -113,6 +121,40 @@ export default function HowItWorksRoute() {
           <Text style={s.termsButtonText}>Read the full Terms of Service</Text>
           <MaterialIcons name="arrow-forward" size={18} color={theme.primary} />
         </TouchableOpacity>
+
+        {/* This page is the only info surface reachable from the pre-auth
+            welcome screen, so privacy, guidelines and a contact route live
+            here too (Shoal trust-audit 2026-09-19: 4 of 5 found none of them
+            before signing up). */}
+        <View style={s.links}>
+          <TouchableOpacity
+            style={s.linkRow}
+            onPress={() => router.push('/legal/privacy')}
+            accessibilityRole="link"
+          >
+            <MaterialIcons name="privacy-tip" size={18} color={theme.textSecondary} />
+            <Text style={s.linkText}>Privacy Policy</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.linkRow}
+            onPress={() => router.push('/legal/community-guidelines')}
+            accessibilityRole="link"
+          >
+            <MaterialIcons name="groups" size={18} color={theme.textSecondary} />
+            <Text style={s.linkText}>Community Guidelines</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.linkRow}
+            onPress={() =>
+              Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(EMAIL_SUBJECTS.general)}`)
+            }
+            accessibilityRole="link"
+            accessibilityLabel={`Contact support at ${SUPPORT_EMAIL}`}
+          >
+            <MaterialIcons name="mail-outline" size={18} color={theme.textSecondary} />
+            <Text style={s.linkText}>Questions? {SUPPORT_EMAIL}</Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={s.disclaimer}>
           This page is a plain-language summary. The Terms of Service are the binding agreement.
@@ -186,6 +228,26 @@ function makeStyles(t: AppTheme) {
       fontSize: 15,
       fontWeight: '700',
       color: t.primary,
+    },
+    links: {
+      marginTop: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+    },
+    linkRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 13,
+      paddingHorizontal: 14,
+    },
+    linkText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: t.text,
+      flexShrink: 1,
     },
     disclaimer: {
       marginTop: 16,
