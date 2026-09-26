@@ -184,7 +184,11 @@ jest.mock('../../lib/services/search-service', () => ({
   searchService: { getTrendingBounties: jest.fn().mockResolvedValue([]) },
 }));
 jest.mock('../../lib/services/bounty-service', () => ({
-  bountyService: { getAll: jest.fn(), getOpenCount: jest.fn().mockResolvedValue(0) },
+  bountyService: {
+    getAll: jest.fn(),
+    getById: jest.fn(),
+    getOpenCount: jest.fn().mockResolvedValue(0),
+  },
 }));
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn() },
@@ -416,6 +420,62 @@ describe('BountyFeed lifecycle visibility', () => {
       );
     });
   });
+  describe('newly posted bounties', () => {
+    it('renders a new bounty live, even with no details, without a refresh', async () => {
+      bountyService.getAll.mockResolvedValue([openBounty({ id: '1', title: 'Still open' })]);
+      // Title and price only — no description, location or timing.
+      const bare = { id: '9', title: 'Just posted', amount: 10, status: 'open' };
+      bountyService.getById.mockResolvedValue({ ...bare, username: 'poster' });
+
+      const { queryAllByTestId, queryByText } = renderFeed();
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toEqual(['Still open']);
+      });
+
+      emitRealtime('INSERT', { new: { ...bare, poster_id: 'someone-else' } });
+
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toEqual(
+          expect.arrayContaining(['Still open', 'Just posted'])
+        );
+      });
+      expect(bountyService.getById).toHaveBeenCalledWith('9');
+      expect(feedLoadCalls()).toBe(1);
+      expect(queryByText(/new bount/)).toBeNull();
+    });
+
+    it('does not add the same bounty twice', async () => {
+      bountyService.getAll.mockResolvedValue([openBounty({ id: '1', title: 'Still open' })]);
+      bountyService.getById.mockResolvedValue(openBounty({ id: '9', title: 'Just posted' }));
+
+      const { queryAllByTestId } = renderFeed();
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toEqual(['Still open']);
+      });
+
+      emitRealtime('INSERT', { new: { id: '9', status: 'open' } });
+      emitRealtime('INSERT', { new: { id: '9', status: 'open' } });
+
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toHaveLength(2);
+      });
+    });
+
+    it('leaves test bounties out, as the feed query does', async () => {
+      bountyService.getAll.mockResolvedValue([openBounty({ id: '1', title: 'Still open' })]);
+
+      const { queryAllByTestId } = renderFeed();
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toEqual(['Still open']);
+      });
+
+      emitRealtime('INSERT', { new: { id: '9', status: 'open', is_test: true } });
+
+      expect(bountyService.getById).not.toHaveBeenCalled();
+      expect(titles(queryAllByTestId)).toEqual(['Still open']);
+    });
+  });
+
   describe('your-bounty progress cards', () => {
     const mine = (over: Record<string, unknown>) =>
       openBounty({ poster_id: 'user-123', created_at: '2026-09-01T00:00:00Z', ...over });

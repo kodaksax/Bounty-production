@@ -196,11 +196,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // "Online" with "Highest pay" all at once.
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [sortByHighestPay, setSortByHighestPay] = useState(false);
-  // Count of newly-posted open bounties observed via realtime since the last
-  // load/refresh. Not injected directly into `bounties` — this feed is
-  // paginated (PAGE_SIZE/offsetRef), so splicing a live INSERT into the
-  // middle of that would corrupt pagination offsets. Surfaced instead as a
-  // "New bounties" pill the user taps to pull a fresh page.
+  // Count of newly-posted open bounties observed via realtime that could NOT
+  // be put straight into the list — only while a distance filter is active
+  // (the INSERT payload can't say whether the bounty is inside the radius) or
+  // when fetching the new row failed. Every other new bounty renders live;
+  // see the realtime INSERT handler. Surfaced as a "New bounties" pill the
+  // user taps to pull a fresh page.
   const [newBountiesCount, setNewBountiesCount] = useState(0);
   // Server-side total of open bounties for the active category — the stable,
   // accurate figure behind the "N active" badge. null until first fetched (and
@@ -653,6 +654,13 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   loadMyActiveBountiesRef.current = loadMyActiveBounties;
   const validUserIdRef = useRef(validUserId ?? currentUserId);
   validUserIdRef.current = validUserId ?? currentUserId;
+  const distanceFilterRef = useRef(distanceFilter);
+  distanceFilterRef.current = distanceFilter;
+  const includeTestBountiesRef = useRef(includeTestBounties);
+  includeTestBountiesRef.current = includeTestBounties;
+  // Bounties already added live, so each shifts the page offset exactly once
+  // even if React replays the state updater that adds it.
+  const liveInsertedIdsRef = useRef(new Set<string>());
 
   const activeCategoryTimerRef = useRef<number | null>(null);
   const handleSetActiveCategory = useCallback((val: string | 'all') => {
@@ -855,9 +863,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     () => `${reactId.replace(/[^a-zA-Z0-9]/g, '')}-${++bountyFeedMountCounter}`
   );
 
-  // Realtime: patch/remove already-loaded bounties in place (safe regardless
-  // of pagination), and surface new open-bounty INSERTs as a count rather
-  // than splicing them into the paginated list.
+  // Realtime: patch/remove already-loaded bounties in place, and render new
+  // open bounties live the moment they're posted — complete or not; an
+  // incomplete one gets the usual "Limited details" badge and ranking.
   useEffect(() => {
     const channel = supabase
       .channel(`bounty-feed:bounties:${instanceId}`)
@@ -865,12 +873,41 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bounties', filter: 'status=eq.open' },
         payload => {
-          setNewBountiesCount(prev => prev + 1);
           const inserted = payload.new as Bounty;
           const uid = validUserIdRef.current;
           if (uid && (inserted.poster_id === uid || inserted.user_id === uid)) {
             loadMyActiveBountiesRef.current();
           }
+          // Same test-bounty rule the feed query applies server-side.
+          if (inserted.is_test && !includeTestBountiesRef.current) return;
+          // The nearby search is radius-bound and the payload carries no
+          // distance, so under a distance filter fall back to the pill.
+          if (distanceFilterRef.current !== DISTANCE_OFF) {
+            setNewBountiesCount(prev => prev + 1);
+            return;
+          }
+          // Re-read rather than render the payload: it has no poster profile
+          // (username/avatar), which getById attaches exactly as the feed
+          // query does.
+          bountyService
+            .getById(inserted.id)
+            .then(fresh => {
+              if (!fresh || filterOpenFeedBounties([fresh]).length === 0) return;
+              if (fresh.is_test && !includeTestBountiesRef.current) return;
+              setBounties(prev => {
+                const id = String(fresh.id);
+                if (prev.some(b => String(b.id) === id)) return prev;
+                // The feed pages by created_at desc, so a new row sits at server
+                // offset 0 and pushes every loaded row down by one. Advance the
+                // offset to match, or the next page would repeat a row.
+                if (!liveInsertedIdsRef.current.has(id)) {
+                  liveInsertedIdsRef.current.add(id);
+                  offsetRef.current += 1;
+                }
+                return [fresh, ...prev];
+              });
+            })
+            .catch(() => setNewBountiesCount(prev => prev + 1));
         }
       )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bounties' }, payload => {
@@ -1352,9 +1389,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       {/* Filter row — outside FlatList for non-grid; grid gets it inside listHeader */}
       {bountyFormat !== 'grid' && renderFilterBar()}
 
-      {/* New-bounties pill — surfaces realtime INSERTs without splicing them into
-          the paginated list mid-scroll. Sits above the list so it works across
-          all three feed layouts (grid/list/compact). */}
+      {/* New-bounties pill — the fallback for realtime INSERTs that couldn't be
+          rendered live (distance filter active, or the fetch failed). Sits
+          above the list so it works across all three feed layouts. */}
       {newBountiesCount > 0 && (
         <TouchableOpacity
           style={s.newBountiesPill}
