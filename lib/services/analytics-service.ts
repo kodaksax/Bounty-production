@@ -81,7 +81,9 @@ const heycatch = (): HeyCatchApi | null => {
 // PostHog is behavioural analytics; the Supabase row state is operational truth.
 // ──────────────────────────────────────────────────────────────────────────
 export type AnalyticsEvent =
-  // App lifecycle / acquisition funnel
+  // App lifecycle / acquisition funnel. `app_opened` is the canonical open
+  // event (once per cold start). The SDK's duplicate `Application Opened` is
+  // dropped in lib/posthog.ts before_send.
   | 'app_opened'
   // Auth events
   // `signup_completed` (renamed from `user_signed_up`) is the single signup
@@ -464,8 +466,12 @@ export type AnalyticsEvent =
   // Payment events
   | 'payment_initiated'
   | 'payment_completed'
+  // `payment_failed` is the single payment-failure event. Every emit site
+  // spreads failureEventProps() (lib/utils/stripe-error.ts), so group by
+  // `error_code` + `stage`. No `payment_error`: it fired 3ms after
+  // `payment_failed` for the same failure and double-counted every decline.
+  // Retired 2026-09-25.
   | 'payment_failed'
-  | 'payment_error'
   | 'payment_security_warning'
   | 'payment_sca_required'
   | 'payment_method_removed'

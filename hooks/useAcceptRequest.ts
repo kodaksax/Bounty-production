@@ -59,6 +59,34 @@ interface UseAcceptRequestParams {
   ) => Promise<boolean>
 }
 
+/**
+ * Plain-language reason a hire didn't go through. Every caller reloads the
+ * lists straight afterwards, so none of these ask the poster to refresh.
+ */
+function showAcceptFailure(status: number | null) {
+  if (status === 409) {
+    Alert.alert(
+      'This bounty changed',
+      "It was updated while you were looking at it. We've refreshed it — check the latest and try again."
+    )
+  } else if (status === 403) {
+    Alert.alert(
+      "Couldn't hire this hunter",
+      "Your account can't hire for this bounty right now. Contact support if that seems wrong."
+    )
+  } else if (status === 400) {
+    Alert.alert(
+      "Couldn't hire this hunter",
+      "This application is no longer open. We've refreshed your list."
+    )
+  } else {
+    Alert.alert(
+      "Couldn't hire this hunter",
+      "The hunter hasn't been hired. Check your connection and try again."
+    )
+  }
+}
+
 export function useAcceptRequest({
   currentUserId,
   bountyRequests,
@@ -185,14 +213,13 @@ export function useAcceptRequest({
           } catch (retryErr: any) {
             console.error('Accept request retry failed for', requestId, retryErr)
             const retryStatus = retryErr?.status || null
-            if (retryStatus === 409) {
-              Alert.alert('Conflict', 'This bounty was updated elsewhere. Refresh and try again.')
-            } else if (retryStatus === 403) {
-              Alert.alert('Not authorized', 'You are not allowed to accept this request.')
-            } else if (retryStatus === 400) {
-              Alert.alert('Invalid request', 'The accept request was invalid. Please refresh and try again.')
+            if (retryStatus === 409 || retryStatus === 403 || retryStatus === 400) {
+              showAcceptFailure(retryStatus)
             } else {
-              Alert.alert('Accept Failed', 'Funding was updated, but selecting this hunter still failed. Please try again.')
+              Alert.alert(
+                "Couldn't hire this hunter",
+                "Your funds are in place, but hiring didn't go through. Please try again."
+              )
             }
             result = null
           }
@@ -205,15 +232,7 @@ export function useAcceptRequest({
           const status = (acceptErr && (acceptErr as any).status) || null
           console.error('Accept request failed for', requestId, acceptErr)
           if (!handleAcceptFailure) {
-            if (status === 409) {
-              Alert.alert('Conflict', 'This bounty was updated elsewhere. Refresh and try again.')
-            } else if (status === 403) {
-              Alert.alert('Not authorized', 'You are not allowed to accept this request.')
-            } else if (status === 400) {
-              Alert.alert('Invalid request', 'The accept request was invalid. Please refresh and try again.')
-            } else {
-              Alert.alert('Accept Failed', 'Failed to accept the request on the server. The UI may be out of sync; please refresh.')
-            }
+            showAcceptFailure(status)
           }
 
           // Reload lists to attempt to restore correct state
@@ -229,7 +248,10 @@ export function useAcceptRequest({
       // false-positive "Request Accepted" alert, and then reload from the DB –
       // which still shows the bounty as 'open'.
       if (!result) {
-        Alert.alert('Conflict', 'This bounty was already accepted or is no longer available. Refreshing…')
+        Alert.alert(
+          'This bounty already moved on',
+          "Someone was already hired, or the bounty closed. We've refreshed your list."
+        )
         await Promise.allSettled([loadMyBounties(), loadInProgress(), loadRequestsForMyBounties(myBounties)])
         return
       }

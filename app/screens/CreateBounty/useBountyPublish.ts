@@ -3,6 +3,7 @@ import { bountyService } from 'app/services/bountyService';
 import { useFormSubmission } from 'hooks/useFormSubmission';
 import { useDeferredFundingVariant } from 'lib/experiments/deferred-funding-variant';
 import { analyticsService } from 'lib/services/analytics-service';
+import { failureEventProps } from 'lib/utils/stripe-error';
 import { amountBucket, canDeferBountyFunding } from 'lib/services/bounty-funding-service';
 import { bountyPaymentsService } from 'lib/services/bounty-payments-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
@@ -380,6 +381,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
                 bountyId: String(createdBounty.id),
                 architecture: 'v2',
                 stage: 'create_or_confirm',
+                ...failureEventProps(escrowError),
               });
             } catch {
               /* analytics is best-effort */
@@ -423,6 +425,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
                 bountyId: String(createdBounty.id),
                 architecture: 'v1',
                 stage: 'create_escrow',
+                ...failureEventProps(escrowError),
               });
             } catch {
               /* analytics is best-effort */

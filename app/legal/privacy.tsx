@@ -1,28 +1,35 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
+import { LegalText } from '../../components/legal/LegalText';
+import { SettingsScreenHeader } from '../../components/ui/settings-screen-header';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 export default function PrivacyRoute() {
   const router = useRouter();
-  const paragraphs = PRIVACY_TEXT.split(/\n\n+/);
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   return (
-    <View className="flex-1 bg-[#059669]">
-      <View className="flex-row justify-between items-center p-4 pt-8">
-        <View className="flex-row items-center">
-          <MaterialIcons name="privacy-tip" size={24} color="#fff" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">Privacy Policy</Text>
-        </View>
-        <TouchableOpacity onPress={() => router.back()} className="p-2" accessibilityRole="button" accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
-        {paragraphs.map((p, i) => (
-          <Text key={i} className="text-white text-sm leading-6 mb-3">{p}</Text>
-        ))}
+    <View style={s.container}>
+      <SettingsScreenHeader icon="privacy-tip" title="Privacy Policy" onBack={() => router.back()} />
+      <ScrollView contentContainerStyle={s.content}>
+        <LegalText text={PRIVACY_TEXT} />
       </ScrollView>
     </View>
   );
+}
+
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    content: {
+      padding: 16,
+      paddingBottom: 96,
+    },
+  });
 }

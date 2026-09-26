@@ -1,6 +1,6 @@
 export const TERMS_TEXT = `# TERMS AND CONDITIONS
 
-Last updated October 18, 2025
+Last updated September 25, 2026
 
 AGREEMENT TO OUR LEGAL TERMS
 
@@ -80,9 +80,9 @@ TABLE OF CONTENTS
 
 29. CALIFORNIA USERS AND RESIDENTS
 
-30. MISCELLANEOUS
+30. PAYMENTS & ESCROW
 
-31. CONTACT US
+31. USER CONDUCT
 
 1. OUR SERVICES
 
@@ -167,7 +167,7 @@ We reserve the right to refuse any order placed through the Services. We may, in
 
 7. REFUNDS POLICY
 
-All sales are final and no refund will be issued.
+Bounty payments are held in escrow and refunded as described in Section 30 (Payments & Escrow). Posters can request cancellation before work starts; whether held funds are returned depends on the state of the bounty and our dispute policy. Once funds have been released to a hunter, the payment is final, except where a dispute, chargeback, or applicable law requires otherwise.
 
 8. SOFTWARE
 

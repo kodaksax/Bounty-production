@@ -18,6 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';
+import { LegalText } from '../../components/legal/LegalText';
 import { Button } from '../../components/ui/button';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { config } from '../../lib/config';
@@ -868,11 +869,7 @@ export function SignUpForm() {
             </TouchableOpacity>
           </View>
           <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
-            {(legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT).split(/\n\n+/).map((p, i) => (
-              <Text key={i} className="text-sm leading-6 mb-3" style={{ color: theme.text }}>
-                {p}
-              </Text>
-            ))}
+            <LegalText text={legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT} />
           </ScrollView>
         </SafeAreaView>
       </Modal>

@@ -10,6 +10,7 @@ jest.mock('expo-haptics', () => ({
     Light: 'Light',
     Medium: 'Medium',
     Heavy: 'Heavy',
+    Soft: 'Soft',
   },
   NotificationFeedbackType: {
     Success: 'Success',
@@ -61,6 +62,41 @@ describe('Haptic Feedback', () => {
     it('should trigger selection feedback', () => {
       hapticFeedback.selection();
       expect(Haptics.selectionAsync).toHaveBeenCalled();
+    });
+  });
+  describe('Unavailable haptics never break the caller', () => {
+    // Where haptics are unsupported (web, some simulators) expo-haptics can
+    // reject its promise rather than throw. The profile-save path calls
+    // success() right before navigating, so neither mode may escape.
+    it('swallows an async rejection', async () => {
+      const unhandled = jest.fn();
+      process.on('unhandledRejection', unhandled);
+      (Haptics.notificationAsync as jest.Mock).mockReturnValueOnce(
+        Promise.reject(new Error('Haptics not available'))
+      );
+
+      expect(() => hapticFeedback.success()).not.toThrow();
+      await new Promise(resolve => setImmediate(resolve));
+
+      process.off('unhandledRejection', unhandled);
+      expect(unhandled).not.toHaveBeenCalled();
+    });
+
+    it('swallows a synchronous throw', () => {
+      (Haptics.notificationAsync as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('Haptics not available');
+      });
+      expect(() => hapticFeedback.success()).not.toThrow();
+    });
+
+    it('falls back to a light impact when soft is rejected', async () => {
+      (Haptics.impactAsync as jest.Mock).mockReturnValueOnce(Promise.reject(new Error('unsupported')));
+
+      hapticFeedback.soft();
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(Haptics.impactAsync).toHaveBeenNthCalledWith(1, Haptics.ImpactFeedbackStyle.Soft);
+      expect(Haptics.impactAsync).toHaveBeenNthCalledWith(2, Haptics.ImpactFeedbackStyle.Light);
     });
   });
 });

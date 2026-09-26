@@ -12,6 +12,7 @@
 // Sharing one instance guarantees autocapture, manual `capture()` calls, and
 // service-level events all flow into the same PostHog project with a single,
 // consistent distinct id.
+import { isSentryInitSafe } from './utils/sentry-gate';
 
 const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
@@ -34,6 +35,14 @@ export const isInternalEmail = (email: string): boolean => {
   return INTERNAL_EMAILS.has(normalizedEmail) || normalizedEmail.includes('bountyfinder');
 };
 
+// The shape `before_send` receives: the SDK's capture event (name, properties,
+// $set, uuid, ...). Only `event` is read here.
+type CapturedEvent = {
+  event: string;
+  properties?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 let _posthog: any | null = null;
 
 // Construct the client eagerly (synchronously) so it is available to the
@@ -45,6 +54,8 @@ try {
     const mod = require('posthog-react-native');
     const PostHog = mod.PostHog ?? mod.default;
     if (PostHog) {
+      // One decision for both error-tracking flags below.
+      const sentryRuns = isSentryInitSafe();
       _posthog = new PostHog(POSTHOG_KEY, {
         host: POSTHOG_HOST,
         // Explicit even though it matches the SDK default: only create a
@@ -55,25 +66,27 @@ try {
         // Application Installed/Opened/Updated/Backgrounded — needed for the
         // acquisition -> activation funnel referenced in app/_layout.tsx.
         //
-        // "Application Opened" duplicates our manual `app_opened` event
-        // (analytics-service.ts, fired from app/_layout.tsx) almost 1:1 —
-        // confirmed live in PostHog (near-identical unique-user counts).
-        // Kept anyway: this flag is the only source of "Application
-        // Installed" / "Application Updated", which nothing else tracks and
-        // which distinguish a fresh install from an ordinary relaunch.
-        // Decision (2026-09-13): keep both rather than lose that signal.
-        // CONSEQUENCE: every acquisition/activation funnel and dashboard
-        // MUST use `app_opened`, never `Application Opened` — the native
-        // event should only ever be queried for Installed/Updated.
+        // This flag is the only source of "Application Installed" /
+        // "Application Updated", which distinguish a fresh install from an
+        // ordinary relaunch, so it stays on. Its "Application Opened"
+        // duplicates our canonical `app_opened` (one per cold start, fired
+        // from app/_layout.tsx) and is dropped in `before_send` below.
         captureAppLifecycleEvents: true,
-        // Sentry (@sentry/react-native) is already wired as the crash/error
-        // reporter throughout this app (see analytics-service.ts). Disable
-        // PostHog's own global exception/rejection/console handlers so the
-        // two don't both install competing global handlers.
+        // Drops "Application Opened" (see above). Retired 2026-09-25, after
+        // 2026-09-13 had kept both: two open events meant every dashboard
+        // had to know which one to trust.
+        before_send: (event: CapturedEvent | null) =>
+          event?.event === 'Application Opened' ? null : event,
+        // Sentry owns uncaught exceptions and rejections wherever it runs. It
+        // does NOT run on iOS 26+ (lib/utils/sentry-gate.ts), which was ~72%
+        // of app users in the 14 days to 2026-09-25, and nothing captured
+        // their uncaught errors at all. PostHog takes over there. Its handler
+        // chains to the previous one, so the two never compete.
+        // Console capture stays off everywhere (see sessionReplayConfig).
         errorTracking: {
           autocapture: {
-            uncaughtExceptions: false,
-            unhandledRejections: false,
+            uncaughtExceptions: !sentryRuns,
+            unhandledRejections: !sentryRuns,
             console: false,
           },
         },
