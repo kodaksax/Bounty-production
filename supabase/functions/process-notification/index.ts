@@ -10,6 +10,18 @@
 // in sync by hand, since Deno's bundler can't import from lib/.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  applicantListLink,
+  buildFallbackEmail,
+  describeTicketError,
+  fallbackDedupeKey,
+  isEmailFallbackType,
+  isLegacyOptedOut,
+  isPosterFallbackType,
+  selectFallbackCandidates,
+  truncateMessage,
+  type LegacyNotificationPreferences,
+} from './email-fallback.ts'
 
 // Inlined from ./message (local imports are not supported by the Supabase bundler)
 function createExpoMessage(to: string, opts: { title?: string; body?: string; data?: any; sound?: string } = {}) {
@@ -224,42 +236,6 @@ function extractInvalidTokens(chunkTokens: string[], expoResponseBody: unknown):
   return invalid
 }
 
-// Inlined from ./email-fallback
-const POSTER_EMAIL_FALLBACK_TYPES = new Set(['application', 'application_pending_reminder'])
-function isPosterFallbackType(type: string): boolean {
-  return POSTER_EMAIL_FALLBACK_TYPES.has(type)
-}
-const MAX_ERROR_MESSAGE_LENGTH = 300
-function truncateMessage(value: unknown): string | null {
-  if (value == null) return null
-  const text = String(value)
-  if (!text) return null
-  return text.length > MAX_ERROR_MESSAGE_LENGTH ? `${text.slice(0, MAX_ERROR_MESSAGE_LENGTH)}…` : text
-}
-function describeTicketError(ticket: unknown): { code: string; message: string | null } {
-  const t = (ticket ?? {}) as { message?: unknown; details?: { error?: unknown } }
-  const code = typeof t.details?.error === 'string' && t.details.error ? t.details.error : 'unknown'
-  return { code, message: truncateMessage(t.message) }
-}
-function fallbackDedupeKey(data: Record<string, unknown>, outboxId: string): string {
-  const requestId = data.requestId ?? data.request_id
-  if (typeof requestId === 'string' && requestId.trim()) return `request:${requestId.trim()}`
-  return `outbox:${outboxId}`
-}
-function applicantListLink(base: string, bountyId: string): string {
-  const normalized = base.endsWith('/') ? base : `${base}/`
-  return `${normalized}postings/${encodeURIComponent(bountyId)}`
-}
-function buildPosterFallbackEmail(params: { bountyTitle: string | null; applicantCount: number }): { title: string; body: string } {
-  const bountyTitle = (params.bountyTitle ?? '').trim() || 'your bounty'
-  const count = Math.max(1, Math.floor(params.applicantCount || 0))
-  const title = count === 1 ? `Someone applied to "${bountyTitle}"` : `${count} applicants are waiting on "${bountyTitle}"`
-  const body =
-    count === 1
-      ? `A hunter applied to "${bountyTitle}" and is waiting for your answer. Accept or decline in the Bounty app — unanswered applications close automatically.`
-      : `${count} hunters applied to "${bountyTitle}" and are waiting for your answer. Accept or decline in the Bounty app — unanswered applications close automatically.`
-  return { title, body }
-}
 // Where the fallback email's button points. Defaults to the app's custom
 // scheme; set to an HTTPS handoff once bountyfinder.app serves TLS, since some
 // mail clients (notably Gmail web) strip non-http(s) links.
@@ -533,13 +509,15 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Poster-facing application types get email ONLY as a fallback for a push
-    // that could not reach the poster (see the fallback step below), capped at
-    // one email per application. Every other type keeps the blanket fan-out.
+    // Poster-facing application types, and the hunter's application_expired
+    // closure notice, get email ONLY as a fallback for a push that could not
+    // reach the recipient (see the fallback step below), capped at one email
+    // per application. Every other type keeps the blanket fan-out.
     const posterFallback = isPosterFallbackType(notificationType)
+    const emailFallback = isEmailFallbackType(notificationType)
 
     // Fire email fan-out (best-effort, does not block push delivery below).
-    if (!posterFallback && emailRecipients.length > 0) {
+    if (!emailFallback && emailRecipients.length > 0) {
       try {
         await fetch(`${supabaseUrl}/functions/v1/send-notification-email`, {
           method: 'POST',
@@ -742,18 +720,15 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── Poster email fallback ─────────────────────────────────────────────
-    // For application / application_pending_reminder only: when push could
-    // not reach the poster (failed, no token, or push turned off), send ONE
-    // email per application, respecting both preference tables.
+    // ── Email fallback ────────────────────────────────────────────────────
+    // For application / application_pending_reminder (poster) and
+    // application_expired (hunter) only: when push could not reach the
+    // recipient (failed, no token, or push turned off), send ONE email per
+    // application, respecting both preference tables.
     type FallbackResult = 'sent' | 'already_emailed' | 'opted_out' | 'no_provider' | 'failed' | 'no_bounty'
     const fallbackResult = new Map<string, FallbackResult>()
-    if (posterFallback) {
-      const candidates = recipients.filter((userId) => {
-        const outcome = pushOutcome.get(userId)
-        if (outcome) return outcome.status === 'failed'
-        return !quietHoursBlocked.has(userId)
-      })
+    if (emailFallback) {
+      const candidates = selectFallbackCandidates(recipients, pushOutcome, quietHoursBlocked)
 
       if (candidates.length > 0) {
         // Legacy per-type toggles (notification_preferences). Row-absent = allow,
@@ -762,11 +737,10 @@ Deno.serve(async (req: Request) => {
         try {
           const { data: legacyRows } = await supabaseAdmin
             .from('notification_preferences')
-            .select('user_id, applications_enabled, reminders_enabled')
+            .select('user_id, applications_enabled, acceptances_enabled, reminders_enabled')
             .in('user_id', candidates)
-          for (const p of ((legacyRows || []) as Array<{ user_id: string; applications_enabled: boolean | null; reminders_enabled: boolean | null }>)) {
-            if (p.applications_enabled === false) legacyOptOut.add(p.user_id)
-            if (notificationType === 'application_pending_reminder' && p.reminders_enabled === false) legacyOptOut.add(p.user_id)
+          for (const p of ((legacyRows || []) as Array<LegacyNotificationPreferences & { user_id: string }>)) {
+            if (isLegacyOptedOut(notificationType, p)) legacyOptOut.add(p.user_id)
           }
         } catch (e) {
           console.error('[process-notification] legacy preference lookup failed (continuing with defaults)', e)
@@ -776,15 +750,19 @@ Deno.serve(async (req: Request) => {
         let bountyTitle: string | null = null
         let applicantCount = 1
         if (bountyId) {
-          const [{ data: bountyRow }, { count: pendingCount }] = await Promise.all([
-            supabaseAdmin.from('bounties').select('title').eq('id', bountyId).maybeSingle(),
-            supabaseAdmin.from('bounty_requests').select('id', { count: 'exact', head: true }).eq('bounty_id', bountyId).eq('status', 'pending'),
-          ])
+          const { data: bountyRow } = await supabaseAdmin.from('bounties').select('title').eq('id', bountyId).maybeSingle()
           bountyTitle = (bountyRow as { title?: string } | null)?.title ?? null
-          if (typeof pendingCount === 'number' && pendingCount > 0) applicantCount = pendingCount
+          if (posterFallback) {
+            const { count: pendingCount } = await supabaseAdmin
+              .from('bounty_requests')
+              .select('id', { count: 'exact', head: true })
+              .eq('bounty_id', bountyId)
+              .eq('status', 'pending')
+            if (typeof pendingCount === 'number' && pendingCount > 0) applicantCount = pendingCount
+          }
         }
 
-        const dedupeKey = fallbackDedupeKey(outboxData, id)
+        const dedupeKey = fallbackDedupeKey(outboxData, id, notificationType)
         for (const userId of candidates) {
           if (!emailRecipients.includes(userId) || legacyOptOut.has(userId)) {
             fallbackResult.set(userId, 'opted_out')
@@ -818,7 +796,7 @@ Deno.serve(async (req: Request) => {
             continue
           }
 
-          const { title: emailTitle, body: emailBody } = buildPosterFallbackEmail({ bountyTitle, applicantCount })
+          const { title: emailTitle, body: emailBody } = buildFallbackEmail(notificationType, { bountyTitle, applicantCount, data: outboxData })
           let result: FallbackResult = 'failed'
           let emailError: string | null = null
           try {
@@ -833,8 +811,12 @@ Deno.serve(async (req: Request) => {
                 body: emailBody,
                 data: {
                   ...outboxData,
-                  ctaUrl: applicantListLink(APP_LINK_BASE, bountyId),
-                  ctaLabel: applicantCount === 1 ? 'Review applicant' : `Review ${applicantCount} applicants`,
+                  ...(posterFallback
+                    ? {
+                        ctaUrl: applicantListLink(APP_LINK_BASE, bountyId),
+                        ctaLabel: applicantCount === 1 ? 'Review applicant' : `Review ${applicantCount} applicants`,
+                      }
+                    : { ctaUrl: APP_LINK_BASE, ctaLabel: 'Find other bounties' }),
                 },
               }),
             })
@@ -901,7 +883,7 @@ Deno.serve(async (req: Request) => {
             // so a push_send_error is nameable instead of opaque.
             provider_error_code: outcome.code,
             provider_error_message: outcome.message,
-            email_fallback: posterFallback ? (fallback ?? 'not_attempted') : 'not_applicable',
+            email_fallback: emailFallback ? (fallback ?? 'not_attempted') : 'not_applicable',
           },
         })
       } else if (inAppInserted && inAppRecipients.includes(userId)) {
