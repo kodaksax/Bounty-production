@@ -44,9 +44,6 @@ import { RevisionFeedbackBanner } from './ui/revision-feedback-banner';
 import { Stepper } from './ui/stepper';
 import { WorkflowDisputeModal } from './workflow-dispute-modal';
 
-// Supabase conversation ids are UUIDs; legacy on-device ones ("conv-*") are not.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -995,30 +992,35 @@ export function MyPostingExpandable({
 
   const handleMessageHunter = async () => {
     // The chat route (app/tabs/messenger/[conversationId].tsx) only resolves
-    // Supabase conversations. The cached `conversation` can be a legacy
-    // on-device one (non-UUID id), which rendered "Conversation not found" —
-    // so resolve through getOrCreateConversation whenever the hunter is known
-    // (idempotent server-side) and only navigate to Supabase ids.
+    // Supabase conversations. The cached `conversation` can be an on-device
+    // one, which rendered "Conversation not found". messageService's
+    // getOrCreateConversation also falls back to the on-device store (uuidv4
+    // ids) when the RPC fails, so the id's shape proves nothing — resolve
+    // through the Supabase RPC directly (idempotent server-side) instead.
     let targetConversationId: string | null = null;
     try {
-      const hunterId = bounty.accepted_by || readyRecord?.hunter_id;
-      if (hunterId) {
-        const targetConversation = await messageService.getOrCreateConversation(
-          [String(hunterId)],
-          bounty.title || 'Conversation',
-          String(bounty.id)
-        );
-        targetConversationId = targetConversation?.id ? String(targetConversation.id) : null;
-        if (targetConversation) {
-          dispatchUi({ type: 'set', key: 'conversation', value: targetConversation });
-        }
-      } else if (conversation?.id) {
-        targetConversationId = String(conversation.id);
-      } else {
+      const userId = currentUserId || getCurrentUserId();
+      const hunterId =
+        bounty.accepted_by ||
+        readyRecord?.hunter_id ||
+        (conversation && !conversation.isGroup
+          ? (conversation.participantIds || []).find(id => String(id) !== String(userId))
+          : undefined);
+      if (!hunterId || !userId) {
         Alert.alert('No Conversation', 'No active conversation found for this bounty yet.');
         return;
       }
-      if (!targetConversationId || !UUID_RE.test(targetConversationId)) {
+      const supabaseMessaging = await import('../lib/services/supabase-messaging');
+      const targetConversation = await supabaseMessaging.getOrCreateConversation(
+        String(userId),
+        String(hunterId),
+        String(bounty.id)
+      );
+      targetConversationId = targetConversation?.id ? String(targetConversation.id) : null;
+      if (targetConversation) {
+        dispatchUi({ type: 'set', key: 'conversation', value: targetConversation });
+      }
+      if (!targetConversationId) {
         Alert.alert(
           'Message Failed',
           'We could not open or create a conversation. You can try again or compose a new message manually.'
