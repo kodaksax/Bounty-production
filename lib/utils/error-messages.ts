@@ -138,6 +138,16 @@ const TECHNICAL_ERROR_PATTERNS = [
   /sk_test_/i,
   /pk_live_/i,
   /pk_test_/i,
+  // Postgres function/trigger failures, e.g. "function public.fn_x(uuid,
+  // integer) does not exist" — would otherwise reach the user verbatim via
+  // the unknown-error fallback, naming internal functions and signatures.
+  /does not exist/i,
+  /plpgsql/i,
+  /\bpublic\.\w+/i,
+  /\bfn_\w+/i,
+  // Developer hints some services append (API hosts, env var names).
+  /Hint:/,
+  /EXPO_PUBLIC_/,
 ];
 
 /**

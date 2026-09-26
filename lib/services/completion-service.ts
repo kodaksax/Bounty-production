@@ -153,6 +153,38 @@ function normalizeCaughtError(err: unknown): Error {
   }
 }
 
+// Latest submission for a bounty, or null when it has none. Throws on a failed
+// lookup; getSubmission() is the swallowing wrapper most callers want.
+async function fetchLatestSubmission(bountyId: string): Promise<CompletionSubmission | null> {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from('completion_submissions')
+      .select('*')
+      .eq('bounty_id', bountyId)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null; // No rows
+      throw new Error(error?.message ?? JSON.stringify(error));
+    }
+
+    return {
+      ...data,
+      proof_items: parseProofItems(data.proof_items),
+    } as CompletionSubmission;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}`);
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error('Failed to fetch completion');
+  }
+
+  return await response.json();
+}
+
 export const completionService = {
   /**
    * Submit completion for review
@@ -361,10 +393,12 @@ export const completionService = {
    * status filters depend on it); fetching one row at a time would mean an
    * extra round trip per card. Bounties with no submission are simply absent
    * from the map. Failures resolve to an empty map — a filter chip degrading to
-   * "no submissions yet" is better than a screen that fails to render.
+   * "no submissions yet" is better than a screen that fails to render — unless
+   * `throwOnError` is set, for callers that keep last-known state instead.
    */
   async getLatestSubmissionsForBounties(
-    bountyIds: string[]
+    bountyIds: string[],
+    options?: { throwOnError?: boolean }
   ): Promise<Map<string, CompletionSubmission>> {
     const ids = Array.from(new Set((bountyIds || []).map(String).filter(Boolean)));
     const latest = new Map<string, CompletionSubmission>();
@@ -393,7 +427,11 @@ export const completionService = {
         return latest;
       }
 
-      const results = await Promise.all(ids.map(id => completionService.getSubmission(id)));
+      const results = await Promise.all(
+        ids.map(id =>
+          options?.throwOnError ? fetchLatestSubmission(id) : completionService.getSubmission(id)
+        )
+      );
       results.forEach((submission, index) => {
         if (submission) latest.set(ids[index], submission);
       });
@@ -401,6 +439,7 @@ export const completionService = {
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
       logger.error('Error batch fetching completions', { count: ids.length, error });
+      if (options?.throwOnError) throw error;
       return latest;
     }
   },
@@ -410,33 +449,7 @@ export const completionService = {
    */
   async getSubmission(bountyId: string): Promise<CompletionSubmission | null> {
     try {
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase
-          .from('completion_submissions')
-          .select('*')
-          .eq('bounty_id', bountyId)
-          .order('submitted_at', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (error) {
-          if (error.code === 'PGRST116') return null; // No rows
-          throw new Error(error?.message ?? JSON.stringify(error));
-        }
-
-        return {
-          ...data,
-          proof_items: parseProofItems(data.proof_items),
-        } as CompletionSubmission;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}`);
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error('Failed to fetch completion');
-      }
-
-      return await response.json();
+      return await fetchLatestSubmission(bountyId);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
       logger.error('Error fetching completion', { bountyId, error });

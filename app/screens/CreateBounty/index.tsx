@@ -1,6 +1,7 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
 import { PublishFundingGate } from 'app/screens/CreateBounty/PublishFundingGate';
+import { PostCelebration } from 'app/screens/CreateBounty/quick/PostCelebration';
 import { StepDirectionContext } from 'app/screens/CreateBounty/quick/QuickStepLayout';
 import { StepPay } from 'app/screens/CreateBounty/quick/StepPay';
 import { StepPhotos } from 'app/screens/CreateBounty/quick/StepPhotos';
@@ -21,6 +22,7 @@ import { analyticsService } from 'lib/services/analytics-service';
 import { useStripe } from 'lib/stripe-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import { validateContactInfo } from 'lib/utils/bounty-validation';
+import { getBountyPublishError } from 'lib/utils/bounty-publish-error';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { createForegroundTimer, getMonotonicNow } from 'lib/utils/foreground-timer';
 import { useWallet } from 'lib/wallet-context';
@@ -118,6 +120,9 @@ export function CreateBountyFlow({
   // optional details have since been persisted onto the real row.
   const [postedBountyId, setPostedBountyId] = useState<string | null>(null);
   const [postedDraft, setPostedDraft] = useState<BountyDraft | null>(null);
+  // The congratulations moment shown once, right after publishing, over the
+  // confirmation step it then fades into.
+  const [celebrating, setCelebrating] = useState(false);
   // Which optional-detail screen is open over the confirmation screen, and the
   // working copy it edits. Kept separate from `postedDraft` so backing out of a
   // detail screen discards its edits instead of leaving the confirmation
@@ -333,6 +338,7 @@ export function CreateBountyFlow({
       // still navigates to the feed, just one screen later.
       setPostedBountyId(bountyId);
       setPostedDraft(publishedDraftRef.current ?? draft);
+      setCelebrating(true);
     },
     // Compensation is the last pre-publish step. This was hard-coded to 2
     // from the two-step flow, so once Location became step 2 "Edit amount"
@@ -793,6 +799,8 @@ export function CreateBountyFlow({
                 screens it opens. These edit `detailDraft` (a working copy) and
                 persist onto the live bounty via handleSaveDetail, NOT the
                 draft — the draft was cleared at publish. --- */}
+            {/* StepPostPublish renders underneath from the start, so the
+                celebration's fade-out reveals it rather than cutting to it. */}
             {postedBountyId && postedDraft && !detailTarget && (
               <StepPostPublish
                 draft={postedDraft}
@@ -842,11 +850,15 @@ export function CreateBountyFlow({
         {submitError && (
           <View className="px-4 pb-4">
             <ErrorBanner
-              error={getUserFriendlyError(submitError)}
+              error={getBountyPublishError(submitError)}
               onDismiss={resetSubmitError}
               onAction={submitError ? () => retry(draft) : undefined}
             />
           </View>
+        )}
+
+        {postedBountyId && celebrating && (
+          <PostCelebration onDone={() => setCelebrating(false)} />
         )}
       </View>
     </Animated.View>

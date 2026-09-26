@@ -342,6 +342,14 @@ jest.mock('expo-haptics', () => ({
   },
 }));
 
+// Mock expo-blur (ships untranspiled ESM; the blur itself is visual only)
+jest.mock('expo-blur', () => {
+  const React = require('react');
+  return {
+    BlurView: ({ children, ...props }) => React.createElement('BlurView', props, children),
+  };
+});
+
 // Mock expo-secure-store
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn().mockResolvedValue(null),

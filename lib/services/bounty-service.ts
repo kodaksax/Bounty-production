@@ -683,6 +683,11 @@ export const bountyService = {
      * ones regardless of this flag.
      */
     includeTest?: boolean;
+    /**
+     * Rethrow fetch failures instead of resolving `[]`. For callers that keep
+     * last-known state on failure and so must tell "none" from "couldn't load".
+     */
+    throwOnError?: boolean;
   }): Promise<Bounty[]> {
     try {
       // Prefer Supabase when configured
@@ -761,7 +766,14 @@ export const bountyService = {
       }
       const json = await response.json();
       let list = Array.isArray(json) ? (json as Bounty[]) : [];
-      if (!options?.includeArchived) list = list.filter(b => b.status !== 'archived');
+      // The REST API takes no status allowlist, so apply it here the same way
+      // the Supabase path does server-side.
+      if (options?.statuses && options.statuses.length > 0) {
+        const allowed = new Set(options.statuses);
+        list = list.filter(b => allowed.has(b.status));
+      } else if (!options?.includeArchived) {
+        list = list.filter(b => b.status !== 'archived');
+      }
       if (options?.limit != null || options?.offset != null) {
         const start = options?.offset ?? 0;
         const end = options?.limit != null ? start + options.limit : undefined;
@@ -783,6 +795,7 @@ export const bountyService = {
           ? 'Check that the API server is running and device can reach the host (if on physical device, replace localhost with your machine LAN IP).'
           : undefined,
       });
+      if (options?.throwOnError) throw error;
       return [];
     }
   },

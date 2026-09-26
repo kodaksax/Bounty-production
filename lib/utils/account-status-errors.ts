@@ -54,6 +54,17 @@ function isRlsViolation(error: unknown): boolean {
 }
 
 /**
+ * Whether a message is already one of the account-status copies above —
+ * i.e. an error some service already translated via
+ * getAccountStatusErrorMessage and rethrew with just the copy.
+ */
+export function getAccountStatusCopyByMessage(message: string): AccountStatusErrorMessage | null {
+  if (message === BANNED_MESSAGE.message) return BANNED_MESSAGE;
+  if (message === SUSPENDED_MESSAGE.message) return SUSPENDED_MESSAGE;
+  return null;
+}
+
+/**
  * Returns distinct copy for a banned/suspended account-status failure, or
  * null if the error isn't one of those (so callers can fall back to their
  * normal generic error handling).
