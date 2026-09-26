@@ -1408,8 +1408,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   // Performance optimizations. ApplicantCards are tall and variable-height,
                   // so keep a wider render window (the default of 21 is overkill, 5 was too
                   // small and caused blank gaps / remounts mid-fling). removeClippedSubviews
-                  // is left off: with measured variable-height rows it causes flicker and
-                  // content jumps on iOS.
+                  // is explicitly off (FlatList defaults it to true on Android): with
+                  // measured variable-height rows it causes blank rows, flicker and
+                  // content jumps.
+                  removeClippedSubviews={false}
                   maxToRenderPerBatch={4}
                   updateCellsBatchingPeriod={30}
                   windowSize={9}

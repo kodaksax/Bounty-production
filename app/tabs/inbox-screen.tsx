@@ -1264,8 +1264,10 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                 scrollEventThrottle={16}
                 // Performance optimizations. ApplicantCards are tall and variable-height,
                 // so keep a wider render window (5 was too small and caused blank gaps /
-                // remounts mid-fling). removeClippedSubviews is left off: with measured
-                // variable-height rows it causes flicker and content jumps on iOS.
+                // remounts mid-fling). removeClippedSubviews is explicitly off (FlatList
+                // defaults it to true on Android): with measured variable-height rows it
+                // causes blank rows, flicker and content jumps.
+                removeClippedSubviews={false}
                 maxToRenderPerBatch={4}
                 updateCellsBatchingPeriod={30}
                 windowSize={9}
