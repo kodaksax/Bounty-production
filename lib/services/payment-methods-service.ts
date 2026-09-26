@@ -14,6 +14,7 @@
  */
 import { supabase } from '../supabase';
 import { logger } from '../utils/error-logger';
+import { failureEventProps } from '../utils/stripe-error';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import { performanceService } from './performance-service';
@@ -534,13 +535,12 @@ class PaymentMethodsService {
     } catch (error) {
       logger.error('[StripeService] Error creating setup intent:', { error });
 
-      await analyticsService.trackEvent('setup_intent_failed', {
-        error: String(error),
-      });
+      const failure = failureEventProps(error);
+      await analyticsService.trackEvent('setup_intent_failed', failure);
 
       await performanceService.endMeasurement('setup_intent_create', {
         success: false,
-        error: String(error),
+        error: failure.error_code,
       });
 
       throw handleStripeError(error);
@@ -804,9 +804,7 @@ class PaymentMethodsService {
       const isUserCancellation = errorCode === 'Canceled';
       if (!isUserCancellation) {
         analyticsService
-          .trackEvent('ach_link_failed', {
-            error: getNetworkErrorMessage(error),
-          })
+          .trackEvent('ach_link_failed', failureEventProps(error))
           .catch(() => {
             /* fire-and-forget */
           });
@@ -919,9 +917,7 @@ class PaymentMethodsService {
       logger.error('[StripeService] Error creating ACH deposit:', { error });
 
       analyticsService
-        .trackEvent('ach_deposit_failed', {
-          error: getNetworkErrorMessage(error),
-        })
+        .trackEvent('ach_deposit_failed', failureEventProps(error))
         .catch(() => {
           /* fire-and-forget */
         });

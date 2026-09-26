@@ -94,6 +94,7 @@ const MARKETPLACE_EVENT_TYPES = [
   'application.submitted',
   'application.accepted',
   'application.rejected',
+  'application.closed',
   'completion.submitted',
   'completion.approved',
   'completion.rejected',

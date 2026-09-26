@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
 import { useAuthContext } from "../../hooks/use-auth-context";
 import { useBackHandler } from "../../hooks/useBackHandler";
+import { hapticFeedback } from "../../lib/haptic-feedback";
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
 import type { AppTheme } from "../../lib/themes/types";
 
@@ -326,9 +327,11 @@ export default function EditProfileScreen() {
       // Clear edited flag after successful save
       userEditedRef.current = false;
 
-      Alert.alert("Success", "Profile updated successfully!", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      // Return straight to the profile, which now shows the saved changes —
+      // that is the confirmation. The old "Success / OK" dialog only added a
+      // tap between the user and the thing they came to see.
+      hapticFeedback.success();
+      router.back();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save profile");
     } finally {

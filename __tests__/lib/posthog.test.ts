@@ -465,9 +465,50 @@ describe('lib/posthog — session replay configuration', () => {
     );
     expect(options.personProfiles).toBe('identified_only');
     expect(options.captureAppLifecycleEvents).toBe(true);
-    expect(options.errorTracking.autocapture).toEqual({
+    expect(options.errorTracking.autocapture.console).toBe(false);
+  });
+
+  test('before_send drops the SDK duplicate "Application Opened" and nothing else', () => {
+    expect(options.before_send({ event: 'Application Opened', properties: {} })).toBeNull();
+    for (const name of ['app_opened', 'Application Installed', 'Application Updated', '$screen']) {
+      const event = { event: name, properties: {} };
+      expect(options.before_send(event)).toBe(event);
+    }
+    expect(options.before_send(null)).toBeNull();
+  });
+});
+
+describe('lib/posthog — exception autocapture follows Sentry availability', () => {
+  const buildOptions = (sentryRuns: boolean) => {
+    const MockPostHog = jest.fn().mockImplementation(() => ({
+      capture: jest.fn(),
+      register: jest.fn(),
+    }));
+    process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-key-errors';
+    jest.isolateModules(() => {
+      jest.doMock('posthog-react-native', () => ({
+        PostHog: MockPostHog,
+        useFeatureFlag: jest.fn(),
+      }));
+      jest.doMock('../../lib/utils/sentry-gate', () => ({ isSentryInitSafe: () => sentryRuns }));
+      require('../../lib/posthog');
+    });
+    delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
+    return MockPostHog.mock.calls[0]?.[1];
+  };
+
+  test('where Sentry runs, it owns uncaught exceptions and rejections', () => {
+    expect(buildOptions(true).errorTracking.autocapture).toEqual({
       uncaughtExceptions: false,
       unhandledRejections: false,
+      console: false,
+    });
+  });
+
+  test('where Sentry is skipped (iOS 26+), PostHog captures them instead', () => {
+    expect(buildOptions(false).errorTracking.autocapture).toEqual({
+      uncaughtExceptions: true,
+      unhandledRejections: true,
       console: false,
     });
   });

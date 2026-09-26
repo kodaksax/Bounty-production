@@ -8,6 +8,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { PROFILE_FALLBACK, useSafeBack } from '../../hooks/useSafeBack';
 import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +33,8 @@ const REASON_COPY: Record<string, string> = {
 
 export default function VerificationRejectedScreen() {
   const router = useRouter();
+  // Also a push-notification landing screen — see useSafeBack.
+  const goBack = useSafeBack(PROFILE_FALLBACK);
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
   const { theme } = useAppThemeContext();
@@ -58,7 +61,7 @@ export default function VerificationRejectedScreen() {
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={goBack}
             style={styles.backButton}
             accessibilityRole="button"
             accessibilityLabel="Go back"
@@ -91,7 +94,7 @@ export default function VerificationRejectedScreen() {
 
         <TouchableOpacity
           style={styles.secondaryButton}
-          onPress={() => router.back()}
+          onPress={goBack}
           accessibilityRole="button"
           accessibilityLabel="Do this later"
         >

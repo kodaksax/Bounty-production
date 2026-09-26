@@ -1,4 +1,5 @@
 import { ThemeProvider } from 'components/theme-provider';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
@@ -7,7 +8,7 @@ import { Slot, useGlobalSearchParams, useRouter, useSegments } from 'expo-router
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import '../global.css';
@@ -17,6 +18,7 @@ import { AdminProvider } from '../lib/admin-context';
 import { BountyFormatProvider } from '../lib/bounty-format-context';
 import { COLORS } from '../lib/constants/accessibility';
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
+import { TopInsetOverlayProvider, useTopInsetOverlay } from '../lib/context/TopInsetOverlayContext';
 import { NotificationProvider } from '../lib/context/notification-context';
 import { ProfileImageViewerProvider } from '../lib/context/ProfileImageViewerContext';
 import { ErrorBoundary } from '../lib/error-boundary';
@@ -32,8 +34,8 @@ import { RuntimeReporters } from '../providers/runtime-reporters';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 import {
-    isInitialNavigationDone,
-    onInitialNavigationDone,
+  isInitialNavigationDone,
+  onInitialNavigationDone,
 } from './initial-navigation/initialNavigation';
 
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
@@ -65,6 +67,10 @@ import { registerDeviceSession } from '../lib/services/auth-service';
 //
 // Re-introduce only behind a lazy import() inside an effect, wrapped in
 // try/catch, and after deduping posthog-react-native.
+
+// One-time, process-wide startup work (error handlers, Sentry, app_opened).
+// See runStartup in RootLayout.
+let processStartupInitDone = false;
 
 // Lazily require Sentry to avoid importing native module at module-evaluation time
 let Sentry: any = null;
@@ -129,10 +135,15 @@ const RootFrame = ({
   bgColor?: string;
 }) => {
   const insets = useSafeAreaInsets();
-  const barStyle = getBarStyleForHex(bgColor);
+  // A screen can hand up the gradient it draws directly below the strip (see
+  // TopInsetOverlayContext); the strip then shows that gradient's true top
+  // slice instead of a flat color, and the status-bar icons take their
+  // contrast from it.
+  const overlay = useTopInsetOverlay()?.overlay ?? null;
+  const barStyle = getBarStyleForHex(overlay?.barColor ?? bgColor);
 
   const topInsetStyle = useMemo(
-    () => ({ height: insets.top, backgroundColor: bgColor }),
+    () => ({ height: insets.top, backgroundColor: bgColor, overflow: 'hidden' as const }),
     [insets.top, bgColor]
   );
   const bottomInsetStyle = useMemo(
@@ -143,7 +154,34 @@ const RootFrame = ({
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
       {/* top safe area behind status icons (time, battery, network) */}
-      <View style={topInsetStyle} />
+      <View style={topInsetStyle}>
+        {overlay ? (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: Math.max(overlay.height, insets.top),
+              transform: [
+                {
+                  translateY: overlay.scrollY
+                    ? Animated.multiply(overlay.scrollY, -1)
+                    : 0,
+                },
+              ],
+            }}
+          >
+            <LinearGradient
+              colors={overlay.colors}
+              start={overlay.start ?? { x: 0, y: 0 }}
+              end={overlay.end ?? { x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+        ) : null}
+      </View>
 
       {/* app content */}
       <View style={styles.content}>{children}</View>
@@ -151,8 +189,10 @@ const RootFrame = ({
       {/* bottom safe area behind home indicator */}
       <View style={bottomInsetStyle} />
 
-      {/* status bar; expo-status-bar maps to appropriate platform APIs */}
-      <StatusBar style={barStyle} backgroundColor={bgColor} />
+      {/* status bar icons only. Android is edge-to-edge (enforced since SDK 54),
+          so the bar is always translucent and the top-inset view above is what
+          shows through it; a StatusBar backgroundColor would be a no-op. */}
+      <StatusBar style={barStyle} />
     </View>
   );
 };
@@ -261,39 +301,45 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       if (startedRef.started) return;
       startedRef.started = true;
 
-      try {
-        initGlobalErrorHandlers();
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[ErrorHandling] failed to init global handlers', e);
-      }
-
-      try {
-        initializeSentry();
-        getSentryFromInit();
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[Sentry] startup init failed:', e);
-      }
-
-      try {
-        // Removed Page View emission to consolidate duplicate events
-        // Initialize the unified analytics surface (PostHog is the single
-        // source of truth) and emit the funnel "install/visit" event so we can
-        // measure acquisition → activation drop-off.
+      // startedRef only guards this effect run, and the effect runs again
+      // when fontsLoaded flips — so without this, everything in the block
+      // ran twice per cold start (app_opened fired exactly 2x per session).
+      if (!processStartupInitDone) {
+        processStartupInitDone = true;
         try {
-          await analyticsService.initialize();
-        } catch {
-          /* ignore */
+          initGlobalErrorHandlers();
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[ErrorHandling] failed to init global handlers', e);
         }
+
         try {
-          await analyticsService.trackEvent('app_opened', { phase: 'startup' });
-        } catch {
-          /* ignore */
+          initializeSentry();
+          getSentryFromInit();
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[Sentry] startup init failed:', e);
         }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[Analytics] startup init failed', e);
+
+        try {
+          // Removed Page View emission to consolidate duplicate events
+          // Initialize the unified analytics surface (PostHog is the single
+          // source of truth) and emit the funnel "install/visit" event so we can
+          // measure acquisition → activation drop-off.
+          try {
+            await analyticsService.initialize();
+          } catch {
+            /* ignore */
+          }
+          try {
+            await analyticsService.trackEvent('app_opened', { phase: 'startup' });
+          } catch {
+            /* ignore */
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[Analytics] startup init failed', e);
+        }
       }
 
       try {
@@ -387,7 +433,9 @@ function RootLayout({ children }: { children: React.ReactNode }) {
           <AppThemeProvider>
             <BountyFormatProvider>
               <BackgroundColorProvider>
-                <LayoutContent />
+                <TopInsetOverlayProvider>
+                  <LayoutContent />
+                </TopInsetOverlayProvider>
               </BackgroundColorProvider>
             </BountyFormatProvider>
           </AppThemeProvider>
@@ -415,7 +463,7 @@ function trackDeepLinkOpen(url: string | null) {
     const [first, second] = path.split('/').filter(Boolean);
     const contentType = first ? DEEP_LINK_CONTENT_TYPES[first] : undefined;
     if (!contentType || !second) return;
-    // The resulting screen_viewed (fired by ScreenTracker once expo-router
+    // The resulting $screen (fired by ScreenTracker once expo-router
     // finishes navigating to this URL) should be tagged as a deep link, not
     // a generic push.
     markPendingNavigationSource('deep_link');
@@ -428,7 +476,7 @@ function trackDeepLinkOpen(url: string | null) {
   }
 }
 
-// Fires a normalized `screen_viewed` event per real expo-router navigation.
+// Fires a normalized `$screen` event per real expo-router navigation.
 // `useSegments()` returns literal route filenames (e.g. "[id]", never
 // resolved IDs) so the resulting screen_name is always ID-free — see
 // lib/analytics/screen-name.ts.

@@ -3,31 +3,11 @@ import type { Integration } from '@sentry/types';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
-import { Platform } from 'react-native';
+import { isSentryInitSafe } from '../utils/sentry-gate';
 
 // Sentry configuration
 const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
 const ENVIRONMENT = process.env.NODE_ENV || 'development';
-
-/**
- * Returns true when it is safe to call Sentry.init() at all.
- *
- * @sentry/react-native ≤7.11.0 bundles a Sentry Cocoa SDK that crashes on
- * iOS 26+ (EXC_BAD_ACCESS in SentrySDKInternal startWithOptions:, offset 608,
- * address 0x10 — a null-pointer deref introduced by a breaking iOS 26 change).
- * Setting enableNative:false is NOT sufficient because the JS SDK still calls
- * the native initNativeSdk TurboModule method which triggers the crash.
- * Until @sentry/react-native is upgraded to a version that ships a compatible
- * Cocoa SDK, skip Sentry.init() entirely on iOS 26+.
- */
-function isSentryInitSafe(): boolean {
-  if (Platform.OS !== 'ios') return true;
-  const iosVersion = parseInt(String(Platform.Version), 10);
-  // Completely skip Sentry.init() on iOS 26+ to avoid the SentrySDKInternal crash.
-  // enableNative:false alone is insufficient — the native initNativeSdk method
-  // is still invoked and crashes at SentrySDKInternal startWithOptions:.
-  return iosVersion < 26;
-}
 
 /**
  * Returns true when the native Sentry SDK should be enabled.

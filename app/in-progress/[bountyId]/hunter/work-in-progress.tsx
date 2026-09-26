@@ -1,6 +1,7 @@
 // app/in-progress/[bountyId]/hunter/work-in-progress.tsx - Work in progress stage
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { FEED_FALLBACK, useSafeBack } from '../../../../hooks/useSafeBack';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -42,6 +43,11 @@ const HUNTER_STAGES: StageInfo[] = [
 export default function HunterWorkInProgressScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
+  // Push notifications can open this screen with nothing under it; fall
+  // back to this bounty's hunter hub rather than leaving back dead.
+  const goBack = useSafeBack(
+    bountyId ? { pathname: '/in-progress/[bountyId]/hunter', params: { bountyId } } : FEED_FALLBACK
+  );
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
 
@@ -255,7 +261,7 @@ export default function HunterWorkInProgressScreen() {
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={goBack}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -273,7 +279,7 @@ export default function HunterWorkInProgressScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backIcon} onPress={goBack}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Hunter Dashboard</Text>
