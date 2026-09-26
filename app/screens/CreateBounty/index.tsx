@@ -755,7 +755,12 @@ export function CreateBountyFlow({
     // (KeyboardAvoidingScreen's `offset` isn't used here — it keeps that
     // offset as padding at rest, which suits safe-area-inset containers, not
     // this one.)
-    <View ref={flowRootRef} onLayout={measureKeyboardOffset} style={{ flex: 1 }}>
+    <View
+      ref={flowRootRef}
+      testID="create-bounty-flow-root"
+      onLayout={measureKeyboardOffset}
+      style={{ flex: 1 }}
+    >
     <Animated.View
       style={{ flex: 1, backgroundColor: theme.background, paddingBottom: keyboardInset }}
     >
