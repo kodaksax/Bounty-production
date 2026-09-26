@@ -108,9 +108,10 @@ interface BountyFeedProps {
 }
 
 const PAGE_SIZE = 10;
-// Most live bounties a poster realistically has at once; also caps the
-// per-bounty submission lookups behind the progress cards.
-const MY_ACTIVE_BOUNTIES_LIMIT = 20;
+// The progress cards page through the poster's whole live set. Nearly every
+// poster fits in one page; the page cap only bounds a runaway loop.
+const MY_ACTIVE_BOUNTIES_PAGE_SIZE = 100;
+const MY_ACTIVE_BOUNTIES_MAX_PAGES = 10;
 
 // 'off' = no distance filter (existing behavior, unchanged). A number is a
 // radius in miles. `null` is the explicit "Anywhere" preset — still uses
@@ -574,41 +575,76 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   }, [validUserId, currentUserId]);
 
   // Non-fatal, like loadUserApplications: on failure the banner keeps its
-  // last-known value rather than flickering away on a flaky network.
+  // last-known value rather than flickering away on a flaky network. Both
+  // lookups below opt into throwOnError because the services otherwise resolve
+  // failures as "nothing found", which would clear or demote the cards.
   const loadMyActiveBounties = useCallback(async () => {
     const uid = validUserId ?? currentUserId;
     if (!uid) {
       setMyActiveBounties([]);
       return;
     }
+    let rows: Bounty[] = [];
     try {
-      const rows = await withTimeout(
-        bountyService.getAll({
-          userId: uid,
-          statuses: ['open', 'in_progress'],
-          limit: MY_ACTIVE_BOUNTIES_LIMIT,
-        }),
-        API_TIMEOUTS.DEFAULT
-      );
-      // An open bounty past its deadline can't be taken by anyone, so it isn't
-      // "live" progress worth a card.
-      const live = rows.filter(b => b.status === 'in_progress' || !isBountyDeadlinePassed(b));
-      const items = await Promise.all(
-        live.map(async (bounty): Promise<MyBountyProgressItem> => {
-          if (bounty.status === 'open') return { bounty, stage: 'open' };
-          const submission = await withTimeout(
-            completionService.getSubmission(String(bounty.id)),
-            API_TIMEOUTS.DEFAULT
-          );
-          return { bounty, stage: submission?.status === 'pending' ? 'review' : 'in_progress' };
-        })
-      );
-      setMyActiveBounties(sortByProgress(items));
+      // Every live bounty, not a newest-first slice: the cards are ordered by
+      // stage then age, so a cap here could drop an older "Needs review" one.
+      for (let page = 0; page < MY_ACTIVE_BOUNTIES_MAX_PAGES; page++) {
+        const batch = await withTimeout(
+          bountyService.getAll({
+            userId: uid,
+            statuses: ['open', 'in_progress'],
+            limit: MY_ACTIVE_BOUNTIES_PAGE_SIZE,
+            offset: page * MY_ACTIVE_BOUNTIES_PAGE_SIZE,
+            throwOnError: true,
+          }),
+          API_TIMEOUTS.DEFAULT
+        );
+        rows = rows.concat(batch);
+        if (batch.length < MY_ACTIVE_BOUNTIES_PAGE_SIZE) break;
+      }
     } catch (error) {
       logger.warning('feed.my_active_bounties.request_failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+      return;
     }
+
+    // An open bounty past its deadline can't be taken by anyone, so it isn't
+    // "live" progress worth a card. Statuses are checked explicitly rather than
+    // trusted from the query.
+    const live = rows.filter(
+      b => b.status === 'in_progress' || (b.status === 'open' && !isBountyDeadlinePassed(b))
+    );
+    const inProgressIds = live.filter(b => b.status === 'in_progress').map(b => String(b.id));
+
+    // null = the lookup failed; those bounties keep whatever stage they had.
+    let latestSubmissions: Map<string, { status?: string }> | null = new Map();
+    if (inProgressIds.length > 0) {
+      try {
+        latestSubmissions = await withTimeout(
+          completionService.getLatestSubmissionsForBounties(inProgressIds, { throwOnError: true }),
+          API_TIMEOUTS.DEFAULT
+        );
+      } catch (error) {
+        latestSubmissions = null;
+        logger.warning('feed.my_active_bounties.submissions_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    setMyActiveBounties(prev => {
+      const priorStages = new Map(prev.map(item => [String(item.bounty.id), item.stage]));
+      const items = live.map((bounty): MyBountyProgressItem => {
+        if (bounty.status === 'open') return { bounty, stage: 'open' };
+        const id = String(bounty.id);
+        const isReview = latestSubmissions
+          ? latestSubmissions.get(id)?.status === 'pending'
+          : priorStages.get(id) === 'review';
+        return { bounty, stage: isReview ? 'review' : 'in_progress' };
+      });
+      return sortByProgress(items);
+    });
   }, [validUserId, currentUserId]);
 
   // The realtime handler below is bound once per mount, so it reads the

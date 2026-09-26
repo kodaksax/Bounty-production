@@ -152,6 +152,9 @@ export function MyBountyProgressCarousel({ items, onPressItem }: CarouselProps) 
   const heightRef = useRef(0);
   heightRef.current = contentHeight;
   const hiddenOffset = () => -(heightRef.current + OFFSCREEN_EXTRA);
+  // A stack restored as stashed has no height to hide behind until the cards
+  // are measured, so it stays invisible until then instead of flashing in.
+  const concealed = stashed && contentHeight === 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -271,10 +274,21 @@ export function MyBountyProgressCarousel({ items, onPressItem }: CarouselProps) 
       )}
 
       <Animated.View
-        style={[styles.cards, { transform: [{ translateY: drag }] }]}
+        style={[
+          styles.cards,
+          { opacity: concealed ? 0 : 1, transform: [{ translateY: drag }] },
+        ]}
         pointerEvents={stashed ? 'none' : 'box-none'}
         importantForAccessibility={stashed ? 'no-hide-descendants' : 'auto'}
-        onLayout={e => setContentHeight(e.nativeEvent.layout.height)}
+        onLayout={e => {
+          // Before the pager mounts (width 0) this is only the padding, not
+          // the cards, so it isn't a height worth hiding behind yet.
+          if (width === 0) return;
+          const height = e.nativeEvent.layout.height;
+          // Move a stashed stack off screen before the re-render reveals it.
+          if (stashed) drag.setValue(-(height + OFFSCREEN_EXTRA));
+          setContentHeight(height);
+        }}
         {...cardsPan.panHandlers}
       >
         {width > 0 && (
@@ -436,7 +450,10 @@ function LiveMarker({
   styles: ReturnType<typeof makeStyles>;
 }) {
   const pulse = useRef(new Animated.Value(0)).current;
-  const [reduceMotion, setReduceMotion] = useState(false);
+  // null until the setting is read: the pulse only starts once it's known to
+  // be off, so a Reduce Motion user never sees its first beat.
+  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  const animate = reduceMotion === false;
 
   useEffect(() => {
     let cancelled = false;
@@ -451,7 +468,7 @@ function LiveMarker({
   }, []);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (!animate) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
@@ -472,11 +489,11 @@ function LiveMarker({
     );
     loop.start();
     return () => loop.stop();
-  }, [reduceMotion, pulse]);
+  }, [animate, pulse]);
 
   return (
     <View style={styles.markerWrap}>
-      {!reduceMotion && (
+      {animate && (
         <Animated.View
           pointerEvents="none"
           style={[

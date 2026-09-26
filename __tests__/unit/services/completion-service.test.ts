@@ -395,6 +395,14 @@ describe('CompletionService', () => {
 
       expect(result.size).toBe(0);
     });
+
+    it('rethrows a failed query when throwOnError is set', async () => {
+      mockBatchQuery({ data: null, error: { message: 'Connection failed' } });
+
+      await expect(
+        completionService.getLatestSubmissionsForBounties(['bounty1'], { throwOnError: true })
+      ).rejects.toThrow('Connection failed');
+    });
   });
 
   describe('getSubmission', () => {

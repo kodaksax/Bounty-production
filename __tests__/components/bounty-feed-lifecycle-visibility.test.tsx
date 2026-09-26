@@ -189,6 +189,26 @@ jest.mock('../../lib/services/bounty-service', () => ({
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn() },
 }));
+jest.mock('../../lib/services/completion-service', () => ({
+  completionService: { getLatestSubmissionsForBounties: jest.fn() },
+}));
+// The progress cards render as "<id>:<stage>" so tests can read what the feed
+// handed them; sortByProgress stays real.
+jest.mock('../../components/my-bounty-progress-banner', () => ({
+  ...jest.requireActual('../../components/my-bounty-progress-banner'),
+  MyBountyProgressCarousel: ({ items }: any) =>
+    require('react').createElement(
+      'View',
+      {},
+      items.map((i: any) =>
+        require('react').createElement(
+          'Text',
+          { key: i.bounty.id, testID: 'progress-card' },
+          `${i.bounty.id}:${i.stage}`
+        )
+      )
+    ),
+}));
 // Realtime mock that records the handlers the feed registers, so a test can
 // deliver a bounties UPDATE/DELETE the way Supabase would.
 const realtimeHandlers: { event: string; handler: (payload: any) => void }[] = [];
@@ -223,6 +243,7 @@ function emitRealtime(event: string, payload: any) {
 let BountyFeed: any;
 let bountyService: any;
 let bountyRequestService: any;
+let completionService: any;
 let resetRemovedBountiesRegistry: () => void;
 
 const openBounty = (over: Record<string, unknown> = {}) => ({
@@ -258,6 +279,7 @@ describe('BountyFeed lifecycle visibility', () => {
     ({ BountyFeed } = require('../../components/bounty-feed'));
     ({ bountyService } = require('../../lib/services/bounty-service'));
     ({ bountyRequestService } = require('../../lib/services/bounty-request-service'));
+    ({ completionService } = require('../../lib/services/completion-service'));
     ({ resetRemovedBountiesRegistry } = require('../../lib/utils/bounty-visibility'));
   });
 
@@ -266,6 +288,7 @@ describe('BountyFeed lifecycle visibility', () => {
     realtimeHandlers.length = 0;
     resetRemovedBountiesRegistry();
     bountyRequestService.getAll.mockResolvedValue([]);
+    completionService.getLatestSubmissionsForBounties.mockResolvedValue(new Map());
   });
 
   afterEach(() => {
@@ -391,6 +414,87 @@ describe('BountyFeed lifecycle visibility', () => {
       expect(titles(queryAllByTestId)).toEqual(
         expect.arrayContaining(['Still open', 'Claimed then released'])
       );
+    });
+  });
+  describe('your-bounty progress cards', () => {
+    const mine = (over: Record<string, unknown>) =>
+      openBounty({ poster_id: 'user-123', created_at: '2026-09-01T00:00:00Z', ...over });
+    // Progress loads are the getAll calls that pass a statuses allowlist.
+    const progressCalls = () =>
+      bountyService.getAll.mock.calls.filter((c: any[]) => c[0]?.statuses);
+    const cards = (queryAllByTestId: any) =>
+      queryAllByTestId('progress-card').map((n: any) => n.props.children);
+
+    it('shows only live bounties, even if the backend ignores the status allowlist', async () => {
+      bountyService.getAll.mockImplementation(async (opts: any) =>
+        opts?.statuses
+          ? [
+              mine({ id: 'p1', status: 'open' }),
+              mine({ id: 'p2', status: 'completed' }),
+              mine({ id: 'p3', status: 'cancelled' }),
+            ]
+          : []
+      );
+
+      const { queryAllByTestId } = renderFeed();
+
+      await waitFor(() => expect(cards(queryAllByTestId)).toEqual(['p1:open']));
+    });
+
+    it('pages through every live bounty instead of stopping at the first page', async () => {
+      const firstPage = Array.from({ length: 100 }, (_, i) =>
+        mine({ id: `o${i}`, created_at: '2026-09-10T00:00:00Z' })
+      );
+      const older = mine({ id: 'old', status: 'in_progress', created_at: '2026-08-01T00:00:00Z' });
+      bountyService.getAll.mockImplementation(async (opts: any) => {
+        if (!opts?.statuses) return [];
+        return opts.offset === 0 ? firstPage : [older];
+      });
+      completionService.getLatestSubmissionsForBounties.mockResolvedValue(
+        new Map([['old', { status: 'pending' }]])
+      );
+
+      const { queryAllByTestId } = renderFeed();
+
+      await waitFor(() => expect(cards(queryAllByTestId)[0]).toBe('old:review'));
+      expect(cards(queryAllByTestId)).toHaveLength(101);
+      expect(progressCalls().map((c: any[]) => c[0].offset)).toEqual([0, 100]);
+    });
+
+    it('keeps the last-known cards and stages when a reload fails', async () => {
+      bountyService.getAll.mockImplementation(async (opts: any) =>
+        opts?.statuses ? [mine({ id: 'w1', status: 'in_progress' })] : []
+      );
+      completionService.getLatestSubmissionsForBounties.mockResolvedValue(
+        new Map([['w1', { status: 'pending' }]])
+      );
+
+      const { queryAllByTestId } = renderFeed();
+      await waitFor(() => expect(cards(queryAllByTestId)).toEqual(['w1:review']));
+
+      // Submission lookup fails: the card stays in review, not demoted.
+      completionService.getLatestSubmissionsForBounties.mockRejectedValue(new Error('offline'));
+      const lookupsBefore =
+        completionService.getLatestSubmissionsForBounties.mock.calls.length;
+      emitRealtime('UPDATE', { new: { id: 'w1', poster_id: 'user-123', status: 'in_progress' } });
+      await waitFor(() =>
+        expect(completionService.getLatestSubmissionsForBounties.mock.calls.length).toBeGreaterThan(
+          lookupsBefore
+        )
+      );
+      await act(async () => {});
+      expect(cards(queryAllByTestId)).toEqual(['w1:review']);
+
+      // The bounty load itself fails: the cards stay rather than vanishing.
+      const loadsBefore = progressCalls().length;
+      bountyService.getAll.mockImplementation(async (opts: any) => {
+        if (opts?.statuses) throw new Error('offline');
+        return [];
+      });
+      emitRealtime('UPDATE', { new: { id: 'w1', poster_id: 'user-123', status: 'in_progress' } });
+      await waitFor(() => expect(progressCalls().length).toBeGreaterThan(loadsBefore));
+      await act(async () => {});
+      expect(cards(queryAllByTestId)).toEqual(['w1:review']);
     });
   });
 });
