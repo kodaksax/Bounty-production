@@ -13,10 +13,21 @@ export const ONBOARDING_STATE_KEY_BASE = '@bounty_onboarding_state';
  * Bumped whenever OnboardingData's shape or the onboarding flow itself
  * changes meaningfully enough that a returning user's in-progress draft
  * should be discarded rather than resumed. Written to
- * `profiles.onboarding_version` on completion (see app/onboarding/done.tsx)
- * so future onboarding redesigns can detect which flow a user completed.
+ * `profiles.onboarding_version` on completion (see
+ * hooks/useCompleteOnboarding.ts) so future onboarding redesigns can detect
+ * which flow a user completed.
+ *
+ * 2 (2026-09-23): the funnel now ends on the founder note. Every screen after
+ * it — the profile details form, the poster's first-bounty composer, the
+ * hunter's nearby-discovery and sample application, phone capture and the
+ * done summary — was removed, along with the draft fields only those screens
+ * wrote, and style/location/role-select were added ahead of payouts. A v1
+ * draft with `intent` set would route straight to payouts and skip those new
+ * steps, so drafts are persisted in a versioned envelope (see
+ * serializeDraft/parseDraft) and any other version — including unversioned
+ * pre-v2 drafts — is discarded on load rather than resumed.
  */
-export const CURRENT_ONBOARDING_VERSION = 1;
+export const CURRENT_ONBOARDING_VERSION = 2;
 
 // Debounce persistence so rapid keystrokes (e.g. typing bio/skills) don't each
 // trigger a disk write. Short enough that a user who stops typing still sees
@@ -39,40 +50,58 @@ export interface OnboardingData {
   // 'poster' = "Get something done", 'hunter' = "Start earning nearby"
   intent: 'poster' | 'hunter' | null;
 
-  // Details screen
+  // Profile fields. Nothing in the funnel collects these any more (the details
+  // form was removed with the post-founder-note screens); they stay because
+  // useCompleteOnboarding still writes whichever are non-empty to the profile,
+  // so a draft left by an older build is still honoured on completion.
   displayName: string;
   title: string;
   bio: string;
+  /** The only one still written in-flow: app/onboarding/location.tsx sets it. */
   location: string;
   skills: string[];
   avatarUri: string;
   
-  // Phone screen
+  // Location step (app/onboarding/location.tsx), which sits between the style
+  // step and role select. 'precise' = full GPS granted, 'approximate' = the
+  // user chose the coarse option, so only a city/region is ever resolved,
+  // 'denied' = the OS prompt was declined, 'skipped' = dismissed without
+  // answering. Null until the step has been answered once.
+  locationPrecision: 'precise' | 'approximate' | 'denied' | 'skipped' | null;
+
+  // Same as the profile fields above: no screen collects a phone number any
+  // more, but a draft that has one still gets written through on completion.
   phone: string;
+}
 
-  // Poster task-prompt screen (details, when intent === 'poster')
-  taskDescription: string;
-  price: string;
-  schedule: 'saturday' | 'flexible' | null;
+/** Stored shape: the draft plus the flow version that wrote it. */
+interface PersistedDraft {
+  version: number;
+  data: Partial<OnboardingData>;
+}
 
-  // Set immediately after the onboarding poster flow successfully creates a
-  // bounty (details.tsx createBountyNow). Used to (a) redirect straight to
-  // /onboarding/bounty-posted instead of re-rendering the composer if the
-  // user navigates back into details.tsx, preventing a duplicate bounty, and
-  // (b) let bounty-posted.tsx render a summary of what was just posted.
-  firstBountyPostedId: string | null;
-  firstBountyPostedTitle: string | null;
-  firstBountyPostedAmount: number | null;
+function serializeDraft(data: OnboardingData): string {
+  const envelope: PersistedDraft = { version: CURRENT_ONBOARDING_VERSION, data };
+  return JSON.stringify(envelope);
+}
 
-  // Set immediately after the onboarding hunter flow successfully applies to
-  // a sample bounty (details.tsx handleApplyToSample). Used to (a) redirect
-  // straight to /onboarding/application-submitted instead of re-rendering the
-  // sample-bounty screen if the user navigates back into details.tsx,
-  // preventing a duplicate application, and (b) let application-submitted.tsx
-  // track/reference what was just applied to.
-  firstAppliedBountyId: string | null;
-  firstAppliedBountyTitle: string | null;
-  firstBountyRequestId: string | null;
+/**
+ * The stored draft's data if it was written by the current flow version,
+ * otherwise null (stale version, legacy unversioned draft, or malformed).
+ * Throws only on invalid JSON.
+ */
+export function parseDraft(stored: string): Partial<OnboardingData> | null {
+  const parsed = JSON.parse(stored);
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    parsed.version === CURRENT_ONBOARDING_VERSION &&
+    parsed.data &&
+    typeof parsed.data === 'object'
+  ) {
+    return parsed.data as Partial<OnboardingData>;
+  }
+  return null;
 }
 
 const defaultOnboardingData: OnboardingData = {
@@ -83,16 +112,8 @@ const defaultOnboardingData: OnboardingData = {
   location: '',
   skills: [],
   avatarUri: '',
+  locationPrecision: null,
   phone: '',
-  taskDescription: '',
-  price: '',
-  schedule: null,
-  firstBountyPostedId: null,
-  firstBountyPostedTitle: null,
-  firstBountyPostedAmount: null,
-  firstAppliedBountyId: null,
-  firstAppliedBountyTitle: null,
-  firstBountyRequestId: null,
 };
 
 interface OnboardingContextType {
@@ -140,9 +161,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
         if (stored) {
           try {
-            const parsed = JSON.parse(stored);
-            if (parsed && typeof parsed === 'object' && !cancelled) {
-              setData({ ...defaultOnboardingData, ...parsed });
+            const draft = parseDraft(stored);
+            if (!draft) {
+              // Written by a different flow version: resuming it could skip
+              // steps that didn't exist when it was saved. Start fresh.
+              await AsyncStorage.removeItem(key);
+            }
+            if (!cancelled) {
+              setData(draft ? { ...defaultOnboardingData, ...draft } : defaultOnboardingData);
             }
           } catch (parseError) {
             console.error('[OnboardingContext] Error parsing stored state:', parseError);
@@ -183,7 +209,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }
     persistTimerRef.current = setTimeout(() => {
       persistTimerRef.current = null;
-      AsyncStorage.setItem(key, JSON.stringify(data)).catch((error) => {
+      AsyncStorage.setItem(key, serializeDraft(data)).catch((error) => {
         console.error('[OnboardingContext] Error saving state:', error);
       });
     }, PERSIST_DEBOUNCE_MS);
@@ -203,7 +229,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       if (persistTimerRef.current) {
         clearTimeout(persistTimerRef.current);
         persistTimerRef.current = null;
-        AsyncStorage.setItem(loadedKeyRef.current || ONBOARDING_STATE_KEY_BASE, JSON.stringify(dataRef.current)).catch((error) => {
+        AsyncStorage.setItem(loadedKeyRef.current || ONBOARDING_STATE_KEY_BASE, serializeDraft(dataRef.current)).catch((error) => {
           console.error('[OnboardingContext] Error saving state on unmount:', error);
         });
       }

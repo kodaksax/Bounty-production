@@ -261,7 +261,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
 
     // Backfill event-triggered moments for users who onboarded before this
     // wiring existed (new users get these enqueued directly in
-    // app/onboarding/done.tsx instead). Gated to once per user per app
+    // hooks/useCompleteOnboarding.ts instead). Gated to once per user per app
     // session; safe to skip entirely once state rows exist (the common case).
     let resolvedStates = fetchedStates;
     if (backfillAttemptedForUserRef.current !== requestUserId) {

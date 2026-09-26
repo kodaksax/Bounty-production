@@ -89,7 +89,7 @@ describe('onboarding gate (app/onboarding/index.tsx)', () => {
   beforeEach(resetState);
 
   describe('authenticated user (the Bug A path)', () => {
-    it('routes a freshly registered user with NO intent into onboarding, not Welcome', async () => {
+    it('routes a freshly registered user with NO intent into the style step, not Welcome', async () => {
       mockAuthContext.session = SIGNED_IN;
       // Brand-new account: the backend created the row with onboarding_completed false.
       mockAuthProfile.profile = { username: 'newuser', onboarding_completed: false };
@@ -98,11 +98,13 @@ describe('onboarding gate (app/onboarding/index.tsx)', () => {
       render(<OnboardingIndex />);
 
       await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+      // No intent yet — the card-style pick is the first post-auth step
+      // (app/onboarding/style.tsx), and role-select follows it.
       expect(mockReplace).toHaveBeenCalledWith('/onboarding/style');
       expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/welcome');
     });
 
-    it('routes a signed-in user with no profile row yet into onboarding, not Welcome', async () => {
+    it('routes a signed-in user with no profile row yet into the style step, not Welcome', async () => {
       mockAuthContext.session = SIGNED_IN;
       mockAuthProfile.profile = null;
       mockOnboarding.data.intent = null;
@@ -121,7 +123,8 @@ describe('onboarding gate (app/onboarding/index.tsx)', () => {
 
       render(<OnboardingIndex />);
 
-      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/style'));
+      // Intent set means style and role-select are both behind them.
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/payouts'));
       expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/welcome');
     });
 

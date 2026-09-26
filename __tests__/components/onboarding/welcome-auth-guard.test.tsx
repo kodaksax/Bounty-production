@@ -5,7 +5,7 @@
  * comment for why: a stale per-device cached arm survived account deletion
  * and could show a deleted-and-recreated account the wrong design).
  *
- * /onboarding/welcome is the PRE-AUTH entry screen — role CTAs plus a "Log In"
+ * /onboarding/welcome is the PRE-AUTH entry screen — a "Sign Up" plus a "Log In"
  * button. Rendering it to someone who already holds a session tells them their
  * brand-new account doesn't exist and invites them to authenticate a second
  * time. The gate in app/onboarding/index.tsx no longer routes signed-in users
@@ -27,14 +27,6 @@ jest.mock('hooks/use-auth-context', () => ({
   useAuthContext: () => mockAuthContext,
 }));
 
-const mockUpdateData = jest.fn();
-jest.mock('lib/context/onboarding-context', () => ({
-  useOnboarding: () => ({
-    data: { intent: null },
-    updateData: mockUpdateData,
-  }),
-}));
-
 jest.mock('lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: jest.fn() },
 }));
@@ -48,9 +40,9 @@ jest.mock('react-native-safe-area-context', () => ({
 
 // A lightweight stand-in that still exposes the onLoginPress action, so the
 // pre-auth-CTA-visibility assertions below stay meaningful without pulling in
-// ProofCard's network/location dependencies.
-jest.mock('components/onboarding/PosterFirstWelcome', () => ({
-  PosterFirstWelcome: (props: { onLoginPress: () => void }) => {
+// the real carousel (reanimated-carousel, svg glow, etc).
+jest.mock('components/onboarding/WelcomeCarousel', () => ({
+  WelcomeCarousel: (props: { onLoginPress: () => void }) => {
     const { TouchableOpacity, Text } = require('react-native');
     return (
       <TouchableOpacity accessibilityLabel="Log in to an existing account" onPress={props.onLoginPress}>
@@ -93,7 +85,7 @@ describe('onboarding welcome auth guard', () => {
   it('shows the single canonical welcome screen to a logged-out visitor, with no A/B branching', () => {
     const utils = render(<OnboardingWelcome />);
 
-    // Always PosterFirstWelcome now — there is no other design left to fall
+    // Always WelcomeCarousel now — there is no other design left to fall
     // back to, so this alone is the full regression check for the old bug.
     expect(utils.getByLabelText('Log in to an existing account')).toBeTruthy();
     expect(mockReplace).not.toHaveBeenCalled();

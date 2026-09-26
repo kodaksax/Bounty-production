@@ -3,6 +3,12 @@
  * (profile form, poster composer/funding, hunter location/sample-bounty).
  * Extracted from app/onboarding/details.tsx so each branch can live in its
  * own component file without duplicating this ~600-line StyleSheet.
+ *
+ * RETAINED BUT UNWIRED: the details step and every branch screen but one were
+ * removed when onboarding was cut to end on app/onboarding/founder-note.tsx.
+ * The single remaining consumer is components/onboarding/PosterFundingScreen.tsx,
+ * itself kept-but-unrendered, which imports `OnboardingDetailsStyles` as a prop
+ * type. Most keys below therefore style nothing today.
  */
 import { StyleSheet } from 'react-native';
 import type { AppTheme } from '../themes/types';
