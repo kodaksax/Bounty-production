@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Animated, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useFadeAnimation } from '../../hooks/use-accessible-animation'
+import { useTabBackToFeed } from '../../hooks/useTabBackToFeed'
 import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
 import { ROUTES } from '../../lib/routes'
@@ -280,6 +281,11 @@ function BountyAppInner() {
     }
     setActiveScreen(next)
   }, [showAdminTab, router])
+
+  // Android hardware back returns to the feed from the other tabs, instead
+  // of closing the app. See useTabBackToFeed for why it is focus-scoped.
+  const showFeed = useCallback(() => setActiveScreen('bounty'), [])
+  useTabBackToFeed(activeScreen, showFeed)
 
   // Redirect unauthenticated users immediately — do not wait for AsyncStorage.
   if (!isLoading && !session) {

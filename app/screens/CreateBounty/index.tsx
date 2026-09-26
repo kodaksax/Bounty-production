@@ -31,7 +31,6 @@ import {
   Animated,
   AppState,
   Dimensions,
-  Platform,
   Text,
   View,
 } from 'react-native';
@@ -335,7 +334,10 @@ export function CreateBountyFlow({
       setPostedBountyId(bountyId);
       setPostedDraft(publishedDraftRef.current ?? draft);
     },
-    onEditAmount: () => handleGoToStep(2),
+    // Compensation is the last pre-publish step. This was hard-coded to 2
+    // from the two-step flow, so once Location became step 2 "Edit amount"
+    // dropped the poster on the address screen instead of the price.
+    onEditAmount: () => handleGoToStep(TOTAL_STEPS),
     onCancelGate: onCancel,
   });
 
@@ -452,11 +454,11 @@ export function CreateBountyFlow({
       setStepDirection(-1);
     } catch (error) {
       const userError = getUserFriendlyError(error);
-      if (Platform.OS !== 'web') {
-        Alert.alert(userError.title, `${userError.message}\n\nYour bounty is still posted.`, [
-          { text: 'OK' },
-        ]);
-      }
+      // Alert is shimmed on web (stubs/react-native-web-alert.web.js), so no
+      // platform guard — the old one made a failed save silent there.
+      Alert.alert(userError.title, `${userError.message}\n\nYour bounty is still posted.`, [
+        { text: 'OK' },
+      ]);
     } finally {
       setIsSavingDetail(false);
     }
@@ -475,34 +477,14 @@ export function CreateBountyFlow({
     return false;
   };
 
-  // Web used to skip this confirmation outright, because react-native-web's Alert is a
-  // no-op and the dialog would never have appeared. It is shimmed now
-  // (stubs/react-native-web-alert.web.js), so web asks the same question native does —
-  // which also means the QA swarm exercises the real discard path instead of silently
-  // losing a draft on every exit.
+  /**
+   * Leave the composer. There is no confirmation: every edit is autosaved to
+   * the draft, so leaving loses nothing and the next visit resumes it. The old
+   * dialog asked "Discard Draft?" and then said the progress would be saved —
+   * an interruption whose two halves contradicted each other.
+   */
   const handleCancel = () => {
-    Alert.alert(
-      'Discard Draft?',
-      'Your progress will be saved. You can return to this draft anytime.',
-      [
-        {
-          text: 'Keep Editing',
-          style: 'cancel',
-          // Clears a 'back' tag set by the hardware-back handler below so
-          // it doesn't leak into a later, unrelated exit.
-          onPress: () => {
-            exitMethodRef.current = null;
-          },
-        },
-        {
-          text: 'Exit',
-          style: 'destructive',
-          onPress: () => {
-            if (onCancel) onCancel();
-          },
-        },
-      ]
-    );
+    onCancel?.();
   };
 
   useBackHandler(() => {
@@ -521,8 +503,8 @@ export function CreateBountyFlow({
       return true;
     }
     // Android hardware back at step 1 is the only exit path this component
-    // can directly attribute — tag it before handleCancel's confirm dialog
-    // runs so the eventual post_step_abandoned reflects it.
+    // can directly attribute — tag it before handleCancel unmounts the flow
+    // so the eventual post_step_abandoned reflects it.
     exitMethodRef.current = 'back';
     handleCancel();
     return true;

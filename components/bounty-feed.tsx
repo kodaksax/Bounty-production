@@ -1116,7 +1116,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         title="No bounties yet"
         description="No bounties near you yet. Be the first to post one!"
         actionLabel="Post a bounty"
-        onAction={() => router.push('/screens/CreateBounty')}
+        // Switch to the Post tab rather than pushing the composer as its own
+        // route: that route mounts CreateBountyFlow with no onCancel/onComplete,
+        // so neither exiting nor finishing after publish could leave it.
+        onAction={() => setActiveScreen('postings')}
       />
     );
   }, [
@@ -1129,7 +1132,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     onlineOnly,
     selectOnlyFilter,
     theme,
-    router,
+    setActiveScreen,
   ]);
 
   const ListFooterComponent = useCallback(
