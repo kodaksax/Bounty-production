@@ -44,6 +44,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
+    BackHandler,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -102,22 +103,19 @@ export default function ConnectOnboardingScreen() {
   const router = useRouter();
   // Optional entry params, set by the onboarding payout step
   // (app/onboarding/payouts.tsx). Every other caller pushes this route bare,
-  // so all three must stay optional.
+  // so all of them must stay optional.
   //   country  — ISO alpha-2 chosen before entering; only affects a NEW
   //              Express account, Stripe ignores it for an existing one.
-  //   mode     — 'create' | 'link'; the hosted flow handles both, this is for
-  //              analytics attribution.
+  //   source   — entry surface, for analytics attribution.
   //   returnTo — where to go on dismissal INSTEAD of popping the stack. In a
   //              signup funnel, popping returns to the step that pushed us and
   //              strands the user there; replacing continues the funnel.
   const params = useLocalSearchParams<{
     country?: string;
-    mode?: string;
     returnTo?: string;
     source?: string;
   }>();
   const entryCountry = typeof params.country === 'string' ? params.country : undefined;
-  const entryMode = params.mode === 'link' ? 'link' : params.mode === 'create' ? 'create' : undefined;
   const returnTo = typeof params.returnTo === 'string' && params.returnTo ? params.returnTo : undefined;
   const { session, isLoading: authLoading } = useAuthContext();
   const { theme } = useAppThemeContext();
@@ -295,7 +293,6 @@ export default function ConnectOnboardingScreen() {
         await analyticsService.trackEvent('identity_onboarding_started', {
           source: 'stripe_connect_onboarding',
           ...(params.source ? { entrySurface: params.source } : {}),
-          ...(entryMode ? { mode: entryMode } : {}),
           ...(entryCountry ? { country: entryCountry } : {}),
         });
       } catch {
@@ -397,7 +394,7 @@ export default function ConnectOnboardingScreen() {
       setCanRetry(launchRetryable);
       setPhase('error');
     }
-  }, [entryCountry, entryMode, params.source, session?.access_token, session?.user?.id, verifyOnboardingStatus]);
+  }, [entryCountry, params.source, session?.access_token, session?.user?.id, verifyOnboardingStatus]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -432,9 +429,30 @@ export default function ConnectOnboardingScreen() {
     router.back();
   }, [fadeOut, returnTo, router]);
 
+  // With returnTo set, dismiss() is the only correct way out: a raw pop would
+  // land back on the step that pushed us (and leave its busy flag set). The
+  // iOS swipe is disabled via gestureEnabled on <Stack.Screen> below; Android
+  // hardware back is routed through dismiss() here.
+  useEffect(() => {
+    if (!returnTo) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      dismiss();
+      return true;
+    });
+    return () => sub.remove();
+  }, [dismiss, returnTo]);
+
+  // Rendered in every branch so the gesture lock holds from the first frame.
+  const screenOptions = (
+    <Stack.Screen
+      options={{ headerShown: false, animation: 'slide_from_bottom', gestureEnabled: !returnTo }}
+    />
+  );
+
   if (authLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        {screenOptions}
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.primary} />
         </View>
@@ -445,6 +463,7 @@ export default function ConnectOnboardingScreen() {
   if (!session?.access_token) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        {screenOptions}
         <View style={styles.centered}>
           <Text style={styles.errorTitle}>Please sign in</Text>
           <Text style={styles.muted}>You must be signed in to set up payouts.</Text>
@@ -480,7 +499,7 @@ export default function ConnectOnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+      {screenOptions}
       <Animated.View style={[styles.flexFill, fadeStyle]}>
         <View style={styles.header}>
           <TouchableOpacity

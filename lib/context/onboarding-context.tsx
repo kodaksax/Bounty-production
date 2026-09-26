@@ -21,8 +21,11 @@ export const ONBOARDING_STATE_KEY_BASE = '@bounty_onboarding_state';
  * it — the profile details form, the poster's first-bounty composer, the
  * hunter's nearby-discovery and sample application, phone capture and the
  * done summary — was removed, along with the draft fields only those screens
- * wrote. A v1 draft resumed under v2 therefore carries fields that no longer
- * exist, which the load path drops on merge.
+ * wrote, and style/location/role-select were added ahead of payouts. A v1
+ * draft with `intent` set would route straight to payouts and skip those new
+ * steps, so drafts are persisted in a versioned envelope (see
+ * serializeDraft/parseDraft) and any other version — including unversioned
+ * pre-v2 drafts — is discarded on load rather than resumed.
  */
 export const CURRENT_ONBOARDING_VERSION = 2;
 
@@ -69,6 +72,36 @@ export interface OnboardingData {
   // Same as the profile fields above: no screen collects a phone number any
   // more, but a draft that has one still gets written through on completion.
   phone: string;
+}
+
+/** Stored shape: the draft plus the flow version that wrote it. */
+interface PersistedDraft {
+  version: number;
+  data: Partial<OnboardingData>;
+}
+
+function serializeDraft(data: OnboardingData): string {
+  const envelope: PersistedDraft = { version: CURRENT_ONBOARDING_VERSION, data };
+  return JSON.stringify(envelope);
+}
+
+/**
+ * The stored draft's data if it was written by the current flow version,
+ * otherwise null (stale version, legacy unversioned draft, or malformed).
+ * Throws only on invalid JSON.
+ */
+export function parseDraft(stored: string): Partial<OnboardingData> | null {
+  const parsed = JSON.parse(stored);
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    parsed.version === CURRENT_ONBOARDING_VERSION &&
+    parsed.data &&
+    typeof parsed.data === 'object'
+  ) {
+    return parsed.data as Partial<OnboardingData>;
+  }
+  return null;
 }
 
 const defaultOnboardingData: OnboardingData = {
@@ -128,9 +161,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
         if (stored) {
           try {
-            const parsed = JSON.parse(stored);
-            if (parsed && typeof parsed === 'object' && !cancelled) {
-              setData({ ...defaultOnboardingData, ...parsed });
+            const draft = parseDraft(stored);
+            if (!draft) {
+              // Written by a different flow version: resuming it could skip
+              // steps that didn't exist when it was saved. Start fresh.
+              await AsyncStorage.removeItem(key);
+            }
+            if (!cancelled) {
+              setData(draft ? { ...defaultOnboardingData, ...draft } : defaultOnboardingData);
             }
           } catch (parseError) {
             console.error('[OnboardingContext] Error parsing stored state:', parseError);
@@ -171,7 +209,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }
     persistTimerRef.current = setTimeout(() => {
       persistTimerRef.current = null;
-      AsyncStorage.setItem(key, JSON.stringify(data)).catch((error) => {
+      AsyncStorage.setItem(key, serializeDraft(data)).catch((error) => {
         console.error('[OnboardingContext] Error saving state:', error);
       });
     }, PERSIST_DEBOUNCE_MS);
@@ -191,7 +229,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       if (persistTimerRef.current) {
         clearTimeout(persistTimerRef.current);
         persistTimerRef.current = null;
-        AsyncStorage.setItem(loadedKeyRef.current || ONBOARDING_STATE_KEY_BASE, JSON.stringify(dataRef.current)).catch((error) => {
+        AsyncStorage.setItem(loadedKeyRef.current || ONBOARDING_STATE_KEY_BASE, serializeDraft(dataRef.current)).catch((error) => {
           console.error('[OnboardingContext] Error saving state on unmount:', error);
         });
       }

@@ -114,9 +114,10 @@ export const welcomeCarouselStrings = {
     distance: '0.9 mi',
   },
 
-  // Trust slide rows. Only the last of these ("never an address") is a claim
-  // this app already keeps elsewhere (hunters see a neighborhood, not a
-  // street address) — kept verbatim as scripted rather than bracketed.
+  // Trust slide rows. Every one must describe behaviour the app actually
+  // enforces. ID verification is NOT mandatory for either side — it's a
+  // per-bounty requirement the poster can switch on (requires_id_verified,
+  // StepPay.tsx), so the middle row says exactly that and nothing stronger.
   trustRows: [
     {
       icon: 'lock',
@@ -125,8 +126,8 @@ export const welcomeCarouselStrings = {
     },
     {
       icon: 'verified-user',
-      title: 'Both sides are ID-verified',
-      body: 'Posters and hunters alike, before money moves.',
+      title: 'Require ID when it matters',
+      body: 'Switch it on for a bounty and only ID-verified hunters can apply.',
     },
     {
       icon: 'location-on',

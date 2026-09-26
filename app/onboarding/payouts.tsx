@@ -9,12 +9,11 @@
  *
  * This file owns state + navigation only; the UI lives in
  * components/onboarding/PayoutSetupScreen.tsx and the actual Connect flow
- * lives in app/wallet/connect/embedded-onboarding.tsx. Both CTAs push that
- * same screen: Stripe's hosted onboarding already offers "sign in to an
- * existing account" inside the flow, so "Link Existing Account" is the same
- * route with a different entry intent (carried for analytics, and so the
- * screen can label itself correctly later) rather than a second, parallel
- * implementation we'd have to keep in sync.
+ * lives in app/wallet/connect/embedded-onboarding.tsx. There is one CTA, not
+ * a create/link pair: the connect function creates a new Express account
+ * whenever the profile has none, so a "Link Existing Account" button pushing
+ * the same route would still have created one. Linking a pre-existing Stripe
+ * account needs its own OAuth flow; until that exists, don't offer it.
  *
  * `returnTo` is what makes Connect onboarding reusable here: the onboarding
  * screen normally pops back to whatever pushed it (Wallet, Withdraw, …), which
@@ -26,7 +25,7 @@
  * comes from useAppThemeContext(), not a pinned darkTheme.
  */
 
-import { type Href, useRouter } from 'expo-router';
+import { type Href, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PayoutSetupScreen } from '../../components/onboarding/PayoutSetupScreen';
@@ -51,29 +50,32 @@ export default function PayoutsScreen() {
   // can't stack two copies of the Connect screen.
   const [busy, setBusy] = useState(false);
 
-  const startConnect = useCallback(
-    (mode: 'create' | 'link') => {
-      if (busy) return;
-      setBusy(true);
-      hapticFeedback.light();
-      analyticsService.trackEvent('payout_setup_started', {
-        surface: 'onboarding',
-        role: onboardingData.intent ?? 'unknown',
-        mode,
-        country: country.code,
-      });
-      router.push({
-        pathname: '/wallet/connect/embedded-onboarding',
-        params: {
-          country: country.code,
-          mode,
-          source: 'onboarding',
-          returnTo: NEXT_STEP as string,
-        },
-      } as Href);
-    },
-    [busy, country.code, onboardingData.intent, router]
+  // The Connect screen normally leaves via replace(returnTo), but if it is
+  // ever popped back to this step instead, the CTA must not stay locked.
+  useFocusEffect(
+    useCallback(() => {
+      setBusy(false);
+    }, [])
   );
+
+  const startConnect = useCallback(() => {
+    if (busy) return;
+    setBusy(true);
+    hapticFeedback.light();
+    analyticsService.trackEvent('payout_setup_started', {
+      surface: 'onboarding',
+      role: onboardingData.intent ?? 'unknown',
+      country: country.code,
+    });
+    router.push({
+      pathname: '/wallet/connect/embedded-onboarding',
+      params: {
+        country: country.code,
+        source: 'onboarding',
+        returnTo: NEXT_STEP as string,
+      },
+    } as Href);
+  }, [busy, country.code, onboardingData.intent, router]);
 
   const handleSkip = useCallback(() => {
     hapticFeedback.light();
@@ -95,8 +97,7 @@ export default function PayoutsScreen() {
       insets={insets}
       country={country}
       onChangeCountry={setCountry}
-      onCreateAccount={() => startConnect('create')}
-      onLinkExisting={() => startConnect('link')}
+      onCreateAccount={startConnect}
       onSkip={handleSkip}
       onBack={router.canGoBack() ? handleBack : undefined}
       busy={busy}

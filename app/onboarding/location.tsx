@@ -61,7 +61,10 @@ export default function LocationScreen() {
   }, []);
 
   const finish = (precision: LocationPrecision, extra?: { location?: string }) => {
-    updateData({ locationPrecision: precision, ...(extra?.location ? { location: extra.location } : {}) });
+    // Always overwrite `location`, clearing it when this answer resolved none:
+    // a user who stored a precise address, came back, then skipped/denied or
+    // chose approximate must not have the old address written on completion.
+    updateData({ locationPrecision: precision, location: extra?.location ?? '' });
     analyticsService.trackEvent('onboarding_location_step_answered', {
       precision,
       intent: onboardingData.intent ?? 'none',

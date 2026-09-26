@@ -230,8 +230,8 @@ export type AnalyticsEvent =
   // visible, so a blocked flow left no signal.
   // Onboarding payout-setup step (app/onboarding/payouts.tsx), the screen that
   // sits between role selection and style for BOTH roles. `payout_setup_started`
-  // means the user chose a Connect entry point (mode: create | link) and is
-  // being handed to the hosted flow — the identity_* events above then take
+  // means the user tapped Create Stripe Account and is being handed to the
+  // hosted flow — the identity_* events above then take
   // over and report what happened there. `payout_setup_skipped` is the
   // "I'll do this later" exit, which is the number that says whether payouts
   // belong this early in the funnel at all.

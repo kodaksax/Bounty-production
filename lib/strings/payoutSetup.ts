@@ -41,6 +41,5 @@ export const PAYOUT_SETUP_COPY = {
   sheetBody:
     'Your wallet is configured and ready — this step is only the Stripe payout connection. Once you link a Stripe account, you can move your balance out to your bank account.',
   createAccount: 'Create Stripe Account',
-  linkExisting: 'Link Existing Account',
   skip: "I'll do this later",
 } as const;

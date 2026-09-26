@@ -123,7 +123,7 @@ describe('onboarding location step', () => {
     await flush();
 
     expect(mockLocationService.getCurrentLocation).not.toHaveBeenCalled();
-    expect(mockUpdateData).toHaveBeenCalledWith({ locationPrecision: 'denied' });
+    expect(mockUpdateData).toHaveBeenCalledWith({ locationPrecision: 'denied', location: '' });
     expect(mockPush).toHaveBeenCalledWith('/onboarding/role-select');
   });
 
@@ -133,7 +133,7 @@ describe('onboarding location step', () => {
     await flush();
 
     expect(mockLocationService.requestPermission).not.toHaveBeenCalled();
-    expect(mockUpdateData).toHaveBeenCalledWith({ locationPrecision: 'skipped' });
+    expect(mockUpdateData).toHaveBeenCalledWith({ locationPrecision: 'skipped', location: '' });
     expect(mockPush).toHaveBeenCalledWith('/onboarding/role-select');
   });
 
@@ -144,7 +144,7 @@ describe('onboarding location step', () => {
     fireEvent.press(getByLabelText('Allow location'));
     await flush();
 
-    expect(mockUpdateData).toHaveBeenCalledWith({ locationPrecision: 'precise' });
+    expect(mockUpdateData).toHaveBeenCalledWith({ locationPrecision: 'precise', location: '' });
     expect(mockPush).toHaveBeenCalledWith('/onboarding/role-select');
   });
 });

@@ -269,8 +269,6 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   // Adding icon fonts ensures icons render consistently on first mount.
   const [fontsLoaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-    // Handwriting face for the founder-note signature (app/onboarding/founder-note.tsx).
-    Caveat: require('../assets/fonts/Caveat-Regular.ttf'),
     MaterialIcons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf'),
     Ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
   });

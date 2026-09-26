@@ -1,5 +1,14 @@
 -- STAGING ONLY. Do not apply to production (xwlwqzzphmmhghiqvkeu).
 --
+-- Lives in supabase/ops/staging/, NOT supabase/migrations/, on purpose:
+-- `supabase db push` applies every file in migrations/ to whichever project
+-- it targets, so keeping it there would let a production push swap the
+-- production cleanup trigger for this hard-delete one. Apply it by hand,
+-- against staging (gwumwpoomwvkjyibdmpj) only, e.g. via the SQL editor or
+-- `psql "$STAGING_DATABASE_URL" -f supabase/ops/staging/hard_user_deletion.sql`.
+-- Staging recorded earlier revisions as migrations 20260922201957 and
+-- 20260922202251.
+--
 -- Repoints the existing trigger_user_deletion_cleanup (BEFORE DELETE ON
 -- profiles) from handle_user_deletion_cleanup() -- which archives bounties
 -- and SET NULLs most references so rows survive account deletion -- to a
@@ -47,6 +56,14 @@
 -- "operator does not exist: text = uuid" on the first real delete attempt.
 -- This file is the corrected, single final version (casts the array side
 -- for that one column) -- see the CREATE OR REPLACE below.
+--
+-- Revised 2026-09-26 (NOT yet re-applied to staging): v_bounty_ids used to
+-- include bounties where the user was only the hunter (hunter_id /
+-- accepted_by), so deleting a hunter deleted the poster's whole bounty and
+-- everything hanging off it. Ownership is now poster_id OR user_id, the same
+-- predicate the production cleanup uses; the hunter columns are SET NULL by
+-- their FKs, and the hunter's own bounty_payments rows (poster_id/hunter_id
+-- carry no FK) are deleted directly instead.
 
 BEGIN;
 
@@ -60,9 +77,12 @@ DECLARE
   v_user_id uuid := OLD.id;
   v_bounty_ids uuid[];
 BEGIN
+  -- Bounties this user OWNS. Never the ones they merely hunted: those belong
+  -- to the poster, and bounties.hunter_id / accepted_by are ON DELETE SET
+  -- NULL, so the poster's bounty survives with its hunter cleared.
   SELECT array_agg(id) INTO v_bounty_ids
   FROM bounties
-  WHERE poster_id = v_user_id OR hunter_id = v_user_id OR accepted_by = v_user_id;
+  WHERE poster_id = v_user_id OR user_id = v_user_id;
 
   -- NO ACTION blockers on bounties/profiles -- must go before the rows they
   -- reference are deleted, or the deletion aborts with a FK violation.
@@ -70,7 +90,10 @@ BEGIN
     WHERE bounty_id = ANY(v_bounty_ids) OR requester_id = v_user_id OR responder_id = v_user_id;
   DELETE FROM bounty_disputes
     WHERE bounty_id = ANY(v_bounty_ids) OR initiator_id = v_user_id OR respondent_id = v_user_id;
-  DELETE FROM bounty_payments WHERE bounty_id = ANY(v_bounty_ids);
+  -- poster_id / hunter_id here carry no FK, so the user's rows on bounties
+  -- they don't own have to be removed by user, not by bounty.
+  DELETE FROM bounty_payments
+    WHERE bounty_id = ANY(v_bounty_ids) OR poster_id = v_user_id OR hunter_id = v_user_id;
   DELETE FROM reconciliation_known_exceptions WHERE user_id = v_user_id;
 
   -- Conversations: delete outright (not SET NULL) so messages/participants,

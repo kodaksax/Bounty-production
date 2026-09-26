@@ -1,7 +1,8 @@
 /**
  * Onboarding Welcome
- * Pre-auth entry screen: a 3-slide swipeable carousel behind a fixed Sign
- * Up / Log In footer (components/onboarding/WelcomeCarousel.tsx). Role
+ * Pre-auth entry screen: a self-rotating four-slide stage (not swipeable —
+ * it advances on a timer) above a fixed Sign Up / Log In footer
+ * (components/onboarding/WelcomeCarousel.tsx). Role
  * (poster vs. hunter) is picked on its own screen after auth — see that
  * component's top comment for why.
  *

@@ -13,7 +13,7 @@
  *      with the profile and is already usable at this point — the copy says so
  *      explicitly, because "set up payouts" otherwise reads as "your wallet is
  *      missing" and users bounce thinking the app is half-built.
- *   2. It does not run onboarding itself. Both CTAs hand off to the existing
+ *   2. It does not run onboarding itself. The CTA hands off to the existing
  *      Stripe Connect onboarding screen (app/wallet/connect/embedded-onboarding.tsx),
  *      which owns account-link creation, the ASWebAuthenticationSession /
  *      Custom Tab presentation, and status reconciliation. This screen is the
@@ -22,7 +22,7 @@
  *
  * Layout follows the "connect a payments account" pattern: a hero card with
  * the paired app + Stripe marks and a single Get Started affordance, and a
- * bottom sheet holding the actual choice (country, create vs. link). No
+ * bottom sheet holding the actual choice (country, then create). No
  * progress dots — the rest of the funnel's dot counts (6 steps, hard-coded in
  * PosterTaskPrompt, HunterLocationPrompt, PosterFundingScreen, done.tsx…) stay
  * correct only if this interstitial stays outside the counted sequence, and
@@ -59,8 +59,6 @@ type PayoutSetupScreenProps = {
   onChangeCountry: (country: PayoutCountry) => void;
   /** Starts Connect onboarding for a brand-new Express account. */
   onCreateAccount: () => void;
-  /** Same hosted flow, entered by signing into an existing Stripe account. */
-  onLinkExisting: () => void;
   onSkip: () => void;
   onBack?: () => void;
   /** True while a CTA is navigating, so the sheet buttons stop double-firing. */
@@ -81,7 +79,6 @@ export function PayoutSetupScreen({
   country,
   onChangeCountry,
   onCreateAccount,
-  onLinkExisting,
   onSkip,
   onBack,
   busy = false,
@@ -263,18 +260,6 @@ export function PayoutSetupScreen({
           accessibilityState={{ disabled: busy }}
         >
           <Text style={styles.primaryButtonText}>{PAYOUT_SETUP_COPY.createAccount}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.secondaryButton, busy && styles.buttonBusy]}
-          onPress={onLinkExisting}
-          disabled={busy}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel={PAYOUT_SETUP_COPY.linkExisting}
-          accessibilityState={{ disabled: busy }}
-        >
-          <Text style={styles.secondaryButtonText}>{PAYOUT_SETUP_COPY.linkExisting}</Text>
         </TouchableOpacity>
       </Animated.View>
 
@@ -504,15 +489,6 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
     },
     primaryButtonText: { fontSize: 17, fontWeight: '700', color: t.background },
-    secondaryButton: {
-      marginTop: 10,
-      height: 56,
-      borderRadius: t.radius.full,
-      backgroundColor: t.surfaceSecondary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    secondaryButtonText: { fontSize: 17, fontWeight: '600', color: t.text },
     buttonBusy: { opacity: 0.6 },
     pickerScrim: {
       flex: 1,
