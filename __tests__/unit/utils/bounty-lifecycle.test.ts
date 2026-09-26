@@ -192,6 +192,19 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     }
   );
 
+  // system_expiry also fires 168h after the poster engaged (e.g. messaged),
+  // so the copy may only claim no decision was made, never no response.
+  it('a system_expiry closure says no decision was made, not that the poster never responded', () => {
+    const s = resolveBountyLifecycle({
+      bounty: bounty(),
+      role: 'hunter',
+      requestStatus: 'rejected',
+      requestRejectionSource: 'system_expiry',
+    });
+    expect(s.explanation).toMatch(/didn't make a decision in time/);
+    expect(s.explanation).not.toMatch(/respond/);
+  });
+
   it('a poster-sourced rejection keeps the "Not selected" copy', () => {
     const s = resolveBountyLifecycle({
       bounty: bounty(),

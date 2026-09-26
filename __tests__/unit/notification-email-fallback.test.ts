@@ -55,7 +55,7 @@ describe('buildHunterClosedEmail', () => {
       expect(body).not.toMatch(/declined|rejected you|chose/i)
     }
     expect(buildHunterClosedEmail({ bountyTitle: 'X', reason: 'poster_absent' }).body).toMatch(/hasn't been active/)
-    expect(buildHunterClosedEmail({ bountyTitle: 'X', reason: 'no_response' }).body).toMatch(/didn't respond in time/)
+    expect(buildHunterClosedEmail({ bountyTitle: 'X', reason: 'no_response' }).body).toMatch(/didn't make a decision in time/)
   })
 
   // The sweep leaves funded bounties open (flagged stale), so the copy may only

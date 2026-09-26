@@ -98,7 +98,9 @@ export function buildPosterFallbackEmail(params: {
 /**
  * Worded as a closure, never as the poster's decision: the poster didn't
  * decide anything. `reason` is data.reason from fn_expire_bounty_requests
- * ('no_response') or fn_sweep_absent_posters ('poster_absent', with
+ * ('no_response' -- which also covers requests that expired after the poster
+ * engaged, e.g. by messaging, so the copy says "no decision", not "no
+ * response") or fn_sweep_absent_posters ('poster_absent', with
  * data.bountyClosed saying whether the bounty itself was archived).
  */
 export function buildHunterClosedEmail(params: {
@@ -116,7 +118,7 @@ export function buildHunterClosedEmail(params: {
       ? params.bountyClosed === true
         ? `The poster of "${bountyTitle}" hasn't been active on Bounty, so we closed the bounty and your application with it. This wasn't a rejection — there are other bounties open near you now.`
         : `The poster of "${bountyTitle}" hasn't been active on Bounty, so we closed your application. This wasn't a rejection — there are other bounties open near you now.`
-      : `The poster of "${bountyTitle}" didn't respond in time, so your application closed automatically. This wasn't a rejection — there are other bounties open near you now.`
+      : `The poster of "${bountyTitle}" didn't make a decision in time, so your application closed automatically. This wasn't a rejection — there are other bounties open near you now.`
   return { title, body }
 }
 

@@ -1,5 +1,6 @@
 -- Request expiry / outcome verification queries.
--- Requires 20260925220000_request_outcomes_and_absent_poster_sweep.sql.
+-- Requires 20260925220000_request_outcomes_and_absent_poster_sweep.sql and
+-- 20260925230000_request_outcomes_review_fixes.sql.
 -- Read-only. Run against production with the service role.
 --
 -- Cohort: bounty_request_outcomes.is_legitimate_external -- no internal party,
@@ -18,15 +19,22 @@ GROUP BY 1, 2
 ORDER BY 1, 2;
 
 -- 2. Pending rows older than their window. Expect 0 within ~15 min of any
---    request crossing its window. Pre-watermark rows are excluded by design
---    (fn_sweep_absent_posters is the only path that closes those).
+--    request crossing its window. The overdue counters use exactly the rows
+--    fn_expire_bounty_requests can close: pre-watermark rows (only
+--    fn_sweep_absent_posters closes those) and open bounties that already
+--    have a worker (#864) are reported separately, never as overdue.
 SELECT
-  count(*) FILTER (WHERE br.poster_interacted_at IS NULL
+  count(*) FILTER (WHERE br.created_at >= c.request_lifecycle_enabled_at
+                   AND b.accepted_by IS NULL AND b.accepted_request_id IS NULL
+                   AND br.poster_interacted_at IS NULL
                    AND br.created_at < now() - make_interval(hours => c.request_expiry_hours)) AS overdue_silent,
-  count(*) FILTER (WHERE br.poster_interacted_at IS NOT NULL
+  count(*) FILTER (WHERE br.created_at >= c.request_lifecycle_enabled_at
+                   AND b.accepted_by IS NULL AND b.accepted_request_id IS NULL
+                   AND br.poster_interacted_at IS NOT NULL
                    AND br.created_at < now() - make_interval(hours => c.request_expiry_hours)
                    AND br.poster_interacted_at < now() - make_interval(hours => c.request_interacted_expiry_hours)) AS overdue_interacted,
-  count(*) FILTER (WHERE br.created_at < c.request_lifecycle_enabled_at) AS pre_watermark_pending
+  count(*) FILTER (WHERE br.created_at < c.request_lifecycle_enabled_at) AS pre_watermark_pending,
+  count(*) FILTER (WHERE b.accepted_by IS NOT NULL OR b.accepted_request_id IS NOT NULL) AS pending_on_assigned_bounty
 FROM public.bounty_requests br
 JOIN public.bounties b ON b.id = br.bounty_id
 CROSS JOIN public.posting_policy_config c
@@ -69,11 +77,14 @@ LEFT JOIN public.notification_email_fallbacks f ON f.outbox_id = o.id
 WHERE o.data->>'type' = 'application_expired'
 GROUP BY 1, 2;
 
--- 5. Absent-poster sweeps: what each real run closed.
-SELECT sweep_id, min(run_at) AS run_at, absent_days, count(*) AS bounties,
-       sum(requests_closed) AS requests,
-       count(*) FILTER (WHERE bounty_action = 'flagged_funded') AS funded_left_open,
-       count(*) FILTER (WHERE poster_is_internal) AS internal_posters
-FROM public.absent_poster_sweep_log
-GROUP BY sweep_id, absent_days
-ORDER BY 2 DESC;
+-- 5. Absent-poster sweeps: every real run, including runs that closed
+--    nothing (absent_poster_sweep_runs has one row per run; the log only has
+--    rows for bounties a run changed). finished_at NULL = the run aborted.
+SELECT s.sweep_id, s.started_at, s.finished_at, s.absent_days,
+       s.bounties_scanned, s.bounties_swept, s.bounties_skipped, s.requests_closed,
+       count(l.id) FILTER (WHERE l.bounty_action = 'flagged_funded') AS funded_left_open,
+       count(l.id) FILTER (WHERE l.poster_is_internal) AS internal_posters
+FROM public.absent_poster_sweep_runs s
+LEFT JOIN public.absent_poster_sweep_log l ON l.sweep_id = s.sweep_id
+GROUP BY s.sweep_id
+ORDER BY s.started_at DESC;

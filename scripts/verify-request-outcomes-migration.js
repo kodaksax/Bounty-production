@@ -1,6 +1,7 @@
 /* scripts/verify-request-outcomes-migration.js
  *
  * Applies supabase/migrations/20260925220000_request_outcomes_and_absent_poster_sweep.sql
+ * and its follow-up 20260925230000_request_outcomes_review_fixes.sql, in order,
  * inside ONE transaction against the real production schema and data, runs the
  * dry-run reports plus functional checks of the real write paths, and ALWAYS
  * rolls back. Nothing persists: the migration's own BEGIN/COMMIT are stripped
@@ -19,7 +20,19 @@ const path = require('path');
 const { Client } = require('pg');
 
 const ROOT = path.resolve(__dirname, '..');
-const MIGRATION = path.join(ROOT, 'supabase/migrations/20260925220000_request_outcomes_and_absent_poster_sweep.sql');
+const MIGRATIONS = [
+  '20260925220000_request_outcomes_and_absent_poster_sweep.sql',
+  '20260925230000_request_outcomes_review_fixes.sql',
+].map((f) => path.join(ROOT, 'supabase/migrations', f));
+
+// Objects these migrations create or replace. Snapshotted before the run and
+// compared after ROLLBACK, so the check holds whether or not production
+// already has them (20260925220000 is live; the follow-up may not be).
+const SNAPSHOT_SQL = `
+  SELECT pg_get_functiondef(to_regprocedure('public.fn_sweep_absent_posters(boolean,integer)')) AS sweep,
+         pg_get_functiondef(to_regprocedure('public.fn_expire_bounty_requests(boolean)'))       AS expire,
+         pg_get_functiondef(to_regprocedure('public.fn_bounty_may_hold_funds(uuid)'))            AS funds,
+         to_regclass('public.absent_poster_sweep_runs')::text                                    AS runs_table`;
 
 function dbUrls() {
   const env = fs.readFileSync(path.join(ROOT, '.env.production'), 'utf8');
@@ -56,16 +69,19 @@ function record(name, ok, info) {
 
 async function main() {
   const client = await connect();
+  const baseline = (await client.query(SNAPSHOT_SQL)).rows[0];
   try {
     await client.query('BEGIN');
     await client.query("SET LOCAL statement_timeout = '300s'");
 
-    const sql = fs
-      .readFileSync(MIGRATION, 'utf8')
-      .replace(/^BEGIN;\s*$/m, '')
-      .replace(/^COMMIT;\s*$/m, '');
-    await client.query(sql);
-    record('migration applies cleanly', true);
+    for (const file of MIGRATIONS) {
+      const sql = fs
+        .readFileSync(file, 'utf8')
+        .replace(/^BEGIN;\s*$/m, '')
+        .replace(/^COMMIT;\s*$/m, '');
+      await client.query(sql);
+      record(`${path.basename(file)} applies cleanly`, true);
+    }
 
     const sp = (await client.query(
       `SELECT p.proname, p.proconfig FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -83,6 +99,21 @@ async function main() {
        FROM fn_expire_bounty_requests(true)`
     );
     console.log('\nREPORT expiry dry-run (would close now):', exp.rows[0]);
+
+    // #864: bounties that already have a worker are not expiry's to close,
+    // in the preview as much as in the real run.
+    const assignedInDryRun = (await client.query(
+      `SELECT count(*)::int n FROM fn_expire_bounty_requests(true) e JOIN bounties b ON b.id = e.bounty_id
+       WHERE b.accepted_by IS NOT NULL OR b.accepted_request_id IS NOT NULL`
+    )).rows[0].n;
+    record('expiry dry-run excludes bounties that already have a worker', assignedInDryRun === 0, `${assignedInDryRun} rows`);
+
+    // v3 funding counts as funds for the sweep, whatever its state.
+    const v3 = (await client.query(
+      `SELECT count(*)::int n, count(*) FILTER (WHERE NOT fn_bounty_may_hold_funds(bounty_id))::int missed
+       FROM bounty_v3_funding`
+    )).rows[0];
+    record('every bounty with a v3 funding row counts as possibly funded', v3.missed === 0, `${v3.missed}/${v3.n} missed`);
 
     const wm = (await client.query('SELECT request_lifecycle_enabled_at wm FROM posting_policy_config WHERE id')).rows[0].wm;
     for (const days of [14, 30]) {
@@ -139,8 +170,32 @@ async function main() {
         `SELECT data FROM notifications_outbox WHERE data->>'requestId' = $1 AND data->>'type' = 'application_expired'`, [target.id]
       )).rows;
       record('hunter notice enqueued with requestId + reason=no_response', ob.length === 1 && ob[0].data.reason === 'no_response');
+      const body = (await client.query(
+        `SELECT body FROM notifications_outbox WHERE data->>'requestId' = $1 AND data->>'type' = 'application_expired'`, [target.id]
+      )).rows[0]?.body ?? '';
+      record('expiry notice says no decision, not no response',
+        body.includes("didn't make a decision in time") && !body.includes('respond'), body);
     } else {
       record('expiry functional check (no eligible pending row to age)', true, 'skipped');
+    }
+
+    // Write path: a pending row on an open bounty that already has a worker
+    // is left alone even when it is past its window.
+    const assigned = (await client.query(
+      `SELECT br.id FROM bounty_requests br JOIN bounties b ON b.id = br.bounty_id
+       WHERE br.status = 'pending' AND b.status = 'open' AND br.hunter_id IS NOT NULL
+         AND (b.accepted_by IS NOT NULL OR b.accepted_request_id IS NOT NULL) LIMIT 1`
+    )).rows[0];
+    if (assigned) {
+      await client.query(
+        `UPDATE bounty_requests SET created_at = now() - interval '100 hours', poster_interacted_at = NULL WHERE id = $1`,
+        [assigned.id]
+      );
+      await client.query('SELECT * FROM fn_expire_bounty_requests(false)');
+      const kept = (await client.query('SELECT status::text FROM bounty_requests WHERE id = $1', [assigned.id])).rows[0];
+      record('expiry leaves requests on an assigned open bounty pending', kept.status === 'pending');
+    } else {
+      record('assigned-bounty expiry check (no pending row on an assigned open bounty)', true, 'skipped');
     }
 
     // Interacted rows: no longer immune, but only after their own window.
@@ -223,7 +278,25 @@ async function main() {
         `SELECT count(*)::int n FROM bounty_events WHERE event_type = 'application.rejected' AND metadata->>'request_id' = ANY($1)`, [ids]
       )).rows[0].n;
       record('no sweep closure is logged as application.rejected', wrongLabel === 0);
+      const run = (await client.query(
+        `SELECT finished_at, bounties_swept, requests_closed FROM absent_poster_sweep_runs WHERE sweep_id = $1`,
+        [swept.rows[0].sweep_id]
+      )).rows[0];
+      record('sweep run row matches what the run closed',
+        !!run && run.finished_at !== null && run.bounties_swept === archivedIds.length + flaggedIds.length
+          && run.requests_closed === ids.length, JSON.stringify(run));
     }
+
+    // A real run that closes nothing still leaves a run row. After the run
+    // above, nothing at N=14 is left to close.
+    const runsBefore = (await client.query('SELECT count(*)::int n FROM absent_poster_sweep_runs')).rows[0].n;
+    const noop = await client.query('SELECT * FROM fn_sweep_absent_posters(false, 14)');
+    const runsAfter = (await client.query(
+      `SELECT count(*)::int n, count(*) FILTER (WHERE finished_at IS NOT NULL AND requests_closed = 0)::int empty
+       FROM absent_poster_sweep_runs`
+    )).rows[0];
+    record('a no-op real sweep is still logged as a run',
+      noop.rows.length === 0 && runsAfter.n === runsBefore + 1 && runsAfter.empty >= 1, JSON.stringify(runsAfter));
 
     // Relabel is reversible.
     await client.query('SELECT * FROM ops_relabel_system_application_events(false, false)');
@@ -244,8 +317,10 @@ async function main() {
     record('verification run', false, err.message);
   } finally {
     await client.query('ROLLBACK').catch(() => {});
-    const probe = await client.query(`SELECT to_regprocedure('public.fn_sweep_absent_posters(boolean,integer)') IS NULL AS gone`);
-    record('rollback honoured (sweep function absent after run)', probe.rows[0].gone);
+    const after = (await client.query(SNAPSHOT_SQL)).rows[0];
+    const changed = Object.keys(baseline).filter((k) => baseline[k] !== after[k]);
+    record('rollback honoured (every touched object matches its pre-run state)', changed.length === 0,
+      changed.length ? `changed: ${changed.join(', ')}` : '');
     await client.end();
   }
   const failed = results.filter((r) => !r.ok);

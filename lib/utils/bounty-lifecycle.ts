@@ -715,10 +715,15 @@ function resolveHunter(args: {
         return finalize({
           status,
           headline: 'Application closed',
+          // system_expiry also covers requests that expired days after the
+          // poster engaged (e.g. messaged), so it must not claim they never
+          // responded -- only that no decision came.
           explanation:
             requestRejectionSource === 'system_bounty_closed'
               ? 'This bounty is no longer available, so your application closed automatically.'
-              : `${poster} didn't respond in time, so your application closed automatically. This wasn't a rejection.`,
+              : requestRejectionSource === 'system_poster_absent'
+                ? `${poster} hasn't been active on Bounty, so your application closed automatically. This wasn't a rejection.`
+                : `${poster} didn't make a decision in time, so your application closed automatically. This wasn't a rejection.`,
           nextStep: 'There are other bounties open now.',
           waitingOn: 'nobody',
           needsAttention: false,
