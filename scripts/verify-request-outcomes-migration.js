@@ -144,6 +144,11 @@ async function main() {
     const beforeRejected = (await client.query(
       `SELECT count(*)::int n FROM bounty_events WHERE event_type = 'application.rejected'`
     )).rows[0].n;
+    // Rows a real relabel already moved before this run (216 in production
+    // since 2026-09-25). The revert below restores those too.
+    const preRelabeled = (await client.query(
+      `SELECT count(*)::int n FROM bounty_events WHERE event_type = 'application.closed' AND metadata ? 'relabeled_from'`
+    )).rows[0].n;
 
     // Expiry: age one real pending, post-watermark, non-interacted request past
     // the window and run the real function.
@@ -309,10 +314,11 @@ async function main() {
     const afterRevert = (await client.query(
       `SELECT count(*)::int n FROM bounty_events WHERE event_type = 'application.rejected'`
     )).rows[0].n;
-    // +1 for the synthetic poster decline above; the relabel/revert pair must
-    // otherwise land exactly where it started.
-    record('relabel revert restores the original ledger rows', afterRevert === beforeRejected + (decide ? 1 : 0),
-      `${afterRevert} vs ${beforeRejected}`);
+    // +1 for the synthetic poster decline above, + every row relabeled before
+    // this run (revert undoes all relabels, not just this run's).
+    const expected = beforeRejected + preRelabeled + (decide ? 1 : 0);
+    record('relabel revert restores the original ledger rows', afterRevert === expected,
+      `${afterRevert} vs ${expected} (${beforeRejected} + ${preRelabeled} pre-relabeled${decide ? ' + 1 synthetic' : ''})`);
   } catch (err) {
     record('verification run', false, err.message);
   } finally {
