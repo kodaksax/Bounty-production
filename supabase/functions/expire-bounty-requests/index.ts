@@ -15,6 +15,12 @@
 // per cron-triggered function so one can be rotated or revoked without
 // affecting the other. There is no human-triggered path for this function,
 // so unlike reconciliation there is no admin-JWT fallback.
+//
+// A second, separate mode -- body {"mode":"absent_poster_sweep"} -- runs
+// fn_sweep_absent_posters. The 15-minute cron never sends it; it is only
+// invoked explicitly (and defaults to dry_run: true), so closing an absent
+// poster's bounties is never a side effect of the general expiry rule. Both
+// modes emit the same `application_expired` event, told apart by `reason`.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -37,6 +43,20 @@ interface ExpiredRequestRow {
   hunter_id: string | null;
   poster_id: string;
   hours_open: number;
+  poster_interacted?: boolean;
+}
+
+interface SweptRequestRow {
+  sweep_id: string;
+  request_id: string;
+  bounty_id: string;
+  hunter_id: string | null;
+  poster_id: string;
+  poster_is_internal: boolean;
+  poster_last_active_at: string | null;
+  bounty_action: 'archived' | 'flagged_funded';
+  request_created_at: string;
+  dry_run: boolean;
 }
 
 async function capturePostHogEvents(
@@ -96,6 +116,48 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    const body = (await req.json().catch(() => ({}))) as { mode?: string; dry_run?: boolean; absent_days?: number };
+
+    if (body.mode === 'absent_poster_sweep') {
+      const dryRun = body.dry_run !== false;
+      const { data: swept, error: sweepError } = await supabase.rpc('fn_sweep_absent_posters', {
+        p_dry_run: dryRun,
+        p_absent_days: typeof body.absent_days === 'number' ? body.absent_days : null,
+      });
+      if (sweepError) {
+        console.error('[expire-bounty-requests] fn_sweep_absent_posters failed', sweepError);
+        return jsonResponse({ error: String(sweepError) }, 500);
+      }
+      const sweptRows = (swept ?? []) as SweptRequestRow[];
+      if (!dryRun) {
+        await capturePostHogEvents(
+          sweptRows
+            .filter((r) => !!r.hunter_id)
+            .map((r) => ({
+              event: 'application_expired',
+              distinct_id: r.hunter_id as string,
+              properties: {
+                bounty_id: r.bounty_id,
+                request_id: r.request_id,
+                reason: 'poster_absent',
+                sweep_id: r.sweep_id,
+                bounty_action: r.bounty_action,
+                poster_is_internal: r.poster_is_internal,
+                hours_open: Math.round(((Date.now() - Date.parse(r.request_created_at)) / 3_600_000) * 10) / 10,
+              },
+            }))
+        );
+      }
+      return jsonResponse({
+        ok: true,
+        mode: 'absent_poster_sweep',
+        dry_run: dryRun,
+        sweep_id: sweptRows[0]?.sweep_id ?? null,
+        requests: sweptRows.length,
+        bounties: new Set(sweptRows.map((r) => r.bounty_id)).size,
+      });
+    }
+
     const { data, error } = await supabase.rpc('fn_expire_bounty_requests', { p_dry_run: false });
 
     if (error) {
@@ -114,6 +176,8 @@ Deno.serve(async (req: Request) => {
           bounty_id: r.bounty_id,
           request_id: r.request_id,
           hours_open: r.hours_open,
+          reason: 'no_response',
+          poster_interacted: r.poster_interacted === true,
         },
       }));
 

@@ -208,6 +208,7 @@ export function MyPostingExpandable({
 
   // Track the current user's request for this bounty (if any)
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
+  const [requestRejectionSource, setRequestRejectionSource] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
 
   type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null;
@@ -465,9 +466,11 @@ export function MyPostingExpandable({
               });
               if (Array.isArray(reqs) && reqs.length > 0) {
                 setRequestStatus(reqs[0].status);
+                setRequestRejectionSource((reqs[0] as { rejection_source?: string | null }).rejection_source ?? null);
                 setRequestId(String(reqs[0].id));
               } else {
                 setRequestStatus(null);
+                setRequestRejectionSource(null);
                 setRequestId(null);
               }
             }
@@ -1134,6 +1137,7 @@ export function MyPostingExpandable({
             : bounty.poster_id || bounty.user_id
         }
         requestStatus={requestStatus}
+        requestRejectionSource={requestRejectionSource}
         onWithdrawApplication={onWithdrawApplication}
         role={variant === 'owner' ? 'poster' : 'hunter'}
         applicationCount={applicationCount}

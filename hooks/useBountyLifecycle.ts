@@ -36,6 +36,8 @@ export interface BountyLifecycleContext {
   applicationCount: number;
   submission: CompletionSubmission | null;
   requestStatus: string | null;
+  /** bounty_requests.rejection_source for the viewer's own application. */
+  requestRejectionSource: string | null;
   requestId: string | null;
   hasDispute: boolean;
   disputeId: string | null;
@@ -63,6 +65,7 @@ export function useBountyLifecycle(
   const [applicationCount, setApplicationCount] = useState(0);
   const [submission, setSubmission] = useState<CompletionSubmission | null>(null);
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
+  const [requestRejectionSource, setRequestRejectionSource] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [hasDispute, setHasDispute] = useState(false);
   const [disputeId, setDisputeId] = useState<string | null>(null);
@@ -120,12 +123,14 @@ export function useBountyLifecycle(
       // The viewer's own application decides hunter vs visitor. A hunter who
       // withdrew has no row and is correctly treated as a visitor again.
       let myRequestStatus: string | null = null;
+      let myRequestRejectionSource: string | null = null;
       let myRequestId: string | null = null;
       if (!viewerIsPoster && currentUserId) {
         try {
           const reqs = await bountyRequestService.getAll({ bountyId: id, userId: String(currentUserId) });
           if (Array.isArray(reqs) && reqs.length > 0) {
             myRequestStatus = reqs[0].status ?? null;
+            myRequestRejectionSource = reqs[0].rejection_source ?? null;
             myRequestId = reqs[0].id != null ? String(reqs[0].id) : null;
           }
         } catch {
@@ -138,6 +143,7 @@ export function useBountyLifecycle(
       }
       if (isStale()) return;
       setRequestStatus(myRequestStatus);
+      setRequestRejectionSource(myRequestRejectionSource);
       setRequestId(myRequestId);
 
       const resolvedRole: BountyRole = viewerIsPoster
@@ -273,6 +279,7 @@ export function useBountyLifecycle(
         bounty,
         role,
         requestStatus,
+        requestRejectionSource,
         submissionStatus: submission?.status ?? null,
         submissionIsMine:
           !!currentUserId && !!submission && String(submission.hunter_id) === String(currentUserId),
@@ -293,6 +300,7 @@ export function useBountyLifecycle(
     applicationCount,
     submission,
     requestStatus,
+    requestRejectionSource,
     requestId,
     hasDispute,
     disputeId,
