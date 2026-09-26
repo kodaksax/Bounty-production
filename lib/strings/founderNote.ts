@@ -19,8 +19,16 @@ export const founderNoteStrings = {
     'those who need help',
     'and those that can help',
   ] as const,
+  /**
+   * The two sides of the disconnect. Once the quote has typed out they light
+   * up in the signature's green, as the crosshair below the quote locks on.
+   * Each must appear verbatim, once, in quoteLines.
+   */
+  highlights: ['need help', 'can help'] as const,
   /** Typed out in the same SpaceMono face as the quote, a beat after it lands. */
   signature: 'Robert Lee Wright III',
   signatureDash: '—',
-  primaryCta: 'Continue',
+  // A commitment, not a navigation step: the note asks the user to be part
+  // of closing that gap, and this is where they say yes.
+  primaryCta: "I'm in",
 } as const;

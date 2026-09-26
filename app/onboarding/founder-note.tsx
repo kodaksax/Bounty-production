@@ -31,6 +31,12 @@
  * face and revealed by a sliding cover — it's deliberately the same typewriter
  * as the quote now, so the whole note reads as one hand at one keyboard.
  *
+ * The moment the quote lands is the note's payoff: "need help" and "can help"
+ * light up in the signature's green, and the bounty crosshair
+ * (FounderNoteCrosshair) swings in and locks on, with a haptic tick and a soft
+ * glow blooming behind the words, before the signature types. The CTA then
+ * reads as a yes to that ("I'm in"), not as a next-step button.
+ *
  * Under Reduce Motion the whole thing renders complete on mount — the point
  * is the words, and the CTA must never be gated behind an animation a user
  * has asked not to see.
@@ -47,6 +53,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CarouselGlow } from '../../components/onboarding/CarouselGlow';
+import {
+  CROSSHAIR_LOCK_MS,
+  FounderNoteCrosshair,
+} from '../../components/onboarding/FounderNoteCrosshair';
 import { useAccessibleAnimation } from '../../hooks/use-accessible-animation';
 import { useCompleteOnboarding } from '../../hooks/useCompleteOnboarding';
 import { useOnboarding } from '../../lib/context/onboarding-context';
@@ -58,12 +69,12 @@ import { palette } from '../../lib/themes/colors';
 import { radius, spacing } from '../../lib/themes/tokens';
 import type { AppTheme } from '../../lib/themes/types';
 
-// Typewriter pacing. Slow enough to be read along with rather than watched —
-// this is the one screen in the funnel with nothing to do but read, so the
-// words arrive at reading speed. Every character gets the same beat, line
-// breaks included: the note is one continuous run of typing from the first
-// word to the last of the signature, with nothing held anywhere in between.
-const TYPE_MS_PER_CHAR = 80;
+// Typewriter pacing. Quick — the typing is a flourish, not something to wait
+// on, so the note lands in a couple of seconds. Every character gets the same
+// beat, line breaks included: the note is one continuous run of typing from
+// the first word to the last of the signature, with nothing held anywhere in
+// between.
+const TYPE_MS_PER_CHAR = 35;
 const TYPE_START_DELAY_MS = 450;
 const REVEAL_MS = 700;
 // Beat in the post-typing reveal: a hold once the signature is fully in
@@ -75,6 +86,33 @@ const CTA_DELAY_MS = 500;
 // Held after the signature's last character before the CTA fade starts, so the
 // name gets a beat on its own rather than being stepped on by the way out.
 const SIGNATURE_SETTLE_MS = 260;
+// The two sides of the quote turning green once it lands.
+const HIGHLIGHT_MS = 600;
+// The glow behind the quote, blooming in as the crosshair locks.
+const GLOW_MS = 1400;
+const GLOW_SIZE = 560;
+
+// The quote cut into plain runs and highlighted runs, in order, so the typed
+// slice can colour each phrase as it arrives.
+function quoteSegments(quote: string, phrases: readonly string[]) {
+  const segments: { text: string; start: number; highlight: boolean }[] = [];
+  let cursor = 0;
+  const hits = phrases
+    .map((p) => ({ start: quote.indexOf(p), end: quote.indexOf(p) + p.length }))
+    .filter((h) => h.start >= 0)
+    .sort((a, b) => a.start - b.start);
+  for (const hit of hits) {
+    if (hit.start > cursor) {
+      segments.push({ text: quote.slice(cursor, hit.start), start: cursor, highlight: false });
+    }
+    segments.push({ text: quote.slice(hit.start, hit.end), start: hit.start, highlight: true });
+    cursor = hit.end;
+  }
+  if (cursor < quote.length) {
+    segments.push({ text: quote.slice(cursor), start: cursor, highlight: false });
+  }
+  return segments;
+}
 
 export default function FounderNoteScreen() {
   const insets = useSafeAreaInsets();
@@ -86,6 +124,7 @@ export default function FounderNoteScreen() {
 
   const quote = useMemo(() => founderNoteStrings.quoteLines.join('\n'), []);
   const spokenQuote = useMemo(() => founderNoteStrings.quoteLines.join(' '), []);
+  const segments = useMemo(() => quoteSegments(quote, founderNoteStrings.highlights), [quote]);
   const signatureLine = useMemo(
     () => `${founderNoteStrings.signatureDash} ${founderNoteStrings.signature}`,
     []
@@ -108,6 +147,11 @@ export default function FounderNoteScreen() {
 
   const ctaOpacity = useRef(new Animated.Value(0)).current;
   const caretOpacity = useRef(new Animated.Value(1)).current;
+  // Colour, so JS-driven; 0 is the quote's own text colour, 1 the green.
+  const highlight = useRef(new Animated.Value(0)).current;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
+  // Vertical centre of the quote block, so the glow sits behind the words.
+  const [quoteCenterY, setQuoteCenterY] = useState<number | null>(null);
 
   useEffect(() => {
     analyticsService.trackEvent('founder_note_viewed', {
@@ -171,9 +215,9 @@ export default function FounderNoteScreen() {
     return () => loop.stop();
   }, [caretOpacity, signatureTypingDone, prefersReducedMotion]);
 
-  // Signature typewriter — the quote's, with the same per-character pacing, so
-  // the two lines read as one continuous piece of typing rather than two
-  // effects that happen to follow each other.
+  // Signature typewriter — the quote's, with the same per-character pacing.
+  // It waits for the crosshair to lock first, so the mark lands before the
+  // name does.
   useEffect(() => {
     if (prefersReducedMotion) {
       setSignatureTypedCount(signatureLine.length);
@@ -185,20 +229,52 @@ export default function FounderNoteScreen() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
 
-    const typeNext = (index: number) => {
+    const typeSignature = (index: number) => {
       if (cancelled || index > signatureLine.length) return;
       setSignatureTypedCount(index);
       if (index === signatureLine.length) return;
-      timer = setTimeout(() => typeNext(index + 1), TYPE_MS_PER_CHAR);
+      timer = setTimeout(() => typeSignature(index + 1), TYPE_MS_PER_CHAR);
     };
 
-    typeNext(0);
+    timer = setTimeout(() => typeSignature(0), CROSSHAIR_LOCK_MS);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
   }, [typingDone, signatureLine, prefersReducedMotion]);
+
+  // The two sides light up as soon as the quote has landed.
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      highlight.setValue(1);
+      return;
+    }
+    if (!typingDone) return;
+    const anim = Animated.timing(highlight, {
+      toValue: 1,
+      duration: HIGHLIGHT_MS,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [typingDone, highlight, prefersReducedMotion]);
+
+  useEffect(() => {
+    if (prefersReducedMotion) glowOpacity.setValue(1);
+  }, [prefersReducedMotion, glowOpacity]);
+
+  // The lock: felt as well as seen, and the glow blooms from it.
+  const handleCrosshairLock = useCallback(() => {
+    hapticFeedback.medium();
+    Animated.timing(glowOpacity, {
+      toValue: 1,
+      duration: GLOW_MS,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [glowOpacity]);
 
   // CTA last, once the signature has landed and had its beat.
   useEffect(() => {
@@ -223,6 +299,12 @@ export default function FounderNoteScreen() {
     return () => reveal.stop();
   }, [signatureTypingDone, ctaOpacity, prefersReducedMotion]);
 
+  const accentColor = theme.isDark ? palette.green[300] : palette.green[700];
+  const highlightColor = highlight.interpolate({
+    inputRange: [0, 1],
+    outputRange: [theme.text, accentColor],
+  });
+
   const handleContinue = useCallback(() => {
     hapticFeedback.light();
     analyticsService.trackEvent('founder_note_continued', {
@@ -246,7 +328,22 @@ export default function FounderNoteScreen() {
           },
         ]}
       >
-        <View style={styles.quoteBlock}>
+        {quoteCenterY !== null ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, { opacity: glowOpacity }]}
+          >
+            <CarouselGlow theme={theme} top={quoteCenterY - GLOW_SIZE / 2} />
+          </Animated.View>
+        ) : null}
+
+        <View
+          style={styles.quoteBlock}
+          onLayout={(e) => {
+            const { y, height } = e.nativeEvent.layout;
+            setQuoteCenterY(y + height / 2);
+          }}
+        >
           {/* The full quote, rendered invisible, reserves the block's final
               size so the typed copy below doesn't reflow the layout — and so
               the centred text doesn't crawl as lines fill in. */}
@@ -262,12 +359,38 @@ export default function FounderNoteScreen() {
                 // screen reader should never be fed it a character at a time.
                 accessibilityLabel={spokenQuote}
               >
-                {quote.slice(0, typedCount)}
+                {segments.map((seg) => {
+                  const visible = seg.text.slice(0, Math.max(0, typedCount - seg.start));
+                  if (!visible) return null;
+                  return seg.highlight ? (
+                    <Animated.Text
+                      key={seg.start}
+                      // Colour only: SpaceMono ships one weight, and a bold would
+                      // fall back to another face and break the ghost's metrics.
+                      style={{ color: highlightColor }}
+                    >
+                      {visible}
+                    </Animated.Text>
+                  ) : (
+                    visible
+                  );
+                })}
                 {!typingDone && !prefersReducedMotion ? (
                   <Animated.Text style={[styles.caret, { opacity: caretOpacity }]}>|</Animated.Text>
                 ) : null}
               </Text>
             </View>
+          </View>
+
+          {/* Present from the start (invisible until it locks) so nothing
+              above it shifts when it arrives. */}
+          <View style={styles.crosshair}>
+            <FounderNoteCrosshair
+              active={typingDone}
+              still={prefersReducedMotion}
+              color={accentColor}
+              onLock={handleCrosshairLock}
+            />
           </View>
         </View>
 
@@ -354,6 +477,7 @@ function makeStyles(theme: AppTheme) {
       textAlign: 'center',
     },
     quoteGhost: { opacity: 0 },
+    crosshair: { marginTop: spacing['2xl'] },
     caret: {
       fontFamily: 'SpaceMono',
       fontSize: 19,

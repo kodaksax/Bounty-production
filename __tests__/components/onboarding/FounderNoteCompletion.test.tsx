@@ -17,6 +17,12 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
 }));
 
+// The glow is an SVG radial gradient, and react-native-svg doesn't load under
+// Jest; it's pure decoration, so it renders nothing here.
+jest.mock('../../../components/onboarding/CarouselGlow', () => ({
+  CarouselGlow: () => null,
+}));
+
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
