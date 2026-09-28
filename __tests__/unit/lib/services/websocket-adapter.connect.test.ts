@@ -1,3 +1,8 @@
+// connect() waits for the previous channel's removal, a few promise hops deep.
+const flushPromises = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve()
+}
+
 describe('wsAdapter — Supabase Realtime', () => {
   beforeEach(() => {
     jest.resetModules()
@@ -142,13 +147,15 @@ describe('wsAdapter — Supabase Realtime', () => {
     expect(channelFactoryMock).toHaveBeenCalledTimes(1)
 
     // Simulate a CHANNEL_ERROR, which should schedule a reconnect via setTimeout.
+    // Realtime marks the channel errored until it manages to rejoin.
+    channelMock.state = 'errored'
     subscriptionStatusCb && subscriptionStatusCb('CHANNEL_ERROR')
 
     // Fast-forward all timers so the scheduled reconnect runs.
     jest.runAllTimers()
 
     // Allow any pending promises in reconnect() / connect() to resolve.
-    await Promise.resolve()
+    await flushPromises()
 
     expect(channelFactoryMock).toHaveBeenCalledTimes(2)
 
@@ -189,7 +196,7 @@ describe('wsAdapter — Supabase Realtime', () => {
     wsAdapter.reconnect()
     // Fast-forward the 100ms delay inside reconnect().
     jest.runAllTimers()
-    await Promise.resolve()
+    await flushPromises()
 
     expect(removeChannelMock).toHaveBeenCalledWith(channelMock)
     expect(channelFactoryMock).toHaveBeenCalledTimes(2)
