@@ -135,6 +135,7 @@ export function BountyCard({
       resolveBountyLifecycle({
         bounty,
         role: viewerRole,
+        viewerId: currentUserId ?? null,
         requestStatus: viewerRole === 'hunter' ? requestStatus : null,
         requestRejectionSource: viewerRole === 'hunter' ? requestRejectionSource : null,
         // The card is handed the already-resolved review flags rather than the
@@ -157,6 +158,7 @@ export function BountyCard({
     [
       bounty,
       viewerRole,
+      currentUserId,
       requestStatus,
       requestRejectionSource,
       reviewNeeded,

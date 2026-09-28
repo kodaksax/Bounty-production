@@ -224,6 +224,7 @@ export function useBountyStatusFilters({
       const state = resolveBountyLifecycle({
         bounty: b,
         role: variant === 'owner' ? 'poster' : 'hunter',
+        viewerId: currentUserId ?? null,
         requestStatus: variant === 'hunter' ? requestStatusMap.get(String(b.id)) ?? null : null,
         submissionStatus: submission?.status ?? null,
         submissionIsMine:

@@ -6,7 +6,6 @@ import { BrandingLogo } from "components/ui/branding-logo"
 import { EmptyState } from "components/ui/empty-state"
 import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
-import { cn } from "lib/utils"
 import { ROUTES } from "lib/routes"
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext"
 import React, { useCallback, useMemo, useRef, useState } from "react"
@@ -23,10 +22,8 @@ import {
 import { Swipeable } from "react-native-gesture-handler"
 
 import { ConnectionStatus } from "../../components/connection-status"
-import { OfflineStatusBadge } from "../../components/offline-status-badge"
 import { WalletBalanceButton } from "../../components/ui/wallet-balance-button"
 
-import { useAuthContext } from "../../hooks/use-auth-context"
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import { useValidUserId } from "../../hooks/useValidUserId"
@@ -36,30 +33,14 @@ import { logClientError as _logClientError } from "../../lib/services/monitoring
 import { navigationIntent } from "../../lib/services/navigation-intent"
 import { generateInitials } from "../../lib/services/supabase-messaging"
 
-import type { Conversation } from "../../lib/types"
+import {
+  buildConversationRows,
+  formatConversationTime,
+  type ConversationRow,
+} from "../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "./chat-detail-screen"
 
 const { width } = Dimensions.get("window")
-
-function formatConversationTime(updatedAt?: string): string {
-  if (!updatedAt) return ""
-
-  const date = new Date(updatedAt)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffHrs = Math.floor(diffMs / (1000 * 60 * 60))
-
-  if (diffHrs < 1) {
-    const diffMins = Math.floor(diffMs / (1000 * 60))
-    if (diffMins < 1) return "Just now"
-    return `${diffMins}m ago`
-  }
-  if (diffHrs < 24) return `${diffHrs}h ago`
-  const diffDays = Math.floor(diffHrs / 24)
-  if (diffDays === 1) return "Yesterday"
-  if (diffDays < 7) return `${diffDays}d ago`
-  return date.toLocaleDateString()
-}
 
 export function MessengerScreen({
   activeScreen,
@@ -76,6 +57,12 @@ export function MessengerScreen({
   const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } =
     useConversations()
+
+  // One row per person (#875); see lib/utils/conversation-rows.ts.
+  const rows = useMemo(
+    () => buildConversationRows(conversations, currentUserId),
+    [conversations, currentUserId]
+  )
 
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -124,19 +111,19 @@ export function MessengerScreen({
     }
   }
 
-  const handleConversationClick = async (conversation: Conversation) => {
-    await markConversationReadSafe(conversation.id)
-
+  const handleConversationClick = async (conversation: ConversationRow) => {
     // A 1:1 row opens the merged thread with that person — the same screen
     // the profile Message button opens — so every route into a direct
     // conversation shows the full history, not just this one bounty's chat.
-    const otherUserId = !conversation.isGroup
-      ? conversation.participantIds?.find(id => id !== currentUserId)
-      : undefined
-    if (otherUserId) {
-      router.push(ROUTES.MESSAGES.WITH_USER(otherUserId) as any)
+    // That thread marks every backing conversation read itself; clearing the
+    // badges here too keeps the list honest when the user comes back.
+    if (conversation.otherUserId) {
+      void Promise.all(conversation.backingConversationIds.map(markConversationReadSafe))
+      router.push(ROUTES.MESSAGES.WITH_USER(conversation.otherUserId) as any)
       return
     }
+
+    await markConversationReadSafe(conversation.id)
 
     setActiveConversation(conversation.id)
     setShowChat(true)
@@ -162,10 +149,10 @@ export function MessengerScreen({
   }, [refresh, onConversationModeChange, slideAnim])
 
   const handleDeleteConversation = useCallback(
-    (conversation: Conversation) => {
+    (conversation: ConversationRow, displayName: string) => {
       Alert.alert(
         "Delete Conversation",
-        `Are you sure you want to delete your conversation with ${conversation.name}?`,
+        `Delete your conversation with ${displayName}? It's removed from your inbox only.`,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -173,7 +160,10 @@ export function MessengerScreen({
             style: "destructive",
             onPress: async () => {
               try {
-                await deleteConversation(conversation.id)
+                // The row stands for every conversation with this person.
+                await Promise.all(
+                  conversation.backingConversationIds.map((id) => deleteConversation(id))
+                )
               } catch {
                 Alert.alert("Error", "Failed to delete conversation")
               }
@@ -186,17 +176,45 @@ export function MessengerScreen({
   )
 
   const renderConversationItem = useCallback(
-    ({ item }: { item: Conversation }) => (
+    ({ item }: { item: ConversationRow }) => (
       <ConversationItem
         conversation={item}
         onPress={() => handleConversationClick(item)}
-        onDelete={() => handleDeleteConversation(item)}
+        onDelete={(displayName) => handleDeleteConversation(item, displayName)}
       />
     ),
     [handleConversationClick, handleDeleteConversation]
   )
 
-  const keyExtractor = useCallback((item: Conversation) => item.id, [])
+  const keyExtractor = useCallback((item: ConversationRow) => item.id, [])
+
+  const listEmpty = useMemo(() => {
+    if (loading) {
+      return (
+        <View className="px-4 py-2">
+          <ConversationsListSkeleton count={6} />
+        </View>
+      )
+    }
+    if (error) {
+      return (
+        <EmptyState
+          icon="cloud-off"
+          title="Couldn't load messages"
+          description="Check your connection and try again."
+          actionLabel="Try again"
+          onAction={handleRefresh}
+        />
+      )
+    }
+    return (
+      <EmptyState
+        icon="chat-bubble-outline"
+        title="No messages yet"
+        description="When you apply to a bounty or someone applies to yours, your conversations show up here."
+      />
+    )
+  }, [loading, error, handleRefresh])
 
   if (showChat && activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)
@@ -206,7 +224,7 @@ export function MessengerScreen({
           <Animated.View style={{ flex: 1, opacity: inboxOpacity }}>
             <View style={{ flex: 1, backgroundColor: theme.background }}>
               <FlatList
-                data={conversations}
+                data={rows}
                 keyExtractor={keyExtractor}
                 renderItem={renderConversationItem}
               />
@@ -266,11 +284,18 @@ export function MessengerScreen({
       </View>
 
       <FlatList
-        data={conversations}
+        data={rows}
         keyExtractor={keyExtractor}
         renderItem={renderConversationItem}
+        ListEmptyComponent={listEmpty}
+        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 32, flexGrow: 1 }}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
         }
       />
     </View>
@@ -280,9 +305,9 @@ export function MessengerScreen({
 export default MessengerScreen
 
 interface ConversationItemProps {
-  conversation: Conversation
+  conversation: ConversationRow
   onPress: () => void
-  onDelete: () => void
+  onDelete: (displayName: string) => void
 }
 
 const ConversationItem = React.memo(function ConversationItem({
@@ -292,17 +317,33 @@ const ConversationItem = React.memo(function ConversationItem({
 }: ConversationItemProps) {
   const { theme } = useAppThemeContext()
   const router = useRouter()
-  const { session } = useAuthContext()
   const time = useMemo(
     () => formatConversationTime(conversation.updatedAt),
     [conversation.updatedAt]
   )
 
-  const otherUserId = useMemo(() => {
-    const currentId = session?.user?.id
-    if (!currentId || !conversation.participantIds?.length) return null
-    return conversation.participantIds.find(id => id !== currentId) ?? null
-  }, [conversation.participantIds, session?.user?.id])
+  const otherUserId = conversation.otherUserId
+  // fetchConversations already batch-loads every other user's name/avatar
+  // (lib/services/supabase-messaging.ts), so only fall back to a live,
+  // per-row profile fetch when that batched avatar is missing -- which is
+  // what caused every row to show a letter instead of a picture (#875).
+  // Disabled for groups: with no id the hook would resolve to the viewer's
+  // own profile.
+  const needsProfileFallback = !!otherUserId && !conversation.avatar
+  const { profile } = useNormalizedProfile(otherUserId ?? undefined, {
+    enabled: needsProfileFallback,
+  })
+  const person = needsProfileFallback ? profile : null
+
+  const displayName = person?.username || conversation.name || "Conversation"
+  const avatarUrl = person?.avatar || conversation.avatar
+  const initials = person
+    ? generateInitials(person.username, person.name)
+    : (conversation.name?.[0] ?? "?").toUpperCase()
+
+  const unread = conversation.unread ?? 0
+  const hasUnread = unread > 0
+  const preview = conversation.lastMessage
 
   const handleAvatarPress = useCallback(() => {
     if (otherUserId) {
@@ -311,51 +352,99 @@ const ConversationItem = React.memo(function ConversationItem({
     }
   }, [otherUserId, router])
 
+  const renderRightActions = useCallback(
+    () => (
+      <TouchableOpacity
+        className="justify-center items-center px-6 rounded-2xl mb-2 ml-2"
+        style={{ backgroundColor: theme.error }}
+        onPress={() => onDelete(displayName)}
+        accessibilityRole="button"
+        accessibilityLabel={`Delete conversation with ${displayName}`}
+      >
+        <MaterialIcons name="delete-outline" size={22} color="white" />
+      </TouchableOpacity>
+    ),
+    [onDelete, displayName, theme.error]
+  )
+
   return (
-    <Swipeable
-      renderRightActions={() => (
-        <TouchableOpacity
-          className="bg-red-500 justify-center items-center px-6 rounded-xl mr-2"
-          onPress={onDelete}
-        >
-          <MaterialIcons name="delete" size={22} color="white" />
-        </TouchableOpacity>
-      )}
-    >
+    <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
       <TouchableOpacity
         onPress={onPress}
         className="flex-row items-center px-3 py-3 mb-2 rounded-2xl"
-        style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}
+        style={{
+          backgroundColor: theme.surface,
+          borderWidth: 1,
+          borderColor: hasUnread ? theme.primary : theme.border,
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={
+          hasUnread
+            ? `${displayName}, ${unread} unread message${unread === 1 ? "" : "s"}`
+            : displayName
+        }
       >
         <TouchableOpacity
           onPress={handleAvatarPress}
           disabled={!otherUserId}
           className="mr-3"
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${displayName}'s profile`}
         >
           <Avatar className="h-12 w-12">
-            <AvatarImage
-              src={conversation.avatar || "/placeholder.svg"}
-              alt={conversation.name}
-            />
+            <AvatarImage src={avatarUrl || "/placeholder.svg"} alt={displayName} />
             <AvatarFallback style={{ backgroundColor: theme.surfaceSecondary }}>
-              <Text style={{ color: theme.textSecondary, fontSize: 14, fontWeight: '600' }}>
-                {conversation.name?.[0] ?? "?"}
+              <Text style={{ color: theme.textSecondary, fontSize: 14, fontWeight: "600" }}>
+                {initials}
               </Text>
             </AvatarFallback>
           </Avatar>
         </TouchableOpacity>
 
-        <View className="flex-1 ml-2">
-          <Text className="font-semibold" style={{ color: theme.text }}>
-            {conversation.name}
-          </Text>
-          <Text className="text-sm" style={{ color: theme.textSecondary }} numberOfLines={1}>
-            {conversation.lastMessage || "No messages yet"}
-          </Text>
+        <View className="flex-1" style={{ minWidth: 0 }}>
+          <View className="flex-row items-center justify-between">
+            <Text
+              className="flex-1 mr-2"
+              style={{ color: theme.text, fontSize: 16, fontWeight: hasUnread ? "700" : "600" }}
+              numberOfLines={1}
+            >
+              {displayName}
+            </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                color: hasUnread ? theme.primaryLight : theme.textDisabled,
+                fontWeight: hasUnread ? "600" : "400",
+              }}
+            >
+              {time}
+            </Text>
+          </View>
+          <View className="flex-row items-center justify-between mt-1">
+            <Text
+              className="flex-1 mr-2"
+              style={{
+                fontSize: 14,
+                color: hasUnread ? theme.text : theme.textSecondary,
+                fontStyle: preview ? "normal" : "italic",
+              }}
+              numberOfLines={1}
+            >
+              {preview || "No messages yet"}
+            </Text>
+            {hasUnread && (
+              <View
+                className="rounded-full items-center justify-center px-1.5"
+                style={{ backgroundColor: theme.primary, minWidth: 20, height: 20 }}
+              >
+                <Text style={{ color: "white", fontSize: 11, fontWeight: "700" }}>
+                  {unread > 99 ? "99+" : unread}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-
-        <Text style={{ fontSize: 12, color: theme.textDisabled }}>{time}</Text>
       </TouchableOpacity>
     </Swipeable>
   )

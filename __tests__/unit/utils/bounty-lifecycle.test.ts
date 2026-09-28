@@ -293,6 +293,28 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     expect(s.group).toBe('past');
   });
 
+  it('an `accepted` row loses to accepted_by when the viewer is someone else (#876)', () => {
+    // Legacy bounties carry two `accepted` rows; only accepted_by is the hunter.
+    const loser = resolveBountyLifecycle({
+      bounty: bounty({ status: 'in_progress', accepted_by: 'hunter-a' }),
+      role: 'hunter',
+      viewerId: 'hunter-b',
+      requestStatus: 'accepted',
+    });
+    expect(loser.headline).toBe('Another hunter was selected');
+    expect(loser.needsAttention).toBe(false);
+    expect(loser.group).toBe('past');
+
+    const winner = resolveBountyLifecycle({
+      bounty: bounty({ status: 'in_progress', accepted_by: 'hunter-a' }),
+      role: 'hunter',
+      viewerId: 'hunter-a',
+      requestStatus: 'accepted',
+    });
+    expect(winner.headline).not.toBe('Another hunter was selected');
+    expect(winner.status).toBe('in_progress');
+  });
+
   it('never reports a payout to a hunter who was not the selected one', () => {
     const s = resolveBountyLifecycle({
       bounty: bounty({ status: 'completed', accepted_by: 'someone-else' }),
