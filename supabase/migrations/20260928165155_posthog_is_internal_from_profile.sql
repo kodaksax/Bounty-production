@@ -14,17 +14,22 @@
 -- The email rule stays in the OR only as a safety net. It adds no accounts
 -- today: every address it matches already has is_internal = true.
 --
--- This function body starts from the LIVE prod definition (read 2026-09-28)
--- with the is_internal change layered on top. Prod's v_properties already
--- carries the initial_utm_*/initial_referrer/initial_landing_page/install_*
--- keys from 20260808000000 -- dropping them here would have silently
--- regressed the attribution contract those person properties feed, so they
--- are kept unchanged alongside is_internal.
+-- This function body is copied from the LIVE prod definition (read
+-- 2026-09-28), not from 20260808000000. That file's initial_utm_* /
+-- initial_referrer / initial_landing_page / install_* keys were never
+-- applied here (its ADD COLUMN statements don't exist on public.profiles --
+-- confirmed against live prod, not just this repo's migration history) and
+-- have no bearing on the current attribution model, which lives in
+-- public.marketing_attribution (marketing_attribution_core_schema,
+-- 2026-07-28). Adding those keys to v_properties fails outright against this
+-- schema (42703: record "v_profile" has no field "initial_utm_source"),
+-- confirmed by actually running it -- do not add them back on the strength of
+-- a diff-only review that assumed 20260808000000 was live.
 --
 -- No schema or RLS change. Rollback: re-run this file with the is_internal
 -- line changed back to public.is_internal_analytics_email(v_profile.email),
--- and drop is_internal from the trigger column list. The attribution keys and
--- the backfill SELECT below are unaffected by that rollback.
+-- and drop is_internal from the trigger column list. The backfill SELECT
+-- below is unaffected by that rollback.
 
 CREATE OR REPLACE FUNCTION public.enqueue_analytics_person_snapshot(p_user_id uuid)
  RETURNS void
@@ -96,14 +101,7 @@ BEGIN
       COALESCE(v_profile.is_internal, false)
       OR public.is_internal_analytics_email(v_profile.email),
       false
-    ),
-    'initial_utm_source', v_profile.initial_utm_source,
-    'initial_utm_medium', v_profile.initial_utm_medium,
-    'initial_utm_campaign', v_profile.initial_utm_campaign,
-    'initial_referrer', v_profile.initial_referrer,
-    'initial_landing_page', v_profile.initial_landing_page,
-    'install_source', v_profile.install_source,
-    'install_campaign', v_profile.install_campaign
+    )
   );
 
   INSERT INTO public.analytics_person_outbox (
