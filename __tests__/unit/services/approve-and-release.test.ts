@@ -140,11 +140,15 @@ describe('approveAndRelease', () => {
     expect(trackEvent).toHaveBeenCalledTimes(1);
     expect(trackEvent).toHaveBeenCalledWith(
       'payment_failed',
-      expect.objectContaining({ bounty_id: 'b5', stage: 'release', reason: 'release_not_confirmed' })
+      expect.objectContaining({
+        bounty_id: 'b5',
+        stage: 'release',
+        error_code: 'release_not_confirmed',
+      })
     );
   });
 
-  test('emits payment_failed when release throws', async () => {
+  test('emits payment_failed with the shared failure props when release throws', async () => {
     await expect(
       approveAndRelease({
         bountyId: 'b6',
@@ -160,7 +164,42 @@ describe('approveAndRelease', () => {
 
     expect(trackEvent).toHaveBeenCalledWith(
       'payment_failed',
-      expect.objectContaining({ bounty_id: 'b6', stage: 'release', reason: 'boom' })
+      expect.objectContaining({ bounty_id: 'b6', stage: 'release', error_code: 'unknown', error_message: 'boom' })
+    );
+    expect(trackEvent).not.toHaveBeenCalledWith('escrow_released', expect.anything());
+  });
+
+  test('includes architecture on escrow_released when the caller supplies it', async () => {
+    await approveAndRelease({
+      bountyId: 'b8',
+      hunterId: 'h8',
+      title: 't8',
+      isForHonor: false,
+      architecture: 'v2',
+      releaseFn: jest.fn(async () => true),
+      approveFn: jest.fn(async () => true),
+    });
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      'escrow_released',
+      expect.objectContaining({ bounty_id: 'b8', architecture: 'v2' })
+    );
+  });
+
+  test('emits escrow_release_pending instead of escrow_released for v3, since releaseFn returning true only means the transfer was accepted, not settled', async () => {
+    await approveAndRelease({
+      bountyId: 'b9',
+      hunterId: 'h9',
+      title: 't9',
+      isForHonor: false,
+      architecture: 'v3',
+      releaseFn: jest.fn(async () => true),
+      approveFn: jest.fn(async () => true),
+    });
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      'escrow_release_pending',
+      expect.objectContaining({ bounty_id: 'b9', architecture: 'v3' })
     );
     expect(trackEvent).not.toHaveBeenCalledWith('escrow_released', expect.anything());
   });

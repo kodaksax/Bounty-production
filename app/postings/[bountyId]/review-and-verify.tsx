@@ -29,6 +29,7 @@ import { profileService } from '../../../lib/services/profile-service';
 import { ratingsService } from '../../../lib/services/ratings';
 import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
 import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
 import { MIN_RATING_SAMPLE } from '../../../lib/utils/trust-summary';
 import { useWallet } from '../../../lib/wallet-context';
@@ -328,6 +329,7 @@ export default function ReviewAndVerifyScreen() {
         isForHonor: Boolean(bounty.is_for_honor),
         amount: Number(bounty.amount ?? 0),
         posterId: currentUserId,
+        architecture: isV3Bounty(bounty) ? 'v3' : isPhase2Bounty(bounty) ? 'v2' : 'v1',
         releaseFn: releaseFunds,
         approveFn: async (id: string) => {
           await completionService.approveSubmission(id);

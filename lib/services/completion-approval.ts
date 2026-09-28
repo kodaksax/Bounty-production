@@ -1,5 +1,6 @@
 import { analyticsService, type AnalyticsProperties } from './analytics-service';
 import { logClientError, logClientInfo } from './monitoring';
+import { failureEventProps } from '../utils/stripe-error';
 
 export interface ApproveAndReleaseOptions {
   bountyId: string | number;
@@ -10,6 +11,9 @@ export interface ApproveAndReleaseOptions {
   // poster's user id (the PostHog distinct id), carried on escrow_released.
   amount?: number;
   posterId?: string | null;
+  // Analytics only: which settlement path released these funds, so v1/v2/v3
+  // releases can be segmented. Omitted when the caller can't determine it.
+  architecture?: 'v1' | 'v2' | 'v3';
   // releaseFn should return true on success
   releaseFn: (bountyId: string | number, hunterId: string, title: string) => Promise<boolean>;
   // approveFn should return true on success
@@ -34,6 +38,7 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
     isForHonor,
     amount,
     posterId,
+    architecture,
     releaseFn,
     approveFn,
     revertApproveFn,
@@ -52,6 +57,7 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
     ...(typeof amount === 'number' ? { amount } : {}),
     hunter_person_id: hunterId,
     poster_person_id: posterId || undefined,
+    architecture,
     via: 'approve_submission',
   };
 
@@ -76,7 +82,7 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
         trackRelease('payment_failed', {
           ...releaseProps,
           stage: 'release',
-          reason: releaseErr instanceof Error ? releaseErr.message.slice(0, 200) : 'unknown',
+          ...failureEventProps(releaseErr),
         });
         throw releaseErr;
       }
@@ -88,7 +94,7 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
         trackRelease('payment_failed', {
           ...releaseProps,
           stage: 'release',
-          reason: 'release_not_confirmed',
+          ...failureEventProps(undefined, 'release_not_confirmed'),
         });
         return false;
       }
@@ -97,10 +103,17 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
         bountyId,
         hunterId,
       });
-      // releaseFn only returns true once the server has settled the release
-      // (wallet credit, or a Stripe transfer for Phase 2/v3), so this is the
-      // confirmed "funds dispatched to the hunter" point for this bounty.
-      trackRelease('escrow_released', releaseProps);
+      // releaseFn returning true is NOT the same as settlement being
+      // confirmed for v3: useWallet().releaseFunds also returns true for
+      // 'release_pending' once a transfer id exists, and only the Stripe
+      // transfer.created webhook later marks it 'released'. Emit a distinct
+      // pending event for v3 so escrow_released keeps meaning "settlement
+      // confirmed" — matching payout.tsx's Stripe-native branch, which
+      // deliberately waits for status === 'released' before emitting it.
+      trackRelease(
+        architecture === 'v3' ? 'escrow_release_pending' : 'escrow_released',
+        releaseProps
+      );
     }
 
     const approved = await approveFn(String(bountyId));
@@ -134,7 +147,7 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
 
 // Fire-and-forget: analytics must never change whether approval succeeds.
 function trackRelease(
-  event: 'escrow_released' | 'payment_failed',
+  event: 'escrow_released' | 'escrow_release_pending' | 'payment_failed',
   props: AnalyticsProperties
 ): void {
   try {

@@ -11,7 +11,11 @@ import { staleBountyService } from 'lib/services/stale-bounty-service';
 import { userProfileService } from 'lib/services/userProfile';
 import type { Attachment, Conversation } from 'lib/types';
 import { getCurrentUserId } from 'lib/utils/data-utils';
-import { bountyHoldsUnreleasedEscrow } from 'lib/utils/payment-architecture';
+import {
+  bountyHoldsUnreleasedEscrow,
+  isPhase2Bounty,
+  isV3Bounty,
+} from 'lib/utils/payment-architecture';
 import { getBountyStages } from 'lib/utils/bounty-lifecycle';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
@@ -2051,6 +2055,7 @@ export function MyPostingExpandable({
           hunterName={hunterName}
           bountyAmount={bounty.amount || 0}
           isForHonor={bounty.is_for_honor || false}
+          architecture={isV3Bounty(bounty) ? 'v3' : isPhase2Bounty(bounty) ? 'v2' : 'v1'}
           onClose={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: false })}
           onComplete={() => {
             dispatchUi({ type: 'set', key: 'showReviewModal', value: false });

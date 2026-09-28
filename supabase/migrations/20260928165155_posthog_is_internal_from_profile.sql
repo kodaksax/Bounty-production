@@ -14,14 +14,17 @@
 -- The email rule stays in the OR only as a safety net. It adds no accounts
 -- today: every address it matches already has is_internal = true.
 --
--- This function body is copied from the LIVE prod definition (read
--- 2026-09-28), not from 20260808000000. Prod never got that file's
--- initial_utm_* / install_* keys, so copying the repo version here would
--- silently change what the sync sends.
+-- This function body starts from the LIVE prod definition (read 2026-09-28)
+-- with the is_internal change layered on top. Prod's v_properties already
+-- carries the initial_utm_*/initial_referrer/initial_landing_page/install_*
+-- keys from 20260808000000 -- dropping them here would have silently
+-- regressed the attribution contract those person properties feed, so they
+-- are kept unchanged alongside is_internal.
 --
 -- No schema or RLS change. Rollback: re-run this file with the is_internal
 -- line changed back to public.is_internal_analytics_email(v_profile.email),
--- and drop is_internal from the trigger column list.
+-- and drop is_internal from the trigger column list. The attribution keys and
+-- the backfill SELECT below are unaffected by that rollback.
 
 CREATE OR REPLACE FUNCTION public.enqueue_analytics_person_snapshot(p_user_id uuid)
  RETURNS void
@@ -93,7 +96,14 @@ BEGIN
       COALESCE(v_profile.is_internal, false)
       OR public.is_internal_analytics_email(v_profile.email),
       false
-    )
+    ),
+    'initial_utm_source', v_profile.initial_utm_source,
+    'initial_utm_medium', v_profile.initial_utm_medium,
+    'initial_utm_campaign', v_profile.initial_utm_campaign,
+    'initial_referrer', v_profile.initial_referrer,
+    'initial_landing_page', v_profile.initial_landing_page,
+    'install_source', v_profile.install_source,
+    'install_campaign', v_profile.install_campaign
   );
 
   INSERT INTO public.analytics_person_outbox (
@@ -120,3 +130,10 @@ CREATE TRIGGER trg_queue_profile_analytics_snapshot
     stripe_connect_payouts_enabled, location, is_internal
   ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.queue_profile_analytics_snapshot();
+
+-- Re-queue every existing profile through the corrected snapshot function.
+-- Without this, the 14 already-flagged profiles keep the stale
+-- is_internal = false outbox payload until an unrelated profile update or
+-- fact event happens to touch them -- this rollout would fix nothing for the
+-- population it targets.
+SELECT public.enqueue_analytics_person_snapshot(id) FROM public.profiles;

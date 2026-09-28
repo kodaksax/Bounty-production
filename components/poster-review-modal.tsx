@@ -48,6 +48,11 @@ interface PosterReviewModalProps {
   hunterName: string;
   bountyAmount: number;
   isForHonor: boolean;
+  // Analytics only: which settlement path a release will use, so
+  // escrow_released can be segmented by v1/v2/v3. The caller already has the
+  // full bounty row (this component doesn't fetch one), so it's supplied
+  // rather than re-derived here.
+  architecture?: 'v1' | 'v2' | 'v3';
   onClose: () => void;
   onComplete: () => void;
 }
@@ -236,6 +241,7 @@ export function PosterReviewModal({
   hunterName,
   bountyAmount,
   isForHonor,
+  architecture,
   onClose,
   onComplete,
 }: PosterReviewModalProps) {
@@ -368,6 +374,7 @@ export function PosterReviewModal({
         isForHonor,
         amount: bountyAmount,
         posterId: getCurrentUserId(),
+        architecture,
         releaseFn: releaseFunds,
         approveFn: async (id: string) => {
           await completionService.approveSubmission(id);
