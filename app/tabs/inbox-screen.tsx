@@ -35,6 +35,7 @@ import { useConversations } from '../../hooks/useConversations'
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
+import { uniqueRealtimeTopic } from '../../lib/utils/realtime-topic'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
 import { EmptyState } from '../../components/ui/empty-state'
@@ -349,7 +350,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     if (!currentUserId || ids.length === 0) return
 
     const channel = supabase
-      .channel(`inbox-requests:${currentUserId}`)
+      .channel(uniqueRealtimeTopic(`inbox-requests:${currentUserId}`))
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bounty_requests', filter: `bounty_id=in.(${ids.join(',')})` },
