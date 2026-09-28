@@ -33,9 +33,18 @@
 --   * 15 other null-hunter `accepted` rows on completed/deleted bounties: they
 --     block nobody and are the (anonymised) acceptance record.
 --
--- Every UPDATE matches on id AND the exact pre-repair state, and the block
--- raises unless exactly the expected rows change, so a re-run or drifted row
--- aborts the whole migration instead of half-applying.
+-- Every UPDATE matches on id AND the exact pre-repair state. This is a
+-- one-off data repair for specific production rows, not a schema change:
+-- `supabase db push` replays every file in this directory against preview
+-- and dev databases too, and those rows don't exist there. So instead of
+-- raising when the target rows are missing or already drifted (which would
+-- abort the whole migration chain on any environment other than the exact
+-- production snapshot this was written against), the block below checks
+-- for the target bounty first and NOTICEs + skips if it isn't in the
+-- expected pre-repair state. On production, where the rows are expected,
+-- it still raises if a match count comes back wrong mid-repair, since at
+-- that point the money guard has already passed and a short match means
+-- something about the target rows changed between the check and the write.
 --
 -- DRY RUN: execute this file wrapped in BEGIN; ... ROLLBACK; and read the
 -- NOTICE lines. The transaction below is the whole change.
@@ -45,18 +54,47 @@ BEGIN;
 DO $$
 DECLARE
   n integer;
+  target_ids uuid[] := ARRAY['81f90076-4b94-4ae2-8f2c-e47595cf6f71',
+                              'e2f61aed-c9b9-469e-ac40-a9321de41613',
+                              'b6291248-e852-441d-a956-916a7b411e5b']::uuid[];
 BEGIN
-  -- Money guard: none of the targets may have ever touched the ledger.
+  -- Environment gate: only run where the documented bounties actually
+  -- exist. A preview/dev database with none of these rows is a no-op, not
+  -- a failure.
+  SELECT count(*) INTO n FROM public.bounties WHERE id = ANY(target_ids);
+  IF n <> 3 THEN
+    RAISE NOTICE '#876 repair skipped: expected 3 target bounties, found % (not the production snapshot this was written for)', n;
+    RETURN;
+  END IF;
+
+  -- Money guard: none of the targets may have ever touched any funding
+  -- ledger -- v1 (wallet_transactions), v2 (bounty_payments), or v3
+  -- (bounty_v3_funding).
   SELECT count(*) INTO n
     FROM public.wallet_transactions
-   WHERE bounty_id IN ('81f90076-4b94-4ae2-8f2c-e47595cf6f71',
-                       'e2f61aed-c9b9-469e-ac40-a9321de41613',
-                       'b6291248-e852-441d-a956-916a7b411e5b');
+   WHERE bounty_id = ANY(target_ids);
   IF n <> 0 THEN
     RAISE EXCEPTION '#876 repair aborted: % wallet_transactions on target bounties', n;
   END IF;
 
-  -- 1. bounty0j's duplicate accepted request on "Wash my dishes".
+  SELECT count(*) INTO n
+    FROM public.bounty_payments
+   WHERE bounty_id = ANY(target_ids);
+  IF n <> 0 THEN
+    RAISE EXCEPTION '#876 repair aborted: % bounty_payments on target bounties', n;
+  END IF;
+
+  SELECT count(*) INTO n
+    FROM public.bounty_v3_funding
+   WHERE bounty_id = ANY(target_ids);
+  IF n <> 0 THEN
+    RAISE EXCEPTION '#876 repair aborted: % bounty_v3_funding rows on target bounties', n;
+  END IF;
+
+  -- 1. bounty0j's duplicate accepted request on "Wash my dishes". The
+  -- bounty id is pinned explicitly (not just joined via br.bounty_id) so a
+  -- reassigned/corrupted FK on the request can't redirect this repair onto
+  -- a different bounty.
   UPDATE public.bounty_requests br
      SET status = 'rejected',
          rejection_source = 'system_bounty_closed',
@@ -65,6 +103,7 @@ BEGIN
    WHERE br.id = '49911372-00d1-4dd5-9178-b0a08d23c0ae'
      AND br.status = 'accepted'
      AND br.hunter_id = 'f4bd948b-a0a6-4991-8e5d-d4a3978760e6'
+     AND br.bounty_id = '81f90076-4b94-4ae2-8f2c-e47595cf6f71'
      AND b.id = br.bounty_id
      AND b.accepted_by = '4a0b8b2b-7a7c-4247-a0e5-55a80657ae58'
      AND b.amount = 0;
@@ -100,7 +139,10 @@ COMMIT;
 --    WHERE status = 'accepted' AND hunter_id IS NOT NULL
 --    GROUP BY bounty_id HAVING count(*) > 1;
 --
--- Rollback (restores the exact pre-repair values):
+-- Rollback restores only the two base-row updates above. The bounty/request
+-- event triggers fired on the original UPDATEs (bounty_events audit rows,
+-- request outcome rows) are NOT undone by this -- treat it as a base-row
+-- rollback only, and reconcile the event/outcome tables separately if used:
 --   UPDATE public.bounty_requests
 --      SET status = 'accepted', rejection_source = NULL, rejected_at = NULL
 --    WHERE id = '49911372-00d1-4dd5-9178-b0a08d23c0ae';

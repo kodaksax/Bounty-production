@@ -323,11 +323,17 @@ const ConversationItem = React.memo(function ConversationItem({
   )
 
   const otherUserId = conversation.otherUserId
-  // Conversation rows carry no avatar for 1:1 chats, which is why every row
-  // showed a letter (#875). Read the person's own profile instead. Disabled
-  // for groups: with no id the hook would resolve to the viewer's profile.
-  const { profile } = useNormalizedProfile(otherUserId ?? undefined, { enabled: !!otherUserId })
-  const person = otherUserId ? profile : null
+  // fetchConversations already batch-loads every other user's name/avatar
+  // (lib/services/supabase-messaging.ts), so only fall back to a live,
+  // per-row profile fetch when that batched avatar is missing -- which is
+  // what caused every row to show a letter instead of a picture (#875).
+  // Disabled for groups: with no id the hook would resolve to the viewer's
+  // own profile.
+  const needsProfileFallback = !!otherUserId && !conversation.avatar
+  const { profile } = useNormalizedProfile(otherUserId ?? undefined, {
+    enabled: needsProfileFallback,
+  })
+  const person = needsProfileFallback ? profile : null
 
   const displayName = person?.username || conversation.name || "Conversation"
   const avatarUrl = person?.avatar || conversation.avatar

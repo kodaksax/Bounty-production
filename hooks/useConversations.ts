@@ -94,6 +94,10 @@ export function useConversations(): UseConversationsResult {
       setError(err instanceof Error ? err.message : 'Failed to delete conversation');
       // Revert on error
       await fetchConversations();
+      // Rethrow so callers (e.g. a merged-row delete awaiting several
+      // backing conversations) can detect the partial failure instead of
+      // reporting success.
+      throw err;
     }
   };
 
