@@ -14,6 +14,7 @@ import { bountyPaymentsService } from './services/bounty-payments-service';
 import { bountyService } from './services/bounty-service';
 import { paymentService } from './services/payment-service';
 import { supabase } from './supabase';
+import { uniqueRealtimeTopic } from './utils/realtime-topic';
 import { logger } from './utils/error-logger';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
@@ -675,7 +676,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!userId) return;
 
     const channel = supabase
-      .channel(`wallet-balance:${userId}`)
+      .channel(uniqueRealtimeTopic(`wallet-balance:${userId}`))
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
