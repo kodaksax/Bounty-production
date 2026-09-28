@@ -915,6 +915,9 @@ export const completionService = {
         const hoursFromClaim = await getHoursSinceClaimed(bountyId);
         analyticsService.trackEvent('bounty_completed', {
           bountyId: String(bountyId),
+          // Same key completion_submitted/escrow_released use, so the three
+          // join on one property. bountyId stays for existing insights.
+          bounty_id: String(bountyId),
           via: 'approve_submission',
           isForHonor: Boolean((bountyRow as any)?.is_for_honor),
           amount: Number((bountyRow as any)?.amount ?? 0),

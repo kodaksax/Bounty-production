@@ -66,7 +66,11 @@ describe('PostHog person property contract', () => {
   it('sends internal status on both the event and person payloads', () => {
     expect(dispatcher).toContain('is_internal: outbox.properties.is_internal');
     expect(dispatcher).toContain('$set: outbox.properties');
-    expect(mobilePostHog).toContain('_posthog.register({ is_internal: isInternalEmail(email) })');
+    // identify() only ever asserts `true` from the email list (a miss must
+    // never write `false` over profiles.is_internal, the source of truth).
+    // syncInternalFlag() is the path that carries the profile's real value.
+    expect(mobilePostHog).toContain('_posthog.register({ is_internal: true })');
+    expect(mobilePostHog).toContain('_posthog.register({ is_internal: isInternal })');
   });
 
   it('does not acknowledge an older snapshot over a newer queued update', () => {

@@ -512,6 +512,10 @@ export type AnalyticsEvent =
   | 'apple_pay_unavailable'
   | 'escrow_funded'
   | 'escrow_released'
+  // v3 settlement is async: releaseFn resolves once Stripe accepts the
+  // transfer (release_pending), not once transfer.created confirms it. This
+  // is that unconfirmed state — see lib/services/completion-approval.ts.
+  | 'escrow_release_pending'
   | 'escrow_refunded'
   // ---------------------------------------------------------------------
   // "Post first, pay at accept" experiment

@@ -192,8 +192,13 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
       return;
     }
     const email = typeof properties?.email === 'string' ? properties.email : null;
-    const identityProperties = email
-      ? { ...properties, is_internal: isInternalEmail(email) }
+    // The email list only ever asserts `true`. `profiles.is_internal` is the
+    // source of truth (see syncInternalFlag below) and 11 of its 14 accounts
+    // are not on this list, so an email miss must not write `false` over the
+    // profile flag on every launch.
+    const emailInternal = !!email && isInternalEmail(email);
+    const identityProperties = emailInternal
+      ? { ...properties, is_internal: true }
       : properties;
 
     // identify() already merges the current anonymous person into the
@@ -216,8 +221,8 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
       _posthog.reset();
     }
 
-    if (email && typeof _posthog.register === 'function') {
-      _posthog.register({ is_internal: isInternalEmail(email) });
+    if (emailInternal && typeof _posthog.register === 'function') {
+      _posthog.register({ is_internal: true });
     }
     _posthog.identify(distinctId, identityProperties);
   } catch (e) {
@@ -237,6 +242,32 @@ export const setPersonProperties = (properties: Record<string, any>): void => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[posthog] setPersonProperties failed', e);
+  }
+};
+
+let _syncedInternalFlag: string | null = null;
+
+/**
+ * Tag the signed-in user's events and person with `is_internal` from
+ * `profiles.is_internal` — the one internal/test-account filter (14 profiles as
+ * of 2026-09-28). Before this, PostHog only saw the email list in
+ * isInternalEmail(), which misses 11 of those 14, so their traffic counted as
+ * real users. Called whenever the auth profile loads; deduped per user+value
+ * because profile listeners fire several times per launch.
+ */
+export const syncInternalFlag = (userId: string, isInternal: boolean): void => {
+  try {
+    if (!_posthog) return;
+    const key = `${userId}:${isInternal}`;
+    if (_syncedInternalFlag === key) return;
+    _syncedInternalFlag = key;
+    if (typeof _posthog.register === 'function') _posthog.register({ is_internal: isInternal });
+    if (typeof _posthog.capture === 'function') {
+      _posthog.capture('$set', { $set: { is_internal: isInternal } });
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[posthog] syncInternalFlag failed', e);
   }
 };
 
@@ -278,6 +309,7 @@ export const screen = (name: string, properties?: Record<string, any>): void => 
 
 /** Reset the client identity (call on logout). */
 export const reset = (): void => {
+  _syncedInternalFlag = null;
   try {
     if (!_posthog || typeof _posthog.reset !== 'function') return;
     _posthog.reset();
