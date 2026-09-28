@@ -5,6 +5,7 @@
 // app/tabs/inbox-screen.tsx so the success-only analytics contract lives in
 // one place and can be unit-tested.
 
+import { hideBountyForHunter } from '../utils/hunter-hidden-bounties';
 import { analyticsService } from './analytics-service';
 import { bountyRequestService } from './bounty-request-service';
 
@@ -94,14 +95,20 @@ export async function withdrawApplication(
 }
 
 /**
- * Delete the current user's already-rejected application for `bountyId` so it
- * stops cluttering the "My Bounties" work list.
+ * Take the current user's already-rejected application for `bountyId` off
+ * their "My Bounties" work list.
  *
- * Unlike `withdrawApplication` (which only ever targets a still-pending row),
- * this targets a `rejected` row specifically — a rejected application can
- * never be "withdrawn" back to pending, it can only be discarded from view.
- * Emits `application_discarded` ONLY after the delete actually succeeds, for
- * the same reason `withdrawApplication` guards its analytics emit.
+ * Unlike `withdrawApplication` (which deletes a still-pending row), this never
+ * deletes anything. Rejected rows are the source of the request-outcome
+ * metrics (`poster_declined`, `expired_no_response`, ... — see migration
+ * 20260925220000), so discarding one only records a per-hunter hide via
+ * hideBountyForHunter, the same store the "Hide" action on a finished card
+ * uses. (The earlier delete-based version needed an RLS change,
+ * 20260908000000, that never reached production, so every discard failed —
+ * #876.) Callers must also add the bounty id to their in-memory hidden set.
+ *
+ * Emits `application_discarded` ONLY after the hide is recorded, for the same
+ * reason `withdrawApplication` guards its analytics emit.
  */
 export async function discardApplication(
   params: WithdrawApplicationParams
@@ -136,9 +143,9 @@ export async function discardApplication(
     throw new Error('No rejected application found for this bounty');
   }
 
-  const success = await bountyRequestService.delete(rejected.id);
-
-  if (!success) {
+  try {
+    await hideBountyForHunter(currentUserId, bountyId);
+  } catch {
     throw new Error('Failed to discard application');
   }
 

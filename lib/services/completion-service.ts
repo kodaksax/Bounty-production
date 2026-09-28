@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
+import { uniqueRealtimeTopic } from 'lib/utils/realtime-topic';
 import { CURRENT_USER_ID, getCurrentUserId } from 'lib/utils/data-utils';
 import getApiBaseFallback from 'lib/utils/dev-host';
 import { logger } from 'lib/utils/error-logger';
@@ -328,7 +329,7 @@ export const completionService = {
     if (isSupabaseConfigured) {
       try {
         channel = supabase
-          .channel(`completion_submissions:${bountyId}`)
+          .channel(uniqueRealtimeTopic(`completion_submissions:${bountyId}`))
           .on(
             'postgres_changes',
             {
@@ -785,7 +786,7 @@ export const completionService = {
     if (isSupabaseConfigured) {
       try {
         channel = supabase
-          .channel(`completion_ready:${bountyId}`)
+          .channel(uniqueRealtimeTopic(`completion_ready:${bountyId}`))
           .on(
             'postgres_changes',
             {

@@ -278,6 +278,7 @@ export function useBountyLifecycle(
     ? resolveBountyLifecycle({
         bounty,
         role,
+        viewerId: currentUserId ?? null,
         requestStatus,
         requestRejectionSource,
         submissionStatus: submission?.status ?? null,

@@ -40,6 +40,7 @@ import { BOTTOM_NAV_BASE_OFFSET, getBottomNavContentPadding } from "../../lib/co
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
+import { uniqueRealtimeTopic } from '../../lib/utils/realtime-topic'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 // Rows expand into forms with text fields (completion message, revision
@@ -456,7 +457,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     if (!currentUserId || ids.length === 0) return
 
     const channel = supabase
-      .channel(`postings-requests:${currentUserId}`)
+      .channel(uniqueRealtimeTopic(`postings-requests:${currentUserId}`))
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bounty_requests', filter: `bounty_id=in.(${ids.join(',')})` },
@@ -824,12 +825,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   currentUserId,
                   surface: 'my_postings',
                 })
-
-                try {
-                  await loadInProgress()
-                } catch (refreshError) {
-                  console.warn('Failed to refresh in-progress bounties after discard:', refreshError)
-                }
+                // Discard records a per-hunter hide (the row itself is kept for
+                // request-outcome metrics), so drop it from the list here.
+                const key = String(bountyId)
+                setHunterHiddenBountyIds((prev) => new Set(prev).add(key))
               } catch (err: any) {
                 console.error("Error discarding application:", err)
                 const friendly = getUserFriendlyError(err)

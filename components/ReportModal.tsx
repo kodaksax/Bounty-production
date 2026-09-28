@@ -55,9 +55,14 @@ const submitReport = async (
         [{ text: 'OK', onPress: onComplete }]
       );
     } else {
-      Alert.alert('Error', result.error || 'Failed to submit report. Please try again.', [
-        { text: 'OK', onPress: onComplete }
-      ]);
+      // result.error is the raw database message (e.g. a not-null violation,
+      // #874); log it for us and show the reporter something they can act on.
+      console.error('Report submission failed:', result.error);
+      Alert.alert(
+        "Couldn't Submit Report",
+        "Your report didn't go through. Please try again in a moment.",
+        [{ text: 'OK', onPress: onComplete }]
+      );
     }
   } catch (error) {
     console.error('Error submitting report:', error);

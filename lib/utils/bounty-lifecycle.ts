@@ -140,6 +140,14 @@ export interface BountyLifecycleInput {
     accepted_by?: string | null;
   };
   role: BountyRole;
+  /**
+   * The viewer's user id. When supplied, `bounty.accepted_by` is authoritative
+   * for who the hunter is: a viewer whose own row says `accepted` but who is
+   * not `accepted_by` was not selected. Legacy data has bounties with two
+   * `accepted` rows (#876), which otherwise left the loser "on the clock" for
+   * work that was never theirs, with no action that could succeed.
+   */
+  viewerId?: string | null;
   /** The viewer's own application row status, when they are a hunter. */
   requestStatus?: string | null;
   /**
@@ -366,7 +374,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
 
   return isPoster
     ? resolvePoster({ status, bounty, applicationCount, hunter, reward, submissionStatus, paymentState, revisionRequested, submissionPending })
-    : resolveHunter({ status, bounty, requestStatus, requestRejectionSource, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState });
+    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState });
 }
 
 function resolveVisitor(
@@ -646,6 +654,7 @@ function resolvePoster(args: {
 function resolveHunter(args: {
   status: BountyDisplayStatus;
   bounty: BountyLifecycleInput['bounty'];
+  viewerId: string | null;
   requestStatus: string | null;
   requestRejectionSource: string | null;
   poster: string;
@@ -655,14 +664,16 @@ function resolveHunter(args: {
   submissionIsMine: boolean;
   paymentState: BountyLifecycleInput['paymentState'];
 }): BountyLifecycleState {
-  const { status, bounty, requestStatus, requestRejectionSource, poster, reward, revisionRequested, paymentState } = args;
+  const { status, bounty, viewerId, requestStatus, requestRejectionSource, poster, reward, revisionRequested, paymentState } = args;
 
   // A hunter whose application is still `pending` on a bounty that has already
   // moved on was passed over — the poster accepted someone else and the row was
   // never rejected explicitly. Without this guard the in_progress/completed
   // branches below would tell them they are "on the clock" for work that is not
   // theirs, or that they were paid for a bounty they never worked.
-  const isSelected = requestStatus === 'accepted';
+  const assignedToSomeoneElse =
+    !!viewerId && !!bounty.accepted_by && String(bounty.accepted_by) !== String(viewerId);
+  const isSelected = requestStatus === 'accepted' && !assignedToSomeoneElse;
   if (!isSelected && (bounty.status === 'in_progress' || bounty.status === 'completed')) {
     return finalize({
       status: 'rejected',
