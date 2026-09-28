@@ -713,12 +713,10 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                   currentUserId,
                   surface: 'inbox',
                 })
-
-                try {
-                  await loadInProgress()
-                } catch (refreshError) {
-                  console.warn('Failed to refresh in-progress bounties after discard:', refreshError)
-                }
+                // Discard records a per-hunter hide (the row itself is kept for
+                // request-outcome metrics), so drop it from the list here.
+                const key = String(bountyId)
+                setHunterHiddenBountyIds((prev) => new Set(prev).add(key))
               } catch (err: any) {
                 console.error("Error discarding application:", err)
                 const friendly = getUserFriendlyError(err)
