@@ -312,6 +312,12 @@ export function CreateBountyFlow({
         role: 'poster',
         surface: meta.surface,
         bounty_id: bountyId,
+        // Always 'new': this create flow is the only bounty_published site,
+        // every call mints a fresh bounty id, and the app has no relist or
+        // boost path ("repost" opens this same empty composer). No bounty_id
+        // was published twice in the 30 days to 2026-09-28. A future relist or
+        // boost path must send 'republish' / 'boost'.
+        publish_type: 'new',
         amount: meta.amountDollars,
         amount_cents: meta.amountCents,
         is_for_honor: meta.isForHonor,

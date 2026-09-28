@@ -137,6 +137,10 @@ export default function PayoutScreen() {
               bountyId: String(bounty.id),
               architecture: useV3 ? 'v3' : 'v2',
               amount: bounty.amount,
+              bounty_id: String(bounty.id),
+              hunter_person_id: bounty.accepted_by || undefined,
+              poster_person_id: currentUserId || undefined,
+              via: 'payout_release',
             });
           } catch {
             /* analytics is best-effort */
@@ -171,6 +175,19 @@ export default function PayoutScreen() {
         if (!released) {
           throw new Error('Failed to release escrowed funds - no active escrow found');
         }
+        try {
+          await analyticsService.trackEvent('escrow_released', {
+            bountyId: String(bounty.id),
+            architecture: 'v1',
+            amount: bounty.amount,
+            bounty_id: String(bounty.id),
+            hunter_person_id: bounty.accepted_by || undefined,
+            poster_person_id: currentUserId || undefined,
+            via: 'payout_release',
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
       }
 
       // Update bounty status to completed
@@ -188,6 +205,9 @@ export default function PayoutScreen() {
       try {
         await analyticsService.trackEvent('bounty_completed', {
           bountyId: String(bounty.id),
+          // Same key completion_submitted/escrow_released use, so the three
+          // join on one property. bountyId stays for existing insights.
+          bounty_id: String(bounty.id),
           via: 'payout_release',
           isForHonor: false,
           amount: bounty.amount,
@@ -261,6 +281,7 @@ export default function PayoutScreen() {
               try {
                 await analyticsService.trackEvent('bounty_completed', {
                   bountyId: String(bounty.id),
+                  bounty_id: String(bounty.id),
                   via: 'mark_complete',
                   isForHonor: !!bounty.is_for_honor,
                   amount: bounty.is_for_honor ? 0 : bounty.amount,

@@ -366,6 +366,8 @@ export function PosterReviewModal({
         hunterId,
         title: `Bounty ${bountyId}`,
         isForHonor,
+        amount: bountyAmount,
+        posterId: getCurrentUserId(),
         releaseFn: releaseFunds,
         approveFn: async (id: string) => {
           await completionService.approveSubmission(id);

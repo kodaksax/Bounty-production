@@ -143,6 +143,13 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // syncInternalFlag's dedupe cache is module-level state that otherwise
+    // survives between tests (the module is `require`d once in beforeAll
+    // above, not reset per test). reset() clears it — see lib/posthog.ts —
+    // so every test starts as if no flag had been synced yet, regardless of
+    // execution order or which prior test touched which userId.
+    posthogModule.reset();
+    jest.clearAllMocks();
   });
 
   test('getPostHog returns a client instance when key is set', () => {
@@ -165,11 +172,23 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
 
   test('identify calls client.identify with userId and properties', () => {
     posthogModule.identify('user-42', { email: 'test@example.com' });
-    expect(mockIdentify).toHaveBeenCalledWith('user-42', {
-      email: 'test@example.com',
-      is_internal: false,
-    });
+    // An email-list miss asserts nothing: profiles.is_internal decides, via
+    // syncInternalFlag once the profile loads.
+    expect(mockIdentify).toHaveBeenCalledWith('user-42', { email: 'test@example.com' });
+    expect(mockRegister).not.toHaveBeenCalledWith({ is_internal: false });
+  });
+
+  test('syncInternalFlag tags events and the person from profiles.is_internal, once per value', () => {
+    posthogModule.syncInternalFlag('user-42', true);
+    posthogModule.syncInternalFlag('user-42', true);
+
+    expect(mockRegister).toHaveBeenCalledWith({ is_internal: true });
+    expect(mockCapture).toHaveBeenCalledWith('$set', { $set: { is_internal: true } });
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+
+    posthogModule.syncInternalFlag('user-42', false);
     expect(mockRegister).toHaveBeenCalledWith({ is_internal: false });
+    expect(mockCapture).toHaveBeenCalledTimes(2);
   });
 
   test('identify never aliases — the SDK merges anonymous to identified itself', () => {
@@ -187,10 +206,7 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
     expect(mockReset.mock.invocationCallOrder[0]).toBeLessThan(
       mockIdentify.mock.invocationCallOrder[0]
     );
-    expect(mockIdentify).toHaveBeenCalledWith('new-user', {
-      email: 'test@example.com',
-      is_internal: false,
-    });
+    expect(mockIdentify).toHaveBeenCalledWith('new-user', { email: 'test@example.com' });
     mockGetDistinctId.mockReturnValue('anon-distinct-id');
     mockGetAnonymousId.mockReturnValue('anon-distinct-id');
   });

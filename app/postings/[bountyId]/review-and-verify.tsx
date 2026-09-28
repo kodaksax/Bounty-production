@@ -326,6 +326,8 @@ export default function ReviewAndVerifyScreen() {
         hunterId: hunterProfile.id,
         title: bounty.title || `Bounty ${bounty.id}`,
         isForHonor: Boolean(bounty.is_for_honor),
+        amount: Number(bounty.amount ?? 0),
+        posterId: currentUserId,
         releaseFn: releaseFunds,
         approveFn: async (id: string) => {
           await completionService.approveSubmission(id);
