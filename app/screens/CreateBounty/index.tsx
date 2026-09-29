@@ -1,6 +1,7 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
 import { PublishFundingGate } from 'app/screens/CreateBounty/PublishFundingGate';
+import { PostCelebration } from 'app/screens/CreateBounty/quick/PostCelebration';
 import { StepDirectionContext } from 'app/screens/CreateBounty/quick/QuickStepLayout';
 import { StepCheckout } from 'app/screens/CreateBounty/quick/StepCheckout';
 import { StepPay } from 'app/screens/CreateBounty/quick/StepPay';
@@ -24,6 +25,7 @@ import { analyticsService } from 'lib/services/analytics-service';
 import { useStripe } from 'lib/stripe-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import { validateContactInfo } from 'lib/utils/bounty-validation';
+import { getBountyPublishError } from 'lib/utils/bounty-publish-error';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { createForegroundTimer, getMonotonicNow } from 'lib/utils/foreground-timer';
 import { useWallet } from 'lib/wallet-context';
@@ -31,12 +33,14 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
+  Dimensions,
   Platform,
   Text,
   View,
 } from 'react-native';
-import { KeyboardAvoidingScreen } from '../../../components/ui/keyboard-avoiding';
+import { useKeyboardInset } from '../../../components/ui/keyboard-avoiding';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -120,6 +124,9 @@ export function CreateBountyFlow({
   // optional details have since been persisted onto the real row.
   const [postedBountyId, setPostedBountyId] = useState<string | null>(null);
   const [postedDraft, setPostedDraft] = useState<BountyDraft | null>(null);
+  // The congratulations moment shown once, right after publishing, over the
+  // confirmation step it then fades into.
+  const [celebrating, setCelebrating] = useState(false);
   // Which optional-detail screen is open over the confirmation screen, and the
   // working copy it edits. Kept separate from `postedDraft` so backing out of a
   // detail screen discards its edits instead of leaving the confirmation
@@ -128,6 +135,19 @@ export function CreateBountyFlow({
   const [detailDraft, setDetailDraft] = useState<BountyDraft | null>(null);
   const [isSavingDetail, setIsSavingDetail] = useState(false);
   const [detailValidationError, setDetailValidationError] = useState<string | null>(null);
+  // How far the flow's bottom edge sits above the screen's bottom edge. Both
+  // hosts lift the flow clear of the BottomNav (+ safe area), and the keyboard
+  // covers that strip too — so the keyboard padding must skip it, or the CTA
+  // floats that far above the keyboard.
+  const flowRootRef = useRef<View>(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const measureKeyboardOffset = () => {
+    flowRootRef.current?.measureInWindow((_x, y, _w, height) => {
+      const below = Math.max(0, Math.round(Dimensions.get('window').height - (y + height)));
+      setKeyboardOffset(prev => (prev === below ? prev : below));
+    });
+  };
+  const { inset: keyboardInset } = useKeyboardInset({ offset: keyboardOffset });
   // The authoritative copy of the in-progress detail edits. `detailDraft`
   // state drives rendering; this ref is what actually gets persisted. They
   // exist separately because the step screens patch and advance within a
@@ -339,6 +359,12 @@ export function CreateBountyFlow({
         role: 'poster',
         surface: meta.surface,
         bounty_id: bountyId,
+        // Always 'new': this create flow is the only bounty_published site,
+        // every call mints a fresh bounty id, and the app has no relist or
+        // boost path ("repost" opens this same empty composer). No bounty_id
+        // was published twice in the 30 days to 2026-09-28. A future relist or
+        // boost path must send 'republish' / 'boost'.
+        publish_type: 'new',
         amount: meta.amountDollars,
         amount_cents: meta.amountCents,
         is_for_honor: meta.isForHonor,
@@ -376,8 +402,12 @@ export function CreateBountyFlow({
       // gesture from the confirmation cannot land on a paid checkout offering
       // to post again.
       setCheckoutDraft(null);
+      setCelebrating(true);
     },
-    onEditAmount: () => handleGoToStep(2),
+    // Compensation is the last pre-publish step. This was hard-coded to 2
+    // from the two-step flow, so once Location became step 2 "Edit amount"
+    // dropped the poster on the address screen instead of the price.
+    onEditAmount: () => handleGoToStep(TOTAL_STEPS),
     onCancelGate: onCancel,
   });
 
@@ -617,11 +647,11 @@ export function CreateBountyFlow({
       setStepDirection(-1);
     } catch (error) {
       const userError = getUserFriendlyError(error);
-      if (Platform.OS !== 'web') {
-        Alert.alert(userError.title, `${userError.message}\n\nYour bounty is still posted.`, [
-          { text: 'OK' },
-        ]);
-      }
+      // Alert is shimmed on web (stubs/react-native-web-alert.web.js), so no
+      // platform guard — the old one made a failed save silent there.
+      Alert.alert(userError.title, `${userError.message}\n\nYour bounty is still posted.`, [
+        { text: 'OK' },
+      ]);
     } finally {
       setIsSavingDetail(false);
     }
@@ -640,34 +670,14 @@ export function CreateBountyFlow({
     return false;
   };
 
-  // Web used to skip this confirmation outright, because react-native-web's Alert is a
-  // no-op and the dialog would never have appeared. It is shimmed now
-  // (stubs/react-native-web-alert.web.js), so web asks the same question native does —
-  // which also means the QA swarm exercises the real discard path instead of silently
-  // losing a draft on every exit.
+  /**
+   * Leave the composer. There is no confirmation: every edit is autosaved to
+   * the draft, so leaving loses nothing and the next visit resumes it. The old
+   * dialog asked "Discard Draft?" and then said the progress would be saved —
+   * an interruption whose two halves contradicted each other.
+   */
   const handleCancel = () => {
-    Alert.alert(
-      'Discard Draft?',
-      'Your progress will be saved. You can return to this draft anytime.',
-      [
-        {
-          text: 'Keep Editing',
-          style: 'cancel',
-          // Clears a 'back' tag set by the hardware-back handler below so
-          // it doesn't leak into a later, unrelated exit.
-          onPress: () => {
-            exitMethodRef.current = null;
-          },
-        },
-        {
-          text: 'Exit',
-          style: 'destructive',
-          onPress: () => {
-            if (onCancel) onCancel();
-          },
-        },
-      ]
-    );
+    onCancel?.();
   };
 
   useBackHandler(() => {
@@ -693,8 +703,8 @@ export function CreateBountyFlow({
       return true;
     }
     // Android hardware back at step 1 is the only exit path this component
-    // can directly attribute — tag it before handleCancel's confirm dialog
-    // runs so the eventual post_step_abandoned reflects it.
+    // can directly attribute — tag it before handleCancel unmounts the flow
+    // so the eventual post_step_abandoned reflects it.
     exitMethodRef.current = 'back';
     handleCancel();
     return true;
@@ -925,14 +935,21 @@ export function CreateBountyFlow({
   }
 
   return (
-    // The flow is full-bleed from y=0, so the container gives up exactly the
-    // keyboard's height: the step's scroll body shrinks and its pinned CTA
-    // stays above the keyboard. (The `KeyboardAvoidingView` this replaces
-    // passed `keyboardVerticalOffset={insets.top}`, which is the distance from
-    // the *window* top to the view's top — zero here — so it over-shifted the
-    // whole flow by the status-bar inset.)
-    <KeyboardAvoidingScreen
-      style={{ flex: 1, backgroundColor: theme.background }}
+    // The container gives up only the part of the keyboard that overlaps the
+    // flow itself: the step's scroll body shrinks and its pinned CTA sits just
+    // above the keyboard. The strip under the flow (BottomNav + safe area) is
+    // already covered by the keyboard, so it is excluded via keyboardOffset.
+    // (KeyboardAvoidingScreen's `offset` isn't used here — it keeps that
+    // offset as padding at rest, which suits safe-area-inset containers, not
+    // this one.)
+    <View
+      ref={flowRootRef}
+      testID="create-bounty-flow-root"
+      onLayout={measureKeyboardOffset}
+      style={{ flex: 1 }}
+    >
+    <Animated.View
+      style={{ flex: 1, backgroundColor: theme.background, paddingBottom: keyboardInset }}
     >
       <View className="flex-1">
         {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
@@ -1000,6 +1017,8 @@ export function CreateBountyFlow({
                 screens it opens. These edit `detailDraft` (a working copy) and
                 persist onto the live bounty via handleSaveDetail, NOT the
                 draft — the draft was cleared at publish. --- */}
+            {/* StepPostPublish renders underneath from the start, so the
+                celebration's fade-out reveals it rather than cutting to it. */}
             {postedBountyId && postedDraft && !detailTarget && (
               <StepPostPublish
                 draft={postedDraft}
@@ -1049,14 +1068,19 @@ export function CreateBountyFlow({
         {submitError && (
           <View className="px-4 pb-4">
             <ErrorBanner
-              error={getUserFriendlyError(submitError)}
+              error={getBountyPublishError(submitError)}
               onDismiss={resetSubmitError}
               onAction={submitError ? () => retry(draft) : undefined}
             />
           </View>
         )}
+
+        {postedBountyId && celebrating && (
+          <PostCelebration onDone={() => setCelebrating(false)} />
+        )}
       </View>
-    </KeyboardAvoidingScreen>
+    </Animated.View>
+    </View>
   );
 }
 

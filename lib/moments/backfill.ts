@@ -2,7 +2,7 @@
  * Moments Queue — enqueue resolution for post_first_bounty / accept_first_bounty.
  *
  * This is the sole place either moment gets enqueued — deliberately not
- * app/onboarding/done.tsx, since enqueuing there (status: 'pending' the
+ * onboarding completion (hooks/useCompleteOnboarding.ts), since enqueuing there (status: 'pending' the
  * instant onboarding finishes) is exactly what used to make the "post a
  * bounty" / "hunt a bounty" prompts appear the moment a user landed in the
  * app. Enqueuing here instead just creates the row; registry.ts's

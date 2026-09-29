@@ -3,6 +3,7 @@ import { logger } from 'lib/utils/error-logger';
 import { isPhase2Bounty, isStripeNativeBounty, isV3Bounty } from 'lib/utils/payment-architecture';
 import type { BountyDispute, DisputeEvidence, LocalDisputeEvidence } from '../types';
 import { analyticsService } from './analytics-service';
+import { failureEventProps } from '../utils/stripe-error';
 import { bountyPaymentsService } from './bounty-payments-service';
 import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
@@ -699,6 +700,7 @@ export const disputeService = {
                   bountyId: String(dispute.bountyId),
                   architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   stage: 'dispute_release',
+                  ...failureEventProps(releaseErr),
                 });
               }
             } else if (winner === 'poster') {
@@ -720,6 +722,7 @@ export const disputeService = {
                   bountyId: String(dispute.bountyId),
                   architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
                   stage: 'dispute_cancel',
+                  ...failureEventProps(refundErr),
                 });
               }
             }

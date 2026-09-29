@@ -81,7 +81,9 @@ const heycatch = (): HeyCatchApi | null => {
 // PostHog is behavioural analytics; the Supabase row state is operational truth.
 // ──────────────────────────────────────────────────────────────────────────
 export type AnalyticsEvent =
-  // App lifecycle / acquisition funnel
+  // App lifecycle / acquisition funnel. `app_opened` is the canonical open
+  // event (once per cold start). The SDK's duplicate `Application Opened` is
+  // dropped in lib/posthog.ts before_send.
   | 'app_opened'
   // Auth events
   // `signup_completed` (renamed from `user_signed_up`) is the single signup
@@ -129,21 +131,30 @@ export type AnalyticsEvent =
   | 'onboarding_resumed'
   // Canonical: the user picked poster / hunter intent (was `onboarding_role_selected`).
   | 'role_selected'
-  // Fired by app/onboarding/welcome.tsx (the poster_first design, formerly
-  // the 'test' arm of the now-concluded 'welcome-page-redesign' PostHog
-  // experiment — the 'control' layout it was compared against was deleted
-  // 2026-08-24). `variant` is always 'poster_first' now; kept as a payload
-  // field for continuity with historical events grouped by it.
+  // Fired by app/onboarding/welcome.tsx. `variant` was 'poster_first' for the
+  // role-CTA design (formerly the 'test' arm of the now-concluded
+  // 'welcome-page-redesign' PostHog experiment — the 'control' layout it was
+  // compared against was deleted 2026-08-24); it's 'carousel' for the
+  // swipeable-carousel redesign that replaced it, which dropped pre-auth role
+  // selection in favor of WelcomeCarousel.tsx's fixed Sign Up / Log In footer.
   | 'first_screen_viewed'
   | 'first_screen_proof_impression'
   | 'first_screen_cta_tapped'
   | 'first_screen_how_it_works_tapped'
+  // One per slide the welcome stage rotates to (WelcomeCarousel.tsx). The
+  // stage rotates on a timer and can't be swiped, so this measures dwell time
+  // on the screen, NOT engagement with any particular slide — every visitor
+  // who lingers emits the same slides in the same order.
+  | 'first_screen_carousel_slide_viewed'
   // Historical only — fired by the "Get started" CTA of the now-deleted
   // 'onboarding-skip-role-selection' test arm. No longer emitted; kept so
   // past events remain queryable under this type.
   | 'onboarding_role_selection_skipped'
   | 'onboarding_intent_switched'
   | 'onboarding_login_tapped'
+  // Sign Up tap on the carousel redesign's fixed footer (WelcomeCarousel.tsx)
+  // — role-agnostic, since intent is no longer picked on this screen.
+  | 'onboarding_signup_tapped'
   // Sign-in screen rendered its intent-aware "why sign in / what's next" line
   // to a visitor who picked a role but hasn't authenticated yet.
   | 'onboarding_signin_context_shown'
@@ -155,6 +166,12 @@ export type AnalyticsEvent =
   | 'onboarding_auth_completed'
   | 'onboarding_style_step_viewed'
   | 'onboarding_style_selected'
+  // Standalone location step (app/onboarding/location.tsx), which sits between
+  // the style step and role select. The _granted/_denied pair below is shared
+  // with the hunter branch's own location prompt in details.tsx, so query them
+  // with the `source` property when you need to tell the two apart.
+  | 'onboarding_location_step_viewed'
+  | 'onboarding_location_step_answered'
   | 'onboarding_profile_step_viewed'
   | 'onboarding_profile_submitted'
   | 'onboarding_step_skipped'
@@ -211,6 +228,21 @@ export type AnalyticsEvent =
   // eligibility booleans. Together they give the funnel a start, a failure, and
   // an outcome — previously only `identity_verified` (the success case) was
   // visible, so a blocked flow left no signal.
+  // Onboarding payout-setup step (app/onboarding/payouts.tsx), the screen that
+  // sits between role selection and style for BOTH roles. `payout_setup_started`
+  // means the user tapped Create Stripe Account and is being handed to the
+  // hosted flow — the identity_* events above then take
+  // over and report what happened there. `payout_setup_skipped` is the
+  // "I'll do this later" exit, which is the number that says whether payouts
+  // belong this early in the funnel at all.
+  | 'payout_setup_started'
+  | 'payout_setup_skipped'
+  // Founder-note interstitial (app/onboarding/founder-note.tsx), shown right
+  // after the payout step on every path out of it. It asks for nothing, so
+  // the gap between viewed and continued is purely how many people abandon
+  // the funnel on a screen that only costs them a tap.
+  | 'founder_note_viewed'
+  | 'founder_note_continued'
   | 'identity_onboarding_started'
   | 'identity_onboarding_outcome'
   | 'identity_submitted'
@@ -464,8 +496,12 @@ export type AnalyticsEvent =
   // Payment events
   | 'payment_initiated'
   | 'payment_completed'
+  // `payment_failed` is the single payment-failure event. Every emit site
+  // spreads failureEventProps() (lib/utils/stripe-error.ts), so group by
+  // `error_code` + `stage`. No `payment_error`: it fired 3ms after
+  // `payment_failed` for the same failure and double-counted every decline.
+  // Retired 2026-09-25.
   | 'payment_failed'
-  | 'payment_error'
   | 'payment_security_warning'
   | 'payment_sca_required'
   | 'payment_method_removed'
@@ -476,6 +512,10 @@ export type AnalyticsEvent =
   | 'apple_pay_unavailable'
   | 'escrow_funded'
   | 'escrow_released'
+  // v3 settlement is async: releaseFn resolves once Stripe accepts the
+  // transfer (release_pending), not once transfer.created confirms it. This
+  // is that unconfirmed state — see lib/services/completion-approval.ts.
+  | 'escrow_release_pending'
   | 'escrow_refunded'
   // ---------------------------------------------------------------------
   // "Post first, pay at accept" experiment

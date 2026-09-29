@@ -70,6 +70,20 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
       createTiming(loadingAnim, loading ? 1 : 0, 150).start();
     }, [loading, loadingAnim, createTiming]);
 
+    // Clear the press state when the button becomes disabled mid-press.
+    //
+    // handlePressOut, handleBlur and handleFocus all early-return while
+    // disabled, so a button that goes disabled between press-in and press-out
+    // (e.g. Sign In flipping to `loading` the instant it is tapped) keeps
+    // isFocused true and scaleAnim at 0.95 — it is left visually pressed and
+    // ringed after the press ends. Reset both here so it returns to rest.
+    React.useEffect(() => {
+      if (isDisabled) {
+        setIsFocused(false);
+        createSpring(scaleAnim, 1).start();
+      }
+    }, [isDisabled, scaleAnim, createSpring]);
+
     const handlePress = React.useCallback((event: any) => {
       if (isDisabled) return;
 

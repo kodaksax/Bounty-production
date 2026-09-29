@@ -31,6 +31,21 @@ export const firstScreenStrings = {
   fallbackCardMeta: 'Most bounties run $35–$75',
 } as const;
 
+// Task composer copy for PosterTaskPrompt.tsx. The examples double as the
+// input placeholder and as tap-to-fill chips, so they live in one list.
+export const posterTaskPromptStrings = {
+  heading: 'What do you need done?',
+  taskPlaceholder: 'Mount a TV, haul a mattress, fix a closet door…',
+  taskExamples: ['Mount a TV', 'Haul a mattress', 'Fix a closet door'] as const,
+  // Quick amounts, not a median: we have no per-category price data on this
+  // screen, so the caption makes no claim about what neighbours actually pay.
+  priceQuickAmounts: [60, 85, 120] as const,
+  priceCaption: 'Common starting points — type any amount you want.',
+  primaryCta: 'Continue',
+  postingCta: 'Posting…',
+  skipCta: 'Skip for now',
+} as const;
+
 // Relocated from welcome.tsx's old feature rows (removed in the poster_first
 // redesign) into PosterTaskPrompt.tsx, beneath the price input — the step
 // where it actually converts, per the design rationale: trust copy is a

@@ -130,7 +130,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSte
       step={step}
       totalSteps={totalSteps}
       title="What do you need done?"
-      subtitle="Write honestly about something you want someone else to solve, or tap a task below. "
+      subtitle="Say it in a few words, or tap a popular task below."
       ctaLabel="Continue"
       ctaDisabled={!!error}
       onCta={onNext}
@@ -208,7 +208,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSte
       
 
       <View style={styles.helperRow}>
-        <Text style={styles.helper}>Keep it short and clear. You can add photos next.</Text>
+        <Text style={styles.helper}>Keep it short. You can add photos and details after it&apos;s posted.</Text>
         {length > 90 ? (
           <Text style={styles.counter}>
             {length}/{MAX_LENGTH}

@@ -76,7 +76,7 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
     error, setError,
     successInfo, setSuccessInfo,
     showPaymentMethodsModal, setShowPaymentMethodsModal,
-    paymentMethods, stripeLoading, stripeError, loadPaymentMethods,
+    primaryCardPaymentMethod, stripeLoading, stripeError, loadPaymentMethods,
     payWithCard, payWithApplePay,
   } = useWalletDeposit()
   const { theme } = useAppThemeContext()
@@ -130,7 +130,7 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
     await payWithApplePay(numericAmount)
   }
 
-  const hasPaymentMethod = paymentMethods.length > 0
+  const hasPaymentMethod = !!primaryCardPaymentMethod
   // "Visually enabled" mirrors the tap-disabled condition below so the CTA's
   // color communicates whether tapping it will do something right now.
   const primaryVisuallyEnabled = (numericAmount > 0 || !hasPaymentMethod) && !isProcessing && !stripeLoading
@@ -314,7 +314,7 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
         {/* Hint for new users */}
         {!hasPaymentMethod && !stripeLoading && !stripeError && (
           <Text style={styles.hintText}>
-            Link a credit card or bank account to add funds to your wallet.
+            Link a card to add funds to your wallet, or use Apple Pay on iPhone.
           </Text>
         )}
       </View>

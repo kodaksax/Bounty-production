@@ -87,6 +87,39 @@ psql -h your-db-host -U postgres -d postgres -f supabase/migrations/20251022_inp
 
 ---
 
+## Verifying a migration is actually live before closing the incident
+
+A merged PR and a migration file committed to this directory are not evidence
+the fix is live — `supabase db push`/`apply_migration` still has to be run
+against production, and nothing in CI does that automatically today (unlike
+`supabase/functions/**`, which auto-deploys on merge; see
+`.github/workflows/deploy-edge-functions.yml`). #871 shipped as a code fix
+that closed the GitHub issue while the migration it depended on was still
+unapplied to prod, so every report insert kept failing after the "fix" merged.
+
+For any migration whose whole point is to unblock a broken write path
+(a missing default, a broken RLS policy, a broken trigger), treat it as
+undone until both of these have run against production and passed:
+
+1. **Apply it.** `apply_migration` (Supabase MCP) or `supabase db push`.
+2. **Verify with a real write**, not a `BEGIN … ROLLBACK` block — a prior
+   rollback-wrapped verification of an unrelated migration left DDL live on
+   prod, untracked, because the trailing `ROLLBACK` didn't reliably run
+   after an intentional error in the same batch. The only reliable check is
+   to actually commit the write the bug was blocking (as the real,
+   RLS-scoped user it would run as — an `is_internal = true` test profile,
+   never a real account), confirm it on a second connection, then delete it.
+
+`scripts/verify-reports-id-migration.js` is the template for this: it
+applies `20260928120000_reports_id_default.sql` (idempotent — safe to
+re-run), inserts a real `reports` row with no client-supplied `id` under RLS
+as an internal test profile exactly the way `report-service.ts` does, checks
+it landed, and cleans it up. Follow this pattern — `scripts/verify-*.js` —
+for the next migration in this position, and run it as the last step of
+deploying that migration, before the linked issue is closed.
+
+---
+
 ## Migration Order
 
 All files in this directory are applied in lexicographic (filename) order.  

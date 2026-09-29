@@ -99,6 +99,7 @@ jest.mock('react-native', () => {
     event: jest.fn().mockReturnValue(jest.fn()),
     createAnimatedComponent: (c: any) => c,
     timing: jest.fn(immediate),
+    spring: jest.fn(immediate),
     parallel: jest.fn(immediate),
     sequence: jest.fn(immediate),
     stagger: jest.fn(immediate),
@@ -123,6 +124,8 @@ jest.mock('react-native', () => {
     TouchableOpacity: passthrough('TouchableOpacity'),
     ScrollView: passthrough('ScrollView'),
     Alert: { alert: jest.fn() },
+    // The progress cards above the feed are draggable.
+    PanResponder: { create: () => ({ panHandlers: {} }) },
     Easing: {
       in: (fn: any) => fn,
       out: (fn: any) => fn,

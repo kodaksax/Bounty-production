@@ -11,7 +11,11 @@ import { staleBountyService } from 'lib/services/stale-bounty-service';
 import { userProfileService } from 'lib/services/userProfile';
 import type { Attachment, Conversation } from 'lib/types';
 import { getCurrentUserId } from 'lib/utils/data-utils';
-import { bountyHoldsUnreleasedEscrow } from 'lib/utils/payment-architecture';
+import {
+  bountyHoldsUnreleasedEscrow,
+  isPhase2Bounty,
+  isV3Bounty,
+} from 'lib/utils/payment-architecture';
 import { getBountyStages } from 'lib/utils/bounty-lifecycle';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
@@ -208,6 +212,7 @@ export function MyPostingExpandable({
 
   // Track the current user's request for this bounty (if any)
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
+  const [requestRejectionSource, setRequestRejectionSource] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
 
   type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null;
@@ -386,17 +391,24 @@ export function MyPostingExpandable({
         // First try: match by bountyId (preferred)
         let match = list.find(c => String(c.bountyId) === String(bounty.id)) || null;
 
-        // Second try: find a 1:1 conversation between current user and poster
-        if (!match && effectiveUserId) {
-          const posterId = bounty.poster_id || bounty.user_id;
-          if (posterId) {
-            match =
-              list.find(c => {
-                if (c.isGroup) return false;
-                const parts = c.participantIds || [];
-                return parts.includes(String(effectiveUserId)) && parts.includes(String(posterId));
-              }) || null;
-          }
+        // The other side of this bounty's 1:1 chat. For the owner that is the
+        // hunter — matching on the poster there matched the owner against
+        // themselves, i.e. whichever 1:1 conversation came first.
+        const counterpartId =
+          variant === 'owner'
+            ? bounty.accepted_by || readyRecord?.hunter_id
+            : bounty.poster_id || bounty.user_id;
+
+        // Second try: find a 1:1 conversation between current user and the counterpart
+        if (!match && effectiveUserId && counterpartId) {
+          match =
+            list.find(c => {
+              if (c.isGroup) return false;
+              const parts = c.participantIds || [];
+              return (
+                parts.includes(String(effectiveUserId)) && parts.includes(String(counterpartId))
+              );
+            }) || null;
         }
 
         // Third try: query supabase-backed cache if still not found (covers cases
@@ -410,17 +422,14 @@ export function MyPostingExpandable({
             );
             if (supList && supList.length > 0) {
               match = supList.find(c => String(c.bountyId) === String(bounty.id)) || match;
-              if (!match && effectiveUserId) {
-                const posterId = bounty.poster_id || bounty.user_id;
-                if (posterId) {
-                  match =
-                    supList.find(
-                      c =>
-                        !c.isGroup &&
-                        (c.participantIds || []).includes(String(effectiveUserId)) &&
-                        (c.participantIds || []).includes(String(posterId))
-                    ) || match;
-                }
+              if (!match && effectiveUserId && counterpartId) {
+                match =
+                  supList.find(
+                    c =>
+                      !c.isGroup &&
+                      (c.participantIds || []).includes(String(effectiveUserId)) &&
+                      (c.participantIds || []).includes(String(counterpartId))
+                  ) || match;
               }
             }
           } catch (e) {
@@ -461,9 +470,11 @@ export function MyPostingExpandable({
               });
               if (Array.isArray(reqs) && reqs.length > 0) {
                 setRequestStatus(reqs[0].status);
+                setRequestRejectionSource((reqs[0] as { rejection_source?: string | null }).rejection_source ?? null);
                 setRequestId(String(reqs[0].id));
               } else {
                 setRequestStatus(null);
+                setRequestRejectionSource(null);
                 setRequestId(null);
               }
             }
@@ -987,23 +998,34 @@ export function MyPostingExpandable({
   };
 
   const handleMessageHunter = async () => {
-    let targetConversationId: string | null = conversation?.id ? String(conversation.id) : null;
+    // The chat route (app/tabs/messenger/[conversationId].tsx) only resolves
+    // Supabase conversations. The cached `conversation` can be an on-device
+    // one, which rendered "Conversation not found". messageService's
+    // getOrCreateConversation also falls back to the on-device store (uuidv4
+    // ids) when the RPC fails, so the id's shape proves nothing — resolve
+    // through the Supabase RPC directly (idempotent server-side) instead.
+    let targetConversationId: string | null = null;
     try {
-      if (!targetConversationId) {
-        const hunterId = bounty.accepted_by || readyRecord?.hunter_id;
-        if (!hunterId) {
-          Alert.alert('No Conversation', 'No active conversation found for this bounty yet.');
-          return;
-        }
-        const targetConversation = await messageService.getOrCreateConversation(
-          [String(hunterId)],
-          bounty.title || 'Conversation',
-          String(bounty.id)
-        );
-        targetConversationId = targetConversation?.id ? String(targetConversation.id) : null;
-        if (targetConversation) {
-          dispatchUi({ type: 'set', key: 'conversation', value: targetConversation });
-        }
+      const userId = currentUserId || getCurrentUserId();
+      const hunterId =
+        bounty.accepted_by ||
+        readyRecord?.hunter_id ||
+        (conversation && !conversation.isGroup
+          ? (conversation.participantIds || []).find(id => String(id) !== String(userId))
+          : undefined);
+      if (!hunterId || !userId) {
+        Alert.alert('No Conversation', 'No active conversation found for this bounty yet.');
+        return;
+      }
+      const supabaseMessaging = await import('../lib/services/supabase-messaging');
+      const targetConversation = await supabaseMessaging.getOrCreateConversation(
+        String(userId),
+        String(hunterId),
+        String(bounty.id)
+      );
+      targetConversationId = targetConversation?.id ? String(targetConversation.id) : null;
+      if (targetConversation) {
+        dispatchUi({ type: 'set', key: 'conversation', value: targetConversation });
       }
       if (!targetConversationId) {
         Alert.alert(
@@ -1119,6 +1141,7 @@ export function MyPostingExpandable({
             : bounty.poster_id || bounty.user_id
         }
         requestStatus={requestStatus}
+        requestRejectionSource={requestRejectionSource}
         onWithdrawApplication={onWithdrawApplication}
         role={variant === 'owner' ? 'poster' : 'hunter'}
         applicationCount={applicationCount}
@@ -2032,6 +2055,7 @@ export function MyPostingExpandable({
           hunterName={hunterName}
           bountyAmount={bounty.amount || 0}
           isForHonor={bounty.is_for_honor || false}
+          architecture={isV3Bounty(bounty) ? 'v3' : isPhase2Bounty(bounty) ? 'v2' : 'v1'}
           onClose={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: false })}
           onComplete={() => {
             dispatchUi({ type: 'set', key: 'showReviewModal', value: false });

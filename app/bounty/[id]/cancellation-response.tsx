@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, AlertCircle, CheckCircle, XCircle, HelpCircle, Phone, Mail, Flag } from 'lucide-react-native';
 import { cancellationService } from 'lib/services/cancellation-service';
 import { analyticsService } from 'lib/services/analytics-service';
+import { failureEventProps } from 'lib/utils/stripe-error';
 import { bountyPaymentsService } from 'lib/services/bounty-payments-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
@@ -119,7 +120,9 @@ export default function CancellationResponseScreen() {
                         {
                           bountyId: String(bountyId),
                           architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
-                          ...(result ? {} : { stage: 'cancel' }),
+                          ...(result
+                            ? {}
+                            : { stage: 'cancel', ...failureEventProps(undefined, 'refund_incomplete') }),
                         }
                       );
                     } catch {
@@ -132,6 +135,7 @@ export default function CancellationResponseScreen() {
                         bountyId: String(bountyId),
                         architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
                         stage: 'cancel',
+                        ...failureEventProps(refundError),
                       });
                     } catch {
                       /* analytics is best-effort */

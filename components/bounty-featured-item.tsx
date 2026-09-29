@@ -15,7 +15,37 @@ import { getScheduleChip } from '../lib/utils/schedule-utils'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { CountdownBadge } from "./ui/countdown-badge"
 
+// Every slot in the card below the cover is a fixed height, and the price row
+// is pinned to the bottom, so title / description / location / price land on
+// exactly the same baselines on every featured card — a one-line title, a
+// missing description or an incomplete listing changes what's in a slot, never
+// where the slots are. The carousel imports FEATURED_CARD_HEIGHT rather than
+// repeating a number that has to stay in step with this budget.
 const COVER_HEIGHT = 165
+const INFO_PADDING = 12
+/** Two lines at TITLE_LINE_HEIGHT — reserved whether the title wraps or not. */
+const TITLE_LINE_HEIGHT = 20
+const TITLE_HEIGHT = TITLE_LINE_HEIGHT * 2
+const DESCRIPTION_HEIGHT = 16
+const LOCATION_HEIGHT = 14
+const META_HEIGHT = 22
+/** Gaps between the three text slots; the gap above the meta row is elastic. */
+const SLOT_GAP = 3
+const INFO_HEIGHT =
+  INFO_PADDING * 2 +
+  TITLE_HEIGHT +
+  SLOT_GAP +
+  DESCRIPTION_HEIGHT +
+  SLOT_GAP +
+  LOCATION_HEIGHT +
+  SLOT_GAP +
+  META_HEIGHT +
+  // Slack, so a capped font bump has somewhere to go before anything clips.
+  12
+export const FEATURED_CARD_HEIGHT = COVER_HEIGHT + INFO_HEIGHT
+
+// Fixed-height text slots only hold if the text can't grow without bound.
+const CARD_MAX_FONT_SCALE = 1.2
 
 export interface BountyFeaturedItemProps {
   id: string | number
@@ -133,6 +163,19 @@ function BountyFeaturedItemComponent({
             </LinearGradient>
           )}
 
+          {/* "Limited details" rides the cover rather than the info block: in
+              the flow below it would push the title, description and price
+              down on exactly the cards that have it, which is the variance
+              this layout exists to remove. */}
+          {incomplete && (
+            <View style={s.limitedBadge}>
+              <MaterialIcons name="info-outline" size={11} color="rgba(255,255,255,0.85)" />
+              <Text style={s.limitedText} numberOfLines={1} maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}>
+                Limited details{missingSummary ? ` · ${missingSummary}` : ''}
+              </Text>
+            </View>
+          )}
+
           {/* Category chip overlaid on image bottom-left */}
           <View style={[s.coverChip, { backgroundColor: categoryColor }]}>
             <Text style={s.coverChipText}>{categoryLabel}</Text>
@@ -158,40 +201,51 @@ function BountyFeaturedItemComponent({
             )
           )}
 
-          {/* Info below cover — banner green */}
-          <LinearGradient
-            colors={['#064e3b', '#059669']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={s.info}
-          >
-            <Text style={s.title} numberOfLines={2}>{title}</Text>
-            {description ? (
-              <Text style={s.description} numberOfLines={1}>{description}</Text>
-            ) : null}
-            <Text style={s.location} numberOfLines={1}>
+          {/* Info below cover — the card's own themed surface, matching
+              BountyGridItem's footer treatment rather than carrying the
+              banner's green down into the card. */}
+          <View style={s.info}>
+            {/* Each slot keeps its height whether or not it has content — the
+                description renders as an empty line rather than collapsing. */}
+            <Text
+              style={s.title}
+              numberOfLines={2}
+              maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+            >
+              {title}
+            </Text>
+            <Text
+              style={s.description}
+              numberOfLines={1}
+              maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+            >
+              {description || ''}
+            </Text>
+            <Text
+              style={s.location}
+              numberOfLines={1}
+              maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+            >
               {work_type === 'online' ? 'Remote' : location || 'In Person'}
             </Text>
-            {incomplete && (
-              <View style={s.limitedBadge}>
-                <MaterialIcons name="info-outline" size={11} color="rgba(255,255,255,0.85)" />
-                <Text style={s.limitedText} numberOfLines={1}>
-                  Limited details{missingSummary ? ` · ${missingSummary}` : ''}
-                </Text>
-              </View>
-            )}
             <View style={s.metaRow}>
               {isForHonor ? (
                 <View style={s.honorBadge}>
-                  <MaterialIcons name="favorite" size={11} color="#064e3b" />
-                  <Text style={s.honorText}>For Honor</Text>
+                  <MaterialIcons name="favorite" size={11} color={theme.primary} />
+                  <Text style={s.honorText} maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}>For Honor</Text>
                 </View>
               ) : (
-                <Text style={s.price}>${price}</Text>
+                <Text style={s.price} maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}>${price}</Text>
               )}
-              <Text style={s.username} numberOfLines={1}>@{resolvedUsername}</Text>
+              <Text
+                style={s.username}
+                numberOfLines={1}
+                maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
+              >
+                @{resolvedUsername}
+              </Text>
             </View>
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
       </Animated.View>
 
@@ -280,36 +334,48 @@ function makeStyles(t: AppTheme) {
       color: '#fff',
     },
     info: {
-      padding: 12,
-      gap: 4,
+      // flex:1 rather than a height: the card is FEATURED_CARD_HEIGHT tall and
+      // the cover is fixed, so this takes exactly INFO_HEIGHT and any rounding
+      // lands in the elastic gap above metaRow.
+      flex: 1,
+      padding: INFO_PADDING,
+      backgroundColor: t.surface,
     },
     title: {
       fontSize: 15,
       fontWeight: '800',
-      color: '#ffffff',
-      lineHeight: 21,
+      color: t.text,
+      lineHeight: TITLE_LINE_HEIGHT,
+      height: TITLE_HEIGHT,
       letterSpacing: -0.2,
     },
     description: {
       fontSize: 12,
-      color: 'rgba(255,255,255,0.72)',
-      lineHeight: 17,
+      color: t.textSecondary,
+      lineHeight: DESCRIPTION_HEIGHT,
+      height: DESCRIPTION_HEIGHT,
+      marginTop: SLOT_GAP,
     },
     location: {
       fontSize: 11,
-      color: 'rgba(255,255,255,0.60)',
-      marginTop: 1,
+      color: t.textDisabled,
+      lineHeight: LOCATION_HEIGHT,
+      height: LOCATION_HEIGHT,
+      marginTop: SLOT_GAP,
     },
     limitedBadge: {
+      position: 'absolute',
+      top: 10,
+      left: 10,
+      // Leaves the top-right corner to the schedule chip / countdown.
+      maxWidth: '55%',
       flexDirection: 'row',
       alignItems: 'center',
-      alignSelf: 'flex-start',
       gap: 4,
-      marginTop: 4,
       paddingHorizontal: 7,
       paddingVertical: 3,
       borderRadius: 999,
-      backgroundColor: 'rgba(255,255,255,0.16)',
+      backgroundColor: 'rgba(0,0,0,0.55)',
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.28)',
     },
@@ -323,30 +389,39 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginTop: 2,
+      height: META_HEIGHT,
+      // Pinned to the bottom of the info block: the price and @username sit on
+      // the same line on every card no matter what the slots above hold.
+      marginTop: 'auto',
     },
     price: {
       fontSize: 16,
+      lineHeight: META_HEIGHT,
       fontWeight: '800',
-      color: '#fcd34d',
+      color: t.primary,
     },
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(255,255,255,0.88)',
+      backgroundColor: t.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(5,150,105,0.1)',
       borderRadius: 999,
       paddingHorizontal: 8,
       paddingVertical: 3,
+      borderWidth: 1,
+      borderColor: t.isDark ? 'rgba(16,185,129,0.35)' : 'rgba(5,150,105,0.3)',
       gap: 4,
     },
     honorText: {
-      color: '#064e3b',
+      color: t.primary,
       fontWeight: '800',
       fontSize: 11,
     },
     username: {
       fontSize: 12,
-      color: 'rgba(255,255,255,0.60)',
+      color: t.textSecondary,
+      flexShrink: 1,
+      marginLeft: 8,
+      textAlign: 'right',
     },
   })
 }

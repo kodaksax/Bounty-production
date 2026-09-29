@@ -84,6 +84,7 @@ jest.mock('react-native', () => {
     event: jest.fn().mockReturnValue(jest.fn()),
     createAnimatedComponent: (c: any) => c,
     timing: jest.fn(immediate),
+    spring: jest.fn(immediate),
     parallel: jest.fn(immediate),
     sequence: jest.fn(immediate),
     stagger: jest.fn(immediate),
@@ -108,6 +109,8 @@ jest.mock('react-native', () => {
     TouchableOpacity: passthrough('TouchableOpacity'),
     ScrollView: passthrough('ScrollView'),
     Alert: { alert: jest.fn() },
+    // The progress cards above the feed are draggable.
+    PanResponder: { create: () => ({ panHandlers: {} }) },
     Easing: {
       in: (fn: any) => fn,
       out: (fn: any) => fn,
@@ -181,10 +184,34 @@ jest.mock('../../lib/services/search-service', () => ({
   searchService: { getTrendingBounties: jest.fn().mockResolvedValue([]) },
 }));
 jest.mock('../../lib/services/bounty-service', () => ({
-  bountyService: { getAll: jest.fn(), getOpenCount: jest.fn().mockResolvedValue(0) },
+  bountyService: {
+    getAll: jest.fn(),
+    getById: jest.fn(),
+    getOpenCount: jest.fn().mockResolvedValue(0),
+  },
 }));
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn() },
+}));
+jest.mock('../../lib/services/completion-service', () => ({
+  completionService: { getLatestSubmissionsForBounties: jest.fn() },
+}));
+// The progress cards render as "<id>:<stage>" so tests can read what the feed
+// handed them; sortByProgress stays real.
+jest.mock('../../components/my-bounty-progress-banner', () => ({
+  ...jest.requireActual('../../components/my-bounty-progress-banner'),
+  MyBountyProgressCarousel: ({ items }: any) =>
+    require('react').createElement(
+      'View',
+      {},
+      items.map((i: any) =>
+        require('react').createElement(
+          'Text',
+          { key: i.bounty.id, testID: 'progress-card' },
+          `${i.bounty.id}:${i.stage}`
+        )
+      )
+    ),
 }));
 // Realtime mock that records the handlers the feed registers, so a test can
 // deliver a bounties UPDATE/DELETE the way Supabase would.
@@ -220,6 +247,7 @@ function emitRealtime(event: string, payload: any) {
 let BountyFeed: any;
 let bountyService: any;
 let bountyRequestService: any;
+let completionService: any;
 let resetRemovedBountiesRegistry: () => void;
 
 const openBounty = (over: Record<string, unknown> = {}) => ({
@@ -245,11 +273,17 @@ const renderFeed = (ref?: React.Ref<any>) =>
 const titles = (queryAllByTestId: any) =>
   queryAllByTestId('bounty-item').map((n: any) => n.props.children);
 
+// Open-feed page loads only — excludes the "your bounty in progress" banner's
+// own getAll({ status: 'in_progress' }) lookup.
+const feedLoadCalls = () =>
+  bountyService.getAll.mock.calls.filter((c: any[]) => c[0]?.status === 'open').length;
+
 describe('BountyFeed lifecycle visibility', () => {
   beforeAll(() => {
     ({ BountyFeed } = require('../../components/bounty-feed'));
     ({ bountyService } = require('../../lib/services/bounty-service'));
     ({ bountyRequestService } = require('../../lib/services/bounty-request-service'));
+    ({ completionService } = require('../../lib/services/completion-service'));
     ({ resetRemovedBountiesRegistry } = require('../../lib/utils/bounty-visibility'));
   });
 
@@ -258,6 +292,7 @@ describe('BountyFeed lifecycle visibility', () => {
     realtimeHandlers.length = 0;
     resetRemovedBountiesRegistry();
     bountyRequestService.getAll.mockResolvedValue([]);
+    completionService.getLatestSubmissionsForBounties.mockResolvedValue(new Map());
   });
 
   afterEach(() => {
@@ -317,7 +352,7 @@ describe('BountyFeed lifecycle visibility', () => {
     });
 
     await waitFor(() => {
-      expect(bountyService.getAll).toHaveBeenCalledTimes(2);
+      expect(feedLoadCalls()).toBe(2);
     });
     await waitFor(() => {
       expect(titles(queryAllByTestId)).toEqual(['Still open']);
@@ -347,7 +382,7 @@ describe('BountyFeed lifecycle visibility', () => {
     });
 
     await waitFor(() => {
-      expect(bountyService.getAll).toHaveBeenCalledTimes(2);
+      expect(feedLoadCalls()).toBe(2);
     });
     await waitFor(() => {
       expect(titles(queryAllByTestId)).toEqual(['Still open']);
@@ -383,6 +418,143 @@ describe('BountyFeed lifecycle visibility', () => {
       expect(titles(queryAllByTestId)).toEqual(
         expect.arrayContaining(['Still open', 'Claimed then released'])
       );
+    });
+  });
+  describe('newly posted bounties', () => {
+    it('renders a new bounty live, even with no details, without a refresh', async () => {
+      bountyService.getAll.mockResolvedValue([openBounty({ id: '1', title: 'Still open' })]);
+      // Title and price only — no description, location or timing.
+      const bare = { id: '9', title: 'Just posted', amount: 10, status: 'open' };
+      bountyService.getById.mockResolvedValue({ ...bare, username: 'poster' });
+
+      const { queryAllByTestId, queryByText } = renderFeed();
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toEqual(['Still open']);
+      });
+
+      emitRealtime('INSERT', { new: { ...bare, poster_id: 'someone-else' } });
+
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toEqual(
+          expect.arrayContaining(['Still open', 'Just posted'])
+        );
+      });
+      expect(bountyService.getById).toHaveBeenCalledWith('9');
+      expect(feedLoadCalls()).toBe(1);
+      expect(queryByText(/new bount/)).toBeNull();
+    });
+
+    it('does not add the same bounty twice', async () => {
+      bountyService.getAll.mockResolvedValue([openBounty({ id: '1', title: 'Still open' })]);
+      bountyService.getById.mockResolvedValue(openBounty({ id: '9', title: 'Just posted' }));
+
+      const { queryAllByTestId } = renderFeed();
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toEqual(['Still open']);
+      });
+
+      emitRealtime('INSERT', { new: { id: '9', status: 'open' } });
+      emitRealtime('INSERT', { new: { id: '9', status: 'open' } });
+
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toHaveLength(2);
+      });
+    });
+
+    it('leaves test bounties out, as the feed query does', async () => {
+      bountyService.getAll.mockResolvedValue([openBounty({ id: '1', title: 'Still open' })]);
+
+      const { queryAllByTestId } = renderFeed();
+      await waitFor(() => {
+        expect(titles(queryAllByTestId)).toEqual(['Still open']);
+      });
+
+      emitRealtime('INSERT', { new: { id: '9', status: 'open', is_test: true } });
+
+      expect(bountyService.getById).not.toHaveBeenCalled();
+      expect(titles(queryAllByTestId)).toEqual(['Still open']);
+    });
+  });
+
+  describe('your-bounty progress cards', () => {
+    const mine = (over: Record<string, unknown>) =>
+      openBounty({ poster_id: 'user-123', created_at: '2026-09-01T00:00:00Z', ...over });
+    // Progress loads are the getAll calls that pass a statuses allowlist.
+    const progressCalls = () =>
+      bountyService.getAll.mock.calls.filter((c: any[]) => c[0]?.statuses);
+    const cards = (queryAllByTestId: any) =>
+      queryAllByTestId('progress-card').map((n: any) => n.props.children);
+
+    it('shows only live bounties, even if the backend ignores the status allowlist', async () => {
+      bountyService.getAll.mockImplementation(async (opts: any) =>
+        opts?.statuses
+          ? [
+              mine({ id: 'p1', status: 'open' }),
+              mine({ id: 'p2', status: 'completed' }),
+              mine({ id: 'p3', status: 'cancelled' }),
+            ]
+          : []
+      );
+
+      const { queryAllByTestId } = renderFeed();
+
+      await waitFor(() => expect(cards(queryAllByTestId)).toEqual(['p1:open']));
+    });
+
+    it('pages through every live bounty instead of stopping at the first page', async () => {
+      const firstPage = Array.from({ length: 100 }, (_, i) =>
+        mine({ id: `o${i}`, created_at: '2026-09-10T00:00:00Z' })
+      );
+      const older = mine({ id: 'old', status: 'in_progress', created_at: '2026-08-01T00:00:00Z' });
+      bountyService.getAll.mockImplementation(async (opts: any) => {
+        if (!opts?.statuses) return [];
+        return opts.offset === 0 ? firstPage : [older];
+      });
+      completionService.getLatestSubmissionsForBounties.mockResolvedValue(
+        new Map([['old', { status: 'pending' }]])
+      );
+
+      const { queryAllByTestId } = renderFeed();
+
+      await waitFor(() => expect(cards(queryAllByTestId)[0]).toBe('old:review'));
+      expect(cards(queryAllByTestId)).toHaveLength(101);
+      expect(progressCalls().map((c: any[]) => c[0].offset)).toEqual([0, 100]);
+    });
+
+    it('keeps the last-known cards and stages when a reload fails', async () => {
+      bountyService.getAll.mockImplementation(async (opts: any) =>
+        opts?.statuses ? [mine({ id: 'w1', status: 'in_progress' })] : []
+      );
+      completionService.getLatestSubmissionsForBounties.mockResolvedValue(
+        new Map([['w1', { status: 'pending' }]])
+      );
+
+      const { queryAllByTestId } = renderFeed();
+      await waitFor(() => expect(cards(queryAllByTestId)).toEqual(['w1:review']));
+
+      // Submission lookup fails: the card stays in review, not demoted.
+      completionService.getLatestSubmissionsForBounties.mockRejectedValue(new Error('offline'));
+      const lookupsBefore =
+        completionService.getLatestSubmissionsForBounties.mock.calls.length;
+      emitRealtime('UPDATE', { new: { id: 'w1', poster_id: 'user-123', status: 'in_progress' } });
+      await waitFor(() =>
+        expect(completionService.getLatestSubmissionsForBounties.mock.calls.length).toBeGreaterThan(
+          lookupsBefore
+        )
+      );
+      await act(async () => {});
+      expect(cards(queryAllByTestId)).toEqual(['w1:review']);
+
+      // The bounty load itself fails: the cards stay rather than vanishing.
+      const loadsBefore = progressCalls().length;
+      bountyService.getAll.mockImplementation(async (opts: any) => {
+        if (opts?.statuses) throw new Error('offline');
+        return [];
+      });
+      emitRealtime('UPDATE', { new: { id: 'w1', poster_id: 'user-123', status: 'in_progress' } });
+      await waitFor(() => expect(progressCalls().length).toBeGreaterThan(loadsBefore));
+      await act(async () => {});
+      expect(cards(queryAllByTestId)).toEqual(['w1:review']);
     });
   });
 });

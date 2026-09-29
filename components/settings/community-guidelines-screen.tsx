@@ -1,10 +1,11 @@
 import { ThemedButton } from 'components/themed/ThemedButton';
+import { LegalText } from 'components/legal/LegalText';
 import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
 import { SettingsSection } from 'components/ui/settings-section';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { COMMUNITY_GUIDELINES_TEXT } from '../../assets/legal/community-guidelines';
 
 interface CommunityGuidelinesScreenProps {
@@ -18,7 +19,6 @@ export const CommunityGuidelinesScreen: React.FC<CommunityGuidelinesScreenProps>
 }) => {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const paragraphs = COMMUNITY_GUIDELINES_TEXT.split(/\n\n+/);
 
   return (
     <View style={s.container}>
@@ -26,9 +26,7 @@ export const CommunityGuidelinesScreen: React.FC<CommunityGuidelinesScreenProps>
       <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 96 }}>
         <SettingsSection>
           <View style={s.textBlock}>
-            {paragraphs.map((p, i) => (
-              <Text key={i} style={s.paragraph}>{p}</Text>
-            ))}
+            <LegalText text={COMMUNITY_GUIDELINES_TEXT} />
           </View>
         </SettingsSection>
 
@@ -46,12 +44,6 @@ function makeStyles(t: AppTheme) {
     },
     textBlock: {
       padding: 16,
-    },
-    paragraph: {
-      fontSize: 14,
-      lineHeight: 21,
-      color: t.text,
-      marginBottom: 12,
     },
     backButton: {
       marginTop: 4,

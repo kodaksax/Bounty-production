@@ -381,6 +381,33 @@ describe('sign-in recovery after a failed attempt', () => {
     );
   });
 
+  it('labels the Sign In button with a live lockout countdown, keeping it findable', async () => {
+    store.set('lockoutUntil', String(Date.now() + 5 * 60 * 1000));
+
+    const utils = render(<SignInForm />);
+
+    // The button reads as a countdown, not a dead control...
+    await waitFor(() => expect(utils.getByText(/Try again in \d+s/)).toBeTruthy());
+    // ...while its action label stays stable so it is still reachable.
+    expect(utils.getByLabelText('Sign in')).toBeTruthy();
+  });
+
+  it('labels the Sign In button with the CAPTCHA gate once the challenge arms', async () => {
+    signInWithPassword.mockResolvedValue(INVALID_CREDENTIALS);
+
+    const utils = render(<SignInForm />);
+    fillCredentials(utils, 'wrong-password');
+
+    for (let i = 0; i < CAPTCHA_THRESHOLD; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      await tapSignIn(utils);
+    }
+
+    await waitFor(() => expect(utils.getByText('Complete the security check')).toBeTruthy());
+    // The action label is unchanged, so screen readers and taps still work.
+    expect(utils.getByLabelText('Sign in')).toBeTruthy();
+  });
+
   it('resets the attempt counter on a successful sign-in', async () => {
     signInWithPassword
       .mockResolvedValueOnce(INVALID_CREDENTIALS)

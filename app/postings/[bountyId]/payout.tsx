@@ -1,6 +1,7 @@
 // app/postings/[bountyId]/payout.tsx - Payout Screen
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { FEED_FALLBACK, useSafeBack } from '../../../hooks/useSafeBack';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -15,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/success-animation';
 import { analyticsService } from '../../../lib/services/analytics-service';
+import { failureEventProps } from '../../../lib/utils/stripe-error';
 import {
     BountyPaymentError,
     bountyPaymentsService,
@@ -35,6 +37,10 @@ import { useWallet } from '../../../lib/wallet-context';
 export default function PayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
+  // Fall back to the poster dashboard when there is no history to pop.
+  const goBack = useSafeBack(
+    bountyId ? { pathname: '/postings/[bountyId]', params: { bountyId } } : FEED_FALLBACK
+  );
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
   const { releaseFunds, logTransaction, balance } = useWallet();
@@ -131,6 +137,10 @@ export default function PayoutScreen() {
               bountyId: String(bounty.id),
               architecture: useV3 ? 'v3' : 'v2',
               amount: bounty.amount,
+              bounty_id: String(bounty.id),
+              hunter_person_id: bounty.accepted_by || undefined,
+              poster_person_id: currentUserId || undefined,
+              via: 'payout_release',
             });
           } catch {
             /* analytics is best-effort */
@@ -141,6 +151,7 @@ export default function PayoutScreen() {
               bountyId: String(bounty.id),
               architecture: useV3 ? 'v3' : 'v2',
               stage: 'release',
+              ...failureEventProps(releaseErr),
             });
           } catch {
             /* analytics is best-effort */
@@ -164,6 +175,19 @@ export default function PayoutScreen() {
         if (!released) {
           throw new Error('Failed to release escrowed funds - no active escrow found');
         }
+        try {
+          await analyticsService.trackEvent('escrow_released', {
+            bountyId: String(bounty.id),
+            architecture: 'v1',
+            amount: bounty.amount,
+            bounty_id: String(bounty.id),
+            hunter_person_id: bounty.accepted_by || undefined,
+            poster_person_id: currentUserId || undefined,
+            via: 'payout_release',
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
       }
 
       // Update bounty status to completed
@@ -181,6 +205,9 @@ export default function PayoutScreen() {
       try {
         await analyticsService.trackEvent('bounty_completed', {
           bountyId: String(bounty.id),
+          // Same key completion_submitted/escrow_released use, so the three
+          // join on one property. bountyId stays for existing insights.
+          bounty_id: String(bounty.id),
           via: 'payout_release',
           isForHonor: false,
           amount: bounty.amount,
@@ -254,6 +281,7 @@ export default function PayoutScreen() {
               try {
                 await analyticsService.trackEvent('bounty_completed', {
                   bountyId: String(bounty.id),
+                  bounty_id: String(bounty.id),
                   via: 'mark_complete',
                   isForHonor: !!bounty.is_for_honor,
                   amount: bounty.is_for_honor ? 0 : bounty.amount,
@@ -427,7 +455,7 @@ export default function PayoutScreen() {
         <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={goBack}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -438,7 +466,7 @@ export default function PayoutScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backIcon} onPress={goBack}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payout</Text>

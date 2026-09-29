@@ -1,3 +1,4 @@
+import { LegalText } from 'components/legal/LegalText';
 import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
 import { ThemedButton } from 'components/themed/ThemedButton';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -14,14 +15,6 @@ export const TermsPrivacyScreen: React.FC<TermsPrivacyScreenProps> = ({ onBack }
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [tab, setTab] = useState<'terms' | 'privacy'>('terms');
   const content = tab === 'terms' ? TERMS_TEXT : PRIVACY_TEXT;
-
-  const renderMarkdownLike = (text: string) => {
-    // Very simple renderer: split by double newlines into paragraphs
-    const parts = text.split(/\n\n+/);
-    return parts.map((p, idx) => (
-      <Text key={idx} style={s.paragraph}>{p}</Text>
-    ));
-  };
 
   return (
     <View style={s.container}>
@@ -47,7 +40,7 @@ export const TermsPrivacyScreen: React.FC<TermsPrivacyScreenProps> = ({ onBack }
       </View>
 
       <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
-        {renderMarkdownLike(content)}
+        <LegalText text={content} />
         <ThemedButton variant="secondary" label="Back to Settings" onPress={onBack} style={s.backButton} />
       </ScrollView>
     </View>
@@ -87,12 +80,6 @@ function makeStyles(t: AppTheme) {
     },
     tabButtonTextActive: {
       color: t.text,
-    },
-    paragraph: {
-      fontSize: 14,
-      lineHeight: 21,
-      color: t.text,
-      marginBottom: 12,
     },
     backButton: {
       marginTop: 4,

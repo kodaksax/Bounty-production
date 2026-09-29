@@ -101,22 +101,26 @@ export default function OnboardingIndex() {
 
       // ── Authenticated, onboarding not finished ────────────────────────────
       // NEVER send a signed-in user to /onboarding/welcome. That screen is the
-      // pre-auth entry point: it offers "Log In" and the role CTAs, so landing
+      // pre-auth entry point: it offers "Sign Up" and "Log In", so landing
       // there after a successful registration reads as "your account wasn't
       // created, sign in again" — the reported beta failure. A signed-in user
       // always resumes at the first post-auth step instead.
       //
-      // `intent` (poster/hunter) is deliberately NOT required here: the
-      // 'onboarding-skip-role-selection' test arm never sets one (welcome.tsx
-      // handleGetStarted), and a draft write can always be lost. Role is
-      // optional for the rest of the flow — totalStepsFor(null) in
-      // username.tsx already covers the no-intent variant.
+      // The card-style pick (app/onboarding/style.tsx) is the first post-auth
+      // step, and role (poster/hunter) follows it on its own screen
+      // (app/onboarding/role-select.tsx) — send an authenticated user to style
+      // unless a role was already picked (e.g. resuming a draft, or an
+      // existing-but-incomplete account signing back in), which means both of
+      // those steps are behind them, so resume at payouts.tsx instead. Role
+      // stays optional for the rest of the flow either way —
+      // totalStepsFor(null) in username.tsx already covers the no-intent
+      // variant.
       if (isAuthenticated) {
         analyticsService.trackEvent(
           onboardingData.intent ? 'onboarding_resumed' : 'onboarding_started',
           { intent: onboardingData.intent ?? 'none', authenticated: true }
         );
-        router.replace('/onboarding/style');
+        router.replace(onboardingData.intent ? '/onboarding/payouts' : '/onboarding/style');
         return;
       }
 
@@ -135,7 +139,13 @@ export default function OnboardingIndex() {
       logger.error('[onboarding] checkOnboardingStatus threw', { error });
       // Even the failure path must not eject a signed-in user to the pre-auth
       // welcome screen.
-      router.replace(isAuthenticated ? '/onboarding/style' : '/onboarding/welcome');
+      router.replace(
+        isAuthenticated
+          ? onboardingData.intent
+            ? '/onboarding/payouts'
+            : '/onboarding/style'
+          : '/onboarding/welcome'
+      );
     }
   };
 
@@ -156,7 +166,7 @@ export default function OnboardingIndex() {
         </Text>
         <TouchableOpacity style={styles.retryButton} onPress={handleManualRetry} disabled={retrying}>
           {retrying ? (
-            <ActivityIndicator size="small" color="#052e1b" />
+            <ActivityIndicator size="small" color={theme.background} />
           ) : (
             <Text style={styles.retryButtonText}>Retry</Text>
           )}
@@ -205,7 +215,10 @@ function makeStyles(theme: AppTheme) {
       alignSelf: 'center',
     },
     retryButtonText: {
-      color: '#052e1b',
+      // theme.background, not a fixed dark green: it's the on-primary colour
+      // and inverts with the theme, dark-on-green in dark mode and
+      // light-on-green in light mode. Matches role-select's continue button.
+      color: theme.background,
       fontSize: 16,
       fontWeight: 'bold',
     },

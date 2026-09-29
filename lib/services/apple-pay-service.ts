@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { API_BASE_URL } from 'lib/config/api';
 import { analyticsService } from 'lib/services/analytics-service';
+import { failureEventProps } from 'lib/utils/stripe-error';
 import { stripeSdk } from 'lib/services/stripe-sdk';
 import { supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
@@ -367,7 +368,8 @@ class ApplePayService {
           await analyticsService.trackEvent('payment_failed', {
             method: 'apple_pay',
             stage: confirmError ? 'confirm' : 'backend_confirm',
-            errorCode: failureCode,
+            payment_intent_id: paymentIntentId,
+            ...failureEventProps(confirmError ?? failureMessage, 'backend_not_succeeded'),
             ...getDiagnosticContext(),
           });
         } catch {
@@ -386,9 +388,10 @@ class ApplePayService {
         ...getDiagnosticContext(),
       });
       try {
-        await analyticsService.trackEvent('payment_error', {
+        await analyticsService.trackEvent('payment_failed', {
           method: 'apple_pay',
           stage: 'unhandled',
+          ...failureEventProps(error),
           ...getDiagnosticContext(),
         });
       } catch {

@@ -136,21 +136,12 @@ export function StepPostPublish({
     <QuickStepLayout
       step={step}
       totalSteps={totalSteps}
-      title="Your Bounty is live!!!"
-      subtitle="It's live and hunters can see it now. Adding more below is optional — it just helps people understand the task."
+      // PostCelebration has just said "posted", so this screen goes straight
+      // to the one thing left to do.
+      title="Add a few details so hunters know exactly what you need."
       ctaLabel="Continue"
       onCta={onContinue}
-      footerNote={
-        draft.isForHonor
-          ? 'No payment is involved in a for-honor bounty.'
-          : "You'll only be charged when you choose someone to do it; you don't commit to anything till work is completed."
-      }
     >
-      <View style={styles.liveBadge}>
-        <MaterialIcons name="check-circle" size={20} color={theme.primary} />
-        <Text style={styles.liveText}>Posted and visible in the feed</Text>
-      </View>
-
       {!isComplete && (
         <View style={styles.gapCallout}>
           <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#fcd34d' : '#92400e'} />
@@ -162,7 +153,9 @@ export function StepPostPublish({
         </View>
       )}
 
-      <Text style={styles.sectionLabel}>Add more details to your bounty</Text>
+      <Text style={[styles.sectionLabel, !isComplete && styles.sectionLabelAfterCallout]}>
+        Add more details to your bounty
+      </Text>
 
       <View style={styles.card}>
         {rows.map((row, index) => {
@@ -212,27 +205,13 @@ export default StepPostPublish;
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
-    liveBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-      borderRadius: 14,
-      backgroundColor: theme.isDark ? 'rgba(5,150,105,0.18)' : 'rgba(5,150,105,0.10)',
-    },
-    liveText: {
-      marginLeft: 10,
-      fontSize: 14,
-      fontWeight: '700',
-      color: theme.text,
-    },
     sectionLabel: {
-      marginTop: 22,
       marginBottom: 10,
       fontSize: 15,
       fontWeight: '700',
       color: theme.text,
     },
+    sectionLabelAfterCallout: { marginTop: 22 },
     card: {
       borderRadius: 24,
       backgroundColor: theme.surface,
@@ -264,7 +243,6 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 10,
-      marginTop: 14,
       padding: 14,
       borderRadius: 14,
       backgroundColor: theme.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',

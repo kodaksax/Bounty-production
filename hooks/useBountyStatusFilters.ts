@@ -17,6 +17,7 @@ import type { CompletionSubmission } from 'lib/services/completion-service'
 import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
 import { supabase } from 'lib/supabase'
+import { uniqueRealtimeTopic } from 'lib/utils/realtime-topic'
 import type { BountyDisplayStatus } from 'lib/utils/bounty-display-status'
 import type { BountyAttentionGroup, BountyLifecycleState } from 'lib/utils/bounty-lifecycle'
 import {
@@ -155,7 +156,7 @@ export function useBountyStatusFilters({
     let channel: any = null
     try {
       channel = supabase
-        .channel(`bounty-status-filters:${currentUserId ?? 'anon'}`)
+        .channel(uniqueRealtimeTopic(`bounty-status-filters:${currentUserId ?? 'anon'}`))
         .on(
           'postgres_changes',
           {
@@ -223,6 +224,7 @@ export function useBountyStatusFilters({
       const state = resolveBountyLifecycle({
         bounty: b,
         role: variant === 'owner' ? 'poster' : 'hunter',
+        viewerId: currentUserId ?? null,
         requestStatus: variant === 'hunter' ? requestStatusMap.get(String(b.id)) ?? null : null,
         submissionStatus: submission?.status ?? null,
         submissionIsMine:

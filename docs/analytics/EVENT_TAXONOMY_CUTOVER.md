@@ -151,3 +151,49 @@ applied / completed" is answered by the Supabase row state (the
 so a returning user on a new device can re-emit once — use a first-touch /
 min-timestamp aggregation in PostHog if a strict once-per-person figure is
 needed.
+
+---
+
+# Duplicate-family cleanup — 2026-09-25
+
+One canonical event per concept. Old names keep their history in PostHog;
+builds that predate this release keep sending them until users update, so
+expect a tail rather than an immediate stop.
+
+| Retired | Canonical | How |
+|---|---|---|
+| `post_published` | `bounty_published` | Already folded in on 08-28 (see above); dark since 09-04. This pass repointed the consumers that were never updated. |
+| `payment_error` | `payment_failed` | `logPaymentError()` no longer emits. It fired 3ms after `payment_failed` for the same failure, so every decline counted twice. |
+| `screen_viewed` | `$screen` | `lib/analytics/screen-tracking.ts` emits only `$screen`, which already carried identical properties (verified 1:1 in PostHog). |
+| `Application Opened` | `app_opened` | Dropped in `before_send` (`lib/posthog.ts`). `captureAppLifecycleEvents` stays on for `Application Installed` / `Updated`. |
+| `auth_signup_success` | `signup_completed` | Already removed in code on 09-13; this is the old-build tail. |
+
+## Failure events: one serializer
+
+Every `*_failed` event spreads `failureEventProps(error)` from
+`lib/utils/stripe-error.ts`: `error_code` (decline code first, then the most
+specific code), `error_type`, `decline_code`, `code`, `error_message` (≤200
+chars), `request_id`, `payment_intent_id`. Group by `error_code` + `stage`.
+Never `String(error)`: the plain objects `invokePayments` and the Stripe SDK
+throw serialize to `"[object Object]"` (the `setup_intent_failed` regression,
+09-15/16).
+
+## Also fixed in this release
+
+* `app_opened` fired exactly twice per session: the startup effect in
+  `app/_layout.tsx` re-runs when `fontsLoaded` flips and its guard was
+  per-run. Counts before this release are 2x.
+* Uncaught JS errors were captured nowhere on iOS 26+ (~72% of app users on
+  2026-09-25). `Sentry.init()` is skipped there (`lib/utils/sentry-gate.ts`)
+  and PostHog's exception autocapture was off. PostHog now captures
+  uncaught exceptions and rejections where Sentry does not run.
+  `initGlobalErrorHandlers()` now installs once and chains to the handler it
+  replaces. Before, its second call overwrote Sentry's handler.
+
+## PostHog objects repointed (2026-09-25)
+
+Experiment 425016 (primary metric `bounty_published`; still a draft with a
+100/0 split), dashboard 2025278 tiles `IRsgPi07`, `6eFoTwNL`, `vI1UcOPK`
+(retired names now read `retired`, not `DEAD`), and insights `ZM2Jd6bb`,
+`83SaO2EQ`, `ta2FLs4b`, `5mRPIVLX`, `ZRXRVayO`, `3tzSLtaj`. Not repointed:
+the three self-driving scouts named in the 08-28 section.

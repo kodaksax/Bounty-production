@@ -133,7 +133,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     setSuccessInfo,
     showPaymentMethodsModal,
     setShowPaymentMethodsModal,
-    paymentMethods,
+    primaryCardPaymentMethod,
     stripeLoading,
     stripeError,
     loadPaymentMethods,
@@ -147,7 +147,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   const needsPayment = shortfall > 0;
   const chargeAmount = chargeAmountForShortfall(shortfall);
   const settling = gate.stage === 'settling';
-  const hasPaymentMethod = paymentMethods.length > 0;
+  const hasPaymentMethod = !!primaryCardPaymentMethod;
   const busy = isProcessing || settling;
 
   // --- Deposit outcome -> gate --------------------------------------------
@@ -342,13 +342,13 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
                     disabled={busy}
                     accessibilityRole="button"
                     accessibilityLabel={`Change payment method, currently ${stripeService.formatCardDisplay(
-                      paymentMethods[0]
+                      primaryCardPaymentMethod
                     )}`}
                   >
                     <Text style={styles.rowLabel}>Paying with</Text>
                     <View style={styles.rowInline}>
                       <Text style={styles.rowValue}>
-                        {stripeService.formatCardDisplay(paymentMethods[0])}
+                        {stripeService.formatCardDisplay(primaryCardPaymentMethod)}
                       </Text>
                       <Text style={styles.changeLink}>Change</Text>
                     </View>

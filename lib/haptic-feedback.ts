@@ -1,100 +1,68 @@
 import * as Haptics from 'expo-haptics';
 
 /**
+ * Fire-and-forget one haptic, never letting it fail the action it decorates.
+ *
+ * expo-haptics calls return promises. Where haptics are unavailable (web, some
+ * simulators) the promise can REJECT instead of throwing, and a synchronous
+ * try/catch never sees that, so it surfaced as an unhandled rejection. Both
+ * failure modes are swallowed here; `fallback`, when given, is tried once
+ * instead.
+ */
+function fire(run: () => unknown, fallback?: () => unknown): void {
+  const onFail = () => {
+    if (fallback) fire(fallback);
+  };
+  try {
+    const result = run();
+    if (result && typeof (result as Promise<unknown>).catch === 'function') {
+      (result as Promise<unknown>).catch(onFail);
+    }
+  } catch {
+    onFail();
+  }
+}
+
+/**
  * Haptic feedback utilities with safety checks.
  * Haptics are always triggered as they provide important feedback for accessibility,
  * independent of reduced motion preferences (which apply to visual animations).
  */
 export const hapticFeedback = {
   // Light feedback for button presses and minor interactions
-  light: () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {
-      // Silently fail if haptics aren't supported
-    }
-  },
-  
+  light: () => fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)),
+
   // Medium feedback for selections and confirmations
-  medium: () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {
-      // Silently fail if haptics aren't supported
-    }
-  },
-  
+  medium: () => fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)),
+
   // Heavy feedback for important actions like delete
-  heavy: () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    } catch {
-      // Silently fail if haptics aren't supported
-    }
-  },
-  
+  heavy: () => fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)),
+
   // Success feedback for completed actions
-  success: () => {
-    try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      // Silently fail if haptics aren't supported
-    }
-  },
-  
+  success: () => fire(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)),
+
   // Warning feedback for caution states
-  warning: () => {
-    try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    } catch {
-      // Silently fail if haptics aren't supported
-    }
-  },
-  
+  warning: () => fire(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)),
+
   // Error feedback for failed actions
-  error: () => {
-    try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } catch {
-      // Silently fail if haptics aren't supported
-    }
-  },
-  
+  error: () => fire(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)),
+
   // Selection feedback (for pickers, toggles, checkbox)
-  selection: () => {
-    try {
-      Haptics.selectionAsync();
-    } catch {
-      // Silently fail if haptics aren't supported
-    }
-  },
+  selection: () => fire(() => Haptics.selectionAsync()),
 
-  // Rigid feedback (soft/rigid) - iOS 13+
-  soft: () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
-    } catch {
-      // Fallback to light if soft not supported
-      try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      } catch {
-        // Silently fail if not supported
-      }
-    }
-  },
+  // Soft impact (iOS 13+) — falls back to light where unsupported
+  soft: () =>
+    fire(
+      () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft),
+      () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    ),
 
-  rigid: () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
-    } catch {
-      // Fallback to heavy if rigid not supported
-      try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      } catch {
-        // Silently fail if not supported
-      }
-    }
-  },
+  // Rigid impact (iOS 13+) — falls back to heavy where unsupported
+  rigid: () =>
+    fire(
+      () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid),
+      () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)
+    ),
 };
 
 /**

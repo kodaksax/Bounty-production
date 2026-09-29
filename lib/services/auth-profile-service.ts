@@ -6,6 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
+import { syncInternalFlag } from '../posthog';
 import { isSupabaseConfigured, supabase, supabaseEnv } from '../supabase';
 import { logger } from '../utils/error-logger';
 
@@ -989,6 +990,13 @@ export class AuthProfileService {
    * Notify all listeners of profile changes
    */
   private notifyListeners(profile: AuthProfile | null): void {
+    // Every profile load funnels through here, so this is where PostHog learns
+    // profiles.is_internal. Fallback/onboarding placeholders leave it
+    // undefined and are skipped rather than reported as external.
+    if (profile?.id && typeof profile.is_internal === 'boolean') {
+      syncInternalFlag(profile.id, profile.is_internal);
+    }
+
     // If a notification cycle is already in progress, schedule the latest
     // profile as a pending notification and return. It will be delivered
     // once the current cycle completes. This prevents re-entrant listeners

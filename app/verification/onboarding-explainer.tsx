@@ -8,6 +8,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { PROFILE_FALLBACK, useSafeBack } from '../../hooks/useSafeBack';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +38,8 @@ const REASONS = [
 
 export default function VerificationOnboardingExplainerScreen() {
   const router = useRouter();
+  // Also a push-notification landing screen — see useSafeBack.
+  const goBack = useSafeBack(PROFILE_FALLBACK);
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -46,7 +49,7 @@ export default function VerificationOnboardingExplainerScreen() {
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={goBack}
             style={styles.backButton}
             accessibilityRole="button"
             accessibilityLabel="Go back"

@@ -63,16 +63,22 @@ export function isValidPaymentIntentId(id: string | undefined | null): boolean {
  * @param value - The raw title string
  * @returns Error message string if invalid, null if valid
  */
+export const TITLE_VALIDATION_MESSAGES = {
+  required: 'Title is required',
+  tooShort: 'Title must be at least 5 characters',
+  tooLong: 'Title must not exceed 120 characters',
+} as const;
+
 export function validateTitle(value: string | undefined | null): string | null {
   const trimmed = (value ?? '').trim();
   if (trimmed.length === 0) {
-    return 'Title is required';
+    return TITLE_VALIDATION_MESSAGES.required;
   }
   if (trimmed.length < 5) {
-    return 'Title must be at least 5 characters';
+    return TITLE_VALIDATION_MESSAGES.tooShort;
   }
   if (trimmed.length > 120) {
-    return 'Title must not exceed 120 characters';
+    return TITLE_VALIDATION_MESSAGES.tooLong;
   }
   return null;
 }

@@ -46,6 +46,9 @@ interface BountyCardProps {
   otherPartyId?: string | null;
   // If the current user has a request for this bounty (pending/accepted/rejected)
   requestStatus?: string | null;
+  // bounty_requests.rejection_source for that request, so a system closure
+  // isn't described as the poster picking someone else.
+  requestRejectionSource?: string | null;
   // For hunters: withdraw a pending application, or discard a rejected one.
   // Receives the current requestStatus so the caller can route to the right
   // service call (withdrawApplication vs discardApplication) without having
@@ -87,6 +90,7 @@ export function BountyCard({
   otherPartyName,
   otherPartyId,
   requestStatus,
+  requestRejectionSource,
   onWithdrawApplication,
   role,
   applicationCount = 0,
@@ -131,7 +135,9 @@ export function BountyCard({
       resolveBountyLifecycle({
         bounty,
         role: viewerRole,
+        viewerId: currentUserId ?? null,
         requestStatus: viewerRole === 'hunter' ? requestStatus : null,
+        requestRejectionSource: viewerRole === 'hunter' ? requestRejectionSource : null,
         // The card is handed the already-resolved review flags rather than the
         // raw submission row, so translate them back into a submission status.
         // A pending submission outranks a revision request: the flags are
@@ -152,7 +158,9 @@ export function BountyCard({
     [
       bounty,
       viewerRole,
+      currentUserId,
       requestStatus,
+      requestRejectionSource,
       reviewNeeded,
       submittedForReview,
       revisionRequested,

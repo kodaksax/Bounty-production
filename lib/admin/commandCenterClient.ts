@@ -67,7 +67,9 @@ const EVENT_LABELS: Record<string, string> = {
   'bounty.flagged_stale': 'Bounty flagged stale',
   'application.submitted': 'Application received',
   'application.accepted': 'Application accepted',
-  'application.rejected': 'Application rejected',
+  'application.rejected': 'Application declined by poster',
+  // System closure (expiry, absent poster, bounty gone): nobody decided.
+  'application.closed': 'Application auto-closed',
   'completion.submitted': 'Work submitted',
   'completion.approved': 'Work approved',
   'completion.rejected': 'Work rejected',

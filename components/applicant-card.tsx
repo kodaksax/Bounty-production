@@ -1,7 +1,7 @@
 // components/applicant-card.tsx - Applicant card with explicit confirmation for accept/reject
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { markApplicantProfileViewed } from '../lib/analytics/sessionFlags';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
@@ -28,7 +28,9 @@ interface ApplicantCardProps {
   referrerOverride?: string;
 }
 
-export function ApplicantCard({
+// Memoized: rendered as a FlatList row, so it must not re-render on every
+// parent (postings screen) state change while the list is scrolling.
+export const ApplicantCard = memo(function ApplicantCard({
   request,
   onAccept,
   onReject,
@@ -417,7 +419,7 @@ export function ApplicantCard({
       </View>
     </TextGuard>
   );
-}
+});
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({

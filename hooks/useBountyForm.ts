@@ -10,6 +10,7 @@ import { shouldUseStripeNativeFunding } from 'lib/utils/payment-architecture'
 import type { WalletTransactionRecord } from 'lib/wallet-context'
 import { momentsService } from 'lib/moments/momentsService'
 import { analyticsService } from 'lib/services/analytics-service'
+import { failureEventProps } from 'lib/utils/stripe-error'
 
 export interface BountyFormData {
   title: string
@@ -271,6 +272,7 @@ export function useBountyForm({
                 bountyId: String(bounty.id),
                 architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
                 stage: 'create_or_confirm',
+                ...failureEventProps(escrowError),
               })
             } catch {
               /* analytics is best-effort */
@@ -313,6 +315,7 @@ export function useBountyForm({
                 bountyId: String(bounty.id),
                 architecture: 'v1',
                 stage: 'create_escrow',
+                ...failureEventProps(escrowError),
               })
             } catch {
               /* analytics is best-effort */

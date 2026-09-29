@@ -13,7 +13,10 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
+import {
+  ONBOARDING_TOTAL_STEPS,
+  OnboardingProgressDots,
+} from '../../components/onboarding/OnboardingProgressDots';
 import { SkipAuthLink } from '../../components/onboarding/SkipAuthLink';
 import { GoogleLogo } from '../../components/ui/google-logo';
 import { useAuthContext } from '../../hooks/use-auth-context';
@@ -25,14 +28,8 @@ import { analyticsService } from '../../lib/services/analytics-service';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
-
-// Generic (no intent picked) is a 4-step flow: sign in -> style -> about you
-// -> done. Poster/hunter branches are 5 steps: sign in -> style -> details ->
-// confirm -> done.
-function totalStepsFor(intent: 'poster' | 'hunter' | null) {
-  return intent ? 5 : 4;
-}
 
 // After a real sign-in, decide whether this is an existing, fully-onboarded
 // account (go straight to the app) or a new/incomplete one (continue onboarding).
@@ -112,7 +109,6 @@ export default function UsernameScreen() {
     ? `Use ${oneTapProvider} for one-tap, password-free sign-up — or continue with email. We never post or share anything without asking.`
     : 'Create your account with an email address and password. We never post or share anything without asking.';
 
-  const totalSteps = totalStepsFor(onboardingData.intent);
 
   // Visitors who picked a role on the welcome screen land here without knowing
   // why sign-in is required or what happens after it — the biggest drop-off in
@@ -215,7 +211,11 @@ export default function UsernameScreen() {
         <MaterialIcons name="arrow-back" size={24} color={theme.text} />
       </TouchableOpacity>
 
-      <OnboardingProgressDots total={totalSteps} activeIndex={0} style={styles.dotsContainer} />
+      <OnboardingProgressDots
+        total={ONBOARDING_TOTAL_STEPS}
+        activeIndex={0}
+        style={styles.dotsContainer}
+      />
 
       <Text style={styles.heading}>Sign up in seconds</Text>
       <Text style={styles.subheading}>{subheading}</Text>
@@ -240,9 +240,11 @@ export default function UsernameScreen() {
             accessibilityState={{ disabled: loading, busy: loading }}
           >
             {loading ? (
-              <ActivityIndicator color="#ffffff" style={styles.buttonIcon} />
+              // White on the black Apple pill, black on the white Google one:
+              // both sit on a brand fill, not on the themed surface.
+              <ActivityIndicator color={palette.white} style={styles.buttonIcon} />
             ) : (
-              <FontAwesome name="apple" size={20} color="#ffffff" style={styles.buttonIcon} />
+              <FontAwesome name="apple" size={20} color={palette.white} style={styles.buttonIcon} />
             )}
             <Text style={styles.appleButtonText}>Continue with Apple</Text>
           </TouchableOpacity>
@@ -261,7 +263,7 @@ export default function UsernameScreen() {
             accessibilityState={{ disabled: !googleRequest || loading, busy: loading }}
           >
             {loading ? (
-              <ActivityIndicator color="#000000" style={styles.buttonIcon} />
+              <ActivityIndicator color={palette.black} style={styles.buttonIcon} />
             ) : (
               <View style={styles.buttonIcon}>
                 <GoogleLogo size={18} />
@@ -348,16 +350,24 @@ function makeStyles(theme: AppTheme) {
       paddingBottom: 40,
       gap: 12,
     },
+    // Apple and Google both mandate the fill and label colours of their
+    // sign-in buttons, so these two stay brand colours (palette.black /
+    // palette.white) rather than theme tokens. What IS theme-aware is the
+    // border: the black Apple pill would otherwise have no edge on the dark
+    // theme's near-black background, and the white Google pill none on the
+    // light theme's white one.
     appleButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#000000',
+      backgroundColor: palette.black,
+      borderWidth: 1,
+      borderColor: theme.border,
       paddingVertical: 16,
       borderRadius: 999,
     },
     appleButtonText: {
-      color: '#ffffff',
+      color: palette.white,
       fontSize: 18,
       fontWeight: 'bold',
     },
@@ -365,14 +375,14 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#ffffff',
-      borderWidth: 2,
-      borderColor: '#000000',
+      backgroundColor: palette.white,
+      borderWidth: 1,
+      borderColor: theme.border,
       paddingVertical: 16,
       borderRadius: 999,
     },
     googleButtonText: {
-      color: '#000000',
+      color: palette.black,
       fontSize: 18,
       fontWeight: 'bold',
     },
