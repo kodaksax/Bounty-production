@@ -267,8 +267,8 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     expect(eventNames()).not.toContain('application_accepted');
     expect(eventNames()).not.toContain('work_started');
     expect(alertSpy).toHaveBeenCalledWith(
-      'Accept Failed',
-      'Funding was updated, but selecting this hunter still failed. Please try again.'
+      "Couldn't hire this hunter",
+      "Your funds are in place, but hiring didn't go through. Please try again."
     );
     alertSpy.mockRestore();
   });

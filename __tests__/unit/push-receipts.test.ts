@@ -25,11 +25,14 @@ describe('extractInvalidTokens', () => {
     expect(extractInvalidTokens(tokens, body)).toEqual(['ExponentPushToken[b]'])
   })
 
-  test('flags InvalidCredentials token', () => {
+  // Project-level credential errors fail every token on a platform at once
+  // (2026-09-25: no FCM key on the Expo project => every Android push failed).
+  // Pruning on them would delete every Android token.
+  test('does not flag InvalidCredentials (project credential error, not a dead token)', () => {
     const body = {
       data: [{ status: 'error', details: { error: 'InvalidCredentials' } }],
     }
-    expect(extractInvalidTokens(tokens, body)).toEqual(['ExponentPushToken[a]'])
+    expect(extractInvalidTokens(tokens, body)).toEqual([])
   })
 
   test('ignores transient errors like MessageRateExceeded', () => {
@@ -39,11 +42,11 @@ describe('extractInvalidTokens', () => {
     expect(extractInvalidTokens(tokens, body)).toEqual([])
   })
 
-  test('flags MismatchSenderId token (wrong sender credential, never delivers)', () => {
+  test('does not flag MismatchSenderId (project sender config, not a dead token)', () => {
     const body = {
       data: [{ status: 'error', details: { error: 'MismatchSenderId' } }],
     }
-    expect(extractInvalidTokens(tokens, body)).toEqual(['ExponentPushToken[a]'])
+    expect(extractInvalidTokens(tokens, body)).toEqual([])
   })
 
   test('handles multiple dead tokens', () => {

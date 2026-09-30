@@ -32,6 +32,11 @@ jest.mock('lib/storage', () => ({
 }));
 jest.mock('lib/storage/onboarding', () => ({
   markDeviceHasSignedIn: jest.fn(),
+  hasLocalOnboardingFlag: jest.fn().mockResolvedValue(false),
+}));
+jest.mock('lib/services/userProfile', () => ({
+  isUsernameUnique: jest.fn().mockResolvedValue(true),
+  validateUsername: jest.fn(() => ({ valid: true })),
 }));
 
 const mockReplace = jest.fn();
@@ -46,18 +51,49 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('lib/hooks/useScreenBackground', () => ({ __esModule: true, default: () => {} }));
 jest.mock('components/ui/branding-logo', () => ({ BrandingLogo: () => null }));
 
+// SignUpForm now shares its OAuth entry points with sign-in-form.tsx via
+// useSocialAuth() (see WelcomeCarousel.tsx's top comment for why: role
+// selection moved off the pre-auth welcome screen, so this screen picked up
+// the "Continue with Apple/Google" buttons that used to live on
+// onboarding/username.tsx). These mocks mirror sign-in-recovery.test.tsx's.
+jest.mock('react-native-svg', () => ({
+  __esModule: true,
+  default: 'Svg',
+  Svg: 'Svg',
+  Path: 'Path',
+}));
+jest.mock('expo-web-browser', () => ({ maybeCompleteAuthSession: jest.fn() }));
+jest.mock('expo-apple-authentication', () => ({
+  AppleAuthenticationButton: 'AppleAuthenticationButton',
+  AppleAuthenticationButtonType: { SIGN_IN: 0 },
+  AppleAuthenticationButtonStyle: { BLACK: 0 },
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  signInAsync: jest.fn(),
+}));
+jest.mock('expo-auth-session', () => ({ ResponseType: { IdToken: 'id_token' } }));
+jest.mock('expo-auth-session/providers/google', () => ({
+  useIdTokenAuthRequest: () => [null, null, jest.fn()],
+}));
+jest.mock('lib/posthog', () => ({
+  capture: jest.fn(),
+  identify: jest.fn(),
+}));
+jest.mock('lib/utils/auth-diagnostics', () => ({
+  emitAuthLoginSuccess: jest.fn().mockResolvedValue(undefined),
+  runAuthStageWithTimeout: ({ run }: { run: (s: AbortSignal) => PromiseLike<unknown> }) =>
+    Promise.resolve(run(new AbortController().signal)),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { SignUpForm } = require('../../app/auth/sign-up-form');
 
 function fillValidForm(utils: ReturnType<typeof render>) {
-  fireEvent.changeText(utils.getByPlaceholderText('Choose a username (3-24 chars)'), 'tester');
+  fireEvent.changeText(utils.getByPlaceholderText('username'), 'tester');
   fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'new@user.test');
   fireEvent.changeText(utils.getByPlaceholderText('At least 8 characters'), 'CorrectHorse1!');
-  fireEvent.changeText(utils.getByPlaceholderText('Confirm password'), 'CorrectHorse1!');
-  // Age + Terms checkboxes (no accessibility label, so match on the role prop).
-  utils.UNSAFE_getAllByProps({ accessibilityRole: 'checkbox' }).forEach(box =>
-    fireEvent.press(box)
-  );
+  // No confirm-password field or age/terms checkboxes: pressing "Create
+  // Account" is itself the consent (see the legal line in sign-up-form.tsx).
 }
 
 describe('sign-up failure analytics', () => {

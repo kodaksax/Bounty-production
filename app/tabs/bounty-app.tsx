@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Animated, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useFadeAnimation } from '../../hooks/use-accessible-animation'
+import { useTabBackToFeed } from '../../hooks/useTabBackToFeed'
 import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
 import { ROUTES } from '../../lib/routes'
@@ -204,7 +205,7 @@ function BountyAppInner() {
 
   // Reports this tab shell's visible screen for analytics. Switching tabs
   // here (via BottomNav) never changes the route, so ScreenTracker in
-  // app/_layout.tsx can't see it — this shell owns its own screen_viewed
+  // app/_layout.tsx can't see it — this shell owns its own screen-view
   // calls instead, including the initial tab on arrival (tagged
   // 'notification' when opened from a notification deep link, 'push'
   // otherwise; later same-session tab switches are always 'tab').
@@ -280,6 +281,11 @@ function BountyAppInner() {
     }
     setActiveScreen(next)
   }, [showAdminTab, router])
+
+  // Android hardware back returns to the feed from the other tabs, instead
+  // of closing the app. See useTabBackToFeed for why it is focus-scoped.
+  const showFeed = useCallback(() => setActiveScreen('bounty'), [])
+  useTabBackToFeed(activeScreen, showFeed)
 
   // Redirect unauthenticated users immediately — do not wait for AsyncStorage.
   if (!isLoading && !session) {

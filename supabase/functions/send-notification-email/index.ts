@@ -49,8 +49,20 @@ type EmailContent = { subject: string; html: string; text: string }
 // Per-category templates. Kept intentionally simple/inline (no external
 // template engine) — this bundler doesn't support local imports, and the
 // notification payload's title/body already carry the human-readable copy.
-function buildEmail(category: string, title: string, body: string, _data: Record<string, unknown>): EmailContent {
+// Only these schemes may be rendered as a button: the app's own custom scheme
+// and https. Anything else in data.ctaUrl is ignored rather than linked.
+const ALLOWED_CTA_PREFIXES = ['https://', 'bountyexpo-workspace://']
+
+function ctaFrom(data: Record<string, unknown>): { url: string; label: string } | null {
+  const url = typeof data.ctaUrl === 'string' ? data.ctaUrl.trim() : ''
+  if (!url || !ALLOWED_CTA_PREFIXES.some((p) => url.startsWith(p))) return null
+  const label = typeof data.ctaLabel === 'string' && data.ctaLabel.trim() ? data.ctaLabel.trim() : 'Open Bounty'
+  return { url, label }
+}
+
+function buildEmail(category: string, title: string, body: string, data: Record<string, unknown>): EmailContent {
   const appName = 'Bounty'
+  const cta = ctaFrom(data)
   const subjectByCategory: Record<string, string> = {
     marketplace: title || `${appName}: bounty update`,
     messages: title || `${appName}: new message`,
@@ -65,9 +77,10 @@ function buildEmail(category: string, title: string, body: string, _data: Record
     <div style="font-family: -apple-system, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
       <h2 style="margin: 0 0 12px; font-size: 18px; color: #111827;">${escapeHtml(subject)}</h2>
       <p style="margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: #374151;">${escapeHtml(body)}</p>
+      ${cta ? `<p style="margin: 0 0 16px;"><a href="${escapeHtml(cta.url)}" style="display: inline-block; padding: 10px 18px; border-radius: 8px; background: #111827; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none;">${escapeHtml(cta.label)}</a></p>` : ''}
       <p style="margin: 24px 0 0; font-size: 12px; color: #9CA3AF;">You're receiving this because of your ${escapeHtml(category)} notification preferences in ${appName}. You can change this anytime in Settings &rsaquo; Notifications.</p>
     </div>`
-  const text = `${subject}\n\n${body}\n\nManage this in Settings > Notifications.`
+  const text = `${subject}\n\n${body}\n\n${cta ? `${cta.label}: ${cta.url}\n\n` : ''}Manage this in Settings > Notifications.`
   return { subject, html, text }
 }
 

@@ -1509,6 +1509,14 @@ Deno.serve(async (req: Request) => {
       const body = await req.json();
       const { returnUrl, refreshUrl, type: linkType } = body;
 
+      // Optional ISO alpha-2 from the onboarding payout step's country picker
+      // (components/onboarding/PayoutSetupScreen.tsx). It only applies when we
+      // create the Express account below — Stripe treats `country` as
+      // immutable afterwards, so an existing account keeps whatever it has.
+      const requestedCountry =
+        typeof body.country === 'string' ? body.country.trim().toUpperCase() : '';
+      const accountCountry = /^[A-Z]{2}$/.test(requestedCountry) ? requestedCountry : undefined;
+
       // Supported link types: 'account_onboarding' (default) and 'account_update'
       const accountLinkType: 'account_onboarding' | 'account_update' =
         linkType === 'account_update' ? 'account_update' : 'account_onboarding';
@@ -1545,6 +1553,7 @@ Deno.serve(async (req: Request) => {
         };
         const account = await stripe.accounts.create({
           type: 'express',
+          ...(accountCountry ? { country: accountCountry } : {}),
           email: profileRow?.email ?? undefined,
           // Request card_payments in addition to transfers. verify-onboarding
           // and the account.updated webhook both gate `onboarded` on

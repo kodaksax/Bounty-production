@@ -4,16 +4,17 @@
 // Pure and dependency-free for unit testing; also inlined into index.ts
 // because the Supabase Edge bundler does not support local imports.
 
-// Expo ticket errors that indicate the token will never deliver again and
-// should be disabled. `DeviceNotRegistered` is the canonical "uninstalled /
-// permission revoked" signal. `MismatchSenderId` means the token belongs to a
-// different sender/credential and can never deliver for this app, so it is
-// permanent too.
-const PERMANENT_TOKEN_ERRORS = new Set([
-  'DeviceNotRegistered',
-  'InvalidCredentials',
-  'MismatchSenderId',
-]);
+// Expo ticket errors that mean THIS token will never deliver again, so it is
+// deleted. Only `DeviceNotRegistered` ("uninstalled / permission revoked")
+// qualifies.
+//
+// `InvalidCredentials` and `MismatchSenderId` are deliberately NOT here: they
+// describe the project's push credentials (missing/wrong FCM key, wrong
+// sender), so they fail every token on that platform at once. On 2026-09-25
+// Expo had no FCM credentials at all and every Android push failed with one of
+// them — pruning on those codes would have deleted every Android poster's
+// token, and posters who don't reopen the app would never re-register.
+const PERMANENT_TOKEN_ERRORS = new Set(['DeviceNotRegistered']);
 
 /**
  * Given the ordered list of tokens that were sent in a single Expo push chunk

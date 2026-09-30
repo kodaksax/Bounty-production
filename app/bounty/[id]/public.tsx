@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useAuthProfile } from '../../../hooks/useAuthProfile';
+import { useSafeBack } from '../../../hooks/useSafeBack';
+import { resendVerification } from '../../../lib/services/auth-service';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
@@ -40,6 +42,9 @@ import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-pro
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
   const router = useRouter();
+  // Push notifications and shared links open this screen with nothing under
+  // it, so a bare router.back() would leave the back arrow dead.
+  const goBack = useSafeBack();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { pushColor, popColor } = useBackgroundColor();
@@ -55,6 +60,7 @@ export default function PublicBountyDetail() {
   const [isApplying, setIsApplying] = useState(false);
   const [showPitchModal, setShowPitchModal] = useState(false);
   const [showIdRequirementModal, setShowIdRequirementModal] = useState(false);
+  const resendInFlightRef = useRef(false);
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(id) ? id[0] : id;
@@ -228,10 +234,44 @@ export default function PublicBountyDetail() {
 
     if (!isEmailVerified) {
       claimFailed('not_eligible');
+      // Offer the fix in place — an "OK"-only alert left the hunter with no
+      // idea where the verification email was or how to get another one.
+      const email = session?.user?.email;
       Alert.alert(
-        'Email verification required',
-        "Please verify your email to apply for bounties.",
-        [{ text: 'OK' }]
+        'Confirm your email to apply',
+        email
+          ? `We sent a confirmation link to ${email}. Tap it, then come back and apply.`
+          : 'Tap the confirmation link we emailed you, then come back and apply.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          ...(email
+            ? [
+                {
+                  text: 'Resend email',
+                  onPress: async () => {
+                    // Alert buttons can't be disabled, so repeat taps (the
+                    // alert re-opens on every Apply press) are dropped here
+                    // while a send is still in flight.
+                    if (resendInFlightRef.current) return;
+                    resendInFlightRef.current = true;
+                    try {
+                      const result = await resendVerification(email);
+                      Alert.alert(
+                        result.success ? 'Email sent' : "Couldn't send email",
+                        result.success
+                          ? `Check ${email} (and your spam folder) for the link.`
+                          : result.message || 'Please try again in a minute.'
+                      );
+                    } catch {
+                      Alert.alert("Couldn't send email", 'Check your connection and try again.');
+                    } finally {
+                      resendInFlightRef.current = false;
+                    }
+                  },
+                },
+              ]
+            : []),
+        ]
       );
       return;
     }
@@ -381,7 +421,7 @@ export default function PublicBountyDetail() {
         )}
         <TouchableOpacity
           style={s.backButton}
-          onPress={() => router.back()}
+          onPress={goBack}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
@@ -404,7 +444,7 @@ export default function PublicBountyDetail() {
       <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
         {/* Header */}
         <View style={s.header}>
-          <TouchableOpacity style={s.backIcon} onPress={() => router.back()}>
+          <TouchableOpacity style={s.backIcon} onPress={goBack}>
             <View style={s.backIconBg}>
               <MaterialIcons name="arrow-back" size={24} color={theme.text} />
             </View>

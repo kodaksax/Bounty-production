@@ -38,12 +38,13 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
+import { type Href, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
+    BackHandler,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -100,6 +101,22 @@ const VERIFY_TIMEOUT_MS = 15000;
 
 export default function ConnectOnboardingScreen() {
   const router = useRouter();
+  // Optional entry params, set by the onboarding payout step
+  // (app/onboarding/payouts.tsx). Every other caller pushes this route bare,
+  // so all of them must stay optional.
+  //   country  — ISO alpha-2 chosen before entering; only affects a NEW
+  //              Express account, Stripe ignores it for an existing one.
+  //   source   — entry surface, for analytics attribution.
+  //   returnTo — where to go on dismissal INSTEAD of popping the stack. In a
+  //              signup funnel, popping returns to the step that pushed us and
+  //              strands the user there; replacing continues the funnel.
+  const params = useLocalSearchParams<{
+    country?: string;
+    returnTo?: string;
+    source?: string;
+  }>();
+  const entryCountry = typeof params.country === 'string' ? params.country : undefined;
+  const returnTo = typeof params.returnTo === 'string' && params.returnTo ? params.returnTo : undefined;
   const { session, isLoading: authLoading } = useAuthContext();
   const { theme } = useAppThemeContext();
   const { refreshFromApi } = useWallet();
@@ -275,6 +292,8 @@ export default function ConnectOnboardingScreen() {
       try {
         await analyticsService.trackEvent('identity_onboarding_started', {
           source: 'stripe_connect_onboarding',
+          ...(params.source ? { entrySurface: params.source } : {}),
+          ...(entryCountry ? { country: entryCountry } : {}),
         });
       } catch {
         /* analytics is best-effort */
@@ -291,6 +310,7 @@ export default function ConnectOnboardingScreen() {
           type: 'account_onboarding',
           returnUrl: CONNECT_RETURN_URL,
           refreshUrl: CONNECT_REFRESH_URL,
+          ...(entryCountry ? { country: entryCountry } : {}),
         }),
       });
 
@@ -374,7 +394,7 @@ export default function ConnectOnboardingScreen() {
       setCanRetry(launchRetryable);
       setPhase('error');
     }
-  }, [session?.access_token, session?.user?.id, verifyOnboardingStatus]);
+  }, [entryCountry, params.source, session?.access_token, session?.user?.id, verifyOnboardingStatus]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -400,12 +420,39 @@ export default function ConnectOnboardingScreen() {
     // fadeOut already collapses to an instant, 0-duration transition when
     // the user has Reduce Motion enabled (see useAccessibleAnimation).
     await fadeOut(180);
+    if (returnTo) {
+      // replace, not push: the funnel step that sent us here shouldn't sit
+      // under the next one in the back stack.
+      router.replace(returnTo as Href);
+      return;
+    }
     router.back();
-  }, [fadeOut, router]);
+  }, [fadeOut, returnTo, router]);
+
+  // With returnTo set, dismiss() is the only correct way out: a raw pop would
+  // land back on the step that pushed us (and leave its busy flag set). The
+  // iOS swipe is disabled via gestureEnabled on <Stack.Screen> below; Android
+  // hardware back is routed through dismiss() here.
+  useEffect(() => {
+    if (!returnTo) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      dismiss();
+      return true;
+    });
+    return () => sub.remove();
+  }, [dismiss, returnTo]);
+
+  // Rendered in every branch so the gesture lock holds from the first frame.
+  const screenOptions = (
+    <Stack.Screen
+      options={{ headerShown: false, animation: 'slide_from_bottom', gestureEnabled: !returnTo }}
+    />
+  );
 
   if (authLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        {screenOptions}
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.primary} />
         </View>
@@ -416,6 +463,7 @@ export default function ConnectOnboardingScreen() {
   if (!session?.access_token) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        {screenOptions}
         <View style={styles.centered}>
           <Text style={styles.errorTitle}>Please sign in</Text>
           <Text style={styles.muted}>You must be signed in to set up payouts.</Text>
@@ -426,6 +474,10 @@ export default function ConnectOnboardingScreen() {
       </SafeAreaView>
     );
   }
+
+  // In the signup funnel there is no wallet to go "back" to yet, so the exit
+  // label has to match where dismiss() actually lands (see returnTo above).
+  const exitLabel = returnTo ? 'Continue' : 'Back to wallet';
 
   const title =
     phase === 'error'
@@ -447,7 +499,7 @@ export default function ConnectOnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+      {screenOptions}
       <Animated.View style={[styles.flexFill, fadeStyle]}>
         <View style={styles.header}>
           <TouchableOpacity
@@ -495,14 +547,14 @@ export default function ConnectOnboardingScreen() {
                     <Text style={styles.primaryBtnText}>Try again</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss}>
-                    <Text style={styles.secondaryBtnText}>Back to wallet</Text>
+                    <Text style={styles.secondaryBtnText}>{exitLabel}</Text>
                   </TouchableOpacity>
                 </>
               ) : (
                 // Non-retryable failure (e.g. a platform credential problem):
                 // retrying reproduces it instantly, so offer only the exit.
                 <TouchableOpacity style={styles.primaryBtn} onPress={dismiss}>
-                  <Text style={styles.primaryBtnText}>Back to wallet</Text>
+                  <Text style={styles.primaryBtnText}>{exitLabel}</Text>
                 </TouchableOpacity>
               )
             ) : null}

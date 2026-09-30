@@ -1,3 +1,14 @@
+/**
+ * Poster funding confirmation, formerly the last step of the onboarding poster
+ * branch (app/onboarding/details.tsx).
+ *
+ * RETAINED BUT UNWIRED: onboarding now ends on app/onboarding/founder-note.tsx
+ * and nothing renders this screen any more. It is kept deliberately — not
+ * overlooked — so the funding step can be brought back without rebuilding it,
+ * which is also why lib/onboarding/onboarding-details-styles.ts is still here
+ * for its `OnboardingDetailsStyles` prop type. Anything reviving it needs to
+ * supply those styles and a parent that owns the deposit state.
+ */
 import { MaterialIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

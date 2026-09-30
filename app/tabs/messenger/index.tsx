@@ -22,7 +22,7 @@ import { logClientError as _logClientError } from '../../../lib/services/monitor
 import { navigationIntent } from '../../../lib/services/navigation-intent'
 import { generateInitials } from '../../../lib/services/supabase-messaging'
 import type { Conversation } from "../../../lib/types"
-import { groupConversationsByUser, type ConversationListRow } from "../../../lib/utils/group-conversations"
+import { buildConversationRows, type ConversationRow } from "../../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "../chat-detail-screen"
 
 // Helper to format conversation time
@@ -58,9 +58,12 @@ export function MessengerScreen({
   const router = useRouter()
   const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
-  // One row per person, newest activity first — see groupConversationsByUser.
+  // One row per person (#875), hiding people with no messages yet — see
+  // app/tabs/messenger-screen.tsx.
   const conversationRows = useMemo(
-    () => groupConversationsByUser(conversations, currentUserId),
+    () => buildConversationRows(conversations, currentUserId).filter(
+      (row) => row.lastMessage !== undefined
+    ),
     [conversations, currentUserId]
   )
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
@@ -75,8 +78,8 @@ export function MessengerScreen({
     }
   }, [refresh])
 
-  const handleConversationClick = async (conversation: ConversationListRow) => {
-    await Promise.all(conversation.conversationIds.map(id => markConversationReadSafe(id)))
+  const handleConversationClick = async (conversation: ConversationRow) => {
+    await Promise.all(conversation.backingConversationIds.map(id => markConversationReadSafe(id)))
 
     // A 1:1 row opens the merged thread with that person — the same screen
     // the profile Message button opens — so every route into a direct
@@ -180,7 +183,7 @@ export function MessengerScreen({
     refresh() // Refresh conversation list when returning
   }, [onConversationModeChange, refresh])
 
-  const handleDeleteConversation = useCallback((conversation: ConversationListRow) => {
+  const handleDeleteConversation = useCallback((conversation: ConversationRow) => {
     Alert.alert(
       'Delete Conversation',
       `Are you sure you want to delete your conversation with ${conversation.name}?`,
@@ -191,7 +194,7 @@ export function MessengerScreen({
           style: 'destructive',
           onPress: async () => {
             try {
-              await Promise.all(conversation.conversationIds.map(id => deleteConversation(id)))
+              await Promise.all(conversation.backingConversationIds.map(id => deleteConversation(id)))
             } catch {
               Alert.alert('Error', 'Failed to delete conversation')
             }
@@ -202,10 +205,10 @@ export function MessengerScreen({
   }, [deleteConversation])
 
   // Optimized keyExtractor for FlatList
-  const keyExtractor = useCallback((item: ConversationListRow) => item.id, []);
+  const keyExtractor = useCallback((item: ConversationRow) => item.id, []);
 
   // Optimized render function for FlatList
-  const renderConversationItem = useCallback(({ item }: { item: ConversationListRow }) => (
+  const renderConversationItem = useCallback(({ item }: { item: ConversationRow }) => (
     <ConversationItem 
       conversation={item} 
       onPress={() => handleConversationClick(item)}

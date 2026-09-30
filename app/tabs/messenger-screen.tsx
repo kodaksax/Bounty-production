@@ -35,7 +35,6 @@ import {
 import { OfflineStatusBadge } from "../../components/offline-status-badge"
 import { WalletBalanceButton } from "../../components/ui/wallet-balance-button"
 
-import { useAuthContext } from "../../hooks/use-auth-context"
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import { useValidUserId } from "../../hooks/useValidUserId"
@@ -48,34 +47,15 @@ import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, UserProfile } from "../../lib/types"
 import { userSearchService } from "../../lib/services/user-search-service"
 import {
-  groupConversationsByUser,
-  type ConversationListRow,
-} from "../../lib/utils/group-conversations"
+  buildConversationRows,
+  formatConversationTime,
+  type ConversationRow,
+} from "../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "./chat-detail-screen"
 
 const { width } = Dimensions.get("window")
 
 const USER_SEARCH_DEBOUNCE_MS = 300
-
-function formatConversationTime(updatedAt?: string): string {
-  if (!updatedAt) return ""
-
-  const date = new Date(updatedAt)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffHrs = Math.floor(diffMs / (1000 * 60 * 60))
-
-  if (diffHrs < 1) {
-    const diffMins = Math.floor(diffMs / (1000 * 60))
-    if (diffMins < 1) return "Just now"
-    return `${diffMins}m ago`
-  }
-  if (diffHrs < 24) return `${diffHrs}h ago`
-  const diffDays = Math.floor(diffHrs / 24)
-  if (diffDays === 1) return "Yesterday"
-  if (diffDays < 7) return `${diffDays}d ago`
-  return date.toLocaleDateString()
-}
 
 export function MessengerScreen({
   activeScreen,
@@ -93,9 +73,16 @@ export function MessengerScreen({
   const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } =
     useConversations()
-  // One row per person, newest activity first — see groupConversationsByUser.
+  // One row per person (#875); see lib/utils/conversation-rows.ts. People
+  // with no messages yet are left out: opening a DM from a profile creates the
+  // conversation before anything is sent, and it shouldn't appear until then.
+  // fetchConversations leaves lastMessage undefined exactly when a
+  // conversation has no messages.
   const conversationRows = useMemo(
-    () => groupConversationsByUser(conversations, currentUserId),
+    () =>
+      buildConversationRows(conversations, currentUserId).filter(
+        (row) => row.lastMessage !== undefined
+      ),
     [conversations, currentUserId]
   )
 
@@ -146,19 +133,19 @@ export function MessengerScreen({
     }
   }
 
-  const handleConversationClick = async (conversation: ConversationListRow) => {
-    await Promise.all(conversation.conversationIds.map(id => markConversationReadSafe(id)))
-
+  const handleConversationClick = async (conversation: ConversationRow) => {
     // A 1:1 row opens the merged thread with that person — the same screen
     // the profile Message button opens — so every route into a direct
     // conversation shows the full history, not just this one bounty's chat.
-    const otherUserId = !conversation.isGroup
-      ? conversation.participantIds?.find(id => id !== currentUserId)
-      : undefined
-    if (otherUserId) {
-      router.push(ROUTES.MESSAGES.WITH_USER(otherUserId) as any)
+    // That thread marks every backing conversation read itself; clearing the
+    // badges here too keeps the list honest when the user comes back.
+    if (conversation.otherUserId) {
+      void Promise.all(conversation.backingConversationIds.map(markConversationReadSafe))
+      router.push(ROUTES.MESSAGES.WITH_USER(conversation.otherUserId) as any)
       return
     }
+
+    await markConversationReadSafe(conversation.id)
 
     setActiveConversation(conversation.id)
     setShowChat(true)
@@ -184,10 +171,10 @@ export function MessengerScreen({
   }, [refresh, onConversationModeChange, slideAnim])
 
   const handleDeleteConversation = useCallback(
-    (conversation: ConversationListRow) => {
+    (conversation: ConversationRow, displayName: string) => {
       Alert.alert(
         "Delete Conversation",
-        `Are you sure you want to delete your conversation with ${conversation.name}?`,
+        `Delete your conversation with ${displayName}? It's removed from your inbox only.`,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -195,7 +182,10 @@ export function MessengerScreen({
             style: "destructive",
             onPress: async () => {
               try {
-                await Promise.all(conversation.conversationIds.map(id => deleteConversation(id)))
+                // The row stands for every conversation with this person.
+                await Promise.all(
+                  conversation.backingConversationIds.map((id) => deleteConversation(id))
+                )
               } catch {
                 Alert.alert("Error", "Failed to delete conversation")
               }
@@ -208,17 +198,17 @@ export function MessengerScreen({
   )
 
   const renderConversationItem = useCallback(
-    ({ item }: { item: ConversationListRow }) => (
+    ({ item }: { item: ConversationRow }) => (
       <ConversationItem
         conversation={item}
         onPress={() => handleConversationClick(item)}
-        onDelete={() => handleDeleteConversation(item)}
+        onDelete={(displayName) => handleDeleteConversation(item, displayName)}
       />
     ),
     [handleConversationClick, handleDeleteConversation]
   )
 
-  const keyExtractor = useCallback((item: ConversationListRow) => item.id, [])
+  const keyExtractor = useCallback((item: ConversationRow) => item.id, [])
 
   // User search — the bar at the top finds people to message. Results replace
   // the conversation list while there's a query; tapping one opens the DM.
@@ -523,9 +513,9 @@ const UserResultItem = React.memo(function UserResultItem({
 })
 
 interface ConversationItemProps {
-  conversation: Conversation
+  conversation: ConversationRow
   onPress: () => void
-  onDelete: () => void
+  onDelete: (displayName: string) => void
 }
 
 const ConversationItem = React.memo(function ConversationItem({
@@ -535,7 +525,6 @@ const ConversationItem = React.memo(function ConversationItem({
 }: ConversationItemProps) {
   const { theme } = useAppThemeContext()
   const router = useRouter()
-  const { session } = useAuthContext()
   const time = useMemo(
     () => formatConversationTime(conversation.updatedAt),
     [conversation.updatedAt]
@@ -543,11 +532,22 @@ const ConversationItem = React.memo(function ConversationItem({
   const unread = conversation.unread ?? 0
   const hasUnread = unread > 0
 
-  const otherUserId = useMemo(() => {
-    const currentId = session?.user?.id
-    if (!currentId || !conversation.participantIds?.length) return null
-    return conversation.participantIds.find(id => id !== currentId) ?? null
-  }, [conversation.participantIds, session?.user?.id])
+  const otherUserId = conversation.otherUserId
+  // fetchConversations already batch-loads every other user's name/avatar
+  // (lib/services/supabase-messaging.ts), so only fall back to a live,
+  // per-row profile fetch when that batched avatar is missing (#875).
+  // Disabled for groups: with no id the hook would resolve to the viewer's
+  // own profile.
+  const needsProfileFallback = !!otherUserId && !conversation.avatar
+  const { profile } = useNormalizedProfile(otherUserId ?? undefined, {
+    enabled: needsProfileFallback,
+  })
+  const person = needsProfileFallback ? profile : null
+  const displayName = person?.username || conversation.name || "Conversation"
+  const avatarUrl = person?.avatar || conversation.avatar
+  const initials = person
+    ? generateInitials(person.username, person.name)
+    : generateInitials(conversation.name)
 
   const handleAvatarPress = useCallback(() => {
     if (otherUserId) {
@@ -560,9 +560,9 @@ const ConversationItem = React.memo(function ConversationItem({
     <Swipeable
       renderRightActions={() => (
         <TouchableOpacity
-          onPress={onDelete}
+          onPress={() => onDelete(displayName)}
           accessibilityRole="button"
-          accessibilityLabel={`Delete conversation with ${conversation.name}`}
+          accessibilityLabel={`Delete conversation with ${displayName}`}
           style={{
             backgroundColor: theme.error,
             justifyContent: "center",
@@ -580,8 +580,8 @@ const ConversationItem = React.memo(function ConversationItem({
         accessibilityRole="button"
         accessibilityLabel={
           hasUnread
-            ? `${conversation.name}, ${unread} unread. ${conversation.lastMessage ?? ""}`
-            : `${conversation.name}. ${conversation.lastMessage ?? ""}`
+            ? `${displayName}, ${unread} unread. ${conversation.lastMessage ?? ""}`
+            : `${displayName}. ${conversation.lastMessage ?? ""}`
         }
         accessibilityHint="Opens the conversation"
         style={{
@@ -597,14 +597,14 @@ const ConversationItem = React.memo(function ConversationItem({
           disabled={!otherUserId}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel={`View ${conversation.name}'s profile`}
+          accessibilityLabel={`View ${displayName}'s profile`}
           style={{ marginRight: theme.spacing.md }}
         >
           <Avatar className="h-12 w-12">
-            <AvatarImage src={conversation.avatar} alt={conversation.name} />
+            <AvatarImage src={avatarUrl} alt={displayName} />
             <AvatarFallback style={{ backgroundColor: theme.surfaceSecondary }}>
               <Text style={{ color: theme.primary, fontSize: 15, fontWeight: "700" }}>
-                {generateInitials(conversation.name) || "?"}
+                {initials || "?"}
               </Text>
             </AvatarFallback>
           </Avatar>
@@ -624,7 +624,7 @@ const ConversationItem = React.memo(function ConversationItem({
                 color: theme.text,
               }}
             >
-              {conversation.name}
+              {displayName}
             </Text>
             <Text
               style={{

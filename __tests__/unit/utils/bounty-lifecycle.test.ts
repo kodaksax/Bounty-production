@@ -173,6 +173,48 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     expect(s.secondaryActions.map(a => a.key)).toContain('discard_application');
   });
 
+  // Every request the expiry job closed rendered "Not selected — went with
+  // another hunter", contradicting the "this wasn't a rejection" notification.
+  it.each(['system_expiry', 'system_poster_absent', 'system_bounty_closed'])(
+    'a %s closure is not described as the poster choosing someone else',
+    (source) => {
+      const s = resolveBountyLifecycle({
+        bounty: bounty(),
+        role: 'hunter',
+        requestStatus: 'rejected',
+        requestRejectionSource: source,
+      });
+      expect(s.status).toBe('rejected');
+      expect(s.headline).toBe('Application closed');
+      expect(s.explanation).not.toMatch(/another hunter/);
+      expect(s.primaryAction?.key).toBe('find_bounties');
+      expect(s.secondaryActions.map(a => a.key)).toContain('discard_application');
+    }
+  );
+
+  // system_expiry also fires 168h after the poster engaged (e.g. messaged),
+  // so the copy may only claim no decision was made, never no response.
+  it('a system_expiry closure says no decision was made, not that the poster never responded', () => {
+    const s = resolveBountyLifecycle({
+      bounty: bounty(),
+      role: 'hunter',
+      requestStatus: 'rejected',
+      requestRejectionSource: 'system_expiry',
+    });
+    expect(s.explanation).toMatch(/didn't make a decision in time/);
+    expect(s.explanation).not.toMatch(/respond/);
+  });
+
+  it('a poster-sourced rejection keeps the "Not selected" copy', () => {
+    const s = resolveBountyLifecycle({
+      bounty: bounty(),
+      role: 'hunter',
+      requestStatus: 'rejected',
+      requestRejectionSource: 'poster',
+    });
+    expect(s.headline).toBe('Not selected');
+  });
+
   // BNTY-11: getBountyDisplayStatus used to have no case for a deleted bounty,
   // so this fell through to its unknown-status default of 'open' — a hunter
   // whose application was still pending when the poster deleted the bounty
@@ -249,6 +291,28 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     expect(s.needsAttention).toBe(false);
     expect(s.primaryAction?.key).toBe('find_bounties');
     expect(s.group).toBe('past');
+  });
+
+  it('an `accepted` row loses to accepted_by when the viewer is someone else (#876)', () => {
+    // Legacy bounties carry two `accepted` rows; only accepted_by is the hunter.
+    const loser = resolveBountyLifecycle({
+      bounty: bounty({ status: 'in_progress', accepted_by: 'hunter-a' }),
+      role: 'hunter',
+      viewerId: 'hunter-b',
+      requestStatus: 'accepted',
+    });
+    expect(loser.headline).toBe('Another hunter was selected');
+    expect(loser.needsAttention).toBe(false);
+    expect(loser.group).toBe('past');
+
+    const winner = resolveBountyLifecycle({
+      bounty: bounty({ status: 'in_progress', accepted_by: 'hunter-a' }),
+      role: 'hunter',
+      viewerId: 'hunter-a',
+      requestStatus: 'accepted',
+    });
+    expect(winner.headline).not.toBe('Another hunter was selected');
+    expect(winner.status).toBe('in_progress');
   });
 
   it('never reports a payout to a hunter who was not the selected one', () => {

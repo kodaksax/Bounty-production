@@ -1,8 +1,12 @@
 /**
  * Shared onboarding-completion logic.
- * Extracted from app/onboarding/done.tsx so multiple terminal onboarding
- * screens (done.tsx, bounty-posted.tsx) can finish onboarding identically
- * without duplicating this review-hardened sequence.
+ * Originally extracted from a done.tsx screen so several terminal onboarding
+ * screens could finish identically; the funnel now ends on a single screen,
+ * app/onboarding/founder-note.tsx, which is this hook's only caller. Kept as a
+ * hook rather than inlined there: this sequence is review-hardened (early
+ * AsyncStorage flag, timeout-guarded profile write with refresh fallbacks,
+ * push registration, draft clear, cache refresh) and a second terminal screen
+ * must reuse it rather than re-derive it.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -268,7 +272,7 @@ export function useCompleteOnboarding(destination: OnboardingDestination = '/tab
     // (and cohort analysis generally) — event-only `role` on
     // onboarding_role_selected can't be queried against a person. Covers both
     // arms uniformly: whatever `intent` settled to by completion (chosen
-    // upfront, chosen via CombinedActivationPrompt, or still null for a
+    // upfront, chosen on the role-select step, or still null for a
     // test-arm skip, resolved later by role-inference-service.ts).
     analyticsService.updateUserProperties({ role: onboardingData.intent ?? 'unset' });
 

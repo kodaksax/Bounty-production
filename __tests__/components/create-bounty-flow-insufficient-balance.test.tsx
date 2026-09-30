@@ -307,6 +307,25 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     resetDraft();
   });
 
+  it('Edit Amount on the gate returns to the Compensation step, not Location', () => {
+    // Regression: onEditAmount was hard-coded to step 2 from the two-step
+    // flow. Once Location became step 2, "Edit Amount" dropped the poster on
+    // the address screen instead of the price they wanted to change.
+    mockBalance = 10;
+    resetDraft({ amount: 30 });
+    render(<CreateBountyFlow />);
+    goToStepPay();
+
+    fireEvent.press(screen.getByLabelText('stub-continue'));
+    expect(screen.getByText('Add Funds to Post')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Edit Bounty Amount'));
+
+    expect(screen.queryByText('Add Funds to Post')).toBeNull();
+    expect(screen.getByText('StepPay')).toBeTruthy();
+    expect(screen.queryByText('StepWhere')).toBeNull();
+  });
+
   it('sufficient balance: Publish goes straight to submit without showing the gate', () => {
     mockBalance = 50;
     resetDraft({ amount: 50 });

@@ -26,13 +26,20 @@ beforeEach(() => {
 describe('trackScreenView', () => {
   test('first call has no previous_screen or seconds_on_previous_screen', () => {
     trackScreenView('home_feed');
-    expect(mockCapture).toHaveBeenCalledWith('screen_viewed', {
+    expect(mockScreen).toHaveBeenCalledWith('home_feed', {
       screen_name: 'home_feed',
       navigation_source: 'push',
     });
   });
 
-  test('every navigation also mirrors into PostHog\'s native $screen event', () => {
+  test('screen_viewed is retired: navigation emits only the native $screen event', () => {
+    trackScreenView('home_feed');
+    trackScreenView('bounty_detail', { source: 'push' });
+    expect(mockCapture).not.toHaveBeenCalled();
+    expect(mockScreen).toHaveBeenCalledTimes(2);
+  });
+
+  test('every navigation emits PostHog\'s native $screen event', () => {
     trackScreenView('home_feed');
     expect(mockScreen).toHaveBeenCalledWith('home_feed', {
       screen_name: 'home_feed',
@@ -52,13 +59,13 @@ describe('trackScreenView', () => {
     trackScreenView('home_feed');
     trackScreenView('home_feed');
     trackScreenView('home_feed');
-    expect(mockCapture).toHaveBeenCalledTimes(1);
+    expect(mockScreen).toHaveBeenCalledTimes(1);
   });
 
   test('a real navigation includes previous_screen and an explicit source', () => {
     trackScreenView('home_feed');
     trackScreenView('bounty_detail', { source: 'push' });
-    expect(mockCapture).toHaveBeenLastCalledWith('screen_viewed', {
+    expect(mockScreen).toHaveBeenLastCalledWith('bounty_detail', {
       screen_name: 'bounty_detail',
       previous_screen: 'home_feed',
       navigation_source: 'push',
@@ -70,7 +77,7 @@ describe('trackScreenView', () => {
     trackScreenView('home_feed');
     trackScreenView('bounty_detail', { source: 'push' });
     trackScreenView('home_feed');
-    expect(mockCapture).toHaveBeenLastCalledWith('screen_viewed', {
+    expect(mockScreen).toHaveBeenLastCalledWith('home_feed', {
       screen_name: 'home_feed',
       previous_screen: 'bounty_detail',
       navigation_source: 'back',
@@ -81,22 +88,22 @@ describe('trackScreenView', () => {
   test('a pending deep-link source is applied once, then cleared', () => {
     markPendingNavigationSource('deep_link');
     trackScreenView('bounty_detail');
-    expect(mockCapture).toHaveBeenLastCalledWith(
-      'screen_viewed',
+    expect(mockScreen).toHaveBeenLastCalledWith(
+      expect.any(String),
       expect.objectContaining({ navigation_source: 'deep_link' })
     );
 
     trackScreenView('profile');
-    expect(mockCapture).toHaveBeenLastCalledWith(
-      'screen_viewed',
+    expect(mockScreen).toHaveBeenLastCalledWith(
+      expect.any(String),
       expect.objectContaining({ navigation_source: 'push' })
     );
   });
 
   test('extra properties are merged into the event', () => {
     trackScreenView('bounty_detail', { properties: { bounty_id: 'abc-123' } });
-    expect(mockCapture).toHaveBeenLastCalledWith(
-      'screen_viewed',
+    expect(mockScreen).toHaveBeenLastCalledWith(
+      expect.any(String),
       expect.objectContaining({ bounty_id: 'abc-123' })
     );
   });

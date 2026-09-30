@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from "react"
 import { Animated, Dimensions, FlatList, ScrollView, StyleSheet, View } from "react-native"
+import type { FlatListProps } from "react-native"
 import { SPACING } from '../lib/constants/accessibility'
 
 const FEATURED_CARD_WIDTH = Dimensions.get('window').width * 0.78
@@ -14,7 +15,8 @@ import {
   summarizeMissingDetails,
   type BountyCompleteness,
 } from '../lib/utils/bounty-completeness'
-import { BountyFeaturedItem } from './bounty-featured-item'
+import { BountyFeaturedItem, FEATURED_CARD_HEIGHT } from './bounty-featured-item'
+import { buildGridRows, getBountyCategory, type GridRow } from './bounty-grid-rows'
 import { BountyGridItem, GRID_CARD_WIDTH } from './bounty-grid-item'
 
 // ── Category definitions ───────────────────────────────────────────────────
@@ -30,71 +32,6 @@ interface CategoryDef {
 const CATEGORY_DEFS: Record<string, CategoryDef> = Object.fromEntries(
   BOUNTY_CATEGORIES.map((c) => [c.label, { label: c.label, icon: c.icon, color: c.color }])
 )
-
-// Category is the metadata the poster explicitly chose when creating the
-// bounty (see StepTitle.tsx) — never inferred from title/description text.
-function getBountyCategory(bounty: Bounty): string {
-  const def = getBountyCategoryDef(bounty.category)
-  return def ? def.label : 'Other'
-}
-
-// ── Data shaping ───────────────────────────────────────────────────────────
-
-type FeaturedCarouselRow = { type: 'featuredCarousel'; items: Array<{ item: Bounty; categoryKey: string }> }
-type PairRow             = { type: 'pair'; left: Bounty; right: Bounty | null; categoryKey: string; rightCategoryKey: string | null }
-type GridRow             = FeaturedCarouselRow | PairRow
-
-const FEATURED_COUNT = 3
-
-function buildGridRows(
-  bounties: Bounty[],
-  completenessById: Map<string, BountyCompleteness>
-): GridRow[] {
-  // Sort globally: highest price first, honor (no price) last
-  const byPrice = [...bounties].sort((a, b) => {
-    const aHonor = Boolean(a.is_for_honor)
-    const bHonor = Boolean(b.is_for_honor)
-    if (aHonor && !bHonor) return 1
-    if (!aHonor && bHonor) return -1
-    return Number(b.amount || 0) - Number(a.amount || 0)
-  })
-
-  // Then sink incomplete listings (missing scope / location / timing) below
-  // complete ones — a barebones "$10, Location TBD" card is not something a
-  // hunter can act on, and must not take a featured slot. Stable partition so
-  // the price order is preserved within each group.
-  const isIncomplete = (b: Bounty) =>
-    completenessById.get(String(b.id))?.isComplete === false
-  const sorted = [
-    ...byPrice.filter(b => !isIncomplete(b)),
-    ...byPrice.filter(b => isIncomplete(b)),
-  ]
-
-  const featured = sorted.slice(0, FEATURED_COUNT)
-  const rest     = sorted.slice(FEATURED_COUNT)
-
-  const rows: GridRow[] = []
-
-  if (featured.length > 0) {
-    rows.push({
-      type: 'featuredCarousel',
-      items: featured.map(b => ({ item: b, categoryKey: getBountyCategory(b) })),
-    })
-  }
-
-  for (let i = 0; i < rest.length; i += 2) {
-    const right = rest[i + 1] ?? null
-    rows.push({
-      type: 'pair',
-      left: rest[i],
-      right,
-      categoryKey: getBountyCategory(rest[i]),
-      rightCategoryKey: right ? getBountyCategory(right) : null,
-    })
-  }
-
-  return rows
-}
 
 // ── Animated row wrapper (staggered entrance) ──────────────────────────────
 
@@ -130,11 +67,15 @@ interface BountyGridFeedProps {
   bounties: Bounty[]
   bountyDistances: Map<string, number | null>
   listHeader?: React.ReactElement
+  /** Forwarded to the underlying FlatList — the feed uses it to tint the
+   *  status-bar area green while the banner in `listHeader` still reaches
+   *  the top of the screen. */
+  onScroll?: FlatListProps<unknown>['onScroll']
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function BountyGridFeed({ bounties, bountyDistances, listHeader }: BountyGridFeedProps) {
+export function BountyGridFeed({ bounties, bountyDistances, listHeader, onScroll }: BountyGridFeedProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
 
@@ -171,7 +112,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
           {item.items.map(({ item: b, categoryKey }) => {
             const def = CATEGORY_DEFS[categoryKey]
             return (
-              <View key={String(b.id)} style={{ width: FEATURED_CARD_WIDTH, height: 290 }}>
+              <View key={String(b.id)} style={{ width: FEATURED_CARD_WIDTH, height: FEATURED_CARD_HEIGHT }}>
                 <BountyFeaturedItem
                   id={b.id}
                   title={b.title}
@@ -218,6 +159,11 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
             work_type={left.work_type}
             poster_avatar={left.poster_avatar ?? undefined}
             end_date={left.end_date ?? left.deadline}
+            attachments_json={left.attachments_json}
+            schedule_type={left.schedule_type}
+            start_date={left.start_date}
+            duration_minutes={left.duration_minutes}
+            is_time_sensitive={left.is_time_sensitive}
             categoryColor={leftDef.color}
             categoryLabel={leftDef.label}
             {...incompleteProps(left)}
@@ -236,6 +182,11 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
               work_type={right.work_type}
               poster_avatar={right.poster_avatar ?? undefined}
               end_date={right.end_date ?? right.deadline}
+              attachments_json={right.attachments_json}
+              schedule_type={right.schedule_type}
+              start_date={right.start_date}
+              duration_minutes={right.duration_minutes}
+              is_time_sensitive={right.is_time_sensitive}
               categoryColor={rightDef?.color}
               categoryLabel={rightDef?.label}
               {...incompleteProps(right)}
@@ -264,6 +215,8 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
       contentContainerStyle={s.list}
       showsVerticalScrollIndicator={false}
       ListHeaderComponent={listHeader ?? undefined}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
       removeClippedSubviews
       maxToRenderPerBatch={8}
       windowSize={7}

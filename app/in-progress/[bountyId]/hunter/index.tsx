@@ -140,8 +140,8 @@ export default function HunterFlowIndex() {
                 currentUserId: currentUserId ?? undefined,
                 surface: 'hunter_detail',
               });
-              // The application row (and with it, this hunter's reason to be on
-              // this screen) is gone — there is nothing left here to refresh.
+              // The bounty is now hidden from this hunter's work list (the
+              // list reloads the hidden set on mount), so leave the screen.
               router.replace(MY_WORK_ROUTE as never);
             } catch (err) {
               const friendly = getUserFriendlyError(err);

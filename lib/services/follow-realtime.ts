@@ -1,5 +1,6 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import { uniqueRealtimeTopic } from '../utils/realtime-topic';
 
 /**
  * Reference-counted realtime subscription for a user's follower/following
@@ -24,8 +25,12 @@ export function subscribeToFollowChanges(userId: string, onChange: () => void): 
     const listeners = new Set<() => void>();
     const notify = () => listeners.forEach(fn => fn());
 
+    // The map key stays fixed so concurrent subscribers share one channel;
+    // the realtime topic is unique so a resubscribe racing the previous
+    // channel's async removeChannel() doesn't get that channel back (see
+    // lib/utils/realtime-topic).
     const channel = supabase
-      .channel(channelName)
+      .channel(uniqueRealtimeTopic(channelName))
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'user_follows', filter: `following_id=eq.${userId}` },

@@ -1,5 +1,6 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import { uniqueRealtimeTopic } from '../utils/realtime-topic';
 
 /**
  * Reference-counted realtime subscription for a user's notifications feed,
@@ -25,8 +26,12 @@ export function subscribeToNotifications(userId: string, onInsertOrUpdate: () =>
     const listeners = new Set<() => void>();
     const notify = () => listeners.forEach(fn => fn());
 
+    // The map key stays fixed so concurrent subscribers share one channel;
+    // the realtime topic is unique so a resubscribe racing the previous
+    // channel's async removeChannel() doesn't get that channel back (see
+    // lib/utils/realtime-topic).
     const channel = supabase
-      .channel(channelName)
+      .channel(uniqueRealtimeTopic(channelName))
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },

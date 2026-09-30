@@ -4,12 +4,32 @@ import { Alert } from 'react-native';
 // Preserve original handlers
 const originalConsoleError = console.error;
 
+let installed = false;
+
 export function initGlobalErrorHandlers() {
+  // Once per JS runtime. A second call used to replace whatever handler had
+  // been chained on top of this one since the first (Sentry's), and Sentry
+  // installs its own only once, so it never came back.
+  if (installed) return;
+  installed = true;
+
   // Catch uncaught exceptions (React Native)
   // @ts-ignore
   if (global.ErrorUtils && typeof global.ErrorUtils.setGlobalHandler === 'function') {
+    // Whatever was installed before us — PostHog's error tracking (lib/posthog.ts)
+    // or React Native's default. Forwarded below so it still sees every error.
+    // @ts-ignore
+    const previousHandler = global.ErrorUtils.getGlobalHandler?.();
     // @ts-ignore
     global.ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
+      try {
+        // Always as non-fatal: this handler deliberately shows an alert
+        // instead of letting a fatal JS error take the app down, and the
+        // default handler would crash on isFatal=true.
+        previousHandler?.(error, false);
+      } catch {
+        // a reporter failing must not stop the alert below
+      }
       try {
         const message = `GlobalHandler: ${error?.name || 'Error'}: ${error?.message || error}`;
         // send to remote logger or console

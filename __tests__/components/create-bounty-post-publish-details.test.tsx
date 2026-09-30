@@ -142,6 +142,10 @@ jest.mock('app/screens/CreateBounty/quick/StepPay', () => ({
   },
 }));
 
+// The post-publish celebration is purely visual and fades itself out.
+jest.mock('app/screens/CreateBounty/quick/PostCelebration', () => ({
+  PostCelebration: () => null,
+}));
 jest.mock('app/screens/CreateBounty/quick/StepPostPublish', () => ({
   StepPostPublish: (props: any) => {
     const { TouchableOpacity, Text, View } = require('react-native');

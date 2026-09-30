@@ -140,8 +140,23 @@ export interface BountyLifecycleInput {
     accepted_by?: string | null;
   };
   role: BountyRole;
+  /**
+   * The viewer's user id. When supplied, `bounty.accepted_by` is authoritative
+   * for who the hunter is: a viewer whose own row says `accepted` but who is
+   * not `accepted_by` was not selected. Legacy data has bounties with two
+   * `accepted` rows (#876), which otherwise left the loser "on the clock" for
+   * work that was never theirs, with no action that could succeed.
+   */
+  viewerId?: string | null;
   /** The viewer's own application row status, when they are a hunter. */
   requestStatus?: string | null;
+  /**
+   * bounty_requests.rejection_source for a rejected application. Anything
+   * starting with `system_` means nobody chose against the hunter (the poster
+   * never answered, went inactive, or the bounty itself closed), so the copy
+   * must not say they were passed over.
+   */
+  requestRejectionSource?: string | null;
   /** Status of the latest completion submission on this bounty. */
   submissionStatus?: string | null;
   /** True when the latest submission belongs to the viewing hunter. */
@@ -275,6 +290,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
     bounty,
     role,
     requestStatus = null,
+    requestRejectionSource = null,
     submissionStatus = null,
     submissionIsMine = false,
     applicationCount = 0,
@@ -358,7 +374,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
 
   return isPoster
     ? resolvePoster({ status, bounty, applicationCount, hunter, reward, submissionStatus, paymentState, revisionRequested, submissionPending })
-    : resolveHunter({ status, bounty, requestStatus, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState });
+    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState });
 }
 
 function resolveVisitor(
@@ -638,7 +654,9 @@ function resolvePoster(args: {
 function resolveHunter(args: {
   status: BountyDisplayStatus;
   bounty: BountyLifecycleInput['bounty'];
+  viewerId: string | null;
   requestStatus: string | null;
+  requestRejectionSource: string | null;
   poster: string;
   reward: string;
   revisionRequested: boolean;
@@ -646,14 +664,16 @@ function resolveHunter(args: {
   submissionIsMine: boolean;
   paymentState: BountyLifecycleInput['paymentState'];
 }): BountyLifecycleState {
-  const { status, bounty, requestStatus, poster, reward, revisionRequested, paymentState } = args;
+  const { status, bounty, viewerId, requestStatus, requestRejectionSource, poster, reward, revisionRequested, paymentState } = args;
 
   // A hunter whose application is still `pending` on a bounty that has already
   // moved on was passed over — the poster accepted someone else and the row was
   // never rejected explicitly. Without this guard the in_progress/completed
   // branches below would tell them they are "on the clock" for work that is not
   // theirs, or that they were paid for a bounty they never worked.
-  const isSelected = requestStatus === 'accepted';
+  const assignedToSomeoneElse =
+    !!viewerId && !!bounty.accepted_by && String(bounty.accepted_by) !== String(viewerId);
+  const isSelected = requestStatus === 'accepted' && !assignedToSomeoneElse;
   if (!isSelected && (bounty.status === 'in_progress' || bounty.status === 'completed')) {
     return finalize({
       status: 'rejected',
@@ -699,6 +719,31 @@ function resolveHunter(args: {
       });
 
     case 'rejected':
+      // A system closure is not a decision against the hunter. Saying "went
+      // with another hunter" here contradicted the application_expired
+      // notification ("this wasn't a rejection") for every expired request.
+      if (typeof requestRejectionSource === 'string' && requestRejectionSource.startsWith('system_')) {
+        return finalize({
+          status,
+          headline: 'Application closed',
+          // system_expiry also covers requests that expired days after the
+          // poster engaged (e.g. messaged), so it must not claim they never
+          // responded -- only that no decision came.
+          explanation:
+            requestRejectionSource === 'system_bounty_closed'
+              ? 'This bounty is no longer available, so your application closed automatically.'
+              : requestRejectionSource === 'system_poster_absent'
+                ? `${poster} hasn't been active on Bounty, so your application closed automatically. This wasn't a rejection.`
+                : `${poster} didn't make a decision in time, so your application closed automatically. This wasn't a rejection.`,
+          nextStep: 'There are other bounties open now.',
+          waitingOn: 'nobody',
+          needsAttention: false,
+          tone: 'neutral',
+          stageIndex: 0,
+          primaryAction: action('find_bounties'),
+          secondaryActions: [action('discard_application')],
+        });
+      }
       return finalize({
         status,
         headline: 'Not selected',
