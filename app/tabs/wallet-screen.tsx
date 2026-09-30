@@ -54,6 +54,8 @@ function getTransactionLabel(tx: WalletTransactionRecord): string {
       return `Released${tx.details.title ? ` · ${tx.details.title}` : ''}`;
     case 'refund':
       return `Refund${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+    case 'posting_fee':
+      return 'Posting fee';
     default:
       return 'Transaction';
   }
@@ -79,6 +81,8 @@ function getTransactionIconName(tx: WalletTransactionRecord): keyof typeof Mater
       return 'lock-open';
     case 'refund':
       return 'refresh';
+    case 'posting_fee':
+      return 'sell';
     default:
       return 'receipt-long';
   }

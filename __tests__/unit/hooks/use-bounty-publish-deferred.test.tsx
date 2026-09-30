@@ -20,6 +20,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 let mockVariant: 'control' | 'deferred' = 'control';
 const mockCanDefer = jest.fn();
+const mockGetWalletPostingFee = jest.fn();
 const mockCreateBounty = jest.fn();
 const mockDeleteBounty = jest.fn();
 const mockCreateEscrow = jest.fn();
@@ -31,6 +32,7 @@ jest.mock('lib/experiments/deferred-funding-variant', () => ({
 
 jest.mock('lib/services/bounty-funding-service', () => ({
   canDeferBountyFunding: (...a: unknown[]) => mockCanDefer(...a),
+  getWalletPostingFee: (...a: unknown[]) => mockGetWalletPostingFee(...a),
   amountBucket: (n: number) => (n < 25 ? 'lt_25' : n < 50 ? '25_49' : '50_99'),
 }));
 
@@ -61,6 +63,8 @@ jest.mock('lib/utils/payment-architecture', () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { useBountyPublish } = require('app/screens/CreateBounty/useBountyPublish');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { __resetWalletPostingFeeCacheForTests } = require('hooks/useWalletPostingFee');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Alert } = require('react-native');
 
@@ -107,6 +111,8 @@ const propsFor = (name: string) => mockTrackEvent.mock.calls.find(c => c[0] === 
 describe('useBountyPublish — deferred funding', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    __resetWalletPostingFeeCacheForTests();
+    mockGetWalletPostingFee.mockResolvedValue(0);
     mockVariant = 'control';
     mockCanDefer.mockResolvedValue(false);
     mockCreateBounty.mockResolvedValue({
@@ -118,6 +124,59 @@ describe('useBountyPublish — deferred funding', () => {
     // the success path's onPublished callback actually runs.
     (Alert.alert as jest.Mock).mockImplementation((_t: string, _m: string, buttons: any[]) => {
       buttons?.[0]?.onPress?.();
+    });
+  });
+
+  // Wallet posting fee: fn_reserve_bounty_escrow debits it next to escrow, so
+  // the balance gate must cover reward + fee or the server refuses the insert.
+  describe('wallet posting fee', () => {
+    beforeEach(() => {
+      mockGetWalletPostingFee.mockResolvedValue(1);
+    });
+
+    test('a wallet holding exactly the reward is sent to the balance gate', async () => {
+      const { result } = await setup({ balance: 50 });
+      await act(async () => {
+        await result.current.publish();
+      });
+
+      expect(result.current.funding.showInsufficientBalance).toBe(true);
+      expect(result.current.funding.postingFee).toBe(1);
+      expect(result.current.funding.initialAmount).toBe('1.00');
+      expect(mockCreateBounty).not.toHaveBeenCalled();
+      expect(propsFor('post_amount_blocked_by_balance')).toEqual(
+        expect.objectContaining({ attemptedAmount: 50, shortfall: 1 })
+      );
+    });
+
+    test('a wallet covering reward + fee publishes', async () => {
+      const { result } = await setup({ balance: 51 });
+      await act(async () => {
+        await result.current.publish();
+      });
+
+      expect(result.current.funding.showInsufficientBalance).toBe(false);
+      expect(mockCreateBounty).toHaveBeenCalledWith(DRAFT, { fundingMode: 'at_post' });
+    });
+
+    test('a deferred bounty skips the gate, fee or not', async () => {
+      mockCanDefer.mockResolvedValue(true);
+      mockCreateBounty.mockResolvedValue({
+        bounty: { id: 'b1', funding_mode: 'at_accept' },
+        created: true,
+      });
+      const { result } = await setup({ balance: 0 });
+      await act(async () => {
+        await result.current.publish();
+      });
+
+      expect(result.current.funding.showInsufficientBalance).toBe(false);
+      expect(mockCreateBounty).toHaveBeenCalled();
+    });
+
+    test('an honor bounty carries no fee', async () => {
+      const { result } = await setup({ balance: 0, draft: { ...DRAFT, amount: 0, isForHonor: true } });
+      expect(result.current.funding.postingFee).toBe(0);
     });
   });
 

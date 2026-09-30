@@ -1,6 +1,7 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { bountyService } from 'app/services/bountyService';
 import { useFormSubmission } from 'hooks/useFormSubmission';
+import { useWalletPostingFee } from 'hooks/useWalletPostingFee';
 import { POSTING_FEE_CENTS } from 'lib/constants/posting-fee';
 import { useDeferredFundingVariant } from 'lib/experiments/deferred-funding-variant';
 import { analyticsService } from 'lib/services/analytics-service';
@@ -63,6 +64,8 @@ export interface BountyPublishFunding {
   showTopUp: boolean;
   walletBalance: number;
   bountyAmount: number;
+  /** Wallet posting fee debited on top of the bounty amount (0 = off). */
+  postingFee: number;
   onAddFunds: () => void;
   onEditAmount: () => void;
   onCancel: () => void;
@@ -137,6 +140,13 @@ export interface PublishOptions {
   prepaidCheckoutAttemptId?: string | null;
 }
 
+/** What a funded-at-post publish takes from the wallet: the reward plus the
+ * wallet posting fee. Honor and zero-amount bounties take nothing extra. */
+function walletChargeFor(draft: BountyDraft, postingFee: number): number {
+  if (draft.isForHonor || draft.amount <= 0) return draft.amount;
+  return draft.amount + postingFee;
+}
+
 export function useBountyPublish(params: UseBountyPublishParams) {
   const {
     surface,
@@ -168,6 +178,15 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // Distinguishes a real abandon from unmounting after a successful publish —
   // exposed so the caller's own post_abandoned tracking doesn't double-count.
   const publishedRef = useRef(false);
+
+  // Flat fee fn_reserve_bounty_escrow debits from the wallet next to escrow on
+  // a funded-at-post bounty. Every wallet balance check here is against reward
+  // + fee: checking the reward alone passes a poster whose wallet is short by
+  // exactly the fee, and the server then refuses the INSERT. Read through a ref
+  // inside submit() for the same staleness reason as deferredGrantRef.
+  const walletPostingFee = useWalletPostingFee();
+  const walletPostingFeeRef = useRef(walletPostingFee);
+  walletPostingFeeRef.current = walletPostingFee;
 
   // --- "Post first, pay at accept" ----------------------------------------
   // `variant` is this device's PostHog arm; it decides whether we ASK. The
@@ -243,10 +262,10 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // onAddMoney (below) is the sole intended trigger for leaving showTopUp.
   useEffect(() => {
     if (!showInsufficientBalance) return;
-    if (!validateBalance(draft.amount, balance, draft.isForHonor)) return;
+    if (!validateBalance(walletChargeFor(draft, walletPostingFee), balance, draft.isForHonor)) return;
     setShowInsufficientBalance(false);
     setInsufficientBalanceOrigin(null);
-  }, [balance, draft.amount, draft.isForHonor, showInsufficientBalance]);
+  }, [balance, draft, walletPostingFee, showInsufficientBalance]);
 
   const {
     submit,
@@ -291,20 +310,21 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // wrong. The DB is the real check either way: fn_reserve_bounty_escrow
       // raises on insufficient funds at INSERT, which aborts the whole
       // transaction rather than posting an unfunded bounty.
+      const walletCharge = walletChargeFor(publishDraft, walletPostingFeeRef.current);
       if (
         !prepaidAttemptId &&
         !deferFunding &&
         !useStripeNativePayments &&
-        !validateBalance(publishDraft.amount, balance, publishDraft.isForHonor)
+        !validateBalance(walletCharge, balance, publishDraft.isForHonor)
       ) {
         analyticsService.trackEvent('post_amount_blocked_by_balance', {
           surface,
           attemptedAmount: publishDraft.amount,
           balance,
-          shortfall: Number((publishDraft.amount - balance).toFixed(2)),
+          shortfall: Number((walletCharge - balance).toFixed(2)),
           method: 'publish',
         });
-        throw new Error(getInsufficientBalanceMessage(publishDraft.amount, balance));
+        throw new Error(getInsufficientBalanceMessage(walletCharge, balance));
       }
 
       const { bounty: createdBounty, created } = await bountyService.createBounty(publishDraft, {
@@ -635,15 +655,16 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // safety net for anything that reaches it despite this gate).
   /** The pre-experiment publish decision, unchanged and fully synchronous. */
   const publishWithBalanceGate = (publishDraft: BountyDraft, useStripeNativePayments: boolean) => {
+    const walletCharge = walletChargeFor(publishDraft, walletPostingFee);
     if (
       !useStripeNativePayments &&
-      !validateBalance(publishDraft.amount, balance, publishDraft.isForHonor)
+      !validateBalance(walletCharge, balance, publishDraft.isForHonor)
     ) {
       analyticsService.trackEvent('post_amount_blocked_by_balance', {
         surface,
         attemptedAmount: publishDraft.amount,
         balance,
-        shortfall: Number((publishDraft.amount - balance).toFixed(2)),
+        shortfall: Number((walletCharge - balance).toFixed(2)),
         method: 'publish',
       });
       setInsufficientBalanceOrigin('publish');
@@ -704,7 +725,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
 
     // The poster can edit the pre-filled amount, so the top-up may be less
     // than the full shortfall. Re-check rather than assuming success.
-    if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
+    if (!validateBalance(walletChargeFor(draft, walletPostingFee), balance, draft.isForHonor)) {
       setShowInsufficientBalance(true);
       return;
     }
@@ -722,13 +743,14 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     // warning) is enough — the poster taps Continue themselves.
   };
 
-  const shortfall = getAmountNeeded(draft.amount, balance);
+  const shortfall = getAmountNeeded(walletChargeFor(draft, walletPostingFee), balance);
 
   const funding: BountyPublishFunding = {
     showInsufficientBalance,
     showTopUp,
     walletBalance: balance,
     bountyAmount: draft.amount,
+    postingFee: draft.isForHonor || draft.amount <= 0 ? 0 : walletPostingFee,
     onAddFunds: () => {
       setShowInsufficientBalance(false);
       setShowTopUp(true);

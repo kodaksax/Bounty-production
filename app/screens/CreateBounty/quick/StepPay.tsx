@@ -4,6 +4,7 @@ import { type Href, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { usePostingPolicy } from '../../../../hooks/usePostingPolicy';
+import { useWalletPostingFee } from '../../../../hooks/useWalletPostingFee';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
@@ -71,6 +72,9 @@ export function StepPay({
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const { balance } = useWallet();
   const { honorPostsEnabled, minimumAmount } = usePostingPolicy();
+  // Non-zero only where the server debits a posting fee from the wallet at
+  // post, which also means the bounty is funded at post, not at accept.
+  const postingFee = useWalletPostingFee();
   const [error, setError] = useState<string | null>(null);
 
   // Mirror of the amount/honor the poster has committed on this screen, updated
@@ -318,14 +322,22 @@ export function StepPay({
           <Text style={styles.infoTitle}>
             {draft.isForHonor
               ? 'This is a for-honor bounty.'
-              : "You're charged when you accept a hunter."}
+              : postingFee > 0
+                ? "You're charged from your balance when you post."
+                : "You're charged when you accept a hunter."}
           </Text>
           <Text style={styles.infoBody}>
             {draft.isForHonor
               ? 'No payment is involved. Someone helps out voluntarily.'
-              : `You pay $${draft.amount || 0}. It is held then, and released when you approve the work. Bounty takes a ${PLATFORM_FEE_DISPLAY} service fee out of it, so the hunter takes home $${calculateHunterEarnings(
-                  draft.amount
-                ).net.toFixed(2)} — and they see that number before they apply.`}
+              : postingFee > 0
+                ? `You pay $${draft.amount || 0} plus a $${postingFee.toFixed(2)} posting fee ($${(
+                    (draft.amount || 0) + postingFee
+                  ).toFixed(2)} total). The $${draft.amount || 0} is held in escrow and released when you approve the work; the posting fee is not refunded. Bounty takes a ${PLATFORM_FEE_DISPLAY} service fee out of the reward, so the hunter takes home $${calculateHunterEarnings(
+                    draft.amount
+                  ).net.toFixed(2)} — and they see that number before they apply.`
+                : `You pay $${draft.amount || 0}. It is held then, and released when you approve the work. Bounty takes a ${PLATFORM_FEE_DISPLAY} service fee out of it, so the hunter takes home $${calculateHunterEarnings(
+                    draft.amount
+                  ).net.toFixed(2)} — and they see that number before they apply.`}
           </Text>
           {draft.isForHonor ? null : (
             <TouchableOpacity

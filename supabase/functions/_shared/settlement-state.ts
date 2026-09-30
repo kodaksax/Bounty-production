@@ -216,6 +216,13 @@ export function describeSettlement(
         tone: 'neutral',
       };
 
+    case 'posting_fee':
+      return {
+        label: 'Charged',
+        detail: 'Posting fee taken from your balance. Not refunded if the bounty is cancelled.',
+        tone: 'neutral',
+      };
+
     case 'refund':
       return state === 'stripe_settled'
         ? { label: 'Refunded', detail: 'Returned to your original payment method.', tone: 'success' }

@@ -32,6 +32,7 @@ export function PublishFundingGate({ funding }: PublishFundingGateProps) {
     <InsufficientBalanceScreen
       walletBalance={funding.walletBalance}
       bountyAmount={funding.bountyAmount}
+      postingFee={funding.postingFee}
       onAddFunds={funding.onAddFunds}
       onEditAmount={funding.onEditAmount}
       onCancel={funding.onCancel}

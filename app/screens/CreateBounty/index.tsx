@@ -6,6 +6,7 @@ import { StepDirectionContext } from 'app/screens/CreateBounty/quick/QuickStepLa
 import { StepCheckout } from 'app/screens/CreateBounty/quick/StepCheckout';
 import { StepPay } from 'app/screens/CreateBounty/quick/StepPay';
 import { StepPhotos } from 'app/screens/CreateBounty/quick/StepPhotos';
+import { StepReceipt } from 'app/screens/CreateBounty/quick/StepReceipt';
 import type { DetailTarget } from 'app/screens/CreateBounty/quick/StepPostPublish';
 import { StepPostPublish } from 'app/screens/CreateBounty/quick/StepPostPublish';
 import { StepTask } from 'app/screens/CreateBounty/quick/StepTask';
@@ -296,6 +297,10 @@ export function CreateBountyFlow({
   // a draft that could have changed underneath.
   const [checkoutDraft, setCheckoutDraft] = useState<BountyDraft | null>(null);
 
+  // Non-null while the purchase summary is showing: the draft plus the payment
+  // committed on the amount step. Publishing happens from the summary's CTA.
+  const [receiptDraft, setReceiptDraft] = useState<BountyDraft | null>(null);
+
   // Declared BEFORE useBountyPublish because the publish hook needs to know
   // whether a checkout has settled.
   const postingCheckout = usePostingCheckout({
@@ -402,12 +407,16 @@ export function CreateBountyFlow({
       // gesture from the confirmation cannot land on a paid checkout offering
       // to post again.
       setCheckoutDraft(null);
+      setReceiptDraft(null);
       setCelebrating(true);
     },
     // Compensation is the last pre-publish step. This was hard-coded to 2
     // from the two-step flow, so once Location became step 2 "Edit amount"
     // dropped the poster on the address screen instead of the price.
-    onEditAmount: () => handleGoToStep(TOTAL_STEPS),
+    onEditAmount: () => {
+      setReceiptDraft(null);
+      handleGoToStep(TOTAL_STEPS);
+    },
     onCancelGate: onCancel,
   });
 
@@ -444,7 +453,7 @@ export function CreateBountyFlow({
     }
   };
 
-  /** Step 2's CTA. Snapshots the draft first — publishing clears it. */
+  /** The amount step's CTA: opens the checkout or the purchase summary. */
   const handlePublishFromAmountStep = (payment: Pick<BountyDraft, 'amount' | 'isForHonor'>) => {
     // Backstop so a publish can never outrun its own funnel start — every
     // realistic path here already went through handleNext.
@@ -461,12 +470,26 @@ export function CreateBountyFlow({
       return;
     }
 
+    // Everyone else reviews the purchase summary; nothing is created yet.
+    setReceiptDraft(publishDraft);
+    setStepDirection(1);
+  };
+
+  /** Purchase summary CTA. Snapshots the draft first — publishing clears it. */
+  const handleReceiptPost = () => {
+    const publishDraft = receiptDraft ?? publishedDraftRef.current ?? draft;
+    publishedDraftRef.current = publishDraft;
     // handlePublish is synchronous: deferred-funding eligibility is prefetched
     // when the amount is chosen, precisely so the tap does not wait on a
     // round-trip before showing either the funding gate or the submit spinner.
     // Failures inside the submit it kicks off are surfaced by useBountyPublish's
     // onError / ErrorBanner.
     handlePublish(publishDraft);
+  };
+
+  const handleReceiptBack = () => {
+    setReceiptDraft(null);
+    setStepDirection(-1);
   };
 
   /**
@@ -999,7 +1022,17 @@ export function CreateBountyFlow({
                 totalSteps={TOTAL_STEPS}
               />
             )}
-            {!postedBountyId && !checkoutDraft && currentStep === 3 && (
+            {!postedBountyId && receiptDraft && (
+              <StepReceipt
+                draft={receiptDraft}
+                onPost={handleReceiptPost}
+                onBack={handleReceiptBack}
+                isSubmitting={isSubmitting}
+                step={TOTAL_STEPS}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {!postedBountyId && !checkoutDraft && !receiptDraft && currentStep === 3 && (
               <StepPay
                 draft={draft}
                 onUpdate={handleDraftUpdate}
@@ -1008,8 +1041,6 @@ export function CreateBountyFlow({
                 step={3}
                 totalSteps={TOTAL_STEPS}
                 onInsufficientBalance={showInsufficientBalanceFromAmountStep}
-                ctaLabel="Post Bounty"
-                isSubmitting={isSubmitting}
               />
             )}
 

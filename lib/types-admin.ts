@@ -26,6 +26,7 @@ export const ADMIN_TRANSACTION_TYPES = [
   'refund',
   'deposit',
   'withdrawal',
+  'posting_fee',
   'dispute_loss',
   'admin_adjustment',
 ] as const;

@@ -38,6 +38,7 @@ const mockDraft: any = {
 
 // ---- module mocks ----
 
+jest.mock('components/payment-methods-modal', () => ({ PaymentMethodsModal: () => null }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: jest.fn(() => ({ top: 0, bottom: 0, left: 0, right: 0 })),
 }));
@@ -145,6 +146,16 @@ jest.mock('app/screens/CreateBounty/quick/StepPay', () => ({
 // The post-publish celebration is purely visual and fades itself out.
 jest.mock('app/screens/CreateBounty/quick/PostCelebration', () => ({
   PostCelebration: () => null,
+}));
+jest.mock('app/screens/CreateBounty/quick/StepReceipt', () => ({
+  StepReceipt: (props: any) => {
+    const { TouchableOpacity, Text } = require('react-native');
+    return (
+      <TouchableOpacity accessibilityLabel="stub-receipt-post" onPress={props.onPost}>
+        <Text>StepReceipt</Text>
+      </TouchableOpacity>
+    );
+  },
 }));
 jest.mock('app/screens/CreateBounty/quick/StepPostPublish', () => ({
   StepPostPublish: (props: any) => {
@@ -265,8 +276,9 @@ async function publishThenReachConfirmation() {
   render(<CreateBountyFlow entryPoint="test" />);
   fireEvent.press(screen.getByLabelText('stub-task-next')); // Task -> Location
   fireEvent.press(screen.getByLabelText('stub-where-continue')); // Location -> Compensation
+  fireEvent.press(screen.getByLabelText('stub-publish')); // Compensation -> Purchase summary
   await act(async () => {
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-receipt-post'));
   });
   await waitFor(() => expect(screen.getByText('StepPostPublish')).toBeTruthy());
 }

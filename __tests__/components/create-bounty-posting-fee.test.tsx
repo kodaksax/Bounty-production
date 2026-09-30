@@ -53,6 +53,7 @@ resetDraft();
 
 // ---- module mocks ----
 
+jest.mock('components/payment-methods-modal', () => ({ PaymentMethodsModal: () => null }));
 jest.mock('react-native-reanimated', () => {
   const RN = require('react-native');
   const chainable = (): any => {
@@ -148,6 +149,7 @@ jest.mock('lib/services/stripe-service', () => ({
 // paid v1 bounty today, so control's expected outcome is at_accept.
 jest.mock('lib/services/bounty-funding-service', () => ({
   canDeferBountyFunding: jest.fn().mockResolvedValue(true),
+  getWalletPostingFee: jest.fn().mockResolvedValue(0),
   amountBucket: jest.fn(() => '25_100'),
 }));
 
@@ -235,6 +237,17 @@ jest.mock('app/screens/CreateBounty/quick/StepPay', () => ({
   },
 }));
 
+jest.mock('app/screens/CreateBounty/quick/StepReceipt', () => ({
+  StepReceipt: (props: any) => {
+    const { TouchableOpacity, Text } = require('react-native');
+    return (
+      <TouchableOpacity accessibilityLabel="receipt-post" onPress={props.onPost}>
+        <Text>StepReceipt</Text>
+      </TouchableOpacity>
+    );
+  },
+}));
+
 jest.mock('app/screens/CreateBounty/quick/StepCheckout', () => ({
   StepCheckout: (props: any) => {
     const { TouchableOpacity, Text, View } = require('react-native');
@@ -275,6 +288,16 @@ jest.mock('app/screens/CreateBounty/PublishFundingGate', () => ({
 
 import { CreateBountyFlow } from 'app/screens/CreateBounty/index';
 
+/**
+ * Tap the amount step's CTA, then — when it opened the purchase summary rather
+ * than the checkout — the summary's Post Bounty, which is what publishes.
+ */
+function pressPublish(label: string) {
+  fireEvent.press(screen.getByLabelText(label));
+  const receiptPost = screen.queryByLabelText('receipt-post');
+  if (receiptPost) fireEvent.press(receiptPost);
+}
+
 // ---- helpers ----
 
 /** Walk the composer from step 1 to the amount step. */
@@ -312,7 +335,7 @@ describe('control arm is untouched', () => {
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
 
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
 
     await waitFor(() => expect(mockCreateBounty).toHaveBeenCalledTimes(1));
     expect(screen.queryByText('StepCheckout')).toBeNull();
@@ -322,7 +345,7 @@ describe('control arm is untouched', () => {
   it('does NOT charge or escrow the bounty reward at posting', async () => {
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
 
     await waitFor(() => expect(mockCreateBounty).toHaveBeenCalledTimes(1));
 
@@ -337,7 +360,7 @@ describe('control arm is untouched', () => {
   it('reports the bounty as live and unfunded', async () => {
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
 
     await waitFor(() => expect(mockCreateBounty).toHaveBeenCalled());
 
@@ -364,7 +387,7 @@ describe('treatment arm gates publishing on payment', () => {
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
 
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
 
     expect(await screen.findByText('StepCheckout')).toBeTruthy();
     expect(screen.getByText('total:5100')).toBeTruthy();
@@ -376,7 +399,7 @@ describe('treatment arm gates publishing on payment', () => {
   it('creates the bounty only after the charge is verified', async () => {
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
     await screen.findByText('StepCheckout');
 
     await act(async () => {
@@ -396,7 +419,7 @@ describe('treatment arm gates publishing on payment', () => {
     mockPayResult = false;
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
     await screen.findByText('StepCheckout');
 
     await act(async () => {
@@ -414,7 +437,7 @@ describe('treatment arm gates publishing on payment', () => {
     mockPayResult = false;
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
     await screen.findByText('StepCheckout');
 
     await act(async () => {
@@ -431,7 +454,7 @@ describe('treatment arm gates publishing on payment', () => {
   it('escrows the reward at post, and reports it as funded and prepaid', async () => {
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
     await screen.findByText('StepCheckout');
 
     await act(async () => {
@@ -461,7 +484,7 @@ describe('treatment arm gates publishing on payment', () => {
     // ask a poster who just paid $51 to add funds.
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
     await screen.findByText('StepCheckout');
 
     await act(async () => {
@@ -478,7 +501,7 @@ describe('treatment arm gates publishing on payment', () => {
   it('emits the checkout-shown funnel event with the arm and the split', async () => {
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
     await screen.findByText('StepCheckout');
 
     const shown = mockTrackEvent.mock.calls.find(c => c[0] === 'posting_checkout_shown');
@@ -494,7 +517,7 @@ describe('treatment arm gates publishing on payment', () => {
   it('records an abandon when the poster backs out unpaid', async () => {
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
     await screen.findByText('StepCheckout');
 
     fireEvent.press(screen.getByLabelText('checkout-back'));
@@ -514,7 +537,7 @@ describe('eligibility', () => {
 
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
 
     await waitFor(() => expect(mockCreateBounty).toHaveBeenCalledTimes(1));
     expect(screen.queryByText('StepCheckout')).toBeNull();
@@ -527,7 +550,7 @@ describe('eligibility', () => {
 
     render(<CreateBountyFlow deliberateTap />);
     await advanceToAmountStep();
-    fireEvent.press(screen.getByLabelText('publish'));
+    pressPublish('publish');
 
     await waitFor(() => expect(mockCreateBounty).toHaveBeenCalledTimes(1));
     expect(screen.queryByText('StepCheckout')).toBeNull();

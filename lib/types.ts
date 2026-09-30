@@ -369,7 +369,7 @@ export interface UserRating {
  */
 export interface WalletTransaction {
   id: string;
-  type: 'escrow' | 'release' | 'refund' | 'deposit' | 'withdrawal';
+  type: 'escrow' | 'release' | 'refund' | 'deposit' | 'withdrawal' | 'posting_fee';
   amount: Money;
   bountyId?: string;
   createdAt: string;
