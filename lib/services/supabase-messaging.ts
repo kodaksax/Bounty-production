@@ -18,6 +18,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import type { Conversation, Message } from '../types';
 import { getAccountStatusErrorMessage } from '../utils/account-status-errors';
+import { uniqueRealtimeTopic } from '../utils/realtime-topic';
 import { EventEmitter } from '../utils/event-emitter';
 import { mediaPreviewLabel } from '../utils/message-media';
 import { logClientError } from './monitoring';
@@ -836,8 +837,12 @@ export function subscribeToConversations(userId: string, onUpdate: () => void): 
     const listeners = new Set<() => void>();
     const notify = () => listeners.forEach(fn => fn());
 
+    // The map key stays fixed so concurrent subscribers share one channel;
+    // the realtime topic is unique so a resubscribe racing the previous
+    // channel's async removeChannel() doesn't get that channel back (see
+    // lib/utils/realtime-topic).
     const channel = supabase
-      .channel(channelName)
+      .channel(uniqueRealtimeTopic(channelName))
       .on(
         'postgres_changes',
         {
@@ -892,8 +897,12 @@ export function subscribeToMessages(
   if (!entry) {
     const listeners = new Set<(message?: Message) => void>();
 
+    // The map key stays fixed so concurrent subscribers share one channel;
+    // the realtime topic is unique so a resubscribe racing the previous
+    // channel's async removeChannel() doesn't get that channel back (see
+    // lib/utils/realtime-topic).
     const channel = supabase
-      .channel(channelName)
+      .channel(uniqueRealtimeTopic(channelName))
       .on(
         'postgres_changes',
         {
