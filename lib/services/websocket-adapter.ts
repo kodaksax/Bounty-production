@@ -24,14 +24,27 @@ const RECONNECT_DELAY_MS = 3000;
 
 /** A shared conversation channel plus how many callers currently hold it. */
 interface ConversationChannelEntry {
-  channel: RealtimeChannel;
+  /** null while a previous channel for this conversation is still closing. */
+  channel: RealtimeChannel | null;
   refCount: number;
 }
 
+// supabase.channel(topic) hands back the channel still registered under that
+// topic, and a removed channel stays registered until the server acks the
+// leave. Re-creating a topic before then binds the new handlers onto the old
+// channel: every event is delivered twice if it rejoins, and nothing at all
+// once it closes. Broadcast topics can't be made unique the way the
+// postgres_changes ones are (every client has to share the topic to hear each
+// other), so instead a topic is only re-created once its removal has finished.
 class WebSocketAdapter {
   private appChannel: RealtimeChannel | null = null;
+  /** Pending removal of the previous app channel; connect() waits for it. */
+  private appChannelRemoval: Promise<unknown> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private connecting: boolean = false;
   private conversationChannels: Map<string, ConversationChannelEntry> = new Map();
+  /** Pending removals of per-conversation channels, keyed by conversation id. */
+  private conversationRemovals: Map<string, Promise<unknown>> = new Map();
   private listeners: Map<string, EventHandler[]> = new Map();
   private connected: boolean = false;
   private intentionalDisconnect: boolean = false;
@@ -61,8 +74,13 @@ class WebSocketAdapter {
         if (__DEV__) console.warn('[wsAdapter] Failed to fetch user session:', error);
       });
 
-    // If disconnect() was called while we were awaiting getSession, abort.
-    if (this.intentionalDisconnect) {
+    if (this.appChannelRemoval) {
+      await this.appChannelRemoval;
+    }
+
+    // If disconnect() was called while we were waiting, or a concurrent
+    // connect() got there first, abort.
+    if (this.intentionalDisconnect || this.appChannel) {
       this.connecting = false;
       return;
     }
@@ -73,6 +91,7 @@ class WebSocketAdapter {
         // duplicate events (e.g. message.new, presence.update, bounty.status).
         config: { broadcast: { self: false } },
       });
+      this.appChannel = channel;
 
       channel
         .on('broadcast', { event: 'bounty.status' }, ({ payload }) => {
@@ -92,6 +111,9 @@ class WebSocketAdapter {
           this.emit('presence.update', payload);
         })
         .subscribe((status) => {
+          // A replaced or torn-down channel still reports CLOSED when its
+          // removal finishes; only the current channel drives state.
+          if (this.appChannel !== channel) return;
           if (status === 'SUBSCRIBED') {
             this.connected = true;
             this.emit('connect', {});
@@ -99,25 +121,69 @@ class WebSocketAdapter {
             this.connected = false;
             if (!this.intentionalDisconnect) {
               this.emit('disconnect', {});
-              // Attempt automatic reconnect after a short delay.
-                      const _t = setTimeout(() => {
-                        if (!this.intentionalDisconnect) {
-                          this.appChannel = null;
-                          this.connect();
-                        }
-                      }, RECONNECT_DELAY_MS);
-                      if (typeof (_t as any)?.unref === 'function') {
-                        try { (_t as any).unref(); } catch { /* ignore */ }
-                      }
+              this.scheduleReconnect(channel);
             }
           }
         });
-
-      this.appChannel = channel;
     } finally {
       // Always clear the in-flight flag so future connect() calls are not blocked.
       this.connecting = false;
     }
+  }
+
+  /** Rebuild the app channel after an unexpected error or close. */
+  private scheduleReconnect(channel: RealtimeChannel): void {
+    if (this.reconnectTimer) return;
+    const _t = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.intentionalDisconnect || this.appChannel !== channel) return;
+      // Realtime rejoins an errored channel by itself once the socket is
+      // back; if it already has, keep it.
+      if ((channel as any).state === 'joined') return;
+      this.dropAppChannel();
+      this.connect();
+    }, RECONNECT_DELAY_MS);
+    this.reconnectTimer = _t;
+    if (typeof (_t as any)?.unref === 'function') {
+      try { (_t as any).unref(); } catch { /* ignore */ }
+    }
+  }
+
+  private dropAppChannel(): void {
+    const channel = this.appChannel;
+    if (!channel) return;
+    this.appChannel = null;
+    const removal: Promise<unknown> = this.removeChannel(channel).finally(() => {
+      if (this.appChannelRemoval === removal) this.appChannelRemoval = null;
+    });
+    this.appChannelRemoval = removal;
+  }
+
+  private dropConversationChannel(conversationId: string, channel: RealtimeChannel): void {
+    const removal: Promise<unknown> = this.removeChannel(channel).finally(() => {
+      if (this.conversationRemovals.get(conversationId) === removal) {
+        this.conversationRemovals.delete(conversationId);
+      }
+    });
+    this.conversationRemovals.set(conversationId, removal);
+  }
+
+  private removeChannel(channel: RealtimeChannel): Promise<unknown> {
+    return (async () => {
+      let removed = false;
+      while (!removed) {
+        try {
+          const status = await supabase.removeChannel(channel);
+          removed = status === 'ok';
+          if (!removed && __DEV__) console.warn('[wsAdapter] removeChannel did not complete:', status);
+        } catch (err) {
+          if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
+        }
+        if (!removed) {
+          await new Promise<void>((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));
+        }
+      }
+    })();
   }
 
   /** Disconnect from Supabase Realtime. */
@@ -125,18 +191,16 @@ class WebSocketAdapter {
     this.intentionalDisconnect = true;
     this.connecting = false;
 
-    if (this.appChannel) {
-      supabase.removeChannel(this.appChannel).catch((err) => {
-        if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
-      });
-      this.appChannel = null;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
 
+    this.dropAppChannel();
+
     // Tear down all per-conversation channels.
-    for (const [, entry] of this.conversationChannels) {
-      supabase.removeChannel(entry.channel).catch((err) => {
-        if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
-      });
+    for (const [conversationId, entry] of this.conversationChannels) {
+      if (entry.channel) this.dropConversationChannel(conversationId, entry.channel);
     }
     this.conversationChannels.clear();
 
@@ -170,6 +234,24 @@ class WebSocketAdapter {
       return;
     }
 
+    const entry: ConversationChannelEntry = { channel: null, refCount: 1 };
+    this.conversationChannels.set(conversationId, entry);
+
+    const pendingRemoval = this.conversationRemovals.get(conversationId);
+    if (!pendingRemoval) {
+      entry.channel = this.createConversationChannel(conversationId);
+      return;
+    }
+    // Rejoined while the previous channel is still closing.
+    pendingRemoval.then(() => {
+      // Only if this join hasn't since been left (or cleared by disconnect()).
+      if (this.conversationChannels.get(conversationId) === entry) {
+        entry.channel = this.createConversationChannel(conversationId);
+      }
+    });
+  }
+
+  private createConversationChannel(conversationId: string): RealtimeChannel {
     const channelName = `${CONVERSATION_CHANNEL_PREFIX}${conversationId}`;
     const channel = supabase.channel(channelName, {
       // self: false — typing indicators must NOT echo back to the sender,
@@ -186,7 +268,7 @@ class WebSocketAdapter {
       })
       .subscribe();
 
-    this.conversationChannels.set(conversationId, { channel, refCount: 1 });
+    return channel;
   }
 
   /** Release one reference to a per-conversation typing channel; only removes it once the last caller leaves. */
@@ -197,16 +279,14 @@ class WebSocketAdapter {
     entry.refCount -= 1;
     if (entry.refCount > 0) return;
 
-    supabase.removeChannel(entry.channel).catch((err) => {
-      if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
-    });
     this.conversationChannels.delete(conversationId);
+    if (entry.channel) this.dropConversationChannel(conversationId, entry.channel);
   }
 
   /** Broadcast a typing indicator to other participants in a conversation. */
   sendTyping(conversationId: string, isTyping: boolean): void {
     const entry = this.conversationChannels.get(conversationId);
-    if (!entry) return;
+    if (!entry?.channel) return;
 
     const event = isTyping ? 'typing.start' : 'typing.stop';
     entry.channel
@@ -281,4 +361,3 @@ class WebSocketAdapter {
 
 // Singleton instance
 export const wsAdapter = new WebSocketAdapter();
-

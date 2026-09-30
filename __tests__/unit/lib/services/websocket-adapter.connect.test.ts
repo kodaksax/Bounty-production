@@ -1,8 +1,14 @@
+// connect() waits for the previous channel's removal, a few promise hops deep.
+const flushPromises = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve()
+}
+
 describe('wsAdapter — Supabase Realtime', () => {
   beforeEach(() => {
     jest.resetModules()
     jest.clearAllMocks()
   })
+
 
   it('connects via supabase.channel and emits connect on SUBSCRIBED', async () => {
     const subscribeMock = jest.fn()
@@ -24,7 +30,7 @@ describe('wsAdapter — Supabase Realtime', () => {
       supabase: {
         auth: { getSession: getSessionMock },
         channel: channelFactoryMock,
-        removeChannel: jest.fn().mockResolvedValue(undefined),
+        removeChannel: jest.fn().mockResolvedValue('ok'),
       },
     }))
 
@@ -61,7 +67,7 @@ describe('wsAdapter — Supabase Realtime', () => {
       supabase: {
         auth: { getSession: getSessionMock },
         channel: channelFactoryMock,
-        removeChannel: jest.fn().mockResolvedValue(undefined),
+        removeChannel: jest.fn().mockResolvedValue('ok'),
       },
     }))
 
@@ -74,7 +80,7 @@ describe('wsAdapter — Supabase Realtime', () => {
   })
 
   it('emits disconnect and cleans up channels on disconnect()', async () => {
-    const removeChannelMock = jest.fn().mockResolvedValue(undefined)
+    const removeChannelMock = jest.fn().mockResolvedValue('ok')
     const subscribeMock = jest.fn()
     const onMock = jest.fn().mockReturnThis()
     const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
@@ -128,7 +134,7 @@ describe('wsAdapter — Supabase Realtime', () => {
       supabase: {
         auth: { getSession: getSessionMock },
         channel: channelFactoryMock,
-        removeChannel: jest.fn().mockResolvedValue(undefined),
+        removeChannel: jest.fn().mockResolvedValue('ok'),
       },
     }))
 
@@ -142,13 +148,15 @@ describe('wsAdapter — Supabase Realtime', () => {
     expect(channelFactoryMock).toHaveBeenCalledTimes(1)
 
     // Simulate a CHANNEL_ERROR, which should schedule a reconnect via setTimeout.
+    // Realtime marks the channel errored until it manages to rejoin.
+    channelMock.state = 'errored'
     subscriptionStatusCb && subscriptionStatusCb('CHANNEL_ERROR')
 
     // Fast-forward all timers so the scheduled reconnect runs.
     jest.runAllTimers()
 
     // Allow any pending promises in reconnect() / connect() to resolve.
-    await Promise.resolve()
+    await flushPromises()
 
     expect(channelFactoryMock).toHaveBeenCalledTimes(2)
 
@@ -156,7 +164,7 @@ describe('wsAdapter — Supabase Realtime', () => {
   })
 
   it('reconnect() tears down existing channel and creates a new one', async () => {
-    const removeChannelMock = jest.fn().mockResolvedValue(undefined)
+    const removeChannelMock = jest.fn().mockResolvedValue('ok')
     const subscribeMock = jest.fn()
     const onMock = jest.fn().mockReturnThis()
     const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
@@ -189,7 +197,7 @@ describe('wsAdapter — Supabase Realtime', () => {
     wsAdapter.reconnect()
     // Fast-forward the 100ms delay inside reconnect().
     jest.runAllTimers()
-    await Promise.resolve()
+    await flushPromises()
 
     expect(removeChannelMock).toHaveBeenCalledWith(channelMock)
     expect(channelFactoryMock).toHaveBeenCalledTimes(2)
@@ -197,4 +205,3 @@ describe('wsAdapter — Supabase Realtime', () => {
     jest.useRealTimers()
   })
 })
-
