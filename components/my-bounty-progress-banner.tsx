@@ -115,9 +115,30 @@ export function sortByProgress(items: MyBountyProgressItem[]): MyBountyProgressI
 type CarouselProps = {
   items: MyBountyProgressItem[];
   onPressItem: (bounty: Bounty) => void;
+  /**
+   * Draws the stashed tab with no background, so it blends into whatever
+   * sits under the top edge (the grid feed's green banner). The expanded
+   * cards are unaffected.
+   */
+  transparentTab?: boolean;
+  /** Arrow/count color for a transparent tab; defaults to the card text. */
+  tabContentColor?: string;
+  /**
+   * A bigger stashed tab with a "Your bounty/bounties" label, for layouts where the
+   * small tab gets lost (the grid feed's busy green banner).
+   */
+  largeTab?: boolean;
+  /**
+   * Called whenever the tab appears or goes away (cards swiped off / brought
+   * back), so the screen can make room for it under the top edge.
+   */
+  onTabVisibleChange?: (visible: boolean) => void;
 };
 
 const STASHED_KEY = 'BE:bountyProgressStashed';
+
+/** Height of the `largeTab` variant, for screens that make room for it. */
+export const LARGE_TAB_HEIGHT = 32;
 // How far up (as a share of the card's height) a drag has to travel, or how
 // fast it has to be flicked, before letting go sends the card away.
 const STASH_DISTANCE = 0.3;
@@ -137,7 +158,14 @@ const OFFSCREEN_EXTRA = 24;
  * Render it as the last child of a `position: relative` container: it
  * positions itself absolutely over that container's top.
  */
-export function MyBountyProgressCarousel({ items, onPressItem }: CarouselProps) {
+export function MyBountyProgressCarousel({
+  items,
+  onPressItem,
+  transparentTab = false,
+  tabContentColor,
+  largeTab = false,
+  onTabVisibleChange,
+}: CarouselProps) {
   const { palette, styles } = useCardStyles();
   const [width, setWidth] = useState(0);
   // Natural height of the card block; 0 until first measured.
@@ -169,6 +197,13 @@ export function MyBountyProgressCarousel({ items, onPressItem }: CarouselProps) 
       cancelled = true;
     };
   }, []);
+
+  const tabVisible = hydrated && stashed;
+  useEffect(() => {
+    onTabVisibleChange?.(tabVisible);
+  }, [tabVisible, onTabVisibleChange]);
+  // The carousel unmounts when the last live bounty goes; the tab goes with it.
+  useEffect(() => () => onTabVisibleChange?.(false), [onTabVisibleChange]);
 
   // Keep a stashed stack fully off screen if its height changes.
   useEffect(() => {
@@ -243,6 +278,8 @@ export function MyBountyProgressCarousel({ items, onPressItem }: CarouselProps) 
     [drag, expand]
   );
 
+  const tabTextColor = transparentTab && tabContentColor ? { color: tabContentColor } : null;
+
   if (!hydrated) return null;
 
   return (
@@ -254,7 +291,11 @@ export function MyBountyProgressCarousel({ items, onPressItem }: CarouselProps) 
       {stashed && (
         <View style={styles.tabRow} pointerEvents="box-none" {...tabPan.panHandlers}>
           <TouchableOpacity
-            style={styles.tab}
+            style={[
+              styles.tab,
+              largeTab && styles.tabLarge,
+              transparentTab && styles.tabTransparent,
+            ]}
             activeOpacity={0.85}
             onPress={expand}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -265,10 +306,25 @@ export function MyBountyProgressCarousel({ items, onPressItem }: CarouselProps) 
             accessibilityHint="Shows it again"
             testID="feed-my-bounty-progress-tab"
           >
-            <BlurView intensity={40} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
-            <View style={styles.tabDot} />
-            {items.length > 1 && <Text style={styles.tabCount}>{items.length}</Text>}
-            <MaterialIcons name="expand-more" size={16} color={palette.strong} />
+            {!transparentTab && (
+              <BlurView intensity={40} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
+            )}
+            <View style={[styles.tabDot, largeTab && styles.tabDotLarge]} />
+            {largeTab && (
+              <Text style={[styles.tabLabel, tabTextColor]} numberOfLines={1}>
+                {items.length === 1 ? 'Your bounty' : 'Your bounties'}
+              </Text>
+            )}
+            {items.length > 1 && (
+              <Text style={[styles.tabCount, largeTab && styles.tabCountLarge, tabTextColor]}>
+                {largeTab ? `(${items.length})` : items.length}
+              </Text>
+            )}
+            <MaterialIcons
+              name="expand-more"
+              size={largeTab ? 22 : 16}
+              color={(transparentTab && tabContentColor) || palette.strong}
+            />
           </TouchableOpacity>
         </View>
       )}
@@ -560,6 +616,31 @@ function makeStyles(p: CardPalette) {
       borderBottomRightRadius: 11,
       overflow: 'hidden',
       backgroundColor: p.bg,
+    },
+    tabTransparent: {
+      backgroundColor: 'transparent',
+    },
+    tabLarge: {
+      height: LARGE_TAB_HEIGHT,
+      paddingLeft: 14,
+      paddingRight: 10,
+      borderBottomLeftRadius: 16,
+      borderBottomRightRadius: 16,
+    },
+    tabDotLarge: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      marginRight: 6,
+    },
+    tabLabel: {
+      color: p.text,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    tabCountLarge: {
+      fontSize: 15,
+      marginLeft: 4,
     },
     tabDot: {
       width: 7,

@@ -4,6 +4,7 @@ import { BountyCompactItem } from 'components/bounty-compact-item';
 import { BountyGridFeed } from 'components/bounty-grid-feed';
 import { BountyListItem } from 'components/bounty-list-item';
 import {
+    LARGE_TAB_HEIGHT,
     MyBountyProgressCarousel,
     sortByProgress,
     type MyBountyProgressItem,
@@ -222,6 +223,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // review), furthest-along first. Drives the swipeable progress cards floating
   // at the top of the feed, in every layout. See sortByProgress.
   const [myActiveBounties, setMyActiveBounties] = useState<MyBountyProgressItem[]>([]);
+  // True while the progress cards are swiped away and only their tab shows.
+  const [progressTabVisible, setProgressTabVisible] = useState(false);
 
   // "See test bounties anyway" — internal accounts only (bounty_test_flag_
   // and_internal_profiles migration). isInternal reads the already-fetched
@@ -1510,7 +1513,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               <View>
                 {/* Banner */}
                 <View
-                  style={[s.gridBanner, { paddingTop: insets.top + 2 }]}
+                  style={[
+                    s.gridBanner,
+                    {
+                      // The minimized progress tab hangs from the top edge,
+                      // right where the title starts; push the title below it.
+                      paddingTop:
+                        insets.top +
+                        2 +
+                        (progressTabVisible && myActiveBounties.length > 0
+                          ? LARGE_TAB_HEIGHT + SPACING.COMPACT_GAP
+                          : 0),
+                    },
+                  ]}
                   onLayout={e => setGridBannerHeight(e.nativeEvent.layout.height)}
                 >
                   <LinearGradient
@@ -1660,6 +1675,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       {myActiveBounties.length > 0 && (
         <MyBountyProgressCarousel
           items={myActiveBounties}
+          // Grid only: the minimized tab hangs over the green banner, so it
+          // drops its frosted background to blend in and is drawn larger so it
+          // still stands out. White reads on the
+          // green; once the banner scrolls away, fall back to the text color.
+          transparentTab={bountyFormat === 'grid'}
+          largeTab={bountyFormat === 'grid'}
+          onTabVisibleChange={setProgressTabVisible}
+          tabContentColor={gridBannerCoversStatusBar ? '#ffffff' : theme.text}
           onPressItem={bounty =>
             router.push({
               pathname: '/postings/[bountyId]',
