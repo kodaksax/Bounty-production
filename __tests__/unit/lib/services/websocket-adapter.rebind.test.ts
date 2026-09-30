@@ -18,7 +18,7 @@ function setup() {
   // channel()) until its removal resolves, which each test controls.
   const registry = new Map<string, any>()
   const created: any[] = []
-  const removals: { channel: any; resolve: () => void }[] = []
+  const removals: { channel: any; resolve: (status?: string) => void }[] = []
 
   const makeChannel = (topic: string) => {
     const bindings: Binding[] = []
@@ -62,10 +62,12 @@ function setup() {
           channel.state = 'leaving'
           removals.push({
             channel,
-            resolve: () => {
-              registry.delete(channel.topic)
-              channel.report('CLOSED')
-              resolve('ok')
+            resolve: (status = 'ok') => {
+              if (status === 'ok') {
+                registry.delete(channel.topic)
+                channel.report('CLOSED')
+              }
+              resolve(status)
             },
           })
         })
@@ -114,6 +116,30 @@ describe('wsAdapter channel rebinding', () => {
     expect(received).toHaveBeenCalledTimes(1)
     // The old channel's CLOSED must not tear down the new one.
     expect(wsAdapter.getConnectionState()).toBe('OPEN')
+  })
+
+  it('retries removal when Supabase reports an error before recreating the app channel', async () => {
+    const { wsAdapter, created, removals, supabase } = setup()
+    await wsAdapter.connect()
+    created[0].report('SUBSCRIBED')
+
+    created[0].report('CHANNEL_ERROR')
+    jest.advanceTimersByTime(3000)
+    await flushPromises()
+
+    removals[0].resolve('error')
+    await flushPromises()
+    expect(created).toHaveLength(1)
+    expect(supabase.channel).toHaveBeenCalledTimes(1)
+
+    jest.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(removals).toHaveLength(2)
+    removals[1].resolve()
+    await flushPromises()
+
+    expect(created).toHaveLength(2)
+    expect(created[1]).not.toBe(created[0])
   })
 
   it('keeps a channel that Realtime already rejoined on its own', async () => {
@@ -183,6 +209,27 @@ describe('wsAdapter channel rebinding', () => {
     fresh.fire('typing.start', { senderId: 'u2' })
     expect(typing).toHaveBeenCalledTimes(1)
     expect(typing).toHaveBeenCalledWith({ senderId: 'u2', conversationId: 'c1' })
+  })
+
+  it('keeps a rejoined chat waiting when channel removal reports an error', async () => {
+    const { wsAdapter, created, removals } = setup()
+
+    wsAdapter.joinConversation('c1')
+    wsAdapter.leaveConversation('c1')
+    wsAdapter.joinConversation('c1')
+    removals[0].resolve('error')
+    await flushPromises()
+
+    expect(created).toHaveLength(1)
+
+    jest.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(removals).toHaveLength(2)
+    removals[1].resolve()
+    await flushPromises()
+
+    expect(created).toHaveLength(2)
+    expect(created[1]).not.toBe(created[0])
   })
 
   it('does not create a typing channel for a chat left again before the old one closed', async () => {

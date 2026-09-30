@@ -169,9 +169,21 @@ class WebSocketAdapter {
   }
 
   private removeChannel(channel: RealtimeChannel): Promise<unknown> {
-    return supabase.removeChannel(channel).catch((err) => {
-      if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
-    });
+    return (async () => {
+      let removed = false;
+      while (!removed) {
+        try {
+          const status = await supabase.removeChannel(channel);
+          removed = status === 'ok';
+          if (!removed && __DEV__) console.warn('[wsAdapter] removeChannel did not complete:', status);
+        } catch (err) {
+          if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
+        }
+        if (!removed) {
+          await new Promise<void>((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));
+        }
+      }
+    })();
   }
 
   /** Disconnect from Supabase Realtime. */
@@ -349,4 +361,3 @@ class WebSocketAdapter {
 
 // Singleton instance
 export const wsAdapter = new WebSocketAdapter();
-

@@ -9,6 +9,7 @@ describe('wsAdapter — Supabase Realtime', () => {
     jest.clearAllMocks()
   })
 
+
   it('connects via supabase.channel and emits connect on SUBSCRIBED', async () => {
     const subscribeMock = jest.fn()
     const onMock = jest.fn().mockReturnThis()
@@ -29,7 +30,7 @@ describe('wsAdapter — Supabase Realtime', () => {
       supabase: {
         auth: { getSession: getSessionMock },
         channel: channelFactoryMock,
-        removeChannel: jest.fn().mockResolvedValue(undefined),
+        removeChannel: jest.fn().mockResolvedValue('ok'),
       },
     }))
 
@@ -66,7 +67,7 @@ describe('wsAdapter — Supabase Realtime', () => {
       supabase: {
         auth: { getSession: getSessionMock },
         channel: channelFactoryMock,
-        removeChannel: jest.fn().mockResolvedValue(undefined),
+        removeChannel: jest.fn().mockResolvedValue('ok'),
       },
     }))
 
@@ -79,7 +80,7 @@ describe('wsAdapter — Supabase Realtime', () => {
   })
 
   it('emits disconnect and cleans up channels on disconnect()', async () => {
-    const removeChannelMock = jest.fn().mockResolvedValue(undefined)
+    const removeChannelMock = jest.fn().mockResolvedValue('ok')
     const subscribeMock = jest.fn()
     const onMock = jest.fn().mockReturnThis()
     const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
@@ -133,7 +134,7 @@ describe('wsAdapter — Supabase Realtime', () => {
       supabase: {
         auth: { getSession: getSessionMock },
         channel: channelFactoryMock,
-        removeChannel: jest.fn().mockResolvedValue(undefined),
+        removeChannel: jest.fn().mockResolvedValue('ok'),
       },
     }))
 
@@ -163,7 +164,7 @@ describe('wsAdapter — Supabase Realtime', () => {
   })
 
   it('reconnect() tears down existing channel and creates a new one', async () => {
-    const removeChannelMock = jest.fn().mockResolvedValue(undefined)
+    const removeChannelMock = jest.fn().mockResolvedValue('ok')
     const subscribeMock = jest.fn()
     const onMock = jest.fn().mockReturnThis()
     const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
@@ -204,4 +205,3 @@ describe('wsAdapter — Supabase Realtime', () => {
     jest.useRealTimers()
   })
 })
-
