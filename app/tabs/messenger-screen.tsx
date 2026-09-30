@@ -6,7 +6,6 @@ import { BrandingLogo } from "components/ui/branding-logo"
 import { EmptyState } from "components/ui/empty-state"
 import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
-import { cn } from "lib/utils"
 import { ROUTES } from "lib/routes"
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext"
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -41,13 +40,12 @@ import { useValidUserId } from "../../hooks/useValidUserId"
 
 import { messageService } from "../../lib/services/message-service"
 import { logClientError as _logClientError } from "../../lib/services/monitoring"
-import { navigationIntent } from "../../lib/services/navigation-intent"
 import { generateInitials } from "../../lib/services/supabase-messaging"
 
-import type { Conversation, UserProfile } from "../../lib/types"
+import type { UserProfile } from "../../lib/types"
 import { userSearchService } from "../../lib/services/user-search-service"
 import {
-  buildConversationRows,
+  buildVisibleConversationRows,
   formatConversationTime,
   type ConversationRow,
 } from "../../lib/utils/conversation-rows"
@@ -73,16 +71,10 @@ export function MessengerScreen({
   const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } =
     useConversations()
-  // One row per person (#875); see lib/utils/conversation-rows.ts. People
-  // with no messages yet are left out: opening a DM from a profile creates the
-  // conversation before anything is sent, and it shouldn't appear until then.
-  // fetchConversations leaves lastMessage undefined exactly when a
-  // conversation has no messages.
+  // One row per person (#875), leaving out people with no messages yet; see
+  // lib/utils/conversation-rows.ts.
   const conversationRows = useMemo(
-    () =>
-      buildConversationRows(conversations, currentUserId).filter(
-        (row) => row.lastMessage !== undefined
-      ),
+    () => buildVisibleConversationRows(conversations, currentUserId),
     [conversations, currentUserId]
   )
 

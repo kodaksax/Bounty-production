@@ -22,7 +22,7 @@ import { logClientError as _logClientError } from '../../../lib/services/monitor
 import { navigationIntent } from '../../../lib/services/navigation-intent'
 import { generateInitials } from '../../../lib/services/supabase-messaging'
 import type { Conversation } from "../../../lib/types"
-import { buildConversationRows, type ConversationRow } from "../../../lib/utils/conversation-rows"
+import { buildVisibleConversationRows, type ConversationRow } from "../../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "../chat-detail-screen"
 
 // Helper to format conversation time
@@ -58,12 +58,10 @@ export function MessengerScreen({
   const router = useRouter()
   const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
-  // One row per person (#875), hiding people with no messages yet — see
-  // app/tabs/messenger-screen.tsx.
+  // One row per person (#875), leaving out people with no messages yet; see
+  // lib/utils/conversation-rows.ts.
   const conversationRows = useMemo(
-    () => buildConversationRows(conversations, currentUserId).filter(
-      (row) => row.lastMessage !== undefined
-    ),
+    () => buildVisibleConversationRows(conversations, currentUserId),
     [conversations, currentUserId]
   )
   const [activeConversation, setActiveConversation] = useState<string | null>(null)

@@ -48,7 +48,9 @@ export function buildConversationRows(
     const latest = sorted[0];
     // An empty conversation (created, never written in) must not hide the
     // last thing actually said to this person.
-    const withMessage = sorted.find((c) => !!c.lastMessage);
+    // lastMessage is undefined only when a conversation has no messages; an
+    // empty-string preview is still a message.
+    const withMessage = sorted.find((c) => c.lastMessage !== undefined);
     rows.push({
       ...latest,
       lastMessage: withMessage?.lastMessage,
@@ -63,6 +65,23 @@ export function buildConversationRows(
   }
 
   return rows.sort((a, b) => timeOf(b) - timeOf(a));
+}
+
+/**
+ * The rows the Messages list actually shows: buildConversationRows, minus
+ * people you haven't exchanged a message with yet. Opening a DM from a
+ * profile creates the conversation before anything is sent, and it shouldn't
+ * appear in the inbox until something is. fetchConversations leaves
+ * lastMessage undefined exactly when a conversation has no messages, so a
+ * message with an empty preview still counts.
+ */
+export function buildVisibleConversationRows(
+  conversations: Conversation[],
+  currentUserId: string | null | undefined
+): ConversationRow[] {
+  return buildConversationRows(conversations, currentUserId).filter(
+    (row) => row.lastMessage !== undefined
+  );
 }
 
 /**
