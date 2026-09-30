@@ -28,7 +28,8 @@ applying them does not revert anything that is live on prod.
 1. **Schema migrations (steps 1–3).** They change nothing yet: the fee
    defaults to 0 and deferral stays on. Safe to apply before or after the OTA.
 2. **OTA** the merged `main` to production.
-3. **Edge functions** `wallet` and `webhooks`, so fee rows get their label.
+3. **Edge functions** `payments`, `wallet` and `webhooks` (they do not ship
+   with the OTA).
 4. **Config (step 5)** turns the behaviour on. Do this last: an older build
    checks the balance against the reward only, so with the fee on it lets a
    poster who is exactly $1 short tap Post, and the server then refuses the
@@ -106,11 +107,15 @@ Every column should be `true`, except `fee_now` (expect `0`) and `anon_exec`
 - Edge functions (they are not part of the OTA):
 
   ```bash
-  npx supabase functions deploy wallet webhooks --project-ref xwlwqzzphmmhghiqvkeu
+  npx supabase functions deploy payments wallet webhooks --project-ref xwlwqzzphmmhghiqvkeu
   ```
 
-  Without this, `posting_fee` rows in the wallet history show the generic
-  "Recorded" label. Nothing breaks.
+  - `wallet` / `webhooks`: without them, `posting_fee` rows in the wallet
+    history show the generic "Recorded" label. Nothing breaks.
+  - `payments` / `webhooks`: carry the `/payments/posting-checkout` route and
+    its settlement from the card-checkout experiment (commit `fe9ad4da`).
+    That arm stays dark until the PostHog flag `posting-service-fee` is
+    rolled out, but deploy them so the code on prod matches `main`.
 
 ## 5. Turn it on (matches staging)
 
