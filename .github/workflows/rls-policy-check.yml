@@ -1,0 +1,92 @@
+name: RLS Policy Check
+
+# Guards against the regression class behind the 2026-09-30 trust-spine audit:
+# 20260715i_sync_rls_policies_across_environments.sql re-created permissive
+# policies that later hardening had removed, reopening "anyone can resolve any
+# dispute" and "suspended accounts can post" for 2.5 months with nothing
+# noticing. This compares the LIVE database against
+# supabase/security/rls-manifest.json (rules: scripts/rls-policy-check/rules.js).
+#
+# The check is read-only (default_transaction_read_only + BEGIN READ ONLY).
+#
+# Secrets (repository or environment):
+#   STAGING_DATABASE_URL      postgres URL for gwumwpoomwvkjyibdmpj
+#   PRODUCTION_DATABASE_URL   postgres URL for xwlwqzzphmmhghiqvkeu (production environment)
+#
+# Migration discipline this enforces: a PR that changes protected policies
+# updates the manifest, and its migration is applied to staging before merge
+# (staging must match the PR's manifest for the PR check to pass).
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/security/**'
+      - 'scripts/check-rls-policies.js'
+      - 'scripts/rls-policy-check/**'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/security/**'
+      - 'scripts/check-rls-policies.js'
+      - 'scripts/rls-policy-check/**'
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  staging:
+    name: RLS check (staging)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+      - name: Install pg only
+        run: npm install --prefix "$RUNNER_TEMP/rls" --no-audit --no-fund pg@8
+      - name: Check staging policies against the manifest
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          RLS_CHECK_ENV: staging
+          NODE_PATH: ${{ runner.temp }}/rls/node_modules
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "::warning::STAGING_DATABASE_URL is not configured; RLS check skipped"
+              exit 0
+            fi
+            echo "::error::STAGING_DATABASE_URL is not configured; the RLS check cannot run"
+            exit 1
+          fi
+          node scripts/check-rls-policies.js
+
+  production:
+    name: RLS check (production, read-only)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+      - name: Install pg only
+        run: npm install --prefix "$RUNNER_TEMP/rls" --no-audit --no-fund pg@8
+      - name: Check production policies against the manifest
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          RLS_CHECK_ENV: production
+          NODE_PATH: ${{ runner.temp }}/rls/node_modules
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL is not configured; the RLS check cannot run"
+            exit 1
+          fi
+          node scripts/check-rls-policies.js

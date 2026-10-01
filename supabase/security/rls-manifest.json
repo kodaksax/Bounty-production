@@ -1,0 +1,539 @@
+{
+  "_comment": [
+    "Expected RLS state, checked by scripts/check-rls-policies.js (rules: scripts/rls-policy-check/rules.js).",
+    "protected: exact policies + anon/authenticated grants + required guard triggers. Change only together with the migration that changes them.",
+    "baseline: known ratchet findings per environment as of 2026-10-01. New findings fail; remove entries as they are fixed.",
+    "Regenerate a protected table's block after a reviewed migration: node scripts/check-rls-policies.js --env staging --print-protected"
+  ],
+  "sensitive_columns": [
+    "status",
+    "accepted_by",
+    "accepted_request_id",
+    "winner",
+    "resolved_by",
+    "resolution",
+    "amount",
+    "balance",
+    "balance_on_hold",
+    "account_status",
+    "role"
+  ],
+  "guarded_tables": {
+    "bounties": "trg_bounties_guard_lifecycle",
+    "bounty_disputes": "trg_bounty_disputes_guard",
+    "profiles": "trg_prevent_client_writes_to_protected_profile_columns"
+  },
+  "protected": {
+    "bounties": {
+      "policies": [
+        {
+          "policyname": "bounties_delete_owner",
+          "cmd": "DELETE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(poster_id = ( SELECT auth.uid() AS uid))",
+          "with_check": null
+        },
+        {
+          "policyname": "bounties_insert_active_owner",
+          "cmd": "INSERT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": null,
+          "with_check": "((poster_id = ( SELECT auth.uid() AS uid)) AND ((user_id IS NULL) OR (user_id = ( SELECT auth.uid() AS uid))) AND is_account_active(( SELECT auth.uid() AS uid)))"
+        },
+        {
+          "policyname": "bounties_select_authenticated",
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "true",
+          "with_check": null
+        },
+        {
+          "policyname": "bounties_update_owner",
+          "cmd": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(poster_id = ( SELECT auth.uid() AS uid))",
+          "with_check": "(poster_id = ( SELECT auth.uid() AS uid))"
+        }
+      ],
+      "grants": {
+        "anon": [],
+        "authenticated": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      },
+      "required_triggers": [
+        "trg_bounties_guard_lifecycle",
+        "trg_bounties_enforce_funding_before_work"
+      ]
+    },
+    "bounty_disputes": {
+      "policies": [
+        {
+          "policyname": "bounty_disputes_insert_participant",
+          "cmd": "INSERT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": null,
+          "with_check": "((initiator_id = ( SELECT auth.uid() AS uid)) AND ((status)::text = 'open'::text) AND (winner IS NULL) AND (resolution IS NULL) AND (resolved_by IS NULL) AND (resolved_at IS NULL) AND (COALESCE(hold_amount, (0)::numeric) = (0)::numeric) AND (COALESCE(escalated, false) = false) AND (stripe_dispute_id IS NULL) AND (EXISTS ( SELECT 1\n   FROM bounties b\n  WHERE ((b.id = bounty_disputes.bounty_id) AND (b.accepted_by IS NOT NULL) AND ((b.status)::text = ANY (ARRAY['in_progress'::text, 'cancellation_requested'::text])) AND (((( SELECT auth.uid() AS uid) = b.poster_id) OR (( SELECT auth.uid() AS uid) = b.user_id)) OR (( SELECT auth.uid() AS uid) = b.accepted_by)) AND ((bounty_disputes.respondent_id IS NULL) OR (((bounty_disputes.respondent_id = b.poster_id) OR (bounty_disputes.respondent_id = b.user_id)) OR (bounty_disputes.respondent_id = b.accepted_by)))))))"
+        },
+        {
+          "policyname": "bounty_disputes_select_participant_or_admin",
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "((COALESCE(((auth.jwt() -> 'app_metadata'::text) ->> 'role'::text), ''::text) = 'admin'::text) OR (EXISTS ( SELECT 1\n   FROM bounties b\n  WHERE ((b.id = bounty_disputes.bounty_id) AND ((b.poster_id = ( SELECT auth.uid() AS uid)) OR (b.user_id = ( SELECT auth.uid() AS uid)) OR (b.accepted_by = ( SELECT auth.uid() AS uid)))))))",
+          "with_check": null
+        },
+        {
+          "policyname": "bounty_disputes_update_admin",
+          "cmd": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(COALESCE(((auth.jwt() -> 'app_metadata'::text) ->> 'role'::text), ''::text) = 'admin'::text)",
+          "with_check": "(COALESCE(((auth.jwt() -> 'app_metadata'::text) ->> 'role'::text), ''::text) = 'admin'::text)"
+        }
+      ],
+      "grants": {
+        "anon": [],
+        "authenticated": [
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      },
+      "required_triggers": [
+        "trg_bounty_disputes_guard"
+      ]
+    },
+    "ratings": {
+      "policies": [
+        {
+          "policyname": "ratings_insert_transaction_party",
+          "cmd": "INSERT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": null,
+          "with_check": "((from_user_id = ( SELECT auth.uid() AS uid)) AND (bounty_id IS NOT NULL) AND (rating >= (1)::numeric) AND (rating <= (5)::numeric) AND (EXISTS ( SELECT 1\n   FROM bounties b\n  WHERE ((b.id = ratings.bounty_id) AND (b.accepted_by IS NOT NULL) AND (((b.status)::text = 'completed'::text) OR (((b.status)::text = 'archived'::text) AND (EXISTS ( SELECT 1\n           FROM completion_submissions cs\n          WHERE ((cs.bounty_id = b.id) AND (cs.status = 'approved'::text)))))) AND (((ratings.from_user_id = COALESCE(b.poster_id, b.user_id)) AND (ratings.to_user_id = b.accepted_by)) OR ((ratings.from_user_id = b.accepted_by) AND (ratings.to_user_id = COALESCE(b.poster_id, b.user_id))))))))"
+        },
+        {
+          "policyname": "ratings_select_all",
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "qual": "true",
+          "with_check": null
+        }
+      ],
+      "grants": {
+        "anon": [
+          "SELECT"
+        ],
+        "authenticated": [
+          "INSERT",
+          "SELECT"
+        ]
+      }
+    },
+    "dispute_audit_log": {
+      "policies": [
+        {
+          "policyname": "dispute_audit_log_insert_participant_or_admin",
+          "cmd": "INSERT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": null,
+          "with_check": "((COALESCE(((auth.jwt() -> 'app_metadata'::text) ->> 'role'::text), ''::text) = 'admin'::text) OR (EXISTS ( SELECT 1\n   FROM (bounty_disputes d\n     JOIN bounties b ON ((b.id = d.bounty_id)))\n  WHERE ((d.id = dispute_audit_log.dispute_id) AND (((( SELECT auth.uid() AS uid) = b.poster_id) OR (( SELECT auth.uid() AS uid) = b.user_id)) OR (( SELECT auth.uid() AS uid) = b.accepted_by))))))"
+        },
+        {
+          "policyname": "dispute_audit_log_select_admin",
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(COALESCE(((auth.jwt() -> 'app_metadata'::text) ->> 'role'::text), ''::text) = 'admin'::text)",
+          "with_check": null
+        }
+      ],
+      "grants": {
+        "anon": [],
+        "authenticated": [
+          "INSERT",
+          "SELECT"
+        ]
+      }
+    },
+    "bounty_cancellations": {
+      "commands": [
+        "UPDATE"
+      ],
+      "policies": [
+        {
+          "policyname": "bounty_cancellations_update_responder",
+          "cmd": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "((( SELECT auth.uid() AS uid) IS NOT NULL) AND (( SELECT auth.uid() AS uid) <> requester_id) AND (EXISTS ( SELECT 1\n   FROM bounties b\n  WHERE ((b.id = bounty_cancellations.bounty_id) AND ((( SELECT auth.uid() AS uid) = b.poster_id) OR (( SELECT auth.uid() AS uid) = b.accepted_by))))))",
+          "with_check": "((( SELECT auth.uid() AS uid) <> requester_id) AND ((responder_id IS NULL) OR (responder_id = ( SELECT auth.uid() AS uid))) AND (EXISTS ( SELECT 1\n   FROM bounties b\n  WHERE ((b.id = bounty_cancellations.bounty_id) AND ((( SELECT auth.uid() AS uid) = b.poster_id) OR (( SELECT auth.uid() AS uid) = b.accepted_by))))))"
+        }
+      ],
+      "grants": {
+        "anon": [],
+        "authenticated": [
+          "INSERT",
+          "SELECT"
+        ]
+      }
+    }
+  },
+  "functions": [
+    {
+      "signature": "fn_owner_refund_block_reason(uuid,uuid)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "request_dispute_escalation(integer)",
+      "forbid_execute": [
+        "anon",
+        "PUBLIC"
+      ]
+    }
+  ],
+  "baseline": {
+    "production": [
+      "multi_permissive:admin_warnings:SELECT",
+      "multi_permissive:blocked_users:DELETE",
+      "multi_permissive:blocked_users:SELECT",
+      "multi_permissive:bounty_requests:DELETE",
+      "multi_permissive:bounty_requests:SELECT",
+      "multi_permissive:bounty_v3_funding:SELECT",
+      "multi_permissive:completion_submissions:SELECT",
+      "multi_permissive:completion_submissions:UPDATE",
+      "multi_permissive:conversation_participants:SELECT",
+      "multi_permissive:dispute_appeals:SELECT",
+      "multi_permissive:dispute_comments:INSERT",
+      "multi_permissive:dispute_comments:SELECT",
+      "multi_permissive:feature_requests:SELECT",
+      "multi_permissive:feedback_reports:SELECT",
+      "multi_permissive:notifications:INSERT",
+      "multi_permissive:payment_methods:DELETE",
+      "multi_permissive:payment_methods:INSERT",
+      "multi_permissive:payment_methods:SELECT",
+      "multi_permissive:payment_methods:UPDATE",
+      "multi_permissive:platform_reserves:SELECT",
+      "multi_permissive:profiles:INSERT",
+      "multi_permissive:profiles:SELECT",
+      "multi_permissive:profiles:UPDATE",
+      "multi_permissive:remediation_workflows:SELECT",
+      "multi_permissive:remediation_workflows:UPDATE",
+      "multi_permissive:reports:SELECT",
+      "multi_permissive:reports:UPDATE",
+      "multi_permissive:restricted_business_categories:SELECT",
+      "multi_permissive:risk_actions:SELECT",
+      "multi_permissive:risk_assessments:SELECT",
+      "multi_permissive:risk_communications:SELECT",
+      "self_only_update:messages:Users can update their own messages",
+      "self_only_update:remediation_workflows:Users can update their own remediation workflows",
+      "self_only_update:user_activation_moments:Users can update own moment state"
+    ],
+    "staging": [
+      "dangerous_grant:activation_moment_repair_snapshot:authenticated:REFERENCES",
+      "dangerous_grant:activation_moment_repair_snapshot:authenticated:TRIGGER",
+      "dangerous_grant:activation_moment_repair_snapshot:authenticated:TRUNCATE",
+      "dangerous_grant:admin_action_log:authenticated:REFERENCES",
+      "dangerous_grant:admin_action_log:authenticated:TRIGGER",
+      "dangerous_grant:admin_action_log:authenticated:TRUNCATE",
+      "dangerous_grant:admin_warnings:authenticated:REFERENCES",
+      "dangerous_grant:admin_warnings:authenticated:TRIGGER",
+      "dangerous_grant:admin_warnings:authenticated:TRUNCATE",
+      "dangerous_grant:analytics_person_outbox:authenticated:REFERENCES",
+      "dangerous_grant:analytics_person_outbox:authenticated:TRIGGER",
+      "dangerous_grant:analytics_person_outbox:authenticated:TRUNCATE",
+      "dangerous_grant:analytics_user_facts:authenticated:REFERENCES",
+      "dangerous_grant:analytics_user_facts:authenticated:TRIGGER",
+      "dangerous_grant:analytics_user_facts:authenticated:TRUNCATE",
+      "dangerous_grant:blocked_users:authenticated:REFERENCES",
+      "dangerous_grant:blocked_users:authenticated:TRIGGER",
+      "dangerous_grant:blocked_users:authenticated:TRUNCATE",
+      "dangerous_grant:bounty_events:authenticated:REFERENCES",
+      "dangerous_grant:bounty_events:authenticated:TRIGGER",
+      "dangerous_grant:bounty_events:authenticated:TRUNCATE",
+      "dangerous_grant:bounty_fund_lifecycle:authenticated:REFERENCES",
+      "dangerous_grant:bounty_fund_lifecycle:authenticated:TRIGGER",
+      "dangerous_grant:bounty_fund_lifecycle:authenticated:TRUNCATE",
+      "dangerous_grant:bounty_moderation:authenticated:REFERENCES",
+      "dangerous_grant:bounty_moderation:authenticated:TRIGGER",
+      "dangerous_grant:bounty_moderation:authenticated:TRUNCATE",
+      "dangerous_grant:bounty_moderation_events:authenticated:REFERENCES",
+      "dangerous_grant:bounty_moderation_events:authenticated:TRIGGER",
+      "dangerous_grant:bounty_moderation_events:authenticated:TRUNCATE",
+      "dangerous_grant:bounty_payments:authenticated:REFERENCES",
+      "dangerous_grant:bounty_payments:authenticated:TRIGGER",
+      "dangerous_grant:bounty_payments:authenticated:TRUNCATE",
+      "dangerous_grant:bounty_posting_checkouts:authenticated:REFERENCES",
+      "dangerous_grant:bounty_posting_checkouts:authenticated:TRIGGER",
+      "dangerous_grant:bounty_posting_checkouts:authenticated:TRUNCATE",
+      "dangerous_grant:bounty_requests:authenticated:REFERENCES",
+      "dangerous_grant:bounty_requests:authenticated:TRIGGER",
+      "dangerous_grant:bounty_requests:authenticated:TRUNCATE",
+      "dangerous_grant:bounty_v3_funding:authenticated:REFERENCES",
+      "dangerous_grant:bounty_v3_funding:authenticated:TRIGGER",
+      "dangerous_grant:bounty_v3_funding:authenticated:TRUNCATE",
+      "dangerous_grant:completion_ready:authenticated:REFERENCES",
+      "dangerous_grant:completion_ready:authenticated:TRIGGER",
+      "dangerous_grant:completion_ready:authenticated:TRUNCATE",
+      "dangerous_grant:conversation_participants:authenticated:REFERENCES",
+      "dangerous_grant:conversation_participants:authenticated:TRIGGER",
+      "dangerous_grant:conversation_participants:authenticated:TRUNCATE",
+      "dangerous_grant:conversations:authenticated:REFERENCES",
+      "dangerous_grant:conversations:authenticated:TRIGGER",
+      "dangerous_grant:conversations:authenticated:TRUNCATE",
+      "dangerous_grant:dispute_appeals:authenticated:REFERENCES",
+      "dangerous_grant:dispute_appeals:authenticated:TRIGGER",
+      "dangerous_grant:dispute_appeals:authenticated:TRUNCATE",
+      "dangerous_grant:dispute_comments:authenticated:REFERENCES",
+      "dangerous_grant:dispute_comments:authenticated:TRIGGER",
+      "dangerous_grant:dispute_comments:authenticated:TRUNCATE",
+      "dangerous_grant:dispute_evidence:authenticated:REFERENCES",
+      "dangerous_grant:dispute_evidence:authenticated:TRIGGER",
+      "dangerous_grant:dispute_evidence:authenticated:TRUNCATE",
+      "dangerous_grant:dispute_resolutions:authenticated:REFERENCES",
+      "dangerous_grant:dispute_resolutions:authenticated:TRIGGER",
+      "dangerous_grant:dispute_resolutions:authenticated:TRUNCATE",
+      "dangerous_grant:feature_requests:authenticated:REFERENCES",
+      "dangerous_grant:feature_requests:authenticated:TRIGGER",
+      "dangerous_grant:feature_requests:authenticated:TRUNCATE",
+      "dangerous_grant:feedback_reports:authenticated:REFERENCES",
+      "dangerous_grant:feedback_reports:authenticated:TRIGGER",
+      "dangerous_grant:feedback_reports:authenticated:TRUNCATE",
+      "dangerous_grant:geography_columns:anon:REFERENCES",
+      "dangerous_grant:geography_columns:anon:TRIGGER",
+      "dangerous_grant:geography_columns:anon:TRUNCATE",
+      "dangerous_grant:geography_columns:authenticated:REFERENCES",
+      "dangerous_grant:geography_columns:authenticated:TRIGGER",
+      "dangerous_grant:geography_columns:authenticated:TRUNCATE",
+      "dangerous_grant:geometry_columns:anon:REFERENCES",
+      "dangerous_grant:geometry_columns:anon:TRIGGER",
+      "dangerous_grant:geometry_columns:anon:TRUNCATE",
+      "dangerous_grant:geometry_columns:authenticated:REFERENCES",
+      "dangerous_grant:geometry_columns:authenticated:TRIGGER",
+      "dangerous_grant:geometry_columns:authenticated:TRUNCATE",
+      "dangerous_grant:hunter_service_areas:authenticated:REFERENCES",
+      "dangerous_grant:hunter_service_areas:authenticated:TRIGGER",
+      "dangerous_grant:hunter_service_areas:authenticated:TRUNCATE",
+      "dangerous_grant:messages:authenticated:REFERENCES",
+      "dangerous_grant:messages:authenticated:TRIGGER",
+      "dangerous_grant:messages:authenticated:TRUNCATE",
+      "dangerous_grant:moderation_actions:authenticated:REFERENCES",
+      "dangerous_grant:moderation_actions:authenticated:TRIGGER",
+      "dangerous_grant:moderation_actions:authenticated:TRUNCATE",
+      "dangerous_grant:moderation_alert_thresholds:authenticated:REFERENCES",
+      "dangerous_grant:moderation_alert_thresholds:authenticated:TRIGGER",
+      "dangerous_grant:moderation_alert_thresholds:authenticated:TRUNCATE",
+      "dangerous_grant:moderation_alerts:authenticated:REFERENCES",
+      "dangerous_grant:moderation_alerts:authenticated:TRIGGER",
+      "dangerous_grant:moderation_alerts:authenticated:TRUNCATE",
+      "dangerous_grant:moderation_signals:authenticated:REFERENCES",
+      "dangerous_grant:moderation_signals:authenticated:TRIGGER",
+      "dangerous_grant:moderation_signals:authenticated:TRUNCATE",
+      "dangerous_grant:moderation_sweep_runs:authenticated:REFERENCES",
+      "dangerous_grant:moderation_sweep_runs:authenticated:TRIGGER",
+      "dangerous_grant:moderation_sweep_runs:authenticated:TRUNCATE",
+      "dangerous_grant:notification_channel_preferences:authenticated:REFERENCES",
+      "dangerous_grant:notification_channel_preferences:authenticated:TRIGGER",
+      "dangerous_grant:notification_channel_preferences:authenticated:TRUNCATE",
+      "dangerous_grant:notification_preferences:authenticated:REFERENCES",
+      "dangerous_grant:notification_preferences:authenticated:TRIGGER",
+      "dangerous_grant:notification_preferences:authenticated:TRUNCATE",
+      "dangerous_grant:notifications:authenticated:REFERENCES",
+      "dangerous_grant:notifications:authenticated:TRIGGER",
+      "dangerous_grant:notifications:authenticated:TRUNCATE",
+      "dangerous_grant:notifications_outbox:authenticated:REFERENCES",
+      "dangerous_grant:notifications_outbox:authenticated:TRIGGER",
+      "dangerous_grant:notifications_outbox:authenticated:TRUNCATE",
+      "dangerous_grant:outbox_events:authenticated:REFERENCES",
+      "dangerous_grant:outbox_events:authenticated:TRIGGER",
+      "dangerous_grant:outbox_events:authenticated:TRUNCATE",
+      "dangerous_grant:payment_methods:authenticated:REFERENCES",
+      "dangerous_grant:payment_methods:authenticated:TRIGGER",
+      "dangerous_grant:payment_methods:authenticated:TRUNCATE",
+      "dangerous_grant:payout_audit_log:authenticated:REFERENCES",
+      "dangerous_grant:payout_audit_log:authenticated:TRIGGER",
+      "dangerous_grant:payout_audit_log:authenticated:TRUNCATE",
+      "dangerous_grant:platform_ledger:authenticated:REFERENCES",
+      "dangerous_grant:platform_ledger:authenticated:TRIGGER",
+      "dangerous_grant:platform_ledger:authenticated:TRUNCATE",
+      "dangerous_grant:platform_reserves:authenticated:REFERENCES",
+      "dangerous_grant:platform_reserves:authenticated:TRIGGER",
+      "dangerous_grant:platform_reserves:authenticated:TRUNCATE",
+      "dangerous_grant:portfolio_items:authenticated:REFERENCES",
+      "dangerous_grant:portfolio_items:authenticated:TRIGGER",
+      "dangerous_grant:portfolio_items:authenticated:TRUNCATE",
+      "dangerous_grant:posting_policy_config:authenticated:REFERENCES",
+      "dangerous_grant:posting_policy_config:authenticated:TRIGGER",
+      "dangerous_grant:posting_policy_config:authenticated:TRUNCATE",
+      "dangerous_grant:profiles:authenticated:REFERENCES",
+      "dangerous_grant:profiles:authenticated:TRIGGER",
+      "dangerous_grant:profiles:authenticated:TRUNCATE",
+      "dangerous_grant:push_tokens:authenticated:REFERENCES",
+      "dangerous_grant:push_tokens:authenticated:TRIGGER",
+      "dangerous_grant:push_tokens:authenticated:TRUNCATE",
+      "dangerous_grant:reconciliation_findings:authenticated:REFERENCES",
+      "dangerous_grant:reconciliation_findings:authenticated:TRIGGER",
+      "dangerous_grant:reconciliation_findings:authenticated:TRUNCATE",
+      "dangerous_grant:reconciliation_known_exceptions:authenticated:REFERENCES",
+      "dangerous_grant:reconciliation_known_exceptions:authenticated:TRIGGER",
+      "dangerous_grant:reconciliation_known_exceptions:authenticated:TRUNCATE",
+      "dangerous_grant:reconciliation_open_findings:authenticated:REFERENCES",
+      "dangerous_grant:reconciliation_open_findings:authenticated:TRIGGER",
+      "dangerous_grant:reconciliation_open_findings:authenticated:TRUNCATE",
+      "dangerous_grant:reconciliation_reports:authenticated:REFERENCES",
+      "dangerous_grant:reconciliation_reports:authenticated:TRIGGER",
+      "dangerous_grant:reconciliation_reports:authenticated:TRUNCATE",
+      "dangerous_grant:region_waitlist_signups:authenticated:REFERENCES",
+      "dangerous_grant:region_waitlist_signups:authenticated:TRIGGER",
+      "dangerous_grant:region_waitlist_signups:authenticated:TRUNCATE",
+      "dangerous_grant:remediation_workflows:authenticated:REFERENCES",
+      "dangerous_grant:remediation_workflows:authenticated:TRIGGER",
+      "dangerous_grant:remediation_workflows:authenticated:TRUNCATE",
+      "dangerous_grant:reports:authenticated:REFERENCES",
+      "dangerous_grant:reports:authenticated:TRIGGER",
+      "dangerous_grant:reports:authenticated:TRUNCATE",
+      "dangerous_grant:restricted_business_categories:authenticated:REFERENCES",
+      "dangerous_grant:restricted_business_categories:authenticated:TRIGGER",
+      "dangerous_grant:restricted_business_categories:authenticated:TRUNCATE",
+      "dangerous_grant:risk_actions:authenticated:REFERENCES",
+      "dangerous_grant:risk_actions:authenticated:TRIGGER",
+      "dangerous_grant:risk_actions:authenticated:TRUNCATE",
+      "dangerous_grant:risk_assessments:authenticated:REFERENCES",
+      "dangerous_grant:risk_assessments:authenticated:TRIGGER",
+      "dangerous_grant:risk_assessments:authenticated:TRUNCATE",
+      "dangerous_grant:risk_communications:authenticated:REFERENCES",
+      "dangerous_grant:risk_communications:authenticated:TRIGGER",
+      "dangerous_grant:risk_communications:authenticated:TRUNCATE",
+      "dangerous_grant:saved_locations:authenticated:REFERENCES",
+      "dangerous_grant:saved_locations:authenticated:TRIGGER",
+      "dangerous_grant:saved_locations:authenticated:TRUNCATE",
+      "dangerous_grant:share_link_events:authenticated:REFERENCES",
+      "dangerous_grant:share_link_events:authenticated:TRIGGER",
+      "dangerous_grant:share_link_events:authenticated:TRUNCATE",
+      "dangerous_grant:skills:authenticated:REFERENCES",
+      "dangerous_grant:skills:authenticated:TRIGGER",
+      "dangerous_grant:skills:authenticated:TRUNCATE",
+      "dangerous_grant:spatial_ref_sys:anon:REFERENCES",
+      "dangerous_grant:spatial_ref_sys:anon:TRIGGER",
+      "dangerous_grant:spatial_ref_sys:anon:TRUNCATE",
+      "dangerous_grant:spatial_ref_sys:authenticated:REFERENCES",
+      "dangerous_grant:spatial_ref_sys:authenticated:TRIGGER",
+      "dangerous_grant:spatial_ref_sys:authenticated:TRUNCATE",
+      "dangerous_grant:stripe_balance_snapshots:authenticated:REFERENCES",
+      "dangerous_grant:stripe_balance_snapshots:authenticated:TRIGGER",
+      "dangerous_grant:stripe_balance_snapshots:authenticated:TRUNCATE",
+      "dangerous_grant:stripe_events:authenticated:REFERENCES",
+      "dangerous_grant:stripe_events:authenticated:TRIGGER",
+      "dangerous_grant:stripe_events:authenticated:TRUNCATE",
+      "dangerous_grant:transaction_patterns:authenticated:REFERENCES",
+      "dangerous_grant:transaction_patterns:authenticated:TRIGGER",
+      "dangerous_grant:transaction_patterns:authenticated:TRUNCATE",
+      "dangerous_grant:user_activation_moments:authenticated:REFERENCES",
+      "dangerous_grant:user_activation_moments:authenticated:TRIGGER",
+      "dangerous_grant:user_activation_moments:authenticated:TRUNCATE",
+      "dangerous_grant:user_devices:authenticated:REFERENCES",
+      "dangerous_grant:user_devices:authenticated:TRIGGER",
+      "dangerous_grant:user_devices:authenticated:TRUNCATE",
+      "dangerous_grant:user_follows:authenticated:REFERENCES",
+      "dangerous_grant:user_follows:authenticated:TRIGGER",
+      "dangerous_grant:user_follows:authenticated:TRUNCATE",
+      "dangerous_grant:user_ratings:authenticated:REFERENCES",
+      "dangerous_grant:user_ratings:authenticated:TRIGGER",
+      "dangerous_grant:user_ratings:authenticated:TRUNCATE",
+      "dangerous_grant:users:authenticated:REFERENCES",
+      "dangerous_grant:users:authenticated:TRIGGER",
+      "dangerous_grant:users:authenticated:TRUNCATE",
+      "dangerous_grant:v_marketing_campaign_performance:authenticated:REFERENCES",
+      "dangerous_grant:v_marketing_campaign_performance:authenticated:TRIGGER",
+      "dangerous_grant:v_marketing_campaign_performance:authenticated:TRUNCATE",
+      "dangerous_grant:v_marketing_dimension_performance:authenticated:REFERENCES",
+      "dangerous_grant:v_marketing_dimension_performance:authenticated:TRIGGER",
+      "dangerous_grant:v_marketing_dimension_performance:authenticated:TRUNCATE",
+      "dangerous_grant:v_marketing_user_outcomes:authenticated:REFERENCES",
+      "dangerous_grant:v_marketing_user_outcomes:authenticated:TRIGGER",
+      "dangerous_grant:v_marketing_user_outcomes:authenticated:TRUNCATE",
+      "dangerous_grant:wallet_transactions:authenticated:REFERENCES",
+      "dangerous_grant:wallet_transactions:authenticated:TRIGGER",
+      "dangerous_grant:wallet_transactions:authenticated:TRUNCATE",
+      "dangerous_grant:withdrawal_payout_confirmation:authenticated:REFERENCES",
+      "dangerous_grant:withdrawal_payout_confirmation:authenticated:TRIGGER",
+      "dangerous_grant:withdrawal_payout_confirmation:authenticated:TRUNCATE",
+      "multi_permissive:admin_warnings:SELECT",
+      "multi_permissive:blocked_users:DELETE",
+      "multi_permissive:blocked_users:SELECT",
+      "multi_permissive:bounty_posting_checkouts:SELECT",
+      "multi_permissive:bounty_requests:DELETE",
+      "multi_permissive:bounty_requests:SELECT",
+      "multi_permissive:bounty_v3_funding:SELECT",
+      "multi_permissive:completion_submissions:SELECT",
+      "multi_permissive:completion_submissions:UPDATE",
+      "multi_permissive:conversation_participants:SELECT",
+      "multi_permissive:conversations:SELECT",
+      "multi_permissive:dispute_appeals:SELECT",
+      "multi_permissive:dispute_comments:INSERT",
+      "multi_permissive:dispute_comments:SELECT",
+      "multi_permissive:feature_requests:SELECT",
+      "multi_permissive:feedback_reports:SELECT",
+      "multi_permissive:notifications:INSERT",
+      "multi_permissive:payment_methods:DELETE",
+      "multi_permissive:payment_methods:INSERT",
+      "multi_permissive:payment_methods:SELECT",
+      "multi_permissive:payment_methods:UPDATE",
+      "multi_permissive:platform_reserves:SELECT",
+      "multi_permissive:profiles:INSERT",
+      "multi_permissive:profiles:SELECT",
+      "multi_permissive:profiles:UPDATE",
+      "multi_permissive:remediation_workflows:SELECT",
+      "multi_permissive:remediation_workflows:UPDATE",
+      "multi_permissive:reports:SELECT",
+      "multi_permissive:reports:UPDATE",
+      "multi_permissive:restricted_business_categories:SELECT",
+      "multi_permissive:risk_actions:SELECT",
+      "multi_permissive:risk_assessments:SELECT",
+      "multi_permissive:risk_communications:SELECT",
+      "self_only_update:messages:Users can update their own messages",
+      "self_only_update:remediation_workflows:Users can update their own remediation workflows",
+      "self_only_update:user_activation_moments:Users can update own moment state"
+    ]
+  }
+}

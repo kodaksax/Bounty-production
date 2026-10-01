@@ -216,7 +216,7 @@ export default function DisputeDetailScreen() {
           text: 'Escalate',
           onPress: async () => {
             try {
-              await disputeService.updateDisputeStatus(disputeId, 'under_review')
+              await disputeService.requestEscalation(disputeId)
               await loadDispute()
               Alert.alert('Escalated', 'Your dispute has been flagged for priority review.')
             } catch (err) {
