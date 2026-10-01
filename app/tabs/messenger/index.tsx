@@ -192,7 +192,9 @@ export function MessengerScreen({
           style: 'destructive',
           onPress: async () => {
             try {
-              await Promise.all(conversation.backingConversationIds.map(id => deleteConversation(id)))
+              for (const id of conversation.backingConversationIds) {
+                await deleteConversation(id)
+              }
             } catch {
               Alert.alert('Error', 'Failed to delete conversation')
             }
@@ -427,7 +429,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
           </View>
           <View className="flex-row justify-between items-center mt-1">
             <Text className={cn("text-sm truncate max-w-[200px]", "text-[#9CA3AF]")}>
-              {conversation.lastMessage || 'No messages yet'}
+              {conversation.lastMessage ?? 'No messages yet'}
             </Text>
             {(conversation.unread ?? 0) > 0 && (
               <View className="bg-blue-500 rounded-full h-5 w-5 flex items-center justify-center">
@@ -465,4 +467,3 @@ function GroupAvatar() {
     </View>
   )
 }
-

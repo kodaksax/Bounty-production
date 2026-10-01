@@ -80,7 +80,7 @@ export function buildVisibleConversationRows(
   currentUserId: string | null | undefined
 ): ConversationRow[] {
   return buildConversationRows(conversations, currentUserId).filter(
-    (row) => row.lastMessage !== undefined
+    (row) => row.isGroup || row.lastMessage !== undefined
   );
 }
 

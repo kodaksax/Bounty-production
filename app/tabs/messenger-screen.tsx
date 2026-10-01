@@ -31,6 +31,7 @@ import {
   SEARCH_FIELD_TEXT,
   SearchBarRow,
 } from "../../components/ui/search-bar-row"
+import { keyboardAwareListProps } from "../../components/ui/keyboard-avoiding"
 import { OfflineStatusBadge } from "../../components/offline-status-badge"
 import { WalletBalanceButton } from "../../components/ui/wallet-balance-button"
 
@@ -207,6 +208,8 @@ export function MessengerScreen({
   const [query, setQuery] = useState("")
   const [userResults, setUserResults] = useState<UserProfile[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchRetry, setSearchRetry] = useState(0)
   const searchRequestIdRef = useRef(0)
   const trimmedQuery = query.trim()
   const isSearchActive = trimmedQuery.length > 0
@@ -216,23 +219,28 @@ export function MessengerScreen({
       searchRequestIdRef.current++
       setUserResults([])
       setIsSearching(false)
+      setSearchError(null)
       return
     }
     const requestId = ++searchRequestIdRef.current
     setIsSearching(true)
+    setSearchError(null)
     const timer = setTimeout(async () => {
       try {
         const result = await userSearchService.searchUsers({ keywords: trimmedQuery, limit: 30 })
         if (requestId !== searchRequestIdRef.current) return
         setUserResults(result.results.filter(u => u.id !== currentUserId))
       } catch {
-        if (requestId === searchRequestIdRef.current) setUserResults([])
+        if (requestId === searchRequestIdRef.current) {
+          setUserResults([])
+          setSearchError("Unable to search users. Check your connection and try again.")
+        }
       } finally {
         if (requestId === searchRequestIdRef.current) setIsSearching(false)
       }
     }, USER_SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [trimmedQuery, currentUserId])
+  }, [trimmedQuery, currentUserId, searchRetry])
 
   const handleUserPress = useCallback(
     (user: UserProfile) => {
@@ -253,6 +261,17 @@ export function MessengerScreen({
 
   const renderUserEmpty = useCallback(() => {
     if (isSearching) return null
+    if (searchError) {
+      return (
+        <EmptyState
+          icon="cloud-off"
+          title="Unable to Search Users"
+          description={searchError}
+          actionLabel="Try Again"
+          onAction={() => setSearchRetry((retry) => retry + 1)}
+        />
+      )
+    }
     return (
       <EmptyState
         icon="person-search"
@@ -260,7 +279,7 @@ export function MessengerScreen({
         description={`No one matches "${trimmedQuery}". Try a different username.`}
       />
     )
-  }, [isSearching, trimmedQuery])
+  }, [isSearching, searchError, trimmedQuery])
 
   const handleWalletPress = useCallback(() => {
     if (onNavigate) onNavigate("wallet")
@@ -390,6 +409,7 @@ export function MessengerScreen({
               <TouchableOpacity
                 onPress={() => setQuery("")}
                 style={{ padding: 4 }}
+                hitSlop={9}
                 accessibilityRole="button"
                 accessibilityLabel="Clear search"
               >
@@ -402,12 +422,11 @@ export function MessengerScreen({
 
       {isSearchActive ? (
         <FlatList
+          {...keyboardAwareListProps}
           data={userResults}
           keyExtractor={userKeyExtractor}
           renderItem={renderUserItem}
           ListEmptyComponent={renderUserEmpty}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
           contentContainerStyle={{
             paddingBottom: insets.bottom + theme.spacing["2xl"],
             flexGrow: 1,
@@ -416,12 +435,11 @@ export function MessengerScreen({
         />
       ) : (
         <FlatList
+          {...keyboardAwareListProps}
           data={conversationRows}
           keyExtractor={keyExtractor}
           renderItem={renderConversationItem}
           ListEmptyComponent={renderEmpty}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
           contentContainerStyle={{
             paddingBottom: insets.bottom + theme.spacing["2xl"],
             flexGrow: 1,
@@ -640,7 +658,7 @@ const ConversationItem = React.memo(function ConversationItem({
                 color: hasUnread ? theme.text : theme.textSecondary,
               }}
             >
-              {conversation.lastMessage || "No messages yet"}
+              {conversation.lastMessage ?? "No messages yet"}
             </Text>
             {hasUnread && (
               <View
