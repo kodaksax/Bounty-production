@@ -8,20 +8,31 @@ import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { ROUTES } from "lib/routes"
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext"
-import React, { useCallback, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   RefreshControl,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   Animated,
   Dimensions,
 } from "react-native"
 import { Swipeable } from "react-native-gesture-handler"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { ConnectionStatus } from "../../components/connection-status"
+import {
+  SEARCH_FIELD_MAX_FONT_SCALE,
+  SEARCH_FIELD_TEXT,
+  SearchBarRow,
+} from "../../components/ui/search-bar-row"
+import { keyboardAwareListProps } from "../../components/ui/keyboard-avoiding"
+import { OfflineStatusBadge } from "../../components/offline-status-badge"
 import { WalletBalanceButton } from "../../components/ui/wallet-balance-button"
 
 import { useConversations } from "../../hooks/useConversations"
@@ -30,17 +41,20 @@ import { useValidUserId } from "../../hooks/useValidUserId"
 
 import { messageService } from "../../lib/services/message-service"
 import { logClientError as _logClientError } from "../../lib/services/monitoring"
-import { navigationIntent } from "../../lib/services/navigation-intent"
 import { generateInitials } from "../../lib/services/supabase-messaging"
 
+import type { UserProfile } from "../../lib/types"
+import { userSearchService } from "../../lib/services/user-search-service"
 import {
-  buildConversationRows,
+  buildVisibleConversationRows,
   formatConversationTime,
   type ConversationRow,
 } from "../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "./chat-detail-screen"
 
 const { width } = Dimensions.get("window")
+
+const USER_SEARCH_DEBOUNCE_MS = 300
 
 export function MessengerScreen({
   activeScreen,
@@ -54,13 +68,14 @@ export function MessengerScreen({
   const router = useRouter()
   const isStandalone = !onNavigate
   const { theme } = useAppThemeContext()
+  const insets = useSafeAreaInsets()
   const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } =
     useConversations()
-
-  // One row per person (#875); see lib/utils/conversation-rows.ts.
-  const rows = useMemo(
-    () => buildConversationRows(conversations, currentUserId),
+  // One row per person (#875), leaving out people with no messages yet; see
+  // lib/utils/conversation-rows.ts.
+  const conversationRows = useMemo(
+    () => buildVisibleConversationRows(conversations, currentUserId),
     [conversations, currentUserId]
   )
 
@@ -188,21 +203,100 @@ export function MessengerScreen({
 
   const keyExtractor = useCallback((item: ConversationRow) => item.id, [])
 
-  const listEmpty = useMemo(() => {
-    if (loading) {
+  // User search — the bar at the top finds people to message. Results replace
+  // the conversation list while there's a query; tapping one opens the DM.
+  const [query, setQuery] = useState("")
+  const [userResults, setUserResults] = useState<UserProfile[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchRetry, setSearchRetry] = useState(0)
+  const searchRequestIdRef = useRef(0)
+  const trimmedQuery = query.trim()
+  const isSearchActive = trimmedQuery.length > 0
+
+  useEffect(() => {
+    if (!trimmedQuery) {
+      searchRequestIdRef.current++
+      setUserResults([])
+      setIsSearching(false)
+      setSearchError(null)
+      return
+    }
+    const requestId = ++searchRequestIdRef.current
+    setIsSearching(true)
+    setSearchError(null)
+    const timer = setTimeout(async () => {
+      try {
+        const result = await userSearchService.searchUsers({ keywords: trimmedQuery, limit: 30 })
+        if (requestId !== searchRequestIdRef.current) return
+        setUserResults(result.results.filter(u => u.id !== currentUserId))
+      } catch {
+        if (requestId === searchRequestIdRef.current) {
+          setUserResults([])
+          setSearchError("Unable to search users. Check your connection and try again.")
+        }
+      } finally {
+        if (requestId === searchRequestIdRef.current) setIsSearching(false)
+      }
+    }, USER_SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [trimmedQuery, currentUserId, searchRetry])
+
+  const handleUserPress = useCallback(
+    (user: UserProfile) => {
+      Keyboard.dismiss()
+      router.push(ROUTES.MESSAGES.WITH_USER(user.id) as any)
+    },
+    [router]
+  )
+
+  const renderUserItem = useCallback(
+    ({ item }: { item: UserProfile }) => (
+      <UserResultItem user={item} onPress={() => handleUserPress(item)} />
+    ),
+    [handleUserPress]
+  )
+
+  const userKeyExtractor = useCallback((item: UserProfile) => item.id, [])
+
+  const renderUserEmpty = useCallback(() => {
+    if (isSearching) return null
+    if (searchError) {
       return (
-        <View className="px-4 py-2">
-          <ConversationsListSkeleton count={6} />
-        </View>
+        <EmptyState
+          icon="cloud-off"
+          title="Unable to Search Users"
+          description={searchError}
+          actionLabel="Try Again"
+          onAction={() => setSearchRetry((retry) => retry + 1)}
+        />
       )
+    }
+    return (
+      <EmptyState
+        icon="person-search"
+        title="No Users Found"
+        description={`No one matches "${trimmedQuery}". Try a different username.`}
+      />
+    )
+  }, [isSearching, searchError, trimmedQuery])
+
+  const handleWalletPress = useCallback(() => {
+    if (onNavigate) onNavigate("wallet")
+    else router.push(ROUTES.TABS.WALLET as never)
+  }, [onNavigate, router])
+
+  const renderEmpty = useCallback(() => {
+    if (loading) {
+      return <ConversationsListSkeleton count={6} />
     }
     if (error) {
       return (
         <EmptyState
           icon="cloud-off"
-          title="Couldn't load messages"
-          description="Check your connection and try again."
-          actionLabel="Try again"
+          title="Unable to Load Messages"
+          description="Check your internet connection and try again"
+          actionLabel="Try Again"
           onAction={handleRefresh}
         />
       )
@@ -210,21 +304,21 @@ export function MessengerScreen({
     return (
       <EmptyState
         icon="chat-bubble-outline"
-        title="No messages yet"
-        description="When you apply to a bounty or someone applies to yours, your conversations show up here."
+        title="No Messages Yet"
+        description="When you apply to or post a bounty, your conversations will appear here."
       />
     )
   }, [loading, error, handleRefresh])
 
   if (showChat && activeConversation) {
-    const conversation = conversations.find((c) => c.id === activeConversation)
+    const conversation = conversations.find(c => c.id === activeConversation)
     if (conversation) {
       return (
         <View style={{ flex: 1 }}>
           <Animated.View style={{ flex: 1, opacity: inboxOpacity }}>
             <View style={{ flex: 1, backgroundColor: theme.background }}>
               <FlatList
-                data={rows}
+                data={conversationRows}
                 keyExtractor={keyExtractor}
                 renderItem={renderConversationItem}
               />
@@ -243,10 +337,7 @@ export function MessengerScreen({
               zIndex: 50,
             }}
           >
-            <ChatDetailScreen
-              conversation={conversation}
-              onBack={handleBackToInbox}
-            />
+            <ChatDetailScreen conversation={conversation} onBack={handleBackToInbox} />
           </Animated.View>
         </View>
       )
@@ -257,16 +348,15 @@ export function MessengerScreen({
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <ConnectionStatus />
 
-      <View
-        className="px-4 pt-12 pb-3 border-b"
-        style={{ borderBottomColor: theme.border, backgroundColor: theme.background }}
-      >
-        <View className="flex-row justify-between items-center">
+      {/* Header — mirrors the inbox screen: logo left, wallet right, then a
+          centered uppercase title. */}
+      <View style={{ paddingTop: insets.top + 8, backgroundColor: theme.background }}>
+        <View className="flex-row justify-between items-center px-4">
           <View className="flex-row items-center">
             {isStandalone && (
               <TouchableOpacity
                 onPress={() => router.back()}
-                className="mr-3 p-1"
+                className="mr-2 p-1 touch-target-min"
                 accessibilityRole="button"
                 accessibilityLabel="Go back"
               >
@@ -275,34 +365,162 @@ export function MessengerScreen({
             )}
             <BrandingLogo size="medium" />
           </View>
-          <WalletBalanceButton onPress={() => onNavigate?.("wallet")} />
+          <WalletBalanceButton onPress={handleWalletPress} />
         </View>
-      </View>
 
-      <View className="px-4 py-3">
-        <Text className="text-lg font-semibold" style={{ color: theme.text }}>Messages</Text>
-      </View>
+        <View className="px-4 mt-2 mb-2">
+          <OfflineStatusBadge />
+        </View>
 
-      <FlatList
-        data={rows}
-        keyExtractor={keyExtractor}
-        renderItem={renderConversationItem}
-        ListEmptyComponent={listEmpty}
-        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 32, flexGrow: 1 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
+        <SearchBarRow
+          emphasis={isSearchActive}
+          style={{ marginTop: theme.spacing.xs, marginBottom: theme.spacing.md }}
+        >
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search users..."
+            placeholderTextColor={theme.textDisabled}
+            maxFontSizeMultiplier={SEARCH_FIELD_MAX_FONT_SCALE}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            style={{
+              ...SEARCH_FIELD_TEXT,
+              flex: 1,
+              color: theme.text,
+              alignSelf: "stretch",
+              paddingVertical: 0,
+              paddingHorizontal: 0,
+              textAlignVertical: "center",
+              includeFontPadding: false,
+            }}
+            accessibilityRole="search"
+            accessibilityLabel="Search users"
           />
-        }
-      />
+          {isSearching ? (
+            <ActivityIndicator
+              size="small"
+              color={theme.primaryLight}
+              accessibilityLabel="Searching users"
+            />
+          ) : (
+            !!query && (
+              <TouchableOpacity
+                onPress={() => setQuery("")}
+                style={{ padding: 4 }}
+                hitSlop={9}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <MaterialIcons name="close" size={18} color={theme.primaryLight} />
+              </TouchableOpacity>
+            )
+          )}
+        </SearchBarRow>
+      </View>
+
+      {isSearchActive ? (
+        <FlatList
+          {...keyboardAwareListProps}
+          data={userResults}
+          keyExtractor={userKeyExtractor}
+          renderItem={renderUserItem}
+          ListEmptyComponent={renderUserEmpty}
+          contentContainerStyle={{
+            paddingBottom: insets.bottom + theme.spacing["2xl"],
+            flexGrow: 1,
+          }}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <FlatList
+          {...keyboardAwareListProps}
+          data={conversationRows}
+          keyExtractor={keyExtractor}
+          renderItem={renderConversationItem}
+          ListEmptyComponent={renderEmpty}
+          contentContainerStyle={{
+            paddingBottom: insets.bottom + theme.spacing["2xl"],
+            flexGrow: 1,
+          }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.primary}
+              colors={[theme.primary]}
+            />
+          }
+        />
+      )}
     </View>
   )
 }
 
 export default MessengerScreen
+
+/** A user search result, laid out like a conversation row. */
+const UserResultItem = React.memo(function UserResultItem({
+  user,
+  onPress,
+}: {
+  user: UserProfile
+  onPress: () => void
+}) {
+  const { theme } = useAppThemeContext()
+  const displayName = user.name || user.username
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`Message ${displayName}`}
+      accessibilityHint="Opens a conversation with this user"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.lg,
+        backgroundColor: theme.background,
+      }}
+    >
+      <Avatar className="h-12 w-12" style={{ marginRight: theme.spacing.md }}>
+        <AvatarImage src={user.avatar} alt={displayName} />
+        <AvatarFallback style={{ backgroundColor: theme.surfaceSecondary }}>
+          <Text style={{ color: theme.primary, fontSize: 15, fontWeight: "700" }}>
+            {generateInitials(user.username, user.name) || "?"}
+          </Text>
+        </AvatarFallback>
+      </Avatar>
+
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text
+          numberOfLines={1}
+          style={{ fontSize: theme.typography.fontSize.base, fontWeight: "600", color: theme.text }}
+        >
+          {displayName}
+        </Text>
+        {!!user.name && (
+          <Text
+            numberOfLines={1}
+            style={{
+              fontSize: theme.typography.fontSize.sm,
+              color: theme.textSecondary,
+              marginTop: 2,
+            }}
+          >
+            @{user.username}
+          </Text>
+        )}
+      </View>
+
+      <MaterialIcons name="chat-bubble-outline" size={20} color={theme.textDisabled} />
+    </TouchableOpacity>
+  )
+})
 
 interface ConversationItemProps {
   conversation: ConversationRow
@@ -321,12 +539,13 @@ const ConversationItem = React.memo(function ConversationItem({
     () => formatConversationTime(conversation.updatedAt),
     [conversation.updatedAt]
   )
+  const unread = conversation.unread ?? 0
+  const hasUnread = unread > 0
 
   const otherUserId = conversation.otherUserId
   // fetchConversations already batch-loads every other user's name/avatar
   // (lib/services/supabase-messaging.ts), so only fall back to a live,
-  // per-row profile fetch when that batched avatar is missing -- which is
-  // what caused every row to show a letter instead of a picture (#875).
+  // per-row profile fetch when that batched avatar is missing (#875).
   // Disabled for groups: with no id the hook would resolve to the viewer's
   // own profile.
   const needsProfileFallback = !!otherUserId && !conversation.avatar
@@ -334,114 +553,124 @@ const ConversationItem = React.memo(function ConversationItem({
     enabled: needsProfileFallback,
   })
   const person = needsProfileFallback ? profile : null
-
   const displayName = person?.username || conversation.name || "Conversation"
   const avatarUrl = person?.avatar || conversation.avatar
   const initials = person
     ? generateInitials(person.username, person.name)
-    : (conversation.name?.[0] ?? "?").toUpperCase()
-
-  const unread = conversation.unread ?? 0
-  const hasUnread = unread > 0
-  const preview = conversation.lastMessage
+    : generateInitials(conversation.name)
 
   const handleAvatarPress = useCallback(() => {
     if (otherUserId) {
-      const referrer = encodeURIComponent('/tabs/bounty-app?screen=messages')
+      const referrer = encodeURIComponent("/tabs/bounty-app?screen=messages")
       router.push(`/profile/${otherUserId}?referrer=${referrer}`)
     }
   }, [otherUserId, router])
 
-  const renderRightActions = useCallback(
-    () => (
-      <TouchableOpacity
-        className="justify-center items-center px-6 rounded-2xl mb-2 ml-2"
-        style={{ backgroundColor: theme.error }}
-        onPress={() => onDelete(displayName)}
-        accessibilityRole="button"
-        accessibilityLabel={`Delete conversation with ${displayName}`}
-      >
-        <MaterialIcons name="delete-outline" size={22} color="white" />
-      </TouchableOpacity>
-    ),
-    [onDelete, displayName, theme.error]
-  )
-
   return (
-    <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
+    <Swipeable
+      renderRightActions={() => (
+        <TouchableOpacity
+          onPress={() => onDelete(displayName)}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete conversation with ${displayName}`}
+          style={{
+            backgroundColor: theme.error,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: theme.spacing.xl,
+          }}
+        >
+          <MaterialIcons name="delete-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+      )}
+    >
       <TouchableOpacity
         onPress={onPress}
-        className="flex-row items-center px-3 py-3 mb-2 rounded-2xl"
-        style={{
-          backgroundColor: theme.surface,
-          borderWidth: 1,
-          borderColor: hasUnread ? theme.primary : theme.border,
-        }}
+        activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={
           hasUnread
-            ? `${displayName}, ${unread} unread message${unread === 1 ? "" : "s"}`
-            : displayName
+            ? `${displayName}, ${unread} unread. ${conversation.lastMessage ?? ""}`
+            : `${displayName}. ${conversation.lastMessage ?? ""}`
         }
+        accessibilityHint="Opens the conversation"
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingVertical: theme.spacing.md,
+          paddingHorizontal: theme.spacing.lg,
+          backgroundColor: theme.background,
+        }}
       >
         <TouchableOpacity
           onPress={handleAvatarPress}
           disabled={!otherUserId}
-          className="mr-3"
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={`View ${displayName}'s profile`}
+          style={{ marginRight: theme.spacing.md }}
         >
           <Avatar className="h-12 w-12">
-            <AvatarImage src={avatarUrl || "/placeholder.svg"} alt={displayName} />
+            <AvatarImage src={avatarUrl} alt={displayName} />
             <AvatarFallback style={{ backgroundColor: theme.surfaceSecondary }}>
-              <Text style={{ color: theme.textSecondary, fontSize: 14, fontWeight: "600" }}>
-                {initials}
+              <Text style={{ color: theme.primary, fontSize: 15, fontWeight: "700" }}>
+                {initials || "?"}
               </Text>
             </AvatarFallback>
           </Avatar>
         </TouchableOpacity>
 
-        <View className="flex-1" style={{ minWidth: 0 }}>
-          <View className="flex-row items-center justify-between">
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View
+            style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+          >
             <Text
-              className="flex-1 mr-2"
-              style={{ color: theme.text, fontSize: 16, fontWeight: hasUnread ? "700" : "600" }}
               numberOfLines={1}
+              style={{
+                flex: 1,
+                marginRight: theme.spacing.sm,
+                fontSize: theme.typography.fontSize.base,
+                fontWeight: hasUnread ? "700" : "600",
+                color: theme.text,
+              }}
             >
               {displayName}
             </Text>
             <Text
               style={{
-                fontSize: 12,
-                color: hasUnread ? theme.primaryLight : theme.textDisabled,
+                fontSize: theme.typography.fontSize.xs,
                 fontWeight: hasUnread ? "600" : "400",
+                color: hasUnread ? theme.primary : theme.textDisabled,
               }}
             >
               {time}
             </Text>
           </View>
-          <View className="flex-row items-center justify-between mt-1">
+
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
             <Text
-              className="flex-1 mr-2"
-              style={{
-                fontSize: 14,
-                color: hasUnread ? theme.text : theme.textSecondary,
-                fontStyle: preview ? "normal" : "italic",
-              }}
               numberOfLines={1}
+              style={{
+                flex: 1,
+                marginRight: hasUnread ? theme.spacing.sm : 0,
+                fontSize: theme.typography.fontSize.sm,
+                fontWeight: hasUnread ? "500" : "400",
+                color: hasUnread ? theme.text : theme.textSecondary,
+              }}
             >
-              {preview || "No messages yet"}
+              {conversation.lastMessage ?? "No messages yet"}
             </Text>
             {hasUnread && (
               <View
-                className="rounded-full items-center justify-center px-1.5"
-                style={{ backgroundColor: theme.primary, minWidth: 20, height: 20 }}
-              >
-                <Text style={{ color: "white", fontSize: 11, fontWeight: "700" }}>
-                  {unread > 99 ? "99+" : unread}
-                </Text>
-              </View>
+                accessibilityElementsHidden={true}
+                importantForAccessibility="no"
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  backgroundColor: theme.primary,
+                }}
+              />
             )}
           </View>
         </View>

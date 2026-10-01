@@ -17,7 +17,16 @@
  */
 import { MaterialIcons } from '@expo/vector-icons'
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
-import { Animated, Easing, StyleSheet, TouchableOpacity, View, type TextStyle } from 'react-native'
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native'
 import { useAccessibleAnimation } from '../../hooks/use-accessible-animation'
 import { A11Y, SIZING, SPACING } from '../../lib/constants/accessibility'
 import { hapticFeedback } from '../../lib/haptic-feedback'
@@ -69,6 +78,11 @@ export interface SearchBarRowProps {
   emphasis?: boolean
   accessibilityLabel?: string
   testID?: string
+  /**
+   * Overrides for the row's outer spacing. Screens that don't share the
+   * feed's header (e.g. the messages list) use this to drop the feed offset.
+   */
+  style?: StyleProp<ViewStyle>
 }
 
 export function SearchBarRow({
@@ -79,6 +93,7 @@ export function SearchBarRow({
   accessibilityLabel,
   emphasis = false,
   testID,
+  style,
 }: SearchBarRowProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -106,7 +121,7 @@ export function SearchBarRow({
   )
 
   return (
-    <View style={s.row} testID={testID}>
+    <View style={[s.row, style]} testID={testID}>
       {onPress ? (
         <TouchableOpacity
           style={s.field}

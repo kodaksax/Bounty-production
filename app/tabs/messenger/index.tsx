@@ -22,6 +22,7 @@ import { logClientError as _logClientError } from '../../../lib/services/monitor
 import { navigationIntent } from '../../../lib/services/navigation-intent'
 import { generateInitials } from '../../../lib/services/supabase-messaging'
 import type { Conversation } from "../../../lib/types"
+import { buildVisibleConversationRows, type ConversationRow } from "../../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "../chat-detail-screen"
 
 // Helper to format conversation time
@@ -57,6 +58,12 @@ export function MessengerScreen({
   const router = useRouter()
   const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
+  // One row per person (#875), leaving out people with no messages yet; see
+  // lib/utils/conversation-rows.ts.
+  const conversationRows = useMemo(
+    () => buildVisibleConversationRows(conversations, currentUserId),
+    [conversations, currentUserId]
+  )
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -69,8 +76,8 @@ export function MessengerScreen({
     }
   }, [refresh])
 
-  const handleConversationClick = async (conversation: Conversation) => {
-    await markConversationReadSafe(conversation.id)
+  const handleConversationClick = async (conversation: ConversationRow) => {
+    await Promise.all(conversation.backingConversationIds.map(id => markConversationReadSafe(id)))
 
     // A 1:1 row opens the merged thread with that person — the same screen
     // the profile Message button opens — so every route into a direct
@@ -174,7 +181,7 @@ export function MessengerScreen({
     refresh() // Refresh conversation list when returning
   }, [onConversationModeChange, refresh])
 
-  const handleDeleteConversation = useCallback((conversation: Conversation) => {
+  const handleDeleteConversation = useCallback((conversation: ConversationRow) => {
     Alert.alert(
       'Delete Conversation',
       `Are you sure you want to delete your conversation with ${conversation.name}?`,
@@ -185,7 +192,9 @@ export function MessengerScreen({
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteConversation(conversation.id)
+              for (const id of conversation.backingConversationIds) {
+                await deleteConversation(id)
+              }
             } catch {
               Alert.alert('Error', 'Failed to delete conversation')
             }
@@ -196,10 +205,10 @@ export function MessengerScreen({
   }, [deleteConversation])
 
   // Optimized keyExtractor for FlatList
-  const keyExtractor = useCallback((item: Conversation) => item.id, []);
+  const keyExtractor = useCallback((item: ConversationRow) => item.id, []);
 
   // Optimized render function for FlatList
-  const renderConversationItem = useCallback(({ item }: { item: Conversation }) => (
+  const renderConversationItem = useCallback(({ item }: { item: ConversationRow }) => (
     <ConversationItem 
       conversation={item} 
       onPress={() => handleConversationClick(item)}
@@ -291,7 +300,7 @@ export function MessengerScreen({
       )}
     
       <FlatList
-        data={conversations}
+        data={conversationRows}
         keyExtractor={keyExtractor}
         renderItem={renderConversationItem}
         contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 96 }}
@@ -420,7 +429,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
           </View>
           <View className="flex-row justify-between items-center mt-1">
             <Text className={cn("text-sm truncate max-w-[200px]", "text-[#9CA3AF]")}>
-              {conversation.lastMessage || 'No messages yet'}
+              {conversation.lastMessage ?? 'No messages yet'}
             </Text>
             {(conversation.unread ?? 0) > 0 && (
               <View className="bg-blue-500 rounded-full h-5 w-5 flex items-center justify-center">
@@ -458,4 +467,3 @@ function GroupAvatar() {
     </View>
   )
 }
-

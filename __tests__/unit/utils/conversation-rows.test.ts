@@ -1,4 +1,8 @@
-import { buildConversationRows, formatConversationTime } from '../../../lib/utils/conversation-rows';
+import {
+  buildConversationRows,
+  buildVisibleConversationRows,
+  formatConversationTime,
+} from '../../../lib/utils/conversation-rows';
 import type { Conversation } from '../../../lib/types';
 
 const me = 'me';
@@ -39,7 +43,8 @@ describe('buildConversationRows (#875)', () => {
     );
     expect(row.id).toBe('new');
     expect(row.lastMessage).toBe('See you then');
-    expect(row.updatedAt).toBe('2026-09-27T10:00:00Z');
+    // Sorted by the last message, not the empty conversation's creation.
+    expect(row.updatedAt).toBe('2026-09-10T10:00:00Z');
   });
 
   it('never merges group conversations', () => {
@@ -64,6 +69,46 @@ describe('buildConversationRows (#875)', () => {
       me
     );
     expect(rows.map((r) => r.id)).toEqual(['newer', 'older', 'undated']);
+  });
+});
+
+describe('buildVisibleConversationRows', () => {
+  it('leaves out people you have never exchanged a message with', () => {
+    // Opening a DM from a profile creates the conversation before anything is
+    // sent; it must not show up in the inbox as a "No messages yet" row.
+    const rows = buildVisibleConversationRows(
+      [
+        conv({ id: 'empty', participantIds: [me, 'stranger'], updatedAt: '2026-09-29T10:00:00Z' }),
+        conv({ id: 'real', participantIds: [me, 'friend'], lastMessage: 'hey', updatedAt: '2026-09-01T10:00:00Z' }),
+      ],
+      me
+    );
+    expect(rows.map((r) => r.otherUserId)).toEqual(['friend']);
+  });
+
+  it('keeps a conversation whose last message has an empty preview', () => {
+    const rows = buildVisibleConversationRows(
+      [conv({ id: 'photo', lastMessage: '', updatedAt: '2026-09-01T10:00:00Z' })],
+      me
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('shows one row per person, newest message first, even when a newer empty DM exists', () => {
+    const rows = buildVisibleConversationRows(
+      [
+        conv({ id: 'a-old', participantIds: [me, 'a'], lastMessage: 'old', updatedAt: '2026-09-01T00:00:00Z' }),
+        // Opened from a's profile today, nothing sent — must not bump a.
+        conv({ id: 'a-empty', participantIds: [me, 'a'], updatedAt: '2026-09-29T00:00:00Z' }),
+        conv({ id: 'b1', participantIds: [me, 'b'], lastMessage: 'newer', updatedAt: '2026-09-20T00:00:00Z' }),
+        conv({ id: 'b2', participantIds: [me, 'b'], lastMessage: 'older', updatedAt: '2026-09-10T00:00:00Z' }),
+      ],
+      me
+    );
+    expect(rows.map((r) => r.otherUserId)).toEqual(['b', 'a']);
+    expect(rows[0]).toMatchObject({ lastMessage: 'newer', backingConversationIds: ['b1', 'b2'] });
+    // The empty conversation still belongs to a's row so read/delete reach it.
+    expect(rows[1].backingConversationIds).toEqual(['a-empty', 'a-old']);
   });
 });
 
