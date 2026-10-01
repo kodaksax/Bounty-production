@@ -163,6 +163,28 @@ export async function canDeferBountyFunding(amount: number): Promise<boolean> {
   }
 }
 
+/**
+ * Flat fee, in dollars, debited from the wallet next to escrow when a bounty
+ * is funded at post (payment_experiment_config.wallet_posting_fee; 0 = off).
+ *
+ * Advisory only, like canDeferBountyFunding: fn_reserve_bounty_escrow reads the
+ * same config at INSERT and is what actually charges. A stale value here only
+ * mis-states the balance check; the server still refuses an under-funded post.
+ * Falls back to 0 on error so an unreachable RPC never blocks posting.
+ */
+export async function getWalletPostingFee(): Promise<number> {
+  if (!isSupabaseConfigured) return 0;
+
+  try {
+    const { data, error } = await supabase.rpc('fn_get_wallet_posting_fee');
+    if (error) return 0;
+    const fee = Number(data);
+    return Number.isFinite(fee) && fee > 0 ? fee : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Extracts the raw message from the several error shapes Supabase throws. */
 function messageOf(err: unknown): string {
   if (!err) return '';
@@ -274,6 +296,7 @@ export function amountBucket(amount: number): string {
 export const bountyFundingService = {
   getBountyFundingRequirement,
   canDeferBountyFunding,
+  getWalletPostingFee,
   classifyAcceptFundingError,
   describeAcceptFundingFailure,
   amountBucket,

@@ -66,6 +66,8 @@ ${transaction.details.title ? `Description: ${transaction.details.title}\n` : ''
         return 'Escrow Released';
       case 'refund':
         return 'Refund';
+      case 'posting_fee':
+        return 'Posting Fee';
       default:
         return 'Transaction';
     }

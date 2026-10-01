@@ -3,8 +3,10 @@ import { useBountyDraft } from 'app/hooks/useBountyDraft';
 import { PublishFundingGate } from 'app/screens/CreateBounty/PublishFundingGate';
 import { PostCelebration } from 'app/screens/CreateBounty/quick/PostCelebration';
 import { StepDirectionContext } from 'app/screens/CreateBounty/quick/QuickStepLayout';
+import { StepCheckout } from 'app/screens/CreateBounty/quick/StepCheckout';
 import { StepPay } from 'app/screens/CreateBounty/quick/StepPay';
 import { StepPhotos } from 'app/screens/CreateBounty/quick/StepPhotos';
+import { StepReceipt } from 'app/screens/CreateBounty/quick/StepReceipt';
 import type { DetailTarget } from 'app/screens/CreateBounty/quick/StepPostPublish';
 import { StepPostPublish } from 'app/screens/CreateBounty/quick/StepPostPublish';
 import { StepTask } from 'app/screens/CreateBounty/quick/StepTask';
@@ -17,7 +19,9 @@ import { EmailVerificationBanner } from 'components/ui/email-verification-banner
 import { useAuthContext } from 'hooks/use-auth-context';
 import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
+import { usePostingCheckout } from 'hooks/usePostingCheckout';
 import { markPosterActivated } from 'lib/analytics/lifecycle';
+import { usePostingFeeVariant } from 'lib/experiments/posting-fee-variant';
 import { analyticsService } from 'lib/services/analytics-service';
 import { useStripe } from 'lib/stripe-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
@@ -33,6 +37,7 @@ import {
   Animated,
   AppState,
   Dimensions,
+  Platform,
   Text,
   View,
 } from 'react-native';
@@ -279,6 +284,53 @@ export function CreateBountyFlow({
     setCurrentStep(target);
   };
 
+  // ── $1 posting service fee experiment ──────────────────────────────────
+  // Treatment posters pass through a checkout after the amount step, paying
+  // the flat service fee AND the full reward before the bounty is created.
+  // Control is untouched: every branch below is a no-op for it, and a control
+  // publish takes exactly the same code path it did before this feature.
+  const { variant: postingFeeVariant, ready: postingFeeVariantReady } = usePostingFeeVariant();
+
+  // Non-null while the checkout is showing. Holds the payment the poster
+  // committed on the amount step, so the checkout itemises exactly what they
+  // chose and the eventual publish uses the same numbers rather than re-reading
+  // a draft that could have changed underneath.
+  const [checkoutDraft, setCheckoutDraft] = useState<BountyDraft | null>(null);
+
+  // Non-null while the purchase summary is showing: the draft plus the payment
+  // committed on the amount step. Publishing happens from the summary's CTA.
+  const [receiptDraft, setReceiptDraft] = useState<BountyDraft | null>(null);
+
+  // Declared BEFORE useBountyPublish because the publish hook needs to know
+  // whether a checkout has settled.
+  const postingCheckout = usePostingCheckout({
+    rewardDollars: checkoutDraft?.amount ?? draft.amount,
+    surface: POST_SURFACE,
+    variant: postingFeeVariant,
+  });
+
+  /**
+   * Whether this publish must go through checkout first.
+   *
+   * Eligibility is "treatment arm, paid post, on this composer". A $0/honor
+   * post is excluded because there is no reward to collect and a bare $1 fee to
+   * publish nothing is a different product question than the one being tested.
+   *
+   * `postingFeeVariantReady` is required, not optional: an unresolved arm
+   * defaults to 'control', and charging on a default would mean a poster whose
+   * flags had not landed yet could be billed for an arm they were never
+   * enrolled in.
+   */
+  const requiresPostingCheckout = (payment: Pick<BountyDraft, 'amount' | 'isForHonor'>) =>
+    postingFeeVariantReady &&
+    postingFeeVariant === 'fee' &&
+    !payment.isForHonor &&
+    payment.amount > 0;
+
+  // Read by the teardown effect further down, which cannot close over state.
+  const postingFeeVariantRef = useRef(postingFeeVariant);
+  postingFeeVariantRef.current = postingFeeVariant;
+
   const {
     publish: handlePublish,
     retry,
@@ -331,6 +383,13 @@ export function CreateBountyFlow({
         seconds_total: secondsTotal,
         seconds_capped: secondsCapped,
         variant: POST_FLOW_VARIANT,
+        // $1 posting-fee experiment. `prepaid` is the arm's defining outcome —
+        // a treatment bounty is live AND funded at this point, where a control
+        // bounty is live and unfunded — so posting conversion and downstream
+        // bounty performance can both be cut by arm off this one event.
+        posting_fee_variant: postingFeeVariant,
+        prepaid: meta.prepaid,
+        posting_fee_cents: meta.feeCents,
       });
       // First successful publish by this user (once per device) — see
       // lib/analytics/lifecycle.ts.
@@ -344,12 +403,20 @@ export function CreateBountyFlow({
       // still navigates to the feed, just one screen later.
       setPostedBountyId(bountyId);
       setPostedDraft(publishedDraftRef.current ?? draft);
+      // Tear down the checkout screen now the bounty is live, so a back
+      // gesture from the confirmation cannot land on a paid checkout offering
+      // to post again.
+      setCheckoutDraft(null);
+      setReceiptDraft(null);
       setCelebrating(true);
     },
     // Compensation is the last pre-publish step. This was hard-coded to 2
     // from the two-step flow, so once Location became step 2 "Edit amount"
     // dropped the poster on the address screen instead of the price.
-    onEditAmount: () => handleGoToStep(TOTAL_STEPS),
+    onEditAmount: () => {
+      setReceiptDraft(null);
+      handleGoToStep(TOTAL_STEPS);
+    },
     onCancelGate: onCancel,
   });
 
@@ -386,12 +453,31 @@ export function CreateBountyFlow({
     }
   };
 
-  /** Step 2's CTA. Snapshots the draft first — publishing clears it. */
+  /** The amount step's CTA: opens the checkout or the purchase summary. */
   const handlePublishFromAmountStep = (payment: Pick<BountyDraft, 'amount' | 'isForHonor'>) => {
     // Backstop so a publish can never outrun its own funnel start — every
     // realistic path here already went through handleNext.
     markComposerStarted('publish');
     const publishDraft = { ...draft, ...payment };
+    publishedDraftRef.current = publishDraft;
+
+    // Treatment arm: show the itemised checkout instead of publishing. Nothing
+    // is charged by this transition — the charge happens on the checkout's own
+    // CTA — and no bounty exists yet, so backing out here costs nothing.
+    if (requiresPostingCheckout(payment)) {
+      setCheckoutDraft(publishDraft);
+      setStepDirection(1);
+      return;
+    }
+
+    // Everyone else reviews the purchase summary; nothing is created yet.
+    setReceiptDraft(publishDraft);
+    setStepDirection(1);
+  };
+
+  /** Purchase summary CTA. Snapshots the draft first — publishing clears it. */
+  const handleReceiptPost = () => {
+    const publishDraft = receiptDraft ?? publishedDraftRef.current ?? draft;
     publishedDraftRef.current = publishDraft;
     // handlePublish is synchronous: deferred-funding eligibility is prefetched
     // when the amount is chosen, precisely so the tap does not wait on a
@@ -399,6 +485,124 @@ export function CreateBountyFlow({
     // Failures inside the submit it kicks off are surfaced by useBountyPublish's
     // onError / ErrorBanner.
     handlePublish(publishDraft);
+  };
+
+  const handleReceiptBack = () => {
+    setReceiptDraft(null);
+    setStepDirection(-1);
+  };
+
+  /**
+   * Checkout CTA. Pays first, publishes only on a server-verified success.
+   *
+   * The ordering is the safety property: `pay()` resolves true only once the
+   * server has confirmed with Stripe that the charge landed and has credited
+   * the reward, so a bounty can never be created against an unpaid or
+   * still-processing checkout. A false result leaves the poster on the checkout
+   * with a retryable error and NO bounty — which is the blocking behaviour this
+   * feature was specified to have.
+   *
+   * A retry after a failed publish does not re-charge: `pay()` short-circuits
+   * on its own 'paid' state, and even a cold restart recovers via the server's
+   * `alreadyPaid` response for the same attempt id.
+   */
+  const handleCheckoutPay = async () => {
+    const paid = await postingCheckout.pay();
+    if (!paid) return;
+    // The attempt id is passed as an ARGUMENT, not read back off the hook's
+    // state. pay() resolving and this call happen in the same tick, so no
+    // re-render has occurred — a state-derived value would still be null here
+    // and the bounty would publish as pay-at-accept with the poster's prepaid
+    // reward left loose in their wallet. `attemptId` is ref-backed and stable,
+    // so it is correct synchronously.
+    handlePublish(checkoutDraft ?? publishedDraftRef.current ?? draft, {
+      prepaidCheckoutAttemptId: postingCheckout.attemptId,
+    });
+  };
+
+  /** Back out of the checkout to the amount step. */
+  const handleCheckoutBack = () => {
+    // Only an UNPAID exit is an abandon. Leaving after paying is recoverable
+    // rather than lost — the paid checkout is reused on the next attempt — so
+    // counting it as abandoned would overstate the arm's drop-off.
+    if (postingCheckout.state !== 'paid') {
+      analyticsService.trackEvent('posting_checkout_abandoned', {
+        surface: POST_SURFACE,
+        variant: postingFeeVariant,
+        postingAttemptId: postingCheckout.attemptId,
+        feeCents: postingCheckout.totals.feeCents,
+        rewardCents: postingCheckout.totals.rewardCents,
+        totalCents: postingCheckout.totals.totalCents,
+        trigger: 'back',
+        platform: Platform.OS,
+      });
+    }
+    postingCheckout.reset();
+    setCheckoutDraft(null);
+    setStepDirection(-1);
+  };
+
+  // Mirrors of the checkout's state for the unmount handler below, which has
+  // empty deps (so it runs on teardown only) and therefore cannot read
+  // closed-over state. Assigned during render, matching how the publish hook
+  // keeps publishDraftRef current.
+  const checkoutSnapshotRef = useRef({
+    open: false,
+    paid: false,
+    attemptId: postingCheckout.attemptId,
+    totals: postingCheckout.totals,
+  });
+  checkoutSnapshotRef.current = {
+    open: !!checkoutDraft,
+    paid: postingCheckout.state === 'paid',
+    attemptId: postingCheckout.attemptId,
+    totals: postingCheckout.totals,
+  };
+
+  /**
+   * The composer was torn down with the checkout open and unpaid — app
+   * backgrounded and evicted, tab switched away, navigation elsewhere.
+   *
+   * Separate from the existing post_abandoned/post_step_abandoned teardown
+   * effect because this one answers a different question: those measure
+   * leaving the COMPOSER, this measures leaving a PAYMENT. A poster who
+   * reached the checkout and walked away is the single most important
+   * drop-off in the treatment arm, and it is invisible in the step funnel
+   * (the checkout is not a step).
+   *
+   * Excludes a paid checkout deliberately: that money is recoverable on the
+   * next attempt, so counting it as abandoned would overstate the loss.
+   */
+  useEffect(() => {
+    return () => {
+      const snapshot = checkoutSnapshotRef.current;
+      if (!snapshot.open || snapshot.paid || publishedRef.current) return;
+      analyticsService.trackEvent('posting_checkout_abandoned', {
+        surface: POST_SURFACE,
+        variant: postingFeeVariantRef.current,
+        postingAttemptId: snapshot.attemptId,
+        feeCents: snapshot.totals.feeCents,
+        rewardCents: snapshot.totals.rewardCents,
+        totalCents: snapshot.totals.totalCents,
+        trigger: appStateRef.current !== 'active' ? 'background' : 'unmount',
+        platform: Platform.OS,
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Funnel event for the checkout being rendered, fired once per mount. */
+  const handleCheckoutShown = () => {
+    analyticsService.trackEvent('posting_checkout_shown', {
+      surface: POST_SURFACE,
+      variant: postingFeeVariant,
+      postingAttemptId: postingCheckout.attemptId,
+      feeCents: postingCheckout.totals.feeCents,
+      rewardCents: postingCheckout.totals.rewardCents,
+      totalCents: postingCheckout.totals.totalCents,
+      prepaid: postingCheckout.state === 'paid',
+      platform: Platform.OS,
+    });
   };
 
   /** Open one of the optional-detail screens over the confirmation screen. */
@@ -510,6 +714,13 @@ export function CreateBountyFlow({
         return handleFinish();
       }
     }
+    // Hardware back on the checkout returns to the amount step rather than
+    // exiting the flow — and must NOT fall through to handleBack() below,
+    // which would leave the checkout mounted over step 2.
+    if (checkoutDraft) {
+      handleCheckoutBack();
+      return true;
+    }
     if (currentStep > 1) {
       handleBack();
       return true;
@@ -546,9 +757,14 @@ export function CreateBountyFlow({
         variant: POST_FLOW_VARIANT,
         entry_point: entryPoint,
         deliberate_entry: true,
+        // "Posting flow entered", cut by arm. This is the experiment's
+        // denominator and its exposure event in one — it is the first moment a
+        // treatment poster is on a path that will ask them for money.
+        posting_fee_variant: postingFeeVariant,
+        posting_fee_variant_ready: postingFeeVariantReady,
       });
     }
-  }, [isLoading, draft.title, entryPoint]);
+  }, [isLoading, draft.title, entryPoint, postingFeeVariant, postingFeeVariantReady]);
 
   /**
    * post_started — emitted at most once per composer instance, on the FIRST
@@ -787,7 +1003,36 @@ export function CreateBountyFlow({
                 totalSteps={TOTAL_STEPS}
               />
             )}
-            {!postedBountyId && currentStep === 3 && (
+            {/* Treatment arm only: the itemised checkout, shown after the
+                amount step and before anything is created. Rendered at full
+                progress rather than as a 4th step so steps 1-3 stay pixel-
+                identical to control — the experiment is meant to isolate the
+                fee, not a longer progress bar. */}
+            {!postedBountyId && checkoutDraft && (
+              <StepCheckout
+                draft={checkoutDraft}
+                totals={postingCheckout.totals}
+                onPay={handleCheckoutPay}
+                onBack={handleCheckoutBack}
+                isBusy={postingCheckout.isBusy || isSubmitting}
+                error={postingCheckout.error}
+                prepaid={postingCheckout.state === 'paid'}
+                onShown={handleCheckoutShown}
+                step={TOTAL_STEPS}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {!postedBountyId && receiptDraft && (
+              <StepReceipt
+                draft={receiptDraft}
+                onPost={handleReceiptPost}
+                onBack={handleReceiptBack}
+                isSubmitting={isSubmitting}
+                step={TOTAL_STEPS}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {!postedBountyId && !checkoutDraft && !receiptDraft && currentStep === 3 && (
               <StepPay
                 draft={draft}
                 onUpdate={handleDraftUpdate}
@@ -796,8 +1041,6 @@ export function CreateBountyFlow({
                 step={3}
                 totalSteps={TOTAL_STEPS}
                 onInsufficientBalance={showInsufficientBalanceFromAmountStep}
-                ctaLabel="Post Bounty"
-                isSubmitting={isSubmitting}
               />
             )}
 

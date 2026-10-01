@@ -18,6 +18,9 @@ interface InsufficientBalanceScreenProps {
   walletBalance: number;
   /** The bounty amount the poster is trying to fund, in dollars. */
   bountyAmount: number;
+  /** Posting fee debited from the wallet on top of the bounty amount, in
+   * dollars. Omitted or 0 hides the row (non-posting flows, fee off). */
+  postingFee?: number;
   /** Continue into the wallet top-up flow. */
   onAddFunds: () => void;
   /** Return to the compensation step so the poster can lower the amount. */
@@ -46,6 +49,7 @@ interface InsufficientBalanceScreenProps {
 export function InsufficientBalanceScreen({
   walletBalance,
   bountyAmount,
+  postingFee = 0,
   onAddFunds,
   onEditAmount,
   onCancel,
@@ -64,7 +68,7 @@ export function InsufficientBalanceScreen({
   // live viewport + insets, so it tracks the device instead of assuming one.
   const footerClearance =
     getBottomNavOccludedHeight(insets.bottom, windowWidth) + getBottomNavContentGap(windowHeight);
-  const needed = getAmountNeeded(bountyAmount, walletBalance);
+  const needed = getAmountNeeded(bountyAmount + postingFee, walletBalance);
 
   useEffect(() => {
     hapticFeedback.warning();
@@ -94,6 +98,12 @@ export function InsufficientBalanceScreen({
             <Text style={styles.rowLabel}>Bounty Amount</Text>
             <Text style={styles.rowValue}>${bountyAmount.toFixed(2)}</Text>
           </View>
+          {postingFee > 0 && (
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Posting Fee</Text>
+              <Text style={styles.rowValue}>${postingFee.toFixed(2)}</Text>
+            </View>
+          )}
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Current Balance</Text>
             <Text style={styles.rowValue}>${walletBalance.toFixed(2)}</Text>

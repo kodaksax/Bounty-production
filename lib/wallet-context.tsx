@@ -55,7 +55,8 @@ export type WalletTransactionType =
   | 'escrow'
   | 'release'
   | 'refund'
-  | 'platform_fee';
+  | 'platform_fee'
+  | 'posting_fee';
 export interface WalletTransactionRecord {
   id: string;
   type: WalletTransactionType;
@@ -387,7 +388,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
 
           // Transaction types that represent outflow (money leaving the user's wallet)
-          const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
+          const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted', 'posting_fee'];
 
           if (txResponse.ok && mountedRef.current) {
             const txData = await txResponse.json();

@@ -1603,6 +1603,117 @@ Deno.serve(async (req: Request) => {
           break;
         }
 
+        // Pre-publish posting checkout ($1 service fee + full bounty reward,
+        // charged together before the bounty row exists — see
+        // supabase/migrations/20260921120000_posting_checkout_service_fee.sql).
+        //
+        // This is the SAFETY NET, not the primary path: the client normally
+        // calls POST /payments/posting-checkout/settle straight after
+        // confirming, because it has to know the charge landed before it may
+        // publish. This branch exists for the interrupted cases — the app was
+        // killed mid-sheet, the network dropped after confirmation, or the
+        // payment settled asynchronously — so the poster's money is credited
+        // and the checkout is reusable even though no client came back.
+        //
+        // Both paths converge because apply_deposit is idempotent on the
+        // PaymentIntent id and the status transition below is non-regressing,
+        // so whichever runs second is a no-op.
+        if (paymentIntent.metadata?.purpose === 'bounty_posting_checkout') {
+          const { data: checkoutRow, error: checkoutReadErr } = await supabase
+            .from('bounty_posting_checkouts')
+            .select('id, poster_id, status, fee_amount_cents, reward_amount_cents, total_amount_cents')
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .maybeSingle();
+
+          if (checkoutReadErr) {
+            console.error('[webhooks] posting checkout read failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: checkoutReadErr,
+            });
+            throw checkoutReadErr;
+          }
+
+          if (!checkoutRow) {
+            // No row means the intent-creation request failed to persist but
+            // Stripe still charged. Unreconcilable here — log loudly rather
+            // than guessing at a user id and amount split.
+            console.error(
+              `[webhooks] posting_checkout PI ${paymentIntent.id} succeeded with NO checkout row — manual review required`
+            );
+            break;
+          }
+
+          if ((checkoutRow as any).poster_id !== userId) {
+            console.error(
+              `[webhooks] posting_checkout PI ${paymentIntent.id} user mismatch — refusing to credit`
+            );
+            break;
+          }
+
+          // Guard against a charge that does not match what we recorded before
+          // crediting anything to a wallet.
+          if (paymentIntent.amount !== (checkoutRow as any).total_amount_cents) {
+            console.error(
+              `[webhooks] posting_checkout PI ${paymentIntent.id} amount mismatch (stripe=${paymentIntent.amount} row=${(checkoutRow as any).total_amount_cents}) — refusing to credit`
+            );
+            break;
+          }
+
+          const rewardCents = (checkoutRow as any).reward_amount_cents as number;
+
+          // Credit ONLY the reward. The fee stays platform revenue, recorded on
+          // the checkout row — crediting it to the wallet would hand the poster
+          // their fee back as spendable balance.
+          if (rewardCents > 0) {
+            const { error: applyErr } = await supabase.rpc('apply_deposit', {
+              p_user_id: userId,
+              p_amount: rewardCents / 100,
+              p_payment_intent_id: paymentIntent.id,
+              p_metadata: {
+                purpose: 'bounty_posting_checkout',
+                posting_attempt_id: paymentIntent.metadata?.posting_attempt_id ?? null,
+                fee_cents: (checkoutRow as any).fee_amount_cents,
+                reward_cents: rewardCents,
+                source: 'webhook',
+              },
+            });
+            if (applyErr) {
+              console.error('[webhooks] posting checkout apply_deposit failed — letting Stripe retry', {
+                paymentIntentId: paymentIntent.id,
+                error: applyErr,
+              });
+              throw applyErr;
+            }
+          }
+
+          // Non-regressing: only pending/failed advance, so a checkout the
+          // client already settled (or already consumed on a live bounty) is
+          // left exactly as it is.
+          const { error: paidErr } = await supabase
+            .from('bounty_posting_checkouts')
+            .update({
+              status: 'paid',
+              paid_at: new Date().toISOString(),
+              failure_code: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', (checkoutRow as any).id)
+            .in('status', ['pending', 'failed']);
+
+          if (paidErr) {
+            console.error('[webhooks] posting checkout mark-paid failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: paidErr,
+            });
+            throw paidErr;
+          }
+
+          console.log(
+            `[webhooks] posting checkout paid for intent ${paymentIntent.id} (fee=${(checkoutRow as any).fee_amount_cents}c reward=${rewardCents}c)`
+          );
+          break;
+        }
+
         // Only process wallet deposits — skip all other payment intents
         if (paymentIntent.metadata?.purpose !== 'wallet_deposit') {
           console.log(
@@ -1955,6 +2066,38 @@ Deno.serve(async (req: Request) => {
           }
 
           console.log(`[webhooks] v3 bounty authorization failed for intent ${paymentIntent.id}`);
+        }
+
+        // Pre-publish posting checkout failed (declined card, abandoned 3DS).
+        // Mark it failed so the composer can offer a retry against the SAME
+        // posting attempt — which re-uses the same idempotency key, so a
+        // retry cannot become a second charge. Nothing was credited and no
+        // bounty exists, so there is nothing to roll back.
+        if (paymentIntent.metadata?.purpose === 'bounty_posting_checkout') {
+          const { error: feeFailErr } = await supabase
+            .from('bounty_posting_checkouts')
+            .update({
+              status: 'failed',
+              // Short machine-readable label only — a raw Stripe message can
+              // carry amounts and customer identifiers.
+              failure_code: String(error?.decline_code ?? error?.code ?? 'payment_failed').slice(
+                0,
+                80
+              ),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .eq('status', 'pending');
+
+          if (feeFailErr) {
+            console.error('[webhooks] posting checkout fail-mark failed — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: feeFailErr,
+            });
+            throw feeFailErr;
+          }
+
+          console.log(`[webhooks] posting checkout failed for intent ${paymentIntent.id}`);
         }
 
         await supabase

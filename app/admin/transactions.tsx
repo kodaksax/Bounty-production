@@ -55,6 +55,7 @@ const TYPE_ICONS: Record<AdminTransactionType, keyof typeof MaterialIcons.glyphM
   refund: 'undo',
   deposit: 'add-circle',
   withdrawal: 'remove-circle',
+  posting_fee: 'sell',
   dispute_loss: 'gavel',
   admin_adjustment: 'tune',
 };
