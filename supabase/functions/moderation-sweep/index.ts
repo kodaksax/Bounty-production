@@ -10,7 +10,11 @@
 //   2. For each new alert: in-app notification for every admin, a push via the
 //      notifications_outbox + process-notification path, and an email via
 //      send-notification-email. Every delivery step is best-effort -- a failed
-//      channel is logged, never fatal.
+//      channel is logged, never fatal. Since 20261001140000 the sweep returns
+//      every alert not yet fanned out, including report-driven reviews and
+//      escalation reviews raised outside the sweep.
+//   3. Forwards uncaptured reports to PostHog as `report_submitted` (see
+//      _shared/report-submitted-events.ts). Best-effort; never fails the run.
 //
 // Invocation:
 //   * Supabase scheduled function -- configure a cron trigger in the Supabase
@@ -26,6 +30,10 @@
 // admins).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  forwardReportSubmittedEvents,
+  type PostHogEvent,
+} from '../_shared/report-submitted-events.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -91,9 +99,19 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: sweepErr.message }, 500);
     }
 
+    let reportEvents: Awaited<ReturnType<typeof forwardReportSubmittedEvents>>;
+    try {
+      reportEvents = await forwardReportSubmittedEvents(supabaseAdmin, sendPostHogBatch);
+    } catch (e) {
+      reportEvents = { pending: 0, sent: 0, marked: 0, error: String(e) };
+    }
+    if (reportEvents.error) {
+      console.error('[moderation-sweep] report_submitted forwarding failed (non-fatal)', reportEvents.error);
+    }
+
     const alerts = (sweepData as ModerationAlert[] | null) ?? [];
     if (alerts.length === 0) {
-      return jsonResponse({ ok: true, alerts_created: 0, notified: 0 });
+      return jsonResponse({ ok: true, alerts_created: 0, notified: 0, report_events: reportEvents });
     }
 
     // Resolve admin recipients once.
@@ -108,7 +126,7 @@ Deno.serve(async (req: Request) => {
 
     if (adminIds.length === 0) {
       console.warn('[moderation-sweep] no admin recipients -- alerts recorded but not delivered');
-      return jsonResponse({ ok: true, alerts_created: alerts.length, notified: 0 });
+      return jsonResponse({ ok: true, alerts_created: alerts.length, notified: 0, report_events: reportEvents });
     }
 
     let delivered = 0;
@@ -177,12 +195,32 @@ Deno.serve(async (req: Request) => {
       delivered += 1;
     }
 
-    return jsonResponse({ ok: true, alerts_created: alerts.length, notified: delivered });
+    return jsonResponse({ ok: true, alerts_created: alerts.length, notified: delivered, report_events: reportEvents });
   } catch (err) {
     console.error('[moderation-sweep] unexpected error', err);
     return jsonResponse({ error: 'Internal server error' }, 500);
   }
 });
+
+// Resolves true only when PostHog accepted the batch, so unaccepted reports
+// stay uncaptured and are retried on the next run.
+async function sendPostHogBatch(events: PostHogEvent[]): Promise<boolean> {
+  const apiKey = Deno.env.get('POSTHOG_PROJECT_API_KEY');
+  if (!apiKey) return false;
+  const host = Deno.env.get('POSTHOG_HOST') ?? 'https://us.i.posthog.com';
+  try {
+    const res = await fetch(`${host}/batch/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5_000),
+      body: JSON.stringify({ api_key: apiKey, batch: events }),
+    });
+    return res.ok;
+  } catch (e) {
+    console.error('[moderation-sweep] PostHog batch failed (non-fatal)', e);
+    return false;
+  }
+}
 
 function severityTitle(severity: string): string {
   switch (severity) {
