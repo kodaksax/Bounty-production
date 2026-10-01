@@ -21,6 +21,11 @@ function baseSnapshot() {
       { table_name: 'wallet_like', column_name: 'balance' },
       { table_name: 'notes', column_name: 'body' },
     ],
+    tables: [
+      { table_name: 'bounty_disputes', rls_enabled: true },
+      { table_name: 'notes', rls_enabled: true },
+    ],
+    column_grants: [] as { table_name: string; column_name: string; grantee: string; privilege_type: string }[],
     functions: [{ signature: 'gate(uuid)', grantees: ['service_role'] }],
   };
 }
@@ -115,6 +120,90 @@ describe('rls-policy-check rules', () => {
     const snap = baseSnapshot();
     snap.functions[0].grantees.push('authenticated');
     expect(analyze(snap, manifest()).errors).toContain('function gate(uuid) is executable by authenticated');
+  });
+
+  it('fails when row-level security is disabled on a protected table', () => {
+    const snap = baseSnapshot();
+    snap.tables[0].rls_enabled = false;
+    expect(analyze(snap, manifest()).errors).toEqual(
+      expect.arrayContaining([expect.stringContaining('bounty_disputes: row-level security is DISABLED')])
+    );
+  });
+
+  it('fails when a protected table is missing from the snapshot', () => {
+    const snap = baseSnapshot();
+    snap.tables = snap.tables.filter((t) => t.table_name !== 'bounty_disputes');
+    expect(analyze(snap, manifest()).errors).toEqual(
+      expect.arrayContaining([expect.stringContaining('bounty_disputes: protected table does not exist')])
+    );
+  });
+
+  describe('column-level grants', () => {
+    const withColumnGrants = () => {
+      const m = manifest();
+      (m.protected.bounty_disputes as any).column_grants = {
+        authenticated: { UPDATE: ['status', 'responder_id'] },
+      };
+      return m;
+    };
+    const grant = (column_name: string) => ({
+      table_name: 'bounty_disputes', column_name, grantee: 'authenticated', privilege_type: 'UPDATE',
+    });
+
+    it('passes when column grants match the allowlist exactly', () => {
+      const snap = baseSnapshot();
+      snap.column_grants = [grant('status'), grant('responder_id')];
+      expect(analyze(snap, withColumnGrants()).errors).toEqual([]);
+    });
+
+    it('fails when UPDATE is granted on an identifier column outside the allowlist', () => {
+      const snap = baseSnapshot();
+      snap.column_grants = [grant('status'), grant('responder_id'), grant('requester_id')];
+      expect(analyze(snap, withColumnGrants()).errors).toEqual(
+        expect.arrayContaining([expect.stringContaining('unexpected authenticated column UPDATE grant(s) on: requester_id')])
+      );
+    });
+
+    it('fails when a required response column is no longer grantable', () => {
+      const snap = baseSnapshot();
+      snap.column_grants = [grant('status')];
+      expect(analyze(snap, withColumnGrants()).errors).toEqual(
+        expect.arrayContaining([expect.stringContaining('missing authenticated column UPDATE grant(s) on: responder_id')])
+      );
+    });
+  });
+
+  describe('trigger state', () => {
+    it.each([['R', 'does not fire for client writes'], ['D', 'DISABLED']])(
+      'rejects a required guard trigger in state %s',
+      (state, message) => {
+        const snap = baseSnapshot();
+        snap.triggers[0].enabled = state;
+        expect(analyze(snap, manifest()).errors).toEqual(
+          expect.arrayContaining([expect.stringContaining(message)])
+        );
+      }
+    );
+
+    it('accepts an always-enabled (A) trigger', () => {
+      const snap = baseSnapshot();
+      snap.triggers[0].enabled = 'A';
+      expect(analyze(snap, manifest()).errors).toEqual([]);
+    });
+
+    it('does not let a replica-only guard suppress a self-only UPDATE finding', () => {
+      const snap = baseSnapshot();
+      snap.policies.push({
+        tablename: 'wallet_like', policyname: 'own_update', permissive: 'PERMISSIVE',
+        cmd: 'UPDATE', roles: '{authenticated}', qual: `(${UID} = user_id)`, with_check: `(${UID} = user_id)`,
+      });
+      const m: any = manifest();
+      m.guarded_tables.wallet_like = 'trg_wallet_guard';
+      snap.triggers.push({ table_name: 'wallet_like', tgname: 'trg_wallet_guard', enabled: 'R' });
+      expect(analyze(snap, m).findings).toContain('self_only_update:wallet_like:own_update');
+      snap.triggers[1].enabled = 'O';
+      expect(analyze(snap, m).findings).not.toContain('self_only_update:wallet_like:own_update');
+    });
   });
 
   describe('ratchet on unprotected tables', () => {

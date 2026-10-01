@@ -132,8 +132,15 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/rls/node_modules
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "::warning::PRODUCTION_DATABASE_URL is not configured; skipping the pre-deploy RLS check"
-            exit 0
+            # Fail closed: without this check, functions that depend on
+            # database objects (wallet /refund -> fn_owner_refund_block_reason)
+            # could deploy before their migrations and return 503s.
+            if [ "${{ github.event.inputs.skip_rls_check }}" = "true" ]; then
+              echo "::warning::PRODUCTION_DATABASE_URL is not configured; skipping the pre-deploy RLS check (skip_rls_check=true)"
+              exit 0
+            fi
+            echo "::error::PRODUCTION_DATABASE_URL is not configured, so the pre-deploy RLS check cannot run. Add the secret to the production environment, or dispatch the workflow with skip_rls_check=true for an emergency deploy."
+            exit 1
           fi
           npm install --prefix "$RUNNER_TEMP/rls" --no-audit --no-fund pg@8
           if ! node scripts/check-rls-policies.js; then

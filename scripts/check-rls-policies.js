@@ -94,6 +94,21 @@ async function snapshot(client) {
        WHERE n.nspname = 'public' AND NOT t.tgisinternal`);
     const columns = await q(`
       SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'`);
+    const tables = await q(`
+      SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')`);
+    // Column-level privileges only (pg_attribute.attacl); role_table_grants
+    // does not show them, and the cancellation policy fix depends on them.
+    const column_grants = await q(`
+      SELECT c.relname AS table_name, a.attname AS column_name,
+             x.grantee::regrole::text AS grantee, x.privilege_type
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN LATERAL aclexplode(a.attacl) x
+       WHERE n.nspname = 'public' AND a.attacl IS NOT NULL AND NOT a.attisdropped
+         AND x.grantee::regrole::text IN ('anon', 'authenticated')`);
     const functions = await q(`
       SELECT p.oid::regprocedure::text AS signature,
              array(SELECT x.grantee::regrole::text
@@ -106,7 +121,7 @@ async function snapshot(client) {
     // A PUBLIC execute grant reaches anon and authenticated too.
     for (const f of functions) if (f.public_execute) f.grantees.push('anon', 'authenticated', 'PUBLIC');
     const [{ db }] = await q(`SELECT current_database() || ' / ' || split_part(current_setting('server_version'), ' ', 1) AS db`);
-    return { policies, grants, triggers, columns, functions, db };
+    return { policies, grants, triggers, columns, tables, column_grants, functions, db };
   } finally {
     await client.query('ROLLBACK').catch(() => {});
   }

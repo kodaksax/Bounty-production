@@ -55,6 +55,15 @@ function normRoles(roles) {
     .sort();
 }
 
+/**
+ * A trigger only guards ordinary client writes in states 'O' (origin, the
+ * default) and 'A' (always). 'D' is disabled and 'R' fires only when
+ * session_replication_role = replica, which PostgREST never sets.
+ */
+function triggerActive(t) {
+  return Boolean(t) && (t.enabled === 'O' || t.enabled === 'A');
+}
+
 function expandCommands(cmd) {
   return cmd === 'ALL' ? COMMANDS : [cmd];
 }
@@ -84,6 +93,10 @@ function policyKey(p) {
  *   policies:  [{ tablename, policyname, permissive, cmd, roles, qual, with_check }]
  *   grants:    [{ table_name, grantee, privilege_type }]
  *   triggers:  [{ table_name, tgname, enabled }]   enabled: 'O' | 'D' | 'R' | 'A'
+ *              (only 'O' and 'A' fire for ordinary client writes)
+ *   tables:    [{ table_name, rls_enabled }]
+ *   column_grants: [{ table_name, column_name, grantee, privilege_type }]
+ *              column-level grants only (pg_attribute.attacl), not table-wide ones
  *   columns:   [{ table_name, column_name }]
  *   functions: [{ signature, grantees: string[] }]  (EXECUTE grantees)
  * @param {object} manifest  supabase/security/rls-manifest.json
@@ -112,6 +125,12 @@ function analyze(snapshot, manifest) {
     // rest of that table's policies fall back to the ratchet).
     const owns = (p) => !spec.commands || expandCommands(p.cmd).some((c) => spec.commands.includes(c));
     const live = (byTable.get(table) || []).filter(owns);
+
+    // Policies and grants say nothing if row-level security is switched off:
+    // ALTER TABLE ... DISABLE ROW LEVEL SECURITY leaves both untouched.
+    const tableInfo = (snapshot.tables || []).find((t) => t.table_name === table);
+    if (!tableInfo) errors.push(`${table}: protected table does not exist`);
+    else if (!tableInfo.rls_enabled) errors.push(`${table}: row-level security is DISABLED`);
 
     if (spec.policies) {
       const liveKeys = new Map(live.map((p) => [policyKey(p), p]));
@@ -153,10 +172,34 @@ function analyze(snapshot, manifest) {
       }
     }
 
+    // Column-level grants (e.g. UPDATE limited to the response columns) are
+    // invisible to role_table_grants, so they are compared separately.
+    if (spec.column_grants) {
+      for (const role of CLIENT_ROLES) {
+        const wantByPriv = spec.column_grants[role] || {};
+        const haveByPriv = {};
+        for (const g of snapshot.column_grants || []) {
+          if (g.table_name !== table || g.grantee !== role) continue;
+          (haveByPriv[g.privilege_type] = haveByPriv[g.privilege_type] || []).push(g.column_name);
+        }
+        for (const priv of new Set([...Object.keys(wantByPriv), ...Object.keys(haveByPriv)])) {
+          const want = wantByPriv[priv] || [];
+          const have = haveByPriv[priv] || [];
+          const extra = have.filter((c) => !want.includes(c)).sort();
+          const missing = want.filter((c) => !have.includes(c)).sort();
+          if (extra.length) errors.push(`${table}: unexpected ${role} column ${priv} grant(s) on: ${extra.join(', ')}`);
+          if (missing.length) errors.push(`${table}: missing ${role} column ${priv} grant(s) on: ${missing.join(', ')}`);
+        }
+      }
+    }
+
     for (const name of spec.required_triggers || []) {
       const t = triggerOn(table, name);
       if (!t) errors.push(`${table}: required guard trigger ${name} is missing`);
       else if (t.enabled === 'D') errors.push(`${table}: required guard trigger ${name} is DISABLED`);
+      else if (!triggerActive(t)) {
+        errors.push(`${table}: required guard trigger ${name} does not fire for client writes (state ${t.enabled}; only O/A are effective)`);
+      }
     }
   }
 
@@ -185,7 +228,7 @@ function analyze(snapshot, manifest) {
     );
     if (hasSensitive) {
       const guardName = guarded[table];
-      const guardOk = guardName && triggerOn(table, guardName) && triggerOn(table, guardName).enabled !== 'D';
+      const guardOk = guardName && triggerActive(triggerOn(table, guardName));
       for (const p of policies) {
         if (!expandCommands(p.cmd).includes('UPDATE')) continue;
         if (isSelfOnly(p.qual) && (p.with_check == null || isSelfOnly(p.with_check)) && !guardOk) {

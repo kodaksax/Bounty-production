@@ -212,6 +212,18 @@
           "INSERT",
           "SELECT"
         ]
+      },
+      "column_grants": {
+        "authenticated": {
+          "UPDATE": [
+            "refund_amount",
+            "resolved_at",
+            "responder_id",
+            "response_message",
+            "status",
+            "updated_at"
+          ]
+        }
       }
     }
   },
