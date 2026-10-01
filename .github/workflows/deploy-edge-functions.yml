@@ -28,6 +28,10 @@ on:
         description: 'Space-separated function slugs to redeploy (blank = all changed/all functions)'
         required: false
         default: ''
+      skip_rls_check:
+        description: 'Emergency only: deploy even if the production RLS check fails'
+        required: false
+        default: 'false'
 
 concurrency:
   group: deploy-edge-functions-production
@@ -111,6 +115,42 @@ jobs:
           # a merge bringing in more than one commit) leaves `before` outside
           # the shallow clone and makes `git diff` fail outright.
           fetch-depth: 0
+
+      # Functions can depend on database objects (e.g. wallet /refund calls
+      # fn_owner_refund_block_reason). Deploying before the migration that
+      # creates them is applied would break the endpoint, so check that the
+      # live database matches the reviewed manifest first.
+      - name: Setup Node.js (RLS pre-deploy check)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Production RLS / schema pre-deploy check
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          RLS_CHECK_ENV: production
+          NODE_PATH: ${{ runner.temp }}/rls/node_modules
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            # Fail closed: without this check, functions that depend on
+            # database objects (wallet /refund -> fn_owner_refund_block_reason)
+            # could deploy before their migrations and return 503s.
+            if [ "${{ github.event.inputs.skip_rls_check }}" = "true" ]; then
+              echo "::warning::PRODUCTION_DATABASE_URL is not configured; skipping the pre-deploy RLS check (skip_rls_check=true)"
+              exit 0
+            fi
+            echo "::error::PRODUCTION_DATABASE_URL is not configured, so the pre-deploy RLS check cannot run. Add the secret to the production environment, or dispatch the workflow with skip_rls_check=true for an emergency deploy."
+            exit 1
+          fi
+          npm install --prefix "$RUNNER_TEMP/rls" --no-audit --no-fund pg@8
+          if ! node scripts/check-rls-policies.js; then
+            if [ "${{ github.event.inputs.skip_rls_check }}" = "true" ]; then
+              echo "::warning::Production RLS check failed; deploying anyway (skip_rls_check=true)"
+            else
+              echo "::error::Production database does not match supabase/security/rls-manifest.json. Apply the pending migrations to production first."
+              exit 1
+            fi
+          fi
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1

@@ -539,6 +539,25 @@ export const disputeService = {
   },
 
   /**
+   * Ask support to prioritise a dispute (participant action).
+   *
+   * Participants cannot change a dispute's status (only admins decide), so
+   * this flags the dispute through the request_dispute_escalation RPC instead
+   * of the old direct `status: 'under_review'` update, which RLS now rejects.
+   * Throws on failure so the caller never reports a no-op as success.
+   */
+  async requestEscalation(disputeId: string): Promise<void> {
+    if (!isSupabaseConfigured) throw new Error('Supabase not configured');
+    const { error } = await supabase.rpc('request_dispute_escalation', {
+      p_dispute_id: normalizeDisputeIdParam(disputeId),
+    });
+    if (error) {
+      logger.error('Error requesting dispute escalation', { error, disputeId });
+      throw error;
+    }
+  },
+
+  /**
    * Resolve a dispute
    * @param prefetchedBounty - Optional pre-fetched bounty to avoid redundant DB call
    */

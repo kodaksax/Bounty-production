@@ -15,6 +15,7 @@ import {
     verifyDepositPaymentIntent,
     type DepositPaymentIntent,
 } from '../_shared/deposit-verification.ts';
+import { checkOwnerRefundGate } from '../_shared/owner-refund-gate.ts';
 import {
     resolveReleasePayee,
     type ReleaseBountyLookupClient,
@@ -822,6 +823,18 @@ Deno.serve(async (req: Request) => {
             errorPayload('Unauthorized to refund funds', 'not_bounty_owner'),
             403
           );
+        }
+
+        // Escrow commitment: once a hunter is accepted the owner cannot pull
+        // the escrow back unilaterally. Only a never-accepted bounty or the
+        // accepted hunter's own cancellation request releases it to the poster.
+        // (A responding hunter consenting to the poster's request is the other
+        // party's own decision and is not gated.)
+        if (isOwner) {
+          const gate = await checkOwnerRefundGate(supabase, bountyId, userId);
+          if (!gate.ok) {
+            return jsonResponse(errorPayload(gate.error, gate.code, gate.retryable), gate.status);
+          }
         }
 
         // Prevent double-refund / double-release.

@@ -24,6 +24,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // @ts-ignore: Allow runtime npm import for Deno/edge function.
 import Stripe from 'npm:stripe@14';
+import { checkOwnerRefundGate } from '../_shared/owner-refund-gate.ts';
 
 declare const Deno: any;
 
@@ -1463,6 +1464,16 @@ Deno.serve(async (req: Request) => {
             code: 'already_released',
           },
           409
+        );
+      }
+
+      // Escrow commitment: same rule as /wallet/refund. After a hunter is
+      // accepted the poster cannot cancel or refund the payment unilaterally.
+      const gate = await checkOwnerRefundGate(supabaseAdmin, bountyId, userId);
+      if (!gate.ok) {
+        return reply(
+          { error: gate.error, code: gate.code, retryable: gate.retryable },
+          gate.status
         );
       }
 
