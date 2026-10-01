@@ -595,6 +595,14 @@ export const MODERATION_SIGNAL_TYPES = [
   'new_account_high_value',
   'duplicate_description',
   'repeated_listing',
+  'payment_proxy',
+  'purchase_on_behalf',
+  'off_platform_channel',
+  'off_platform_payment',
+  'employment_offer',
+  'recurring_pay_rate',
+  'details_withheld',
+  'details_in_attachment',
 ] as const;
 export type ModerationSignalType = (typeof MODERATION_SIGNAL_TYPES)[number];
 
@@ -609,6 +617,14 @@ export const MODERATION_SIGNAL_LABEL: Record<string, string> = {
   new_account_high_value: 'High-value listing from a new account',
   duplicate_description: 'Duplicate description',
   repeated_listing: 'Repeated listing',
+  payment_proxy: 'Asks the hunter to pay, receive money or verify an identity',
+  purchase_on_behalf: 'Online purchase / gift card on someone\'s behalf',
+  off_platform_channel: 'Moves contact to another app',
+  off_platform_payment: 'Payment outside escrow (Zelle, Cash App…)',
+  employment_offer: 'Job / hiring pitch',
+  recurring_pay_rate: 'Hourly or recurring pay rate',
+  details_withheld: 'Task details withheld (DMs or image)',
+  details_in_attachment: 'Attachments with almost no description',
 };
 
 export type ModerationSeverity = 'low' | 'medium' | 'high' | 'critical';

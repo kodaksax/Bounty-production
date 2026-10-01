@@ -57,6 +57,17 @@
           "with_check": null
         },
         {
+          "policyname": "bounties_select_moderation_hold",
+          "cmd": "SELECT",
+          "permissive": "RESTRICTIVE",
+          "roles": [
+            "anon",
+            "authenticated"
+          ],
+          "qual": "fn_bounty_moderation_visible(id, poster_id, user_id, accepted_by)",
+          "with_check": null
+        },
+        {
           "policyname": "bounties_update_owner",
           "cmd": "UPDATE",
           "permissive": "PERMISSIVE",
