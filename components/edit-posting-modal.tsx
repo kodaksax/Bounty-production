@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingScreen, KeyboardAwareScrollView } from "./ui/keyboard-avoiding";
+import { useBountyExactLocation } from "../hooks/useBountyExactLocation";
 import { usePostingPolicy } from "../hooks/usePostingPolicy";
 import { useAppThemeContext } from "../lib/themes/AppThemeContext";
 import type { AppTheme } from "../lib/themes/types";
@@ -39,12 +40,17 @@ export function EditPostingModal({
   const { honorPostsEnabled, minimumAmount } = usePostingPolicy();
   const canToggleForHonor = honorPostsEnabled || !!bounty.is_for_honor;
 
+  // bounty.location is only the public "City, ST" label; the poster edits
+  // their real address, which comes from the access-checked RPC.
+  const { exact: exactLocation } = useBountyExactLocation(bounty?.id, visible);
+  const initialLocation = exactLocation?.location || bounty.location || "";
+
   const [formData, setFormData] = useState({
     title: bounty.title || "",
     description: bounty.description || "",
     amount: bounty.amount || 0,
     isForHonor: bounty.is_for_honor || false,
-    location: bounty.location || "",
+    location: initialLocation,
   });
 
   // Sync state with props when bounty changes (e.g. when modal is reused)
@@ -55,11 +61,22 @@ export function EditPostingModal({
         description: bounty.description || "",
         amount: bounty.amount || 0,
         isForHonor: bounty.is_for_honor || false,
-        location: bounty.location || "",
+        location: initialLocation,
       });
       setError(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on open/bounty change only
   }, [visible, bounty]);
+
+  // The exact address usually lands just after opening: swap it in unless the
+  // poster has already started editing the field.
+  const exactAddress = exactLocation?.location;
+  React.useEffect(() => {
+    if (!exactAddress) return;
+    setFormData((prev) =>
+      prev.location === (bounty.location || "") ? { ...prev, location: exactAddress } : prev
+    );
+  }, [exactAddress, bounty.location]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,7 +111,12 @@ export function EditPostingModal({
         description: formData.description.trim(),
         amount: formData.isForHonor ? 0 : formData.amount,
         is_for_honor: formData.isForHonor,
-        location: formData.location.trim() || undefined,
+        // Only send a location the poster actually changed: re-sending the
+        // public label would replace the stored private address with it.
+        location:
+          formData.location.trim() !== initialLocation.trim()
+            ? formData.location.trim() || undefined
+            : undefined,
       });
 
       onClose();
@@ -113,7 +135,7 @@ export function EditPostingModal({
         description: bounty.description,
         amount: bounty.amount,
         isForHonor: bounty.is_for_honor,
-        location: bounty.location || "",
+        location: initialLocation,
       });
       setError(null);
       onClose();

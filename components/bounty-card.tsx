@@ -11,6 +11,7 @@ import {
 } from 'lib/utils/bounty-display-status';
 import { resolveBountyLifecycle } from 'lib/utils/bounty-lifecycle';
 import { isBountyPoster } from 'lib/utils/poster-bounty-dashboard';
+import { formatPublicLocation } from 'lib/utils/public-location';
 import { isBountyDeadlinePassed } from 'lib/utils/schedule-utils';
 import { shareBounty } from 'lib/utils/share-utils';
 import { useMemo } from 'react';
@@ -108,6 +109,7 @@ export function BountyCard({
   // shown as "Deadline Passed" instead of its underlying open/in_progress
   // status, and becomes eligible for the poster to delete it.
   const isDeadlinePassed = isBountyDeadlinePassed(bounty);
+  const publicLocation = formatPublicLocation(bounty);
 
   const handleShare = async () => {
     await shareBounty({
@@ -248,11 +250,11 @@ export function BountyCard({
 
       {/* Meta row: location, work type */}
       <View style={styles.metaRow}>
-        {bounty.location && (
+        {publicLocation && (
           <View style={styles.metaItem}>
             <MaterialIcons name="place" size={14} color={theme.primaryLight} />
             <Text style={styles.metaText} numberOfLines={1}>
-              {bounty.location}
+              {publicLocation}
             </Text>
           </View>
         )}

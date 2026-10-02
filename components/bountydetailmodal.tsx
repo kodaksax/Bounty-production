@@ -24,6 +24,8 @@ import {
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { formatExactAddress, useBountyExactLocation } from '../hooks/useBountyExactLocation'
+import { formatPublicLocation } from '../lib/utils/public-location'
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { bountyService } from '../lib/services/bounty-service'
@@ -80,7 +82,10 @@ interface BountyDetailModalProps {
     duration_minutes?: number | null
     conditional_end_note?: string | null
     skills_required?: string
+    /** Public "City, ST" label. Never the street address — see lib/utils/public-location. */
     location?: string
+    neighborhood?: string | null
+    accepted_by?: string | null
     is_time_sensitive?: boolean
     deadline?: string
     status?: string
@@ -125,6 +130,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
   const posterId = bounty.poster_id || bounty.user_id
   const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId ? String(posterId) : undefined)
+  // Everyone sees the neighborhood/city. Only the poster and the accepted
+  // hunter get the street address, from the access-checked RPC.
+  const isLocationParticipant =
+    currentUserId != null &&
+    (String(posterId ?? '') === String(currentUserId) || String(bounty.accepted_by ?? '') === String(currentUserId))
+  const { exact: exactLocation } = useBountyExactLocation(bounty.id, isLocationParticipant)
+  const locationText = formatExactAddress(exactLocation) || formatPublicLocation(bounty)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [viewerAttachment, setViewerAttachment] = useState<AttachmentMeta | null>(null)
@@ -815,7 +827,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                   )}
 
                   {/* Additional Details - Timeline, Skills, Location, Deadline */}
-                  {(scheduleSummary || bounty.skills_required || bounty.location || bounty.deadline) && (
+                  {(scheduleSummary || bounty.skills_required || locationText || bounty.deadline) && (
                     <View style={styles.additionalDetailsContainer}>
                       <Text style={styles.sectionHeader}>Additional Details</Text>
 
@@ -832,11 +844,11 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                           label: 'Skills Required',
                           value: bounty.skills_required,
                         },
-                        bounty.location && bounty.work_type !== 'online' && {
+                        locationText && bounty.work_type !== 'online' && {
                           icon: 'place' as const,
                           color: theme.textSecondary,
                           label: 'Location',
-                          value: bounty.location,
+                          value: locationText,
                         },
                         bounty.is_time_sensitive && bounty.deadline && {
                           icon: 'access-time' as const,

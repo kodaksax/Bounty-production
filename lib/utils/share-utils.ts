@@ -1,5 +1,6 @@
 import { Alert, Platform, Share } from 'react-native';
 import { analyticsService } from '../services/analytics-service';
+import { publicLocationLabel } from './public-location';
 
 // Production domain for shareable links. Each link is served by a Supabase
 // Edge Function (supabase/functions/share-bounty, share-profile) that
@@ -118,7 +119,9 @@ export const shareBounty = async ({
         const url = `${APP_SCHEME}/bounty/${id}`;
         const rewardLine = isForHonor ? 'For Honor' : `$${amount.toLocaleString()} reward`;
 
-        const detailParts = [category, location].filter(Boolean);
+        // Shared text leaves the app: never let a street address through, even
+        // from a stale cached row (see lib/utils/public-location.ts).
+        const detailParts = [category, publicLocationLabel(location)].filter(Boolean);
         const detailLine = detailParts.length > 0 ? detailParts.join(' • ') : '';
 
         const lines = [

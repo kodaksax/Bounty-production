@@ -90,7 +90,9 @@
       },
       "required_triggers": [
         "trg_bounties_guard_lifecycle",
-        "trg_bounties_enforce_funding_before_work"
+        "trg_bounties_enforce_funding_before_work",
+        "zz_bounties_privatize_location",
+        "zz_bounties_store_private_location"
       ]
     },
     "bounty_disputes": {
@@ -240,6 +242,47 @@
           ]
         }
       }
+    },
+    "bounty_private_locations": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "bounty_location_backfill_snapshot": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "location_privacy_rollback_defs": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "bounty_location_access_log": {
+      "policies": [
+        {
+          "policyname": "bounty_location_access_log_admin_read",
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(((( SELECT auth.jwt() AS jwt) -> 'app_metadata'::text) ->> 'role'::text) = 'admin'::text)",
+          "with_check": null
+        }
+      ],
+      "grants": {
+        "anon": [],
+        "authenticated": [
+          "SELECT"
+        ]
+      }
     }
   },
   "functions": [
@@ -267,6 +310,7 @@
       ]
     },
     {
+      "signature": "fn_backfill_bounty_location_privacy(boolean)",
       "signature": "admin_revert_legacy_rating_verification()",
       "forbid_execute": [
         "anon",
