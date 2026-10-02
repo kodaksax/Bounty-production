@@ -47,7 +47,7 @@
             "authenticated"
           ],
           "qual": null,
-          "with_check": "((poster_id = ( SELECT auth.uid() AS uid)) AND ((user_id IS NULL) OR (user_id = ( SELECT auth.uid() AS uid))) AND is_account_active(( SELECT auth.uid() AS uid)))"
+          "with_check": "((poster_id = ( SELECT auth.uid() AS uid)) AND ((user_id IS NULL) OR (user_id = ( SELECT auth.uid() AS uid))) AND is_account_active(( SELECT auth.uid() AS uid)) AND ((status)::text = 'open'::text) AND (accepted_by IS NULL) AND (accepted_request_id IS NULL) AND (completed_at IS NULL))"
         },
         {
           "policyname": "bounties_select_authenticated",
