@@ -253,12 +253,14 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
         : {
             icon: 'verified-user',
             title: 'Verify your identity',
-            body: 'A quick ID and selfie check (powered by Stripe) builds trust with other users and unlocks higher limits. It takes about 2 minutes. This is separate from any bank details you’ve added for payouts — it verifies who you are, not how you get paid, and you can always do it later from your profile.',
+            body: 'A quick ID and selfie check (powered by Stripe) lets other people see that Bounty confirmed who you are. It takes about 2 minutes. This is separate from any bank details you’ve added for payouts — it verifies who you are, not how you get paid, and you can always do it later from your profile.',
+            // Only what verification actually does today. "Higher transaction
+            // limits", "Priority in bounty matching" and "Enhanced trust score"
+            // had nothing behind them anywhere in the backend.
             benefits: [
               'Verified badge on your profile',
-              'Higher transaction limits',
-              'Priority in bounty matching',
-              'Enhanced trust score',
+              'Apply to bounties that require ID',
+              'Shown to hunters on bounties you post',
             ],
             primaryLabel: 'Verify now',
             secondaryLabel: 'Later',

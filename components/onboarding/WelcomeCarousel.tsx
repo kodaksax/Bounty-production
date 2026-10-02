@@ -419,12 +419,15 @@ function ProofMockCard({
   styles: ReturnType<typeof makeStyles>;
 }) {
   return (
-    <View style={styles.proofCard} accessibilityRole="none">
+    <View
+      style={styles.proofCard}
+      accessible
+      accessibilityLabel={`Example request: ${card.request} ${card.amount}`}
+    >
       <View style={styles.proofCardTopRow}>
-        <View style={[styles.proofBadge, { backgroundColor: theme.completed }]}>
-          <Text style={styles.proofBadgeText}>{proofCard.statusBadge}</Text>
+        <View style={[styles.proofBadge, { backgroundColor: theme.surfaceSecondary }]}>
+          <Text style={[styles.proofBadgeText, { color: theme.textSecondary }]}>{proofCard.exampleBadge}</Text>
         </View>
-        <Text style={styles.proofPaidOut}>{proofCard.paidOut}</Text>
       </View>
 
       <View style={styles.proofCardMainRow}>
@@ -439,9 +442,6 @@ function ProofMockCard({
           <Text style={styles.proofAvatarText}>{card.posterInitial}</Text>
         </View>
         <Text style={styles.proofPosterName}>{card.posterName}</Text>
-        <Text style={styles.proofMetaDot}>·</Text>
-        <Text style={styles.proofRating}>{proofCard.rating}</Text>
-        <MaterialIcons name="verified" size={13} color={theme.primary} style={styles.proofVerifiedIcon} />
         <Text style={styles.proofMetaDot}>·</Text>
         <Text style={styles.proofDistance}>{card.distance}</Text>
       </View>
@@ -571,11 +571,6 @@ function makeStyles(theme: AppTheme) {
       letterSpacing: 0.4,
       color: theme.foreground,
     },
-    proofPaidOut: {
-      fontSize: 12,
-      fontWeight: '500',
-      color: theme.textSecondary,
-    },
     proofCardMainRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -619,14 +614,6 @@ function makeStyles(theme: AppTheme) {
       fontSize: 13,
       fontWeight: '600',
       color: theme.text,
-    },
-    proofRating: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: theme.textSecondary,
-    },
-    proofVerifiedIcon: {
-      marginLeft: -2,
     },
     proofDistance: {
       fontSize: 13,

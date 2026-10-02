@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useAuthProfile } from '../../../hooks/useAuthProfile';
+import { useNormalizedProfile } from '../../../hooks/useNormalizedProfile';
 import { useSafeBack } from '../../../hooks/useSafeBack';
 import { resendVerification } from '../../../lib/services/auth-service';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
@@ -38,6 +39,8 @@ import { getUserFriendlyError } from '../../../lib/utils/error-messages';
 import { ApplicationPitchModal } from '../../../components/application-pitch-modal';
 import { IdRequirementModal } from '../../../components/id-requirement-modal';
 import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
+import { formatPostedAgo } from '../../../lib/utils/format-relative-date';
+import { BountyTrustSignals } from '../../../components/bounty-trust-signals';
 
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
@@ -196,19 +199,9 @@ export default function PublicBountyDetail() {
     });
   }, [bounty, viewerRole, hasApplied]);
 
-  const formatTimeAgo = (dateString?: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
-  };
+  // Poster's public profile, for account age + earned ID on the trust block.
+  const posterId = bounty ? String(bounty.poster_id || bounty.user_id || '') || undefined : undefined;
+  const { profile: posterProfile } = useNormalizedProfile(posterId, { enabled: !!posterId && !isOwnBounty });
 
   const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
     if (!bounty) return;
@@ -480,7 +473,7 @@ export default function PublicBountyDetail() {
                   {lifecycle ? BOUNTY_DISPLAY_STATUS_LABELS[lifecycle.status] : 'OPEN'}
                 </Text>
               </View>
-              <Text style={s.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
+              <Text style={s.bountyAge}>{formatPostedAgo(bounty.created_at)}</Text>
             </View>
 
             <Text style={s.bountyTitle}>{bounty.title}</Text>
@@ -513,6 +506,12 @@ export default function PublicBountyDetail() {
               </View>
             </View>
           </View>
+
+          {/* Funding state + poster evidence for a hunter deciding whether to
+              apply. The poster has their own dashboard for this. */}
+          {!isOwnBounty && (
+            <BountyTrustSignals bountyId={bounty.id} posterId={posterId} poster={posterProfile} />
+          )}
 
           {/* What this state means for the person reading it. No action button
               here: the sticky Apply / View-your-application control below is

@@ -2,10 +2,10 @@
  * Onboarding Payouts
  * The last step that asks for anything, immediately after role selection
  * (app/onboarding/role-select.tsx) and before the founder note
- * (app/onboarding/founder-note.tsx), which closes the flow. Both intents land here —
- * "Make today pay." and "I'd rather earn" alike — because a poster's refunds
- * and a hunter's earnings both leave the wallet through the same Stripe
- * Connect account.
+ * (app/onboarding/founder-note.tsx), which closes the flow. Only hunters
+ * ("I'd rather earn") land here. Posters go straight to the founder note:
+ * nothing they do needs a payout account until they withdraw, and the
+ * withdraw flow asks then (lib/onboarding/next-step-after-role.ts).
  *
  * This file owns state + navigation only; the UI lives in
  * components/onboarding/PayoutSetupScreen.tsx and the actual Connect flow

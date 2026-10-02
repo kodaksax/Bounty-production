@@ -3,11 +3,12 @@
  * (components/onboarding/WelcomeCarousel.tsx, rendered by app/onboarding/welcome.tsx).
  *
  * Slide headlines/body lines and the proof-card caption are spec-scripted —
- * kept verbatim. The proof-card's task title and poster name are wrapped in
- * [brackets] deliberately: they stand in for real user-generated content
- * (a completed bounty pulled live, the way ProofCard.tsx already does on
- * the funding screen) and must never be read as a claim about a specific
- * bounty or person.
+ * kept verbatim. The proof cards are illustrative requests, not transactions,
+ * and say so on the card itself ("EXAMPLE"). They used to carry
+ * "COMPLETED · paid out 2h ago · 4.9 ✓" plus bracketed placeholders that
+ * rendered literally, which read as both a broken template and a claim about
+ * real jobs (trust-spine audit T9). Nothing on these cards may state an
+ * outcome, payout, rating or verification.
  */
 
 export interface WelcomeCarouselSlide {
@@ -21,10 +22,9 @@ export interface WelcomeCarouselSlide {
  * RotatingProofCards in WelcomeCarousel.tsx) instead of showing one static
  * card.
  *
- * Same bracket convention as `proofCard` below and as ProofCard.tsx on the
- * funding screen: every bracketed value stands in for user-generated content
- * and must never be read as a claim about a specific bounty, person or
- * payout. The request lines are illustrative asks in a poster's own voice.
+ * Illustrative asks in a poster's own voice, labelled as examples on the
+ * card. Names, amounts and distances are made up; the card shows no status,
+ * payout, rating or verification for them.
  */
 export interface WelcomeProofExampleCard {
   key: string;
@@ -40,37 +40,37 @@ export const welcomeProofExampleCards = [
     key: 'couch',
     request:
       "I'm moving this weekend and my new couch arrives while I'm at work. Can someone be there to receive it and help get it inside?",
-    amount: '[$90]',
-    distance: '[1.1 mi]',
+    amount: '$90',
+    distance: '1.1 mi',
     posterInitial: 'D',
-    posterName: '[Dana]',
+    posterName: 'Dana',
   },
   {
     key: 'groceries',
     request:
       "My mom is visiting from the Philippines and I'm at work all day. Can someone who speaks Filipino go grocery shopping with her and help her get around?",
-    amount: '[$120]',
-    distance: '[0.6 mi]',
+    amount: '$120',
+    distance: '0.6 mi',
     posterInitial: 'R',
-    posterName: '[Rey]',
+    posterName: 'Rey',
   },
   {
     key: 'charger',
     request:
       'I left my laptop charger at a coffee shop 30 minutes away. Can someone pick it up and bring it to me?',
-    amount: '[$45]',
-    distance: '[2.4 mi]',
+    amount: '$45',
+    distance: '2.4 mi',
     posterInitial: 'S',
-    posterName: '[Sam]',
+    posterName: 'Sam',
   },
   {
     key: 'ride',
     request:
       "My dad needs to get something from a store across town, but he can't drive right now. Can someone pick him up, take him there, and bring him home?",
-    amount: '[$75]',
-    distance: '[1.8 mi]',
+    amount: '$75',
+    distance: '1.8 mi',
     posterInitial: 'A',
-    posterName: '[Alex]',
+    posterName: 'Alex',
   },
 ] satisfies WelcomeProofExampleCard[];
 
@@ -104,14 +104,8 @@ export const welcomeCarouselStrings = {
   ] satisfies WelcomeCarouselSlide[],
 
   proofCard: {
-    statusBadge: 'COMPLETED',
-    paidOut: 'paid out 2h ago',
-    taskTitle: '[Hauled a mattress to the curb]',
-    amount: '$85',
-    posterInitial: 'M',
-    posterName: '[Marcus]',
-    rating: '4.9',
-    distance: '0.9 mi',
+    // Shown on every rolling card. Neutral, not the "completed" colour.
+    exampleBadge: 'EXAMPLE',
   },
 
   // Trust slide rows. Every one must describe behaviour the app actually

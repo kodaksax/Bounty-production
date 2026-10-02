@@ -46,8 +46,18 @@ export const profileStatsService = {
    * ratingsService.getAggregatedStats.
    */
   async getActivityStats(userId: string): Promise<ProfileActivityStats> {
+    return (await profileStatsService.getActivityStatsOrNull(userId)) ?? EMPTY_STATS;
+  },
+
+  /**
+   * Same read as getActivityStats, but null when the server didn't answer.
+   * Trust surfaces that state a count to a stranger ("No completed bounties
+   * yet") must use this: zeroed defaults on a failed fetch would be a false
+   * claim about the person, not a safe fallback.
+   */
+  async getActivityStatsOrNull(userId: string): Promise<ProfileActivityStats | null> {
     if (!userId || !isSupabaseConfigured) {
-      return EMPTY_STATS;
+      return null;
     }
 
     try {
@@ -60,10 +70,10 @@ export const profileStatsService = {
           userId,
           error,
         });
-        return EMPTY_STATS;
+        return null;
       }
 
-      if (!data) return EMPTY_STATS;
+      if (!data) return null;
 
       return {
         bountiesPosted: Number((data as any).bounties_posted) || 0,
@@ -78,7 +88,7 @@ export const profileStatsService = {
         userId,
         error: err,
       });
-      return EMPTY_STATS;
+      return null;
     }
   },
 };

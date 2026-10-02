@@ -116,16 +116,27 @@ describe('onboarding gate (app/onboarding/index.tsx)', () => {
       expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/welcome');
     });
 
-    it('resumes a signed-in user who already picked a role', async () => {
+    it('resumes a signed-in hunter who already picked a role at payout setup', async () => {
       mockAuthContext.session = SIGNED_IN;
       mockAuthProfile.profile = { username: 'newuser', onboarding_completed: false };
-      mockOnboarding.data.intent = 'poster';
+      mockOnboarding.data.intent = 'hunter';
 
       render(<OnboardingIndex />);
 
       // Intent set means style and role-select are both behind them.
       await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/payouts'));
       expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/welcome');
+    });
+
+    it('resumes a signed-in poster past payout setup (posters are never asked for Stripe in onboarding)', async () => {
+      mockAuthContext.session = SIGNED_IN;
+      mockAuthProfile.profile = { username: 'newuser', onboarding_completed: false };
+      mockOnboarding.data.intent = 'poster';
+
+      render(<OnboardingIndex />);
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/founder-note'));
+      expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/payouts');
     });
 
     it('sends an already-onboarded user straight to the app', async () => {

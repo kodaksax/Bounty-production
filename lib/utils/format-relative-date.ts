@@ -21,3 +21,27 @@ export function formatRelativeDate(iso?: string): string {
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(months / 12)}y ago`;
 }
+
+/**
+ * "just now" / "12m ago" / "3h ago" / "4d ago" / "2mo ago" / "1y ago" for when
+ * a bounty was posted, derived from its real created_at. Finer than
+ * formatRelativeDate because a feed's freshness is measured in hours.
+ *
+ * Returns '' for a missing or unparseable timestamp, so callers omit the line
+ * instead of inventing one. A future timestamp (clock skew) reads "just now".
+ */
+export function formatPostedAgo(iso?: string | null, now: number = Date.now()): string {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const mins = Math.floor((now - t) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}

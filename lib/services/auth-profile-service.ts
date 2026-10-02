@@ -241,8 +241,11 @@ export class AuthProfileService {
           // (verification-badges.ts) can actually be earned -- it was
           // previously omitted here even though public_profiles exposes it,
           // so that badge always read as unearned for every other user.
+          // `created_at` is the account age shown to hunters on a bounty
+          // (components/bounty-trust-signals.tsx); without it the join date
+          // fell back to "now" for every other user.
           .select(
-            'id,username,displayName:display_name,avatar,banner_url,location,about,stripe_identity_status,verified_since'
+            'id,username,displayName:display_name,avatar,banner_url,location,about,created_at,stripe_identity_status,verified_since'
           )
           .eq('id', userId)
           .maybeSingle();
