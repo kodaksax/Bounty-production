@@ -290,6 +290,11 @@ BEGIN
       v_priv.longitude := NULL;
     ELSE
       v_priv.address := v_raw;
+      IF NOT v_coords_sent THEN
+        v_priv.unit := NULL;
+        v_priv.latitude := NULL;
+        v_priv.longitude := NULL;
+      END IF;
       NEW.location := COALESCE(public.fn_public_location_label(v_raw),
                                public.fn_public_neighborhood(NEW.neighborhood),
                                '');
@@ -317,7 +322,7 @@ BEGIN
       v_priv.longitude := NEW.longitude;
       v_dirty := true;
     END IF;
-  ELSIF v_loc_removed THEN
+  ELSIF v_loc_removed OR (v_loc_changed AND NOT v_coords_sent) THEN
     NEW.approx_latitude  := NULL;
     NEW.approx_longitude := NULL;
   ELSIF TG_OP = 'UPDATE' THEN

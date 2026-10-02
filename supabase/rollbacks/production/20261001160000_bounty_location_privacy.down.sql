@@ -65,6 +65,13 @@ BEGIN
   GET DIAGNOSTICS v_rows = ROW_COUNT;
   RAISE NOTICE 'rollback: restored exact location on % bounties', v_rows;
 
+  UPDATE public.bounties b
+  SET neighborhood = s.neighborhood
+  FROM public.bounty_location_backfill_snapshot s
+  WHERE s.bounty_id = b.id
+    AND b.neighborhood IS NULL
+    AND s.neighborhood IS NOT NULL;
+
   IF v_replident = 'f' THEN
     ALTER TABLE public.bounties REPLICA IDENTITY FULL;
   END IF;

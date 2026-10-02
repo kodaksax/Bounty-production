@@ -40,7 +40,7 @@ async function connect(env) {
   }
   let lastErr;
   for (const url of candidateUrls(env)) {
-    const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 10000 });
+    const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 10000 });
     try {
       await client.connect();
       return client;

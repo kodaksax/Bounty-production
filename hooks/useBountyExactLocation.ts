@@ -20,6 +20,7 @@ export function useBountyExactLocation(bountyId: string | number | null | undefi
       return;
     }
     let cancelled = false;
+    setExact(null);
     setIsLoading(true);
     getBountyExactLocation(String(bountyId)).then((result) => {
       if (cancelled) return;
