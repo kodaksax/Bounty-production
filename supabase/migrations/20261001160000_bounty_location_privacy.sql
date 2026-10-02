@@ -546,6 +546,7 @@ DECLARE
   v_snap      integer;
   v_priv      integer;
   v_rows      integer;
+  v_owner_chk text;
 BEGIN
   SELECT jsonb_build_object(
     'rows_total',                     count(*),
@@ -630,6 +631,19 @@ BEGIN
     ALTER TABLE public.bounties REPLICA IDENTITY DEFAULT;
   END IF;
 
+  -- Legacy ownerless rows (poster_id, user_id, former_poster_id all NULL; see
+  -- 20260913211432) violate the NOT VALID bounties_owner_reference_required,
+  -- which Postgres re-checks on every UPDATE. Lift it for the scrub only and
+  -- re-add it NOT VALID, so it still guards every new write.
+  SELECT pg_get_constraintdef(c.oid) INTO v_owner_chk
+  FROM pg_constraint c
+  WHERE c.conrelid = 'public.bounties'::regclass
+    AND c.conname = 'bounties_owner_reference_required'
+    AND NOT c.convalidated;
+  IF v_owner_chk IS NOT NULL THEN
+    ALTER TABLE public.bounties DROP CONSTRAINT bounties_owner_reference_required;
+  END IF;
+
   UPDATE public.bounties b
   SET location = CASE
         WHEN NULLIF(btrim(b.location), '') IS NULL THEN b.location
@@ -675,6 +689,10 @@ BEGIN
          OR b.neighborhood IS NOT NULL
          OR b.approx_latitude IS NOT NULL);
   GET DIAGNOSTICS v_rows = ROW_COUNT;
+
+  IF v_owner_chk IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE public.bounties ADD CONSTRAINT bounties_owner_reference_required %s', v_owner_chk);
+  END IF;
 
   IF v_replident = 'f' THEN
     ALTER TABLE public.bounties REPLICA IDENTITY FULL;

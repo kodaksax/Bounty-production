@@ -25,6 +25,7 @@ DECLARE
   v_replident "char";
   v_def       text;
   v_rows      integer;
+  v_owner_chk text;
 BEGIN
   IF to_regclass('public.location_privacy_rollback_defs') IS NULL
      OR to_regclass('public.bounty_private_locations') IS NULL THEN
@@ -50,6 +51,17 @@ BEGIN
     ALTER TABLE public.bounties REPLICA IDENTITY DEFAULT;
   END IF;
 
+  -- Ownerless legacy rows fail the NOT VALID owner check on UPDATE; lift it
+  -- for the restore and re-add it NOT VALID (same as the forward backfill).
+  SELECT pg_get_constraintdef(c.oid) INTO v_owner_chk
+  FROM pg_constraint c
+  WHERE c.conrelid = 'public.bounties'::regclass
+    AND c.conname = 'bounties_owner_reference_required'
+    AND NOT c.convalidated;
+  IF v_owner_chk IS NOT NULL THEN
+    ALTER TABLE public.bounties DROP CONSTRAINT bounties_owner_reference_required;
+  END IF;
+
   UPDATE public.bounties b
   SET location     = COALESCE(p.address, b.location),
       latitude     = p.latitude,
@@ -71,6 +83,10 @@ BEGIN
   WHERE s.bounty_id = b.id
     AND b.neighborhood IS NULL
     AND s.neighborhood IS NOT NULL;
+
+  IF v_owner_chk IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE public.bounties ADD CONSTRAINT bounties_owner_reference_required %s', v_owner_chk);
+  END IF;
 
   IF v_replident = 'f' THEN
     ALTER TABLE public.bounties REPLICA IDENTITY FULL;
