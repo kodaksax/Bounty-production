@@ -10,12 +10,32 @@
  * bank, and the withdraw flow asks for it at that moment. Asking a new payer
  * for bank details before they've posted anything read as a red flag, not
  * as setup (trust-spine audit T25).
+ *
+ * Only defined for a picked role. With no role there is no "after role":
+ * callers route to role selection's own entry (the style step) instead, and
+ * the type makes them decide that rather than inheriting a default.
  */
-export type OnboardingIntent = 'poster' | 'hunter' | null | undefined;
+export type OnboardingRole = 'poster' | 'hunter';
 
 export const POSTER_NEXT_STEP_AFTER_ROLE = '/onboarding/founder-note' as const;
 export const HUNTER_NEXT_STEP_AFTER_ROLE = '/onboarding/payouts' as const;
 
-export function nextStepAfterRole(intent: OnboardingIntent) {
-  return intent === 'poster' ? POSTER_NEXT_STEP_AFTER_ROLE : HUNTER_NEXT_STEP_AFTER_ROLE;
+export function nextStepAfterRole(role: OnboardingRole) {
+  switch (role) {
+    case 'poster':
+      return POSTER_NEXT_STEP_AFTER_ROLE;
+    case 'hunter':
+      return HUNTER_NEXT_STEP_AFTER_ROLE;
+    default: {
+      // Unreachable for typed callers; untyped data (e.g. a corrupted
+      // onboarding draft) fails loudly instead of landing on payout setup.
+      const unexpected: never = role;
+      throw new Error(`nextStepAfterRole: unknown role ${String(unexpected)}`);
+    }
+  }
+}
+
+/** For values read from storage/drafts, which the type system can't vouch for. */
+export function isOnboardingRole(value: unknown): value is OnboardingRole {
+  return value === 'poster' || value === 'hunter';
 }

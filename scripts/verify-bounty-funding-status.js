@@ -3,11 +3,20 @@
  * Verifies supabase/migrations/20261002180000_bounty_funding_status_read_model.sql
  * against staging inside ONE transaction that is always rolled back.
  *
- *   node scripts/verify-bounty-funding-status.js            # staging (.env.staging)
+ *   node scripts/verify-bounty-funding-status.js                 # staging (.env.staging)
+ *   PGSSLROOTCERT=/path/to/supabase-ca.crt node scripts/verify-bounty-funding-status.js
+ *   node scripts/verify-bounty-funding-status.js --insecure-tls  # encrypt, don't verify
  *
- * If the migration is not on staging yet it is applied inside the
- * transaction, so nothing persists either way. Fixtures (users, bounties,
- * ledger rows) are created inside the same transaction.
+ * The migration file is always (re)applied inside the transaction -- its
+ * functions are CREATE OR REPLACE -- so this tests the file, not whatever
+ * version happens to be live. Fixtures (users, bounties, ledger rows) live in
+ * the same transaction. Nothing persists.
+ *
+ * TLS: the server certificate is verified by default. Supabase presents a
+ * certificate signed by its own root CA, so point PGSSLROOTCERT at it
+ * (Dashboard > Database > SSL Configuration > Download certificate), or pass
+ * --insecure-tls to opt out explicitly. Same policy as
+ * scripts/ops/sync-cron-secrets.js.
  */
 const fs = require('fs');
 const path = require('path');
@@ -16,6 +25,7 @@ const { Client } = require('pg');
 const ROOT = path.resolve(__dirname, '..');
 const MIGRATION = path.join(ROOT, 'supabase/migrations/20261002180000_bounty_funding_status_read_model.sql');
 const ENV = (process.argv.find((a) => a.startsWith('--env=')) || '--env=staging').slice(6);
+const INSECURE_TLS = process.argv.includes('--insecure-tls');
 if (ENV !== 'staging') {
   console.error('verify-bounty-funding-status only runs against staging (it applies DDL inside a transaction).');
   process.exit(2);
@@ -25,8 +35,10 @@ function candidateUrls() {
   const env = fs.readFileSync(path.join(ROOT, `.env.${ENV}`), 'utf8');
   const m = env.match(/^\s*DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m);
   if (!m) throw new Error(`DATABASE_URL not found in .env.${ENV}`);
-  const raw = m[1].trim();
-  const u = new URL(raw);
+  const u = new URL(m[1].trim());
+  // sslmode in the URL would override the TLS policy below.
+  u.searchParams.delete('sslmode');
+  const raw = u.toString();
   const urls = [raw];
   const ref = u.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/)?.[1];
   if (ref) {
@@ -37,16 +49,29 @@ function candidateUrls() {
   return urls;
 }
 
+function tlsConfig() {
+  if (INSECURE_TLS) {
+    console.warn('WARNING: --insecure-tls: connection is encrypted but the server certificate is NOT verified.');
+    return { rejectUnauthorized: false };
+  }
+  const ca = process.env.PGSSLROOTCERT;
+  return ca ? { rejectUnauthorized: true, ca: fs.readFileSync(ca, 'utf8') } : { rejectUnauthorized: true };
+}
+
 async function connect() {
   let lastError;
   for (const connectionString of candidateUrls()) {
-    const c = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+    const c = new Client({ connectionString, ssl: tlsConfig() });
     try {
       await c.connect();
       return c;
     } catch (err) {
-      lastError = err;
       await c.end().catch(() => {});
+      // A certificate failure won't be fixed by the next host; say how to fix it.
+      if (/self[- ]signed|unable to verify|certificate/i.test(err.message)) {
+        throw new Error(`${err.message}\nSet PGSSLROOTCERT to Supabase's root CA, or pass --insecure-tls.`);
+      }
+      lastError = err;
     }
   }
   throw lastError;
@@ -91,14 +116,17 @@ async function main() {
     await c.query('BEGIN');
     await c.query("SET LOCAL statement_timeout = '120s'");
 
-    const applied = await one(`SELECT to_regprocedure('public.get_bounty_funding_status(uuid[])') IS NOT NULL AS ok`);
-    if (!applied.ok) {
-      const sql = fs.readFileSync(MIGRATION, 'utf8').replace(/^\s*BEGIN;\s*$/m, '').replace(/^\s*COMMIT;\s*$/m, '');
-      await c.query(sql);
-      check('migration applies cleanly (inside this transaction)', true);
-    } else {
-      console.log('(migration already applied on staging -- testing the live objects)');
-    }
+    const sql = fs.readFileSync(MIGRATION, 'utf8').replace(/^\s*BEGIN;\s*$/m, '').replace(/^\s*COMMIT;\s*$/m, '');
+    await c.query(sql);
+    check('migration applies cleanly (inside this transaction)', true);
+
+    // The RPC re-implements bounties' SELECT visibility (it is SECURITY
+    // DEFINER). Any policy it doesn't know about must fail this suite.
+    const KNOWN_SELECT_POLICIES = ['bounties_select_authenticated', 'bounties_select_moderation_hold'];
+    const policies = await q(`SELECT policyname FROM pg_policies
+      WHERE schemaname = 'public' AND tablename = 'bounties' AND cmd IN ('SELECT', 'ALL')`);
+    const unknown = policies.map((p) => p.policyname).filter((n) => !KNOWN_SELECT_POLICIES.includes(n));
+    check('bounties has no SELECT policy the RPC does not mirror', unknown.length === 0, unknown.length ? unknown : policies.map((p) => p.policyname));
 
     // Fixture plumbing only: posting/escrow triggers are not under test here.
     for (const t of ['trg_bounties_reserve_escrow', 'trg_bounties_enforce_funding_before_work', 'trg_bounties_consume_posting_checkout',
@@ -182,6 +210,33 @@ async function main() {
 
     const noJwt = await attempt(as('authenticated', null, () => q(`SELECT * FROM public.get_bounty_funding_status($1::uuid[])`, [[bOpenHeld]])));
     check('no auth.uid() -> no rows', noJwt.ok && noJwt.rows.length === 0, noJwt.ok ? noJwt.rows.length : noJwt.msg);
+
+    // --- visibility: a moderation-held bounty must not be probeable ---------
+    // Uses the real fn_bounty_moderation_visible + bounty_moderation row where
+    // the environment has them (prod, and staging once 20261001140000 lands);
+    // otherwise installs a stand-in with the same signature and semantics so
+    // the RPC's mirroring of the restrictive policy is still exercised.
+    const S = await mkUser('stranger');
+    const bHidden = await mkBounty(P);
+    await ledger(bHidden, P, 'escrow', -25);
+    const realModeration = (await one(`SELECT to_regprocedure('public.fn_bounty_moderation_visible(uuid,uuid,uuid,uuid)') IS NOT NULL AS ok`)).ok;
+    if (realModeration) {
+      await c.query(`INSERT INTO public.bounty_moderation (bounty_id, state) VALUES ($1, 'hidden')
+        ON CONFLICT (bounty_id) DO UPDATE SET state = 'hidden'`, [bHidden]);
+    } else {
+      await c.query(`CREATE FUNCTION public.fn_bounty_moderation_visible(p_bounty_id uuid, p_poster_id uuid, p_user_id uuid, p_accepted_by uuid)
+        RETURNS boolean LANGUAGE sql STABLE AS $f$
+          SELECT p_bounty_id <> '${bHidden}'::uuid OR auth.uid() IN (p_poster_id, p_user_id, p_accepted_by)
+        $f$`);
+    }
+    const hiddenStranger = await attempt(call('authenticated', S, [bHidden, bOpenHeld]));
+    check(`moderation-held bounty: stranger gets no row (${realModeration ? 'real' : 'stand-in'} visibility fn)`,
+      hiddenStranger.ok && !hiddenStranger.rows.some((row) => row.bounty_id === bHidden)
+        && hiddenStranger.rows.some((row) => row.bounty_id === bOpenHeld),
+      hiddenStranger.ok ? hiddenStranger.rows.map((row) => row.bounty_id === bHidden ? 'hidden' : 'visible') : hiddenStranger.msg);
+    const hiddenPoster = await attempt(call('authenticated', P, [bHidden]));
+    check('moderation-held bounty: its poster still gets the state', hiddenPoster.ok && hiddenPoster.rows[0]?.funding_state === 'held',
+      hiddenPoster.ok ? hiddenPoster.rows : hiddenPoster.msg);
   } finally {
     await c.query('ROLLBACK').catch(() => {});
     await c.end();

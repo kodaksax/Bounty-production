@@ -139,6 +139,18 @@ describe('onboarding gate (app/onboarding/index.tsx)', () => {
       expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/payouts');
     });
 
+    it('a corrupted stored intent restarts at the style step instead of guessing a role', async () => {
+      mockAuthContext.session = SIGNED_IN;
+      mockAuthProfile.profile = { username: 'newuser', onboarding_completed: false };
+      mockOnboarding.data.intent = 'both' as any;
+
+      render(<OnboardingIndex />);
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/style'));
+      expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/payouts');
+      expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/founder-note');
+    });
+
     it('sends an already-onboarded user straight to the app', async () => {
       mockAuthContext.session = SIGNED_IN;
       mockAuthProfile.profile = { username: 'veteran', onboarding_completed: true };

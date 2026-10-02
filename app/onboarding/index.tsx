@@ -14,7 +14,7 @@ import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { logger } from '../../lib/utils/error-logger';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
-import { nextStepAfterRole } from '../../lib/onboarding/next-step-after-role';
+import { isOnboardingRole, nextStepAfterRole } from '../../lib/onboarding/next-step-after-role';
 
 // A fetch error alongside an already-verified username means "we couldn't
 // confirm current state," not "this is a new user" — retry a bounded number
@@ -122,7 +122,7 @@ export default function OnboardingIndex() {
           onboardingData.intent ? 'onboarding_resumed' : 'onboarding_started',
           { intent: onboardingData.intent ?? 'none', authenticated: true }
         );
-        router.replace(onboardingData.intent ? nextStepAfterRole(onboardingData.intent) : '/onboarding/style');
+        router.replace(isOnboardingRole(onboardingData.intent) ? nextStepAfterRole(onboardingData.intent) : '/onboarding/style');
         return;
       }
 
@@ -143,7 +143,7 @@ export default function OnboardingIndex() {
       // welcome screen.
       router.replace(
         isAuthenticated
-          ? onboardingData.intent
+          ? isOnboardingRole(onboardingData.intent)
             ? nextStepAfterRole(onboardingData.intent)
             : '/onboarding/style'
           : '/onboarding/welcome'
