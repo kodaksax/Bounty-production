@@ -954,6 +954,35 @@ describe('CompletionService', () => {
 
       expect(result).toBeNull();
     });
+
+    it('does not send created_at -- the server stamps it (trg_ratings_guard)', async () => {
+      const insert = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          single: jest.fn().mockResolvedValue({ data: { ...mockRating, id: 'r1' }, error: null }),
+        }),
+      });
+      mockSupabase.from.mockReturnValue({ insert });
+
+      await completionService.submitRating(mockRating);
+
+      expect(insert.mock.calls[0][0]).not.toHaveProperty('created_at');
+    });
+
+    it('a rejected rating (CHECK message mentions "relation") throws and never falls back to user_ratings', async () => {
+      mockSupabase.from.mockReturnValue({
+        insert: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnValue({
+            single: jest.fn().mockResolvedValue({
+              data: null,
+              error: { code: '23514', message: 'new row for relation "ratings" violates check constraint "ratings_rating_check"' },
+            }),
+          }),
+        }),
+      });
+
+      await expect(completionService.submitRating(mockRating)).rejects.toThrow('violates check constraint');
+      expect(mockSupabase.from).not.toHaveBeenCalledWith('user_ratings');
+    });
   });
 
   describe('getUserRatings', () => {
