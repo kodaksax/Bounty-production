@@ -23,7 +23,8 @@
     "bounty_disputes": "trg_bounty_disputes_guard",
     "bounty_requests": "trg_bounty_requests_guard_assignment",
     "completion_submissions": "trg_completion_submissions_guard",
-    "profiles": "trg_prevent_client_writes_to_protected_profile_columns"
+    "profiles": "trg_prevent_client_writes_to_protected_profile_columns",
+    "ratings": "trg_ratings_guard"
   },
   "protected": {
     "bounties": {
@@ -91,7 +92,9 @@
       },
       "required_triggers": [
         "trg_bounties_guard_lifecycle",
-        "trg_bounties_enforce_funding_before_work"
+        "trg_bounties_enforce_funding_before_work",
+        "zz_bounties_privatize_location",
+        "zz_bounties_store_private_location"
       ]
     },
     "bounty_disputes": {
@@ -149,16 +152,16 @@
             "authenticated"
           ],
           "qual": null,
-          "with_check": "((from_user_id = ( SELECT auth.uid() AS uid)) AND (bounty_id IS NOT NULL) AND (rating >= (1)::numeric) AND (rating <= (5)::numeric) AND (EXISTS ( SELECT 1\n   FROM bounties b\n  WHERE ((b.id = ratings.bounty_id) AND (b.accepted_by IS NOT NULL) AND (((b.status)::text = 'completed'::text) OR (((b.status)::text = 'archived'::text) AND (EXISTS ( SELECT 1\n           FROM completion_submissions cs\n          WHERE ((cs.bounty_id = b.id) AND (cs.status = 'approved'::text)))))) AND (((ratings.from_user_id = COALESCE(b.poster_id, b.user_id)) AND (ratings.to_user_id = b.accepted_by)) OR ((ratings.from_user_id = b.accepted_by) AND (ratings.to_user_id = COALESCE(b.poster_id, b.user_id))))))))"
+          "with_check": "((from_user_id = ( SELECT auth.uid() AS uid)) AND is_account_active(( SELECT auth.uid() AS uid)) AND (bounty_id IS NOT NULL) AND (rating >= (1)::numeric) AND (rating <= (5)::numeric) AND (fn_rating_transaction_role(bounty_id, from_user_id, to_user_id) IS NOT NULL))"
         },
         {
-          "policyname": "ratings_select_all",
+          "policyname": "ratings_select_reputation",
           "cmd": "SELECT",
           "permissive": "PERMISSIVE",
           "roles": [
             "public"
           ],
-          "qual": "true",
+          "qual": "(fn_rating_counts_toward_reputation(verified_at, hidden_at, bounty_id, from_user_id, to_user_id) OR (from_user_id = ( SELECT auth.uid() AS uid)) OR (COALESCE(((( SELECT auth.jwt() AS jwt) -> 'app_metadata'::text) ->> 'role'::text), ''::text) = 'admin'::text))",
           "with_check": null
         }
       ],
@@ -170,7 +173,10 @@
           "INSERT",
           "SELECT"
         ]
-      }
+      },
+      "required_triggers": [
+        "trg_ratings_guard"
+      ]
     },
     "dispute_audit_log": {
       "policies": [
@@ -238,6 +244,47 @@
           ]
         }
       }
+    },
+    "bounty_private_locations": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "bounty_location_backfill_snapshot": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "location_privacy_rollback_defs": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "bounty_location_access_log": {
+      "policies": [
+        {
+          "policyname": "bounty_location_access_log_admin_read",
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(((( SELECT auth.jwt() AS jwt) -> 'app_metadata'::text) ->> 'role'::text) = 'admin'::text)",
+          "with_check": null
+        }
+      ],
+      "grants": {
+        "anon": [],
+        "authenticated": [
+          "SELECT"
+        ]
+      }
     }
   },
   "functions": [
@@ -251,6 +298,44 @@
     },
     {
       "signature": "request_dispute_escalation(integer)",
+      "forbid_execute": [
+        "anon",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "admin_verify_legacy_ratings(boolean)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_backfill_bounty_location_privacy(boolean)",
+      "signature": "admin_revert_legacy_rating_verification()",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "get_user_reviews(uuid,integer,integer)",
+      "forbid_execute": [
+        "anon",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "get_my_rating_status(uuid)",
+      "forbid_execute": [
+        "anon",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_rating_transaction_role(uuid,uuid,uuid)",
       "forbid_execute": [
         "anon",
         "PUBLIC"
@@ -502,9 +587,6 @@
       "dangerous_grant:user_follows:authenticated:REFERENCES",
       "dangerous_grant:user_follows:authenticated:TRIGGER",
       "dangerous_grant:user_follows:authenticated:TRUNCATE",
-      "dangerous_grant:user_ratings:authenticated:REFERENCES",
-      "dangerous_grant:user_ratings:authenticated:TRIGGER",
-      "dangerous_grant:user_ratings:authenticated:TRUNCATE",
       "dangerous_grant:users:authenticated:REFERENCES",
       "dangerous_grant:users:authenticated:TRIGGER",
       "dangerous_grant:users:authenticated:TRUNCATE",

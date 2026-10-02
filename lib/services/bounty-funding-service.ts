@@ -163,6 +163,44 @@ export async function canDeferBountyFunding(amount: number): Promise<boolean> {
   }
 }
 
+/**
+ * Hunter-facing funding state, from get_bounty_funding_status
+ * (supabase/migrations/20261002180000_bounty_funding_status_read_model.sql):
+ *   held               money is held for this bounty right now
+ *   held_on_selection  open pay-at-accept bounty; escrow is reserved when the
+ *                      poster picks a hunter, and the DB refuses to start work
+ *                      without it
+ *   not_held           a paid bounty with nothing held and no pending selection
+ *   not_applicable     for honor / no amount
+ */
+export type BountyFundingState = 'held' | 'held_on_selection' | 'not_held' | 'not_applicable';
+
+const FUNDING_STATES: readonly BountyFundingState[] = ['held', 'held_on_selection', 'not_held', 'not_applicable'];
+
+/**
+ * Funding state for a bounty, readable by any signed-in user (unlike
+ * getBountyFundingRequirement, which is poster-only because it returns a
+ * wallet balance).
+ *
+ * Returns null whenever the server didn't answer — signed out, RPC not
+ * deployed, network. Callers render nothing for null: a funding claim is
+ * only ever shown when the backend made it.
+ */
+export async function getBountyFundingState(bountyId: string | number): Promise<BountyFundingState | null> {
+  if (!isSupabaseConfigured || bountyId == null) return null;
+  try {
+    const { data, error } = await supabase.rpc('get_bounty_funding_status', {
+      p_bounty_ids: [String(bountyId)],
+    });
+    if (error) return null;
+    const row: any = Array.isArray(data) ? data[0] : data;
+    const state = row?.funding_state;
+    return FUNDING_STATES.includes(state) ? (state as BountyFundingState) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Extracts the raw message from the several error shapes Supabase throws. */
 function messageOf(err: unknown): string {
   if (!err) return '';
@@ -273,6 +311,7 @@ export function amountBucket(amount: number): string {
 
 export const bountyFundingService = {
   getBountyFundingRequirement,
+  getBountyFundingState,
   canDeferBountyFunding,
   classifyAcceptFundingError,
   describeAcceptFundingFailure,

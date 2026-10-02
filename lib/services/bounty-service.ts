@@ -13,14 +13,13 @@ import { offlineQueueService } from './offline-queue-service';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Explicit column allowlist for browse/feed/search queries (anyone can see
-// an open bounty pre-acceptance). Deliberately excludes `latitude`,
-// `longitude`, `unit`, and `geom` — those are exact-precision/privacy-sensitive
-// and only ever readable via get_bounty_exact_location(), scoped server-side
-// to the poster and the accepted hunter. `location` (the legacy free-text
-// address) is still included for now so existing bounties created before
-// this redesign keep rendering; new bounties should prefer `neighborhood` for
-// display (see components/bounty-feed.tsx). `search_tsv` is a server-only
-// search index column, not meant for client consumption.
+// an open bounty pre-acceptance). Excludes `latitude`, `longitude`, `unit` and
+// `geom`. Since 20261001160000_bounty_location_privacy.sql the exact values
+// are not on this table at all: `location` is a "City, ST" label, the address
+// lives in bounty_private_locations, and get_bounty_exact_location() is the
+// only client path to it (poster; accepted hunter while active). Render with
+// formatPublicLocation() from lib/utils/public-location. `search_tsv` is a
+// server-only search index column, not meant for client consumption.
 export const FEED_SAFE_BOUNTY_COLUMNS = [
   'id', 'title', 'description', 'amount', 'is_for_honor', 'location', 'timeline',
   'skills_required', 'poster_id', 'user_id', 'status', 'work_type', 'is_time_sensitive',

@@ -6,17 +6,21 @@ export type Bounty = {
   description: string;
   amount: number;
   is_for_honor: boolean;
+  // Public "City, ST" label. On write the client may send the full address;
+  // the zz_bounties_privatize_location trigger moves it to
+  // bounty_private_locations and stores only the label here. Participants
+  // read the address via get_bounty_exact_location().
   location: string;
   // Optional ZIP code, saved as metadata so users with a matching profile
   // ZIP can eventually be matched/notified about this bounty.
   zip_code?: string;
-  // Exact-precision location fields (privacy-sensitive — see
-  // get_bounty_exact_location() RPC and docs/ location redesign plan).
+  // Write-only: sent when posting/editing, always NULL when read back (the
+  // trigger moves them to bounty_private_locations).
   latitude?: number | null;
   longitude?: number | null;
   unit?: string | null;
-  // Coarse/display-safe fields, computed server-side by the
-  // bounties_compute_approx_location() trigger from latitude/longitude.
+  // Coarse/display-safe fields: a stable 120-350 m jitter of the exact point,
+  // computed once server-side. geom holds this approximate point too.
   approx_latitude?: number | null;
   approx_longitude?: number | null;
   neighborhood?: string | null;

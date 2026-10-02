@@ -316,6 +316,25 @@ export interface UserRating {
   score: 1 | 2 | 3 | 4 | 5;
   comment?: string;
   createdAt: string;
+  // The transaction a review came from (get_user_reviews). Absent on rows read
+  // from the raw table.
+  raterRole?: 'poster' | 'hunter';
+  raterName?: string | null;
+  raterAvatar?: string | null;
+  /** Null when the poster later deleted the bounty. */
+  bountyTitle?: string | null;
+  bountyCompletedAt?: string | null;
+  isForHonor?: boolean;
+}
+
+/** The caller's side of one bounty's rating (get_my_rating_status). */
+export interface MyRatingStatus {
+  raterRole: 'poster' | 'hunter';
+  rateeId: string;
+  rateeName: string | null;
+  /** The bounty is a completed transaction between the two parties. */
+  eligible: boolean;
+  alreadyRated: boolean;
 }
 
 /**

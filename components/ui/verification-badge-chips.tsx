@@ -61,8 +61,11 @@ const OWN_PROFILE_ONLY_BADGES: ReadonlySet<string> = new Set([
 export function VerificationBadgeChips({ input, isOwnProfile = true }: VerificationBadgeChipsProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  // Cross-user, only EARNED badges render. A locked "ID Verified" chip on a
+  // stranger's profile reads as a credential at a glance; the owner sees the
+  // locked ones as a to-do list, nobody else needs them (trust-spine T23).
   const badges = getVerificationBadges(input).filter(
-    (badge) => isOwnProfile || !OWN_PROFILE_ONLY_BADGES.has(badge.id)
+    (badge) => isOwnProfile || (badge.earned && !OWN_PROFILE_ONLY_BADGES.has(badge.id))
   );
 
   if (badges.length === 0) return null;

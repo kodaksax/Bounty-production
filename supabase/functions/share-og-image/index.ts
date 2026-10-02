@@ -266,17 +266,19 @@ Deno.serve(async (req: Request) => {
       return pngResponse(png, 300);
     }
 
-    const [{ data: ratingRows }, { count: completedCount }] = await Promise.all([
-      supabaseAdmin.from('ratings').select('rating').eq('to_user_id', id),
+    // Reputation comes from get_profile_activity_stats, which counts only
+    // ratings traceable to a completed transaction; the service role would
+    // otherwise see (and average) every raw row.
+    const [{ data: stats }, { count: completedCount }] = await Promise.all([
+      supabaseAdmin.rpc('get_profile_activity_stats', { target_user_id: id }).maybeSingle(),
       supabaseAdmin.from('bounties').select('id', { count: 'exact', head: true }).eq('accepted_by', id).eq('status', 'completed'),
     ]);
-    const rows = ratingRows || [];
-    const averageRating = rows.length
-      ? rows.reduce((sum: number, r: any) => sum + Number(r.rating || 0), 0) / rows.length
-      : 0;
+    const ratingStats = stats as { rating_avg: number | string | null; rating_count: number | null } | null;
+    const ratingCount = Number(ratingStats?.rating_count) || 0;
+    const averageRating = ratingStats?.rating_avg == null ? 0 : Number(ratingStats.rating_avg);
 
     const statParts: string[] = [];
-    if (averageRating > 0) statParts.push(`★ ${averageRating.toFixed(1)} (${rows.length})`);
+    if (averageRating > 0) statParts.push(`★ ${averageRating.toFixed(1)} (${ratingCount})`);
     if ((completedCount || 0) > 0) statParts.push(`${completedCount} bounties completed`);
 
     const avatarDataUri = await fetchImageAsDataUri(

@@ -143,3 +143,31 @@ describe('resolveNotificationDeepLink: bounty_location_nudge', () => {
     expect(supportsActionSheet({ type: 'bounty_location_nudge', data: { bountyId: 'abc-123' } })).toBe(true);
   });
 });
+
+/**
+ * Hunter -> poster rating (rating integrity 2026-10-02). The "Please rate the
+ * poster" push (type completion, subtype rating_prompt) was sent 42 times on
+ * prod and produced 0 ratings: it opened the public bounty view, which has no
+ * rating UI. It must land on the hunter's payout screen, which does.
+ */
+describe('resolveNotificationDeepLink: completion / rating_prompt', () => {
+  test('routes the hunter to their payout screen, where the rate-the-poster card lives', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'completion',
+      data: { subtype: 'rating_prompt', bounty_id: 'b-1', bountyId: 'b-1' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/in-progress/b-1/hunter/payout' });
+  });
+
+  test('other completion notifications keep the default bounty route', () => {
+    const action = resolveNotificationDeepLink({
+      type: 'completion',
+      data: { subtype: 'approval', bountyId: 'b-1' },
+    });
+    expect(action).toEqual({ kind: 'route', path: '/bounty/b-1?source=notification' });
+  });
+
+  test('rating_prompt without a bounty id resolves to none', () => {
+    expect(resolveNotificationDeepLink({ type: 'completion', data: { subtype: 'rating_prompt' } })).toEqual({ kind: 'none' });
+  });
+});

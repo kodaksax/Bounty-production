@@ -79,6 +79,13 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'rating_reminder' && bountyId) {
         return { kind: 'route', path: `/postings/${bountyId}` };
       }
+      // Hunter-facing "Please rate the poster" (completion / rating_prompt,
+      // enqueued on approval by handle_completion_review_notification): the
+      // hunter's payout screen carries the rate-the-poster card. It used to
+      // fall through to the public bounty view, which has no rating UI.
+      if (ctx.type === 'completion' && data.subtype === 'rating_prompt' && bountyId) {
+        return { kind: 'route', path: `/in-progress/${bountyId}/hunter/payout` };
+      }
       // A new application is only ever sent to the poster, and the only thing
       // to do with it is accept/decline -- land on the Requests tab where that
       // happens (GitHub #809), even for bundled notifications with no bountyId.

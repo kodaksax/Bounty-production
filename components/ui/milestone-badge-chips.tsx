@@ -26,6 +26,13 @@ const BADGE_COLORS: Record<string, string> = {
 
 interface MilestoneBadgeChipsProps {
   input: MilestoneBadgeInput;
+  /**
+   * Defaults to true (self-view): locked milestones show as goals. On someone
+   * else's profile only earned milestones render, and the section disappears
+   * when there are none — a locked "Top Rated" next to "Jobs Completed 0"
+   * read as a claim (trust-spine audit T23).
+   */
+  isOwnProfile?: boolean;
 }
 
 /**
@@ -33,10 +40,12 @@ interface MilestoneBadgeChipsProps {
  * earned/muted-with-lock visual pattern as VerificationBadgeChips, but for a
  * conceptually distinct set (real deterministic activity, not identity/KYC).
  */
-export function MilestoneBadgeChips({ input }: MilestoneBadgeChipsProps) {
+export function MilestoneBadgeChips({ input, isOwnProfile = true }: MilestoneBadgeChipsProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const badges = getMilestoneBadges(input);
+  const badges = getMilestoneBadges(input).filter((badge) => isOwnProfile || badge.earned);
+
+  if (badges.length === 0) return null;
 
   return (
     <View style={styles.container}>

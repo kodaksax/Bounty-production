@@ -35,27 +35,18 @@ async function getRatingStats(
   supabaseAdmin: SupabaseClient,
   userId: string
 ): Promise<{ averageRating: number; ratingCount: number }> {
+  // The service role bypasses RLS, so never aggregate `ratings` rows here:
+  // get_profile_activity_stats counts only ratings traceable to a completed
+  // transaction (20261002160000_rating_reputation_integrity.sql).
   const { data, error } = await supabaseAdmin
-    .from('ratings')
-    .select('rating')
-    .eq('to_user_id', userId);
-  if (!error) {
-    const rows = data || [];
-    if (rows.length === 0) return { averageRating: 0, ratingCount: 0 };
-    const total = rows.reduce((sum: number, row: any) => sum + Number(row.rating || 0), 0);
-    return { averageRating: total / rows.length, ratingCount: rows.length };
-  }
-
-  // Legacy schema fallback (see lib/services/ratings.ts for the same pattern).
-  const { data: legacyRows, error: legacyError } = await supabaseAdmin
-    .from('user_ratings')
-    .select('score')
-    .eq('user_id', userId);
-  if (legacyError || !legacyRows || legacyRows.length === 0) {
-    return { averageRating: 0, ratingCount: 0 };
-  }
-  const total = legacyRows.reduce((sum: number, row: any) => sum + Number(row.score || 0), 0);
-  return { averageRating: total / legacyRows.length, ratingCount: legacyRows.length };
+    .rpc('get_profile_activity_stats', { target_user_id: userId })
+    .maybeSingle();
+  if (error || !data) return { averageRating: 0, ratingCount: 0 };
+  const row = data as { rating_avg: number | string | null; rating_count: number | null };
+  return {
+    averageRating: row.rating_avg == null ? 0 : Number(row.rating_avg),
+    ratingCount: Number(row.rating_count) || 0,
+  };
 }
 
 Deno.serve(async (req: Request) => {

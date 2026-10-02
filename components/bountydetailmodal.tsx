@@ -5,6 +5,7 @@ import { useRouter } from "expo-router"
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { formatCategoryLabel } from 'lib/utils/data-utils'
+import { formatPostedAgo } from 'lib/utils/format-relative-date'
 import { formatScheduleDescription } from 'lib/utils/schedule-utils'
 import { shareBounty } from "lib/utils/share-utils"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -23,6 +24,8 @@ import {
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { formatExactAddress, useBountyExactLocation } from '../hooks/useBountyExactLocation'
+import { formatPublicLocation } from '../lib/utils/public-location'
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { bountyService } from '../lib/services/bounty-service'
@@ -32,6 +35,7 @@ import type { AttachmentMeta } from '../lib/services/database.types'
 import { storageService } from '../lib/services/storage-service'
 import type { BountyScheduleType, Message } from '../lib/types'
 import { AttachmentViewerModal } from './attachment-viewer-modal'
+import { BountyTrustSignals } from './bounty-trust-signals'
 import { ReportModal } from "./ReportModal"
 import { AppModal } from './ui/app-modal'
 import { useKeyboardInset } from './ui/keyboard-avoiding'
@@ -78,7 +82,10 @@ interface BountyDetailModalProps {
     duration_minutes?: number | null
     conditional_end_note?: string | null
     skills_required?: string
+    /** Public "City, ST" label. Never the street address — see lib/utils/public-location. */
     location?: string
+    neighborhood?: string | null
+    accepted_by?: string | null
     is_time_sensitive?: boolean
     deadline?: string
     status?: string
@@ -123,6 +130,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
   const posterId = bounty.poster_id || bounty.user_id
   const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId ? String(posterId) : undefined)
+  // Everyone sees the neighborhood/city. Only the poster and the accepted
+  // hunter get the street address, from the access-checked RPC.
+  const isLocationParticipant =
+    currentUserId != null &&
+    (String(posterId ?? '') === String(currentUserId) || String(bounty.accepted_by ?? '') === String(currentUserId))
+  const { exact: exactLocation } = useBountyExactLocation(bounty.id, isLocationParticipant)
+  const locationText = formatExactAddress(exactLocation) || formatPublicLocation(bounty)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [viewerAttachment, setViewerAttachment] = useState<AttachmentMeta | null>(null)
@@ -287,6 +301,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       }
     }
   }, [])
+
+  const postedAgo = formatPostedAgo(bounty.created_at)
+  const isOwnBounty = currentUserId != null && posterId != null && String(currentUserId) === String(posterId)
 
   // Empty/whitespace-only descriptions hide the whole section (header included)
   // rather than rendering a bare "Description" heading over nothing.
@@ -751,7 +768,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                         </Avatar>
                         <View style={styles.userTextInfo}>
                           <Text style={styles.username}>{displayUsername}</Text>
-                          <Text style={styles.postTime}>Posted 2h ago</Text>
+                          {/* Real age of the post. This line used to be a hard-coded
+                              "Posted 2h ago" on every bounty, months-old ones included. */}
+                          {!!postedAgo && <Text style={styles.postTime}>Posted {postedAgo}</Text>}
                         </View>
                         {posterId && (
                           <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} style={{ marginLeft: 'auto' }} />
@@ -789,6 +808,16 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     )}
                   </View>
 
+                  {/* Funding state + poster evidence, for anyone deciding whether
+                      to apply. Not shown to the poster on their own bounty. */}
+                  {!isOwnBounty && (
+                    <BountyTrustSignals
+                      bountyId={bounty.id}
+                      posterId={posterId ? String(posterId) : null}
+                      poster={normalizedPoster}
+                    />
+                  )}
+
                   {/* Description — omitted entirely when the bounty has none */}
                   {!!description && (
                     <View style={styles.descriptionContainer}>
@@ -798,7 +827,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                   )}
 
                   {/* Additional Details - Timeline, Skills, Location, Deadline */}
-                  {(scheduleSummary || bounty.skills_required || bounty.location || bounty.deadline) && (
+                  {(scheduleSummary || bounty.skills_required || locationText || bounty.deadline) && (
                     <View style={styles.additionalDetailsContainer}>
                       <Text style={styles.sectionHeader}>Additional Details</Text>
 
@@ -815,11 +844,11 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                           label: 'Skills Required',
                           value: bounty.skills_required,
                         },
-                        bounty.location && bounty.work_type !== 'online' && {
+                        locationText && bounty.work_type !== 'online' && {
                           icon: 'place' as const,
                           color: theme.textSecondary,
                           label: 'Location',
-                          value: bounty.location,
+                          value: locationText,
                         },
                         bounty.is_time_sensitive && bounty.deadline && {
                           icon: 'access-time' as const,

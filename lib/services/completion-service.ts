@@ -1057,13 +1057,13 @@ export const completionService = {
    */
   async submitRating(rating: Omit<Rating, 'id' | 'created_at'>): Promise<Rating | null> {
     try {
+      // created_at is stamped by the server (trg_ratings_guard ignores any
+      // client value), so it is not sent.
+      const payload: Omit<Rating, 'id' | 'created_at'> = { ...rating };
+
       // Defensive: ensure from_user_id/to_user_id look valid. If from_user_id is empty,
       // try to populate from current session helper. This prevents inserting empty strings
       // into UUID columns which causes DB errors like "invalid input syntax for type uuid: \"\"".
-      const payload: Omit<Rating, 'id' | 'created_at'> & { created_at?: string } = {
-        ...rating,
-        created_at: new Date().toISOString(),
-      };
 
       let sessionUserId: string | null = null;
       if (isSupabaseConfigured) {
@@ -1117,40 +1117,11 @@ export const completionService = {
           return null;
         }
 
-        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
-        const canFallback =
-          primaryError.includes('relation') ||
-          primaryError.includes('does not exist') ||
-          primaryError.includes('column') ||
-          primaryError.includes('schema cache');
-
-        if (!canFallback) {
-          throw new Error(error?.message ?? JSON.stringify(error));
-        }
-
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('user_ratings')
-          .insert({
-            user_id: payload.to_user_id,
-            rater_id: payload.from_user_id,
-            bounty_id: payload.bounty_id,
-            score: payload.rating,
-            comment: payload.comment,
-          })
-          .select('*')
-          .single();
-
-        if (fallbackError) throw new Error(fallbackError?.message ?? JSON.stringify(fallbackError));
-
-        return {
-          id: fallbackData.id,
-          bounty_id: fallbackData.bounty_id,
-          from_user_id: fallbackData.rater_id,
-          to_user_id: fallbackData.user_id,
-          rating: fallbackData.score,
-          comment: fallbackData.comment,
-          created_at: fallbackData.created_at,
-        } as Rating;
+        // No fallback store: every rating must pass the transaction check on
+        // `ratings` (20261002160000). The old `user_ratings` fallback fired on
+        // any error mentioning "relation" -- which includes every CHECK
+        // violation -- and wrote to an ungated table instead.
+        throw new Error(error?.message ?? JSON.stringify(error));
       }
 
       const response = await fetch(`${API_BASE_URL}/api/ratings`, {
@@ -1184,36 +1155,10 @@ export const completionService = {
           .eq('to_user_id', userId)
           .order('created_at', { ascending: false });
 
-        if (!error) {
-          return (data as Rating[]) || [];
-        }
-
-        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
-        const canFallback =
-          primaryError.includes('relation') ||
-          primaryError.includes('does not exist') ||
-          primaryError.includes('column') ||
-          primaryError.includes('schema cache');
-
-        if (!canFallback) throw error;
-
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('user_ratings')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false });
-
-        if (fallbackError) throw fallbackError;
-
-        return (fallbackData || []).map((row: any) => ({
-          id: row.id,
-          bounty_id: row.bounty_id,
-          from_user_id: row.rater_id,
-          to_user_id: row.user_id,
-          rating: row.score,
-          comment: row.comment,
-          created_at: row.created_at,
-        })) as Rating[];
+        if (error) throw error;
+        // RLS returns only ratings that count as reputation (plus the
+        // caller's own), so this is the same set the profile stats count.
+        return (data as Rating[]) || [];
       }
 
       const response = await fetch(`${API_BASE_URL}/api/ratings/user/${userId}`);

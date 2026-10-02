@@ -14,6 +14,7 @@ import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { logger } from '../../lib/utils/error-logger';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { isOnboardingRole, nextStepAfterRole } from '../../lib/onboarding/next-step-after-role';
 
 // A fetch error alongside an already-verified username means "we couldn't
 // confirm current state," not "this is a new user" — retry a bounded number
@@ -111,7 +112,8 @@ export default function OnboardingIndex() {
       // (app/onboarding/role-select.tsx) — send an authenticated user to style
       // unless a role was already picked (e.g. resuming a draft, or an
       // existing-but-incomplete account signing back in), which means both of
-      // those steps are behind them, so resume at payouts.tsx instead. Role
+      // those steps are behind them, so resume at the step after role
+      // (payouts.tsx for hunters, founder-note.tsx for posters). Role
       // stays optional for the rest of the flow either way —
       // totalStepsFor(null) in username.tsx already covers the no-intent
       // variant.
@@ -120,7 +122,7 @@ export default function OnboardingIndex() {
           onboardingData.intent ? 'onboarding_resumed' : 'onboarding_started',
           { intent: onboardingData.intent ?? 'none', authenticated: true }
         );
-        router.replace(onboardingData.intent ? '/onboarding/payouts' : '/onboarding/style');
+        router.replace(isOnboardingRole(onboardingData.intent) ? nextStepAfterRole(onboardingData.intent) : '/onboarding/style');
         return;
       }
 
@@ -141,8 +143,8 @@ export default function OnboardingIndex() {
       // welcome screen.
       router.replace(
         isAuthenticated
-          ? onboardingData.intent
-            ? '/onboarding/payouts'
+          ? isOnboardingRole(onboardingData.intent)
+            ? nextStepAfterRole(onboardingData.intent)
             : '/onboarding/style'
           : '/onboarding/welcome'
       );

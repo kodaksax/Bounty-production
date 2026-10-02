@@ -81,6 +81,7 @@ import {
     markBountyRemovedLocally,
 } from '../lib/utils/bounty-visibility';
 import { logger } from '../lib/utils/error-logger';
+import { formatPublicLocation } from '../lib/utils/public-location';
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
 import { withTimeout } from '../lib/utils/withTimeout';
@@ -1197,10 +1198,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         username: item.username,
         price: Number(item.amount),
         distance,
-        // Prefer the coarse neighborhood label — item.location is only the
-        // full/legacy exact address for bounties created before this location
-        // redesign (see docs/ location plan; new bounties don't fall back to it).
-        location: item.neighborhood || item.location,
+        // Neighborhood/city only (lib/utils/public-location). The server already
+        // stores just a label in `location`; this also covers cached rows.
+        location: formatPublicLocation(item) ?? undefined,
         description: item.description,
         isForHonor: Boolean(item.is_for_honor),
         user_id: item.user_id,

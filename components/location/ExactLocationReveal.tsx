@@ -1,8 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import { getBountyExactLocation, type ExactBountyLocation } from '../../lib/services/bounty-location-service';
+import { formatExactAddress, useBountyExactLocation } from '../../hooks/useBountyExactLocation';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
 interface ExactLocationRevealProps {
@@ -21,23 +21,7 @@ interface ExactLocationRevealProps {
  */
 export function ExactLocationReveal({ bountyId, canReveal, height = 160 }: ExactLocationRevealProps) {
   const { theme } = useAppThemeContext();
-  const [location, setLocation] = useState<ExactBountyLocation | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!canReveal || !bountyId) return;
-    let cancelled = false;
-    setIsLoading(true);
-    getBountyExactLocation(bountyId).then((result) => {
-      if (!cancelled) {
-        setLocation(result);
-        setIsLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [bountyId, canReveal]);
+  const { exact: location, isLoading } = useBountyExactLocation(bountyId, canReveal);
 
   if (!canReveal) {
     return null;
@@ -66,29 +50,32 @@ export function ExactLocationReveal({ bountyId, canReveal, height = 160 }: Exact
     );
   }
 
+  const address = formatExactAddress(location);
+
   return (
     <View>
-      <View style={{ height, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.border }}>
-        <MapView
-          provider={PROVIDER_GOOGLE}
-          style={{ flex: 1 }}
-          initialRegion={{
-            latitude: location.latitude,
-            longitude: location.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }}
-        >
-          <Marker coordinate={{ latitude: location.latitude, longitude: location.longitude }} />
-        </MapView>
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 8 }}>
-        <MaterialIcons name="verified" size={16} color={theme.primary} style={{ marginRight: 6, marginTop: 2 }} />
-        <Text style={{ flex: 1, color: theme.text, fontSize: 13 }}>
-          {location.location}
-          {location.unit ? `, ${location.unit}` : ''}
-        </Text>
-      </View>
+      {location.latitude != null && location.longitude != null && (
+        <View style={{ height, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.border }}>
+          <MapView
+            provider={PROVIDER_GOOGLE}
+            style={{ flex: 1 }}
+            initialRegion={{
+              latitude: location.latitude,
+              longitude: location.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+          >
+            <Marker coordinate={{ latitude: location.latitude, longitude: location.longitude }} />
+          </MapView>
+        </View>
+      )}
+      {address && (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 8 }}>
+          <MaterialIcons name="verified" size={16} color={theme.primary} style={{ marginRight: 6, marginTop: 2 }} />
+          <Text style={{ flex: 1, color: theme.text, fontSize: 13 }}>{address}</Text>
+        </View>
+      )}
     </View>
   );
 }

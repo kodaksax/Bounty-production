@@ -1,0 +1,42 @@
+{
+  "_comment": "Shared cases for public.fn_public_location_label / fn_public_neighborhood (SQL, supabase/migrations/20261001160000_bounty_location_privacy.sql) and lib/utils/public-location.ts (client mirror). Checked by __tests__/unit/public-location.test.ts and scripts/verify-location-privacy.js so the two implementations cannot drift.",
+  "label": [
+    { "in": "1234 Painters Mill Road, Owings Mills, MD 21117, USA", "out": "Owings Mills, MD" },
+    { "in": "Stockton St, San Francisco, CA, 94108", "out": "San Francisco, CA" },
+    { "in": "500 W 2nd Ave Suite 300, Austin, TX 78701, United States", "out": "Austin, TX" },
+    { "in": "Apt 4B, 55 Elm Street, Boston, MA", "out": "Boston, MA" },
+    { "in": "#12, Baltimore, MD", "out": "Baltimore, MD" },
+    { "in": "Unit 7, Pikesville, MD", "out": "Pikesville, MD" },
+    { "in": "PO Box 12, Towson, MD", "out": "Towson, MD" },
+    { "in": "Kings Hwy, Brooklyn, NY", "out": "Brooklyn, NY" },
+    { "in": "Main Street, Springfield", "out": "Springfield" },
+    { "in": "SoMa, San Francisco, CA", "out": "San Francisco, CA" },
+    { "in": "Baltimore, Maryland, USA", "out": "Baltimore, Maryland" },
+    { "in": "St. Louis, MO 63101", "out": "St. Louis, MO" },
+    { "in": "Hartford, CT", "out": "Hartford, CT" },
+    { "in": "Shaker Heights, OH", "out": "Shaker Heights, OH" },
+    { "in": "Mill Valley, CA", "out": "Mill Valley, CA" },
+    { "in": "  Owings   Mills ,  MD 21117 ", "out": "Owings Mills, MD" },
+    { "in": "Owings Mills", "out": "Owings Mills" },
+    { "in": "Union Square", "out": "Union Square" },
+    { "in": "Current location", "out": "Current location" },
+    { "in": "Remote", "out": "Remote" },
+    { "in": "123 Main St", "out": null },
+    { "in": "21117", "out": null },
+    { "in": "Elm Street", "out": null },
+    { "in": "", "out": null },
+    { "in": "   ", "out": null },
+    { "in": null, "out": null }
+  ],
+  "neighborhood": [
+    { "in": "Mid-Town Belvedere", "out": "Mid-Town Belvedere" },
+    { "in": "Fells Point", "out": "Fells Point" },
+    { "in": "  SoMa ", "out": "SoMa" },
+    { "in": "123 Main St", "out": null },
+    { "in": "Elm Street", "out": null },
+    { "in": "Apt 4", "out": null },
+    { "in": "Owings Mills, MD", "out": null },
+    { "in": "", "out": null },
+    { "in": null, "out": null }
+  ]
+}

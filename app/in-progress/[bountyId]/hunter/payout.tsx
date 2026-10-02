@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { RateCounterpartyCard } from '../../../../components/rate-counterparty-card';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
@@ -391,6 +392,11 @@ export default function HunterPayoutScreen() {
                 </View>
               )}
             </View>
+
+            {/* Hunter -> poster rating. Where the "Please rate the poster"
+                notification lands; renders only when the server says this
+                hunter can still rate (completed transaction, not yet rated). */}
+            {routeBountyId && <RateCounterpartyCard bountyId={routeBountyId} />}
 
             {/* Current Balance */}
             {!bounty.is_for_honor && (

@@ -23,6 +23,8 @@ import { disputeService } from '../../../../lib/services/dispute-service';
 import { messageService } from '../../../../lib/services/message-service';
 import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+import { formatPublicLocation } from '../../../../lib/utils/public-location';
+import { formatExactAddress, useBountyExactLocation } from '../../../../hooks/useBountyExactLocation';
 import { KeyboardAwareScrollView } from '../../../../components/ui/keyboard-avoiding';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
@@ -66,6 +68,14 @@ export default function HunterWorkInProgressScreen() {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [hasActiveDispute, setHasActiveDispute] = useState(false);
   const [activeDisputeId, setActiveDisputeId] = useState<string | null>(null);
+  // bounty.location is only a "City, ST" label; the accepted hunter gets the
+  // street address from the access-checked RPC.
+  const { exact: exactLocation } = useBountyExactLocation(
+    bounty?.id,
+    !!bounty && !!currentUserId && String(bounty.accepted_by ?? '') === String(currentUserId)
+  );
+  const locationText =
+    formatExactAddress(exactLocation) || (bounty ? formatPublicLocation(bounty) : null);
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
@@ -467,10 +477,10 @@ export default function HunterWorkInProgressScreen() {
 
         {/* Timeline & Location Info */}
         <View style={styles.infoRow}>
-          {bounty.location && (
+          {locationText && (
             <View style={styles.infoItem}>
               <MaterialIcons name="location-on" size={16} color="#6ee7b7" />
-              <Text style={styles.infoText}>{bounty.location}</Text>
+              <Text style={styles.infoText}>{locationText}</Text>
             </View>
           )}
           {bounty.timeline && (
