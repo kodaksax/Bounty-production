@@ -282,6 +282,7 @@ export function useBountyLifecycle(
         requestStatus,
         requestRejectionSource,
         submissionStatus: submission?.status ?? null,
+        submittedAt: submission?.submitted_at ?? null,
         submissionIsMine:
           !!currentUserId && !!submission && String(submission.hunter_id) === String(currentUserId),
         applicationCount,

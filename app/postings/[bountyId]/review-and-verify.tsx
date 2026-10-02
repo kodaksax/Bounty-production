@@ -31,6 +31,7 @@ import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
 import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
+import { getReviewDeadlineStatus } from '../../../lib/utils/review-deadline';
 import { MIN_RATING_SAMPLE } from '../../../lib/utils/trust-summary';
 import { useWallet } from '../../../lib/wallet-context';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
@@ -440,6 +441,11 @@ export default function ReviewAndVerifyScreen() {
     </View>
   );
 
+  const reviewDeadline =
+    reviewSubmission?.status === 'pending'
+      ? getReviewDeadlineStatus(reviewSubmission.submitted_at, 'poster')
+      : null;
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -532,6 +538,21 @@ export default function ReviewAndVerifyScreen() {
             {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
           </Text>
         </View>
+
+        {/* Review deadline: the same window the hunter sees (trust-spine T6). */}
+        {reviewDeadline && (
+          <View
+            style={[styles.deadlineCard, reviewDeadline.overdue && styles.deadlineCardOverdue]}
+            accessibilityRole="text"
+          >
+            <MaterialIcons
+              name={reviewDeadline.overdue ? 'support-agent' : 'schedule'}
+              size={18}
+              color={reviewDeadline.overdue ? '#fca5a5' : '#fcd34d'}
+            />
+            <Text style={styles.deadlineText}>{reviewDeadline.message}</Text>
+          </View>
+        )}
 
         {/* Proof/Attachments Section */}
         <View style={styles.section}>
@@ -692,6 +713,27 @@ export default function ReviewAndVerifyScreen() {
 }
 
 const styles = StyleSheet.create({
+  deadlineCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  deadlineCardOverdue: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  deadlineText: {
+    flex: 1,
+    color: '#fffef5',
+    fontSize: 14,
+    lineHeight: 20,
+  },
   container: {
     flex: 1,
     backgroundColor: '#0B0F14',

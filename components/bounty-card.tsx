@@ -23,7 +23,10 @@ interface BountyCardProps {
   onPress?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  onCancel?: () => void; // New: Navigate to cancellation request screen
+  // Owner action on an in-progress bounty: open the dispute screen. A poster
+  // cannot cancel once a hunter is committed (cancellation requests are the
+  // hunter's); reporting a problem is their route to support (trust-spine T22).
+  onReportProblem?: () => void;
   onViewCancellation?: () => void; // New: Navigate to cancellation response screen
   onViewDispute?: () => void; // New: Navigate to dispute screen
   // Owner action: discard a cancelled bounty so it no longer clutters active lists
@@ -76,7 +79,7 @@ export function BountyCard({
   onPress,
   onEdit,
   onDelete,
-  onCancel,
+  onReportProblem,
   onViewCancellation,
   onViewDispute,
   onDiscard,
@@ -298,7 +301,7 @@ export function BountyCard({
 
       {/* Owner actions row (only visible to owner) */}
       {isOwner &&
-        (onEdit || onDelete || onCancel || onViewCancellation || onViewDispute || onDiscard) && (
+        (onEdit || onDelete || onReportProblem || onViewCancellation || onViewDispute || onDiscard) && (
           <View style={styles.ownerActions}>
             <Text style={styles.ownerLabel}>Your posting</Text>
             <View style={styles.actionButtons}>
@@ -332,16 +335,19 @@ export function BountyCard({
                   <Text style={styles.actionButtonText}>Delete</Text>
                 </TouchableOpacity>
               )}
-              {onCancel && bounty.status === 'in_progress' && (
+              {onReportProblem && bounty.status === 'in_progress' && !hasDispute && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.cancelButton]}
                   onPress={e => {
                     e.stopPropagation();
-                    onCancel();
+                    onReportProblem();
                   }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Report a problem"
+                  accessibilityHint="Tell Bounty support the hunter has gone quiet or the work is wrong"
                 >
-                  <MaterialIcons name="cancel" size={16} color="#f97316" />
-                  <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancel</Text>
+                  <MaterialIcons name="report-problem" size={16} color="#f97316" />
+                  <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Report a problem</Text>
                 </TouchableOpacity>
               )}
               {onViewCancellation && bounty.status === 'cancellation_requested' && (

@@ -137,6 +137,19 @@ function parseEvidenceJson(raw: unknown): DisputeEvidence[] | undefined {
   }
 }
 
+/**
+ * bounty_disputes.reason_code (CHECK-constrained in the database). The category
+ * support filters on; the free-text `reason` still carries the detail.
+ */
+export type DisputeReasonCode =
+  | 'hunter_unresponsive'
+  | 'poster_unresponsive'
+  | 'work_quality'
+  | 'scope_disagreement'
+  | 'missed_deadline'
+  | 'communication'
+  | 'other';
+
 export const disputeService = {
   /**
    * Create a dispute from a cancellation request
@@ -1756,7 +1769,8 @@ export const disputeService = {
     respondentId: string,
     stage: 'in_progress' | 'review_verify',
     reason: string,
-    evidence?: LocalDisputeEvidence[]
+    evidence?: LocalDisputeEvidence[],
+    reasonCode?: DisputeReasonCode
   ): Promise<BountyDispute | null> {
     try {
       if (!isSupabaseConfigured) {
@@ -1773,7 +1787,7 @@ export const disputeService = {
         throw new Error('A dispute is already active for this bounty');
       }
 
-      const disputeData = {
+      const disputeData: Record<string, unknown> = {
         bounty_id: bountyId,
         initiator_id: initiatorId,
         respondent_id: respondentId,
@@ -1782,13 +1796,27 @@ export const disputeService = {
         // cancellation_id is null for workflow disputes
         evidence_json: null,
         status: 'open',
+        // Lets support filter the queue (e.g. "Hunter hasn't responded").
+        // See 20261002120100_review_window_and_recourse_queue.sql.
+        ...(reasonCode ? { reason_code: reasonCode } : {}),
       };
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('bounty_disputes')
         .insert(disputeData)
         .select('*')
         .single();
+
+      // A database without the reason_code column yet (PGRST204) must still
+      // accept the dispute: the category is a filter, the dispute is the point.
+      if (error && reasonCode && (error as { code?: string }).code === 'PGRST204') {
+        const { reason_code: _omit, ...withoutCode } = disputeData;
+        ({ data, error } = await supabase
+          .from('bounty_disputes')
+          .insert(withoutCode)
+          .select('*')
+          .single());
+      }
 
       if (error || !data) {
         logger.error('Error creating workflow dispute', { error, disputeData });

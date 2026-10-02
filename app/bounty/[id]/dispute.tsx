@@ -5,8 +5,10 @@ import { EMAIL_SUBJECTS, SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, c
 import { attachmentService } from 'lib/services/attachment-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { cancellationService } from 'lib/services/cancellation-service';
+import { completionService } from 'lib/services/completion-service';
 import type { Bounty } from 'lib/services/database.types';
-import { disputeService } from 'lib/services/dispute-service';
+import { disputeService, type DisputeReasonCode } from 'lib/services/dispute-service';
+import { getDisputeReasonOptions } from 'lib/utils/dispute-reasons';
 import type { BountyCancellation, BountyDispute, LocalDisputeEvidence } from 'lib/types';
 import { AlertCircle, ArrowLeft, HelpCircle, Mail, Phone } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
@@ -25,7 +27,12 @@ import { ROUTES } from '../../../lib/routes';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 
 export default function DisputeScreen() {
-  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const { id, from, reason: reasonParam } = useLocalSearchParams<{
+    id: string;
+    from?: string;
+    /** Preselects a reason, e.g. `hunter_unresponsive`. */
+    reason?: string;
+  }>();
   const router = useRouter();
   const { session } = useAuthContext();
   const userId = session?.user?.id;
@@ -37,7 +44,10 @@ export default function DisputeScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
   const [evidenceInput, setEvidenceInput] = useState('');
-  
+  // Work is waiting on the poster's review (workflow dispute stage + reasons).
+  const [workSubmitted, setWorkSubmitted] = useState(false);
+  const [reasonCode, setReasonCode] = useState<DisputeReasonCode | null>(null);
+    
   useEffect(() => {
     loadData();
   }, [id]);
@@ -45,23 +55,28 @@ export default function DisputeScreen() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [bountyData, cancellationData] = await Promise.all([
+      const [bountyData, cancellationData, latestSubmission] = await Promise.all([
         bountyService.getById(id),
         cancellationService.getCancellationByBountyId(id),
+        completionService.getSubmission(id).catch(() => null),
       ]);
-      
+
       if (bountyData) {
         setBounty(bountyData);
       }
-      
+      setWorkSubmitted(latestSubmission?.status === 'pending');
+
+      let existingDispute: BountyDispute | null = null;
       if (cancellationData) {
         setCancellation(cancellationData);
-        // Check if dispute already exists
-        const existingDispute = await disputeService.getDisputeByCancellationId(cancellationData.id);
-        if (existingDispute) {
-          setDispute(existingDispute);
-        }
+        existingDispute = await disputeService.getDisputeByCancellationId(cancellationData.id);
       }
+      // Workflow disputes (no cancellation) are the only kind a poster can
+      // open since cancellation requests became hunter-only (20260908020000).
+      if (!existingDispute) {
+        existingDispute = await disputeService.getDisputeByBountyId(id);
+      }
+      setDispute(existingDispute);
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load dispute information');
@@ -70,19 +85,57 @@ export default function DisputeScreen() {
     }
   };
   
+  const isPoster =
+    !!userId && !!bounty && (bounty.poster_id === userId || bounty.user_id === userId);
+  const isAcceptedHunter = !!userId && !!bounty?.accepted_by && bounty.accepted_by === userId;
+  // The database accepts a workflow dispute only from a participant of a
+  // bounty a hunter is committed to (fn_bounty_disputes_guard).
+  const canOpenWorkflowDispute =
+    !!bounty &&
+    !!bounty.accepted_by &&
+    (bounty.status === 'in_progress' || bounty.status === 'cancellation_requested') &&
+    (isPoster || isAcceptedHunter);
+  const reasonOptions = canOpenWorkflowDispute
+    ? getDisputeReasonOptions(isPoster ? 'poster' : 'hunter', { workSubmitted })
+    : [];
+  const selectedReason = reasonOptions.find((o) => o.code === reasonCode) ?? null;
+
+  useEffect(() => {
+    if (reasonCode || reasonOptions.length === 0) return;
+    const preset = reasonOptions.find((o) => o.code === reasonParam);
+    if (preset) setReasonCode(preset.code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reasonParam, reasonOptions.length]);
+
   const handleCreateDispute = async (reason: string, evidence: LocalDisputeEvidence[]) => {
-    if (!userId || !cancellation) {
+    if (!userId || !bounty) {
       throw new Error('Unable to create dispute');
     }
-    
+
     setSubmitting(true);
     try {
-      const result = await disputeService.createDispute(
-        cancellation.id,
-        userId,
-        reason,
-        evidence
-      );
+      let result: BountyDispute | null;
+      if (cancellation && cancellation.status === 'pending') {
+        result = await disputeService.createDispute(cancellation.id, userId, reason, evidence);
+      } else {
+        if (!canOpenWorkflowDispute) {
+          throw new Error('You can report a problem only on a bounty you are working on or posted.');
+        }
+        const respondentId = isPoster
+          ? String(bounty.accepted_by)
+          : String(bounty.poster_id ?? bounty.user_id);
+        result = await disputeService.createWorkflowDispute(
+          String(bounty.id),
+          userId,
+          respondentId,
+          workSubmitted ? 'review_verify' : 'in_progress',
+          reason,
+          // Evidence is uploaded below: picker items are local file:// URIs
+          // that must reach storage first.
+          undefined,
+          reasonCode ?? undefined
+        );
+      }
 
       if (!result) {
         throw new Error('Failed to create dispute');
@@ -137,7 +190,7 @@ export default function DisputeScreen() {
         'Success',
         evidenceFailures > 0
           ? `Dispute created successfully, but ${evidenceFailures} piece${evidenceFailures === 1 ? '' : 's'} of evidence failed to upload. You can add it again from the dispute details screen.`
-          : 'Dispute created successfully. We will review your case.',
+          : `Bounty support has your report and usually responds within ${SUPPORT_RESPONSE_TIMES.dispute}.`,
         [
           {
             text: 'OK',
@@ -237,15 +290,17 @@ export default function DisputeScreen() {
     router.back();
   };
 
-  if (!bounty || !cancellation) {
+  if (!bounty || (!dispute && !cancellation && !canOpenWorkflowDispute)) {
     return (
       <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
         <AlertCircle size={48} color="#dc2626" />
         <Text className="text-lg font-semibold text-white mt-4">
-          Dispute information not found
+          {bounty ? 'Nothing to report here' : 'Bounty not found'}
         </Text>
         <Text className="text-[#9CA3AF] text-center mt-2">
-          Unable to load the dispute information. This may occur if the bounty was not found or no cancellation request exists.
+          {bounty
+            ? 'You can report a problem once a hunter is working on this bounty. For anything else, contact support.'
+            : 'We could not load this bounty. Contact support and we will look into it.'}
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
@@ -278,7 +333,7 @@ export default function DisputeScreen() {
             <ArrowLeft size={24} color="white" />
           </TouchableOpacity>
           <Text className="text-2xl font-bold text-white">
-            {dispute ? 'Dispute Details' : 'Create Dispute'}
+            {dispute ? 'Dispute Details' : 'Report a problem'}
           </Text>
           <Text className="text-[#9CA3AF] mt-1">
             {bounty.title}
@@ -372,11 +427,44 @@ export default function DisputeScreen() {
           ) : (
             /* Create Dispute Form - Using DisputeSubmissionForm component */
             <View className="flex-1">
+              {reasonOptions.length > 0 && (
+                <View className="mb-6">
+                  <Text className="text-base font-semibold text-white mb-3">
+                    {"What's going on?"}
+                  </Text>
+                  <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                    {reasonOptions.map((option) => {
+                      const selected = option.code === reasonCode;
+                      return (
+                        <TouchableOpacity
+                          key={option.code}
+                          onPress={() => setReasonCode(option.code)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                          className={`px-3 py-2 rounded-full border ${
+                            selected ? 'bg-[#059669] border-[#059669]' : 'border-[#374151]'
+                          }`}
+                        >
+                          <Text className={selected ? 'text-white font-medium' : 'text-[#D1D5DB]'}>
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {selectedReason && (
+                    <Text className="text-sm text-[#9CA3AF] mt-3">{selectedReason.help}</Text>
+                  )}
+                </View>
+              )}
               <DisputeSubmissionForm
+                // Remount so the reason text starts from the chosen category.
+                key={reasonCode ?? 'none'}
                 bountyTitle={bounty.title}
                 onSubmit={handleCreateDispute}
                 isSubmitting={submitting}
                 showGuidance={true}
+                initialReason={selectedReason ? `${selectedReason.label}: ` : ''}
               />
             </View>
           )}

@@ -21,6 +21,8 @@
   "guarded_tables": {
     "bounties": "trg_bounties_guard_lifecycle",
     "bounty_disputes": "trg_bounty_disputes_guard",
+    "bounty_requests": "trg_bounty_requests_guard_assignment",
+    "completion_submissions": "trg_completion_submissions_guard",
     "profiles": "trg_prevent_client_writes_to_protected_profile_columns"
   },
   "protected": {

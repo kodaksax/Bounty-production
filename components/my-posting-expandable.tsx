@@ -972,8 +972,10 @@ export function MyPostingExpandable({
     !isOwner && bounty.status === 'in_progress' && (submissionPending || hasSubmission);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleCancelBounty = () => {
-    router.push(`/bounty/${bounty.id}/cancel`);
+  // The owner's "Cancel" used to open the hunter-only cancellation screen, a
+  // dead end. Once a hunter is working, the poster reports a problem instead.
+  const handleReportProblem = () => {
+    router.push(`/bounty/${bounty.id}/dispute`);
   };
 
   const handleViewCancellation = () => {
@@ -1124,7 +1126,7 @@ export function MyPostingExpandable({
         onEdit={onEdit}
         onDelete={onDelete}
         onDiscard={onDiscard}
-        onCancel={handleCancelBounty}
+        onReportProblem={variant === 'owner' ? handleReportProblem : undefined}
         onViewCancellation={handleViewCancellation}
         onViewDispute={handleViewDispute}
         revisionRequested={hasRevisionRequested && !isOwner}
