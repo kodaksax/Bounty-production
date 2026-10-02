@@ -63,7 +63,8 @@ describe('BountyStatusPanel', () => {
     // This used to assert on cancel_bounty, but a cancellation REQUEST is the
     // hunter's exit — granting one refunds the poster's escrow in full — so the
     // poster is no longer offered it at all. The contract under test is the
-    // disclosure, not which action happens to sit behind it.
+    // disclosure, not which action happens to sit behind it. For the poster it
+    // reads 'Report a problem' (trust-spine T22).
     const onDispute = jest.fn();
     const { getByText, queryByText } = render(
       <BountyStatusPanel
@@ -76,10 +77,10 @@ describe('BountyStatusPanel', () => {
 
     // Collapsed: the primary action is the only button on screen.
     expect(getByText('Message Dana')).toBeTruthy();
-    expect(queryByText('Open a dispute')).toBeNull();
+    expect(queryByText('Report a problem')).toBeNull();
 
     fireEvent.press(getByText('More actions'));
-    fireEvent.press(getByText('Open a dispute'));
+    fireEvent.press(getByText('Report a problem'));
     expect(onDispute).toHaveBeenCalledTimes(1);
   });
 

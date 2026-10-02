@@ -247,16 +247,24 @@ export default function CancellationRequestScreen() {
     return (
       <View style={[s.screen, s.centered, s.centeredPad]}>
         <AlertCircle size={48} color={theme.warning} />
-        <Text style={s.stateTitle}>Not available here</Text>
+        <Text style={s.stateTitle}>Report a problem instead</Text>
         <Text style={s.stateBody}>
-          Only the hunter working on a bounty can request its cancellation. If you posted this
-          bounty and need to stop it, open a dispute so support can settle the escrow, or delete
-          the posting if no hunter has been selected yet.
+          Once a hunter is working on your bounty, you can't cancel it yourself. If the hunter has
+          gone quiet or the work isn't right, report it. Bounty support follows up with both of you
+          and decides what happens to the escrow.
         </Text>
         <View style={s.stateActions}>
-          <TouchableOpacity onPress={handleContactSupport} style={[s.primaryButton, s.rowButton]}>
-            <HelpCircle size={18} color={ON_ACCENT_TEXT} />
-            <Text style={[s.primaryButtonText, s.rowButtonText]}>Contact Support</Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.replace({ pathname: '/bounty/[id]/dispute', params: { id: String(id) } } as never)
+            }
+            style={[s.primaryButton, s.rowButton]}
+          >
+            <AlertCircle size={18} color={ON_ACCENT_TEXT} />
+            <Text style={[s.primaryButtonText, s.rowButtonText]}>Report a problem</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleContactSupport} style={s.linkButton}>
+            <Text style={s.linkButtonText}>Contact support</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.back()} style={s.linkButton}>
             <Text style={s.linkButtonText}>Go Back</Text>

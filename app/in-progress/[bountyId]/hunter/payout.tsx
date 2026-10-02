@@ -16,6 +16,8 @@ import { RateCounterpartyCard } from '../../../../components/rate-counterparty-c
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
+import { completionService } from '../../../../lib/services/completion-service';
+import { getReviewDeadlineStatus } from '../../../../lib/utils/review-deadline';
 import { bountyHoldsUnreleasedEscrow } from '../../../../lib/utils/payment-architecture';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
@@ -55,6 +57,8 @@ export default function HunterPayoutScreen() {
   const [currentStage] = useState<HunterStage>('payout');
   const [isPaidOut, setIsPaidOut] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  // submitted_at of this hunter's submission while it waits on the poster.
+  const [pendingSubmittedAt, setPendingSubmittedAt] = useState<string | null>(null);
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
@@ -85,6 +89,18 @@ export default function HunterPayoutScreen() {
 
       // Check if bounty is completed (poster released payout)
       setIsPaidOut(bountyData.status === 'completed');
+
+      // The review deadline is informational: never block the screen on it.
+      completionService
+        .getSubmission(id)
+        .then((submission) =>
+          setPendingSubmittedAt(
+            submission?.status === 'pending' && String(submission.hunter_id) === String(currentUserId)
+              ? (submission.submitted_at ?? null)
+              : null
+          )
+        )
+        .catch(() => setPendingSubmittedAt(null));
 
       // Check if hunter has an accepted request for this bounty
       const requests = await bountyRequestService.getAll({
@@ -217,6 +233,9 @@ export default function HunterPayoutScreen() {
     );
   };
 
+  // "The poster has until Friday at 3:00 PM to approve…" (trust-spine T6).
+  const reviewDeadline = isPaidOut ? null : getReviewDeadlineStatus(pendingSubmittedAt, 'hunter');
+
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
@@ -327,6 +346,16 @@ export default function HunterPayoutScreen() {
                     2
                   )} is released from escrow into your wallet. You'll be notified — nothing to do until then.`}
             </Text>
+            {reviewDeadline && (
+              <View style={styles.deadlineRow} accessibilityRole="text">
+                <MaterialIcons
+                  name={reviewDeadline.overdue ? 'support-agent' : 'schedule'}
+                  size={16}
+                  color="#fbbf24"
+                />
+                <Text style={styles.deadlineText}>{reviewDeadline.message}</Text>
+              </View>
+            )}
             <View style={styles.statusBadge}>
               <MaterialIcons name="pending" size={16} color="#fbbf24" />
               <Text style={styles.statusText}>Payout Pending</Text>
@@ -603,6 +632,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  deadlineRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  deadlineText: {
+    flex: 1,
+    color: '#fde68a',
+    fontSize: 13,
+    lineHeight: 18,
   },
   statusBadge: {
     flexDirection: 'row',

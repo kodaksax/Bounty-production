@@ -85,6 +85,8 @@ export const ROUTES = {
     // Dispute Management
     DISPUTES: '/admin/disputes',
     DISPUTE_DETAIL: (id: string | number) => `/admin/disputes/${id}` as const,
+    /** Stalled bounties: reviews past 72h and every new dispute (trust-spine T6/T22). */
+    REVIEW_QUEUE: '/admin/review-queue',
     
     // Settings section
     SETTINGS: {

@@ -29,6 +29,7 @@
  */
 import type { BountyDisplayStatus } from './bounty-display-status';
 import { getBountyDisplayStatus } from './bounty-display-status';
+import { getReviewDeadlineStatus, type ReviewDeadlineStatus } from './review-deadline';
 
 /** Who is looking at the bounty. */
 export type BountyRole = 'poster' | 'hunter' | 'visitor';
@@ -178,6 +179,13 @@ export interface BountyLifecycleInput {
   otherPartyName?: string | null;
   /** Settlement state of the escrow, when known. */
   paymentState?: 'held' | 'released' | 'refunded' | null;
+  /**
+   * submitted_at of the latest completion submission. Starts the poster's
+   * 72-hour review window, which both sides see (lib/utils/review-deadline.ts).
+   */
+  submittedAt?: string | null;
+  /** Clock override, for tests. */
+  now?: Date;
 }
 
 export interface BountyLifecycleState {
@@ -201,7 +209,16 @@ export interface BountyLifecycleState {
   secondaryActions: BountyLifecycleAction[];
   /** Which list section this belongs in. */
   group: BountyAttentionGroup;
+  /** ISO time the poster's review window closes, while work awaits review. */
+  reviewDeadline?: string | null;
 }
+
+/**
+ * The poster's label for open_dispute once a hunter is committed. It is the
+ * poster's one route when the hunter goes quiet or the work is wrong: it files
+ * a workflow dispute that lands in Bounty support's queue (trust-spine T22).
+ */
+const REPORT_PROBLEM = 'Report a problem';
 
 const ACTIONS: Record<BountyActionKey, BountyLifecycleAction> = {
   review_applications: {
@@ -299,11 +316,17 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
     cancellationRequestedByRole = null,
     otherPartyName = null,
     paymentState = null,
+    submittedAt = null,
+    now,
   } = input;
 
   const isPoster = role === 'poster';
   const submissionPending = submissionStatus === 'pending';
   const revisionRequested = submissionStatus === 'revision_requested';
+  const review =
+    submissionPending && role !== 'visitor'
+      ? getReviewDeadlineStatus(submittedAt, isPoster ? 'poster' : 'hunter', now ?? new Date())
+      : null;
 
   const status = getBountyDisplayStatus({
     bounty,
@@ -373,8 +396,8 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
   }
 
   return isPoster
-    ? resolvePoster({ status, bounty, applicationCount, hunter, reward, submissionStatus, paymentState, revisionRequested, submissionPending })
-    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState });
+    ? resolvePoster({ status, bounty, applicationCount, hunter, reward, submissionStatus, paymentState, revisionRequested, submissionPending, review })
+    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState, review });
 }
 
 function resolveVisitor(
@@ -461,8 +484,9 @@ function resolvePoster(args: {
   paymentState: BountyLifecycleInput['paymentState'];
   revisionRequested: boolean;
   submissionPending: boolean;
+  review: ReviewDeadlineStatus | null;
 }): BountyLifecycleState {
-  const { status, bounty, applicationCount, hunter, reward, paymentState, revisionRequested } = args;
+  const { status, bounty, applicationCount, hunter, reward, paymentState, revisionRequested, review } = args;
   const hasApplicants = applicationCount > 0;
 
   switch (status) {
@@ -470,14 +494,19 @@ function resolvePoster(args: {
       return finalize({
         status,
         headline: 'Awaiting your approval',
-        explanation: `${hunter} submitted the work for this bounty.`,
-        nextStep: `Approve it to release ${reward}, or request changes and send it back.`,
+        explanation: review
+          ? `${hunter} submitted the work for this bounty. Approving it releases ${reward}.`
+          : `${hunter} submitted the work for this bounty.`,
+        nextStep: review
+          ? review.message
+          : `Approve it to release ${reward}, or request changes and send it back.`,
         waitingOn: 'you',
         needsAttention: true,
-        tone: 'action',
+        tone: review?.overdue ? 'warning' : 'action',
         stageIndex: 2,
         primaryAction: action('review_submission'),
-        secondaryActions: [action('message'), action('open_dispute')],
+        secondaryActions: [action('message'), action('open_dispute', REPORT_PROBLEM)],
+        reviewDeadline: review ? review.deadline.toISOString() : null,
       });
 
     case 'open':
@@ -526,7 +555,7 @@ function resolvePoster(args: {
           // from work they can't finish. Once a hunter is on the clock the
           // poster's route out is a dispute, which is the flow that can settle
           // escrow either way. See describeHunter's in_progress case.
-          secondaryActions: [action('open_dispute')],
+          secondaryActions: [action('open_dispute', REPORT_PROBLEM)],
           primaryAction: action('message', `Message ${hunter}`),
         });
       }
@@ -540,7 +569,7 @@ function resolvePoster(args: {
         tone: 'progress',
         stageIndex: 1,
         primaryAction: action('message', `Message ${hunter}`),
-        secondaryActions: [action('open_dispute')],
+        secondaryActions: [action('open_dispute', REPORT_PROBLEM)],
       });
 
     case 'deadline_passed':
@@ -561,7 +590,7 @@ function resolvePoster(args: {
           ? action('message', `Message ${hunter}`)
           : action('repost'),
         secondaryActions: bounty.accepted_by
-          ? [action('open_dispute')]
+          ? [action('open_dispute', REPORT_PROBLEM)]
           : [action('edit'), action('delete')],
       });
 
@@ -663,8 +692,9 @@ function resolveHunter(args: {
   submissionPending: boolean;
   submissionIsMine: boolean;
   paymentState: BountyLifecycleInput['paymentState'];
+  review: ReviewDeadlineStatus | null;
 }): BountyLifecycleState {
-  const { status, bounty, viewerId, requestStatus, requestRejectionSource, poster, reward, revisionRequested, paymentState } = args;
+  const { status, bounty, viewerId, requestStatus, requestRejectionSource, poster, reward, revisionRequested, paymentState, review } = args;
 
   // A hunter whose application is still `pending` on a bounty that has already
   // moved on was passed over — the poster accepted someone else and the row was
@@ -693,15 +723,16 @@ function resolveHunter(args: {
     case 'submitted_for_review':
       return finalize({
         status,
-        headline: 'Submitted — awaiting approval',
-        explanation: `${poster} is reviewing the work you submitted.`,
-        nextStep: `${reward} is released to your balance as soon as they approve it.`,
-        waitingOn: 'other',
+        headline: review?.overdue ? 'Submitted — Bounty is reviewing' : 'Submitted — awaiting approval',
+        explanation: `${poster} is reviewing the work you submitted. ${reward} is released to your balance as soon as it's approved.`,
+        nextStep: review ? review.message : `${reward} is released to your balance as soon as they approve it.`,
+        waitingOn: review?.overdue ? 'support' : 'other',
         needsAttention: false,
         tone: 'progress',
         stageIndex: 2,
         primaryAction: action('message', `Message ${poster}`),
         secondaryActions: [action('view_bounty'), action('open_dispute')],
+        reviewDeadline: review ? review.deadline.toISOString() : null,
       });
 
     case 'applied':

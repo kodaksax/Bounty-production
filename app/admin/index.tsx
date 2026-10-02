@@ -140,6 +140,13 @@ const NAV_GROUPS: NavGroup[] = [
         route: ROUTES.ADMIN.MODERATION,
       },
       {
+        id: 'review-queue',
+        title: 'Review Queue',
+        description: 'Work waiting 72h+ on the poster, and every new dispute',
+        icon: 'support-agent',
+        route: ROUTES.ADMIN.REVIEW_QUEUE,
+      },
+      {
         id: 'disputes',
         title: 'Disputes',
         description: 'Bounty disputes awaiting a decision',
