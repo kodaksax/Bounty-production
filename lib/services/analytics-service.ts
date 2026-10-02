@@ -229,7 +229,7 @@ export type AnalyticsEvent =
   // an outcome — previously only `identity_verified` (the success case) was
   // visible, so a blocked flow left no signal.
   // Onboarding payout-setup step (app/onboarding/payouts.tsx), the screen that
-  // sits between role selection and style for BOTH roles. `payout_setup_started`
+  // sits between role selection and the founder note for hunters (posters skip it). `payout_setup_started`
   // means the user tapped Create Stripe Account and is being handed to the
   // hosted flow — the identity_* events above then take
   // over and report what happened there. `payout_setup_skipped` is the

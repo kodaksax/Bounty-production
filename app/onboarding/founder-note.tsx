@@ -1,9 +1,10 @@
 /**
  * Onboarding Founder Note
- * The last screen of onboarding, shown right after payout setup
- * (app/onboarding/payouts.tsx). Reached from both the "Skip for now" path and
- * the Connect return path — payouts.tsx passes this route as `returnTo`, so
- * finishing or backing out of Stripe both land here.
+ * The last screen of onboarding. Posters arrive straight from role selection;
+ * hunters arrive after payout setup (app/onboarding/payouts.tsx), from both
+ * the "Skip for now" path and the Connect return path — payouts.tsx passes
+ * this route as `returnTo`, so finishing or backing out of Stripe both land
+ * here. See lib/onboarding/next-step-after-role.ts.
  *
  * Continue is therefore the terminal action of the whole funnel: it runs
  * useCompleteOnboarding, which writes the profile and the

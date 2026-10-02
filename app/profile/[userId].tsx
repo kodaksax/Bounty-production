@@ -621,6 +621,7 @@ export default function UserProfileScreen() {
             }}
           />
           <MilestoneBadgeChips
+            isOwnProfile={isOwnProfile}
             input={{
               bounties_posted: activityStats.bountiesPosted,
               bounties_completed: activityStats.bountiesCompleted,

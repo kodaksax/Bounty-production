@@ -33,6 +33,7 @@ import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { nextStepAfterRole } from '../../lib/onboarding/next-step-after-role';
 
 type Intent = 'poster' | 'hunter';
 
@@ -75,11 +76,10 @@ export default function RoleSelectScreen() {
     hapticFeedback.light();
     analyticsService.trackEvent('role_selected', { role: selected, surface: 'onboarding' });
     updateData({ intent: selected });
-    // Both roles go to payout setup next, not straight into their branch
-    // (the poster task composer / hunter location prompt). Posters need a
-    // payout account for refunds, hunters for earnings, so the step is shared
-    // — see app/onboarding/payouts.tsx, which continues on to style.
-    router.push('/onboarding/payouts');
+    // Hunters go to payout setup next; posters skip it, because nothing a
+    // poster does needs a Stripe payout account until they withdraw — see
+    // lib/onboarding/next-step-after-role.ts.
+    router.push(nextStepAfterRole(selected));
   };
 
   // Reached from the style step (app/onboarding/style.tsx), which itself is

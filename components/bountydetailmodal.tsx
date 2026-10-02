@@ -5,6 +5,7 @@ import { useRouter } from "expo-router"
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { formatCategoryLabel } from 'lib/utils/data-utils'
+import { formatPostedAgo } from 'lib/utils/format-relative-date'
 import { formatScheduleDescription } from 'lib/utils/schedule-utils'
 import { shareBounty } from "lib/utils/share-utils"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -34,6 +35,7 @@ import type { AttachmentMeta } from '../lib/services/database.types'
 import { storageService } from '../lib/services/storage-service'
 import type { BountyScheduleType, Message } from '../lib/types'
 import { AttachmentViewerModal } from './attachment-viewer-modal'
+import { BountyTrustSignals } from './bounty-trust-signals'
 import { ReportModal } from "./ReportModal"
 import { AppModal } from './ui/app-modal'
 import { useKeyboardInset } from './ui/keyboard-avoiding'
@@ -299,6 +301,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       }
     }
   }, [])
+
+  const postedAgo = formatPostedAgo(bounty.created_at)
+  const isOwnBounty = currentUserId != null && posterId != null && String(currentUserId) === String(posterId)
 
   // Empty/whitespace-only descriptions hide the whole section (header included)
   // rather than rendering a bare "Description" heading over nothing.
@@ -763,7 +768,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                         </Avatar>
                         <View style={styles.userTextInfo}>
                           <Text style={styles.username}>{displayUsername}</Text>
-                          <Text style={styles.postTime}>Posted 2h ago</Text>
+                          {/* Real age of the post. This line used to be a hard-coded
+                              "Posted 2h ago" on every bounty, months-old ones included. */}
+                          {!!postedAgo && <Text style={styles.postTime}>Posted {postedAgo}</Text>}
                         </View>
                         {posterId && (
                           <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} style={{ marginLeft: 'auto' }} />
@@ -800,6 +807,16 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                       <Text style={styles.distanceText}>{bounty.distance} mi away</Text>
                     )}
                   </View>
+
+                  {/* Funding state + poster evidence, for anyone deciding whether
+                      to apply. Not shown to the poster on their own bounty. */}
+                  {!isOwnBounty && (
+                    <BountyTrustSignals
+                      bountyId={bounty.id}
+                      posterId={posterId ? String(posterId) : null}
+                      poster={normalizedPoster}
+                    />
+                  )}
 
                   {/* Description — omitted entirely when the bounty has none */}
                   {!!description && (

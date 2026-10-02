@@ -49,3 +49,63 @@ export function formatHunterTrustSummary(input: HunterTrustInput): string {
   if (parts.length === 0) return 'New to Bounty';
   return parts.join(' · ');
 }
+
+export interface PosterTrustInput {
+  /** Bounties this user POSTED that reached 'completed' (get_profile_activity_stats.bounties_completed). */
+  bountiesCompleted?: number | null;
+  averageRating?: number | null;
+  ratingCount?: number | null;
+}
+
+/**
+ * "3 completed bounties · ★4.8 (4)" / "3 completed bounties" /
+ * "No completed bounties yet".
+ *
+ * The hunter-facing counterpart of formatHunterTrustSummary, with the same
+ * MIN_RATING_SAMPLE rule. A poster with no history says so plainly rather
+ * than falling back to something that reads as credibility: a hunter weighing
+ * an unfunded bounty from a day-old account needs to see exactly that.
+ * "Completed" is the bounty's status, not a verified payout, so the copy
+ * never says "paid".
+ */
+export function formatPosterTrustSummary(input: PosterTrustInput): string {
+  const completed = Math.max(0, Number(input.bountiesCompleted) || 0);
+  const ratingCount = Math.max(0, Number(input.ratingCount) || 0);
+  const averageRating = input.averageRating;
+
+  const parts: string[] = [];
+  parts.push(
+    completed > 0
+      ? `${completed} completed bount${completed === 1 ? 'y' : 'ies'}`
+      : 'No completed bounties yet'
+  );
+  if (
+    ratingCount >= MIN_RATING_SAMPLE &&
+    typeof averageRating === 'number' &&
+    Number.isFinite(averageRating) &&
+    averageRating > 0
+  ) {
+    parts.push(`★${averageRating.toFixed(1)} (${ratingCount})`);
+  }
+  return parts.join(' · ');
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * "Joined today" / "Joined 3 days ago" / "Joined Mar 2026" from an account's
+ * created_at. Recent accounts get a day count rather than a month, because
+ * "Joined Oct 2026" on a 1-day-old account hides the one thing a hunter
+ * needs to know. Returns '' for a missing or unparseable timestamp.
+ */
+export function formatAccountAge(createdAt?: string | null, now: number = Date.now()): string {
+  if (!createdAt) return '';
+  const t = new Date(createdAt).getTime();
+  if (Number.isNaN(t)) return '';
+  const days = Math.floor((now - t) / 86_400_000);
+  if (days <= 0) return 'Joined today';
+  if (days === 1) return 'Joined yesterday';
+  if (days < 30) return `Joined ${days} days ago`;
+  const d = new Date(t);
+  return `Joined ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}

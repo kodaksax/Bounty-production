@@ -61,3 +61,51 @@ describe('formatHunterTrustSummary', () => {
     expect(result).not.toContain('★');
   });
 });
+
+describe('formatPosterTrustSummary', () => {
+  const { formatPosterTrustSummary } = require('../../../lib/utils/trust-summary');
+
+  test('new poster says so plainly; no credibility is manufactured', () => {
+    expect(formatPosterTrustSummary({ bountiesCompleted: 0, averageRating: null, ratingCount: 0 })).toBe(
+      'No completed bounties yet'
+    );
+  });
+
+  test('never claims "paid" — completed is a bounty status, not a verified payout', () => {
+    const result = formatPosterTrustSummary({ bountiesCompleted: 4, averageRating: 4.8, ratingCount: 4 });
+    expect(result).toBe('4 completed bounties · ★4.8 (4)');
+    expect(result.toLowerCase()).not.toContain('paid');
+  });
+
+  test('singular', () => {
+    expect(formatPosterTrustSummary({ bountiesCompleted: 1 })).toBe('1 completed bounty');
+  });
+
+  test('rating hidden below MIN_RATING_SAMPLE, same rule as the applicant card', () => {
+    expect(formatPosterTrustSummary({ bountiesCompleted: 2, averageRating: 5, ratingCount: 2 })).toBe(
+      '2 completed bounties'
+    );
+  });
+});
+
+describe('formatAccountAge', () => {
+  const { formatAccountAge } = require('../../../lib/utils/trust-summary');
+  const NOW = new Date('2026-10-02T12:00:00.000Z').getTime();
+  const daysAgo = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
+
+  test('recent accounts show a day count, not a flattering month', () => {
+    expect(formatAccountAge(daysAgo(0), NOW)).toBe('Joined today');
+    expect(formatAccountAge(daysAgo(1), NOW)).toBe('Joined yesterday');
+    expect(formatAccountAge(daysAgo(3), NOW)).toBe('Joined 3 days ago');
+  });
+
+  test('older accounts show month + year', () => {
+    expect(formatAccountAge('2026-03-10T00:00:00.000Z', NOW)).toBe('Joined Mar 2026');
+  });
+
+  test('missing or invalid -> empty (line omitted, never defaulted to now)', () => {
+    expect(formatAccountAge(undefined, NOW)).toBe('');
+    expect(formatAccountAge(null, NOW)).toBe('');
+    expect(formatAccountAge('not a date', NOW)).toBe('');
+  });
+});

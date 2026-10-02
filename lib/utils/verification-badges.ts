@@ -153,7 +153,7 @@ export interface MilestoneBadge {
 /**
  * Badge criteria:
  * - First Bounty Posted : bounties_posted >= 1
- * - 5 Bounties Completed: bounties_completed >= 5
+ * - 5 Posted Bounties Completed: bounties_completed >= 5 (poster-side)
  * - Top Rated           : average_rating >= 4.5 with rating_count >= 5
  *                         (a minimum sample size so a single 5-star rating
  *                         can't earn it)
@@ -172,8 +172,10 @@ export function getMilestoneBadges(input: MilestoneBadgeInput): MilestoneBadge[]
     },
     {
       id: 'bounties_completed_5',
-      label: '5 Bounties Completed',
-      description: 'Successfully completed 5 or more posted bounties.',
+      // Poster-side (bounties_completed counts bounties this user POSTED).
+      // Labelled as such so it can't be read as hunter work on a profile.
+      label: '5 Posted Bounties Completed',
+      description: 'Posted 5 or more bounties that were completed.',
       earned: completed5Earned,
     },
     {

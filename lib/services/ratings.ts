@@ -1,7 +1,13 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
-import type { UserRating } from 'lib/types';
+import type { MyRatingStatus, UserRating } from 'lib/types';
 import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
+
+// Ratings are reputation only when they trace back to a completed transaction
+// (supabase/migrations/20261002160000_rating_reputation_integrity.sql). Reads
+// go through the server functions that apply that rule -- get_user_reviews for
+// the list, get_profile_activity_stats for the average -- so a count and the
+// reviews behind it always agree. There is no second ratings store.
 
 // API Configuration
 function getApiBaseUrl() {
@@ -29,9 +35,13 @@ function logOnce(key: string, level: 'error' | 'warn', message: string, meta?: a
   }
 }
 
+// PostgREST "function not found": the RPC isn't deployed to this environment yet.
+const isMissingFunction = (error: any) => error?.code === 'PGRST202' || error?.code === '42883';
+
 export const ratingsService = {
   /**
-   * Create a new rating
+   * Create a new rating. The server verifies the transaction and rejects
+   * anything else; there is no fallback table.
    */
   async create(rating: Omit<UserRating, 'id' | 'createdAt'>): Promise<UserRating | null> {
     try {
@@ -48,31 +58,8 @@ export const ratingsService = {
           .select('*')
           .single();
 
-        if (!error) return this.mapFromRatingsDb(data);
-
-        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
-        const canFallback =
-          primaryError.includes('relation') ||
-          primaryError.includes('does not exist') ||
-          primaryError.includes('column') ||
-          primaryError.includes('schema cache');
-
-        if (!canFallback) throw error;
-
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('user_ratings')
-          .insert({
-            user_id: rating.user_id,
-            rater_id: rating.rater_id,
-            bounty_id: rating.bountyId,
-            score: rating.score,
-            comment: rating.comment,
-          })
-          .select('*')
-          .single();
-
-        if (fallbackError) throw fallbackError;
-        return this.mapFromDb(fallbackData);
+        if (error) throw error;
+        return this.mapFromRatingsDb(data);
       }
 
       const API_URL = `${getApiBaseUrl()}/api/ratings`;
@@ -98,7 +85,8 @@ export const ratingsService = {
   },
 
   /**
-   * Get ratings for a user (as ratee)
+   * Reviews received by a user that count as reputation, newest first, each
+   * with the transaction it came from. Star-only ratings are included.
    */
   async getByUserId(
     userId: string,
@@ -109,35 +97,24 @@ export const ratingsService = {
         const limit = options?.limit ?? 20;
         const offset = options?.offset ?? 0;
 
-        let query = supabase
+        const { data, error } = await supabase.rpc('get_user_reviews', {
+          p_user_id: userId,
+          p_limit: limit,
+          p_offset: offset,
+        });
+        if (!error) return ((data as any[]) || []).map((row) => this.mapFromReviewRpc(row, userId));
+        if (!isMissingFunction(error)) throw error;
+
+        // Environment without get_user_reviews yet: the raw table (RLS-filtered
+        // once the migration lands), without transaction context.
+        const { data: rows, error: rowsError } = await supabase
           .from('ratings')
           .select('*')
           .eq('to_user_id', userId)
           .order('created_at', { ascending: false })
           .range(offset, offset + limit - 1);
-
-        const { data, error } = await query;
-        if (!error) return (data || []).map(this.mapFromRatingsDb);
-
-        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
-        const canFallback =
-          primaryError.includes('relation') ||
-          primaryError.includes('does not exist') ||
-          primaryError.includes('column') ||
-          primaryError.includes('schema cache');
-
-        if (!canFallback) throw error;
-
-        let fallbackQuery = supabase
-          .from('user_ratings')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .range(offset, offset + limit - 1);
-
-        const { data: fallbackData, error: fallbackError } = await fallbackQuery;
-        if (fallbackError) throw fallbackError;
-        return (fallbackData || []).map(this.mapFromDb);
+        if (rowsError) throw rowsError;
+        return (rows || []).map(this.mapFromRatingsDb);
       }
 
       const API_URL = `${getApiBaseUrl()}/api/ratings`;
@@ -160,7 +137,8 @@ export const ratingsService = {
   },
 
   /**
-   * Get aggregated rating stats for a user
+   * Average and count of the ratings a user received that count as
+   * reputation -- the same figures as get_profile_activity_stats.
    */
   async getAggregatedStats(
     userId: string
@@ -168,23 +146,15 @@ export const ratingsService = {
     try {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
-          .from('ratings')
-          .select('rating')
-          .eq('to_user_id', userId);
-
-        if (!error) {
-          const rows = data || [];
-          if (rows.length === 0) {
-            return { averageRating: 0, ratingCount: 0 };
-          }
-          const total = rows.reduce((sum: number, row: any) => sum + Number(row.rating || 0), 0);
-          return {
-            averageRating: total / rows.length,
-            ratingCount: rows.length,
-          };
-        }
-
-        throw error;
+          .rpc('get_profile_activity_stats', { target_user_id: userId })
+          .single();
+        if (error) throw error;
+        const row = (data || {}) as { rating_avg?: number | string | null; rating_count?: number | null };
+        const ratingCount = Number(row.rating_count) || 0;
+        return {
+          averageRating: ratingCount > 0 && row.rating_avg != null ? Number(row.rating_avg) : 0,
+          ratingCount,
+        };
       }
 
       // Fallback: fetch all ratings and compute locally
@@ -215,37 +185,17 @@ export const ratingsService = {
   async hasRated(raterId: string, bountyId: string, userId: string): Promise<boolean> {
     try {
       if (isSupabaseConfigured) {
-        // Try primary ratings table first (canonical schema)
+        // A rater can always read their own ratings (ratings_select_reputation).
         const { data, error } = await supabase
           .from('ratings')
           .select('id')
           .eq('from_user_id', raterId)
           .eq('bounty_id', bountyId)
           .eq('to_user_id', userId)
-          .single();
+          .maybeSingle();
 
-        if (!error || error.code === 'PGRST116') return !!data; // PGRST116 = not found
-
-        const msg = String(error?.message || '').toLowerCase();
-        const canFallback =
-          msg.includes('relation') ||
-          msg.includes('does not exist') ||
-          msg.includes('column') ||
-          msg.includes('schema cache');
-
-        if (!canFallback) throw error;
-
-        // Fallback: legacy user_ratings view / table
-        const { data: legacyData, error: legacyError } = await supabase
-          .from('user_ratings')
-          .select('id')
-          .eq('rater_id', raterId)
-          .eq('bounty_id', bountyId)
-          .eq('user_id', userId)
-          .single();
-
-        if (legacyError && legacyError.code !== 'PGRST116') throw legacyError;
-        return !!legacyData;
+        if (error) throw error;
+        return !!data;
       }
 
       const API_URL = `${getApiBaseUrl()}/api/ratings/check`;
@@ -269,18 +219,31 @@ export const ratingsService = {
   },
 
   /**
-   * Map database record to domain type
+   * The signed-in user's side of one bounty's rating: who they would rate,
+   * whether the transaction is complete enough to rate, and whether they
+   * already did. Null when they are not a party (or on any failure -- the
+   * rating prompt is optional and must never block a screen).
    */
-  mapFromDb(record: any): UserRating {
-    return {
-      id: record.id,
-      user_id: record.user_id,
-      rater_id: record.rater_id,
-      bountyId: record.bounty_id,
-      score: record.score,
-      comment: record.comment,
-      createdAt: record.created_at,
-    };
+  async getMyRatingStatus(bountyId: string): Promise<MyRatingStatus | null> {
+    if (!bountyId || !isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase
+        .rpc('get_my_rating_status', { p_bounty_id: bountyId })
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const row = data as any;
+      return {
+        raterRole: row.rater_role,
+        rateeId: row.ratee_id,
+        rateeName: row.ratee_username ?? null,
+        eligible: !!row.eligible,
+        alreadyRated: !!row.already_rated,
+      };
+    } catch (err) {
+      logOnce('ratings:getMyRatingStatus', 'warn', 'Error getting rating status', { bountyId, error: err });
+      return null;
+    }
   },
 
   mapFromRatingsDb(record: any): UserRating {
@@ -289,9 +252,28 @@ export const ratingsService = {
       user_id: record.to_user_id,
       rater_id: record.from_user_id,
       bountyId: record.bounty_id,
-      score: record.rating,
-      comment: record.comment,
+      score: Number(record.rating) as UserRating['score'],
+      comment: record.comment ?? undefined,
       createdAt: record.created_at,
+      raterRole: record.rater_role ?? undefined,
+    };
+  },
+
+  mapFromReviewRpc(record: any, rateeId: string): UserRating {
+    return {
+      id: record.id,
+      user_id: rateeId,
+      rater_id: record.rater_id,
+      bountyId: record.bounty_id,
+      score: Number(record.rating) as UserRating['score'],
+      comment: record.comment ?? undefined,
+      createdAt: record.created_at,
+      raterRole: record.rater_role ?? undefined,
+      raterName: record.rater_username ?? null,
+      raterAvatar: record.rater_avatar ?? null,
+      bountyTitle: record.bounty_title ?? null,
+      bountyCompletedAt: record.bounty_completed_at ?? null,
+      isForHonor: !!record.is_for_honor,
     };
   },
 };

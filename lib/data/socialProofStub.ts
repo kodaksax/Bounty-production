@@ -34,78 +34,17 @@ export interface SocialProofParams {
   limit?: number;
 }
 
-// Fixture data: a mix of completed and open jobs so both proof-card variants
-// (and the fallback chain in ProofCard.tsx) are exercisable during
-// development. Distances here are illustrative only — fetchSocialProof
-// strips them to null whenever the caller doesn't supply lat/lng, matching
-// the real endpoint's documented behavior.
-const STUB_ITEMS: SocialProofItem[] = [
-  {
-    id: 'bnty_stub_1',
-    state: 'completed',
-    hunter_first_name: 'Marcus',
-    task_summary: 'carried a couch up three flights',
-    amount_cents: 4500,
-    neighborhood: 'Petworth',
-    distance_miles: 1.2,
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'bnty_stub_2',
-    state: 'completed',
-    hunter_first_name: 'Dana',
-    task_summary: 'mounted a TV over the fireplace',
-    amount_cents: 6000,
-    neighborhood: 'Logan Circle',
-    distance_miles: 0.8,
-    timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'bnty_stub_3',
-    state: 'completed',
-    hunter_first_name: 'Elijah',
-    task_summary: 'hauled an old mattress to the dump',
-    amount_cents: 3500,
-    neighborhood: 'Columbia Heights',
-    distance_miles: 2.1,
-    timestamp: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'bnty_stub_4',
-    state: 'completed',
-    hunter_first_name: 'Priya',
-    task_summary: 'fixed a closet door that wouldn’t close',
-    amount_cents: 4000,
-    neighborhood: 'Adams Morgan',
-    distance_miles: 0.3,
-    timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'bnty_stub_5',
-    state: 'open',
-    hunter_first_name: '',
-    task_summary: 'help assembling a bookshelf',
-    amount_cents: 3000,
-    neighborhood: 'Shaw',
-    distance_miles: 1.5,
-    timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-  },
-];
-
 /**
- * Never returns fabricated data — this is fixture data standing in for a
- * real, already-completed/open bounty feed. Callers are responsible for the
- * data-integrity fallback chain (completed -> open -> static card); this
- * function just returns what's "in the database."
+ * Returns no items until a real endpoint exists, so ProofCard.tsx always
+ * renders its static, non-factual fallback card.
+ *
+ * This used to return hard-coded fixtures ("Marcus carried a couch up three
+ * flights · $45 · 2 hours ago") with timestamps relative to now, which
+ * ProofCard rendered as real completed bounties nearby. The screen is
+ * currently unreachable (PosterFirstWelcome has no importer), but fabricated
+ * completions must not be one import away from production. Fixtures for
+ * development belong in tests, not in the data client.
  */
-export async function fetchSocialProof(params: SocialProofParams = {}): Promise<SocialProofResponse> {
-  const limit = params.limit ?? 8;
-  const hasLocation = typeof params.lat === 'number' && typeof params.lng === 'number';
-
-  const items = STUB_ITEMS.slice(0, limit).map(item => ({
-    ...item,
-    distance_miles: hasLocation ? item.distance_miles : null,
-  }));
-
-  return { items };
+export async function fetchSocialProof(_params: SocialProofParams = {}): Promise<SocialProofResponse> {
+  return { items: [] };
 }
