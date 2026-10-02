@@ -64,6 +64,13 @@ BEGIN
     RETURN COALESCE(NEW, OLD);
   END IF;
 
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status::text IS DISTINCT FROM 'pending' THEN
+      RAISE EXCEPTION 'request_must_start_pending' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+  END IF;
+
   IF TG_OP = 'DELETE' THEN
     IF OLD.status::text = 'accepted' THEN
       RAISE EXCEPTION 'accepted_request_is_locked'
@@ -98,7 +105,7 @@ $$;
 
 DROP TRIGGER IF EXISTS trg_bounty_requests_guard_assignment ON public.bounty_requests;
 CREATE TRIGGER trg_bounty_requests_guard_assignment
-  BEFORE UPDATE OR DELETE ON public.bounty_requests
+  BEFORE INSERT OR UPDATE OR DELETE ON public.bounty_requests
   FOR EACH ROW EXECUTE FUNCTION public.fn_bounty_requests_guard_assignment();
 
 -- ---------------------------------------------------------------------------

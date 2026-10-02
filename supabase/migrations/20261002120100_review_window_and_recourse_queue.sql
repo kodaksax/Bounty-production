@@ -238,6 +238,7 @@ DECLARE
   b  public.bounties%ROWTYPE;
   v  text[] := '{}';
   v_policy public.completion_review_policy%ROWTYPE;
+  v_funding_state text;
 BEGIN
   SELECT * INTO cs FROM public.completion_submissions WHERE id = p_submission_id;
   IF NOT FOUND THEN RETURN ARRAY['submission_not_found']; END IF;
@@ -271,13 +272,72 @@ BEGIN
     v := array_append(v, 'cancellation_pending');
   END IF;
   IF NOT public.is_account_active(cs.hunter_id) THEN v := array_append(v, 'hunter_account_not_active'); END IF;
-  -- The client releases escrow BEFORE flipping the submission to approved, so
-  -- "released, approval write failed" leaves a pending submission on a paid
-  -- bounty. Support must see it; an automatic release must never touch it.
-  IF EXISTS (SELECT 1 FROM public.wallet_transactions wt
-              WHERE wt.bounty_id = cs.bounty_id AND wt.type::text IN ('release', 'refund')) THEN
-    v := array_append(v, 'payment_already_settled');
-  END IF;
+  -- Payment state is architecture-specific. Only completed v1 ledger rows and
+  -- canonical v2/v3 payment states can prove escrow is available or settled.
+  CASE COALESCE(b.payment_architecture_version, 1)
+    WHEN 1 THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM public.wallet_transactions wt
+         WHERE wt.bounty_id = cs.bounty_id
+           AND wt.type::text = 'escrow'
+           AND wt.status::text = 'completed'
+      ) THEN
+        v := array_append(v, 'escrow_not_funded');
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM public.wallet_transactions wt
+         WHERE wt.bounty_id = cs.bounty_id
+           AND wt.type::text IN ('release', 'refund')
+           AND wt.status::text = 'completed'
+      ) THEN
+        v := array_append(v, 'payment_already_settled');
+      END IF;
+    WHEN 2 THEN
+      IF EXISTS (
+        SELECT 1 FROM public.bounty_payments bp
+         WHERE bp.bounty_id = cs.bounty_id
+           AND bp.status IN ('released', 'refunded')
+      ) THEN
+        v := array_append(v, 'payment_already_settled');
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM public.bounty_payments bp
+         WHERE bp.bounty_id = cs.bounty_id
+           AND bp.status IN ('release_pending', 'refund_pending')
+      ) THEN
+        v := array_append(v, 'payment_settlement_pending');
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM public.bounty_payments bp
+         WHERE bp.bounty_id = cs.bounty_id
+           AND bp.status IN ('authorized', 'captured')
+      ) THEN
+        v := array_append(v, 'escrow_not_funded');
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM public.bounty_payments bp
+         WHERE bp.bounty_id = cs.bounty_id
+           AND bp.status = 'disputed'
+      ) THEN
+        v := array_append(v, 'payment_disputed');
+      END IF;
+    WHEN 3 THEN
+      SELECT bf.state INTO v_funding_state
+        FROM public.bounty_v3_funding bf
+       WHERE bf.bounty_id = cs.bounty_id;
+      IF v_funding_state = 'released' THEN
+        v := array_append(v, 'payment_already_settled');
+      ELSIF v_funding_state = 'capturing' THEN
+        v := array_append(v, 'payment_settlement_pending');
+      END IF;
+      IF v_funding_state IS DISTINCT FROM 'authorized'
+         AND v_funding_state IS DISTINCT FROM 'awaiting_hunter_onboarding'
+      THEN
+        v := array_append(v, 'escrow_not_funded');
+      END IF;
+    ELSE
+      v := array_append(v, 'unsupported_payment_architecture');
+  END CASE;
   -- Nothing to release. Phase B would still need a policy for approving
   -- for-honor work on the poster's behalf.
   IF COALESCE(b.is_for_honor, false) OR COALESCE(b.amount, 0) <= 0 THEN

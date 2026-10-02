@@ -126,11 +126,11 @@ async function main() {
 
   // Users: poster P, hunter H, second applicant H2, stranger A, admin D.
   let U;
-  const fixture = async ({ accept = true, submit = false, amount = 20, message = 'done, photos attached' } = {}) => {
+  const fixture = async ({ accept = true, submit = false, amount = 20, message = 'done, photos attached', paymentVersion = 1 } = {}) => {
     const [b] = await as(U.P, () => q(
-      `INSERT INTO bounties (title, description, amount, is_for_honor, poster_id, user_id, status, work_type)
-       VALUES ('REVIEW-WINDOW TEST', 'harness fixture', $1, $2, $3, $3, 'open', 'online') RETURNING id`,
-      [amount, amount === 0, U.P.id]));
+      `INSERT INTO bounties (title, description, amount, is_for_honor, poster_id, user_id, status, work_type, payment_architecture_version)
+       VALUES ('REVIEW-WINDOW TEST', 'harness fixture', $1, $2, $3, $3, 'open', 'online', $4) RETURNING id`,
+      [amount, amount === 0, U.P.id, paymentVersion]));
     const B = b.id;
     const [r1] = await as(U.H, () => q(
       `INSERT INTO bounty_requests (bounty_id, hunter_id, poster_id, status) VALUES ($1, $2, $3, 'pending') RETURNING id`,
@@ -231,6 +231,10 @@ async function main() {
 
     await scenario('direct mutation: bounty_requests (new guard)', async () => {
       const f = await fixture();
+      const forged = await as(U.H2, () => tryq(
+        `INSERT INTO bounty_requests (bounty_id, hunter_id, poster_id, status) VALUES ($1, $2, $3, 'accepted')`,
+        [f.B, U.H2.id, U.P.id]));
+      check('BLOCKED hunter inserts an already-accepted application', !forged.ok, forged.err);
       for (const [label, sql, params] of [
         ['reject the accepted request', `UPDATE bounty_requests SET status = 'rejected' WHERE id = $1`, [f.R1]],
         ['promote another applicant to accepted', `UPDATE bounty_requests SET status = 'accepted' WHERE id = $1`, [f.R2]],
@@ -527,10 +531,15 @@ async function main() {
       await setRollout(24 * 30);
       // a) release failed: nothing changed, the clock keeps running.
       const f = await fixture({ submit: true });
+      await q(`INSERT INTO wallet_transactions (user_id, type, amount, bounty_id, description, status)
+               VALUES ($1, 'release', 20, $2, 'harness: failed release', 'failed')`, [U.H.id, f.B]);
+      const failedRelease = await one(`SELECT fn_completion_auto_release_blockers($1) blockers`, [f.S]);
+      check('failed v1 release is not treated as settled', !failedRelease.blockers.includes('payment_already_settled'), failedRelease.blockers);
       await age(f.S, 73);
       await runCron();
       const [a] = await queueFor(f.B);
       check('release failure: work still escalates to support', a && a.status === 'open');
+      check('funded v1 escrow remains shadow-eligible after failed release', a?.auto_release_eligible === true, a?.auto_release_blockers);
       // b) release succeeded but the approval write failed (client order is
       //    release -> approve). Support must see it; auto-release must not.
       const g = await fixture({ submit: true });
@@ -542,6 +551,35 @@ async function main() {
       const [b] = await queueFor(g.B);
       check('released-but-unapproved is queued for support', b && b.status === 'open');
       check('shadow rule blocks it: payment_already_settled', b && !b.auto_release_eligible && b.auto_release_blockers.includes('payment_already_settled'), b?.auto_release_blockers);
+    });
+
+    await scenario('shadow funding follows payment architecture', async () => {
+      const unfundedV1 = await fixture({ submit: true });
+      await q(`UPDATE wallet_transactions SET status = 'failed' WHERE bounty_id = $1 AND type = 'escrow'`, [unfundedV1.B]);
+      const v1Blockers = await one(`SELECT fn_completion_auto_release_blockers($1) blockers`, [unfundedV1.S]);
+      check('v1 requires a completed escrow row', v1Blockers.blockers.includes('escrow_not_funded'), v1Blockers.blockers);
+
+      const v2 = await fixture({ submit: true, paymentVersion: 2 });
+      const v2Unfunded = await one(`SELECT fn_completion_auto_release_blockers($1) blockers`, [v2.S]);
+      check('v2 ignores legacy escrow and requires an active payment status', v2Unfunded.blockers.includes('escrow_not_funded'), v2Unfunded.blockers);
+      await q(
+        `INSERT INTO bounty_payments (bounty_id, poster_id, hunter_id, amount, status)
+         VALUES ($1, $2, $3, 20, 'authorized')`, [v2.B, U.P.id, U.H.id]);
+      const v2Funded = await one(`SELECT fn_completion_auto_release_blockers($1) blockers`, [v2.S]);
+      check('v2 authorized payment is treated as funded', !v2Funded.blockers.includes('escrow_not_funded'), v2Funded.blockers);
+      await q(`UPDATE bounty_payments SET status = 'released' WHERE bounty_id = $1`, [v2.B]);
+      const v2Settled = await one(`SELECT fn_completion_auto_release_blockers($1) blockers`, [v2.S]);
+      check('v2 released payment blocks auto-release', v2Settled.blockers.includes('payment_already_settled'), v2Settled.blockers);
+
+      const v3 = await fixture({ submit: true, paymentVersion: 3 });
+      await q(
+        `INSERT INTO bounty_v3_funding (bounty_id, state, amount_cents)
+         VALUES ($1, 'authorized', 2000)`, [v3.B]);
+      const v3Funded = await one(`SELECT fn_completion_auto_release_blockers($1) blockers`, [v3.S]);
+      check('v3 authorized funding is treated as funded', !v3Funded.blockers.includes('escrow_not_funded'), v3Funded.blockers);
+      await q(`UPDATE bounty_v3_funding SET state = 'released' WHERE bounty_id = $1`, [v3.B]);
+      const v3Settled = await one(`SELECT fn_completion_auto_release_blockers($1) blockers`, [v3.S]);
+      check('v3 released funding blocks auto-release', v3Settled.blockers.includes('payment_already_settled'), v3Settled.blockers);
     });
 
     // ── 10. Delayed webhook ────────────────────────────────────────────────
