@@ -53,6 +53,7 @@ import {
     summarizeMissingDetails,
 } from '../../lib/utils/bounty-completeness';
 import { logger } from '../../lib/utils/error-logger';
+import { formatPublicLocation } from '../../lib/utils/public-location';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 /**
@@ -368,7 +369,7 @@ export default function EnhancedSearchScreen() {
       amount: (b as any).amount,
       created_at: (b as any).created_at,
       is_for_honor: (b as any).is_for_honor,
-      location: (b as any).location,
+      location: formatPublicLocation(b) ?? undefined,
       status: (b as any).status,
       incomplete: !completeness.isComplete,
       missingSummary: completeness.isComplete

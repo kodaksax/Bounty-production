@@ -1,10 +1,14 @@
 import { supabase } from '../supabase';
 import { logger } from '../utils/error-logger';
 
+/**
+ * Exact address from bounty_private_locations. Older bounties may have an
+ * address with no coordinates (or the reverse), so both halves are nullable.
+ */
 export interface ExactBountyLocation {
-  location: string;
-  latitude: number;
-  longitude: number;
+  location: string | null;
+  latitude: number | null;
+  longitude: number | null;
   unit: string | null;
 }
 
@@ -29,10 +33,11 @@ export interface NearbyBounty {
 
 /**
  * Fetches a bounty's exact address/coordinates/unit via the
- * get_bounty_exact_location() RPC, which is scoped server-side to the
- * bounty's poster or its accepted hunter. Returns null for anyone else
- * (including other users browsing the open feed) — that is expected, not
- * an error, so callers should treat null as "not revealed yet," not fail.
+ * get_bounty_exact_location() RPC — the only client path to them, since
+ * bounties.location only holds a "City, ST" label. Server-side it returns a
+ * row to the poster always and to the accepted hunter while the job is active
+ * (every call is logged). Returns null for anyone else — expected, not an
+ * error, so callers should treat null as "not revealed," not fail.
  */
 export async function getBountyExactLocation(bountyId: string): Promise<ExactBountyLocation | null> {
   try {
@@ -41,9 +46,16 @@ export async function getBountyExactLocation(bountyId: string): Promise<ExactBou
       logger.error('get_bounty_exact_location rpc error', { error, bountyId });
       return null;
     }
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row || row.latitude == null || row.longitude == null) return null;
-    return row as ExactBountyLocation;
+    const row = (Array.isArray(data) ? data[0] : data) as ExactBountyLocation | undefined;
+    if (!row) return null;
+    const hasCoords = row.latitude != null && row.longitude != null;
+    if (!row.location && !hasCoords) return null;
+    return {
+      location: row.location ?? null,
+      latitude: hasCoords ? row.latitude : null,
+      longitude: hasCoords ? row.longitude : null,
+      unit: row.unit ?? null,
+    };
   } catch (error) {
     logger.error('get_bounty_exact_location threw', { error, bountyId });
     return null;

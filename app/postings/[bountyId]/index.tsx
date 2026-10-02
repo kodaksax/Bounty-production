@@ -42,6 +42,7 @@ import { NotFoundScreen } from '../../../components/not-found-screen';
 import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
 import { Stepper } from '../../../components/ui/stepper';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { formatExactAddress, useBountyExactLocation } from '../../../hooks/useBountyExactLocation';
 import { useBountyLifecycle } from '../../../hooks/useBountyLifecycle';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { ROUTES } from '../../../lib/routes';
@@ -55,6 +56,7 @@ import { getBountyStages } from '../../../lib/utils/bounty-lifecycle';
 import type { BountyActionKey } from '../../../lib/utils/bounty-lifecycle';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { bountyHoldsUnreleasedEscrow } from '../../../lib/utils/payment-architecture';
+import { formatPublicLocation } from '../../../lib/utils/public-location';
 import { getTrustTierLabel } from '../../../lib/utils/trust-tier';
 import { shareBounty } from '../../../lib/utils/share-utils';
 
@@ -94,6 +96,10 @@ export default function BountyDashboard() {
     notFound,
     refresh,
   } = useBountyLifecycle(routeBountyId, currentUserId);
+
+  // Poster sees their own exact address; bounty.location is only the public label.
+  const { exact: exactLocation } = useBountyExactLocation(bounty?.id, role === 'poster');
+  const locationText = formatExactAddress(exactLocation) || (bounty ? formatPublicLocation(bounty) : null);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -608,7 +614,7 @@ export default function BountyDashboard() {
             <Text style={s.cardBodyMuted}>No description was added to this bounty.</Text>
           )}
 
-          {!!bounty.location && <DetailRow icon="place" text={bounty.location} s={s} color={theme.primaryLight} />}
+          {!!locationText && <DetailRow icon="place" text={locationText} s={s} color={theme.primaryLight} />}
           {!!bounty.timeline && <DetailRow icon="schedule" text={bounty.timeline} s={s} color={theme.primaryLight} />}
           {!!bounty.skills_required && (
             <DetailRow icon="build" text={bounty.skills_required} s={s} color={theme.primaryLight} />

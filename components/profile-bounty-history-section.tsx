@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { bountyService } from 'lib/services/bounty-service';
 import type { Bounty } from 'lib/services/database.types';
+import { formatPublicLocation } from 'lib/utils/public-location';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { BountyCompactItem } from './bounty-compact-item';
@@ -81,7 +82,7 @@ export function ProfileBountyHistorySection({
             username={bounty.username}
             price={bounty.amount}
             distance={bounty.distance ?? null}
-            location={bounty.location}
+            location={formatPublicLocation(bounty) ?? undefined}
             isForHonor={bounty.is_for_honor}
             user_id={bounty.poster_id || bounty.user_id}
             work_type={bounty.work_type}

@@ -7,6 +7,7 @@ import { SPACING } from '../lib/constants/accessibility'
 
 const FEATURED_CARD_WIDTH = Dimensions.get('window').width * 0.78
 import type { Bounty } from '../lib/services/database.types'
+import { formatPublicLocation } from '../lib/utils/public-location'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { BOUNTY_CATEGORIES, getBountyCategoryDef } from '../lib/constants/bounty-categories'
@@ -119,7 +120,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader, onScroll
                   username={b.username}
                   price={Number(b.amount)}
                   distance={bountyDistances.get(String(b.id)) ?? null}
-                  location={b.location}
+                  location={formatPublicLocation(b) ?? undefined}
                   description={b.description}
                   isForHonor={Boolean(b.is_for_honor)}
                   user_id={b.user_id}
@@ -152,7 +153,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader, onScroll
             username={left.username}
             price={Number(left.amount)}
             distance={bountyDistances.get(String(left.id)) ?? null}
-            location={left.location}
+            location={formatPublicLocation(left) ?? undefined}
             description={left.description}
             isForHonor={Boolean(left.is_for_honor)}
             user_id={left.user_id}
@@ -175,7 +176,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader, onScroll
               username={right.username}
               price={Number(right.amount)}
               distance={bountyDistances.get(String(right.id)) ?? null}
-              location={right.location}
+              location={formatPublicLocation(right) ?? undefined}
               description={right.description}
               isForHonor={Boolean(right.is_for_honor)}
               user_id={right.user_id}

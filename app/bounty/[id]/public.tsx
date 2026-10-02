@@ -24,6 +24,7 @@ import type { Bounty } from '../../../lib/services/database.types';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
+import { formatPublicLocation } from '../../../lib/utils/public-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
 import {
@@ -527,13 +528,13 @@ export default function PublicBountyDetail() {
             <Text style={s.description}>{bounty.description}</Text>
             
             <View style={s.infoGrid}>
-              {bounty.location ? (
+              {formatPublicLocation(bounty) ? (
                 <View style={s.infoBox}>
                   <View style={s.infoIconBg}>
                     <MaterialIcons name="place" size={20} color={theme.primary} />
                   </View>
                   <Text style={s.infoBoxLabel}>Location</Text>
-                  <Text style={s.infoBoxValue}>{bounty.location}</Text>
+                  <Text style={s.infoBoxValue}>{formatPublicLocation(bounty)}</Text>
                 </View>
               ) : null}
               

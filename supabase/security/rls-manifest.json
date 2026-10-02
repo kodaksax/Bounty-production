@@ -89,7 +89,9 @@
       },
       "required_triggers": [
         "trg_bounties_guard_lifecycle",
-        "trg_bounties_enforce_funding_before_work"
+        "trg_bounties_enforce_funding_before_work",
+        "zz_bounties_privatize_location",
+        "zz_bounties_store_private_location"
       ]
     },
     "bounty_disputes": {
@@ -236,6 +238,35 @@
           ]
         }
       }
+    },
+    "bounty_private_locations": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "bounty_location_backfill_snapshot": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "location_privacy_rollback_defs": {
+      "policies": [],
+      "grants": {
+        "anon": [],
+        "authenticated": []
+      }
+    },
+    "bounty_location_access_log": {
+      "grants": {
+        "anon": [],
+        "authenticated": [
+          "SELECT"
+        ]
+      }
     }
   },
   "functions": [
@@ -251,6 +282,21 @@
       "signature": "request_dispute_escalation(integer)",
       "forbid_execute": [
         "anon",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "get_bounty_exact_location(uuid)",
+      "forbid_execute": [
+        "anon",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_backfill_bounty_location_privacy(boolean)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
         "PUBLIC"
       ]
     }
