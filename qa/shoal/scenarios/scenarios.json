@@ -721,6 +721,130 @@
         ]
       },
       "notes": "Scenarios F and G. Liquidity failure is the normal case for a young marketplace, so what the poster is told while nothing is happening is a first-order retention question, not an edge case."
+    },
+    {
+      "id": "trust-reaudit-skeptical-poster",
+      "title": "Trust re-audit 2026-10-02 -- skeptical poster hires a stranger",
+      "phase": 4,
+      "task": "You are about to pay a stranger about $45 to help move a couch out of your apartment, and you do not trust this app yet. Find your posted job \"Help move a couch down two flights\", open the person who applied, and before you hire anyone establish, using only what the app shows you: who this person is; whether they are verified and by what; whether they have real transaction history on this app (jobs paid, reviews you can actually read); exactly what happens to your money when you hire them and when it leaves your control; whether your address is protected and who will see it and when; what happens if the person never shows up; how you report a problem; what happens if the work is poor; and when and how the transaction resolves. If the answers are good enough for you, hire them and check the app now says what it promised. Finish by listing each of those nine questions as ANSWERED (with the quote) or NOT ANSWERED. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs, treat them as real jobs. Your account is a disposable test account funded with test money, so you are authorised to hire, fund, approve or dispute if that is the step in front of you. Quote the exact on-screen text that answers each question, or say plainly that nothing on screen answers it. Do not guess and do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-skeptical-poster",
+        "careful-carl",
+        "bounty-returning-poster"
+      ],
+      "swarm": 3,
+      "maxSteps": 45,
+      "path": "/tabs/postings-screen",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:trust",
+          "funnel:apply",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux",
+          "area:supabase"
+        ]
+      },
+      "notes": "Trust re-audit 2026-10-02 (scenario 1). Seeded per slot by the re-audit seeder: open \"[shoal] sNN Help move a couch down two flights\" with a pending applicant from hunter slot NN."
+    },
+    {
+      "id": "trust-reaudit-skeptical-hunter",
+      "title": "Trust re-audit 2026-10-02 -- skeptical hunter evaluates a stranger's job",
+      "phase": 4,
+      "task": "You do odd jobs for money and you have been burned before by a \"client\" who never paid. Browse the jobs on offer, pick one you could do this week, and before you apply establish, using only what the app shows you: whether the job is legitimate; who the poster is; whether the poster has meaningful reputation (jobs they have actually paid for, reviews you can read, how long they have been here); whether the payment is already funded or protected and by whom; whether you will get paid; when you will get paid and how long after you finish; what happens if the poster disappears after you do the work; what happens if the poster changes what they want after you start; and how you would dispute something. Then look at the jobs you are already working on and check whether the app answers the same questions for those. Apply to the job only if the answers satisfy you. Finish by listing each of those nine questions as ANSWERED (with the quote) or NOT ANSWERED. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs, treat them as real jobs. Your account is a disposable test account funded with test money, so you are authorised to hire, fund, approve or dispute if that is the step in front of you. Quote the exact on-screen text that answers each question, or say plainly that nothing on screen answers it. Do not guess and do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-hunter",
+        "careful-carl",
+        "literal-lena"
+      ],
+      "swarm": 3,
+      "maxSteps": 45,
+      "path": "/",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:trust",
+          "funnel:browse",
+          "funnel:apply"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux",
+          "area:supabase"
+        ]
+      },
+      "notes": "Trust re-audit 2026-10-02 (scenario 2)."
+    },
+    {
+      "id": "trust-reaudit-poster-silent-worker",
+      "title": "Trust re-audit 2026-10-02 -- poster whose hired person went silent",
+      "phase": 4,
+      "task": "Four days ago you hired someone through this app to assemble an IKEA wardrobe (\"Assemble an IKEA wardrobe\"). Your money was taken when you hired them. They have not shown up, not messaged and not submitted anything. Using only the app: find out how long they have been silent and whether the app knows; what you can do about it (cancel, replace them, report them, get your money back); whether anyone at the company will look at it and how quickly; and what will happen to your money and when. Then take the strongest recovery action the app offers and follow it through to the end, and check afterwards that the job and your money are in the state the app said they would be. Also open your other hired job (\"Pick up dry cleaning\") where the person says they finished and check what you are expected to do and by when. Finish by listing every question the app left you unable to answer and every recovery route that dead-ended. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs, treat them as real jobs. Your account is a disposable test account funded with test money, so you are authorised to hire, fund, approve or dispute if that is the step in front of you. Quote the exact on-screen text that answers each question, or say plainly that nothing on screen answers it. Do not guess and do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-skeptical-poster",
+        "careful-carl",
+        "bounty-returning-poster"
+      ],
+      "swarm": 3,
+      "maxSteps": 45,
+      "path": "/tabs/postings-screen",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:trust",
+          "funnel:completion",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux",
+          "area:supabase"
+        ]
+      },
+      "notes": "Trust re-audit 2026-10-02 (scenario 3). Id avoids the word \"hunter\" because run.mjs picks the hunter pool for any id containing it. Seeded: in_progress \"[shoal] sNN Assemble an IKEA wardrobe\" accepted 4 days ago, no submission."
+    },
+    {
+      "id": "trust-reaudit-hunter-silent-poster",
+      "title": "Trust re-audit 2026-10-02 -- hunter whose poster went silent after the work",
+      "phase": 4,
+      "task": "Three days ago you finished a job through this app (\"Pick up dry cleaning and drop it at my door\") and submitted your proof. The poster has not approved it, has not asked for changes and has not replied. You need this money. Using only the app: find out whether the payment for this job is actually held for you and by whom; whether there is any deadline for the poster to respond and what happens when it passes; when you can expect to be paid; what you can do to move it along (nudge, report, dispute); who will decide if you dispute and how fast; and whether the poster can take the money back. Take the strongest action the app offers and follow it through. Also open your other job (\"Assemble an IKEA wardrobe\") and check whether the app tells you what is expected of you and by when. Finish by listing every question the app left you unable to answer and every route that dead-ended. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs, treat them as real jobs. Your account is a disposable test account funded with test money, so you are authorised to hire, fund, approve or dispute if that is the step in front of you. Quote the exact on-screen text that answers each question, or say plainly that nothing on screen answers it. Do not guess and do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-hunter",
+        "careful-carl",
+        "literal-lena"
+      ],
+      "swarm": 3,
+      "maxSteps": 45,
+      "path": "/",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:trust",
+          "funnel:completion",
+          "funnel:payout"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux",
+          "area:supabase"
+        ]
+      },
+      "notes": "Trust re-audit 2026-10-02 (scenario 4). Seeded: in_progress \"[shoal] sNN Pick up dry cleaning...\" with a pending submission backdated 80 hours."
     }
   ]
 }
