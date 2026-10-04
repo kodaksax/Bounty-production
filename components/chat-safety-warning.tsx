@@ -15,7 +15,8 @@ export function ChatSafetyWarning({ risk, onReport }: {
   return (
     <View accessibilityLiveRegion="polite">
       <TrustSafetyNotice urgent message={
-        risk === 'payment' ? trustSafetyStrings.paymentRequest : trustSafetyStrings.contactRequest
+        onReport ? trustSafetyStrings.incomingRequest :
+          risk === 'payment' ? trustSafetyStrings.paymentRequest : trustSafetyStrings.contactRequest
       } />
       {onReport && (
         <TouchableOpacity
@@ -24,7 +25,7 @@ export function ChatSafetyWarning({ risk, onReport }: {
           accessibilityLabel={messagingStrings.reportMessage}
           style={{ padding: 12, minHeight: 44 }}
         >
-          <Text style={{ color: theme.primary, fontWeight: '600' }}>{messagingStrings.reportMessage}</Text>
+          <Text style={{ color: theme.isDark ? theme.primaryLight : theme.primary, fontWeight: '600' }}>{messagingStrings.reportMessage}</Text>
         </TouchableOpacity>
       )}
     </View>

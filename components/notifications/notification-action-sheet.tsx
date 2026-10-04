@@ -9,7 +9,7 @@ import { categoryForNotificationType, isBundled } from 'lib/config/notification-
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import type { Notification } from 'lib/types';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +22,11 @@ import {
   View,
 } from 'react-native';
 import { AppModal } from '../ui/app-modal';
+import { ChatSafetyWarning } from '../chat-safety-warning';
+import { TrustSafetyNotice } from '../ui/trust-safety-notice';
+import { useChatSendProtection, useChatSendScope } from '../../hooks/use-chat-send-protection';
+import { detectOffPlatformRisk } from '../../lib/utils/off-platform-risk';
+import { messagingStrings } from '../../lib/strings/messaging';
 
 interface NotificationActionSheetProps {
   notification: Notification | null;
@@ -43,6 +48,11 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [busy, setBusy] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const replyInFlight = useRef(false);
+  const confirmSend = useChatSendProtection(notification?.id);
+  const captureSendScope = useChatSendScope(notification?.id);
+  const replyRisk = useMemo(() => detectOffPlatformRisk(replyText), [replyText]);
+  useEffect(() => { setBusy(null); }, [notification?.id]);
 
   const visible = !!notification;
   const category = notification ? (notification.category ?? categoryForNotificationType(notification.type)) : null;
@@ -60,10 +70,11 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     : category === 'messages' ? 'View Conversation'
     : 'View';
 
-  const finishAndClose = async () => {
+  const finishAndClose = async (isCurrentAction: () => boolean = () => true) => {
     if (notification) {
       await notificationService.markAsRead([notification.id]).catch(() => {});
     }
+    if (!isCurrentAction()) return;
     setReplyText('');
     onActionComplete?.();
     onClose();
@@ -124,15 +135,21 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
 
   const handleReply = async () => {
     const conversationId = notification?.data?.conversationId;
-    if (!conversationId || !currentUserId || !replyText.trim()) return;
-    setBusy('reply');
+    const textToSend = replyText.trim();
+    if (!conversationId || !currentUserId || !textToSend || replyInFlight.current || busy) return;
+    replyInFlight.current = true;
+    const isCurrentSend = captureSendScope();
     try {
-      await sendMessage(conversationId, replyText.trim(), currentUserId);
-      await finishAndClose();
-    } catch (e) {
-      console.error('[NotificationActionSheet] reply failed', e);
+      if (!await confirmSend(textToSend) || !isCurrentSend()) return;
+      setBusy('reply');
+      await sendMessage(conversationId, textToSend, currentUserId);
+      if (!isCurrentSend()) return;
+      await finishAndClose(isCurrentSend);
+    } catch {
+      if (isCurrentSend()) Alert.alert("Couldn't send", 'Check your connection and try again. Your reply is still here.');
     } finally {
-      setBusy(null);
+      replyInFlight.current = false;
+      if (isCurrentSend()) setBusy(null);
     }
   };
 
@@ -150,6 +167,9 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
             <>
               <Text style={s.title} numberOfLines={2}>{notification.title}</Text>
               <Text style={s.body} numberOfLines={4}>{notification.body}</Text>
+              {notification.type === 'acceptance' && (
+                <TrustSafetyNotice message={messagingStrings.notificationAcceptance} />
+              )}
 
               {category === 'marketplace' && !bundled && notification.data?.requestId ? (
                 <View style={s.actionRow}>
@@ -169,22 +189,28 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
               ) : null}
 
               {category === 'messages' && !bundled && notification.data?.conversationId ? (
-                <View style={s.replyRow}>
-                  <TextInput
-                    style={s.replyInput}
-                    placeholder="Type a reply..."
-                    placeholderTextColor={theme.textDisabled}
-                    value={replyText}
-                    onChangeText={setReplyText}
-                    multiline
-                  />
-                  <TouchableOpacity
-                    style={[s.sendButton, !replyText.trim() && s.sendButtonDisabled]}
-                    onPress={handleReply}
-                    disabled={!replyText.trim() || !!busy}
-                  >
-                    {busy === 'reply' ? <ActivityIndicator color="#fff" /> : <MaterialIcons name="send" size={18} color="#fff" />}
-                  </TouchableOpacity>
+                <View>
+                  <ChatSafetyWarning risk={replyRisk} />
+                  <View style={s.replyRow}>
+                    <TextInput
+                      style={s.replyInput}
+                      placeholder="Type a reply..."
+                      placeholderTextColor={theme.textDisabled}
+                      value={replyText}
+                      onChangeText={setReplyText}
+                      multiline
+                      accessibilityLabel="Quick reply message"
+                    />
+                    <TouchableOpacity
+                      style={[s.sendButton, !replyText.trim() && s.sendButtonDisabled]}
+                      onPress={handleReply}
+                      disabled={!replyText.trim() || !!busy}
+                      accessibilityRole="button"
+                      accessibilityLabel="Send quick reply"
+                    >
+                      {busy === 'reply' ? <ActivityIndicator color="#fff" /> : <MaterialIcons name="send" size={18} color="#fff" />}
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : null}
 

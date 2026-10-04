@@ -2,7 +2,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FEED_FALLBACK, useSafeBack } from '../../../../hooks/useSafeBack';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +28,9 @@ import { formatExactAddress, useBountyExactLocation } from '../../../../hooks/us
 import { KeyboardAwareScrollView } from '../../../../components/ui/keyboard-avoiding';
 import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
 import { getApplicationSafetyMessage } from '../../../../lib/utils/bounty-lifecycle';
+import { useChatSendProtection, useChatSendScope } from '../../../../hooks/use-chat-send-protection';
+import { ChatSafetyWarning } from '../../../../components/chat-safety-warning';
+import { detectOffPlatformRisk } from '../../../../lib/utils/off-platform-risk';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
@@ -62,6 +65,8 @@ export default function HunterWorkInProgressScreen() {
   const [currentStage] = useState<HunterStage>('work_in_progress');
   const [messageText, setMessageText] = useState('');
   const [conversation, setConversation] = useState<Conversation | null>(null);
+  const confirmSend = useChatSendProtection(conversation?.id);
+  const sendInFlightRef = useRef(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [progressUpdate, setProgressUpdate] = useState('');
@@ -83,6 +88,7 @@ export default function HunterWorkInProgressScreen() {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [bountyId]);
+  const captureSendScope = useChatSendScope(routeBountyId ?? undefined);
 
   useEffect(() => {
     if (!routeBountyId) {
@@ -153,10 +159,16 @@ export default function HunterWorkInProgressScreen() {
   };
 
   const handleSendMessage = async () => {
-    if (!messageText.trim()) return;
+    const text = messageText.trim();
+    if (!text || isSendingMessage || sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
+    const isCurrentSend = captureSendScope();
+    let started = false;
 
     let conv = conversation;
     try {
+      if (!(await confirmSend(text)) || !isCurrentSend()) return;
+      started = true;
       setIsSendingMessage(true);
 
       // If no existing conversation, create or get one for this bounty and participants
@@ -168,40 +180,51 @@ export default function HunterWorkInProgressScreen() {
         }
 
         conv = await messageService.getOrCreateConversation([String(bounty.user_id)], '', routeBountyId || undefined);
+        if (!isCurrentSend()) return;
         setConversation(conv);
       }
 
       // conv will be set by getOrCreateConversation above; no further null-check required
 
-      await messageService.sendMessage(conv.id, messageText.trim());
+      await messageService.sendMessage(conv.id, text);
+      if (!isCurrentSend()) return;
       setMessageText('');
       Alert.alert('Success', 'Message sent successfully!');
     } catch (err) {
       console.error('Error sending message:', err);
       Alert.alert('Error', 'Failed to send message. Please try again.');
     } finally {
-      setIsSendingMessage(false);
+      sendInFlightRef.current = false;
+      if (started && isCurrentSend()) setIsSendingMessage(false);
     }
   };
 
   const handlePostProgressUpdate = async () => {
-    if (!progressUpdate.trim()) {
+    if (isPostingUpdate || sendInFlightRef.current) return;
+    const text = progressUpdate.trim();
+    if (!text) {
       Alert.alert('Empty Update', 'Please enter a progress update.');
       return;
     }
+    sendInFlightRef.current = true;
+    const isCurrentSend = captureSendScope();
+    let started = false;
 
     try {
+      if (!(await confirmSend(text)) || !isCurrentSend()) return;
+      started = true;
       setIsPostingUpdate(true);
       
       // Send progress update via message
       if (conversation) {
         await messageService.sendMessage(
           conversation.id,
-          `📋 Progress Update: ${progressUpdate.trim()}`,
+          `📋 Progress Update: ${text}`,
           currentUserId
         );
       }
 
+      if (!isCurrentSend()) return;
       setProgressUpdate('');
       setShowProgressForm(false);
       Alert.alert('Success', 'Progress update posted successfully!');
@@ -209,7 +232,8 @@ export default function HunterWorkInProgressScreen() {
       console.error('Error posting progress update:', err);
       Alert.alert('Error', 'Failed to post progress update. Please try again.');
     } finally {
-      setIsPostingUpdate(false);
+      sendInFlightRef.current = false;
+      if (started && isCurrentSend()) setIsPostingUpdate(false);
     }
   };
 
@@ -404,6 +428,8 @@ export default function HunterWorkInProgressScreen() {
                 style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
                 onPress={handleSendMessage}
                 disabled={!messageText.trim() || isSendingMessage}
+                accessibilityRole="button"
+                accessibilityLabel="Send message to poster"
               >
                 {isSendingMessage ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -412,6 +438,7 @@ export default function HunterWorkInProgressScreen() {
                 )}
               </TouchableOpacity>
             </View>
+            <ChatSafetyWarning risk={detectOffPlatformRisk(messageText)} />
           </View>
         )}
 
@@ -446,6 +473,7 @@ export default function HunterWorkInProgressScreen() {
                 numberOfLines={4}
                 maxLength={500}
               />
+              <ChatSafetyWarning risk={detectOffPlatformRisk(progressUpdate)} />
               <TouchableOpacity
                 style={[
                   styles.postUpdateButton,

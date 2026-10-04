@@ -1,8 +1,22 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { messagingStrings } from '../lib/strings/messaging';
 import { trustSafetyStrings } from '../lib/strings/trust-safety';
 import { detectOffPlatformRisk } from '../lib/utils/off-platform-risk';
+
+/** Capture a send's screen lifetime before awaiting, including benign messages. */
+export function useChatSendScope(scopeId?: string) {
+  const scope = useRef({ active: false });
+  useLayoutEffect(() => {
+    const current = { active: true };
+    scope.current = current;
+    return () => { current.active = false; };
+  }, [scopeId]);
+  return useCallback(() => {
+    const captured = scope.current;
+    return () => captured.active;
+  }, []);
+}
 
 /** Native confirmation happens before any draft, reply, attachment, or send state is changed. */
 export function useChatSendProtection(conversationId?: string) {

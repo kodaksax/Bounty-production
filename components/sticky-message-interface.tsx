@@ -1,11 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { cn } from 'lib/utils';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getBottomNavKeyboardOffset } from '../lib/constants/navigation';
 import { useHapticFeedback } from '../lib/haptic-feedback';
-import { useChatSendProtection } from '../hooks/use-chat-send-protection';
+import { useChatSendProtection, useChatSendScope } from '../hooks/use-chat-send-protection';
 import { detectOffPlatformRisk, latestIncomingRisk } from '../lib/utils/off-platform-risk';
 import { ChatSafetyWarning } from './chat-safety-warning';
 import { TrustSafetyNotice } from './ui/trust-safety-notice';
@@ -23,7 +23,7 @@ export interface ChatMessage {
 interface StickyMessageInterfaceProps {
   conversationId?: string;
   messages: ChatMessage[];
-  onSend: (text: string) => void;
+  onSend: (text: string) => void | Promise<void>;
   isSending?: boolean;
   placeholder?: string;
   topInset?: number;
@@ -57,10 +57,13 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   const [atBottom, setAtBottom] = useState(true);
   const [expanded, setExpanded] = useState(false); // controls typing modal
   const expandedInputRef = useRef<TextInput | null>(null);
+  const sendInFlight = useRef(false);
+  const [composerHeight, setComposerHeight] = useState(0);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { triggerHaptic } = useHapticFeedback()
   const insets = useSafeAreaInsets()
   const confirmSend = useChatSendProtection(conversationId);
+  const captureSendScope = useChatSendScope(conversationId);
   const composerRisk = useMemo(() => detectOffPlatformRisk(text), [text]);
   const incomingRisk = useMemo(() => latestIncomingRisk(messages, message => !message.isUser), [messages]);
   const [reportMessageId, setReportMessageId] = useState<string | null>(null);
@@ -76,19 +79,28 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
 
   const handleSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed || isSending) return;
-    if (!await confirmSend(trimmed)) return;
-    triggerHaptic('medium'); // Medium haptic for sending message
-    onSend(trimmed);
-    setText('');
-    if (expanded) setExpanded(false);
-    // Stop typing when message is sent
-    if (onTypingChange) {
-      onTypingChange(false);
-    }
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = null;
+    if (!trimmed || isSending || sendInFlight.current) return;
+    sendInFlight.current = true;
+    const isCurrentSend = captureSendScope();
+    try {
+      if (!await confirmSend(trimmed) || !isCurrentSend()) return;
+      triggerHaptic('medium'); // Medium haptic for sending message
+      await onSend(trimmed);
+      if (!isCurrentSend()) return;
+      setText('');
+      if (expanded) setExpanded(false);
+      // Stop typing when message is sent
+      if (onTypingChange) {
+        onTypingChange(false);
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    } catch {
+      if (isCurrentSend()) Alert.alert("Couldn't send", 'Check your connection and try again. Your message is still here.');
+    } finally {
+      sendInFlight.current = false;
     }
   };
 
@@ -143,7 +155,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           data={messages}
           renderItem={renderItem}
           keyExtractor={(m) => m.id}
-          contentContainerStyle={{ paddingTop: topInset + 8, paddingBottom: effectiveBottomInset + 110, paddingHorizontal: 12 }}
+          contentContainerStyle={{ paddingTop: topInset + 8, paddingBottom: composerHeight ? composerHeight + 16 : effectiveBottomInset + 110, paddingHorizontal: 12 }}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
@@ -156,7 +168,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
         />
 
         {/* Sticky composer */}
-        <View className="absolute left-0 right-0" style={{ bottom: 0, paddingBottom: effectiveBottomInset }}>
+        <View className="absolute left-0 right-0" style={{ bottom: 0, paddingBottom: effectiveBottomInset }} onLayout={event => setComposerHeight(event.nativeEvent.layout.height)}>
           <View className="px-3 pb-3">
             {!expanded && <ChatSafetyWarning risk={composerRisk} />}
             <View className="flex-row items-end gap-2 bg-[#1F2937] rounded-2xl px-3 pt-2 pb-2 border border-[#374151]">

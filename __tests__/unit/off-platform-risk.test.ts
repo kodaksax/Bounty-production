@@ -1,5 +1,6 @@
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../../lib/constants/support';
 import { detectOffPlatformRisk, latestIncomingRisk } from '../../lib/utils/off-platform-risk';
+import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 
 describe('local off-platform risk detection', () => {
   it.each([
@@ -11,6 +12,12 @@ describe('local off-platform risk detection', () => {
     'https://paypal.me/worker',
     'Use https://cash.app/$worker',
     'Send crypto before starting',
+    'Pay me via Apple Pay outside Bounty',
+    'Pay me directly with Google Pay',
+    'Use Apple Pay in Bounty to fund the job. Pay me via Venmo instead.',
+    'Pay through Bounty using Apple Pay, or send me money with Apple Pay',
+    'Use Google Pay through Bounty, but pay me directly with Google Pay',
+    'Use Apple Pay in Bounty, or pay outside Bounty with Apple Pay',
     'Pay me directly',
     'Pay me cash when you arrive',
     "I'll pay cash",
@@ -35,6 +42,7 @@ describe('local off-platform risk detection', () => {
     'Contact me on WhatsApp',
     "Let's move this chat off-platform",
     "Let's chat on Telegram",
+    "Let's talk outside Bounty",
     'https://wa.me/12125550199',
     'https://t.me/worker',
   ])('identifies contact instructions: %s', text => {
@@ -48,6 +56,23 @@ describe('local off-platform risk detection', () => {
     'This is a $40 task.',
     'Bring cash register parts.',
     'I develop PayPal integrations.',
+    'Pay with Apple Pay in Bounty',
+    'Use Apple Pay in Bounty to fund the job',
+    'Pay through Bounty using Apple Pay.',
+    'Use Google Pay in Bounty to fund the job',
+    'Pay through Bounty using Google Pay.',
+    'Pay with Google Pay through Bounty',
+    'Use Apple Pay for checkout',
+    'Use Google Pay',
+    'Pay me with Apple Pay in Bounty',
+    'Pay through Bounty instead of Venmo',
+    'Pay on Bounty, not PayPal',
+    'Payment outside Bounty is not protected',
+    "Bounty can't protect payment outside Bounty",
+    'I accept cash register repair jobs.',
+    'We need a developer: https://paypal.com/docs',
+    "I don't want to pay outside Bounty.",
+    '{"ciphertext":"12345678901","nonce":"abc","senderPublicKey":"12345678901"}',
     'Here is my portfolio https://example.com/paypal/contact-me',
     'Job reference: https://example.com/2025/1234567890',
     'Due on 2026-10-04',
@@ -68,6 +93,15 @@ describe('local off-platform risk detection', () => {
   it('does not allow a support address to hide a different contact', () => {
     expect(detectOffPlatformRisk(`Contact ${SUPPORT_EMAIL} or worker@example.com`)).toBe('contact');
     expect(detectOffPlatformRisk(`Contact ${SUPPORT_EMAIL}. Pay me through Venmo`)).toBe('payment');
+  });
+
+  it.each(Object.values(trustSafetyStrings))('does not flag shared protection guidance: %s', text => {
+    expect(detectOffPlatformRisk(text)).toBeNull();
+  });
+
+  it('does not let safe wallet guidance hide contact instructions in another clause', () => {
+    expect(detectOffPlatformRisk('Use Apple Pay in Bounty. Text me on WhatsApp')).toBe('contact');
+    expect(detectOffPlatformRisk('Pay through Bounty using Google Pay, and email me at worker@example.com')).toBe('contact');
   });
 
   it('selects the newest flagged incoming message, not the newest outgoing or harmless message', () => {

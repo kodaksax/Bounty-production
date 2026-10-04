@@ -123,6 +123,26 @@ describe.each([
     expect(RN.Alert.alert).not.toHaveBeenCalled();
   });
 
+  it('does not duplicate ordinary sends when tapped repeatedly before the await resumes', async () => {
+    const ui = render(<Screen conversation={conversation} />);
+    fireEvent.changeText(ui.getByLabelText('Message input field'), 'Thanks!');
+    await act(async () => {
+      fireEvent.press(ui.getByLabelText('Send message'));
+      fireEvent.press(ui.getByLabelText('Send message'));
+    });
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['unmount', 'conversation change'])('does not send a benign draft after %s', async change => {
+    const ui = render(<Screen conversation={conversation} />);
+    fireEvent.changeText(ui.getByLabelText('Message input field'), 'Thanks!');
+    const pending = ui.getByLabelText('Send message').props.onPress();
+    if (change === 'unmount') ui.unmount();
+    else ui.rerender(<Screen conversation={{ ...conversation, id: 'next', realConversationId: 'next' }} />);
+    await act(async () => { await pending; });
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
   it('restores the composer after a failed approved send', async () => {
     mockSend.mockRejectedValueOnce(new Error('offline'));
     const ui = render(<Screen conversation={conversation} />);
@@ -142,7 +162,7 @@ describe.each([
       { ...original, id: 'wrong-conversation', conversationId: 'elsewhere', text: 'Text me', createdAt: '2026-01-04T00:00:00Z' },
     ];
     const ui = render(<Screen conversation={conversation} />);
-    expect(ui.getAllByText(trustSafetyStrings.paymentRequest)).toHaveLength(1);
+    expect(ui.getAllByText(trustSafetyStrings.incomingRequest)).toHaveLength(1);
     expect(ui.queryByText(trustSafetyStrings.contactRequest)).toBeNull();
     expect(ui.queryByText(trustSafetyStrings.general)).toBeNull();
     fireEvent.press(ui.getByLabelText('Report this message'));
@@ -165,5 +185,48 @@ describe('alternate sticky composer', () => {
     await act(async () => { (RN.Alert.alert as jest.Mock).mock.calls[1][2][1].onPress(); });
     expect(mockSend).toHaveBeenCalledTimes(1);
     expect(mockSend).toHaveBeenCalledWith('Email me at worker@example.com');
+  });
+
+  it('reports only the latest incoming flagged message, not outgoing messages', () => {
+    const ui = render(<StickyMessageInterface conversationId="conv" messages={[
+      { id: 'old', text: 'Text me', createdAt: 1, isUser: false },
+      { id: 'latest', text: 'Pay me via Zelle', createdAt: 2, isUser: false },
+      { id: 'own', text: 'Text me', createdAt: 3, isUser: true },
+    ]} onSend={mockSend} />);
+    expect(ui.getAllByText(trustSafetyStrings.incomingRequest)).toHaveLength(1);
+    expect(ui.queryByText(trustSafetyStrings.general)).toBeNull();
+    fireEvent.press(ui.getByLabelText('Report this message'));
+    expect(ui.getByText('Reporting latest')).toBeTruthy();
+  });
+
+  it('does not duplicate a benign collapsed-composer send on rapid taps', async () => {
+    const ui = render(<StickyMessageInterface conversationId="conv" messages={[]} onSend={mockSend} />);
+    fireEvent.changeText(ui.getByLabelText('Message input field', { includeHiddenElements: true }), 'Thanks!');
+    const collapsedSend = ui.getAllByLabelText('Send message', { includeHiddenElements: true })[0];
+    await act(async () => {
+      fireEvent.press(collapsedSend);
+      fireEvent.press(collapsedSend);
+    });
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the sticky draft when an asynchronous send fails', async () => {
+    mockSend.mockRejectedValueOnce(new Error('offline'));
+    const ui = render(<StickyMessageInterface conversationId="conv" messages={[]} onSend={mockSend} />);
+    fireEvent.changeText(ui.getByLabelText('Message input field', { includeHiddenElements: true }), 'Thanks!');
+    await act(async () => {
+      fireEvent.press(ui.getAllByLabelText('Send message', { includeHiddenElements: true })[0]);
+    });
+    expect(ui.getByLabelText('Message input field', { includeHiddenElements: true }).props.value).toBe('Thanks!');
+  });
+
+  it.each(['unmount', 'conversation change'])('does not send a benign sticky draft after %s', async change => {
+    const ui = render(<StickyMessageInterface conversationId="conv" messages={[]} onSend={mockSend} />);
+    fireEvent.changeText(ui.getByLabelText('Message input field', { includeHiddenElements: true }), 'Thanks!');
+    const pending = ui.getAllByLabelText('Send message', { includeHiddenElements: true })[0].props.onPress();
+    if (change === 'unmount') ui.unmount();
+    else ui.rerender(<StickyMessageInterface conversationId="next" messages={[]} onSend={mockSend} />);
+    await act(async () => { await pending; });
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });

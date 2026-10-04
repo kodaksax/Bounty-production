@@ -29,7 +29,7 @@ import { getValidAvatarUrl } from "../../lib/utils/avatar-utils"
 import { getMediaKind, getMediaMimeType, mediaFileName, mediaPreviewLabel } from "../../lib/utils/message-media"
 import { messagingStrings } from "../../lib/strings/messaging"
 import { ChatSafetyWarning } from "../../components/chat-safety-warning"
-import { useChatSendProtection } from "../../hooks/use-chat-send-protection"
+import { useChatSendProtection, useChatSendScope } from "../../hooks/use-chat-send-protection"
 import { detectOffPlatformRisk, latestIncomingRisk } from "../../lib/utils/off-platform-risk"
  
 interface ChatDetailScreenProps {
@@ -73,6 +73,7 @@ export function ChatDetailScreen({
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<TextInput>(null)
+  const sendInFlight = useRef(false)
   const listRef = useRef<FlatList<Message>>(null)
   // The list is `inverted`, so it opens on the newest message with no scroll
   // choreography: index 0 is the bottom of the screen. Data is therefore
@@ -81,6 +82,7 @@ export function ChatDetailScreen({
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
   const confirmSend = useChatSendProtection(conversation.id)
+  const captureSendScope = useChatSendScope(conversation.id)
   const composerRisk = useMemo(() => detectOffPlatformRisk(inputText), [inputText])
   const incomingRisk = useMemo(() => latestIncomingRisk(messages,
     message => currentUserId !== null && message.senderId !== currentUserId &&
@@ -143,6 +145,7 @@ export function ChatDetailScreen({
   }
 
   const handleSend = async () => {
+    if (sendInFlight.current) return
     const textToSend = inputText.trim()
     const attachment = pendingAttachment
     // Only ever send the remote URL — `requireRemote` guarantees one exists on
@@ -151,19 +154,24 @@ export function ChatDetailScreen({
     const mediaUrl = attachment?.remoteUri ?? null
     const quoted = replyingTo
     if (!textToSend && !mediaUrl) return
-    if (!await confirmSend(textToSend)) return
-
-    setInputText('')
-    setPendingAttachment(null)
-    setReplyingTo(null)
-    setShowEmojiPicker(false)
+    sendInFlight.current = true
+    const isCurrentSend = captureSendScope()
     try {
+      if (!await confirmSend(textToSend) || !isCurrentSend()) return
+      setInputText('')
+      setPendingAttachment(null)
+      setReplyingTo(null)
+      setShowEmojiPicker(false)
       await handleSendMessage(textToSend, mediaUrl, quoted?.id ?? null)
     } catch {
       // Restore the composer so nothing the user typed or picked is lost.
-      setInputText(inputText)
-      setPendingAttachment(attachment)
-      setReplyingTo(quoted)
+      if (isCurrentSend()) {
+        setInputText(inputText)
+        setPendingAttachment(attachment)
+        setReplyingTo(quoted)
+      }
+    } finally {
+      sendInFlight.current = false
     }
   }
 
