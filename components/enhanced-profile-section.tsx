@@ -35,6 +35,9 @@ import { PdfPreview, isPdfSource } from './ui/pdf-preview';
 import { ReputationScoreCompact } from './ui/reputation-score';
 import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from './ui/skeleton-loaders';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
+import { trustSafetyStrings } from '../lib/strings/trust-safety';
+import { detectOffPlatformRisk } from '../lib/utils/off-platform-risk';
+import { TrustSafetyNotice } from './ui/trust-safety-notice';
 
 /**
  * Progress bar component for upload progress
@@ -661,6 +664,9 @@ export function EnhancedProfileSection({
         )}
 
         {/* Stats Row */}
+        {detectOffPlatformRisk(`${effectiveProfile.bio || ''} ${effectiveProfile.location || ''} ${effectiveProfile.portfolio || ''}`) && (
+          <TrustSafetyNotice message={trustSafetyStrings.contactRequest} />
+        )}
         <View className="flex-row justify-around mt-4 pt-3 border-t" style={{ borderTopColor: theme.surfaceSecondary }}>
           <View className="items-center">
             <Text className="text-2xl font-bold" style={{ color: theme.text }}>
@@ -950,6 +956,9 @@ export function EnhancedProfileSection({
                     player={selectedVideoPlayer}
                     hasVideo={hasSelectedVideo}
                   />
+                  {detectOffPlatformRisk(`${selectedPortfolioItem.title || ''} ${selectedPortfolioItem.description || ''}`) && (
+                    <TrustSafetyNotice message={trustSafetyStrings.contactRequest} />
+                  )}
                   {selectedPortfolioItem.title && (
                     <Text className="text-base font-medium mb-2" style={{ color: theme.text }}>
                       {selectedPortfolioItem.title}
@@ -1277,6 +1286,9 @@ export function PortfolioSection({
                     player={standaloneVideoPlayer}
                     hasVideo={standaloneHasVideo}
                   />
+                  {detectOffPlatformRisk(`${selectedPortfolioItem.title || ''} ${selectedPortfolioItem.description || ''}`) && (
+                    <TrustSafetyNotice message={trustSafetyStrings.contactRequest} />
+                  )}
                   {selectedPortfolioItem.title && (
                     <Text className="text-base font-medium mb-2" style={{ color: theme.text }}>
                       {selectedPortfolioItem.title}

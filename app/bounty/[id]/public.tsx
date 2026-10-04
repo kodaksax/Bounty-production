@@ -32,7 +32,9 @@ import {
   BOUNTY_DISPLAY_STATUS_COLORS,
   BOUNTY_DISPLAY_STATUS_LABELS,
 } from '../../../lib/utils/bounty-display-status';
-import { resolveBountyLifecycle } from '../../../lib/utils/bounty-lifecycle';
+import { getApplicationSafetyMessage, resolveBountyLifecycle } from '../../../lib/utils/bounty-lifecycle';
+import { trustSafetyStrings } from '../../../lib/strings/trust-safety';
+import { TrustSafetyNotice } from '../../../components/ui/trust-safety-notice';
 import { HunterEarningsCard } from '../../../components/ui/hunter-earnings-card';
 import { calculateHunterEarnings } from '../../../lib/constants/fees';
 import { ROUTES } from '../../../lib/routes';
@@ -61,6 +63,7 @@ export default function PublicBountyDetail() {
   const [error, setError] = useState<string | null>(null);
 
   const [hasApplied, setHasApplied] = useState(false);
+  const [requestStatus, setRequestStatus] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [showPitchModal, setShowPitchModal] = useState(false);
   const [showIdRequirementModal, setShowIdRequirementModal] = useState(false);
@@ -135,6 +138,7 @@ export default function PublicBountyDetail() {
           userId: currentUserId,
         });
         setHasApplied(requests.length > 0);
+        setRequestStatus(requests[0]?.status ?? null);
       }
     } catch (err) {
       console.error('Error loading bounty:', err);
@@ -196,9 +200,10 @@ export default function PublicBountyDetail() {
     return resolveBountyLifecycle({
       bounty,
       role: viewerRole,
-      requestStatus: hasApplied ? 'pending' : null,
+      viewerId: currentUserId,
+      requestStatus,
     });
-  }, [bounty, viewerRole, hasApplied]);
+  }, [bounty, viewerRole, requestStatus, currentUserId]);
 
   // Poster's public profile, for account age + earned ID on the trust block.
   const posterId = bounty ? String(bounty.poster_id || bounty.user_id || '') || undefined : undefined;
@@ -319,6 +324,7 @@ export default function PublicBountyDetail() {
       if (result && (result as any).success) {
         setShowPitchModal(false);
         setHasApplied(true);
+        setRequestStatus((result as any).request?.status ?? 'pending');
         const applicationId =
           (result as any)?.request?.id != null
             ? String((result as any).request.id)
@@ -344,7 +350,12 @@ export default function PublicBountyDetail() {
         });
         Alert.alert(
           'Application sent',
-          "The poster has been notified. You'll get a notification as soon as they respond — nothing to do until then.",
+          getApplicationSafetyMessage({
+            bounty,
+            viewerId: currentUserId,
+            requestStatus: (result as any).request?.status ?? 'pending',
+            submitted: true,
+          }),
           [
             {
               text: 'Track it',
@@ -613,6 +624,7 @@ export default function PublicBountyDetail() {
             </TouchableOpacity>
           ) : bounty.status === 'open' ? (
             <>
+              <TrustSafetyNotice message={trustSafetyStrings.beforeAcceptance} />
               {bounty.requires_id_verified && (
                 <View style={s.idRequiredNotice}>
                   <MaterialIcons name="verified-user" size={14} color={theme.textSecondary} />

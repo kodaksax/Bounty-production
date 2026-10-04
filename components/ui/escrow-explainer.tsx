@@ -3,6 +3,8 @@ import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { trustSafetyStrings } from '../../lib/strings/trust-safety';
+import { TrustSafetyNotice } from './trust-safety-notice';
 
 interface EscrowExplainerProps {
   amount?: number;
@@ -31,13 +33,13 @@ export function EscrowExplainer({
 
       <View style={s.textContainer}>
         <Text style={[s.title, variant === 'inline' && s.inlineTitle]}>
-          {variant === 'banner' ? 'Your Payment is Protected' : 'Escrow Protection'}
+          In-App Escrow
         </Text>
 
         <Text style={[s.description, variant === 'inline' && s.inlineDescription]}>
           {amount
-            ? `$${amount.toFixed(2)} will be held securely until the task is complete and you approve.`
-            : 'Your payment is held securely until you approve the completed work.'}
+            ? `When funded through Bounty, $${amount.toFixed(2)} is authorized or captured for this job. Release depends on completion and any dispute review.`
+            : 'Funding can happen at posting or acceptance. In-app funds are authorized or captured; release depends on completion and any dispute review.'}
         </Text>
 
         {showLearnMore && variant !== 'inline' && (
@@ -80,19 +82,20 @@ export function EscrowExplainer({
                 <View style={s.modalIconCircle}>
                   <MaterialIcons name="lock" size={40} color="#059669" />
                 </View>
-                <Text style={s.modalTitle}>Escrow Protection</Text>
-                <Text style={s.modalSubtitle}>Your funds are always secure</Text>
+                <Text style={s.modalTitle}>In-App Escrow</Text>
+                <Text style={s.modalSubtitle}>An open listing is not proof of funding</Text>
               </View>
+              <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
 
               {/* How It Works Steps */}
               <View style={s.stepsContainer}>
                 <Text style={s.sectionTitle}>How It Works</Text>
 
                 {[
-                  { n: '1', title: 'Post Your Bounty', desc: 'When you post a bounty with a payment, the funds are securely held in escrow.' },
-                  { n: '2', title: 'Work Gets Done', desc: 'A hunter accepts your bounty and completes the task according to your requirements.' },
-                  { n: '3', title: 'You Approve', desc: 'Review the completed work. Only after your approval are the funds released.' },
-                  { n: '4', title: 'Payment Released', desc: "Once approved, the funds are instantly transferred to the hunter's wallet." },
+                  { n: '1', title: 'Fund Through Bounty', desc: 'The app shows whether funding happens at posting or acceptance. Funds may be authorized or captured through Stripe.' },
+                  { n: '2', title: 'Hire Before Work Starts', desc: 'The poster officially accepts the hunter in Bounty before work begins.' },
+                  { n: '3', title: 'Review in Bounty', desc: 'Review submitted work and use the in-app release flow, or raise a dispute for review.' },
+                  { n: '4', title: 'Check Payment Status', desc: 'Release and availability depend on processing, fraud checks, and any dispute review. Check Wallet for status.' },
                 ].map((step, i, arr) => (
                   <React.Fragment key={step.n}>
                     <View style={s.step}>
@@ -109,14 +112,14 @@ export function EscrowExplainer({
                 ))}
               </View>
 
-              {/* Protection Guarantees */}
+              {/* Scope and limits */}
               <View style={s.guaranteesContainer}>
-                <Text style={s.sectionTitle}>Your Guarantees</Text>
+                <Text style={s.sectionTitle}>Payment Scope and Limits</Text>
                 {[
-                  'Funds never released without your approval',
-                  "Full refund if work isn't completed",
-                  'Dispute resolution support available',
-                  'Bank-level encryption on all transactions',
+                  'Only payments handled through Bounty are covered',
+                  'Refunds and releases depend on bounty state and dispute review',
+                  'Dispute review is available in the app',
+                  'Payout timing depends on Stripe and the receiving bank',
                 ].map(text => (
                   <View key={text} style={s.guarantee}>
                     <MaterialIcons name="check-circle" size={20} color="#059669" />
@@ -129,7 +132,7 @@ export function EscrowExplainer({
               <View style={s.processingInfo}>
                 <MaterialIcons name="credit-card" size={20} color={theme.primaryLight} />
                 <Text style={s.processingText}>
-                  Payments processed securely through Stripe, a PCI Level 1 certified provider.
+                  In-app payments are processed through Stripe. Payments made elsewhere are not covered by Bounty.
                 </Text>
               </View>
             </ScrollView>
@@ -157,7 +160,7 @@ export function EscrowProtectionBanner({ amount }: { amount?: number }) {
     <View style={s.protectionBanner}>
       <MaterialIcons name="lock" size={14} color="#059669" />
       <Text style={s.protectionBannerText}>
-        {amount ? `$${amount.toFixed(2)} protected` : 'Escrow protected'}
+        {amount ? `$${amount.toFixed(2)} · in-app escrow when funded` : 'In-app escrow when funded'}
       </Text>
       <MaterialIcons name="verified-user" size={12} color="#059669" />
     </View>

@@ -1,0 +1,16 @@
+export const trustSafetyStrings = {
+  beforeAcceptance: 'Don’t start work yet. Applying is not acceptance. Only begin after the poster officially accepts you on Bounty.',
+  applicationSent: 'Application sent—not accepted yet. Wait for official acceptance on Bounty before starting work. Never accept payment outside the app.',
+  pendingApplication: 'Your application is pending. This is not an authorized job yet—don’t start work.',
+  acceptedWork: 'You’ve been officially accepted on Bounty. Keep the agreement, updates, and any payment here. Never pay someone to receive this job.',
+  paymentRequest: 'Never pay or accept payment outside Bounty. Bounty can’t protect payments made elsewhere.',
+  contactRequest: 'Keep this job on Bounty. Don’t share contact details to move communication, agreements, or payment elsewhere.',
+  incomingRequest: 'Asked to pay, get paid, or communicate outside Bounty? Don’t do it. Report this message.',
+  paidCompletion: 'Complete this paid bounty through Bounty’s payment flow. Don’t settle it elsewhere.',
+  posterHire: 'Hire through Bounty before work begins. Keep the agreement and payment here—an informal arrangement is not official acceptance.',
+  general: 'Stay on Bounty to stay protected. Keep communication, agreements, and payments here.',
+  paymentProtection: 'Bounty’s payment protections apply only to payments handled through Bounty. Never pay or accept payment elsewhere.',
+  posting: 'Keep this bounty on Bounty. Remove contact details or instructions to arrange payment elsewhere.',
+  profile: 'Show your experience—not instructions to contact or pay you elsewhere. Keep bounty agreements on Bounty.',
+  escrowLimits: 'Keep work and payment on Bounty. Refunds and releases depend on the bounty’s state and any dispute review.',
+} as const;

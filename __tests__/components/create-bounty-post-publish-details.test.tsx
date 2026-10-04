@@ -22,6 +22,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
+import { CONTACT_INFO_ERROR } from '../../lib/utils/bounty-validation';
 
 // ---- controllable test state ----
 
@@ -373,7 +374,7 @@ describe('post-publish detail saves', () => {
     });
 
     expect(mockedService.updateBountyDetails).not.toHaveBeenCalled();
-    expect(screen.getByText("Numbers, links, or emails were detected. This bounty can't be posted with them — scammers and promoters use these fields to reach people off the app. Remove them and try again.")).toBeTruthy();
+    expect(screen.getByText(CONTACT_INFO_ERROR)).toBeTruthy();
     expect(screen.getByText('StepPhotos')).toBeTruthy();
   });
 });

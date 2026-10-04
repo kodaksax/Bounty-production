@@ -26,6 +26,8 @@ import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 import { formatPublicLocation } from '../../../../lib/utils/public-location';
 import { formatExactAddress, useBountyExactLocation } from '../../../../hooks/useBountyExactLocation';
 import { KeyboardAwareScrollView } from '../../../../components/ui/keyboard-avoiding';
+import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
+import { getApplicationSafetyMessage } from '../../../../lib/utils/bounty-lifecycle';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
@@ -123,7 +125,9 @@ export default function HunterWorkInProgressScreen() {
       setRequest(hunterRequest);
 
       // If not accepted yet, go back to apply screen
-      if (hunterRequest.status !== 'accepted') {
+      if (hunterRequest.status !== 'accepted' || !currentUserId ||
+        String(bountyData.accepted_by ?? '') !== String(currentUserId) ||
+        bountyData.status !== 'in_progress') {
         router.replace({
           pathname: '/in-progress/[bountyId]/hunter',
           params: { bountyId: id },
@@ -278,6 +282,12 @@ export default function HunterWorkInProgressScreen() {
     );
   }
 
+  if (request.status !== 'accepted' || !currentUserId ||
+    String(bounty.accepted_by ?? '') !== String(currentUserId) ||
+    bounty.status !== 'in_progress') {
+    return <HunterDashboardSkeleton />;
+  }
+
   // Guard every access: `description` is optional on the two-step posting flow
   // and null on some older/API-created rows — an unguarded `.length` here
   // white-screens the hunter's active-job screen.
@@ -326,6 +336,10 @@ export default function HunterWorkInProgressScreen() {
             )}
           </View>
         </View>
+
+        <TrustSafetyNotice message={getApplicationSafetyMessage({
+          bounty, viewerId: currentUserId, requestStatus: request.status,
+        })} />
 
         {/* Timeline */}
         <View style={styles.timelineContainer}>

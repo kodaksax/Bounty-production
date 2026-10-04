@@ -5,6 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View 
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 
 // Type for MaterialIcons icon names
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
@@ -28,43 +29,43 @@ const PLATFORM_BADGES: TrustBadge[] = [
   {
     id: 'escrow-protected',
     icon: 'lock',
-    title: 'Escrow Protected',
-    description: 'All payments are held securely in escrow until work is verified and approved. Your funds are never released without your explicit approval.',
+    title: 'In-App Escrow',
+    description: 'Funds handled through Bounty may be authorized or captured at posting or acceptance. An open listing does not prove funding. Releases depend on bounty state and any dispute review.',
     color: '#059669', // emerald-500
   },
   {
     id: 'secure-payments',
     icon: 'credit-card',
-    title: 'Secure Payments',
-    description: 'Payments are processed through Stripe, a PCI Level 1 certified payment processor. Your payment information is encrypted and never stored on our servers.',
+    title: 'In-App Payments',
+    description: `In-app payments are processed through Stripe. ${trustSafetyStrings.paymentProtection}`,
     color: '#3b82f6', // blue-500
   },
   {
     id: 'dispute-resolution',
     icon: 'gavel',
-    title: 'Dispute Resolution',
-    description: 'Our dedicated support team helps mediate any disputes between posters and hunters. We ensure fair outcomes for both parties.',
+    title: 'Dispute Review',
+    description: 'Report problems in Bounty for review. Refunds and releases depend on bounty state and the review outcome; no particular outcome is guaranteed.',
     color: '#8b5cf6', // violet-500
   },
   {
     id: 'verified-users',
     icon: 'verified-user',
     title: 'Verified Users',
-    description: 'Users can verify their identity through our secure verification process, adding an extra layer of trust to transactions.',
+    description: 'Stripe identity checks support payout setup. They are not background checks or guarantees of a user’s skills or conduct.',
     color: '#06b6d4', // cyan-500
   },
   {
     id: 'encrypted-messaging',
     icon: 'security',
-    title: 'Encrypted Messaging',
-    description: 'All messages between users are secured. Your conversations and shared information remain private and protected.',
+    title: 'In-App Messaging',
+    description: 'Keep job agreements and updates in Bounty so they can support a dispute review. Do not move payment or the agreement outside the app.',
     color: '#14b8a6', // teal-500
   },
   {
     id: 'refund-guarantee',
     icon: 'replay',
-    title: 'Refund Guarantee',
-    description: 'If work is not completed satisfactorily, escrowed funds are refunded. We protect both posters and hunters from unfair outcomes.',
+    title: 'Refund Review',
+    description: trustSafetyStrings.escrowLimits,
     color: '#f59e0b', // amber-500
   },
 ];
@@ -101,11 +102,11 @@ export function TrustBadges({
     <View style={styles.container}>
       <View style={styles.header}>
         <MaterialIcons name="shield" size={18} color={theme.primary} />
-        <Text style={styles.title}>Platform Security</Text>
+        <Text style={styles.title}>In-App Trust and Safety</Text>
       </View>
       
       <Text style={styles.subtitle}>
-        Tap any badge to learn more about our security measures
+        Tap a badge for payment scope and review limits
       </Text>
 
       <View style={compact ? styles.gridContainer : styles.listContainer}>

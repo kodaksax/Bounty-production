@@ -30,6 +30,7 @@
 import type { BountyDisplayStatus } from './bounty-display-status';
 import { getBountyDisplayStatus } from './bounty-display-status';
 import { getReviewDeadlineStatus, type ReviewDeadlineStatus } from './review-deadline';
+import { trustSafetyStrings } from '../strings/trust-safety';
 
 /** Who is looking at the bounty. */
 export type BountyRole = 'poster' | 'hunter' | 'visitor';
@@ -211,6 +212,31 @@ export interface BountyLifecycleState {
   group: BountyAttentionGroup;
   /** ISO time the poster's review window closes, while work awaits review. */
   reviewDeadline?: string | null;
+}
+
+/** Request rows alone (and especially chat messages) cannot authorize work. */
+export function getApplicationSafetyMessage({
+  bounty,
+  viewerId,
+  requestStatus,
+  submitted = false,
+}: Pick<BountyLifecycleInput, 'bounty' | 'viewerId' | 'requestStatus'> & { submitted?: boolean }): string {
+  if (
+    viewerId && bounty.accepted_by &&
+    String(bounty.accepted_by) === String(viewerId) &&
+    bounty.status === 'in_progress'
+  ) {
+    return bounty.is_for_honor
+      ? `${trustSafetyStrings.acceptedWork} This is an honor bounty; no funds are held or paid.`
+      : trustSafetyStrings.acceptedWork;
+  }
+  if (requestStatus === 'pending' && bounty.status === 'open' && !bounty.accepted_by) {
+    return submitted ? trustSafetyStrings.applicationSent : trustSafetyStrings.pendingApplication;
+  }
+  if (requestStatus === 'rejected' || ['completed', 'cancelled', 'archived', 'deleted'].includes(bounty.status ?? '')) {
+    return 'This application is no longer awaiting acceptance. Check its status on Bounty; do not start new work.';
+  }
+  return 'Check your application status on Bounty before starting work. A chat message is not official acceptance.';
 }
 
 /**
@@ -518,7 +544,9 @@ function resolvePoster(args: {
               ? '1 hunter applied'
               : `${applicationCount} hunters applied`,
           explanation: 'Applications are in and nobody has been selected yet.',
-          nextStep: `Pick a hunter to start the work — ${reward} is held in escrow the moment you accept.`,
+          nextStep: bounty.is_for_honor
+            ? 'Officially accept a hunter before work starts. This bounty is for honor; no funds are held or paid.'
+            : `Pick a hunter to start the work — ${reward} is held in escrow the moment you accept. Keep the agreement and payment on Bounty.`,
           waitingOn: 'you',
           needsAttention: true,
           tone: 'action',
@@ -562,8 +590,12 @@ function resolvePoster(args: {
       return finalize({
         status,
         headline: 'Hunter is working on it',
-        explanation: `${hunter} accepted this bounty and is working on it now. ${reward} is held in escrow.`,
-        nextStep: "When they submit the work you'll review it here and release payment.",
+        explanation: bounty.is_for_honor
+          ? `You selected ${hunter}, who is working on this honor bounty. No funds are held or paid.`
+          : `You selected ${hunter}, who is working on it now. ${reward} is held in escrow.`,
+        nextStep: bounty.is_for_honor
+          ? "When they submit the work you'll review it here. Keep the agreement on Bounty."
+          : "When they submit the work you'll review it here and release payment through Bounty.",
         waitingOn: 'other',
         needsAttention: false,
         tone: 'progress',
@@ -739,8 +771,8 @@ function resolveHunter(args: {
       return finalize({
         status,
         headline: 'Application sent',
-        explanation: `${poster} hasn't chosen a hunter yet.`,
-        nextStep: "If they pick you, this bounty moves to your active work and you can start.",
+        explanation: trustSafetyStrings.pendingApplication,
+        nextStep: `Wait for ${poster} to officially accept you on Bounty. A chat message is not acceptance. Keep the agreement and any payment here.`,
         waitingOn: 'other',
         needsAttention: false,
         tone: 'progress',
@@ -813,8 +845,10 @@ function resolveHunter(args: {
       return finalize({
         status,
         headline: "You're on the clock",
-        explanation: `You were selected for this bounty. ${reward} is held in escrow while you work.`,
-        nextStep: 'Submit proof of the finished work to send it for approval and get paid.',
+        explanation: getApplicationSafetyMessage({ bounty, viewerId, requestStatus }),
+        nextStep: bounty.is_for_honor
+          ? 'Submit proof of the finished work for approval. Honor bounties have no payout.'
+          : 'Submit proof of the finished work to send it for approval and get paid through Bounty.',
         waitingOn: 'you',
         needsAttention: true,
         tone: 'action',

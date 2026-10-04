@@ -6,6 +6,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 
 type WorkflowVariant = 'poster-postings' | 'poster-requests' | 'hunter-inprogress';
 
@@ -39,7 +40,7 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
       {
         icon: 'check-circle',
         iconColor: '#6ee7b7',
-        text: 'Accept a hunter to lock in the work and place funds in escrow',
+        text: `${trustSafetyStrings.posterHire} Paid bounties hold funds in escrow at acceptance; honor bounties have no funds.`,
       },
       {
         icon: 'rate-review',
@@ -49,7 +50,7 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
       {
         icon: 'account-balance-wallet',
         iconColor: '#fcd34d',
-        text: 'Approve the work to release payment — or request a revision if needed',
+        text: 'Approve paid work to release payment through Bounty — or request a revision. Honor bounties have no payout.',
       },
     ],
   },
@@ -65,17 +66,17 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
       {
         icon: 'check-circle',
         iconColor: '#6ee7b7',
-        text: 'Tap "Accept" on the hunter you\'d like to hire',
+        text: `Tap "Accept" to officially hire a hunter. ${trustSafetyStrings.posterHire}`,
       },
       {
         icon: 'lock',
         iconColor: '#fcd34d',
-        text: 'Funds are held safely in escrow once you accept — no payment until you approve the work',
+        text: 'Paid bounties hold funds in escrow at acceptance and release them after approval. Honor bounties have no funds.',
       },
       {
         icon: 'chat',
         iconColor: '#6ee7b7',
-        text: 'A chat is created automatically so you can coordinate with the hunter',
+        text: 'Coordinate in Bounty chat. A chat message is not official acceptance.',
       },
       {
         icon: 'trending-up',
@@ -91,12 +92,12 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
       {
         icon: 'touch-app',
         iconColor: '#6ee7b7',
-        text: 'Tap a bounty card to see details and start working',
+        text: trustSafetyStrings.beforeAcceptance,
       },
       {
         icon: 'chat',
         iconColor: '#6ee7b7',
-        text: 'Use the chat to ask questions or update the poster on your progress',
+        text: 'After official acceptance, use Bounty chat for agreements and updates. Keep any payment on Bounty.',
       },
       {
         icon: 'check-circle',
@@ -116,7 +117,7 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
       {
         icon: 'account-balance-wallet',
         iconColor: '#fcd34d',
-        text: 'Once approved, payment is released to your wallet automatically',
+        text: 'For paid bounties, approval releases payment to your Bounty wallet. Honor bounties have no funds or payout.',
       },
     ],
   },

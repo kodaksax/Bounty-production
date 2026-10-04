@@ -682,7 +682,7 @@ export class NotificationService {
       userId: hunterId,
       type: 'acceptance',
       title: 'Bounty Accepted!',
-      body: `Your application for "${bountyTitle}" was accepted`,
+      body: `Your application for "${bountyTitle}" was accepted. Before starting, open the bounty to check your assignment. Keep work and any payment on Bounty.`,
       data: { bountyId },
     });
 
@@ -691,7 +691,7 @@ export class NotificationService {
       const conv = await db.select().from(conversations).where(eq(conversations.bounty_id, bountyId)).limit(1);
       if (conv.length > 0) {
         const conversationId = conv[0].id;
-        const text = `Your application for "${bountyTitle}" was accepted.`;
+        const text = `Your application for "${bountyTitle}" was accepted. Check your assignment in the bounty before starting. Keep agreements and any payment on Bounty.`;
         await db.insert(messages).values({ conversation_id: conversationId, sender_id: hunterId, text }).returning();
       }
     } catch (err) {

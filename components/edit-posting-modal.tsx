@@ -16,6 +16,10 @@ import { useBountyExactLocation } from "../hooks/useBountyExactLocation";
 import { usePostingPolicy } from "../hooks/usePostingPolicy";
 import { useAppThemeContext } from "../lib/themes/AppThemeContext";
 import type { AppTheme } from "../lib/themes/types";
+import { trustSafetyStrings } from "../lib/strings/trust-safety";
+import { validateContactInfo } from "../lib/utils/bounty-validation";
+import { detectOffPlatformRisk } from "../lib/utils/off-platform-risk";
+import { TrustSafetyNotice } from "./ui/trust-safety-notice";
 
 interface EditPostingModalProps {
   visible: boolean;
@@ -88,6 +92,11 @@ export function EditPostingModal({
     }
     if (!formData.description.trim()) {
       setError("Description is required");
+      return;
+    }
+    const contactError = validateContactInfo(formData.title, formData.description);
+    if (contactError) {
+      setError(contactError);
       return;
     }
     if (formData.amount <= 0 && !formData.isForHonor) {
@@ -175,6 +184,9 @@ export function EditPostingModal({
                 { paddingBottom: Math.max(insets.bottom, 16) + 60 },
               ]}
             >
+              {detectOffPlatformRisk(`${formData.title} ${formData.description}`) && (
+                <TrustSafetyNotice message={trustSafetyStrings.posting} urgent />
+              )}
               {/* Title */}
               <View style={styles.field}>
                 <Text style={styles.label}>Title *</Text>

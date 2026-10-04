@@ -16,7 +16,7 @@ import {
   isPhase2Bounty,
   isV3Bounty,
 } from 'lib/utils/payment-architecture';
-import { getBountyStages } from 'lib/utils/bounty-lifecycle';
+import { getApplicationSafetyMessage, getBountyStages } from 'lib/utils/bounty-lifecycle';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -46,6 +46,7 @@ import { DisputeFrozenBanner } from './ui/dispute-frozen-banner';
 import { RatingStars } from './ui/rating-stars';
 import { RevisionFeedbackBanner } from './ui/revision-feedback-banner';
 import { Stepper } from './ui/stepper';
+import { TrustSafetyNotice } from './ui/trust-safety-notice';
 import { WorkflowDisputeModal } from './workflow-dispute-modal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -1229,10 +1230,17 @@ export function MyPostingExpandable({
                 </Text>
               ) : (
                 <Text style={styles.infoText}>
-                  Your application is pending. We’ll notify you when the poster accepts.
+                  {getApplicationSafetyMessage({ bounty, viewerId: currentUserId, requestStatus })}
                 </Text>
               )}
             </View>
+          )}
+
+          {!isOwner && bounty.status === 'in_progress' && !!currentUserId &&
+            String(bounty.accepted_by ?? '') === String(currentUserId) && (
+              <TrustSafetyNotice message={getApplicationSafetyMessage({
+                bounty, viewerId: currentUserId, requestStatus,
+              })} />
           )}
 
           {/* Work in Progress section - hunter only, while the bounty is in progress */}

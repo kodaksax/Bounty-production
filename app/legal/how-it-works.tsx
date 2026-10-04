@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SettingsScreenHeader } from '../../components/ui/settings-screen-header';
+import { TrustSafetyNotice } from '../../components/ui/trust-safety-notice';
+import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 import { PLATFORM_FEE_DISPLAY } from '../../lib/constants/fees';
 import { EMAIL_SUBJECTS, SUPPORT_EMAIL } from '../../lib/constants/support';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -44,7 +46,7 @@ const SECTIONS: Section[] = [
     icon: 'lock',
     title: 'Your money is held in escrow',
     body:
-      'When you fund a bounty, the money is authorized or captured and held in escrow through Stripe / Stripe Connect. It is not paid to the hunter while the job is in progress. Funds are released to the hunter only when you confirm the work is done in the app. Bounty may delay a release to run fraud checks or resolve a dispute.',
+      'When you fund a bounty through Bounty, the money is authorized or captured and held through Stripe / Stripe Connect. An open listing is not proof of funding. Use the in-app completion and release flow; releases depend on bounty state and any dispute review. Processing and fraud checks may delay payment.',
     terms: 'Terms §30 (Payments & Escrow)',
   },
   {
@@ -68,7 +70,7 @@ const SECTIONS: Section[] = [
     icon: 'payments',
     title: 'Getting paid as a hunter',
     body:
-      `When you apply, nothing is owed to you yet. Once the poster accepts you, their money is already held in escrow — it is committed before you start work. You submit the finished work in the app, the poster approves it, and the bounty amount less the ${PLATFORM_FEE_DISPLAY} service fee lands in your Bounty wallet. Every bounty shows you what you take home before you apply.`,
+      `Applying is not acceptance. Begin work only after the poster officially accepts you in Bounty. Funding may happen at posting or acceptance through authorization or capture. Submit completed work and settle payment in the app. The net amount reflects the ${PLATFORM_FEE_DISPLAY} service fee; availability depends on processing and any dispute review. Check Wallet for payment status.`,
     terms: 'Terms §30 (Payments & Escrow)',
   },
   {
@@ -100,6 +102,7 @@ export default function HowItWorksRoute() {
           Bounty is a way to pay someone nearby to do a small job — or to get paid for doing one.
           Here is exactly what happens to the money, and what protects you on either side.
         </Text>
+        <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
 
         {SECTIONS.map(section => (
           <View key={section.title} style={s.card}>

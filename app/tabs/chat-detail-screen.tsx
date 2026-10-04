@@ -28,6 +28,9 @@ import type { Attachment, Conversation, Message } from "../../lib/types"
 import { getValidAvatarUrl } from "../../lib/utils/avatar-utils"
 import { getMediaKind, getMediaMimeType, mediaFileName, mediaPreviewLabel } from "../../lib/utils/message-media"
 import { messagingStrings } from "../../lib/strings/messaging"
+import { ChatSafetyWarning } from "../../components/chat-safety-warning"
+import { useChatSendProtection } from "../../hooks/use-chat-send-protection"
+import { detectOffPlatformRisk, latestIncomingRisk } from "../../lib/utils/off-platform-risk"
  
 interface ChatDetailScreenProps {
   conversation: Conversation
@@ -77,6 +80,12 @@ export function ChatDetailScreen({
   const listData = useMemo(() => [...messages].reverse(), [messages])
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
+  const confirmSend = useChatSendProtection(conversation.id)
+  const composerRisk = useMemo(() => detectOffPlatformRisk(inputText), [inputText])
+  const incomingRisk = useMemo(() => latestIncomingRisk(messages,
+    message => currentUserId !== null && message.senderId !== currentUserId &&
+      (!message.conversationId || message.conversationId === conversation.id)
+  ), [messages, currentUserId, conversation.id])
 
   // Get the other participant's ID (not the current user) for 1:1 chats.
   // Wait for currentUserId to resolve before picking a participant — while
@@ -142,6 +151,7 @@ export function ChatDetailScreen({
     const mediaUrl = attachment?.remoteUri ?? null
     const quoted = replyingTo
     if (!textToSend && !mediaUrl) return
+    if (!await confirmSend(textToSend)) return
 
     setInputText('')
     setPendingAttachment(null)
@@ -348,13 +358,19 @@ export function ChatDetailScreen({
     return (
       <View>
         {isTyping && <TypingIndicator userName={conversation.name} />}
-        {/* Off-platform liability notice: always the last thing under the newest message. */}
-        <Text style={s.disclaimer} accessibilityRole="text">
-          {messagingStrings.offPlatformDisclaimer}
-        </Text>
+        {incomingRisk ? (
+          <ChatSafetyWarning risk={incomingRisk.risk} onReport={() => {
+            setSelectedMessageId(incomingRisk.message.id)
+            setShowReportModal(true)
+          }} />
+        ) : (
+          <Text style={s.disclaimer} accessibilityRole="text">
+            {messagingStrings.offPlatformDisclaimer}
+          </Text>
+        )}
       </View>
     )
-  }, [typingUsersRef, conversation.name, s.disclaimer])
+  }, [typingUsersRef, conversation.name, s.disclaimer, incomingRisk])
 
   const selectedMessage = messages.find(m => m.id === selectedMessageId)
   const canReplyToSelectedMessage =
@@ -460,6 +476,7 @@ export function ChatDetailScreen({
             />
             {/* Message Input */}
             <View style={s.inputContainer}>
+              <ChatSafetyWarning risk={composerRisk} />
               {/* Message being replied to */}
               {replyingTo && (
                 <View style={s.replyRow} accessibilityLabel={`Replying to ${senderLabelFor(replyingTo.senderId)}`}>

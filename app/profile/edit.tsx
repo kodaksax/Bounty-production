@@ -26,6 +26,9 @@ import { useBackHandler } from "../../hooks/useBackHandler";
 import { hapticFeedback } from "../../lib/haptic-feedback";
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
 import type { AppTheme } from "../../lib/themes/types";
+import { trustSafetyStrings } from "../../lib/strings/trust-safety";
+import { detectOffPlatformRisk } from "../../lib/utils/off-platform-risk";
+import { TrustSafetyNotice } from "../../components/ui/trust-safety-notice";
 
 type EditProfileFormData = {
   name: string;
@@ -553,6 +556,9 @@ export default function EditProfileScreen() {
 
           <View style={styles.fieldGroup}>
             <Text style={styles.sectionTitle}>Location & Links</Text>
+            {detectOffPlatformRisk(`${formData.bio} ${formData.location} ${formData.portfolio}`) && (
+              <TrustSafetyNotice message={trustSafetyStrings.profile} />
+            )}
 
             <View style={[styles.fieldContainer, focusedField === 'location' && styles.fieldContainerFocused]}>
               <Text style={styles.label}>Location</Text>

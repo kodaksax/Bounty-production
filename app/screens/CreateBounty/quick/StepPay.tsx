@@ -12,6 +12,8 @@ import { detectTrustTier } from '../../../../lib/utils/trust-tier';
 import { validateAmount, validateBalance, validateContactInfo } from '../../../../lib/utils/bounty-validation';
 import { useWallet } from '../../../../lib/wallet-context';
 import { QuickStepLayout } from './QuickStepLayout';
+import { trustSafetyStrings } from '../../../../lib/strings/trust-safety';
+import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
 
 interface StepPayProps {
   draft: BountyDraft;
@@ -338,6 +340,7 @@ export function StepPay({
           )}
         </View>
       </View>
+      <TrustSafetyNotice message={draft.isForHonor ? trustSafetyStrings.posterHire : trustSafetyStrings.paymentProtection} />
 
       {/* For honor option.
           Hidden while the server refuses $0 posts (the default). This is the

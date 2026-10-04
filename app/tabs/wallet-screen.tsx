@@ -15,6 +15,7 @@ import { BrandingLogo } from "../../components/ui/branding-logo";
 import { EmptyState } from "../../components/ui/empty-state";
 import { PayoutFailedBanner } from "../../components/ui/PayoutFailedBanner";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
+import { TrustSafetyNotice } from "../../components/ui/trust-safety-notice";
 import { WithdrawWithBankScreen } from "../../components/withdraw-with-bank-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useWalletBalanceDisplay } from '../../hooks/use-wallet-balance-display';
@@ -23,6 +24,7 @@ import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { StripePaymentMethod, stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
+import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { formatCurrency, formatCurrencyCents } from '../../lib/utils';
@@ -343,6 +345,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                       </Text>
                     )}
                 </View>
+                <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
                 <View style={s.balanceActionsRow}>
                   <TouchableOpacity
                     style={s.actionButton}
