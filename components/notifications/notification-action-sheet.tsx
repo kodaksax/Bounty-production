@@ -52,7 +52,10 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
   const confirmSend = useChatSendProtection(notification?.id);
   const captureSendScope = useChatSendScope(notification?.id);
   const replyRisk = useMemo(() => detectOffPlatformRisk(replyText), [replyText]);
-  useEffect(() => { setBusy(null); }, [notification?.id]);
+  useEffect(() => {
+    setBusy(null);
+    setReplyText('');
+  }, [notification?.id]);
 
   const visible = !!notification;
   const category = notification ? (notification.category ?? categoryForNotificationType(notification.type)) : null;

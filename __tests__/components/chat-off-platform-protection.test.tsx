@@ -78,7 +78,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   global.requestAnimationFrame = jest.fn(callback => { callback(0); return 0; });
   mockMessages = [original];
-  mockSend.mockResolvedValue(undefined);
+  mockSend.mockResolvedValue(true);
   mockPick.mockResolvedValue([attachment]);
 });
 afterEach(() => jest.useRealTimers());
@@ -144,7 +144,7 @@ describe.each([
   });
 
   it('restores the composer after a failed approved send', async () => {
-    mockSend.mockRejectedValueOnce(new Error('offline'));
+    mockSend.mockResolvedValueOnce(false);
     const ui = render(<Screen conversation={conversation} />);
     await act(async () => { fireEvent.press(ui.getByLabelText('Add attachment')); });
     fireEvent.changeText(ui.getByLabelText('Message input field'), 'Text me');

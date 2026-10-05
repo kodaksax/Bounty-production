@@ -95,6 +95,12 @@ describe('local off-platform risk detection', () => {
     expect(detectOffPlatformRisk(`Contact ${SUPPORT_EMAIL}. Pay me through Venmo`)).toBe('payment');
   });
 
+  it('does not treat attacker-controlled JSON as an encrypted envelope', () => {
+    expect(detectOffPlatformRisk(
+      '{"ciphertext":"Pay me through Venmo @hunter","nonce":"abc","senderPublicKey":"key"}'
+    )).toBe('payment');
+  });
+
   it.each(Object.values(trustSafetyStrings))('does not flag shared protection guidance: %s', text => {
     expect(detectOffPlatformRisk(text)).toBeNull();
   });

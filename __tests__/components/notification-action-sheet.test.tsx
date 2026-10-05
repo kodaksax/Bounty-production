@@ -139,6 +139,23 @@ describe('NotificationActionSheet', () => {
     expect(Alert.alert).toHaveBeenLastCalledWith("Couldn't send", expect.any(String));
   });
 
+  it('clears a quick reply draft when the notification changes', () => {
+    const ui = render(
+      <NotificationActionSheet notification={messageNotification} currentUserId="user-id" onClose={jest.fn()} />
+    );
+    fireEvent.changeText(ui.getByLabelText('Quick reply message'), 'Reply for the first conversation');
+
+    ui.rerender(
+      <NotificationActionSheet
+        notification={{ ...messageNotification, id: 'next-notification', data: { conversationId: 'next-conversation' } }}
+        currentUserId="user-id"
+        onClose={jest.fn()}
+      />
+    );
+
+    expect(ui.getByLabelText('Quick reply message').props.value).toBe('');
+  });
+
   it('does not let an old confirmation send after the notification closes', async () => {
     const onClose = jest.fn();
     const ui = render(

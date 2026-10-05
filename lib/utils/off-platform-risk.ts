@@ -20,17 +20,6 @@ const safetyNotices = new Set(Object.values(trustSafetyStrings).map(normalize));
 
 /** Advisory heuristics over local plaintext only; never inspects attachments or calls a service. */
 export function detectOffPlatformRisk(plaintext: string): OffPlatformRisk | null {
-  // A live row can still contain an encrypted envelope. Wait for the existing
-  // messaging pipeline to provide plaintext rather than interpreting key bytes.
-  if (plaintext.trimStart().startsWith('{')) {
-    try {
-      const payload = JSON.parse(plaintext);
-      if (typeof payload.ciphertext === 'string' && typeof payload.nonce === 'string' &&
-          typeof payload.senderPublicKey === 'string') return null;
-    } catch {
-      // Ordinary text beginning with "{" is still eligible for guidance.
-    }
-  }
   const normalized = normalize(plaintext);
   if (safetyNotices.has(normalized.trim())) return null;
   const clauses = normalized.split(/(?:[.!?]\s+|[;\n]+|,\s+(?:or|and)\s+|\bbut\b|\bhowever\b)/);

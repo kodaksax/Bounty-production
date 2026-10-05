@@ -121,7 +121,9 @@ export function ChatDetailScreen({
     mediaUrl?: string | null,
     replyTo?: string | null
   ) => {
-    await sendMessage(text, mediaUrl, replyTo)
+    if (!await sendMessage(text, mediaUrl, replyTo)) {
+      throw new Error('Failed to send message')
+    }
     // Offset 0 is the newest message in an inverted list.
     setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 100)
   }

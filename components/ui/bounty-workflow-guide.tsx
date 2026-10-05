@@ -40,7 +40,7 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
       {
         icon: 'check-circle',
         iconColor: '#6ee7b7',
-        text: `${trustSafetyStrings.posterHire} Paid bounties hold funds in escrow at acceptance; honor bounties have no funds.`,
+        text: `${trustSafetyStrings.posterHire} Paid bounties hold funds in escrow at posting or acceptance; honor bounties have no funds.`,
       },
       {
         icon: 'rate-review',
@@ -71,7 +71,7 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
       {
         icon: 'lock',
         iconColor: '#fcd34d',
-        text: 'Paid bounties hold funds in escrow at acceptance and release them after approval. Honor bounties have no funds.',
+        text: 'Paid bounties hold funds in escrow at posting or acceptance and release them after approval. Honor bounties have no funds.',
       },
       {
         icon: 'chat',
