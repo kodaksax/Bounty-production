@@ -11,17 +11,21 @@
  * choice to its own screen after auth fixes both: it's not competing with
  * "sign up now," and each option gets a description line under it.
  *
+ * One tap: picking a card is the answer and advances immediately. It used to
+ * be pick-a-radio-then-Continue, two taps for a step that only has two
+ * answers. There is deliberately no pre-selected default — this answer feeds
+ * primary_role / declared intent, and a default would record "poster" for
+ * everyone who just tapped through, which is worse than no answer.
+ *
  * Theme-aware like every other step: colors come from useAppThemeContext(),
  * never a pinned theme. This screen used to force darkTheme to match the
  * pre-auth funnel, which meant a light-mode user watched the app flip to dark
- * for three screens and back. The tokens carry the contrast instead — note
- * `continueButtonText` takes theme.background, which is dark-on-primary in
- * dark mode and light-on-primary in light mode without a second rule.
+ * for three screens and back. The tokens carry the contrast instead.
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -64,22 +68,27 @@ export default function RoleSelectScreen() {
   const insets = useSafeAreaInsets();
   const { data: onboardingData, updateData } = useOnboarding();
   const [selected, setSelected] = useState<Intent | null>(onboardingData.intent);
-
+  // A tap navigates, so a second tap landing before the push transition
+  // starts would push the next step twice. Cleared whenever this screen
+  // regains focus, so coming back to change the answer still works.
+  const advancingRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      advancingRef.current = false;
+    }, [])
+  );
 
   const handleSelect = (intent: Intent) => {
+    if (advancingRef.current) return;
+    advancingRef.current = true;
     hapticFeedback.light();
     setSelected(intent);
-  };
-
-  const handleContinue = () => {
-    if (!selected) return;
-    hapticFeedback.light();
-    analyticsService.trackEvent('role_selected', { role: selected, surface: 'onboarding' });
-    updateData({ intent: selected });
+    analyticsService.trackEvent('role_selected', { role: intent, surface: 'onboarding' });
+    updateData({ intent });
     // Hunters go to payout setup next; posters skip it, because nothing a
     // poster does needs a Stripe payout account until they withdraw — see
     // lib/onboarding/next-step-after-role.ts.
-    router.push(nextStepAfterRole(selected));
+    router.push(nextStepAfterRole(intent));
   };
 
   // Reached from the style step (app/onboarding/style.tsx), which itself is
@@ -117,7 +126,7 @@ export default function RoleSelectScreen() {
         <Text style={styles.heading} accessibilityRole="header">
           What brings you to Bounty?
         </Text>
-        <Text style={styles.subheading}>Pick the one that fits today.</Text>
+        <Text style={styles.subheading}>Tap the one that fits today.</Text>
 
         <View style={styles.optionsList}>
           {ROLE_OPTIONS.map(option => {
@@ -132,8 +141,8 @@ export default function RoleSelectScreen() {
                 ]}
                 onPress={() => handleSelect(option.intent)}
                 activeOpacity={0.85}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: isSelected }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
                 accessibilityLabel={`${option.title} — ${option.body}`}
               >
                 <View style={[styles.optionIconWrap, { backgroundColor: theme.surfaceSecondary }]}>
@@ -144,8 +153,8 @@ export default function RoleSelectScreen() {
                   <Text style={styles.optionBody}>{option.body}</Text>
                 </View>
                 <MaterialIcons
-                  name={isSelected ? 'radio-button-checked' : 'radio-button-unchecked'}
-                  size={22}
+                  name="chevron-right"
+                  size={24}
                   color={isSelected ? theme.primary : theme.textSecondary}
                 />
               </TouchableOpacity>
@@ -156,21 +165,6 @@ export default function RoleSelectScreen() {
 
       <View style={styles.footer}>
         <Text style={styles.footerHint}>You can switch or do both any time.</Text>
-        <TouchableOpacity
-          style={[
-            styles.continueButton,
-            { backgroundColor: theme.primary },
-            !selected && styles.continueButtonDisabled,
-          ]}
-          onPress={handleContinue}
-          disabled={!selected}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel="Continue"
-          accessibilityState={{ disabled: !selected }}
-        >
-          <Text style={styles.continueButtonText}>Continue</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -245,26 +239,11 @@ function makeStyles(theme: AppTheme) {
     paddingHorizontal: 24,
     paddingBottom: 16,
     paddingTop: 8,
-    gap: 12,
   },
   footerHint: {
     fontSize: 13,
     color: theme.textSecondary,
     textAlign: 'center',
-  },
-  continueButton: {
-    height: 56,
-    borderRadius: theme.radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  continueButtonDisabled: {
-    opacity: 0.5,
-  },
-  continueButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.background,
   },
   });
 }
