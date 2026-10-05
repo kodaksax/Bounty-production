@@ -229,6 +229,7 @@ export function ChatDetailScreen({
       {/* Messages + Sticky Composer */}
       <View className="flex-1">
         <StickyMessageInterface
+          conversationId={conversation.id}
           messages={messages.map(m => ({ 
             id: m.id, 
             text: m.text, 

@@ -71,10 +71,12 @@ describe('useMessages sendMessage analytics', () => {
     const { result } = renderHook(() => useMessages(CONVERSATION_ID));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
+    let sendResult: boolean | undefined;
     await act(async () => {
-      await result.current.sendMessage('this will fail');
+      sendResult = await result.current.sendMessage('this will fail');
     });
 
+    expect(sendResult).toBe(false);
     expect(mockTrackEvent).not.toHaveBeenCalled();
     // The failed message stays in the list (marked failed) rather than vanishing.
     const failed = result.current.messages.find(m => m.text === 'this will fail');

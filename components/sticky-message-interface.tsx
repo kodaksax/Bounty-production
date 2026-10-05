@@ -1,10 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { cn } from 'lib/utils';
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getBottomNavKeyboardOffset } from '../lib/constants/navigation';
 import { useHapticFeedback } from '../lib/haptic-feedback';
+import { useChatSendProtection, useChatSendScope } from '../hooks/use-chat-send-protection';
+import { detectOffPlatformRisk, latestIncomingRisk } from '../lib/utils/off-platform-risk';
+import { ChatSafetyWarning } from './chat-safety-warning';
+import { TrustSafetyNotice } from './ui/trust-safety-notice';
+import { trustSafetyStrings } from '../lib/strings/trust-safety';
+import { ReportModal } from './ReportModal';
 
 export interface ChatMessage {
   id: string;
@@ -15,8 +21,9 @@ export interface ChatMessage {
 }
 
 interface StickyMessageInterfaceProps {
+  conversationId?: string;
   messages: ChatMessage[];
-  onSend: (text: string) => void;
+  onSend: (text: string) => void | Promise<void>;
   isSending?: boolean;
   placeholder?: string;
   topInset?: number;
@@ -33,6 +40,7 @@ interface StickyMessageInterfaceProps {
  * Features: animated message entry, read receipts, typing indicators.
  */
 export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
+  conversationId,
   messages,
   onSend,
   isSending = false,
@@ -49,9 +57,16 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   const [atBottom, setAtBottom] = useState(true);
   const [expanded, setExpanded] = useState(false); // controls typing modal
   const expandedInputRef = useRef<TextInput | null>(null);
+  const sendInFlight = useRef(false);
+  const [composerHeight, setComposerHeight] = useState(0);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { triggerHaptic } = useHapticFeedback()
   const insets = useSafeAreaInsets()
+  const confirmSend = useChatSendProtection(conversationId);
+  const captureSendScope = useChatSendScope(conversationId);
+  const composerRisk = useMemo(() => detectOffPlatformRisk(text), [text]);
+  const incomingRisk = useMemo(() => latestIncomingRisk(messages, message => !message.isUser), [messages]);
+  const [reportMessageId, setReportMessageId] = useState<string | null>(null);
 
   const effectiveBottomInset = Math.max(bottomInset || 0, getBottomNavKeyboardOffset(insets.bottom))
 
@@ -62,20 +77,30 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
     }
   }, [messages, atBottom]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    triggerHaptic('medium'); // Medium haptic for sending message
-    onSend(trimmed);
-    setText('');
-    if (expanded) setExpanded(false);
-    // Stop typing when message is sent
-    if (onTypingChange) {
-      onTypingChange(false);
-    }
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = null;
+    if (!trimmed || isSending || sendInFlight.current) return;
+    sendInFlight.current = true;
+    const isCurrentSend = captureSendScope();
+    try {
+      if (!await confirmSend(trimmed) || !isCurrentSend()) return;
+      triggerHaptic('medium'); // Medium haptic for sending message
+      await onSend(trimmed);
+      if (!isCurrentSend()) return;
+      setText('');
+      if (expanded) setExpanded(false);
+      // Stop typing when message is sent
+      if (onTypingChange) {
+        onTypingChange(false);
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    } catch {
+      if (isCurrentSend()) Alert.alert("Couldn't send", 'Check your connection and try again. Your message is still here.');
+    } finally {
+      sendInFlight.current = false;
     }
   };
 
@@ -130,16 +155,22 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           data={messages}
           renderItem={renderItem}
           keyExtractor={(m) => m.id}
-          contentContainerStyle={{ paddingTop: topInset + 8, paddingBottom: effectiveBottomInset + 110, paddingHorizontal: 12 }}
+          contentContainerStyle={{ paddingTop: topInset + 8, paddingBottom: composerHeight ? composerHeight + 16 : effectiveBottomInset + 110, paddingHorizontal: 12 }}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
-          ListFooterComponent={isOtherUserTyping ? <TypingIndicator /> : null}
+          ListFooterComponent={<>
+            {isOtherUserTyping && <TypingIndicator />}
+            {incomingRisk ? (
+              <ChatSafetyWarning risk={incomingRisk.risk} onReport={() => setReportMessageId(incomingRisk.message.id)} />
+            ) : <TrustSafetyNotice message={trustSafetyStrings.general} />}
+          </>}
         />
 
         {/* Sticky composer */}
-        <View className="absolute left-0 right-0" style={{ bottom: 0, paddingBottom: effectiveBottomInset }}>
+        <View className="absolute left-0 right-0" style={{ bottom: 0, paddingBottom: effectiveBottomInset }} onLayout={event => setComposerHeight(event.nativeEvent.layout.height)}>
           <View className="px-3 pb-3">
+            {!expanded && <ChatSafetyWarning risk={composerRisk} />}
             <View className="flex-row items-end gap-2 bg-[#1F2937] rounded-2xl px-3 pt-2 pb-2 border border-[#374151]">
               <TouchableOpacity className="h-9 w-9 rounded-full bg-[#374151] items-center justify-center mt-auto">
                 <MaterialIcons name="add" size={22} color="#ffffff" />
@@ -152,7 +183,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
                 </View>
               </TouchableOpacity>
               {text.length > 0 ? (
-                <TouchableOpacity onPress={handleSend} disabled={isSending} className="h-9 w-9 rounded-full bg-[#059669] items-center justify-center mb-1">
+                <TouchableOpacity onPress={handleSend} disabled={isSending} accessibilityRole="button" accessibilityLabel="Send message" className="h-9 w-9 rounded-full bg-[#059669] items-center justify-center mb-1">
                   <MaterialIcons name={isSending ? 'hourglass-empty' : 'send'} size={18} color="#ffffff" />
                 </TouchableOpacity>
               ) : (
@@ -186,6 +217,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
             <KeyboardAvoidingView behavior={Platform.select({ ios:'padding', android: undefined })}>
               <View style={{ backgroundColor:'#111827', paddingTop:16, paddingHorizontal:12, paddingBottom: effectiveBottomInset + 16, borderTopLeftRadius:24, borderTopRightRadius:24 }}>
                 <View style={{ alignSelf:'center', width:48, height:4, backgroundColor:'rgba(255,255,255,0.3)', borderRadius:2, marginBottom:12 }} />
+                <ChatSafetyWarning risk={composerRisk} />
                 <View style={{ maxHeight: 220, borderRadius:16, borderWidth:1, borderColor:'#374151', backgroundColor:'#1F2937', paddingHorizontal:12, paddingVertical:8 }}>
                   <TextInput
                     ref={expandedInputRef}
@@ -194,6 +226,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
                     placeholder={placeholder}
                     placeholderTextColor="#6B7280"
                     multiline
+                    accessibilityLabel="Message input field"
                     style={{ color:'#ffffff', fontSize:15, minHeight:80, textAlignVertical:'top' }}
                     returnKeyType="default"
                   />
@@ -210,6 +243,8 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
                   <TouchableOpacity
                     disabled={!text.trim() || isSending}
                     onPress={handleSend}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send message"
                     style={{ backgroundColor: text.trim()? '#059669':'#1F2937', paddingHorizontal:24, height:44, borderRadius:22, alignItems:'center', justifyContent:'center', flexDirection:'row', gap:6 }}>
                     <MaterialIcons name={isSending? 'hourglass-empty':'send'} size={20} color={text.trim()? '#ffffff':'#9CA3AF'} />
                     <Text style={{ fontWeight:'600', color: text.trim()? '#ffffff':'#9CA3AF' }}>{isSending? 'Sending':'Send Message'}</Text>
@@ -219,6 +254,13 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
             </KeyboardAvoidingView>
           </View>
         </Modal>
+        <ReportModal
+          visible={reportMessageId !== null}
+          onClose={() => setReportMessageId(null)}
+          contentType="message"
+          contentId={reportMessageId || ''}
+          contentTitle="Message"
+        />
       </View>
     </KeyboardAvoidingView>
   );

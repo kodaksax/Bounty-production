@@ -3,6 +3,7 @@
  * These functions are used across StepCompensation and CreateBounty flow
  * to ensure consistent validation logic.
  */
+import { trustSafetyStrings } from '../strings/trust-safety';
 
 /** Minimum number of characters required for a bounty description. */
 const MIN_DESCRIPTION_LENGTH = 20;
@@ -221,7 +222,7 @@ const LINK_PATTERN =
 
 /** The single error shown wherever contact info is refused, so every composer says the same thing. */
 export const CONTACT_INFO_ERROR =
-  "Numbers, links, or emails were detected. This bounty can't be posted with them — scammers and promoters use these fields to reach people off the app. Remove them and try again.";
+  `Contact details or links detected. ${trustSafetyStrings.posting}`;
 
 /**
  * True when `value` contains a phone number, email address, or website link.

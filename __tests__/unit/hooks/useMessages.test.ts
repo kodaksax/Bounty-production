@@ -202,7 +202,7 @@ describe('useMessages (local conversation)', () => {
     expect(result.current.messages).toEqual([sentMessage]);
   });
 
-  it('marks the message failed when the service returns an error instead of throwing', async () => {
+  it('returns failure and marks the message failed when the service returns an error', async () => {
     (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue('user-1');
 
     // messageService.sendMessage resolves with `{ message: {}, error }` when it
@@ -219,10 +219,12 @@ describe('useMessages (local conversation)', () => {
       expect(result.current.loading).toBe(false);
     });
 
+    let sendResult: boolean | undefined;
     await act(async () => {
-      await result.current.sendMessage('hi');
+      sendResult = await result.current.sendMessage('hi');
     });
 
+    expect(sendResult).toBe(false);
     expect(result.current.error).toBe('Message cannot be empty');
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0].status).toBe('failed');

@@ -39,6 +39,10 @@ import { BountyTrustSignals } from './bounty-trust-signals'
 import { ReportModal } from "./ReportModal"
 import { AppModal } from './ui/app-modal'
 import { useKeyboardInset } from './ui/keyboard-avoiding'
+import { TrustSafetyNotice } from './ui/trust-safety-notice'
+import { trustSafetyStrings } from '../lib/strings/trust-safety'
+import { getApplicationSafetyMessage } from '../lib/utils/bounty-lifecycle'
+import { detectOffPlatformRisk } from '../lib/utils/off-platform-risk'
 
 // Alert defer delay to allow React to process state updates before showing alert
 const ALERT_DEFER_DELAY = 100;
@@ -116,6 +120,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [visible, setVisible] = useState(true)
   const [isApplying, setIsApplying] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
+  const [requestStatus, setRequestStatus] = useState<string | null>(null)
   const [showReportModal, setShowReportModal] = useState(false)
   const [applicationMessage, setApplicationMessage] = useState('')
   const messagesEndRef = useRef<ScrollView>(null)
@@ -432,6 +437,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           userId: currentUserId,
         })
         setHasApplied(requests.length > 0)
+        setRequestStatus(requests[0]?.status ?? null)
       } catch (error) {
         console.error('Error checking application status:', error)
       }
@@ -441,7 +447,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   }, [bounty.id, currentUserId])
 
   // Handle apply for bounty
-  const handleApplyForBounty = async () => {
+  const handleApplyForBounty = async (confirmed = false) => {
     triggerHaptic('medium') // Medium haptic for apply action
 
     const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
@@ -495,6 +501,14 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       return
     }
 
+    if (!confirmed) {
+      Alert.alert('Send application?', trustSafetyStrings.beforeAcceptance, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Apply', onPress: () => handleApplyForBounty(true) },
+      ])
+      return
+    }
+
     setIsApplying(true)
     try {
       const result = await bountyRequestService.create({
@@ -528,6 +542,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           application_id: applicationId,
         })
         setHasApplied(true)
+        setRequestStatus((result as any).request?.status ?? 'pending')
         setIsApplying(false)
 
         if (Platform.OS === 'web') {
@@ -538,10 +553,15 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
             if (!isMountedRef.current) return
             Alert.alert(
               'Application Submitted',
-              'Your application has been submitted. The bounty poster will review it soon.',
+              getApplicationSafetyMessage({
+                bounty,
+                viewerId: currentUserId,
+                requestStatus: (result as any).request?.status ?? 'pending',
+                submitted: true,
+              }),
               [
                 {
-                  text: 'View In Progress',
+                  text: 'View application',
                   onPress: () => {
                     router.push(`/in-progress/${bounty.id}/hunter`)
                     setTimeout(() => handleClose(), 50)
@@ -574,7 +594,14 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                 setIsApplying(false)
                 if (requests.length > 0) {
                   setHasApplied(true)
-                  Alert.alert('Application Found', 'We found your application. Navigating to in-progress view.', [
+                  setRequestStatus(requests[0].status)
+                  const latestBounty = await bountyService.getById(bounty.id)
+                  if (latestBounty) setDetailBounty({ ...bounty, ...latestBounty } as any)
+                  Alert.alert('Application Found', getApplicationSafetyMessage({
+                    bounty: latestBounty ?? bounty,
+                    viewerId: currentUserId,
+                    requestStatus: requests[0].status,
+                  }), [
                     { text: 'OK', onPress: () => { router.push(`/in-progress/${bounty.id}/hunter`); setTimeout(() => handleClose(), 50) } }
                   ])
                 } else {
@@ -610,7 +637,14 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               setIsApplying(false)
               if (requests.length > 0) {
                 setHasApplied(true)
-                Alert.alert('Application Found', 'We found your application. Navigating to in-progress view.', [
+                setRequestStatus(requests[0].status)
+                const latestBounty = await bountyService.getById(bounty.id)
+                if (latestBounty) setDetailBounty({ ...bounty, ...latestBounty } as any)
+                Alert.alert('Application Found', getApplicationSafetyMessage({
+                  bounty: latestBounty ?? bounty,
+                  viewerId: currentUserId,
+                  requestStatus: requests[0].status,
+                }), [
                   { text: 'OK', onPress: () => { router.push(`/in-progress/${bounty.id}/hunter`); setTimeout(() => handleClose(), 50) } }
                 ])
               } else {
@@ -918,6 +952,11 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
             {/* Apply section - message input + button */}
             <View style={styles.actionContainer}>
+              {!isOwnBounty && (
+                <TrustSafetyNotice message={hasApplied
+                  ? getApplicationSafetyMessage({ bounty, viewerId: currentUserId, requestStatus })
+                  : trustSafetyStrings.beforeAcceptance} />
+              )}
               {!hasApplied && (
                 <TextInput
                   style={styles.messageInput}
@@ -932,12 +971,15 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                   editable={!isApplying}
                 />
               )}
+              {!hasApplied && detectOffPlatformRisk(applicationMessage) && (
+                <TrustSafetyNotice message={trustSafetyStrings.profile} urgent />
+              )}
               <TouchableOpacity
                 style={[
                   styles.acceptButton,
                   (hasApplied || isApplying) && styles.acceptButtonDisabled
                 ]}
-                onPress={handleApplyForBounty}
+                onPress={() => handleApplyForBounty()}
                 disabled={hasApplied || isApplying}
               >
                 {isApplying ? (
@@ -1341,4 +1383,3 @@ function makeStyles(theme: AppTheme) {
   },
   });
 }
-

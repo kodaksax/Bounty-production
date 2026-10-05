@@ -5,6 +5,9 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { AppModal } from './ui/app-modal';
 import { Button } from './ui/button';
+import { TrustSafetyNotice } from './ui/trust-safety-notice';
+import { trustSafetyStrings } from '../lib/strings/trust-safety';
+import { detectOffPlatformRisk } from '../lib/utils/off-platform-risk';
 
 export interface ApplicationPitchModalProps {
   visible: boolean;
@@ -100,7 +103,7 @@ export function ApplicationPitchModal({
 
   const title = isForHonor ? 'Apply for this bounty?' : `Apply and earn $${netEarnings.toFixed(2)}?`;
   const description = isForHonor
-    ? "The poster gets your application and can accept it. You'll be notified either way — you can withdraw it any time before they accept."
+    ? "The poster gets your application and can accept it. This is an honor bounty: no funds are held or paid. You can withdraw any time before they accept."
     : `The poster gets your application and can accept it. If they do, $${grossAmount.toFixed(2)} is held in escrow before you start, and $${netEarnings.toFixed(2)} lands in your wallet once they approve your work. You can withdraw the application any time before they accept.`;
 
   const primaryLabel = isForHonor ? 'Apply' : `Apply — earn $${netEarnings.toFixed(2)}`;
@@ -110,6 +113,7 @@ export function ApplicationPitchModal({
       <View style={styles.card}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.description}>{description}</Text>
+        <TrustSafetyNotice message={trustSafetyStrings.beforeAcceptance} />
 
         <View style={styles.pitchSection}>
           <View style={styles.pitchLabelRow}>
@@ -130,6 +134,9 @@ export function ApplicationPitchModal({
             accessibilityLabel="Application pitch"
             accessibilityHint={prompt}
           />
+          {detectOffPlatformRisk(pitch) && (
+            <TrustSafetyNotice message={trustSafetyStrings.profile} urgent />
+          )}
           {requirement === 'encouraged' && trimmed.length === 0 && (
             <Text style={styles.encouragedHint}>Applications with a pitch get chosen more often.</Text>
           )}

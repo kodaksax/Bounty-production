@@ -24,6 +24,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { Platform } from 'react-native';
+import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 
 const mockPayWithCard = jest.fn();
 const mockPayWithApplePay = jest.fn();
@@ -150,7 +151,7 @@ describe('AcceptFundingGate', () => {
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
       expect(getByText('Ada')).toBeTruthy();
-      expect(getByText('Held until you approve the work')).toBeTruthy();
+      expect(getByText('Held for in-app completion or dispute review')).toBeTruthy();
       expect(getByText('from your wallet balance')).toBeTruthy();
       // No Apple Pay button when there is nothing to charge.
       expect(queryByText('Pay')).toBeNull();
@@ -178,7 +179,7 @@ describe('AcceptFundingGate', () => {
       const { getByText } = render(<AcceptFundingGate gate={gate} />);
 
       expect(getByText('charged to your card now')).toBeTruthy();
-      expect(getByText('Held until you approve the work')).toBeTruthy();
+      expect(getByText('Held for in-app completion or dispute review')).toBeTruthy();
 
       fireEvent.press(getByText('Pay $30.00 & hire'));
 
@@ -355,7 +356,7 @@ describe('AcceptFundingGate', () => {
       expect(mockPayWithCard).not.toHaveBeenCalled();
     });
 
-    test('on a short screen the buttons and the escrow line share the screen; only the reassurance copy is trimmed', () => {
+    test('on a short screen payment actions and safety guidance remain available', () => {
       const RN = require('react-native');
       const dims = RN.useWindowDimensions as jest.Mock;
       const original = dims.getMockImplementation();
@@ -365,7 +366,9 @@ describe('AcceptFundingGate', () => {
         const gate = makeGate();
         const { getByText, queryByText, getByLabelText } = render(<AcceptFundingGate gate={gate} />);
 
-        expect(getByText('Held until you approve the work')).toBeTruthy();
+        expect(getByText('Held for in-app completion or dispute review')).toBeTruthy();
+        expect(getByText(trustSafetyStrings.posterHire)).toBeTruthy();
+        expect(getByText(/Refunds and releases depend/)).toBeTruthy();
         expect(getByText('Pay $30.00 & hire')).toBeTruthy();
         expect(getByLabelText('Pay 30.00 dollars with Apple Pay and hire')).toBeTruthy();
         expect(getByText('Not now')).toBeTruthy();
@@ -378,11 +381,11 @@ describe('AcceptFundingGate', () => {
       }
     });
 
-    test('on a tall screen the reassurance copy is shown', () => {
+    test('on a tall screen the payment scope and refund limits are shown', () => {
       const gate = makeGate();
       const { getByText } = render(<AcceptFundingGate gate={gate} />);
       expect(
-        getByText("If it doesn't work out, you can cancel and the money comes back to your wallet.")
+        getByText(/Bounty’s payment protections apply only to payments handled through Bounty/)
       ).toBeTruthy();
     });
 

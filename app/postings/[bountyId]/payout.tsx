@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/success-animation';
+import { TrustSafetyNotice } from '../../../components/ui/trust-safety-notice';
+import { trustSafetyStrings } from '../../../lib/strings/trust-safety';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { failureEventProps } from '../../../lib/utils/stripe-error';
 import {
@@ -228,7 +230,7 @@ export default function PayoutScreen() {
         setShowConfetti(false);
         Alert.alert(
           'Success',
-          `Payout of $${bounty.amount.toFixed(2)} has been released successfully! The funds have been transferred to the hunter. The bounty is now completed and will be archived.`,
+          `Payout release for $${bounty.amount.toFixed(2)} has been recorded in Bounty. Check Wallet for payment status; availability depends on processing and any dispute review. The bounty is now completed and will be archived.`,
           [
             {
               text: 'OK',
@@ -253,12 +255,14 @@ export default function PayoutScreen() {
 
   const handleMarkComplete = async () => {
     if (!bounty) return;
+    if (bounty.is_for_honor !== true) {
+      Alert.alert('Use Payout Release', trustSafetyStrings.paidCompletion);
+      return;
+    }
 
     Alert.alert(
       'Mark as Complete',
-      bounty.is_for_honor
-        ? 'This will mark the bounty as complete and archive it for all parties.'
-        : 'Are you sure you want to mark this bounty as complete without releasing funds?',
+      'This will mark the bounty as complete and archive it for all parties.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -292,7 +296,7 @@ export default function PayoutScreen() {
                 /* analytics is best-effort */
               }
 
-              // For honor bounties or manual completion
+              // Record the non-monetary completion for honor bounties.
               if (bounty.is_for_honor) {
                 if (typeof logTransaction === 'function') {
                   await logTransaction({
@@ -344,7 +348,7 @@ export default function PayoutScreen() {
     if (bountyHoldsUnreleasedEscrow(bounty)) {
       Alert.alert(
         'Cannot Delete',
-        'This bounty still holds escrowed funds. Cancel it first to refund your money, then delete it.',
+        `This bounty still holds escrowed funds. Request cancellation before deleting it. ${trustSafetyStrings.escrowLimits}`,
         [{ text: 'OK' }]
       );
       return;
@@ -513,7 +517,7 @@ export default function PayoutScreen() {
                 <View style={styles.balanceInfo}>
                   <MaterialIcons name="verified-user" size={16} color="#6ee7b7" />
                   <Text style={styles.balanceLabel}>
-                    Secured in Stripe escrow — automatic payout on release
+                    Stripe escrow — release and payout timing may vary
                   </Text>
                 </View>
               ) : (
@@ -529,10 +533,11 @@ export default function PayoutScreen() {
         {/* Confirmation Section (Only for paid bounties) */}
         {!bounty.is_for_honor && bounty.status !== 'completed' && (
           <View style={styles.confirmationCard}>
+            <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
             <Text style={styles.confirmationTitle}>Confirm Payout Release</Text>
             <Text style={styles.confirmationSubtext}>
-              By confirming, you agree that the work has been completed satisfactorily and the
-              hunter will receive the payout amount.
+              {trustSafetyStrings.paidCompletion} Confirm that the work is complete to request release.
+              Processing, fraud checks, or dispute review may delay payment.
             </Text>
             <View style={styles.switchContainer}>
               <Text style={styles.switchLabel}>I confirm payout release</Text>
@@ -632,20 +637,22 @@ export default function PayoutScreen() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              style={[styles.completeButton, isProcessing && styles.buttonDisabled]}
-              onPress={handleMarkComplete}
-              disabled={isProcessing}
-            >
-              {isProcessing ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <MaterialIcons name="check" size={24} color="#fff" />
-                  <Text style={styles.completeButtonText}>Mark as Complete</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {bounty.is_for_honor === true && (
+              <TouchableOpacity
+                style={[styles.completeButton, isProcessing && styles.buttonDisabled]}
+                onPress={handleMarkComplete}
+                disabled={isProcessing}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialIcons name="check" size={24} color="#fff" />
+                    <Text style={styles.completeButtonText}>Mark as Complete</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[styles.deleteButton, isProcessing && styles.buttonDisabled]}
@@ -670,7 +677,9 @@ export default function PayoutScreen() {
           <Text style={styles.infoText}>
             {bounty.status === 'completed'
               ? 'This bounty has been archived and is accessible in your bounty history.'
-              : 'Once you release the payout or mark as complete, the bounty will be archived for all parties.'}
+              : bounty.is_for_honor
+                ? 'Once you mark as complete, the bounty will be archived for all parties.'
+                : 'Complete this bounty using Release Payout. Payment remains subject to processing and dispute review.'}
           </Text>
         </View>
       </ScrollView>

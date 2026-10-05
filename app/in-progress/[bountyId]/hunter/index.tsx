@@ -72,7 +72,8 @@ export default function HunterFlowIndex() {
   const forwardTarget = useMemo(() => {
     if (!bounty || !routeBountyId) return null;
     if (role === 'poster') return { pathname: '/postings/[bountyId]', params: { bountyId: routeBountyId } };
-    if (requestStatus === 'accepted') {
+    if (requestStatus === 'accepted' && currentUserId &&
+      String(bounty.accepted_by ?? '') === String(currentUserId)) {
       if (bounty.status === 'completed')
         return { pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: routeBountyId } };
       if (bounty.status === 'in_progress')
@@ -82,7 +83,7 @@ export default function HunterFlowIndex() {
         };
     }
     return null;
-  }, [bounty, role, requestStatus, routeBountyId]);
+  }, [bounty, role, requestStatus, routeBountyId, currentUserId]);
 
   React.useEffect(() => {
     if (isAuthLoading || isLoading || !forwardTarget) return;

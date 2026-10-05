@@ -16,7 +16,7 @@ interface UseMessagesResult {
   error: string | null;
   pinnedMessage: Message | null;
   /** `replyTo` is the id of the message being quoted, when this is a reply. */
-  sendMessage: (text: string, mediaUrl?: string | null, replyTo?: string | null) => Promise<void>;
+  sendMessage: (text: string, mediaUrl?: string | null, replyTo?: string | null) => Promise<boolean>;
   retryMessage: (messageId: string) => Promise<void>;
   pinMessage: (messageId: string) => Promise<void>;
   unpinMessage: (messageId: string) => Promise<void>;
@@ -109,7 +109,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
           const sentMessage: Message =
             result && (result as any).message ? (result as any).message : (result as any);
           setMessages(prev => prev.map(m => (m.id === tempMessage!.id ? sentMessage : m)));
-          return;
+          return true;
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to send message (local)');
           // Keep the message in the list marked as failed (instead of removing
@@ -121,7 +121,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
               prev.map(m => (m.id === tempId ? { ...m, status: 'failed' } : m))
             );
           }
-          return;
+          return false;
         }
       }
 
@@ -150,6 +150,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
         .catch(() => {
           /* analytics is best-effort */
         });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
       // Mark the specific temp message as failed rather than deleting it, so
@@ -160,6 +161,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
           prev.map(m => (m.id === tempId ? { ...m, status: 'failed' } : m))
         );
       }
+      return false;
     }
   }, [conversationId, currentUserId]);
 

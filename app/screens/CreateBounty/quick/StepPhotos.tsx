@@ -8,6 +8,9 @@ import { validateContactInfo } from '../../../../lib/utils/bounty-validation';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { QuickStepLayout } from './QuickStepLayout';
+import { trustSafetyStrings } from '../../../../lib/strings/trust-safety';
+import { detectOffPlatformRisk } from '../../../../lib/utils/off-platform-risk';
+import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
 
 interface StepPhotosProps {
   draft: BountyDraft;
@@ -133,6 +136,9 @@ export function StepPhotos({
         accessibilityLabel="Additional details about the task"
       />
       {renderedDetailsError ? <Text style={styles.detailsError}>{renderedDetailsError}</Text> : null}
+      {!renderedDetailsError && detectOffPlatformRisk(`${draft.title} ${draft.description}`) && (
+        <TrustSafetyNotice message={trustSafetyStrings.posting} urgent />
+      )}
 
       {/* Gallery drop zone */}
       <TouchableOpacity

@@ -24,11 +24,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { ErrorBanner } from 'components/error-banner';
 import { PaymentMethodsModal } from 'components/payment-methods-modal';
 import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
+import { TrustSafetyNotice } from 'components/ui/trust-safety-notice';
 import type { AcceptFundingGate as AcceptFundingGateState } from 'hooks/useAcceptFunding';
 import { useWalletDeposit } from 'hooks/use-wallet-deposit';
 import { getBottomNavContentGap, getBottomNavOccludedHeight } from 'lib/constants/navigation';
 import { hapticFeedback } from 'lib/haptic-feedback';
 import { stripeService } from 'lib/services/stripe-service';
+import { trustSafetyStrings } from 'lib/strings/trust-safety';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
@@ -289,7 +291,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             </Text>
             <View style={styles.heldRow}>
               <MaterialIcons name="lock-outline" size={16} color={theme.textSecondary} />
-              <Text style={styles.heldText}>Held until you approve the work</Text>
+              <Text style={styles.heldText}>Held for in-app completion or dispute review</Text>
             </View>
           </View>
 
@@ -363,13 +365,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             )}
           </View>
 
-          {/* Reassurance copy is the first thing traded for room on a short
-            screen — the lock line above already carries the guarantee. */}
-          {!metrics.compact && (
-            <Text style={styles.body}>
-              If it doesn&apos;t work out, you can cancel and the money comes back to your wallet.
-            </Text>
-          )}
+          <TrustSafetyNotice message={trustSafetyStrings.posterHire} />
+          <Text style={styles.body}>
+            {trustSafetyStrings.paymentProtection} Refunds and releases depend on the bounty’s state and any dispute review.
+          </Text>
         </View>
         </ScrollView>
 

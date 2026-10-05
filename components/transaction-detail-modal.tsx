@@ -10,6 +10,8 @@ import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
 import type { Transaction } from "./transaction-history-screen"
 import { describeSettlement, mayDescribeAsPaid } from "../lib/utils/settlement-vocabulary"
+import { trustSafetyStrings } from "../lib/strings/trust-safety"
+import { TrustSafetyNotice } from "./ui/trust-safety-notice"
 
 const DEFAULT_TITLE = 'Transaction'
 
@@ -139,7 +141,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
       case "bounty_received":
         return `You received payment for the bounty "${title}"${counterparty ? ` from ${counterparty}` : ''}.`
       case "escrow":
-        return `Funds for "${title}" are held in escrow until the bounty is completed.`
+        return `Funds for "${title}" are held for in-app completion or dispute review.`
       case "release":
         // "Released" reads as "paid" to most people. It is only true in the
         // settlement sense when Stripe moved the money; for a v1 bounty nothing
@@ -158,7 +160,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
   const description = getTransactionDescription()
 
   const escrowStatusText: Record<string, string> = {
-    funded: 'Funds are held in escrow until bounty completion.',
+    funded: 'Funds are held for in-app completion or dispute review.',
     // Not "released to the hunter" — that implies the money reached them. It
     // reached their Bounty balance, which is a different claim (ADR 0001).
     released: mayDescribeAsPaid(transaction.details.settlementState)
@@ -307,6 +309,9 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
               </Text>
             </View>
           )}
+          <View style={s.detailSection}>
+            <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
+          </View>
         </ScrollView>
 
         <View style={s.actionsSection}>

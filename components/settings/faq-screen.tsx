@@ -6,6 +6,7 @@ import type { AppTheme } from '../../lib/themes/types';
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PLATFORM_FEE_DISPLAY } from 'lib/constants/fees';
+import { trustSafetyStrings } from 'lib/strings/trust-safety';
 
 interface FAQScreenProps { onBack: () => void }
 
@@ -20,7 +21,11 @@ const FAQS = [
   },
   {
     q: 'How does escrow work?',
-    a: 'When a poster accepts a hunter, the bounty amount is taken from the poster and held by Bounty — not paid out yet, and not still spendable by the poster. It is released to the hunter when the poster approves the finished work.',
+    a: 'Funding happens at posting or acceptance, as shown in the app. Funds handled through Bounty may be authorized or captured through Stripe and held for the job. An open listing is not proof of funding. Release depends on in-app completion and any dispute review.',
+  },
+  {
+    q: 'Can I pay or get paid outside Bounty?',
+    a: trustSafetyStrings.paymentProtection,
   },
   {
     q: 'What fees apply?',
@@ -28,7 +33,7 @@ const FAQS = [
   },
   {
     q: 'When do I get paid for work I finished?',
-    a: 'As soon as the poster approves your submitted work, the money moves from escrow into your Bounty wallet. From there you can cash out to a bank account or debit card from the Wallet tab. You verify your identity with Stripe once, before your first cash-out.',
+    a: 'Use Bounty’s completion and payment flow. Release and availability depend on processing, fraud checks, and any dispute review. Check Wallet for payment status and available funds. Cash-out requires Stripe payout setup; timing depends on Stripe and the receiving bank.',
   },
   {
     q: 'What if the poster never approves my work?',
@@ -36,7 +41,7 @@ const FAQS = [
   },
   {
     q: 'Can I cancel a bounty?',
-    a: 'Yes. An open bounty with no one accepted can be cancelled outright and any held funds are returned. Once a hunter is working, cancelling sends them a request rather than cancelling unilaterally, and an unresolved disagreement goes to dispute review.',
+    a: `You can request cancellation in the app. Once a hunter is working, cancellation sends them a request rather than cancelling unilaterally. ${trustSafetyStrings.escrowLimits}`,
   },
   {
     q: 'How do I report abuse?',

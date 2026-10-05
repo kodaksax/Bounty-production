@@ -40,6 +40,9 @@ import type { Attachment, FullConversation, Message } from '../../lib/types';
 import { getValidAvatarUrl } from '../../lib/utils/avatar-utils';
 import { getMediaKind, getMediaMimeType, mediaFileName } from '../../lib/utils/message-media';
 import { messagingStrings } from '../../lib/strings/messaging';
+import { ChatSafetyWarning } from '../../components/chat-safety-warning';
+import { useChatSendProtection, useChatSendScope } from '../../hooks/use-chat-send-protection';
+import { detectOffPlatformRisk, latestIncomingRisk } from '../../lib/utils/off-platform-risk';
 
 
 interface ChatDetailScreenProps {
@@ -95,6 +98,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
  const inputRef = useRef<TextInput>(null);
+ const sendInFlight = useRef(false);
 
 
  const listRef = useRef<FlatList<Message>>(null);
@@ -103,6 +107,14 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
  // newest-first; `mergedMessages` stays oldest-first for everything else.
  const listData = useMemo(() => [...mergedMessages].reverse(), [mergedMessages]);
  const typingUsersRef = useTypingIndicator(conversation.realConversationId);
+ const confirmSend = useChatSendProtection(conversation.realConversationId);
+ const captureSendScope = useChatSendScope(conversation.realConversationId);
+ const composerRisk = useMemo(() => detectOffPlatformRisk(inputText), [inputText]);
+ const incomingRisk = useMemo(() => latestIncomingRisk(mergedMessages,
+   message => currentUserId !== null && message.senderId !== currentUserId &&
+     (!message.conversationId || message.conversationId === conversation.realConversationId ||
+       !!conversation.backingConversationIds?.includes(message.conversationId))
+ ), [mergedMessages, currentUserId, conversation.realConversationId, conversation.backingConversationIds]);
 
 
  // Wait for currentUserId to resolve before picking a participant — while
@@ -141,7 +153,9 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
    mediaUrl?: string | null,
    replyTo?: string | null
  ) => {
-   await sendMessage(text, mediaUrl, replyTo);
+   if (!(await sendMessage(text, mediaUrl, replyTo))) {
+     throw new Error('Failed to send message');
+   }
    // Offset 0 is the newest message in an inverted list.
    setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
  };
@@ -168,6 +182,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
 
  const handleSend = async () => {
+   if (sendInFlight.current) return;
    const textToSend = inputText.trim();
    const attachment = pendingAttachment;
    // Only ever send the remote URL — `requireRemote` guarantees one exists on
@@ -176,18 +191,24 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
    const mediaUrl = attachment?.remoteUri ?? null;
    const quoted = replyingTo;
    if (!textToSend && !mediaUrl) return;
-
-   setInputText('');
-   setPendingAttachment(null);
-   setReplyingTo(null);
-   setShowEmojiPicker(false);
+   sendInFlight.current = true;
+   const isCurrentSend = captureSendScope();
    try {
+     if (!await confirmSend(textToSend) || !isCurrentSend()) return;
+     setInputText('');
+     setPendingAttachment(null);
+     setReplyingTo(null);
+     setShowEmojiPicker(false);
      await handleSendMessage(textToSend, mediaUrl, quoted?.id ?? null);
    } catch {
      // Restore the composer so nothing the user typed or picked is lost.
-     setInputText(inputText);
-     setPendingAttachment(attachment);
-     setReplyingTo(quoted);
+     if (isCurrentSend()) {
+       setInputText(inputText);
+       setPendingAttachment(attachment);
+       setReplyingTo(quoted);
+     }
+   } finally {
+     sendInFlight.current = false;
    }
  };
 
@@ -391,13 +412,19 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
    return (
      <View>
        {isTyping && <TypingIndicator userName={conversation.name} />}
-       {/* Off-platform liability notice: always the last thing under the newest message. */}
-       <Text style={s.disclaimer} accessibilityRole="text">
-         {messagingStrings.offPlatformDisclaimer}
-       </Text>
+       {incomingRisk ? (
+         <ChatSafetyWarning risk={incomingRisk.risk} onReport={() => {
+           setSelectedMessageId(incomingRisk.message.id);
+           setShowReportModal(true);
+         }} />
+       ) : (
+         <Text style={s.disclaimer} accessibilityRole="text">
+           {messagingStrings.offPlatformDisclaimer}
+         </Text>
+       )}
      </View>
    );
- }, [typingUsersRef, conversation.name, s.disclaimer]);
+ }, [typingUsersRef, conversation.name, s.disclaimer, incomingRisk]);
 
 
 
@@ -508,6 +535,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
          {/* Message Input */}
          <View style={s.inputContainer}>
+           <ChatSafetyWarning risk={composerRisk} />
            {/* Message being replied to */}
            {replyingTo && (
              <View style={s.replyRow} accessibilityLabel={`Replying to ${senderLabelFor(replyingTo.senderId)}`}>

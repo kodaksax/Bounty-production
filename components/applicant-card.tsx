@@ -4,6 +4,7 @@ import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { markApplicantProfileViewed } from '../lib/analytics/sessionFlags';
+import { trustSafetyStrings } from '../lib/strings/trust-safety';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
@@ -170,7 +171,7 @@ export const ApplicantCard = memo(function ApplicantCard({
 
     Alert.alert(
       `Choose ${applicantName}?`,
-      `They start work right away and the other applicants are declined. ${moneyLine}`,
+      `Once acceptance succeeds, they can start work and the other applicants are declined. ${moneyLine}\n\n${trustSafetyStrings.posterHire}`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Choose hunter', style: 'default', onPress: runAccept },

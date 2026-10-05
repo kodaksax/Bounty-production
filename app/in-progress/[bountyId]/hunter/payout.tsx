@@ -14,6 +14,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RateCounterpartyCard } from '../../../../components/rate-counterparty-card';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
+import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
+import { trustSafetyStrings } from '../../../../lib/strings/trust-safety';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import { completionService } from '../../../../lib/services/completion-service';
@@ -186,7 +188,7 @@ export default function HunterPayoutScreen() {
     if (bountyHoldsUnreleasedEscrow(bounty)) {
       Alert.alert(
         'Cannot Delete',
-        'This bounty still holds escrowed funds. Cancel it first to refund the money, then delete it.',
+        `This bounty still holds escrowed funds. Request cancellation before deleting it. ${trustSafetyStrings.escrowLimits}`,
         [{ text: 'OK' }]
       );
       return;
@@ -333,6 +335,9 @@ export default function HunterPayoutScreen() {
         </View>
 
         {/* Payout Status */}
+        {!bounty.is_for_honor && (
+          <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
+        )}
         {!isPaidOut ? (
           <View style={styles.waitingPanel}>
             <MaterialIcons name="hourglass-empty" size={32} color="#fbbf24" />
@@ -344,7 +349,7 @@ export default function HunterPayoutScreen() {
                     bounty.amount
                   ).net.toFixed(
                     2
-                  )} is released from escrow into your wallet. You'll be notified — nothing to do until then.`}
+                  )} can be released through Bounty. Processing or dispute review may delay payment. You'll be notified of updates.`}
             </Text>
             {reviewDeadline && (
               <View style={styles.deadlineRow} accessibilityRole="text">
@@ -366,20 +371,21 @@ export default function HunterPayoutScreen() {
             {/* Success Panel */}
             <View style={styles.successPanel}>
               <MaterialIcons name="check-circle" size={48} color="#059669" />
-              <Text style={styles.successTitle}>Payout Released!</Text>
+              <Text style={styles.successTitle}>
+                {bounty.is_for_honor ? 'Completed for Honor' : 'Bounty Completed'}
+              </Text>
               <Text style={styles.successText}>
-                Congratulations! The poster has approved your work and released the payment.
+                {bounty.is_for_honor
+                  ? 'The poster has approved your work.'
+                  : 'The bounty is marked complete. Check Wallet for payment status and available funds.'}
               </Text>
               {!bounty.is_for_honor && (
                 <View style={styles.payoutAmountCard}>
-                  <Text style={styles.payoutLabel}>Paid to you</Text>
-                  {/* The NET, not the bounty amount. This card used to print
-                      the gross and call it "Added to your wallet balance",
-                      which disagreed with the wallet by the service fee. */}
+                  <Text style={styles.payoutLabel}>Net bounty amount</Text>
                   <Text style={styles.payoutAmount}>
                     ${calculateHunterEarnings(bounty.amount).net.toFixed(2)}
                   </Text>
-                  <Text style={styles.payoutSubtext}>Added to your wallet balance</Text>
+                  <Text style={styles.payoutSubtext}>Availability depends on payment status</Text>
                 </View>
               )}
               {bounty.is_for_honor && (
