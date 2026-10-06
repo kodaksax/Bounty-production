@@ -1,6 +1,7 @@
 /**
  * Onboarding Founder Note
- * The last screen of onboarding. Posters arrive straight from role selection;
+ * The last screen of onboarding. Posters arrive from the poster profile step
+ * (app/onboarding/poster-profile.tsx);
  * hunters arrive after payout setup (app/onboarding/payouts.tsx), from both
  * the "Skip for now" path and the Connect return path — payouts.tsx passes
  * this route as `returnTo`, so finishing or backing out of Stripe both land
@@ -60,6 +61,7 @@ import {
   FounderNoteCrosshair,
 } from '../../components/onboarding/FounderNoteCrosshair';
 import { useAccessibleAnimation } from '../../hooks/use-accessible-animation';
+import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useCompleteOnboarding } from '../../hooks/useCompleteOnboarding';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
@@ -118,6 +120,7 @@ function quoteSegments(quote: string, phrases: readonly string[]) {
 export default function FounderNoteScreen() {
   const insets = useSafeAreaInsets();
   const { data: onboardingData } = useOnboarding();
+  const { profile } = useAuthProfile();
   const { complete, isLoading: isCompleting } = useCompleteOnboarding('/tabs/bounty-app');
   const { prefersReducedMotion } = useAccessibleAnimation();
   const { theme } = useAppThemeContext();
@@ -126,6 +129,13 @@ export default function FounderNoteScreen() {
   const quote = useMemo(() => founderNoteStrings.quoteLines.join('\n'), []);
   const spokenQuote = useMemo(() => founderNoteStrings.quoteLines.join(' '), []);
   const segments = useMemo(() => quoteSegments(quote, founderNoteStrings.highlights), [quote]);
+  // First name only: the poster profile step (poster-profile.tsx) leaves it in
+  // the draft; hunters skip that step, so fall back to the profile's display
+  // name. Never the username — "Thank you, maya_r92." reads as a system
+  // message, not a note. With no name the line is left out entirely.
+  const firstName = (onboardingData.displayName || profile?.display_name || '')
+    .trim()
+    .split(/\s+/)[0];
   const signatureLine = useMemo(
     () => `${founderNoteStrings.signatureDash} ${founderNoteStrings.signature}`,
     []
@@ -345,6 +355,12 @@ export default function FounderNoteScreen() {
             setQuoteCenterY(y + height / 2);
           }}
         >
+          {firstName ? (
+            <Text style={styles.greeting} accessibilityRole="text">
+              {founderNoteStrings.greeting(firstName)}
+            </Text>
+          ) : null}
+
           {/* The full quote, rendered invisible, reserves the block's final
               size so the typed copy below doesn't reflow the layout — and so
               the centred text doesn't crawl as lines fill in. */}
@@ -478,6 +494,14 @@ function makeStyles(theme: AppTheme) {
       textAlign: 'center',
     },
     quoteGhost: { opacity: 0 },
+    greeting: {
+      fontFamily: 'SpaceMono',
+      fontSize: 19,
+      lineHeight: 32,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      marginBottom: spacing.xl,
+    },
     crosshair: { marginTop: spacing['2xl'] },
     caret: {
       fontFamily: 'SpaceMono',

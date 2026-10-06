@@ -13,6 +13,8 @@
  */
 
 export const founderNoteStrings = {
+  /** Shown above the quote when the user has given a name. */
+  greeting: (firstName: string) => `Thank you, ${firstName}.`,
   quoteLines: [
     'the reason people struggle in life',
     'is the disconnect between',

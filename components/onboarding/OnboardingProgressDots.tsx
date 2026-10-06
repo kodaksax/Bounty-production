@@ -11,10 +11,12 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 /**
  * Steps in the onboarding funnel, and so the total every screen's dots show:
  * sign up (app/auth/sign-up-form.tsx, or app/onboarding/username.tsx) -> style
- * -> location -> role select -> payouts. The founder note
+ * -> location -> role select -> payouts (hunters) or poster profile (posters).
+ * The founder note
  * (app/onboarding/founder-note.tsx) closes the flow and is deliberately
- * unnumbered — it asks for nothing — and payouts renders no dots of its own,
- * but it is a step the user passes through, so it counts here.
+ * unnumbered — it asks for nothing. Payouts renders no dots of its own, but
+ * it is a step the user passes through, so it counts here; poster profile
+ * fills the same last slot for posters.
  *
  * One constant, not a per-screen totalStepsFor(): the flow used to run two
  * lengths (poster/hunter branches were a step longer than the generic path)

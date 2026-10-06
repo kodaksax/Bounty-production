@@ -4,7 +4,9 @@
  * Hunters go to payout setup (app/onboarding/payouts.tsx): they are the side
  * that gets paid, so the Stripe Connect step is about their own earnings.
  *
- * Posters skip it. Posting, funding and hiring never touch Connect: the
+ * Posters go to the poster profile step (app/onboarding/poster-profile.tsx)
+ * instead: name, photo and bio, which hunters see before taking a bounty.
+ * They skip payouts because posting, funding and hiring never touch Connect: the
  * reward is held from the wallet when they choose a hunter, and refunds go
  * back to that wallet. Connect is needed only to move a balance out to a
  * bank, and the withdraw flow asks for it at that moment. Asking a new payer
@@ -17,7 +19,7 @@
  */
 export type OnboardingRole = 'poster' | 'hunter';
 
-export const POSTER_NEXT_STEP_AFTER_ROLE = '/onboarding/founder-note' as const;
+export const POSTER_NEXT_STEP_AFTER_ROLE = '/onboarding/poster-profile' as const;
 export const HUNTER_NEXT_STEP_AFTER_ROLE = '/onboarding/payouts' as const;
 
 export function nextStepAfterRole(role: OnboardingRole) {
