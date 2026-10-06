@@ -25,6 +25,7 @@ import { useAdmin } from '../../lib/admin-context'
 import { ROUTES } from '../../lib/routes'
 import { screenNameForBountyAppTab } from '../../lib/analytics/screen-name'
 import { trackScreenView } from '../../lib/analytics/screen-tracking'
+import { ReplayMask } from '../../components/replay-mask'
 import { API_TIMEOUTS } from '../../lib/config/network'
 import { authProfileService } from '../../lib/services/auth-profile-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
@@ -362,7 +363,9 @@ function BountyAppInner() {
 
         {activeScreen === "wallet" && (
           <FadeInScreen>
-            <WalletScreen onBack={() => setActiveScreen("bounty")} />
+            <ReplayMask>
+              <WalletScreen onBack={() => setActiveScreen("bounty")} />
+            </ReplayMask>
           </FadeInScreen>
         )}
         {activeScreen === "postings" && (
@@ -382,6 +385,7 @@ function BountyAppInner() {
         )}
         {activeScreen === "messages" && (
           <FadeInScreen>
+          <ReplayMask>
           <InboxScreen
             initialTab={pendingInitialTab ?? paramInitialTab}
             onBack={() => setActiveScreen("bounty")}
@@ -389,6 +393,7 @@ function BountyAppInner() {
             setActiveScreen={setActiveScreen}
             onBountyAccepted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a bounty is accepted
           />
+          </ReplayMask>
           </FadeInScreen>
         )}
 

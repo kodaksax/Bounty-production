@@ -24,6 +24,7 @@ import { generateInitials } from '../../../lib/services/supabase-messaging'
 import type { Conversation } from "../../../lib/types"
 import { buildVisibleConversationRows, type ConversationRow } from "../../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "../chat-detail-screen"
+import { withReplayMask } from '../../../components/replay-mask';
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -327,10 +328,6 @@ export function MessengerScreen({
   )
 }
 
-export default MessengerScreen;
-      
-        
-  
 
 interface ConversationItemProps {
   conversation: Conversation
@@ -467,3 +464,5 @@ function GroupAvatar() {
     </View>
   )
 }
+
+export default withReplayMask(MessengerScreen);

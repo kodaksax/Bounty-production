@@ -20,6 +20,7 @@ import type { BountyDispute } from '../../lib/types'
 import { getCurrentUserId } from '../../lib/utils/data-utils'
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../lib/utils/dispute-helpers'
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding'
+import { withReplayMask } from '../../components/replay-mask';
 
 type CommentItem = {
   id: string
@@ -40,7 +41,7 @@ type EvidenceItem = {
   createdAt: string
 }
 
-export default function DisputeDetailScreen() {
+function DisputeDetailScreen() {
   const { disputeId } = useLocalSearchParams<{ disputeId: string }>()
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -786,3 +787,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 })
+
+export default withReplayMask(DisputeDetailScreen);
