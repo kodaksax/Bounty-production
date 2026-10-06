@@ -150,6 +150,12 @@ verify_jwt = true
 [functions.webhooks]
 verify_jwt = false
 
+# app-link: public marketing redirect (guerilla/share links) clicked by
+# anonymous visitors who have no Supabase session. Reads no user data and
+# uses no service-role key; it only mints a Branch link and 302s to it.
+[functions.app-link]
+verify_jwt = false
+
 # admin-verifications-list: handles its own auth via supabaseAdmin.auth.getUser(token)
 # and gates on the admin role claim. Without this override the gateway can
 # reject valid user JWTs before the function is reached, preventing admins
