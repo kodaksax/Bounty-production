@@ -5,6 +5,35 @@ import { cacheDirectory, copyTo, readAsBase64, writeBase64ToFile } from '../util
 
 const STORAGE_PREFIX = 'attachment-cache-'
 
+const MIME_TYPE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+  'image/bmp': '.bmp',
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+  'video/x-m4v': '.m4v',
+  'video/webm': '.webm',
+  'video/x-msvideo': '.avi',
+  'application/pdf': '.pdf',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'text/plain': '.txt',
+  'application/rtf': '.rtf',
+}
+
+function withMimeExtension(path: string, contentType?: string): string {
+  const mimeType = contentType?.split(';')[0].trim().toLowerCase()
+  const extension = mimeType ? MIME_TYPE_EXTENSIONS[mimeType] : undefined
+  const filename = path.split('/').pop() || ''
+  if (!extension || !filename || /\.[a-z0-9]{1,10}$/i.test(filename)) return path
+  return `${path}${extension}`
+}
+
 // Use shared supabase client exported from lib/supabase.ts. That client is
 // configured to persist auth and will include the user's access token when
 // signed in. This ensures uploads are performed as the authenticated user and
@@ -42,19 +71,20 @@ export const storageService = {
    */
   async uploadFile(fileUri: string, options: UploadOptions): Promise<UploadResult> {
     const { bucket, path, onProgress, contentType } = options
+    const uploadPath = withMimeExtension(path, contentType)
 
     try {
       // If Supabase is configured, try uploading there first
       if (supabaseClient) {
-        return await this._uploadToSupabase(fileUri, bucket, path, onProgress, contentType)
+        return await this._uploadToSupabase(fileUri, bucket, uploadPath, onProgress, contentType)
       } else {
         console.error('[StorageService] Supabase not configured, using AsyncStorage fallback')
-        return await this._saveToAsyncStorage(fileUri, path)
+        return await this._saveToAsyncStorage(fileUri, uploadPath)
       }
     } catch (error) {
       console.error('[StorageService] Upload failed, trying AsyncStorage fallback:', error)
       // Fallback to AsyncStorage if Supabase upload fails
-      return await this._saveToAsyncStorage(fileUri, path)
+      return await this._saveToAsyncStorage(fileUri, uploadPath)
     }
   },
 
