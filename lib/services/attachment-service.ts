@@ -58,6 +58,7 @@ export const attachmentService = {
       const result = await storageService.uploadFile(attachment.uri, {
         bucket,
         path: filePath,
+        contentType: attachment.mimeType,
         onProgress: (progress) => {
           // Map storage progress to 20-90% range
           onProgress?.(0.2 + progress * 0.7)
