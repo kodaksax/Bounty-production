@@ -99,6 +99,9 @@ describe('local off-platform risk detection', () => {
     expect(detectOffPlatformRisk(
       '{"ciphertext":"Pay me through Venmo @hunter","nonce":"abc","senderPublicKey":"key"}'
     )).toBe('payment');
+    expect(detectOffPlatformRisk(
+      '{"ciphertext":"call me 410 555 0123","nonce":"abc","senderPublicKey":"key"}'
+    )).toBe('contact');
   });
 
   it.each(Object.values(trustSafetyStrings))('does not flag shared protection guidance: %s', text => {
