@@ -73,6 +73,8 @@ export interface UsePayoutMethodsResult {
   refresh: () => Promise<void>;
   /** Opens the user's Stripe Express Dashboard (via a fresh Login Link) so they can add, remove, or set the default bank account/debit card. Refreshes the list on return. */
   openPayoutDashboard: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  prepareAccountReplacement: () => Promise<{ ok: true; replacementId: string } | { ok: false; error: string }>;
+  cancelAccountReplacement: () => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 export function usePayoutMethods(): UsePayoutMethodsResult {
@@ -176,6 +178,37 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
     }
   }, [authHeaders, refresh]);
 
+  const prepareAccountReplacement = useCallback(async () => {
+    if (!session?.access_token) return { ok: false as const, error: 'Sign in before replacing your payout account.' };
+    try {
+      const response = await fetch(`${API_BASE_URL}/connect/prepare-account-replacement`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ confirmed: true }),
+      });
+      const data = await response.json();
+      if (!response.ok || typeof data?.replacementId !== 'string') {
+        return { ok: false as const, error: data?.error ?? 'Could not prepare replacement. Please retry or cancel the pending replacement.' };
+      }
+      return { ok: true as const, replacementId: data.replacementId as string };
+    } catch {
+      return { ok: false as const, error: 'Could not reach the server. Retry to resume the same replacement, or cancel the pending replacement.' };
+    }
+  }, [session?.access_token, authHeaders]);
+
+  const cancelAccountReplacement = useCallback(async () => {
+    if (!session?.access_token) return { ok: false as const, error: 'Sign in before canceling replacement.' };
+    try {
+      const response = await fetch(`${API_BASE_URL}/connect/cancel-account-replacement`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok) return { ok: false as const, error: data?.error ?? 'Could not cancel replacement. Please retry.' };
+      await refresh();
+      return { ok: true as const };
+    } catch {
+      return { ok: false as const, error: 'Could not reach the server. Please retry cancellation.' };
+    }
+  }, [session?.access_token, authHeaders, refresh]);
+
   const hasInstantEligibleCard = useMemo(
     () => debitCards.some(c => c.instantEligible),
     [debitCards]
@@ -199,5 +232,7 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
     error,
     refresh,
     openPayoutDashboard,
+    prepareAccountReplacement,
+    cancelAccountReplacement,
   };
 }

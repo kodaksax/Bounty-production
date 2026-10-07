@@ -170,6 +170,7 @@ async function syncConnectAccountToProfile(
     .from('profiles')
     .select('stripe_connect_onboarded_at')
     .eq('id', userId)
+    .eq('stripe_connect_account_id', account.id)
     .maybeSingle();
 
   if (readError) {
@@ -198,7 +199,8 @@ async function syncConnectAccountToProfile(
     update.stripe_connect_onboarded_at = new Date().toISOString();
   }
 
-  const { error: updateError } = await supabase.from('profiles').update(update).eq('id', userId);
+  const { data: updatedProfile, error: updateError } = await supabase.from('profiles').update(update)
+    .eq('id', userId).eq('stripe_connect_account_id', account.id).select('id').maybeSingle();
 
   if (updateError) {
     console.error('[webhooks] Failed to sync Connect account to profile', {
@@ -206,7 +208,9 @@ async function syncConnectAccountToProfile(
       accountId: account.id,
       error: updateError,
     });
+    throw updateError;
   }
+  if (!updatedProfile) return;
 
   // v3 re-check: a hunter who finished onboarding may have approved bounties
   // parked in awaiting_hunter_onboarding. Move them back to 'authorized' so
@@ -415,7 +419,7 @@ async function handleUndeliveredPayout(
 ): Promise<void> {
   console.log(`[webhooks] Payout ${outcome}: ${payout.id}, reason: ${payout.failure_code}`);
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: activeProfile, error: profileError } = await supabase
     .from('profiles')
     .select('id')
     .eq('stripe_connect_account_id', accountId)
@@ -429,9 +433,18 @@ async function handleUndeliveredPayout(
     throw profileError;
   }
 
+  let profile = activeProfile;
   if (!profile) {
-    console.warn(`[webhooks] No profile found for Connect account ${accountId}`);
-    return;
+    const { data: historical, error: historicalError } = await supabase
+      .from('wallet_transactions').select('user_id')
+      .eq('type', 'withdrawal').eq('stripe_payout_id', payout.id)
+      .eq('stripe_connect_account_id', accountId).maybeSingle();
+    if (historicalError) throw historicalError;
+    if (!historical) {
+      console.warn(`[webhooks] No exact historical withdrawal found for Connect account ${accountId}`);
+      return;
+    }
+    profile = { id: historical.user_id };
   }
 
   const candidateTx = await findCandidateWithdrawalTx(supabase, profile.id, payout);
@@ -656,7 +669,8 @@ async function handleUndeliveredPayout(
       payout_failed_at: new Date().toISOString(),
       payout_failure_code: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
     })
-    .eq('id', profile.id);
+    .eq('id', profile.id)
+    .eq('stripe_connect_account_id', accountId);
   if (payoutFlagError) {
     console.error('[webhooks] Failed to flag profile payout_failed_at', {
       profileId: profile.id,
@@ -2610,7 +2624,7 @@ Deno.serve(async (req: Request) => {
         console.log(`[webhooks] Payout paid: ${payout.id} for $${payout.amount / 100}`);
 
         if (paidAccountId) {
-          const { data: paidProfile, error: paidProfileError } = await supabase
+          const { data: activePaidProfile, error: paidProfileError } = await supabase
             .from('profiles')
             .select('id')
             .eq('stripe_connect_account_id', paidAccountId)
@@ -2622,6 +2636,15 @@ Deno.serve(async (req: Request) => {
               error: paidProfileError,
             });
             throw paidProfileError;
+          }
+          let paidProfile = activePaidProfile;
+          if (!paidProfile) {
+            const { data: historical, error: historicalError } = await supabase
+              .from('wallet_transactions').select('user_id')
+              .eq('type', 'withdrawal').eq('stripe_payout_id', payout.id)
+              .eq('stripe_connect_account_id', paidAccountId).maybeSingle();
+            if (historicalError) throw historicalError;
+            if (historical) paidProfile = { id: historical.user_id };
           }
 
           if (paidProfile) {

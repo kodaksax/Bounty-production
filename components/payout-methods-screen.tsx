@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -36,6 +36,8 @@ interface PayoutMethodsScreenProps {
  */
 export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: PayoutMethodsScreenProps) {
   const [isOpeningDashboard, setIsOpeningDashboard] = useState(false);
+  const [isReplacing, setIsReplacing] = useState(false);
+  const replacingRef = useRef(false);
 
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -62,6 +64,35 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
     }
   };
 
+  const startReplacement = async () => {
+    if (replacingRef.current) return;
+    replacingRef.current = true;
+    setIsReplacing(true);
+    try {
+      const result = await payoutMethods.prepareAccountReplacement();
+      if (!result.ok) {
+        Alert.alert('Could not replace account', result.error);
+        return;
+      }
+      router.push({
+        pathname: '/wallet/connect/embedded-onboarding',
+        params: { replacementId: result.replacementId, source: 'account_replacement' },
+      } as Href);
+    } catch {
+      Alert.alert('Could not start setup', 'Retry to resume your pending replacement, or cancel it here to keep using your current account.');
+    } finally {
+      replacingRef.current = false;
+      setIsReplacing(false);
+    }
+  };
+
+  const confirmReplacement = () => Alert.alert(
+    'Replace your Stripe Express account?',
+    'Bounty will create a NEW Express account. This is not a bank change or a link to an existing Stripe account. You must complete identity and payout setup again. Your old account, wallet balance, and transaction history are preserved; no funds are moved. Replacement is blocked while funds, payouts, or financial operations are unresolved. Financial operations pause until you resume or cancel a pending replacement.',
+    [{ text: 'Keep current account', style: 'cancel' },
+      { text: 'Create new account', style: 'destructive', onPress: startReplacement }]
+  );
+
   return (
     <View style={s.container}>
       <View style={[s.header, { paddingTop: insets.top + 8 }]}>
@@ -73,6 +104,23 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
       </View>
 
       <ScrollView contentContainerStyle={s.content}>
+        <TouchableOpacity onPress={confirmReplacement} disabled={isReplacing || isOpeningDashboard}
+          style={[s.dashboardButton, isReplacing && s.dashboardButtonDisabled]}
+          accessibilityRole="button" accessibilityLabel="Replace Stripe account">
+          <Text style={s.dashboardButtonText}>{isReplacing ? 'Preparing replacement…' : 'Replace Stripe Account'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity disabled={isReplacing} style={s.paymentActivityLink}
+          accessibilityRole="button" accessibilityLabel="Cancel pending account replacement"
+          onPress={async () => {
+            const result = await payoutMethods.cancelAccountReplacement();
+            if (!result.ok) Alert.alert('Could not cancel replacement', result.error);
+            else {
+              await eligibility.refresh();
+              Alert.alert('Pending replacement canceled', 'Your active account is unchanged. An account that has already been replaced cannot be restored here; continue onboarding for the new account.');
+            }
+          }}>
+          <Text style={s.paymentActivityLinkText}>Cancel pending account replacement</Text>
+        </TouchableOpacity>
         {isLoading ? (
           <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 24 }} />
         ) : (

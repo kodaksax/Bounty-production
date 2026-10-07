@@ -27,6 +27,16 @@
     "ratings": "trg_ratings_guard"
   },
   "protected": {
+    "connect_account_operations": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
+    "connect_account_replacements": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
     "bounties": {
       "policies": [
         {

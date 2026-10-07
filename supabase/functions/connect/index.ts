@@ -36,6 +36,14 @@ import {
 } from '../_shared/payout-state.ts';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
+import {
+  reserveAccountOperation,
+  finishAccountOperation,
+  hasNonzeroStripeBalance,
+  isDefinitiveStripeRejection,
+  isDefinitiveDatabaseRejection,
+  AccountOperationBlockedError,
+} from '../_shared/connect-account-operations.ts';
 
 // stripe@14's bundled types for Balance.InstantAvailable omit `net_available`,
 // even though the live API returns it (see
@@ -603,6 +611,10 @@ function mapPlatformError(error: unknown): {
   status: number;
   retryable: boolean;
 } {
+  if (error instanceof AccountOperationBlockedError) return {
+    error: 'Payout account is busy, has changed, or needs reconciliation. Resume or cancel pending replacement; if this persists, contact support before retrying.',
+    code: error.code, status: 409, retryable: true,
+  };
   const type = (error as { type?: string })?.type ?? '';
 
   // Platform credential / permission problems. The hunter cannot fix these and
@@ -721,13 +733,14 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
   // attempt. Returning the original result rather than paying out twice is the
   // whole point — a retried request must never move money a second time.
   if (idempotencyKey) {
-    const { data: existing } = await supabase
+    const { data: existing, error: replayError } = await supabase
       .from('wallet_transactions')
       .select('id, stripe_payout_id, stripe_connect_account_id, amount, status, payout_method')
       .eq('user_id', userId)
       .eq('type', 'withdrawal')
       .eq('idempotency_key', idempotencyKey)
       .maybeSingle();
+    if (replayError) return reply({ error: 'Could not verify withdrawal history. No payout was attempted; please retry.', code: 'history_unavailable' }, 503);
 
     if (existing) {
       const e = existing as WalletTransaction & {
@@ -1055,6 +1068,10 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
 
   // The payout itself. This is the ONLY money movement in this handler: funds
   // already in the connected account go out to the user's bank or card.
+  const accountOperation = await reserveAccountOperation(
+    supabase, userId, accountId, 'native_payout',
+    idempotencyKey ? `native:${idempotencyKey}` : `native:${requestId}`
+  );
   let payout: Stripe.Payout;
   try {
     payout = await stripe.payouts.create(
@@ -1065,6 +1082,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
         ...(destinationId ? { destination: destinationId } : {}),
         metadata: {
           user_id: userId,
+          ...(!idempotencyKey ? { account_operation_id: accountOperation } : {}),
           purpose: method === 'instant' ? 'instant_cash_out' : 'standard_withdrawal',
           ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
         },
@@ -1081,10 +1099,13 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
               amountCents,
               method,
             })
-          : undefined,
+          : `native_payout_${accountOperation}`,
       }
     );
   } catch (payoutError) {
+    if (isDefinitiveStripeRejection(payoutError)) {
+      await finishAccountOperation(supabase, accountOperation);
+    }
     const errInfo = payoutError as { code?: string; type?: string; message?: string };
     console.error(`${log} payout creation failed`, {
       userId,
@@ -1115,6 +1136,10 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     // genuine provider-failure exit from this function; every other error
     // return above happens before that call and must not carry the flag.
     const mapped = mapStripePayoutError(errInfo);
+    if (!isDefinitiveStripeRejection(payoutError)) return reply({
+      error: 'We could not confirm this payout. Further financial operations are blocked until it is reconciled. Contact support before retrying.',
+      code: 'account_operation_uncertain', stripeAttempted: true,
+    }, 503);
     return reply({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
   }
 
@@ -1155,6 +1180,7 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
         arrival_date: payout.arrival_date ?? null,
         idempotency_key: idempotencyKey ?? null,
         connect_native: true,
+        account_operation_id: accountOperation,
         ...(destinationCard
           ? {
               destination_card_id: destinationCard.id,
@@ -1173,13 +1199,19 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     // idempotency means both calls resolved to the SAME payout, so there is
     // nothing to reverse — report the winner.
     if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
-      const { data: winner } = await supabase
+      const { data: winner, error: winnerError } = await supabase
         .from('wallet_transactions')
-        .select('id, stripe_payout_id, status, payout_method')
+        .select('id, stripe_payout_id, stripe_connect_account_id, status, payout_method')
         .eq('user_id', userId)
         .eq('type', 'withdrawal')
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
+      if (winnerError || !winner || winner.stripe_payout_id !== payout.id ||
+        winner.stripe_connect_account_id !== accountId) return reply({
+        error: 'Could not match this payout to its history. Financial operations remain blocked; contact support.',
+        code: 'account_operation_uncertain',
+      }, 409);
+      await finishAccountOperation(supabase, accountOperation);
 
       const w = winner as
         | (WalletTransaction & { stripe_payout_id?: string; payout_method?: string })
@@ -1218,10 +1250,11 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       accountId,
       arrivalDate: payout.arrival_date ?? null,
       message: 'Withdrawal initiated.',
-      warning: 'Transaction history may take a moment to update.',
+      warning: 'Contact support to reconcile this payout before retrying. Further financial operations are blocked.',
     });
   }
 
+  await finishAccountOperation(supabase, accountOperation);
   await writePayoutAudit(supabase, {
     userId,
     event: 'withdrawal_completed',
@@ -1504,6 +1537,110 @@ Deno.serve(async (req: Request) => {
     }
     const appUrl = configuredAppUrl ?? 'http://localhost:8081';
 
+    // Prepare freezes financial operations but does not unlink anything.
+    // A lost prepare response is recovered by returning the pending row.
+    if (subPath === '/prepare-account-replacement') {
+      const body = await req.json().catch(() => ({}));
+      if (body.confirmed !== true) return jsonResponse({ error: 'Explicit confirmation required.' }, 400);
+      const { data: profile, error: profileError } = await supabase.from('profiles')
+        .select('stripe_connect_account_id').eq('id', userId).single();
+      if (profileError || !profile?.stripe_connect_account_id) {
+        return jsonResponse({ error: 'Could not load your existing payout account.' }, 409);
+      }
+      const oldAccount = await stripe.accounts.retrieve(profile.stripe_connect_account_id);
+      if (oldAccount.type !== 'express' || !oldAccount.country) {
+        return jsonResponse({ error: 'Only an existing Express account can be replaced.' }, 409);
+      }
+      const { data, error } = await supabase.rpc('begin_connect_account_replacement', {
+        p_user_id: userId, p_account_id: oldAccount.id,
+        p_country: oldAccount.country, p_manual_payouts: CONNECT_MANUAL_PAYOUTS,
+      });
+      if (error || !data?.id) return jsonResponse({
+        error: 'Replacement is blocked by a financial operation, unresolved withdrawal, or funded bounty. Please finish it first or contact support.',
+        code: 'replacement_blocked',
+      }, 409);
+      return jsonResponse({ replacementId: data.id });
+    }
+
+    if (subPath === '/cancel-account-replacement') {
+      const { error } = await supabase.rpc('cancel_connect_account_replacement', { p_user_id: userId });
+      if (error) return jsonResponse({ error: 'Could not cancel replacement. Please retry.' }, 503);
+      return jsonResponse({ canceled: true });
+    }
+
+    if (subPath === '/replace-account') {
+      const body = await req.json().catch(() => ({}));
+      const { data: replacement, error: replacementError } = await supabase
+        .from('connect_account_replacements').select('*')
+        .eq('id', body.replacementId).eq('user_id', userId).single();
+      if (replacementError || !replacement || replacement.state === 'canceled') {
+        return jsonResponse({ error: 'Replacement not found or canceled. Return to Payout Methods.' }, 409);
+      }
+      let accountId = replacement.candidate_account_id as string | null;
+      if (replacement.state === 'pending') {
+        const oldAccount = await stripe.accounts.retrieve(replacement.old_account_id);
+        if (oldAccount.type !== 'express') return jsonResponse({ error: 'Existing account is not Express.' }, 409);
+        const balance = await stripe.balance.retrieve({ stripeAccount: oldAccount.id });
+        if (hasNonzeroStripeBalance(balance)) return jsonResponse({
+          error: 'Your old Stripe account still has funds or a negative balance. Settle it before replacing. You can cancel this replacement and keep using the old account.',
+          code: 'old_account_has_balance',
+        }, 409);
+        // Scan all pages: pending and in_transit payouts must not be abandoned.
+        for await (const payout of stripe.payouts.list({ limit: 100 }, { stripeAccount: oldAccount.id })) {
+          if (payout.status === 'pending' || payout.status === 'in_transit') return jsonResponse({
+            error: 'A payout on your old Stripe account is still processing. Wait for settlement or cancel this replacement.',
+            code: 'old_account_has_pending_payout',
+          }, 409);
+        }
+        if (!accountId) {
+          // Stripe keys expire after 24h. Never create a second account if the
+          // first create response was lost and its key may have expired.
+          if (Date.now() - Date.parse(replacement.created_at) >= 23 * 60 * 60 * 1000) {
+            return jsonResponse({
+              error: 'This replacement attempt expired. Cancel it and start again, or contact support to recover a previously created account.',
+              code: 'replacement_expired',
+            }, 409);
+          }
+          const candidate = await stripe.accounts.create({
+            type: 'express', country: replacement.country,
+            ...(replacement.email ? { email: replacement.email } : {}),
+            capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
+            business_type: 'individual',
+            metadata: { user_id: userId, replacement_id: replacement.id },
+            ...(replacement.manual_payouts
+              ? { settings: { payouts: { schedule: { interval: 'manual' as const } } } } : {}),
+          }, { idempotencyKey: `connect_replacement_${replacement.id}` });
+          accountId = candidate.id;
+          const { error: saveError } = await supabase.from('connect_account_replacements')
+            .update({ candidate_account_id: accountId }).eq('id', replacement.id)
+            .eq('user_id', userId).is('candidate_account_id', null);
+          if (saveError) return jsonResponse({ error: 'Could not save the new account. Retry this replacement; do not start another one.' }, 503);
+        }
+        const candidate = await stripe.accounts.retrieve(accountId);
+        if (candidate.type !== 'express' || candidate.metadata?.user_id !== userId ||
+          candidate.metadata?.replacement_id !== replacement.id) {
+          return jsonResponse({ error: 'Could not verify the replacement account. Contact support.' }, 409);
+        }
+        const { error: swapError } = await supabase.rpc('complete_connect_account_replacement', {
+          p_user_id: userId, p_replacement_id: replacement.id, p_candidate_account_id: accountId,
+        });
+        if (swapError) return jsonResponse({
+          error: 'Could not confirm replacement. Retry this same attempt or cancel it from Payout Methods.',
+        }, 409);
+      }
+      const { data: active, error: activeError } = await supabase.from('profiles')
+        .select('stripe_connect_account_id').eq('id', userId).single();
+      if (activeError || active?.stripe_connect_account_id !== accountId) {
+        return jsonResponse({ error: 'Your payout account changed. Return to Payout Methods.' }, 409);
+      }
+      const link = await stripe.accountLinks.create({
+        account: accountId!, type: 'account_onboarding',
+        refresh_url: `https://bountyfinder.app/wallet/connect/refresh?replacementId=${encodeURIComponent(replacement.id)}`,
+        return_url: 'https://bountyfinder.app/wallet/connect/return',
+      });
+      return jsonResponse({ url: link.url, accountId, replacementId: replacement.id });
+    }
+
     // POST /connect/create-account-link
     if (subPath === '/create-account-link') {
       const body = await req.json();
@@ -1521,11 +1658,12 @@ Deno.serve(async (req: Request) => {
       const accountLinkType: 'account_onboarding' | 'account_update' =
         linkType === 'account_update' ? 'account_update' : 'account_onboarding';
 
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('stripe_connect_account_id, email, full_name, phone, zip_code')
         .eq('id', userId)
         .single();
+      if (profileError || !profile) return jsonResponse({ error: 'Could not load your payout profile. Please retry.' }, 503);
 
       const profileRow = profile as Profile | null;
       let accountId = profileRow?.stripe_connect_account_id;
@@ -1551,6 +1689,9 @@ Deno.serve(async (req: Request) => {
             postal_code: profileRow?.zip_code ?? undefined,
           },
         };
+        const creationOperation = await reserveAccountOperation(
+          supabase, userId, null, 'account_creation', `initial_link:${requestId}`
+        );
         const account = await stripe.accounts.create({
           type: 'express',
           ...(accountCountry ? { country: accountCountry } : {}),
@@ -1574,12 +1715,20 @@ Deno.serve(async (req: Request) => {
           },
           metadata: { user_id: userId },
           ...manualPayoutSettings,
+        }, { idempotencyKey: `connect_initial_${creationOperation}` }).catch(async error => {
+          // Creating an unlinked account moves no money; a create failure may
+          // release this gate. A failed profile save below may not.
+          await finishAccountOperation(supabase, creationOperation);
+          throw error;
         });
         accountId = account.id;
-        await supabase
+        const { data: saved, error: saveError } = await supabase
           .from('profiles')
           .update({ stripe_connect_account_id: accountId })
-          .eq('id', userId);
+          .eq('id', userId).is('stripe_connect_account_id', null)
+          .select('id').single();
+        if (saveError || !saved) return jsonResponse({ error: 'Account setup changed. Refresh and retry.' }, 409);
+        await finishAccountOperation(supabase, creationOperation);
         console.log(`[connect] Created new account: ${accountId} for user ${userId}`, {
           manualPayouts: CONNECT_MANUAL_PAYOUTS,
         });
@@ -1698,11 +1847,12 @@ Deno.serve(async (req: Request) => {
           ? body.components
           : { account_onboarding: true, payments: true, payouts: true };
 
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('stripe_connect_account_id, email')
         .eq('id', userId)
         .single();
+      if (profileError || !profile) return jsonResponse({ error: 'Could not load your payout profile. Please retry.' }, 503);
 
       const profileRow = profile as Profile | null;
       let accountId = profileRow?.stripe_connect_account_id;
@@ -1711,6 +1861,9 @@ Deno.serve(async (req: Request) => {
         const requestedCountry =
           typeof body.country === 'string' ? body.country.trim().toUpperCase() : '';
         const country = /^[A-Z]{2}$/.test(requestedCountry) ? requestedCountry : 'US';
+        const creationOperation = await reserveAccountOperation(
+          supabase, userId, null, 'account_creation', `initial_session:${requestId}`
+        );
         const account = await stripe.accounts.create({
           type: 'express',
           country,
@@ -1722,12 +1875,16 @@ Deno.serve(async (req: Request) => {
           business_type: 'individual',
           metadata: { user_id: userId },
           ...manualPayoutSettings,
+        }, { idempotencyKey: `connect_initial_${creationOperation}` }).catch(async error => {
+          await finishAccountOperation(supabase, creationOperation);
+          throw error;
         });
         accountId = account.id;
         const { error: updateError } = await supabase
           .from('profiles')
           .update({ stripe_connect_account_id: accountId })
-          .eq('id', userId);
+          .eq('id', userId).is('stripe_connect_account_id', null)
+          .select('id').single();
         if (updateError) {
           console.error('[connect] Failed to persist stripe_connect_account_id', {
             userId,
@@ -1737,6 +1894,7 @@ Deno.serve(async (req: Request) => {
           // We created an orphan Stripe account; surface the error so the client retries.
           return jsonResponse({ error: 'Failed to save account. Please try again.' }, 500);
         }
+        await finishAccountOperation(supabase, creationOperation);
         console.log(`[connect] Created new Express account ${accountId} for user ${userId}`);
       }
 
@@ -1842,7 +2000,8 @@ Deno.serve(async (req: Request) => {
         const { error: updateError } = await supabase
           .from('profiles')
           .update(profileUpdates)
-          .eq('id', userId);
+          .eq('id', userId)
+          .eq('stripe_connect_account_id', account.id);
 
         if (updateError) {
           console.error('[connect] Failed to update profile during verify-onboarding', {
@@ -2011,13 +2170,14 @@ Deno.serve(async (req: Request) => {
       // Idempotency replay: if this key was already processed, return the
       // recorded withdrawal instead of creating a duplicate payout.
       if (idempotencyKey) {
-        const { data: existing } = await supabase
+        const { data: existing, error: replayError } = await supabase
           .from('wallet_transactions')
           .select('id, stripe_transfer_id, stripe_connect_account_id, amount, status')
           .eq('user_id', userId)
           .eq('type', 'withdrawal')
           .eq('idempotency_key', idempotencyKey)
           .maybeSingle();
+        if (replayError) return jsonResponse({ error: 'Could not verify withdrawal history. No transfer was attempted; please retry.' }, 503);
 
         if (existing) {
           const e = existing as WalletTransaction & { stripe_connect_account_id?: string };
@@ -2231,11 +2391,17 @@ Deno.serve(async (req: Request) => {
       }
 
       const reservationMetadata = {
+        account_operation_id: null as string | null,
         idempotency_key: idempotencyKey ?? null,
         destination_bank_account_id: destinationAccount.id,
         destination_bank_last4: destinationAccount.last4 ?? null,
         destination_bank_name: destinationAccount.bank_name ?? null,
       };
+      const accountOperation = await reserveAccountOperation(
+        supabase, userId, p.stripe_connect_account_id, 'legacy_withdrawal',
+        idempotencyKey ? `legacy:${idempotencyKey}` : `legacy:${requestId}`
+      );
+      reservationMetadata.account_operation_id = accountOperation;
       const { data: reservation, error: reservationError } = await supabase
         .rpc('begin_legacy_withdrawal', {
           p_user_id: userId,
@@ -2250,6 +2416,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (reservationError) {
+        if (isDefinitiveDatabaseRejection(reservationError)) await finishAccountOperation(supabase, accountOperation);
         const violatedConstraint = `${(reservationError as { message?: string }).message ?? ''} ${
           (reservationError as { details?: string }).details ?? ''
         }`;
@@ -2330,6 +2497,7 @@ Deno.serve(async (req: Request) => {
             destination: p.stripe_connect_account_id,
             metadata: {
               user_id: userId,
+              ...(!idempotencyKey ? { account_operation_id: accountOperation } : {}),
               ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
             },
           },
@@ -2345,7 +2513,7 @@ Deno.serve(async (req: Request) => {
                   purpose: 'standard',
                 }),
               }
-            : undefined
+            : { idempotencyKey: `legacy_transfer_${accountOperation}` }
         );
       } catch (stripeError) {
         const errInfo = stripeError as { code?: string; type?: string; message?: string };
@@ -2368,6 +2536,10 @@ Deno.serve(async (req: Request) => {
           errorMessage: errInfo?.message ?? null,
           detail: { transactionId, stage: 'transfer_create' },
         });
+        if (!isDefinitiveStripeRejection(stripeError)) return jsonResponse({
+          error: 'We could not confirm the transfer. Your withdrawal remains reserved and financial operations are blocked. Contact support before retrying.',
+          code: 'account_operation_uncertain', stripeAttempted: true,
+        }, 503);
         const { data: rollbackResult, error: refundError } = await supabase
           .rpc('fail_legacy_withdrawal', {
             p_transaction_id: transactionId,
@@ -2403,6 +2575,9 @@ Deno.serve(async (req: Request) => {
             },
             500
           );
+        }
+        if (isDefinitiveStripeRejection(stripeError)) {
+          await finishAccountOperation(supabase, accountOperation);
         }
         const mapped = mapStripeTransferError(errInfo);
         return jsonResponse(
@@ -2451,7 +2626,7 @@ Deno.serve(async (req: Request) => {
                   amountCents: validation.amountCents,
                   method: 'standard',
                 })
-              : undefined,
+              : `legacy_payout_${accountOperation}`,
           }
         );
       } catch (payoutCreateError) {
@@ -2521,7 +2696,7 @@ Deno.serve(async (req: Request) => {
           newBalance,
           estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
           message: 'Transfer initiated. Funds typically arrive in 1-2 business days.',
-          warning: 'Transaction history may take a moment to update.',
+          warning: 'Contact support to reconcile this withdrawal before retrying; financial operations remain blocked.',
         });
       }
 
@@ -2531,6 +2706,7 @@ Deno.serve(async (req: Request) => {
         payoutId: standardPayout?.id ?? null,
         transactionId: (transaction as WalletTransaction).id,
       });
+      if (standardPayout) await finishAccountOperation(supabase, accountOperation);
 
       return jsonResponse({
         transferId: transfer.id,
@@ -2543,6 +2719,7 @@ Deno.serve(async (req: Request) => {
         newBalance,
         estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
         message: 'Transfer initiated. Funds typically arrive in 1-2 business days.',
+        ...(!standardPayout ? { warning: 'The payout could not be confirmed. Contact support before retrying; financial operations remain blocked.' } : {}),
       });
     }
 
@@ -2599,6 +2776,9 @@ Deno.serve(async (req: Request) => {
       const p = profile as Profile | null;
       if (!p?.stripe_connect_account_id) {
         return jsonResponse({ error: 'Stripe Connect account not found' }, 400);
+      }
+      if ((t as WalletTransaction & { stripe_connect_account_id?: string }).stripe_connect_account_id !== p.stripe_connect_account_id) {
+        return jsonResponse({ error: 'This withdrawal belongs to an old payout account. Contact support; it cannot be retried to a different account.' }, 409);
       }
 
       const amount = Math.abs(t.amount);
@@ -2676,6 +2856,10 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Insufficient balance for retry' }, 400);
       }
 
+      const accountOperation = await reserveAccountOperation(
+        supabase, userId, p.stripe_connect_account_id, 'withdrawal_retry',
+        `retry:${transactionId}:${retryCount + 1}:${requestId}`
+      );
       const { error: retryReservationError } = await supabase
         .rpc('retry_failed_withdrawal', {
           p_transaction_id: transactionId,
@@ -2685,6 +2869,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (retryReservationError) {
+        if (isDefinitiveDatabaseRejection(retryReservationError)) await finishAccountOperation(supabase, accountOperation);
         const violatedConstraint = `${(retryReservationError as { message?: string }).message ?? ''} ${
           (retryReservationError as { details?: string }).details ?? ''
         }`;
@@ -2744,6 +2929,10 @@ Deno.serve(async (req: Request) => {
           errorMessage: retryErrInfo?.message ?? null,
           detail: { transactionId, stage: 'retry_transfer_create', retryAttempt: retryCount + 1 },
         });
+        if (!isDefinitiveStripeRejection(stripeError)) return jsonResponse({
+          error: 'We could not confirm the retry transfer. Your withdrawal remains reserved and financial operations are blocked. Contact support before retrying.',
+          code: 'account_operation_uncertain', stripeAttempted: true,
+        }, 503);
         const { data: rollbackResult, error: retryRefundError } = await supabase
           .rpc('fail_legacy_withdrawal', {
             p_transaction_id: transactionId,
@@ -2783,6 +2972,9 @@ Deno.serve(async (req: Request) => {
             },
             500
           );
+        }
+        if (isDefinitiveStripeRejection(stripeError)) {
+          await finishAccountOperation(supabase, accountOperation);
         }
         const mapped = mapStripeTransferError(
           stripeError as { code?: string; type?: string; message?: string }
@@ -2877,13 +3069,14 @@ Deno.serve(async (req: Request) => {
           transactionId,
           status: 'pending',
           message: 'Transfer retry initiated successfully.',
-          warning: 'Transaction history may take a moment to update.',
+          warning: 'Contact support to reconcile this withdrawal before retrying; financial operations remain blocked.',
         });
       }
 
       console.log(
         `[connect] Transfer retry successful: ${transfer.id} for transaction ${transactionId}`
       );
+      if (retryPayout) await finishAccountOperation(supabase, accountOperation);
 
       return jsonResponse({
         success: true,
@@ -2892,6 +3085,7 @@ Deno.serve(async (req: Request) => {
         transactionId: (retriedTx as WalletTransaction | null)?.id ?? transactionId,
         status: 'pending',
         message: 'Transfer retry initiated successfully.',
+        ...(!retryPayout ? { warning: 'The payout could not be confirmed. Contact support before retrying; financial operations remain blocked.' } : {}),
       });
     }
 
@@ -3126,7 +3320,7 @@ Deno.serve(async (req: Request) => {
       // client generates a fresh key per attempt (never reused across
       // /transfer and /instant-payout), so this is safe to share.
       if (idempotencyKey) {
-        const { data: existing } = await supabase
+        const { data: existing, error: replayError } = await supabase
           .from('wallet_transactions')
           .select(
             'id, stripe_transfer_id, stripe_payout_id, stripe_connect_account_id, amount, status, payout_method'
@@ -3135,6 +3329,7 @@ Deno.serve(async (req: Request) => {
           .eq('type', 'withdrawal')
           .eq('idempotency_key', idempotencyKey)
           .maybeSingle();
+        if (replayError) return jsonResponse({ error: 'Could not verify withdrawal history. No transfer was attempted; please retry.' }, 503);
 
         if (existing) {
           const e = existing as WalletTransaction & {
@@ -3437,12 +3632,18 @@ Deno.serve(async (req: Request) => {
 
       const estimatedFeeCents = estimateInstantFeeCents(validation.amountCents);
       const instantReservationMetadata = {
+        account_operation_id: null as string | null,
         idempotency_key: idempotencyKey ?? null,
         destination_card_id: destinationCard.id,
         destination_card_last4: destinationCard.last4 ?? null,
         destination_card_brand: destinationCard.brand ?? null,
         estimated_fee_cents: estimatedFeeCents,
       };
+      const accountOperation = await reserveAccountOperation(
+        supabase, userId, p.stripe_connect_account_id, 'legacy_instant',
+        idempotencyKey ? `instant:${idempotencyKey}` : `instant:${requestId}`
+      );
+      instantReservationMetadata.account_operation_id = accountOperation;
       const { data: reservation, error: reservationError } = await supabase
         .rpc('begin_legacy_withdrawal', {
           p_user_id: userId,
@@ -3457,6 +3658,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (reservationError) {
+        if (isDefinitiveDatabaseRejection(reservationError)) await finishAccountOperation(supabase, accountOperation);
         const violatedConstraint = `${(reservationError as { message?: string }).message ?? ''} ${
           (reservationError as { details?: string }).details ?? ''
         }`;
@@ -3552,7 +3754,7 @@ Deno.serve(async (req: Request) => {
                   purpose: 'instant',
                 }),
               }
-            : undefined
+            : { idempotencyKey: `instant_transfer_${accountOperation}` }
         );
       } catch (stripeError) {
         const errInfo = stripeError as { code?: string; type?: string; message?: string };
@@ -3574,6 +3776,10 @@ Deno.serve(async (req: Request) => {
           errorMessage: errInfo?.message ?? null,
           detail: { transactionId, stage: 'transfer_create' },
         });
+        if (!isDefinitiveStripeRejection(stripeError)) return jsonResponse({
+          error: 'We could not confirm the instant transfer. Your withdrawal remains reserved and financial operations are blocked. Contact support before retrying.',
+          code: 'account_operation_uncertain', stripeAttempted: true,
+        }, 503);
         const { data: rollbackResult, error: refundError } = await supabase
           .rpc('fail_legacy_withdrawal', {
             p_transaction_id: transactionId,
@@ -3609,6 +3815,9 @@ Deno.serve(async (req: Request) => {
             },
             500
           );
+        }
+        if (isDefinitiveStripeRejection(stripeError)) {
+          await finishAccountOperation(supabase, accountOperation);
         }
         const mapped = mapStripeTransferError(errInfo);
         return jsonResponse(
@@ -3649,7 +3858,7 @@ Deno.serve(async (req: Request) => {
                   amountCents: validation.amountCents,
                   method: 'instant',
                 })
-              : undefined,
+              : `instant_payout_${accountOperation}`,
           }
         );
       } catch (payoutError) {
@@ -3716,7 +3925,7 @@ Deno.serve(async (req: Request) => {
         // deterministically so a retry replays instead of paying twice.
         let fallbackPayout: Stripe.Payout | null = null;
         let fallbackPayoutError: string | null = null;
-        if (isRecoverableInstantPayoutError(errInfo?.code)) {
+        if (isDefinitiveStripeRejection(payoutError) && isRecoverableInstantPayoutError(errInfo?.code)) {
           try {
             fallbackPayout = await stripe.payouts.create(
               {
@@ -3740,7 +3949,7 @@ Deno.serve(async (req: Request) => {
                       amountCents: validation.amountCents,
                       method: 'standard',
                     })
-                  : undefined,
+                  : `instant_fallback_${accountOperation}`,
               }
             );
           } catch (fallbackError) {
@@ -3800,6 +4009,9 @@ Deno.serve(async (req: Request) => {
           );
         }
 
+        if (!fallbackTxError && fallbackPayout && isDefinitiveStripeRejection(payoutError)) {
+          await finishAccountOperation(supabase, accountOperation);
+        }
         await writePayoutAudit(supabase, {
           userId,
           event: fallbackPayout ? 'stripe_payout_created' : 'withdrawal_failed',
@@ -3830,7 +4042,8 @@ Deno.serve(async (req: Request) => {
           fellBackToStandard: true,
           message: fallbackPayout
             ? "Instant Cash Out isn't available for this card, so your withdrawal is on its way as a standard bank transfer. It typically arrives in 1-2 business days, and your balance was deducted only once."
-            : "Your withdrawal is being processed. It's taking longer than usual to confirm with our payments provider — we're on it, and your balance was deducted only once.",
+            : 'We could not confirm the payout. Financial operations remain blocked; contact support before retrying.',
+          ...(fallbackTxError ? { warning: 'The payout record could not be confirmed. Contact support for reconciliation before retrying.' } : {}),
         });
       }
 
@@ -3893,7 +4106,7 @@ Deno.serve(async (req: Request) => {
           accountId: p.stripe_connect_account_id,
           newBalance,
           message: 'Instant Cash Out initiated.',
-          warning: 'Transaction history may take a moment to update.',
+          warning: 'Contact support to reconcile this withdrawal before retrying; financial operations remain blocked.',
         });
       }
 
@@ -3903,6 +4116,7 @@ Deno.serve(async (req: Request) => {
         payoutId: payout.id,
         transactionId: (transaction as WalletTransaction).id,
       });
+      await finishAccountOperation(supabase, accountOperation);
 
       return jsonResponse({
         transferId: transfer.id,

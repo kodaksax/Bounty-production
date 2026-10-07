@@ -7,6 +7,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import type { UseConnectEligibilityResult } from '../../hooks/use-connect-eligibility';
 import type { UsePayoutMethodsResult } from '../../hooks/use-payout-methods';
 import { PayoutMethodsScreen } from '../../components/payout-methods-screen';
+import { Alert } from 'react-native';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: jest.fn(() => ({ top: 0, bottom: 0, left: 0, right: 0 })),
@@ -31,6 +32,8 @@ function makePayoutMethods(overrides: Partial<UsePayoutMethodsResult> = {}): Use
     error: null,
     refresh: jest.fn(),
     openPayoutDashboard: jest.fn().mockResolvedValue({ ok: true }),
+    prepareAccountReplacement: jest.fn().mockResolvedValue({ ok: true, replacementId: 'replacement' }),
+    cancelAccountReplacement: jest.fn().mockResolvedValue({ ok: true }),
     ...overrides,
   };
 }
@@ -148,5 +151,48 @@ describe('PayoutMethodsScreen', () => {
     );
     fireEvent.press(getByText('View Payment Activity'));
     expect(mockPush).toHaveBeenCalledWith('/wallet/payments');
+  });
+
+  it('requires explicit confirmation even when payout methods and dashboard are unavailable', async () => {
+    const alert = jest.spyOn(Alert, 'alert');
+    const prepareAccountReplacement = jest.fn().mockResolvedValue({ ok: true, replacementId: 'replacement' });
+    const { getByText } = render(
+      <PayoutMethodsScreen onBack={jest.fn()}
+        payoutMethods={makePayoutMethods({ error: 'unavailable', isLoading: true, prepareAccountReplacement })}
+        eligibility={makeEligibility({ error: 'dashboard unavailable' })} />
+    );
+    fireEvent.press(getByText('Replace Stripe Account'));
+    expect(prepareAccountReplacement).not.toHaveBeenCalled();
+    const [, message, buttons] = alert.mock.calls[alert.mock.calls.length - 1];
+    expect(message).toContain('not a bank change');
+    expect(message).toContain('no funds are moved');
+    expect(buttons?.[0].style).toBe('cancel');
+    await act(async () => { await buttons?.[1].onPress?.(); });
+    expect(prepareAccountReplacement).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/wallet/connect/embedded-onboarding',
+      params: { replacementId: 'replacement', source: 'account_replacement' },
+    });
+    alert.mockRestore();
+  });
+
+  it('allows replacement retry after a server error', async () => {
+    const alert = jest.spyOn(Alert, 'alert');
+    const prepareAccountReplacement = jest.fn()
+      .mockResolvedValueOnce({ ok: false, error: 'Please retry the same replacement' })
+      .mockResolvedValueOnce({ ok: true, replacementId: 'replacement' });
+    const { getByText } = render(
+      <PayoutMethodsScreen onBack={jest.fn()} payoutMethods={makePayoutMethods({ prepareAccountReplacement })}
+        eligibility={makeEligibility()} />
+    );
+    fireEvent.press(getByText('Replace Stripe Account'));
+    let buttons = alert.mock.calls[alert.mock.calls.length - 1][2];
+    await act(async () => { await buttons?.[1].onPress?.(); });
+    expect(alert).toHaveBeenCalledWith('Could not replace account', 'Please retry the same replacement');
+    fireEvent.press(getByText('Replace Stripe Account'));
+    buttons = alert.mock.calls[alert.mock.calls.length - 1][2];
+    await act(async () => { await buttons?.[1].onPress?.(); });
+    expect(prepareAccountReplacement).toHaveBeenCalledTimes(2);
+    alert.mockRestore();
   });
 });

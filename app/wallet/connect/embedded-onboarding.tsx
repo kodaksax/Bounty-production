@@ -114,8 +114,10 @@ export default function ConnectOnboardingScreen() {
     country?: string;
     returnTo?: string;
     source?: string;
+    replacementId?: string;
   }>();
   const entryCountry = typeof params.country === 'string' ? params.country : undefined;
+  const replacementId = typeof params.replacementId === 'string' ? params.replacementId : undefined;
   const returnTo = typeof params.returnTo === 'string' && params.returnTo ? params.returnTo : undefined;
   const { session, isLoading: authLoading } = useAuthContext();
   const { theme } = useAppThemeContext();
@@ -300,13 +302,14 @@ export default function ConnectOnboardingScreen() {
       }
 
       // 1. Ask our edge function for a fresh, short-lived Stripe Account Link.
-      const linkRes = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
+      const linkRes = await fetch(`${API_BASE_URL}/connect/${replacementId ? 'replace-account' : 'create-account-link'}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+          ...(replacementId ? { replacementId } : {}),
           type: 'account_onboarding',
           returnUrl: CONNECT_RETURN_URL,
           refreshUrl: CONNECT_REFRESH_URL,
@@ -342,11 +345,14 @@ export default function ConnectOnboardingScreen() {
         result = await WebBrowser.openAuthSessionAsync(url, CONNECT_RETURN_URL, {
           // Sharing cookies gives users a smoother flow if they've already
           // authenticated with Stripe or their bank in Safari/Chrome.
-          preferEphemeralSession: false,
+          preferEphemeralSession: !!replacementId,
         });
       } catch (err) {
         launchFailureReason = 'open_auth_session_failed';
         throw err;
+      }
+      if (replacementId && (result.type === 'locked' || result.type === 'opened')) {
+        throw new Error('The secure browser could not start. Close any other browser session and try again. Your new account setup can be resumed safely.');
       }
 
       // Track the funnel step regardless of final verification outcome —
@@ -361,7 +367,7 @@ export default function ConnectOnboardingScreen() {
           /* analytics is best-effort */
         }
         try {
-          await supabase
+          if (!replacementId) await supabase
             .from('profiles')
             .update({ stripe_connect_onboarding_complete: true })
             .eq('id', userId);
@@ -394,7 +400,7 @@ export default function ConnectOnboardingScreen() {
       setCanRetry(launchRetryable);
       setPhase('error');
     }
-  }, [entryCountry, params.source, session?.access_token, session?.user?.id, verifyOnboardingStatus]);
+  }, [entryCountry, params.source, replacementId, session?.access_token, session?.user?.id, verifyOnboardingStatus]);
 
   useEffect(() => {
     if (authLoading) return;
