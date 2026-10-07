@@ -28,6 +28,11 @@ function sanitizeFileName(rawName: string): string {
   return truncated || 'file'
 }
 
+/** True for a `type/subtype` MIME string (not a bare picker kind like 'image'). */
+function isMimeType(value: string | undefined): value is string {
+  return !!value && /^[\w.+-]+\/[\w.+-]+$/.test(value.split(';')[0].trim())
+}
+
 /**
  * Attachment upload service using Supabase Storage with AsyncStorage fallback.
  */
@@ -58,7 +63,11 @@ export const attachmentService = {
       const result = await storageService.uploadFile(attachment.uri, {
         bucket,
         path: filePath,
-        contentType: attachment.mimeType,
+        // Only forward a real `type/subtype` MIME. Pickers can report a bare
+        // kind like 'image', and an override disables storage-service's
+        // URI-extension sniffing, so a bogus value would reach the bucket's
+        // allowed_mime_types check and be rejected.
+        contentType: isMimeType(attachment.mimeType) ? attachment.mimeType : undefined,
         onProgress: (progress) => {
           // Map storage progress to 20-90% range
           onProgress?.(0.2 + progress * 0.7)

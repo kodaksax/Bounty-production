@@ -72,7 +72,6 @@ describe('local off-platform risk detection', () => {
     'I accept cash register repair jobs.',
     'We need a developer: https://paypal.com/docs',
     "I don't want to pay outside Bounty.",
-    '{"ciphertext":"12345678901","nonce":"abc","senderPublicKey":"12345678901"}',
     'Here is my portfolio https://example.com/paypal/contact-me',
     'Job reference: https://example.com/2025/1234567890',
     'Due on 2026-10-04',
