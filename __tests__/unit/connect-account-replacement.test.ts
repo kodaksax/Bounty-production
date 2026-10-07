@@ -360,8 +360,8 @@ describe('durable reservation and migration contracts', () => {
     expect(releases.indexOf("'bounty_release_v2'")).toBeLessThan(releases.indexOf('transfer = await stripe.transfers.create('));
     const admin = fs.readFileSync(path.join(__dirname, '../../supabase/functions/admin-withdrawals/index.ts'), 'utf8');
     expect(admin.indexOf("'admin_retry'")).toBeLessThan(admin.indexOf("rpc('retry_failed_withdrawal'"));
-    expect(admin).toContain('stripe_connect_account_id !== p.stripe_connect_account_id');
-    expect(source).toContain('stripe_connect_account_id !== p.stripe_connect_account_id');
+    expect(admin).toContain('withdrawalAccountMatches(supabase, targetUserId, t.stripe_connect_account_id, p.stripe_connect_account_id)');
+    expect(source).toContain('withdrawalAccountMatches(supabase, userId, t.stripe_connect_account_id, p.stripe_connect_account_id)');
   });
 
   test('webhook writes use account CAS and old payouts resolve exact historical identities', () => {
