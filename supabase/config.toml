@@ -140,6 +140,11 @@ verify_jwt = false
 [functions.bounty-payments]
 verify_jwt = false
 
+# The website's poster bounty page. Authenticates the poster's own session
+# itself (and answers CORS preflight, which carries no token).
+[functions.poster-web]
+verify_jwt = false
+
 # Diagnostic access is authenticated so it cannot disclose Stripe mode or
 # account configuration to unauthenticated callers.
 [functions.stripe-mode-check]

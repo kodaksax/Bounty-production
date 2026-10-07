@@ -11,6 +11,8 @@ import {
   selectFallbackCandidates,
   type FallbackPushOutcome,
   truncateMessage,
+  webBountyLink,
+  withWebPosterCta,
 } from '../../supabase/functions/process-notification/email-fallback'
 
 describe('isPosterFallbackType', () => {
@@ -175,6 +177,35 @@ describe('applicantListLink', () => {
   test('points at the poster applicant-management route', () => {
     expect(applicantListLink('bountyexpo-workspace://', 'b1')).toBe('bountyexpo-workspace://postings/b1')
     expect(applicantListLink('https://example.com/app', 'b1')).toBe('https://example.com/app/postings/b1')
+  })
+})
+
+describe('webBountyLink', () => {
+  test('points at the website bounty page', () => {
+    expect(webBountyLink('https://www.bountyfinder.net/bounty', 'b1')).toBe('https://www.bountyfinder.net/bounty?id=b1')
+    expect(webBountyLink('https://www.bountyfinder.net/bounty/', 'a b')).toBe('https://www.bountyfinder.net/bounty?id=a%20b')
+  })
+})
+
+describe('withWebPosterCta', () => {
+  const base = 'https://www.bountyfinder.net/bounty'
+  test('adds a review button to review_needed', () => {
+    expect(withWebPosterCta('review_needed', { bountyId: 'b1', type: 'review_needed' }, base)).toEqual({
+      bountyId: 'b1',
+      type: 'review_needed',
+      ctaUrl: 'https://www.bountyfinder.net/bounty?id=b1',
+      ctaLabel: 'Review the work',
+    })
+    expect(withWebPosterCta('review_needed', { bounty_id: 'b2' }, base).ctaUrl).toBe(`${base}?id=b2`)
+  })
+  test("keeps a producer's own button", () => {
+    const data = { bountyId: 'b1', ctaUrl: 'https://x.example', ctaLabel: 'Go' }
+    expect(withWebPosterCta('review_needed', data, base)).toBe(data)
+  })
+  test('leaves other types and id-less payloads alone', () => {
+    const data = { bountyId: 'b1' }
+    expect(withWebPosterCta('message', data, base)).toBe(data)
+    expect(withWebPosterCta('review_needed', {}, base)).toEqual({})
   })
 })
 

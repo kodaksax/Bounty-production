@@ -78,6 +78,39 @@ export function applicantListLink(base: string, bountyId: string): string {
   return `${normalized}postings/${encodeURIComponent(bountyId)}`
 }
 
+/**
+ * The website page where a poster manages one bounty (backed by the
+ * poster-web function). An https link, unlike the app scheme, survives mail
+ * clients that strip non-http(s) links, and works for a poster who posted on
+ * the web and never installed the app.
+ */
+export function webBountyLink(base: string, bountyId: string): string {
+  return `${base.replace(/\/+$/, '')}?id=${encodeURIComponent(bountyId)}`
+}
+
+// Poster-facing blanket-fan-out types whose email gets a button to the web
+// bounty page when the producer did not supply one.
+const WEB_POSTER_CTA_LABELS: Record<string, string> = {
+  review_needed: 'Review the work',
+}
+
+/**
+ * Adds a web bounty-page button to a poster-facing email. A producer's own
+ * ctaUrl always wins; types not listed above, and payloads without a bounty
+ * id, are returned unchanged.
+ */
+export function withWebPosterCta(
+  type: string,
+  data: Record<string, unknown>,
+  webBase: string
+): Record<string, unknown> {
+  const label = WEB_POSTER_CTA_LABELS[type]
+  if (!label || typeof data.ctaUrl === 'string') return data
+  const bountyId = data.bountyId ?? data.bounty_id
+  if (typeof bountyId !== 'string' || !bountyId.trim()) return data
+  return { ...data, ctaUrl: webBountyLink(webBase, bountyId.trim()), ctaLabel: label }
+}
+
 export function buildPosterFallbackEmail(params: {
   bountyTitle: string | null
   applicantCount: number

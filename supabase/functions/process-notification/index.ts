@@ -11,7 +11,6 @@
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
-  applicantListLink,
   buildFallbackEmail,
   describeTicketError,
   fallbackDedupeKey,
@@ -20,6 +19,8 @@ import {
   isPosterFallbackType,
   selectFallbackCandidates,
   truncateMessage,
+  webBountyLink,
+  withWebPosterCta,
   type LegacyNotificationPreferences,
 } from './email-fallback.ts'
 
@@ -240,6 +241,11 @@ function extractInvalidTokens(chunkTokens: string[], expoResponseBody: unknown):
 // scheme; set to an HTTPS handoff once bountyfinder.app serves TLS, since some
 // mail clients (notably Gmail web) strip non-http(s) links.
 const APP_LINK_BASE = Deno.env.get('NOTIFICATION_APP_LINK_BASE') || 'bountyexpo-workspace://'
+
+// Where poster-facing email buttons point: the website's bounty page (backed by
+// the poster-web function), so a poster who posted on the web can act without
+// the app. Always https, so no mail client strips it.
+const WEB_BOUNTY_URL_BASE = Deno.env.get('WEB_BOUNTY_URL_BASE') || 'https://www.bountyfinder.net/bounty'
 
 // PostHog delivery-funnel instrumentation (notification_generated/sent/failed).
 // Same HTTP capture pattern as process-analytics-person/index.ts. Every event
@@ -528,7 +534,7 @@ Deno.serve(async (req: Request) => {
             type: notificationType,
             title: rows.title || '',
             body: rows.body || '',
-            data: outboxData,
+            data: withWebPosterCta(notificationType, outboxData, WEB_BOUNTY_URL_BASE),
           }),
         })
       } catch (e) {
@@ -813,7 +819,7 @@ Deno.serve(async (req: Request) => {
                   ...outboxData,
                   ...(posterFallback
                     ? {
-                        ctaUrl: applicantListLink(APP_LINK_BASE, bountyId),
+                        ctaUrl: bountyId ? webBountyLink(WEB_BOUNTY_URL_BASE, bountyId) : WEB_BOUNTY_URL_BASE,
                         ctaLabel: applicantCount === 1 ? 'Review applicant' : `Review ${applicantCount} applicants`,
                       }
                     : { ctaUrl: APP_LINK_BASE, ctaLabel: 'Find other bounties' }),
