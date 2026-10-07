@@ -213,6 +213,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
 
       // Process images (compress and resize) before upload
       let processedUri = assetUri
+      let uploadMimeType = mimeType
       if (assetKind === 'image' || (mimeType && mimeType.startsWith('image/'))) {
         setState(s => ({ ...s, message: 'Processing image…' }))
         try {
@@ -223,6 +224,10 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
             quality: 0.8,
           })
           processedUri = processed.uri
+          // processImage re-encodes to JPEG (its default format), so the
+          // picker's original type (HEIF, GIF, PNG, or a bare 'image' kind)
+          // no longer describes these bytes.
+          uploadMimeType = 'image/jpeg'
         } catch (e) {
           console.error('[usePortfolioUpload] image processing failed, using original:', e)
         }
@@ -244,7 +249,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
         id: `${Date.now()}`,
         name: name || 'portfolio-item',
         uri: processedUri,
-        mimeType: mimeType || undefined,
+        mimeType: uploadMimeType || undefined,
         size: undefined,
         status: 'uploading' as const,
       }

@@ -1,4 +1,5 @@
 import { storageService } from '../../../lib/services/storage-service';
+import { getMediaKind } from '../../../lib/utils/message-media';
 
 // Mock dependencies
 jest.mock('../../../lib/supabase', () => ({
@@ -251,6 +252,64 @@ describe('storage-service - Upload Optimizations', () => {
           contentType: 'image/png',
         })
       );
+    });
+
+    it('adds a MIME-derived extension to extensionless uploaded filenames', async () => {
+      supabase.storage.upload = jest.fn().mockResolvedValue({ data: {}, error: null });
+      supabase.storage.getPublicUrl = jest.fn().mockImplementation((path: string) => ({
+        data: { publicUrl: `https://example.com/${path}` },
+      }));
+      global.fetch = jest.fn().mockResolvedValue({
+        arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(1024)),
+      });
+
+      const [result] = await storageService.uploadFiles(['file://media-123'], {
+        bucket: 'attachments',
+        path: 'messages',
+        fileNames: ['media-123'],
+        contentTypes: ['image/jpeg'],
+      });
+
+      expect(result.url).toMatch(/\/messages\/\d+-0-media-123\.jpg$/);
+      expect(getMediaKind(result.url)).toBe('image');
+    });
+
+    it('adds a MIME-derived extension to single-file upload paths', async () => {
+      supabase.storage.upload = jest.fn().mockResolvedValue({ data: {}, error: null });
+      supabase.storage.getPublicUrl = jest.fn().mockImplementation((path: string) => ({
+        data: { publicUrl: `https://example.com/${path}` },
+      }));
+      global.fetch = jest.fn().mockResolvedValue({
+        arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(1024)),
+      });
+
+      const result = await storageService.uploadFile('file://media-123', {
+        bucket: 'attachments',
+        path: 'messages/media-123',
+        contentType: 'image/jpeg',
+      });
+
+      expect(result.url).toBe('https://example.com/messages/media-123.jpg');
+      expect(getMediaKind(result.url)).toBe('image');
+    });
+
+    it('does not duplicate an existing filename extension', async () => {
+      supabase.storage.upload = jest.fn().mockResolvedValue({ data: {}, error: null });
+      supabase.storage.getPublicUrl = jest.fn().mockImplementation((path: string) => ({
+        data: { publicUrl: `https://example.com/${path}` },
+      }));
+      global.fetch = jest.fn().mockResolvedValue({
+        arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(1024)),
+      });
+
+      const [result] = await storageService.uploadFiles(['file://photo.jpg'], {
+        bucket: 'attachments',
+        path: 'messages',
+        fileNames: ['photo.jpg'],
+        contentTypes: ['image/jpeg'],
+      });
+
+      expect(result.url).toMatch(/\/messages\/\d+-0-photo\.jpg$/);
     });
   });
 
