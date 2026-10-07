@@ -229,6 +229,10 @@ CREATE FUNCTION public.guard_withdrawal_account_identity()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_account text;
 BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.type = 'withdrawal'
+    AND OLD.stripe_connect_account_id IS DISTINCT FROM NEW.stripe_connect_account_id
+  THEN RAISE EXCEPTION 'Historical withdrawal payout account cannot be changed'; END IF;
+
   IF NEW.type = 'withdrawal' AND NEW.status = 'pending'
     AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
     SELECT stripe_connect_account_id INTO v_account FROM profiles WHERE id = NEW.user_id FOR UPDATE;
@@ -242,7 +246,7 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-CREATE TRIGGER guard_withdrawal_account_identity BEFORE INSERT OR UPDATE OF status ON public.wallet_transactions
+CREATE TRIGGER guard_withdrawal_account_identity BEFORE INSERT OR UPDATE OF status, stripe_connect_account_id ON public.wallet_transactions
   FOR EACH ROW EXECUTE FUNCTION public.guard_withdrawal_account_identity();
 
 REVOKE ALL ON FUNCTION public.reserve_connect_account_operation(uuid,text,text,text),

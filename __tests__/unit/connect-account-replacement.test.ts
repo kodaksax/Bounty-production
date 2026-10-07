@@ -53,6 +53,7 @@ function replacementHarness() {
   let saveFails = false;
   let operationActive = false;
   let walletRow: any = null;
+  let appUrl = 'https://bountyfinder.app';
   let handler: (request: Request) => Promise<Response>;
   const db: any = {
     auth: { getUser: jest.fn(async () => ({ data: { user: { id: 'user' } } })) },
@@ -135,7 +136,7 @@ function replacementHarness() {
     },
     Deno: {
       serve: (callback: typeof handler) => { handler = callback; },
-      env: { get: (key: string) => key === 'APP_URL' ? 'https://bountyfinder.app'
+      env: { get: (key: string) => key === 'APP_URL' ? appUrl
         : key === 'CONNECT_NATIVE_PAYOUTS' ? 'true' : 'test-config' },
     },
     crypto: { randomUUID: () => 'request' },
@@ -144,6 +145,7 @@ function replacementHarness() {
   return {
     db, stripe, profile, replacement,
     failSave: (value: boolean) => { saveFails = value; },
+    setAppUrl: (value: string) => { appUrl = value; },
     request: (body: unknown = { replacementId: replacement.id }, token = 'test-session', route = 'replace-account') =>
       handler(new Request('https://test.example/connect/' + route, {
         method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -187,9 +189,36 @@ describe('replacement account safety', () => {
     });
     expect(h.profile.balance).toBe(123);
     expect(h.stripe.accountLinks.create).toHaveBeenCalledWith(expect.objectContaining({
-      account: 'acct_new', return_url: 'https://bountyfinder.app/wallet/connect/return',
+      account: 'acct_new',
+      refresh_url: 'https://bountyfinder.app/wallet/connect/refresh?replacementId=replacement',
+      return_url: 'https://bountyfinder.app/wallet/connect/return',
     }));
   });
+
+  test('replacement callback URLs use the configured environment app URL', async () => {
+    const h = replacementHarness();
+    h.setAppUrl('https://staging.example');
+    expect((await h.request()).status).toBe(200);
+    expect(h.stripe.accountLinks.create).toHaveBeenCalledWith(expect.objectContaining({
+      refresh_url: 'https://staging.example/wallet/connect/refresh?replacementId=replacement',
+      return_url: 'https://staging.example/wallet/connect/return',
+    }));
+  });
+
+  test.each(['create-account-link', 'create-account-session'])(
+    '/%s keeps the account-creation reservation after an uncertain Stripe failure',
+    async route => {
+      const h = replacementHarness();
+      h.profile.stripe_connect_account_id = null;
+      h.replacement.state = 'canceled';
+      h.stripe.accounts.create.mockRejectedValue({ type: 'StripeConnectionError' });
+
+      expect((await h.request({}, 'test-session', route)).status).toBe(503);
+      expect(h.db.rpc).not.toHaveBeenCalledWith('finish_connect_account_operation', expect.anything());
+      expect((await h.request({}, 'test-session', route)).status).not.toBe(200);
+      expect(h.stripe.accounts.create).toHaveBeenCalledTimes(1);
+    }
+  );
 
   test('blocks pending payouts on later pages without creating or swapping accounts', async () => {
     const h = replacementHarness();
@@ -343,6 +372,26 @@ describe('durable reservation and migration contracts', () => {
     for (const field of ['stripe_connect_onboarded_at = NULL', 'stripe_connect_payouts_enabled = false',
       'stripe_connect_charges_enabled = false', 'stripe_connect_onboarding_complete = false',
       'stripe_connect_requirements = NULL', 'payout_failed_at = NULL']) expect(migration).toContain(field);
+  });
+
+  test('initial account creation keeps reservations on uncertain Stripe errors', () => {
+    const creationCatches = [...source.matchAll(
+      /\.catch\(async error => \{([\s\S]*?)\}\);/g
+    )].filter(([, body]) => body.includes('finishAccountOperation(supabase, creationOperation)'));
+    expect(creationCatches).toHaveLength(2);
+    for (const [, body] of creationCatches) {
+      expect(body).toContain('if (isDefinitiveStripeRejection(error))');
+      expect(body).toContain('throw error;');
+    }
+  });
+
+  test('withdrawal account identities cannot be rewritten after insertion', () => {
+    expect(migration).toContain(
+      'BEFORE INSERT OR UPDATE OF status, stripe_connect_account_id ON public.wallet_transactions'
+    );
+    expect(migration).toMatch(
+      /TG_OP = 'UPDATE' AND OLD\.type = 'withdrawal'[\s\S]*?OLD\.stripe_connect_account_id IS DISTINCT FROM NEW\.stripe_connect_account_id[\s\S]*?Historical withdrawal payout account cannot be changed/
+    );
   });
 
   test('every financial path reserves before moving money and stale retries retain their original identity', () => {

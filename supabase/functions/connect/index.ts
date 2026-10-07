@@ -1636,8 +1636,8 @@ Deno.serve(async (req: Request) => {
       }
       const link = await stripe.accountLinks.create({
         account: accountId!, type: 'account_onboarding',
-        refresh_url: `https://bountyfinder.app/wallet/connect/refresh?replacementId=${encodeURIComponent(replacement.id)}`,
-        return_url: 'https://bountyfinder.app/wallet/connect/return',
+        refresh_url: `${appUrl}/wallet/connect/refresh?replacementId=${encodeURIComponent(replacement.id)}`,
+        return_url: `${appUrl}/wallet/connect/return`,
       });
       return jsonResponse({ url: link.url, accountId, replacementId: replacement.id });
     }
@@ -1717,9 +1717,7 @@ Deno.serve(async (req: Request) => {
           metadata: { user_id: userId },
           ...manualPayoutSettings,
         }, { idempotencyKey: `connect_initial_${creationOperation}` }).catch(async error => {
-          // Creating an unlinked account moves no money; a create failure may
-          // release this gate. A failed profile save below may not.
-          await finishAccountOperation(supabase, creationOperation);
+          if (isDefinitiveStripeRejection(error)) await finishAccountOperation(supabase, creationOperation);
           throw error;
         });
         accountId = account.id;
@@ -1877,7 +1875,7 @@ Deno.serve(async (req: Request) => {
           metadata: { user_id: userId },
           ...manualPayoutSettings,
         }, { idempotencyKey: `connect_initial_${creationOperation}` }).catch(async error => {
-          await finishAccountOperation(supabase, creationOperation);
+          if (isDefinitiveStripeRejection(error)) await finishAccountOperation(supabase, creationOperation);
           throw error;
         });
         accountId = account.id;
