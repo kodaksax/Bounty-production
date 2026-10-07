@@ -1317,7 +1317,7 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '5');
+        const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '10');
         const platformFee = Math.round(((totalAmount * PLATFORM_FEE_PERCENT) / 100) * 100) / 100;
         const hunterAmount = Math.round((totalAmount - platformFee) * 100) / 100;
         const effectiveKey = idempotencyKey || `release_${bountyId}_${hunterId}`;

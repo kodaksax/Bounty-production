@@ -117,7 +117,7 @@ Deno.serve(async (req: Request) => {
     global: { headers: { Authorization: authHeader } },
   })
 
-  const feePercent = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '5')
+  const feePercent = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '10')
 
   // Loads a bounty only if the caller posted it. A bounty someone else posted
   // reads as not found, so ids cannot be probed.

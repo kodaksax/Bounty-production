@@ -17,29 +17,29 @@ import {
 } from '../../../lib/constants/fees';
 
 describe('platform fee constants', () => {
-  it('matches the server default (PLATFORM_FEE_PERCENT env, default 5)', () => {
+  it('matches the server default (PLATFORM_FEE_PERCENT env, default 10)', () => {
     // supabase/functions/wallet/index.ts, supabase/functions/bounty-payments/index.ts
-    // and services/api/src/services/completion-release-service.ts all default to 5.
-    expect(PLATFORM_FEE_PERCENT).toBe(5);
-    expect(PLATFORM_FEE_RATE).toBeCloseTo(0.05, 10);
+    // and services/api/src/services/completion-release-service.ts all default to 10.
+    expect(PLATFORM_FEE_PERCENT).toBe(10);
+    expect(PLATFORM_FEE_RATE).toBeCloseTo(0.1, 10);
   });
 
   it('renders a whole percent without a trailing decimal', () => {
-    expect(PLATFORM_FEE_DISPLAY).toBe('5%');
+    expect(PLATFORM_FEE_DISPLAY).toBe('10%');
   });
 });
 
 describe('calculateHunterEarnings', () => {
   it('splits a bounty into gross, fee and take-home', () => {
-    expect(calculateHunterEarnings(100)).toEqual({ gross: 100, fee: 5, net: 95 });
-    expect(calculateHunterEarnings(40)).toEqual({ gross: 40, fee: 2, net: 38 });
+    expect(calculateHunterEarnings(100)).toEqual({ gross: 100, fee: 10, net: 90 });
+    expect(calculateHunterEarnings(40)).toEqual({ gross: 40, fee: 4, net: 36 });
   });
 
   it('rounds the fee to cents the way the server does, so net always reconciles', () => {
     // Server: round2((amount * PERCENT) / 100), then amount - fee.
     const { gross, fee, net } = calculateHunterEarnings(10.99);
-    expect(fee).toBeCloseTo(0.55, 10);
-    expect(net).toBeCloseTo(10.44, 10);
+    expect(fee).toBeCloseTo(1.1, 10);
+    expect(net).toBeCloseTo(9.89, 10);
     expect(Math.round((fee + net) * 100) / 100).toBe(gross);
   });
 

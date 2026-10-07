@@ -2,7 +2,7 @@
  * Platform fee — the single client-side source of truth.
  *
  * This MUST track the server's `PLATFORM_FEE_PERCENT` env default, which is
- * read in three places and defaults to 5:
+ * read in three places and defaults to 10:
  *   - supabase/functions/wallet/index.ts       (internal wallet release)
  *   - supabase/functions/bounty-payments/index.ts (v2 / v3 release)
  *   - services/api/src/services/completion-release-service.ts
@@ -19,13 +19,13 @@
  * env can be tuned without a client release.
  */
 
-/** Platform service fee, as a percent (5 = 5%). Mirrors PLATFORM_FEE_PERCENT. */
-export const PLATFORM_FEE_PERCENT = 5;
+/** Platform service fee, as a percent (10 = 10%). Mirrors PLATFORM_FEE_PERCENT. */
+export const PLATFORM_FEE_PERCENT = 10;
 
-/** Same fee expressed as a rate (0.05). */
+/** Same fee expressed as a rate (0.1). */
 export const PLATFORM_FEE_RATE = PLATFORM_FEE_PERCENT / 100;
 
-/** "5%" — for display. Avoids "5.0%" for whole numbers. */
+/** "10%" — for display. Avoids "5.0%" for whole numbers. */
 export const PLATFORM_FEE_DISPLAY = `${
   Number.isInteger(PLATFORM_FEE_PERCENT)
     ? PLATFORM_FEE_PERCENT

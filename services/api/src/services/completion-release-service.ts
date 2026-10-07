@@ -27,7 +27,7 @@ export interface CompletionReleaseResponse {
 export class CompletionReleaseService {
   private stripe: Stripe | null = null;
   private isConfigured: boolean = false;
-  private readonly DEFAULT_PLATFORM_FEE_PERCENTAGE = 5; // 5%
+  private readonly DEFAULT_PLATFORM_FEE_PERCENTAGE = 10; // 10%
 
   constructor() {
     const secretKey = process.env.STRIPE_SECRET_KEY;

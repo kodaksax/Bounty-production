@@ -267,7 +267,7 @@ Deno.serve(async (req: Request) => {
   const userId = user.id;
   const userEmail = sanitizeText(user.email ?? '');
 
-  const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '5');
+  const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '10');
 
   try {
     // ───────────────────────────────────────────────────────────────────────

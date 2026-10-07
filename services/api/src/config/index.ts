@@ -221,7 +221,7 @@ export const config = {
     secretKey: getRequired('STRIPE_SECRET_KEY'),
     webhookSecret: getOptional('STRIPE_WEBHOOK_SECRET', ''),
     connectClientId: getOptional('STRIPE_CONNECT_CLIENT_ID', ''),
-    platformFeePercent: getNumber('STRIPE_PLATFORM_FEE_PERCENT', 5),
+    platformFeePercent: getNumber('STRIPE_PLATFORM_FEE_PERCENT', 10),
     // Low-priority optimization: create Stripe customers eagerly at signup instead of lazily on
     // first payment. Toggle this flag to reduce first-payment latency. Defaults to false (safe
     // fallback – lazy creation on first payment is preserved when disabled).
