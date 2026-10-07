@@ -25,9 +25,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -39,6 +36,7 @@ import {
   ONBOARDING_TOTAL_STEPS,
   OnboardingProgressDots,
 } from '../../components/onboarding/OnboardingProgressDots';
+import { KeyboardAwareScrollView, KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
@@ -51,6 +49,15 @@ const NEXT_STEP = '/onboarding/founder-note' as const;
 export const POSTER_BIO_MAX_LENGTH = 160;
 const NAME_MAX_LENGTH = 50;
 const AVATAR_SIZE = 56;
+
+function isRemoteAvatarUrl(uri: string): boolean {
+  try {
+    const url = new URL(uri);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
 export default function PosterProfileScreen() {
   const router = useRouter();
@@ -112,7 +119,7 @@ export default function PosterProfileScreen() {
         mimeType: asset.mimeType,
         size: asset.fileSize,
       });
-      if (error || !uploadedUrl) {
+      if (error || !uploadedUrl || !isRemoteAvatarUrl(uploadedUrl)) {
         throw error ?? new Error('Upload failed');
       }
       setAvatarUrl(uploadedUrl);
@@ -154,15 +161,12 @@ export default function PosterProfileScreen() {
   };
 
   const previewImage = pendingAvatarUri ?? (avatarUrl || null);
-  const badgeLine = onboardingData.location
+  const badgeLine = onboardingData.location && onboardingData.locationPrecision === 'approximate'
     ? `New poster · ${onboardingData.location}`
     : 'New poster';
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingScreen style={styles.flex} offset={insets.bottom}>
       <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.backRow}>
           {router.canGoBack() && (
@@ -184,7 +188,8 @@ export default function PosterProfileScreen() {
           style={styles.dotsContainer}
         />
 
-        <ScrollView
+        <KeyboardAwareScrollView
+          offset={insets.bottom}
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -270,7 +275,7 @@ export default function PosterProfileScreen() {
             textAlignVertical="top"
             accessibilityLabel="Short bio"
           />
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={styles.actionContainer}>
           <TouchableOpacity
@@ -294,7 +299,7 @@ export default function PosterProfileScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingScreen>
   );
 }
 

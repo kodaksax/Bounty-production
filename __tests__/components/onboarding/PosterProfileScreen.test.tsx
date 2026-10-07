@@ -6,17 +6,20 @@
  * without committing anything, so a half-typed name never reaches the profile.
  */
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 
 const mockPush = jest.fn();
+const mockRequestMediaLibraryPermissionsAsync = jest.fn();
+const mockLaunchImageLibraryAsync = jest.fn();
+const mockUploadAvatar = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn(), canGoBack: () => true }),
   useFocusEffect: jest.fn(),
 }));
 
 jest.mock('expo-image-picker', () => ({
-  requestMediaLibraryPermissionsAsync: jest.fn(),
-  launchImageLibraryAsync: jest.fn(),
+  requestMediaLibraryPermissionsAsync: mockRequestMediaLibraryPermissionsAsync,
+  launchImageLibraryAsync: mockLaunchImageLibraryAsync,
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -24,7 +27,13 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 const mockUpdateData = jest.fn();
-let mockData = { displayName: '', bio: '', avatarUri: '', location: '' };
+let mockData = {
+  displayName: '',
+  bio: '',
+  avatarUri: '',
+  location: '',
+  locationPrecision: null as 'precise' | 'approximate' | 'denied' | 'skipped' | null,
+};
 jest.mock('../../../lib/context/onboarding-context', () => ({
   useOnboarding: () => ({ data: mockData, updateData: mockUpdateData }),
 }));
@@ -34,7 +43,7 @@ jest.mock('../../../lib/services/analytics-service', () => ({
 }));
 
 jest.mock('../../../lib/services/avatar-service', () => ({
-  avatarService: { uploadAvatar: jest.fn() },
+  avatarService: { uploadAvatar: mockUploadAvatar },
 }));
 
 jest.mock('../../../lib/haptic-feedback', () => ({
@@ -50,8 +59,22 @@ import PosterProfileScreen from '../../../app/onboarding/poster-profile';
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockData = { displayName: '', bio: '', avatarUri: '', location: '' };
+  mockData = { displayName: '', bio: '', avatarUri: '', location: '', locationPrecision: null };
+  mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: true });
+  mockLaunchImageLibraryAsync.mockResolvedValue({
+    canceled: false,
+    assets: [{ uri: 'file:///avatar.jpg', fileName: 'avatar.jpg', mimeType: 'image/jpeg', fileSize: 1024 }],
+  });
 });
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
 
 describe('onboarding poster profile step', () => {
   it('commits the trimmed name and bio, then advances to the founder note', () => {
@@ -85,9 +108,16 @@ describe('onboarding poster profile step', () => {
   });
 
   it('shows the location from the location step in the preview', () => {
-    mockData = { ...mockData, location: 'Fall Creek' };
+    mockData = { ...mockData, location: 'Fall Creek', locationPrecision: 'approximate' };
     const { getByText } = render(<PosterProfileScreen />);
     expect(getByText('New poster · Fall Creek')).toBeTruthy();
+  });
+
+  it('does not show the precise location in the hunter preview', () => {
+    mockData = { ...mockData, location: '12 Main St, Brooklyn, NY', locationPrecision: 'precise' };
+    const { getByText, queryByText } = render(<PosterProfileScreen />);
+    expect(getByText('New poster')).toBeTruthy();
+    expect(queryByText('New poster · 12 Main St, Brooklyn, NY')).toBeNull();
   });
 
   it('resumes what was entered before', () => {
@@ -95,5 +125,68 @@ describe('onboarding poster profile step', () => {
     const { getByDisplayValue } = render(<PosterProfileScreen />);
     expect(getByDisplayValue('Sam')).toBeTruthy();
     expect(getByDisplayValue('Hi')).toBeTruthy();
+  });
+
+  it('saves a remotely uploaded avatar URL to the draft', async () => {
+    mockUploadAvatar.mockResolvedValue({
+      avatarUrl: 'https://cdn.example.com/avatar.jpg',
+      error: null,
+    });
+
+    const { getByLabelText } = render(<PosterProfileScreen />);
+    fireEvent.press(getByLabelText('Add profile photo'));
+    await flush();
+    fireEvent.press(getByLabelText('Continue'));
+
+    expect(mockUploadAvatar).toHaveBeenCalledWith('file:///avatar.jpg', {
+      fileName: 'avatar.jpg',
+      mimeType: 'image/jpeg',
+      size: 1024,
+    });
+    expect(mockUpdateData).toHaveBeenCalledWith({
+      displayName: '',
+      bio: '',
+      avatarUri: 'https://cdn.example.com/avatar.jpg',
+    });
+  });
+
+  it('rejects a local fallback key when avatar upload fails', async () => {
+    mockUploadAvatar.mockResolvedValue({
+      avatarUrl: 'attachment-cache-avatar.jpg',
+      error: null,
+    });
+
+    const { getByLabelText } = render(<PosterProfileScreen />);
+    fireEvent.press(getByLabelText('Add profile photo'));
+    await flush();
+    fireEvent.press(getByLabelText('Continue'));
+
+    expect(mockUpdateData).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('disables profile actions while the avatar is uploading', async () => {
+    let finishUpload!: (result: { avatarUrl: string; error: null }) => void;
+    mockUploadAvatar.mockReturnValue(
+      new Promise<{ avatarUrl: string; error: null }>(resolve => {
+        finishUpload = resolve;
+      })
+    );
+
+    const { getByLabelText } = render(<PosterProfileScreen />);
+    fireEvent.press(getByLabelText('Add profile photo'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getByLabelText('Change profile photo').props.disabled).toBe(true);
+    expect(getByLabelText('Continue').props.disabled).toBe(true);
+    expect(getByLabelText('Skip for now').props.disabled).toBe(true);
+
+    await act(async () => {
+      finishUpload({ avatarUrl: 'https://cdn.example.com/avatar.jpg', error: null });
+    });
   });
 });
