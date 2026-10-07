@@ -29,7 +29,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
-import { reserveAccountOperation, finishAccountOperation, isDefinitiveStripeRejection, isDefinitiveDatabaseRejection } from '../_shared/connect-account-operations.ts';
+import { reserveAccountOperation, finishAccountOperation, isDefinitiveStripeRejection, isDefinitiveDatabaseRejection, withdrawalAccountMatches } from '../_shared/connect-account-operations.ts';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
 import { mayAdminReopenFailedWithdrawal } from '../_shared/payout-state.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
@@ -761,7 +761,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const amount = Math.abs(t.amount);
-    if ((t as WalletTransaction & { stripe_connect_account_id?: string }).stripe_connect_account_id !== p.stripe_connect_account_id) {
+    if (!await withdrawalAccountMatches(supabase, targetUserId, t.stripe_connect_account_id, p.stripe_connect_account_id)) {
       return jsonResponse({ error: 'This transaction belongs to an old payout account. Reconcile it without retargeting its history.' }, 409);
     }
 

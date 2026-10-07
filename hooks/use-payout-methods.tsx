@@ -188,6 +188,9 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
       if (!response.ok || typeof data?.replacementId !== 'string') {
         return { ok: false as const, error: data?.error ?? 'Could not prepare replacement. Please retry or cancel the pending replacement.' };
       }
+      setBankAccounts([]);
+      setDebitCards([]);
+      setInstantAvailableCents(0);
       return { ok: true as const, replacementId: data.replacementId as string };
     } catch {
       return { ok: false as const, error: 'Could not reach the server. Retry to resume the same replacement, or cancel the pending replacement.' };

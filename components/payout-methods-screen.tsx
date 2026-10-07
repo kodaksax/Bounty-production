@@ -88,7 +88,7 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
 
   const confirmReplacement = () => Alert.alert(
     'Replace your Stripe Express account?',
-    'Bounty will create a NEW Express account. This is not a bank change or a link to an existing Stripe account. You must complete identity and payout setup again. Your old account, wallet balance, and transaction history are preserved; no funds are moved. Replacement is blocked while funds, payouts, or financial operations are unresolved. Financial operations pause until you resume or cancel a pending replacement.',
+    'Bounty will create a NEW Express account. This is not a bank change or a link to an existing Stripe account. You must complete identity and payout setup again. Your old account, wallet balance, and transaction history are preserved; no funds are moved. Replacement is blocked while funds, payouts, or financial operations are unresolved. Financial operations pause until you resume or cancel a pending replacement. Once switched, canceling onboarding will not restore the old account; resume the new setup instead.',
     [{ text: 'Keep current account', style: 'cancel' },
       { text: 'Create new account', style: 'destructive', onPress: startReplacement }]
   );

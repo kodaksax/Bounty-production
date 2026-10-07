@@ -4,9 +4,12 @@
 -- and manual reconciliation, never an automatic unlock.
 CREATE TABLE public.connect_account_operations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES public.profiles(id),
+  user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   account_id text,
-  kind text NOT NULL,
+  kind text NOT NULL CHECK (kind IN (
+    'account_creation', 'native_payout', 'legacy_withdrawal', 'legacy_instant',
+    'withdrawal_retry', 'admin_retry', 'bounty_release_v2', 'bounty_release_v3', 'admin_reversal'
+  )),
   operation_key text NOT NULL,
   state text NOT NULL DEFAULT 'active' CHECK (state IN ('active', 'finished')),
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -18,7 +21,7 @@ CREATE UNIQUE INDEX connect_account_one_active_operation
 
 CREATE TABLE public.connect_account_replacements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES public.profiles(id),
+  user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   old_account_id text NOT NULL,
   candidate_account_id text,
   country text NOT NULL,
@@ -54,6 +57,11 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1 FROM connect_account_replacements WHERE user_id = p_user_id AND state = 'pending') THEN
     RAISE EXCEPTION 'Account replacement in progress; resume or cancel it first';
+  END IF;
+  IF p_kind IN ('native_payout', 'legacy_withdrawal', 'legacy_instant', 'withdrawal_retry', 'admin_retry')
+    AND EXISTS (SELECT 1 FROM wallet_transactions WHERE user_id = p_user_id
+      AND type = 'withdrawal' AND status = 'pending') THEN
+    RAISE EXCEPTION 'A withdrawal is still settling; wait before starting another';
   END IF;
   INSERT INTO connect_account_operations(user_id, account_id, kind, operation_key)
     VALUES (p_user_id, p_account_id, p_kind, p_operation_key) RETURNING id INTO v_id;
@@ -144,7 +152,7 @@ $$;
 CREATE FUNCTION public.complete_connect_account_replacement(
   p_user_id uuid, p_replacement_id uuid, p_candidate_account_id text
 ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_account text; v_row public.connect_account_replacements;
+DECLARE v_account text; v_row public.connect_account_replacements; v_legacy_column text;
 BEGIN
   SELECT stripe_connect_account_id INTO v_account FROM profiles WHERE id = p_user_id FOR UPDATE;
   SELECT * INTO v_row FROM connect_account_replacements
@@ -168,6 +176,19 @@ BEGIN
     payout_failed_at = NULL,
     payout_failure_code = NULL
   WHERE id = p_user_id AND stripe_connect_account_id = v_row.old_account_id;
+  -- Older deployments also cached unprefixed Connect flags. Reset aliases
+  -- when present without requiring those obsolete columns on fresh schemas.
+  FOREACH v_legacy_column IN ARRAY ARRAY['charges_enabled', 'payouts_enabled', 'details_submitted'] LOOP
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+      AND table_name = 'profiles' AND column_name = v_legacy_column) THEN
+      EXECUTE format('UPDATE public.profiles SET %I = false WHERE id = $1', v_legacy_column)
+        USING p_user_id;
+    END IF;
+  END LOOP;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+    AND table_name = 'profiles' AND column_name = 'disabled_reason') THEN
+    UPDATE public.profiles SET disabled_reason = NULL WHERE id = p_user_id;
+  END IF;
   DELETE FROM connect_balance_cache WHERE user_id = p_user_id;
   RETURN p_candidate_account_id;
 END;
@@ -211,7 +232,10 @@ BEGIN
   IF NEW.type = 'withdrawal' AND NEW.status = 'pending'
     AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
     SELECT stripe_connect_account_id INTO v_account FROM profiles WHERE id = NEW.user_id FOR UPDATE;
-    IF NEW.stripe_connect_account_id IS DISTINCT FROM v_account
+    IF (NEW.stripe_connect_account_id IS NOT NULL AND NEW.stripe_connect_account_id IS DISTINCT FROM v_account)
+      OR (NEW.stripe_connect_account_id IS NULL AND EXISTS (
+        SELECT 1 FROM connect_account_replacements WHERE user_id = NEW.user_id AND state = 'completed'
+      ))
       OR EXISTS (SELECT 1 FROM connect_account_replacements WHERE user_id = NEW.user_id AND state = 'pending')
     THEN RAISE EXCEPTION 'Payout account changed or replacement is in progress'; END IF;
   END IF;

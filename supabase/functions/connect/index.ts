@@ -43,6 +43,7 @@ import {
   isDefinitiveStripeRejection,
   isDefinitiveDatabaseRejection,
   AccountOperationBlockedError,
+  withdrawalAccountMatches,
 } from '../_shared/connect-account-operations.ts';
 
 // stripe@14's bundled types for Balance.InstantAvailable omit `net_available`,
@@ -2777,7 +2778,7 @@ Deno.serve(async (req: Request) => {
       if (!p?.stripe_connect_account_id) {
         return jsonResponse({ error: 'Stripe Connect account not found' }, 400);
       }
-      if ((t as WalletTransaction & { stripe_connect_account_id?: string }).stripe_connect_account_id !== p.stripe_connect_account_id) {
+      if (!await withdrawalAccountMatches(supabase, userId, t.stripe_connect_account_id, p.stripe_connect_account_id)) {
         return jsonResponse({ error: 'This withdrawal belongs to an old payout account. Contact support; it cannot be retried to a different account.' }, 409);
       }
 

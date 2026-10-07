@@ -335,6 +335,7 @@ export default function ConnectOnboardingScreen() {
         launchFailureReason = 'missing_account_link_url';
         throw new Error("Stripe didn't return an onboarding URL. Please try again.");
       }
+      if (replacementId) void refreshAncillaryState(token).catch(() => {});
 
       // 2. Present the hosted onboarding in an ASWebAuthenticationSession /
       //    Chrome Custom Tab. The OS dismisses automatically when Stripe
@@ -400,7 +401,7 @@ export default function ConnectOnboardingScreen() {
       setCanRetry(launchRetryable);
       setPhase('error');
     }
-  }, [entryCountry, params.source, replacementId, session?.access_token, session?.user?.id, verifyOnboardingStatus]);
+  }, [entryCountry, params.source, replacementId, refreshAncillaryState, session?.access_token, session?.user?.id, verifyOnboardingStatus]);
 
   useEffect(() => {
     if (authLoading) return;

@@ -8,11 +8,37 @@ import {
   finishAccountOperation,
   isDefinitiveStripeRejection,
   isDefinitiveDatabaseRejection,
+  withdrawalAccountMatches,
 } from '../../supabase/functions/_shared/connect-account-operations';
 
 const source = fs.readFileSync(path.join(__dirname, '../../supabase/functions/connect/index.ts'), 'utf8');
 const migration = fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261006230000_connect_account_replacement.sql'), 'utf8');
 const operations = require('../../supabase/functions/_shared/connect-account-operations');
+
+describe('legacy withdrawal identity compatibility', () => {
+  function database(data: unknown, error: unknown = null) {
+    const query: any = {
+      select: jest.fn(() => query), eq: jest.fn(() => query), limit: jest.fn(() => query),
+      maybeSingle: jest.fn(async () => ({ data, error })),
+    };
+    return { from: jest.fn(() => query) } as any;
+  }
+
+  test('allows an unrecorded legacy identity only before a completed replacement', async () => {
+    await expect(withdrawalAccountMatches(database(null), 'user', null, 'acct_active')).resolves.toBe(true);
+    await expect(withdrawalAccountMatches(database({ id: 'replacement' }), 'user', null, 'acct_active')).resolves.toBe(false);
+  });
+
+  test('rejects known mismatches and fails closed on history lookup errors', async () => {
+    await expect(withdrawalAccountMatches(database(null), 'user', 'acct_old', 'acct_active')).resolves.toBe(false);
+    await expect(withdrawalAccountMatches(database(null), 'user', 'acct_active', 'acct_active')).resolves.toBe(true);
+    await expect(withdrawalAccountMatches(database(null, { message: 'unavailable' }), 'user', null, 'acct_active')).rejects.toThrow(/historical payout identity/);
+  });
+
+  test('new account-operation records do not prevent profile deletion', () => {
+    expect(migration.match(/REFERENCES public\.profiles\(id\) ON DELETE CASCADE/g)).toHaveLength(2);
+  });
+});
 
 function replacementHarness() {
   const profile = {
@@ -57,7 +83,7 @@ function replacementHarness() {
     }),
     rpc: jest.fn(async (name: string, args: any) => {
       if (name === 'reserve_connect_account_operation') {
-        if (operationActive || replacement.state === 'pending' || profile.stripe_connect_account_id !== args.p_account_id) {
+        if (operationActive || walletRow?.status === 'pending' || replacement.state === 'pending' || profile.stripe_connect_account_id !== args.p_account_id) {
           return { data: null, error: { message: 'busy or stale' } };
         }
         operationActive = true;
@@ -277,6 +303,8 @@ describe('replacement account safety', () => {
     expect((await h.request({ amount: 10 }, 'test-session', 'payout')).status).toBe(200);
     expect(h.db.rpc).toHaveBeenCalledWith('finish_connect_account_operation', { p_operation_id: 'operation' });
     expect(h.profile.balance).toBe(123);
+    expect((await h.request({ amount: 10 }, 'test-session', 'payout')).status).toBe(409);
+    expect(h.stripe.payouts.create).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -3,6 +3,24 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 export class AccountOperationBlockedError extends Error {
   readonly code = 'account_operation_blocked';
 }
+
+type AccountOperationKind = 'account_creation' | 'native_payout' | 'legacy_withdrawal' |
+  'legacy_instant' | 'withdrawal_retry' | 'admin_retry' | 'bounty_release_v2' |
+  'bounty_release_v3' | 'admin_reversal';
+
+export async function withdrawalAccountMatches(
+  db: SupabaseClient,
+  userId: string,
+  recordedAccountId: string | null | undefined,
+  activeAccountId: string
+): Promise<boolean> {
+  if (recordedAccountId) return recordedAccountId === activeAccountId;
+  const { data, error } = await db.from('connect_account_replacements')
+    .select('id').eq('user_id', userId).eq('state', 'completed').limit(1).maybeSingle();
+  if (error) throw new AccountOperationBlockedError('Could not verify historical payout identity. Contact support before retrying.');
+  return !data;
+}
+
 /**
  * Durable reservation, not a lease: a crashed or uncertain financial request
  * must be reconciled before this account can be replaced or used again.
@@ -11,7 +29,7 @@ export async function reserveAccountOperation(
   db: SupabaseClient,
   userId: string,
   accountId: string | null,
-  kind: string,
+  kind: AccountOperationKind,
   operationKey: string
 ): Promise<string> {
   const { data, error } = await db.rpc('reserve_connect_account_operation', {
