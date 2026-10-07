@@ -27,6 +27,27 @@
     "ratings": "trg_ratings_guard"
   },
   "protected": {
+    "profiles": {
+      "commands": [],
+      "required_triggers": [
+        "trg_prevent_client_writes_to_protected_profile_columns",
+        "guard_connect_account_identity"
+      ]
+    },
+    "wallet_transactions": {
+      "commands": [],
+      "required_triggers": ["guard_withdrawal_account_identity"]
+    },
+    "connect_account_operations": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
+    "connect_account_replacements": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
     "bounties": {
       "policies": [
         {
@@ -288,6 +309,38 @@
     }
   },
   "functions": [
+    {
+      "signature": "reserve_connect_account_operation(uuid,text,text,text)",
+      "forbid_execute": ["anon", "authenticated", "PUBLIC"]
+    },
+    {
+      "signature": "finish_connect_account_operation(uuid)",
+      "forbid_execute": ["anon", "authenticated", "PUBLIC"]
+    },
+    {
+      "signature": "assert_connect_replacement_safe(uuid,text)",
+      "forbid_execute": ["anon", "authenticated", "PUBLIC"]
+    },
+    {
+      "signature": "begin_connect_account_replacement(uuid,text,text,boolean)",
+      "forbid_execute": ["anon", "authenticated", "PUBLIC"]
+    },
+    {
+      "signature": "complete_connect_account_replacement(uuid,uuid,text)",
+      "forbid_execute": ["anon", "authenticated", "PUBLIC"]
+    },
+    {
+      "signature": "cancel_connect_account_replacement(uuid)",
+      "forbid_execute": ["anon", "authenticated", "PUBLIC"]
+    },
+    {
+      "signature": "guard_connect_account_identity()",
+      "forbid_execute": ["anon", "authenticated", "PUBLIC"]
+    },
+    {
+      "signature": "guard_withdrawal_account_identity()",
+      "forbid_execute": ["anon", "authenticated", "PUBLIC"]
+    },
     {
       "signature": "fn_owner_refund_block_reason(uuid,uuid)",
       "forbid_execute": [
