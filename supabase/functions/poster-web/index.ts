@@ -126,8 +126,9 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await admin
       .from('bounties')
       .select(
-        'id, title, description, amount, is_for_honor, status, work_type, location, created_at, ' +
-          'completed_at, poster_id, user_id, accepted_by, accepted_request_id, payment_architecture_version'
+        // One string literal: supabase-js infers the row type from it, and a
+        // concatenated (widened) string types every row as an error.
+        'id, title, description, amount, is_for_honor, status, work_type, location, created_at, completed_at, poster_id, user_id, accepted_by, accepted_request_id, payment_architecture_version'
       )
       .eq('id', bountyId)
       .maybeSingle()
