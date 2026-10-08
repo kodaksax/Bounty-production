@@ -1,26 +1,20 @@
 // Supabase Edge Function: send-notification-email
 // POST { userIds: string[], category, type, title, body, data } from
-// process-notification's email fan-out step. Isolated from the push-send
-// critical path so an email provider outage never affects push delivery.
+// process-notification's email fan-out step, and directly from database
+// triggers (fn_email_bounty_posted). Isolated from the push-send critical path
+// so an email provider outage never affects push delivery.
 //
 // Auth: same pattern as send-expo-push — caller must present the service
 // role key as a bearer token (not just any authenticated JWT), since this
 // function resolves and emails arbitrary users given a userIds list.
 //
+// Rendering: notification types mapped in ./templates.ts are sent as
+// PUBLISHED Resend templates (bounty posted, new applicants, work submitted,
+// hired). Everything else uses the generic buildEmail() layout below.
+//
 // Provider: Resend first, SendGrid second, neither = drop with a warning.
-// Resolved once at module scope by `pickProvider()` below.
-//
-// If no provider key is configured, emails are dropped with a warning instead
-// of sent. That was intentional while the pipeline was being built — but as of
-// 2026-09-09 STILL no key is provisioned in production, and this function is
-// invoked continuously with real, correct payloads ("New Bounty Application",
-// "Bounty Accepted!", "Message from ...") addressed to real users. Every one
-// of them is discarded.
-//
-// This is the whole of the "application alerts are push-only" finding: the
-// email channel is not missing, it is unplugged. Setting RESEND_API_KEY (and a
-// NOTIFICATION_FROM_EMAIL on a domain verified with that provider) turns it on
-// with no code change.
+// Resolved once at module scope by `pickProvider()` below. SendGrid has no
+// access to the Resend templates, so it always gets the generic layout.
 //
 // SendGrid is retained as a fallback rather than deleted so that setting
 // RESEND_API_KEY is a reversible one-variable change: unset it and the
@@ -31,8 +25,22 @@
 // dashboard can tell that nothing was delivered. It previously counted console
 // lines as `sent`, which is why the gap was invisible from outside. Note that
 // `ok` deliberately stays true in that state — see the response comment below.
+//
+// Until this commit the template code ran only in a hand-deployed copy of this
+// function; the repo still had the pre-template version, so the next CI deploy
+// would have silently reverted every templated email to the generic layout.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  buildTemplateSend,
+  ctaFrom,
+  escapeHtml,
+  rewardDisplay,
+  templateKeyFor,
+  type ApplicantFact,
+  type TemplateFacts,
+  type TemplateSend,
+} from './templates.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,20 +54,8 @@ function jsonResponse(data: unknown, status = 200) {
 
 type EmailContent = { subject: string; html: string; text: string }
 
-// Per-category templates. Kept intentionally simple/inline (no external
-// template engine) — this bundler doesn't support local imports, and the
+// Generic layout for every notification type without a Resend template. The
 // notification payload's title/body already carry the human-readable copy.
-// Only these schemes may be rendered as a button: the app's own custom scheme
-// and https. Anything else in data.ctaUrl is ignored rather than linked.
-const ALLOWED_CTA_PREFIXES = ['https://', 'bountyexpo-workspace://']
-
-function ctaFrom(data: Record<string, unknown>): { url: string; label: string } | null {
-  const url = typeof data.ctaUrl === 'string' ? data.ctaUrl.trim() : ''
-  if (!url || !ALLOWED_CTA_PREFIXES.some((p) => url.startsWith(p))) return null
-  const label = typeof data.ctaLabel === 'string' && data.ctaLabel.trim() ? data.ctaLabel.trim() : 'Open Bounty'
-  return { url, label }
-}
-
 function buildEmail(category: string, title: string, body: string, data: Record<string, unknown>): EmailContent {
   const appName = 'Bounty'
   const cta = ctaFrom(data)
@@ -82,10 +78,6 @@ function buildEmail(category: string, title: string, body: string, data: Record<
     </div>`
   const text = `${subject}\n\n${body}\n\n${cta ? `${cta.label}: ${cta.url}\n\n` : ''}Manage this in Settings > Notifications.`
   return { subject, html, text }
-}
-
-function escapeHtml(s: string): string {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
 }
 
 // Function logs are broadly readable in the Supabase dashboard and in any
@@ -122,6 +114,14 @@ const PROVIDER = pickProvider()
 const fromEmail = Deno.env.get('NOTIFICATION_FROM_EMAIL') || 'Bounty <notifications@bountyfinder.app>'
 // Replies land on the monitored support inbox rather than an unread noreply.
 const replyToEmail = Deno.env.get('NOTIFICATION_REPLY_TO_EMAIL') || 'support@bountyfinder.app'
+
+const TEMPLATE_ENV = {
+  preferencesUrl: Deno.env.get('NOTIFICATION_PREFERENCES_URL') || '',
+  postalAddress: Deno.env.get('NOTIFICATION_POSTAL_ADDRESS') || '',
+}
+
+// How many applicants the new-applicants email lists by name.
+const MAX_APPLICANT_ROWS = 3
 
 /** `alice@example.com` -> `a***@example.com`; only ever used in verbose mode. */
 function redactEmail(email: string): string {
@@ -171,6 +171,27 @@ async function sendViaResend(apiKey: string, toEmail: string, content: EmailCont
   return true
 }
 
+// `from` is intentionally omitted: the template carries its own verified sender.
+// Resend does not allow html/text alongside `template`. The idempotency key
+// makes a repeated call for the same event a no-op instead of a second email.
+async function sendTemplateViaResend(apiKey: string, toEmail: string, tpl: TemplateSend): Promise<boolean> {
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      ...(tpl.idempotencyKey ? { 'Idempotency-Key': `${tpl.idempotencyKey}/${toEmail}` } : {}),
+    },
+    body: JSON.stringify({
+      to: [toEmail],
+      template: { id: tpl.id, variables: tpl.variables },
+      ...(replyToEmail ? { reply_to: replyToEmail } : {}),
+    }),
+  })
+  if (!resp.ok) return providerError('Resend template', resp)
+  return true
+}
+
 async function sendViaSendGrid(apiKey: string, toEmail: string, content: EmailContent, fromEmail: string): Promise<boolean> {
   const resp = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
@@ -188,6 +209,94 @@ async function sendViaSendGrid(apiKey: string, toEmail: string, content: EmailCo
   })
   if (!resp.ok) return providerError('SendGrid', resp)
   return true
+}
+
+function displayName(p: any): string {
+  return p?.display_name || p?.full_name || p?.username || ''
+}
+
+function isIdVerified(p: any): boolean {
+  return p?.id_verification_status === 'verified' || p?.verified === true
+}
+
+/**
+ * Loads what a template needs and the payload doesn't carry: the bounty's
+ * title and reward, the hunter's name, and for new-applicants the applicant
+ * list. Best-effort: a failed lookup leaves the field to the template's
+ * fallback rather than failing the email.
+ */
+async function loadTemplateFacts(supabaseAdmin: any, type: string, data: Record<string, unknown>): Promise<TemplateFacts> {
+  const key = templateKeyFor(type, data)
+  const bountyId = typeof data.bountyId === 'string' ? data.bountyId : typeof data.bounty_id === 'string' ? data.bounty_id : ''
+  // bounty_posted's trigger already sends everything it needs.
+  if (!key || key === 'bounty_posted' || !bountyId) return {}
+
+  const facts: TemplateFacts = {}
+  try {
+    const { data: bounty } = await supabaseAdmin
+      .from('bounties')
+      .select('title, amount, is_for_honor, accepted_by')
+      .eq('id', bountyId)
+      .maybeSingle()
+    if (!bounty) return facts
+    facts.bountyTitle = bounty.title ?? ''
+    facts.reward = rewardDisplay(bounty.amount, bounty.is_for_honor)
+
+    if (key === 'work_submitted' || key === 'hired') {
+      const hunterId =
+        (typeof data.hunter_id === 'string' && data.hunter_id) ||
+        (typeof data.hunterId === 'string' && data.hunterId) ||
+        bounty.accepted_by
+      if (hunterId) {
+        const { data: p } = await supabaseAdmin
+          .from('profiles')
+          .select('display_name, full_name, username, id_verification_status, verified')
+          .eq('id', hunterId)
+          .maybeSingle()
+        facts.hunterName = displayName(p)
+        facts.hunterIdVerified = isIdVerified(p)
+      }
+    }
+
+    if (key === 'new_applicants') {
+      const { data: requests, count } = await supabaseAdmin
+        .from('bounty_requests')
+        .select('hunter_id', { count: 'exact' })
+        .eq('bounty_id', bountyId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(MAX_APPLICANT_ROWS)
+      const ids: string[] = ((requests ?? []) as any[]).map((r) => r.hunter_id).filter(Boolean)
+      facts.applicantCount = count ?? ids.length
+      if (ids.length > 0) {
+        const [{ data: profiles }, { data: ratings }, { data: done }] = await Promise.all([
+          supabaseAdmin
+            .from('profiles')
+            .select('id, display_name, full_name, username, id_verification_status, verified')
+            .in('id', ids),
+          supabaseAdmin.from('ratings').select('to_user_id, rating').in('to_user_id', ids).is('hidden_at', null),
+          supabaseAdmin.from('bounties').select('accepted_by').in('accepted_by', ids).eq('status', 'completed'),
+        ])
+        const byId = new Map(((profiles ?? []) as any[]).map((p) => [p.id, p]))
+        facts.applicants = ids
+          .filter((id) => byId.has(id))
+          .map((id): ApplicantFact => {
+            const own = ((ratings ?? []) as any[]).filter((r) => r.to_user_id === id)
+            const avg = own.length ? own.reduce((s, r) => s + Number(r.rating || 0), 0) / own.length : null
+            return {
+              name: displayName(byId.get(id)) || 'A hunter',
+              idVerified: isIdVerified(byId.get(id)),
+              rating: avg === null ? null : Math.round(avg * 10) / 10,
+              ratingCount: own.length,
+              jobsCompleted: ((done ?? []) as any[]).filter((b) => b.accepted_by === id).length,
+            }
+          })
+      }
+    }
+  } catch (e) {
+    console.error('[send-notification-email] template facts lookup failed (sending with fallbacks)', { type, e })
+  }
+  return facts
 }
 
 Deno.serve(async (req: Request) => {
@@ -211,6 +320,7 @@ Deno.serve(async (req: Request) => {
 
   const userIds: string[] = Array.isArray(payload.userIds) ? payload.userIds.filter((x: unknown) => typeof x === 'string') : []
   const category: string = typeof payload.category === 'string' ? payload.category : 'marketplace'
+  const type: string = typeof payload.type === 'string' ? payload.type : ''
   const title: string = typeof payload.title === 'string' ? payload.title : ''
   const body: string = typeof payload.body === 'string' ? payload.body : ''
   const data: Record<string, unknown> = (payload.data && typeof payload.data === 'object') ? payload.data : {}
@@ -226,6 +336,12 @@ Deno.serve(async (req: Request) => {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
   const content = buildEmail(category, title, body, data)
+  // Non-null only for types that render through a published Resend template,
+  // and only worth the lookups when Resend is the provider.
+  const templateSend =
+    PROVIDER.name === 'resend' && templateKeyFor(type, data)
+      ? buildTemplateSend(type, data, await loadTemplateFacts(supabaseAdmin, type, data), TEMPLATE_ENV)
+      : null
 
   let sent = 0
   let failed = 0
@@ -240,7 +356,9 @@ Deno.serve(async (req: Request) => {
         return
       }
       if (PROVIDER.name === 'resend' && PROVIDER.key) {
-        const ok = await sendViaResend(PROVIDER.key, email, content, fromEmail)
+        const ok = templateSend
+          ? await sendTemplateViaResend(PROVIDER.key, email, templateSend)
+          : await sendViaResend(PROVIDER.key, email, content, fromEmail)
         if (ok) sent++; else failed++
       } else if (PROVIDER.name === 'sendgrid' && PROVIDER.key) {
         const ok = await sendViaSendGrid(PROVIDER.key, email, content, fromEmail)
@@ -284,5 +402,6 @@ Deno.serve(async (req: Request) => {
     failed,
     skipped,
     provider: PROVIDER.name,
+    template: templateSend ? templateKeyFor(type, data) : null,
   })
 })
