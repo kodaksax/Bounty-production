@@ -227,3 +227,9 @@ verify_jwt = false
 
 [functions.share-og-image]
 verify_jwt = false
+
+# web-account: the website's account API (bountyfinder.net/bounty). Handles its
+# own auth via supabaseAdmin.auth.getUser(token); gateway verification is off so
+# the browser's CORS preflight (which carries no Authorization) is answered.
+[functions.web-account]
+verify_jwt = false
