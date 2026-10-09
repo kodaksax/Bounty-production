@@ -4,9 +4,8 @@
  * (assets/images/bounty-logo-green.png): a heavy ring crossed by four square
  * arms that start outside it, cut through it, and stop short of the centre,
  * leaving it open — locking on once the quote has landed.
- * It comes in oversized and settles straight down onto its target, no spin —
- * the quote names the gap, and the crosshair picks out the reader as the one
- * who closes it.
+ * It fades in gently in place — no scale, no spin — so it reads as a quiet
+ * mark under the quote rather than a pop.
  *
  * Plays exactly once, driven by `active`. Under Reduce Motion the parent
  * passes `still` and the mark renders locked.
@@ -15,7 +14,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
-export const CROSSHAIR_LOCK_MS = 750;
+export const CROSSHAIR_LOCK_MS = 900;
 const ICON = 72;
 
 // Proportions measured off the logo, as fractions of the mark's full span
@@ -50,7 +49,7 @@ export function FounderNoteCrosshair({ active, still, color, onLock }: FounderNo
     const run = Animated.timing(lock, {
       toValue: 1,
       duration: CROSSHAIR_LOCK_MS,
-      easing: Easing.out(Easing.cubic),
+      easing: Easing.inOut(Easing.quad),
       useNativeDriver: true,
     });
     const locked = setTimeout(() => onLockRef.current?.(), CROSSHAIR_LOCK_MS);
@@ -61,9 +60,6 @@ export function FounderNoteCrosshair({ active, still, color, onLock }: FounderNo
     };
   }, [active, still, lock]);
 
-  const scale = lock.interpolate({ inputRange: [0, 1], outputRange: [1.9, 1] });
-  const opacity = lock.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0.8, 1] });
-
   return (
     <View
       style={styles.wrap}
@@ -71,7 +67,7 @@ export function FounderNoteCrosshair({ active, still, color, onLock }: FounderNo
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <Animated.View style={[styles.mark, { opacity, transform: [{ scale }] }]}>
+      <Animated.View style={[styles.mark, { opacity: lock }]}>
         <View style={[styles.ring, { borderColor: color }]} />
         <View style={[styles.arm, styles.armTop, { backgroundColor: color }]} />
         <View style={[styles.arm, styles.armBottom, { backgroundColor: color }]} />
