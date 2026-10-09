@@ -34,7 +34,7 @@
  *
  * The moment the quote lands is the note's payoff: "need help" and "can help"
  * light up in the signature's green, and the bounty crosshair
- * (FounderNoteCrosshair) swings in and locks on, with a haptic tick and a soft
+ * (FounderNoteCrosshair) fades in softly, with a haptic tick and a soft
  * glow blooming behind the words, before the signature types. The CTA then
  * reads as a yes to that ("I'm in"), not as a next-step button.
  *
