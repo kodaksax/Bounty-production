@@ -53,9 +53,26 @@ type EmailContent = { subject: string; html: string; text: string }
 // and https. Anything else in data.ctaUrl is ignored rather than linked.
 const ALLOWED_CTA_PREFIXES = ['https://', 'bountyexpo-workspace://']
 
+// Every email about a bounty links to its page on the website, where the
+// recipient signs in with an emailed link (no app, no password). The link
+// carries no sign-in token on purpose: a forwarded email must not grant
+// access to someone's account.
+const WEB_BOUNTY_URL_BASE = Deno.env.get('WEB_BOUNTY_URL_BASE') || 'https://www.bountyfinder.net/bounty'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function webBountyCta(data: Record<string, unknown>): { url: string; label: string } | null {
+  const bountyId = data.bountyId ?? data.bounty_id
+  if (typeof bountyId !== 'string' || !UUID_PATTERN.test(bountyId)) return null
+  return {
+    url: `${WEB_BOUNTY_URL_BASE.replace(/\/+$/, '')}?id=${encodeURIComponent(bountyId)}`,
+    label: data.type === 'message' ? 'Reply on bountyfinder.net' : 'Open on bountyfinder.net',
+  }
+}
+
 function ctaFrom(data: Record<string, unknown>): { url: string; label: string } | null {
   const url = typeof data.ctaUrl === 'string' ? data.ctaUrl.trim() : ''
-  if (!url || !ALLOWED_CTA_PREFIXES.some((p) => url.startsWith(p))) return null
+  if (!url) return webBountyCta(data)
+  if (!ALLOWED_CTA_PREFIXES.some((p) => url.startsWith(p))) return null
   const label = typeof data.ctaLabel === 'string' && data.ctaLabel.trim() ? data.ctaLabel.trim() : 'Open Bounty'
   return { url, label }
 }
