@@ -198,8 +198,7 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_thread_events_from_requests ON public.bounty_requests;
-CREATE TRIGGER trg_thread_events_from_requests
+CREATE OR REPLACE TRIGGER trg_thread_events_from_requests
   AFTER INSERT OR UPDATE OF status OR DELETE ON public.bounty_requests
   FOR EACH ROW EXECUTE FUNCTION public.trg_thread_events_from_requests();
 
@@ -223,8 +222,7 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_thread_events_from_completions ON public.completion_submissions;
-CREATE TRIGGER trg_thread_events_from_completions
+CREATE OR REPLACE TRIGGER trg_thread_events_from_completions
   AFTER INSERT OR UPDATE ON public.completion_submissions
   FOR EACH ROW EXECUTE FUNCTION public.trg_thread_events_from_completions();
 
@@ -256,8 +254,7 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_thread_events_from_bounty_payments ON public.bounty_payments;
-CREATE TRIGGER trg_thread_events_from_bounty_payments
+CREATE OR REPLACE TRIGGER trg_thread_events_from_bounty_payments
   AFTER UPDATE OF status ON public.bounty_payments
   FOR EACH ROW EXECUTE FUNCTION public.trg_thread_events_from_bounty_payments();
 
@@ -292,8 +289,7 @@ $$;
 DO $$
 BEGIN
   IF to_regclass('public.bounty_v3_funding') IS NOT NULL THEN
-    DROP TRIGGER IF EXISTS trg_thread_events_from_v3_funding ON public.bounty_v3_funding;
-    CREATE TRIGGER trg_thread_events_from_v3_funding
+    CREATE OR REPLACE TRIGGER trg_thread_events_from_v3_funding
       AFTER UPDATE OF state ON public.bounty_v3_funding
       FOR EACH ROW EXECUTE FUNCTION public.trg_thread_events_from_v3_funding();
   END IF;
@@ -337,8 +333,7 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_messages_guard_event_cards ON public.messages;
-CREATE TRIGGER trg_messages_guard_event_cards
+CREATE OR REPLACE TRIGGER trg_messages_guard_event_cards
   BEFORE INSERT OR UPDATE OR DELETE ON public.messages
   FOR EACH ROW EXECUTE FUNCTION public.fn_messages_guard_event_cards();
 
