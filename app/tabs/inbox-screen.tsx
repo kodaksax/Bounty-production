@@ -898,9 +898,15 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         yourTurn={app ? true : row.lifecycle.needsAttention}
         onPress={() => openThread(b.id, row.role, row.role === 'poster' ? row.person?.id ?? null : null)}
         onLongPress={() => handleRowLongPress(row)}
+        // Same rule as the long-press "Delete posting" option.
+        onDelete={
+          row.role === 'poster' && b.status === 'open' && !b.accepted_by
+            ? () => handleDeleteBounty(b)
+            : undefined
+        }
       />
     )
-  }, [openThread, handleRowLongPress])
+  }, [openThread, handleRowLongPress, handleDeleteBounty])
 
   const listContentPadding = useMemo(
     () => ({ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }),

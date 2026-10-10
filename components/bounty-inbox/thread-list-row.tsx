@@ -7,9 +7,10 @@
  * The only addition is a small line underneath naming the bounty and its
  * status, since the same person can be on more than one of your bounties.
  */
+import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { generateInitials } from 'lib/services/supabase-messaging';
 import { userProfileService } from 'lib/services/userProfile';
 import { getValidAvatarUrl } from 'lib/utils/avatar-utils';
@@ -74,6 +75,8 @@ interface BountyConversationRowProps {
   yourTurn?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
+  /** Shows a trash button on the bounty line. Omit when the bounty can't be deleted. */
+  onDelete?: () => void;
 }
 
 export function BountyConversationRow({
@@ -87,6 +90,7 @@ export function BountyConversationRow({
   yourTurn,
   onPress,
   onLongPress,
+  onDelete,
 }: BountyConversationRowProps) {
   const { theme } = useAppThemeContext();
   const router = useRouter();
@@ -117,6 +121,16 @@ export function BountyConversationRow({
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>
             {bountyTitle}
           </Text>
+          {onDelete && (
+            <TouchableOpacity
+              onPress={onDelete}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${bountyTitle}`}
+            >
+              <MaterialIcons name="delete-outline" size={18} color={theme.error} />
+            </TouchableOpacity>
+          )}
         </View>
       }
     />
