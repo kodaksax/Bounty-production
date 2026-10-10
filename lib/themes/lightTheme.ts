@@ -23,6 +23,12 @@ export const lightTheme: AppTheme = {
     borderRightColor:  palette.navy[300],
     borderBottomColor: palette.white,       // light bottom edge
   },
+  insetBorderPrimary: {
+    borderTopColor:    palette.green[800],  // #00571A — dark top edge
+    borderLeftColor:   palette.green[700],  // #00701F
+    borderRightColor:  palette.green[700],
+    borderBottomColor: palette.green[500],  // #1FAE49 — light bottom edge
+  },
 
   text:              palette.ink,         // #31363F
   textSecondary:     palette.navy[600],   // #61656B
