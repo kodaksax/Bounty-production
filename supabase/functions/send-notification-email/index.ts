@@ -57,10 +57,15 @@ const ALLOWED_CTA_PREFIXES = ['https://', 'bountyexpo-workspace://']
 // recipient signs in with an emailed link (no app, no password). The link
 // carries no sign-in token on purpose: a forwarded email must not grant
 // access to someone's account.
-const WEB_BOUNTY_URL_BASE = Deno.env.get('WEB_BOUNTY_URL_BASE') || 'https://www.bountyfinder.net/bounty'
+//
+// Off until WEB_BOUNTY_URL_BASE is set: there is no default, so emails never
+// link to a page that is not live yet. Set it (e.g.
+// https://www.bountyfinder.net/bounty) once the page ships.
+const WEB_BOUNTY_URL_BASE = (Deno.env.get('WEB_BOUNTY_URL_BASE') ?? '').trim()
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function webBountyCta(data: Record<string, unknown>): { url: string; label: string } | null {
+  if (!WEB_BOUNTY_URL_BASE.startsWith('https://')) return null
   const bountyId = data.bountyId ?? data.bounty_id
   if (typeof bountyId !== 'string' || !UUID_PATTERN.test(bountyId)) return null
   return {
