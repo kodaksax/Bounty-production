@@ -83,6 +83,19 @@ export interface WalletTransactionRecord {
   escrowStatus?: 'funded' | 'pending' | 'released';
 }
 
+export interface RefreshFromApiOptions {
+  silent?: boolean;
+  force?: boolean;
+  /**
+   * Join an identical refresh that is already in flight instead of starting a
+   * second one. Only for "sync whatever the server has" triggers (mount,
+   * auth events, screen mount), where a request that started a moment ago is
+   * just as good. Never pass it after a write: an in-flight request may have
+   * started before the write landed and would return the pre-write balance.
+   */
+  coalesce?: boolean;
+}
+
 interface WalletContextValue {
   balance: number;
   isLoading: boolean;
@@ -103,10 +116,7 @@ interface WalletContextValue {
   // when the SERVER is known to have just moved money (e.g. escrow reserved
   // during acceptance) — it bypasses the optimistic-deposit guard so a
   // legitimate DECREASE cannot be masked by a recent optimistic increase.
-  refreshFromApi: (
-    accessToken?: string,
-    options?: { silent?: boolean; force?: boolean }
-  ) => Promise<void>;
+  refreshFromApi: (accessToken?: string, options?: RefreshFromApiOptions) => Promise<void>;
   /**
    * Re-read balance and transactions from the server, resolving the auth token
    * internally. Use this when the CLIENT has detected that its cached wallet
@@ -254,8 +264,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Refresh wallet data from the API (fetches real transaction history and balance)
   // Defined before useEffect so it can be called on mount for initial API sync.
-  const refreshFromApi = useCallback(
-    async (accessToken?: string, options?: { silent?: boolean; force?: boolean }) => {
+  const fetchFromApi = useCallback(
+    async (accessToken?: string, options?: RefreshFromApiOptions) => {
       if (!accessToken) {
         return;
       }
@@ -469,17 +479,52 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [persist, persistTransactions]
   );
 
+  // The most recent refresh still in flight. Every call registers here, but
+  // only `coalesce` callers ever join one. Keyed on the exact token so a join
+  // can never hand one account another account's request. On cold start the
+  // mount sync and the TOKEN_REFRESHED listener both carry the freshly
+  // refreshed token, which is the duplicate pair this exists to collapse.
+  // `force` is recorded because a forced request skips the optimistic-deposit
+  // guard; joining one would silently give a non-force caller that behavior.
+  const inFlightRefreshRef = useRef<{
+    accessToken: string;
+    force: boolean;
+    promise: Promise<void>;
+  } | null>(null);
+
+  const refreshFromApi = useCallback(
+    (accessToken?: string, options?: RefreshFromApiOptions): Promise<void> => {
+      if (!accessToken) return Promise.resolve();
+
+      const force = options?.force ?? false;
+      const inFlight = inFlightRefreshRef.current;
+      if (
+        options?.coalesce &&
+        !force &&
+        inFlight &&
+        !inFlight.force &&
+        inFlight.accessToken === accessToken
+      ) {
+        return inFlight.promise;
+      }
+
+      const promise = fetchFromApi(accessToken, options).finally(() => {
+        if (inFlightRefreshRef.current?.promise === promise) {
+          inFlightRefreshRef.current = null;
+        }
+      });
+      inFlightRefreshRef.current = { accessToken, force, promise };
+      return promise;
+    },
+    [fetchFromApi]
+  );
+
   // Keep a stable ref to `refreshFromApi` so subscription callbacks can call
   // the latest implementation without forcing the auth-state effect to
   // re-subscribe if the function identity changes.
-  const refreshFromApiRef =
-    useRef<
-      | ((
-          accessToken?: string,
-          options?: { silent?: boolean; force?: boolean }
-        ) => Promise<void>)
-      | undefined
-    >(refreshFromApi);
+  const refreshFromApiRef = useRef<
+    ((accessToken?: string, options?: RefreshFromApiOptions) => Promise<void>) | undefined
+  >(refreshFromApi);
 
   useEffect(() => {
     refreshFromApiRef.current = refreshFromApi;
@@ -547,7 +592,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         const token = await getAccessToken();
         if (token && mountedRef.current) {
-          await refreshFromApi(token);
+          await refreshFromApi(token, { coalesce: true });
         }
       } catch (err) {
         console.error('[wallet] Error syncing from API on mount:', err);
@@ -598,7 +643,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 // Call the latest memoized implementation via ref so we don't
                 // force the effect to re-run when the function identity changes.
                 // Silent: background recovery must not flash the balance UI.
-                await refreshFromApiRef.current?.(token, { silent: true });
+                // Coalesce: on cold start this fires alongside the mount sync
+                // with the same refreshed token.
+                await refreshFromApiRef.current?.(token, { silent: true, coalesce: true });
               } catch (err) {
                 console.error('[wallet] Error syncing balance after sign-in:', err);
               }

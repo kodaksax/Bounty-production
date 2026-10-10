@@ -121,6 +121,16 @@ function reportFetchFailure(
 function shouldRetryDefault(response: Response | null, error: Error | null): boolean {
   // Retry on network errors (no response)
   if (error) {
+    // Never retry our own timeout. The attempt already spent the caller's whole
+    // budget on a stalled connection, so retrying multiplies the wait (retries: 2
+    // turns a 15s failure into ~45s of spinner) for little gain. The caller's
+    // next refresh trigger (focus, foreground, pull-to-refresh) is the retry.
+    // This was already the de facto behavior: the TimeoutError message says
+    // "timed out", which the 'timeout' check below never matched.
+    if (error.name === 'TimeoutError') {
+      return false;
+    }
+
     // Normalize message for case-insensitive matching (catches "Network request failed", etc.)
     const message = error.message.toLowerCase();
     

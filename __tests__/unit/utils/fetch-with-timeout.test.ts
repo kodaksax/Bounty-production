@@ -125,6 +125,26 @@ describe('fetchWithTimeout', () => {
       expect(callCount).toBe(2);
     });
 
+    it('should not retry an internal timeout', async () => {
+      (global.fetch as jest.Mock).mockImplementation((_url, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            const error = new Error('The operation was aborted');
+            error.name = 'AbortError';
+            reject(error);
+          });
+        })
+      );
+
+      await expect(fetchWithTimeout('https://api.example.com/test', {
+        timeout: 20,
+        retries: 2,
+        retryDelay: 10,
+      })).rejects.toMatchObject({ name: 'TimeoutError' });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
     it('should not retry on 4xx errors', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 404 });
 
