@@ -282,7 +282,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 16,
       padding: 20,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       gap: 6,
     },
     label: {

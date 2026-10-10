@@ -160,7 +160,7 @@ function makeStyles(theme: AppTheme) {
     card: {
       backgroundColor: theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       borderRadius: 12,
       padding: 16,
       gap: 12,

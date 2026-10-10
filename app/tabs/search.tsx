@@ -1357,7 +1357,7 @@ function makeStyles(t: AppTheme) {
       padding: SPACING.ELEMENT_GAP,
       marginBottom: 10,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       shadowColor: '#000',
       shadowOpacity: t.isDark ? 0.3 : 0.06,
       shadowRadius: 8,

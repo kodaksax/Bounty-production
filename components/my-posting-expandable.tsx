@@ -2350,7 +2350,7 @@ function makeStyles(theme: AppTheme) {
       padding: 16,
       gap: 12,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
     },
     receiptHeader: {
       flexDirection: 'row',

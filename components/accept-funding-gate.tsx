@@ -489,7 +489,7 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
     subtitle: { color: theme.textSecondary, fontSize: metrics.subtitleFontSize },
     card: {
       backgroundColor: theme.surface,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       borderWidth: 1,
       borderRadius: 16,
       paddingVertical: metrics.cardPaddingVertical,

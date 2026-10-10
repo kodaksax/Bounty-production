@@ -461,7 +461,7 @@ function makeStyles(theme: AppTheme) {
       padding: 12,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       backgroundColor: theme.surfaceSecondary,
     },
     trustCardHeader: { flexDirection: 'row', alignItems: 'flex-start' },

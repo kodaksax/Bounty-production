@@ -521,7 +521,7 @@ function makeStyles(theme: AppTheme) {
     detailsCard: {
       backgroundColor: theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       borderRadius: 8,
       padding: 16,
       marginBottom: 24,

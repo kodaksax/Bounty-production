@@ -528,7 +528,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: t.border,
+    ...t.insetBorder, // pressed-in edge: dark top → light bottom
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,

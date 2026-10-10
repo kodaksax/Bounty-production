@@ -131,7 +131,7 @@ function makeStyles(theme: AppTheme) {
     reviewCard: {
       backgroundColor: theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       borderRadius: 12,
       padding: 12,
       marginBottom: 8,

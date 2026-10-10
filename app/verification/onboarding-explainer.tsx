@@ -168,7 +168,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 16,
       padding: SPACING.CARD_PADDING,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       gap: 12,
     },
     reasonIconCircle: {

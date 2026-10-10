@@ -521,7 +521,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 20,
       padding: 16,
       borderWidth: 1,
-      borderColor: t.borderRaised,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       shadowColor: '#000',
       shadowOpacity: t.isDark ? 0.4 : 0.16,
       shadowRadius: 12,

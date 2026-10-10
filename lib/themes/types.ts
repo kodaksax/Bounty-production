@@ -21,6 +21,17 @@ export type AppTheme = {
 
   // ── Borders ──────────────────────────────────────────────────────────────
   border: string;
+  /**
+   * Pressed-in card edge: per-side colours that read as a gradient from a
+   * dark top edge to a light bottom edge. Spread into a style that already
+   * has a borderWidth: `{ borderWidth: 1, ...theme.insetBorder }`.
+   */
+  insetBorder: {
+    borderTopColor: string;
+    borderLeftColor: string;
+    borderRightColor: string;
+    borderBottomColor: string;
+  };
 
   // ── Text ─────────────────────────────────────────────────────────────────
   text: string;               // primary

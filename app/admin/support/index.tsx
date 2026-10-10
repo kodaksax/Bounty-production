@@ -197,7 +197,7 @@ const makeStyles = (theme: AppTheme) =>
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: theme.border,
+    ...theme.insetBorder, // pressed-in edge: dark top → light bottom
     gap: 16,
   },
   linkIcon: {
@@ -232,7 +232,7 @@ const makeStyles = (theme: AppTheme) =>
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: theme.border,
+    ...theme.insetBorder, // pressed-in edge: dark top → light bottom
     alignItems: 'center',
     gap: 8,
   },
@@ -247,7 +247,7 @@ const makeStyles = (theme: AppTheme) =>
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: theme.border,
+    ...theme.insetBorder, // pressed-in edge: dark top → light bottom
     gap: 12,
   },
   infoRow: {

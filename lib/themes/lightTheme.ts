@@ -17,6 +17,12 @@ export const lightTheme: AppTheme = {
   borderRaised:      palette.navy[300],   // #D8D2C4
 
   border:            palette.navy[300],   // #D8D2C4
+  insetBorder: {
+    borderTopColor:    '#B8AE9C',           // dark top edge
+    borderLeftColor:   palette.navy[300],   // #D8D2C4
+    borderRightColor:  palette.navy[300],
+    borderBottomColor: palette.white,       // light bottom edge
+  },
 
   text:              palette.ink,         // #31363F
   textSecondary:     palette.navy[600],   // #61656B

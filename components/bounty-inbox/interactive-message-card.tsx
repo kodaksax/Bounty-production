@@ -554,7 +554,7 @@ function makeStackStyles(t: AppTheme) {
     },
     context: {
       backgroundColor: t.surfaceRaised,
-      borderColor: t.borderRaised,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       borderWidth: 1,
       borderRadius: 20,
       overflow: 'hidden',

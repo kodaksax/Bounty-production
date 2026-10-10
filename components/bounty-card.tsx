@@ -463,7 +463,7 @@ function makeStyles(theme: AppTheme) {
       padding: 18,
       marginBottom: 18,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       ...legacyTheme.shadows.lg,
     },
     // Cancels the card's own padding so the strip spans edge to edge under it.

@@ -817,7 +817,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 24,
       padding: 24,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       overflow: 'hidden',
     },
     heroTopRow: {
@@ -927,7 +927,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 24,
       padding: 24,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       gap: 24,
     },
     sectionTitle: {

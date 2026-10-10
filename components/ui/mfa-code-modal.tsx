@@ -125,7 +125,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 16,
       padding: 24,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
     },
     title: {
       fontSize: 18,

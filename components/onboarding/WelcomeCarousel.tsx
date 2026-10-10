@@ -552,7 +552,7 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: theme.surface,
       borderRadius: theme.radius.xl,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       padding: 18,
     },
     proofCardTopRow: {

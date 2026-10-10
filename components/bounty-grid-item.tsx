@@ -386,7 +386,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surfaceRaised,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: t.borderRaised,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.15,

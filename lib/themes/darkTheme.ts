@@ -16,6 +16,12 @@ export const darkTheme: AppTheme = {
   borderRaised:      palette.navy[700],   // #454952
 
   border:            palette.navy[700],   // #454952
+  insetBorder: {
+    borderTopColor:    '#121418',           // dark top edge
+    borderLeftColor:   '#3A3E46',
+    borderRightColor:  '#3A3E46',
+    borderBottomColor: '#5E636C',           // light bottom edge
+  },
 
   text:              palette.cream,       // #E6DED1
   textSecondary:     palette.navy[500],   // #929497

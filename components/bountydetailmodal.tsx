@@ -1110,7 +1110,7 @@ function makeStyles(theme: AppTheme) {
     overflow: 'hidden',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: theme.border,
+    ...theme.insetBorder, // pressed-in edge: dark top → light bottom
   },
   cardContent: {
     padding: 16,

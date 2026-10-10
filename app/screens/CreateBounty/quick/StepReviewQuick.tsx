@@ -151,7 +151,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 24,
       backgroundColor: theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       overflow: 'hidden',
     },
     row: { flexDirection: 'row', alignItems: 'center', padding: 18 },
