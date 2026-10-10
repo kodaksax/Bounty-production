@@ -175,7 +175,7 @@ export default function AuditLogsScreen() {
         return { color: theme.warning, bg: 'rgba(245,158,11,0.15)', label: 'Warning' };
       case 'info':
       default:
-        return { color: theme.success, bg: 'rgba(16,185,129,0.15)', label: 'Info' };
+        return { color: theme.success, bg: 'rgba(0,142,42,0.15)', label: 'Info' };
     }
   };
 
@@ -971,7 +971,7 @@ const makeStyles = (theme: AppTheme) =>
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(16,185,129,0.15)',
+    backgroundColor: 'rgba(0,142,42,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,

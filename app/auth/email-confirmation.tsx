@@ -83,7 +83,7 @@ export default function EmailConfirmationScreen() {
           ]}
         >
           <View style={styles.iconCircle}>
-            <MaterialIcons name="mark-email-read" size={64} color="#059669" />
+            <MaterialIcons name="mark-email-read" size={64} color="#008E2A" />
           </View>
         </Animated.View>
 
@@ -217,7 +217,7 @@ function makeStyles(theme: AppTheme) {
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 12,
@@ -270,7 +270,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       paddingVertical: 16,
       borderRadius: 999,
       gap: 8,

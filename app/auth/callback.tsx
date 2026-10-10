@@ -269,7 +269,7 @@ export default function AuthCallbackScreen() {
         return (
           <View style={styles.centerContent}>
             <View style={styles.successIconCircle}>
-              <MaterialIcons name="check-circle" size={64} color="#059669" />
+              <MaterialIcons name="check-circle" size={64} color="#008E2A" />
             </View>
             <Text style={styles.title}>
               {linkType === 'recovery' ? 'Link Verified' : 'Email Confirmed!'}
@@ -483,7 +483,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       paddingVertical: 16,
       borderRadius: 999,
       gap: 8,

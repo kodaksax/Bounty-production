@@ -303,7 +303,7 @@ export default function Index() {
     }
     return (
       <View style={indexStyles.loadingContainer}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color="#008E2A" />
         <Text style={indexStyles.loadingText}>
           {bootstrap.status === 'authenticated' ? 'Redirecting...' : 'Loading...'}
         </Text>
@@ -323,7 +323,7 @@ const indexStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0B0F14', // page background
+    backgroundColor: '#1B1E24', // page background
   },
   loadingText: {
     color: '#ffffff',
@@ -336,7 +336,7 @@ const indexStyles = StyleSheet.create({
     fontWeight: '700',
   },
   offlineText: {
-    color: '#d1d5db',
+    color: '#D8D2C4',
     fontSize: 16,
     lineHeight: 22,
     marginTop: 12,
@@ -345,7 +345,7 @@ const indexStyles = StyleSheet.create({
   },
   retryButton: {
     alignItems: 'center',
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     borderRadius: 6,
     marginTop: 24,
     minWidth: 112,

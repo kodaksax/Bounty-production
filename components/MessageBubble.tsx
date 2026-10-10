@@ -115,13 +115,13 @@ export const MessageBubble = memo(({
       case 'sent':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="check" size={12} color="#9CA3AF" />
+            <MaterialIcons name="check" size={12} color="#929497" />
           </View>
         );
       case 'delivered':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="done-all" size={12} color="#9CA3AF" />
+            <MaterialIcons name="done-all" size={12} color="#929497" />
           </View>
         );
       case 'read':
@@ -162,7 +162,7 @@ export const MessageBubble = memo(({
         <View style={[styles.quoteBar, isUser ? styles.quoteBarUser : styles.quoteBarOther]} />
         <View style={styles.quoteBody}>
           <View style={styles.quoteHeader}>
-            <MaterialIcons name="reply" size={12} color={isUser ? '#d1fae5' : '#6ee7b7'} />
+            <MaterialIcons name="reply" size={12} color={isUser ? '#DBF0E1' : '#1FAE49'} />
             <Text
               style={[styles.quoteSender, isUser ? styles.quoteSenderUser : styles.quoteSenderOther]}
               numberOfLines={1}
@@ -199,7 +199,7 @@ export const MessageBubble = memo(({
           <MaterialIcons
             name={mediaFailed ? 'broken-image' : 'insert-drive-file'}
             size={20}
-            color="#E5E7EB"
+            color="#F4F1EC"
           />
           <Text style={styles.fileChipText} numberOfLines={1}>
             {mediaFileName(mediaUrl)}
@@ -276,8 +276,8 @@ export const MessageBubble = memo(({
         <View className={cn(
           'px-3 py-2 rounded-2xl',
           isUser
-            ? 'bg-[#059669] rounded-br-none'
-            : 'bg-[#1F2937] rounded-bl-none'
+            ? 'bg-[#008E2A] rounded-br-none'
+            : 'bg-[#2A2E35] rounded-bl-none'
         )}>
           {isPinned && (
             <View style={styles.pinnedBadge}>
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
   },
   highlighted: {
     borderRadius: 18,
-    backgroundColor: 'rgba(110, 231, 183, 0.18)',
+    backgroundColor: 'rgba(31, 174, 73, 0.18)',
   },
   quote: {
     flexDirection: 'row',
@@ -338,10 +338,10 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   quoteBarUser: {
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#DBF0E1',
   },
   quoteBarOther: {
-    backgroundColor: '#6ee7b7',
+    backgroundColor: '#1FAE49',
   },
   quoteBody: {
     flexShrink: 1,
@@ -359,10 +359,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   quoteSenderUser: {
-    color: '#d1fae5',
+    color: '#DBF0E1',
   },
   quoteSenderOther: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
   },
   quoteText: {
     fontSize: MESSAGE_FONT_SIZE.quoteText,
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
   fileChipText: {
     flexShrink: 1,
     fontSize: MESSAGE_FONT_SIZE.fileName,
-    color: '#E5E7EB',
+    color: '#F4F1EC',
   },
   jumboEmoji: {
     fontSize: MESSAGE_FONT_SIZE.emojiOnly,

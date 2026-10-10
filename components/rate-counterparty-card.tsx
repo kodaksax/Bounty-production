@@ -58,7 +58,7 @@ export function RateCounterpartyCard({ bountyId }: { bountyId: string }) {
   if (phase === 'done') {
     return (
       <View style={styles.card} accessibilityLiveRegion="polite">
-        <MaterialIcons name="check-circle" size={28} color="#059669" />
+        <MaterialIcons name="check-circle" size={28} color="#008E2A" />
         <Text style={styles.title}>Thanks for rating {name}</Text>
         <Text style={styles.subtitle}>Your rating now shows on their profile.</Text>
       </View>
@@ -195,7 +195,7 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButton: {
       width: '100%',
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       borderRadius: 10,
       paddingVertical: 14,
       alignItems: 'center',

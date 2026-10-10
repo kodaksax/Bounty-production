@@ -2,8 +2,7 @@
 
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { MaterialIcons } from "@expo/vector-icons"
-import { BrandingLogo } from "components/ui/branding-logo"
-import { useRouter } from "expo-router"
+import { useFocusEffect, useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
 import { failureEventProps } from "lib/utils/stripe-error"
 import { discardApplication, withdrawApplication } from "lib/services/application-withdrawal"
@@ -12,6 +11,8 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
+import type { Conversation } from "lib/types"
+import type { BountyLifecycleState } from "lib/utils/bounty-lifecycle"
 import {
   filterManagementBounties,
   markBountyRemovedLocally,
@@ -27,47 +28,35 @@ import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { ApplicantCard } from "../../components/applicant-card"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
+import { BrandingLogo } from "../../components/ui/branding-logo"
+import { BountyConversationRow, type InboxPerson } from "../../components/bounty-inbox/thread-list-row"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { getBottomNavContentPadding } from "../../lib/constants/navigation"
 import { useConversations } from '../../hooks/useConversations'
+import { findPairConversation } from '../../hooks/useBountyThread'
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
 import { uniqueRealtimeTopic } from '../../lib/utils/realtime-topic'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
-import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
 import { EmptyState } from '../../components/ui/empty-state'
-import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
+import { PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
-import { useAcceptFunding } from '../../hooks/useAcceptFunding'
-import { useAcceptRequest } from '../../hooks/useAcceptRequest'
 import { useApplicantListViewed } from '../../hooks/useApplicantListViewed'
-import { AcceptFundingGate } from '../../components/accept-funding-gate'
-import type { BountyListRow, InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
+import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
   IN_PROGRESS_FILTERS,
   IN_PROGRESS_FILTER_LABELS,
   MY_POSTINGS_FILTERS,
   MY_POSTINGS_FILTER_LABELS,
-  toBountyListRows,
   useBountyStatusFilters,
 } from '../../hooks/useBountyStatusFilters'
-import { BountySectionHeader } from '../../components/ui/bounty-section-header'
-import { useAskApplicant } from '../../hooks/useAskApplicant'
-import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { getBountyFundingRequirement } from '../../lib/services/bounty-funding-service'
-import { useAuthContext } from '../../hooks/use-auth-context'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
-// Reuse the exact same expandable row used by the Activity (Postings) screen so
-// the Inbox renders Work / Posts / Requests with identical look-and-feel.
-import { MyPostingRow } from './postings-screen'
-// Expanded rows contain text fields (completion message, revision
-// feedback), so the list has to inset for the keyboard.
-import { keyboardAwareListProps } from "../../components/ui/keyboard-avoiding"
+import { hapticFeedback } from '../../lib/haptic-feedback'
 
 interface InboxScreenProps {
   onBack?: () => void
@@ -78,21 +67,28 @@ interface InboxScreenProps {
 }
 
 /**
- * InboxScreen — the "Inbox" bottom-nav tab.
+ * InboxScreen — the "My Bounties" bottom-nav tab.
  *
- * Renders the Work (In Progress), Posts (My Postings) and Requests content that
- * previously lived only on the Activity tab. The messaging inbox implementation
- * still lives in `messenger-screen.tsx` and is intentionally left untouched.
+ * Two top tabs, both laid out as a DM inbox: My Work (bounties this user
+ * applied to / is working, as the hunter) and My Bounties (bounties they
+ * posted, as the poster). Each row opens a bounty thread
+ * (app/tabs/bounty-thread/[bountyId].tsx) where the workflow plays out as
+ * interactive cards between ordinary messages. Applications that used to sit
+ * in a separate Requests tab now arrive as rows in My Bounties.
+ *
+ * The general messaging inbox still lives in `messenger-screen.tsx` and is
+ * reached from the header's chat icon.
  */
 export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyAccepted }: InboxScreenProps) {
   const rawUserId = useValidUserId()
   const currentUserId = rawUserId ?? undefined
   const router = useRouter()
 
-  // Only Work / Posts / Requests exist here — anything else (e.g. the Activity
-  // tab's "new" flow) falls back to Work.
-  const [activeTab, setActiveTab] = useState(
-    initialTab && ["inProgress", "myPostings", "requests"].includes(initialTab) ? initialTab : "inProgress"
+  // My Work / My Bounties. Old deep links still resolve: "requests" (the
+  // retired Requests tab) opens My Bounties, where applications now live, and
+  // anything unknown falls back to My Work.
+  const [activeTab, setActiveTab] = useState<InboxTab>(
+    initialTab === "myPostings" || initialTab === "requests" ? "myPostings" : "inProgress"
   )
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   const [headerHeight, setHeaderHeight] = useState(0)
@@ -118,9 +114,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   const insets = useSafeAreaInsets()
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
-  const { totalUnreadCount: unreadMessageCount } = useConversations()
-  const { refundEscrow, refreshFromApi } = useWallet()
-  const { session: walletSession } = useAuthContext()
+  const { totalUnreadCount: unreadMessageCount, conversations, refresh: refreshConversations } = useConversations()
+  const { refundEscrow } = useWallet()
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
   // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
@@ -133,38 +128,9 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   // Edit/Delete state
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
-  // Expanded rows map for My Postings list
-  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({})
-  // When true we should not toggle rows on press (prevents taps firing after a scroll/drag)
-  const [isListScrolling, setIsListScrolling] = useState(false)
-  // Refs for lists so we can scroll items into view when expanded
-  const inProgressListRef = useRef<any>(null)
-  const myPostingsListRef = useRef<any>(null)
   // Bounty ids with a delete/refund in flight — blocks repeat taps from
   // re-entering the refund and firing duplicate escrow events.
   const deletingBountyIdsRef = useRef<Set<string>>(new Set())
-
-  // Per-item native refs so we can measure exact layout relative to the list
-  const itemRefs = useRef<Record<string, any>>({})
-  // Pending scroll request (set when expanding an item, cleared after measuring)
-  const pendingScrollRef = useRef<{ list: 'inProgress' | 'myPostings'; key: string } | null>(null)
-
-  // Scroll helper: toggle expanded state then measure the item's position and scroll to exact offset
-  const handleToggleAndScroll = (list: 'inProgress' | 'myPostings', bountyId: string | number) => {
-    const key = String(bountyId)
-    // Toggle expansion first
-    setExpandedMap((prev) => {
-      const next = { ...prev, [key]: !prev[key] }
-      return next
-    })
-
-    // If we're collapsing, no need to scroll
-    const willExpand = !expandedMap[key]
-
-    if (!willExpand) return
-    // Mark pending scroll — we'll measure and scroll when the expanded content calls back
-    pendingScrollRef.current = { list, key }
-  }
 
   // ---- Data Loaders ----
   const loadRequestsForMyBounties = React.useCallback(async (bounties: Bounty[]) => {
@@ -269,18 +235,6 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     }
   }, [loadMyBounties, loadInProgress])
 
-  const tabs = [
-    { id: "inProgress", label: "In Progress", shortLabel: "Work", icon: "play-circle-outline" },
-    { id: "myPostings", label: "My Postings", shortLabel: "Posts", icon: "assignment" },
-    { id: "requests", label: "Requests", shortLabel: "Requests", icon: "people-outline" },
-  ] as const
-
-  // Count of unreviewed (pending) requests — drives the badge on the Requests tab
-  const pendingRequestCount = React.useMemo(
-    () => bountyRequests.filter((r) => r.status === 'pending').length,
-    [bountyRequests]
-  )
-
   // Unreviewed applications per posting. An open bounty with applications is
   // the poster's most common "needs your attention" state and cannot be seen
   // from the bounty row alone, so the grouping needs it explicitly.
@@ -369,56 +323,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     }
   }, [openBountyIdsKey, currentUserId, loadRequestsForMyBounties])
 
-  // ---- Accept/Reject request handlers (extracted to hooks) ----
-  // Owns the pay-at-accept gate. Rendered as a full-screen early return below,
-  // so the poster can never be looking at an "in progress" list while a
-  // payment sheet is open.
-  // Pull the authoritative balance the moment a pay-at-accept acceptance
-  // charges the poster. `force` because the server just debited us: a recent
-  // optimistic top-up (very likely here — the poster may have just topped up
-  // inside the funding gate) would otherwise keep the pre-charge figure on
-  // screen. `silent` so the wallet updates in place instead of blanking.
-  const refreshWalletBalance = React.useCallback(async () => {
-    const token = walletSession?.access_token
-    if (!token) return
-    await refreshFromApi(token, { silent: true, force: true })
-  }, [walletSession?.access_token, refreshFromApi])
-
-  const { gate: acceptFundingGate, ensureFunded, handleAcceptFailure } = useAcceptFunding()
-
-  const { handleAcceptRequest } = useAcceptRequest({
-    currentUserId,
-    bountyRequests,
-    myBounties,
-    setBountyRequests,
-    setMyBounties,
-    setInProgressBounties,
-    setIsLoading,
-    setError,
-    loadMyBounties,
-    loadInProgress,
-    loadRequestsForMyBounties,
-    onBountyAccepted,
-    setActiveScreen,
-    ensureFunded,
-    refreshWallet: refreshWalletBalance,
-    handleAcceptFailure,
-  })
-
-  const { handleRejectRequest } = useRejectRequest({
-    bountyRequests,
-    setBountyRequests,
-    setIsLoading,
-    setError,
-  })
-
-  // P0-02: let a poster ask an applicant a question BEFORE committing to them.
-  // ApplicantCard already renders an "Ask a question" button whenever
-  // onRequestMoreInfo is supplied; until now neither list passed it, so the
-  // button never appeared and accepting was the only way to open a thread.
-  const { handleAskApplicant, askingRequestId, isAskApplicantBusy } = useAskApplicant({ bountyRequests })
-
-  useApplicantListViewed(bountyRequests, activeTab === 'requests', isLoading.requests)
+  // Applicants are now reviewed from My Bounties.
+  useApplicantListViewed(bountyRequests, activeTab === 'myPostings', isLoading.requests)
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.
@@ -773,82 +679,57 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     )
   }
 
-  // ---- Optimized FlatList callbacks ----
-  // Memoized keyExtractor functions
-  // Rows are either a section header or a bounty; ids are namespaced by
-  // toBountyListRows so a header can never collide with a bounty id.
-  const keyExtractorRow = React.useCallback((item: BountyListRow) => item.id, []);
-  const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
-
-  // NOTE: Do NOT provide getItemLayout for any of these lists. MyPostingExpandable
-  // rows change height when expanded, and ApplicantCard height varies with the
-  // pitch message, skills row and ID-status row (~280-400px). A fixed guess makes
-  // FlatList compute wrong offsets, unmount rows that are still on screen and
-  // snap the scroll position back while the user is scrolling.
-
-  // Memoized render functions for better performance
-  const renderMyPostingItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
-    if (row.kind === 'section') {
-      return <BountySectionHeader label={row.label} count={row.count} group={row.group} />
-    }
-    const bounty = row.bounty
-    return (
-    <View
-      ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
-      collapsable={false}
-    >
-      <MyPostingRow
-        bounty={bounty}
-        currentUserId={currentUserId}
-        expanded={!!expandedMap[String(bounty.id)]}
-        onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
-        onEdit={bounty.status === 'open' && !bounty.accepted_by && !isBountyDeadlinePassed(bounty) && !bountiesWithPendingRequestsSet.has(String(bounty.id)) ? () => handleEditBounty(bounty) : undefined}
-        onDelete={bounty.status === 'open' && !bounty.accepted_by ? () => handleDeleteBounty(bounty) : undefined}
-        onDiscard={bounty.status === 'cancelled' ? () => handleDiscardCancelledBounty(bounty) : undefined}
-        onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
-        onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
-        variant={'owner'}
-        isListScrolling={isListScrolling}
-        onRefresh={refreshAll}
-        applicationCount={applicationCounts.get(String(bounty.id)) ?? 0}
-      />
-    </View>
-    )
-  }, [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, refreshAll, bountiesWithPendingRequestsSet, applicationCounts]);
-
-  const renderInProgressItem = React.useCallback(({ item: row }: { item: BountyListRow; index: number }) => {
-    if (row.kind === 'section') {
-      return <BountySectionHeader label={row.label} count={row.count} group={row.group} />
-    }
-    const bounty = row.bounty
-    return (
-    <View
-      ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
-      collapsable={false}
-    >
-      <MyPostingRow
-        bounty={bounty}
-        currentUserId={currentUserId}
-        expanded={!!expandedMap[String(bounty.id)]}
-        onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
-        onWithdrawApplication={(requestStatus) => handleWithdrawApplication(bounty.id, requestStatus)}
-        onHide={() => handleHideInProgressBounty(bounty)}
-        onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
-        onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
-        variant={'hunter'}
-        isListScrolling={isListScrolling}
-        onRefresh={refreshAll}
-      />
-    </View>
-    )
-  }, [currentUserId, expandedMap, isListScrolling, router, refreshAll, handleHideInProgressBounty]);
-
-  // Memoized styles that must be called unconditionally (before any early returns)
-  const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
-  const listContentPadding = useMemo(
-    () => ({ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }),
-    [insets.bottom]
+  // ---- Thread rows ----
+  // Returning from a thread (where the user may have hired, submitted, paid…)
+  // must not leave the inbox showing the old state.
+  const firstFocusRef = useRef(true)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (firstFocusRef.current) {
+        firstFocusRef.current = false
+        return
+      }
+      refreshAll()
+      refreshConversations().catch(() => {})
+    }, [refreshAll, refreshConversations])
   )
+
+  const handleRefresh = React.useCallback(async () => {
+    await Promise.all([refreshAll(), refreshConversations().catch(() => null)])
+  }, [refreshAll, refreshConversations])
+
+  const openThread = React.useCallback(
+    (bountyId: string | number, role: 'hunter' | 'poster', withId?: string | null) => {
+      router.push({
+        pathname: '/tabs/bounty-thread/[bountyId]',
+        params: withId ? { bountyId: String(bountyId), role, with: String(withId) } : { bountyId: String(bountyId), role },
+      } as never)
+    },
+    [router]
+  )
+
+  const handleArchiveBounty = React.useCallback((bounty: Bounty) => {
+    Alert.alert(
+      'Archive Bounty',
+      'Archive this bounty so it is hidden from active listings but retained in your history?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Archive',
+          onPress: async () => {
+            try {
+              const updated = await bountyService.update(String(bounty.id), { status: 'archived' })
+              if (!updated) throw new Error('Failed to archive bounty')
+              await loadMyBounties()
+            } catch (err) {
+              console.error('Error archiving bounty:', err)
+              Alert.alert('Error', 'Failed to archive bounty. Please try again.')
+            }
+          },
+        },
+      ]
+    )
+  }, [loadMyBounties])
 
   // Bounties this hunter locally hid from In Progress (see
   // lib/utils/hunter-hidden-bounties.ts) — re-applied on every render so a
@@ -862,10 +743,9 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   // Filter chips select on the status a card *displays*, not on bounty.status —
   // see hooks/useBountyStatusFilters for why those differ.
   const {
+    getLifecycle,
     displayedInProgress,
     displayedMyPostings,
-    inProgressSections,
-    myPostingsSections,
     inProgressReviewCount,
     myPostingsReviewCount,
     inProgressAttentionCount,
@@ -880,526 +760,438 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     applicationCounts,
   })
 
-  // Section headers are interleaved into the same FlatList as the cards — see
-  // toBountyListRows for why these lists aren't SectionLists.
-  const inProgressRows = React.useMemo(
-    () => toBountyListRows(inProgressSections, displayedInProgress),
-    [inProgressSections, displayedInProgress]
-  )
-  const myPostingsRows = React.useMemo(
-    () => toBountyListRows(myPostingsSections, displayedMyPostings),
-    [myPostingsSections, displayedMyPostings]
-  )
+  const requestStatusByBounty = React.useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of hunterRequests) m.set(String(r?.bounty?.id ?? r?.bounty_id), r.status)
+    return m
+  }, [hunterRequests])
 
-  // Badges count everything actually blocked on this user, not just submitted
-  // work: a poster with applications waiting has something to do even though
-  // nothing has been submitted for review yet.
-  const getTabBadgeCount = React.useCallback((tabId: string) => {
-    if (tabId === 'requests') return pendingRequestCount
-    if (tabId === 'inProgress') return inProgressAttentionCount
-    if (tabId === 'myPostings') return myPostingsAttentionCount
-    return 0
-  }, [inProgressAttentionCount, myPostingsAttentionCount, pendingRequestCount])
+  const applicantsByBounty = React.useMemo(() => {
+    const m = new Map<string, BountyRequestWithDetails[]>()
+    for (const r of bountyRequests) {
+      if (r.status !== 'pending') continue
+      const key = String(r.bounty_id)
+      const list = m.get(key)
+      if (list) list.push(r)
+      else m.set(key, [r])
+    }
+    return m
+  }, [bountyRequests])
 
-  const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
-    <ApplicantCard
-      request={request}
-      onAccept={handleAcceptRequest}
-      onReject={handleRejectRequest}
-      onRequestMoreInfo={handleAskApplicant}
-      isAskingQuestion={askingRequestId === String(request.id)}
-      isAskQuestionDisabled={isAskApplicantBusy}
-      // Ensure returning from profile restores this screen to the Requests tab
-      // reliably by directing BountyApp to open messages + requests.
-      referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=requests`}
-    />
-  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant, askingRequestId, isAskApplicantBusy]);
+  const workRows: InboxRow[] = React.useMemo(() => {
+    const rows = displayedInProgress.map((b): InboxRow => {
+      const lifecycle = getLifecycle(b, 'hunter')
+      const posterId = String(b.poster_id || b.user_id || '')
+      const conv = findPairConversation(conversations, currentUserId, posterId, String(b.id))
+      return {
+        key: `work:${b.id}`,
+        bounty: b,
+        role: 'hunter',
+        lifecycle,
+        person: posterId ? { id: posterId, name: (b as any).username ?? null, avatar: (b as any).poster_avatar ?? null } : null,
+        conversation: conv,
+        application: null,
+        activityAt: conv?.updatedAt ?? b.created_at,
+      }
+    })
+    return sortInboxRows(rows)
+  }, [displayedInProgress, getLifecycle, conversations, currentUserId])
+
+  // One row per person, like a DM inbox: each pending applicant on an open
+  // bounty is their own conversation; a hired bounty is the conversation with
+  // its hunter; an open bounty nobody has applied to yet gets a single row.
+  const bountyRows: InboxRow[] = React.useMemo(() => {
+    const rows: InboxRow[] = []
+    for (const b of displayedMyPostings) {
+      const lifecycle = getLifecycle(b, 'owner')
+      const applicants = b.status === 'open' ? applicantsByBounty.get(String(b.id)) ?? [] : []
+      if (applicants.length > 0) {
+        for (const a of applicants) {
+          const hunterId = String(a.hunter_id)
+          const conv = findPairConversation(conversations, currentUserId, hunterId, String(b.id))
+          rows.push({
+            key: `bounty:${b.id}:${hunterId}`,
+            bounty: b,
+            role: 'poster',
+            lifecycle,
+            person: { id: hunterId, name: a.profile?.username ?? null, avatar: a.profile?.avatar ?? null },
+            conversation: conv,
+            application: a,
+            activityAt: [conv?.updatedAt, a.created_at].filter(Boolean).sort().pop() ?? null,
+          })
+        }
+        continue
+      }
+      const hunterId = b.accepted_by ? String(b.accepted_by) : null
+      const conv = hunterId ? findPairConversation(conversations, currentUserId, hunterId, String(b.id)) : null
+      rows.push({
+        key: `bounty:${b.id}`,
+        bounty: b,
+        role: 'poster',
+        lifecycle,
+        person: hunterId ? { id: hunterId } : null,
+        conversation: conv,
+        application: null,
+        activityAt: conv?.updatedAt ?? b.created_at,
+      })
+    }
+    return sortInboxRows(rows)
+  }, [displayedMyPostings, getLifecycle, applicantsByBounty, conversations, currentUserId])
+
+  // Badges count everything actually blocked on this user — for a poster that
+  // includes applications waiting on a decision.
+  const tabBadge = (tabId: InboxTab) =>
+    tabId === 'inProgress' ? inProgressAttentionCount : myPostingsAttentionCount
+
+  const handleRowLongPress = React.useCallback((row: InboxRow) => {
+    const b = row.bounty
+    const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = []
+    if (row.role === 'hunter') {
+      const reqStatus = requestStatusByBounty.get(String(b.id))
+      if (b.status === 'open' && reqStatus === 'pending') {
+        buttons.push({ text: 'Withdraw application', style: 'destructive', onPress: () => handleWithdrawApplication(b.id, reqStatus) })
+      } else if (row.lifecycle.status === 'rejected') {
+        buttons.push({ text: 'Discard', style: 'destructive', onPress: () => handleWithdrawApplication(b.id, 'rejected') })
+      } else if (row.lifecycle.group === 'past') {
+        buttons.push({
+          text: 'Hide from list',
+          style: 'destructive',
+          onPress: () => {
+            handleHideInProgressBounty(b).catch(() => Alert.alert('Error', 'Failed to hide bounty. Please try again.'))
+          },
+        })
+      }
+    } else {
+      const canEdit =
+        b.status === 'open' && !b.accepted_by && !isBountyDeadlinePassed(b) && !bountiesWithPendingRequestsSet.has(String(b.id))
+      if (canEdit) buttons.push({ text: 'Edit posting', onPress: () => handleEditBounty(b) })
+      if (b.status === 'open' && !b.accepted_by) buttons.push({ text: 'Delete posting', style: 'destructive', onPress: () => handleDeleteBounty(b) })
+      if (b.status === 'cancelled') buttons.push({ text: 'Discard', style: 'destructive', onPress: () => handleDiscardCancelledBounty(b) })
+      if (b.status === 'completed') buttons.push({ text: 'Archive', onPress: () => handleArchiveBounty(b) })
+    }
+    if (buttons.length === 0) return
+    Alert.alert(b.title, undefined, [...buttons, { text: 'Cancel', style: 'cancel' }])
+  }, [requestStatusByBounty, bountiesWithPendingRequestsSet, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, handleArchiveBounty, handleHideInProgressBounty, handleWithdrawApplication])
+
+  // Full-width line between conversations.
+  const RowSeparator = React.useCallback(() => <View style={styles.rowSeparator} />, [styles])
+
+  const renderRow = React.useCallback(({ item: row }: { item: InboxRow }) => {
+    const b = row.bounty
+    const conv = row.conversation
+    const app = row.application
+    const preview = conv?.lastMessage
+      ? conv.lastMessage
+      : app
+        ? app.message?.trim() || 'Applied to your bounty'
+        : row.lifecycle.explanation || row.lifecycle.headline
+    return (
+      <BountyConversationRow
+        person={row.person}
+        bountyTitle={b.title}
+        status={row.lifecycle.status}
+        preview={preview}
+        timeIso={row.activityAt}
+        unread={conv?.unread ?? 0}
+        // An application waiting on the poster is their move even though the
+        // bounty-level lifecycle is shared by every applicant row.
+        yourTurn={app ? true : row.lifecycle.needsAttention}
+        onPress={() => openThread(b.id, row.role, row.role === 'poster' ? row.person?.id ?? null : null)}
+        onLongPress={() => handleRowLongPress(row)}
+      />
+    )
+  }, [openThread, handleRowLongPress])
+
+  const listContentPadding = useMemo(
+    () => ({ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }),
+    [insets.bottom]
+  )
 
   if (showArchivedBounties) {
     return <ArchivedBountiesScreen onBack={() => setShowArchivedBounties(false)} />
   }
 
-  // The pay-at-accept gate takes over the whole screen while it is open. It is
-  // only ever active for a bounty that was posted unfunded and still needs
-  // escrow — every legacy bounty resolves it instantly and invisibly.
-  if (acceptFundingGate.active) {
-    return <AcceptFundingGate gate={acceptFundingGate} />
-  }
+  const isWork = activeTab === 'inProgress'
+  const rows = isWork ? workRows : bountyRows
+  const loadingList = isWork ? isLoading.inProgress : isLoading.myBounties
+  const filters = isWork ? IN_PROGRESS_FILTERS : MY_POSTINGS_FILTERS
+  const selectedFilter = isWork ? statusFilterInProgress : statusFilterMyPostings
+  const reviewCount = isWork ? inProgressReviewCount : myPostingsReviewCount
 
   return (
-    <View className="flex-1" style={{ backgroundColor: theme.background }}>
-        {/* Fixed Header (overlay) - measured height to align content under tabs */}
-        <View
-          onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
-          style={[
-            {
-              position: "absolute",
-              top: -55,
-              left: 0,
-              right: 0,
-              zIndex: 20,
-              backgroundColor: theme.background,
-              paddingTop: insets.top,
-            },
-            showShadow
-              ? {
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 6,
-                elevation: 6,
-              }
-              : null,
-          ]}
-        >
-          {/* Header */}
-          <View className="flex-row justify-between items-center px-4">
-            {/* Left: logo aligned like messenger (no back icon) */}
-            <View className="flex-row items-center" style={styles.translateY2}>
-              <BrandingLogo size="medium" />
-            </View>
-
-            {/* Right: Wallet balance pill and bookmark (inline) */}
-            <View className="flex-row items-center" style={styles.translateY2}>
-              {/* Balance pill sits to the left, bookmark to the right */}
-              <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
-              {/* Messages. The conversation list at /tabs/messenger had no
-                  entry point anywhere in the app — every route into messaging
-                  was a deep link to ONE conversation from a bounty screen or a
-                  push notification, so there was no way to see who had written
-                  to you. The bottom nav meanwhile showed an unread-message
-                  badge on this tab, which rendered Work/Posts/Requests and no
-                  messages at all. This is the missing door. */}
-              <TouchableOpacity
-                className="ml-3 p-2 touch-target-min"
-                onPress={() => router.push(ROUTES.TABS.MESSENGER as never)}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  unreadMessageCount > 0
-                    ? `Messages, ${unreadMessageCount} unread`
-                    : 'Messages'
-                }
-                accessibilityHint="Opens your conversations"
-              >
-                <View>
-                  <MaterialIcons
-                    name="chat-bubble-outline"
-                    size={20}
-                    color={theme.text}
-                    accessibilityElementsHidden={true}
-                  />
-                  {unreadMessageCount > 0 && (
-                    <View style={styles.headerBadge}>
-                      <Text style={styles.headerBadgeText}>
-                        {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className="ml-3 p-2 touch-target-min"
-                onPress={() => setShowArchivedBounties(true)}
-                accessibilityRole="button"
-                accessibilityLabel="View archived bounties"
-                accessibilityHint="Opens a list of your archived bounties"
-              >
-                <MaterialIcons
-                  name="bookmark"
-                  size={20}
-                  color={theme.text}
-                  accessibilityElementsHidden={true}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Offline status badge */}
-          <View className="px-4 mb-2">
-            <OfflineStatusBadge />
-          </View>
-
-          {/* Title (centered below header) */}
-          <View className="px-4">
-            <Text style={[styles.titleText, { color: theme.text }]} className="font-bold tracking-wide uppercase text-center w-full">
-              {activeTab === "inProgress"
-                ? "In Progress"
-                : activeTab === "requests"
-                  ? "Bounty Requests"
-                  : "My Postings"}
-            </Text>
-          </View>
-
-
-          {/* Tabs - Segmented Control Style */}
-          <View className="px-4 mb-4" style={{ backgroundColor: theme.background }}>
-            <View className="flex-row items-center rounded-full p-1 border" style={{ backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}>
-              {tabs.map((tab) => {
-                const isActive = activeTab === tab.id
-                const badgeCount = getTabBadgeCount(tab.id)
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
-                    onPress={() => setActiveTab(tab.id)}
-                    activeOpacity={0.85}
-                    className="flex-1 py-2 mx-0.5 rounded-full items-center justify-center touch-target-min"
-                    style={{
-                      backgroundColor: isActive ? theme.surface : 'transparent',
-                      shadowColor: isActive ? '#000' : 'transparent',
-                      shadowOffset: { width: 0, height: isActive ? 2 : 0 },
-                      shadowOpacity: isActive ? 0.12 : 0,
-                      shadowRadius: isActive ? 3 : 0,
-                      elevation: isActive ? 2 : 0,
-                    }}
-                    accessibilityRole="tab"
-                    accessibilityLabel={
-                      badgeCount > 0
-                        ? `${tab.label}, ${badgeCount} need attention`
-                        : tab.label
-                    }
-                    accessibilityState={{ selected: isActive }}
-                    accessibilityHint={`Switch to ${tab.label} tab`}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <MaterialIcons
-                        name={tab.icon as keyof typeof MaterialIcons.glyphMap}
-                        size={14}
-                        color={isActive ? theme.primary : theme.textDisabled}
-                        accessibilityElementsHidden={true}
-                      />
-                      <Text
-                        className="text-xs font-semibold tracking-wide ml-1"
-                        style={{ color: isActive ? theme.primary : theme.textDisabled }}
-                        numberOfLines={1}
-                      >
-                        {tab.shortLabel.toUpperCase()}
-                      </Text>
-                      {badgeCount > 0 && (
-                        <View
-                          style={{
-                            marginLeft: 4,
-                            backgroundColor: isActive ? '#dc2626' : '#ef4444',
-                            borderRadius: 8,
-                            minWidth: 16,
-                            height: 16,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            paddingHorizontal: 3,
-                          }}
-                        >
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', lineHeight: 12 }}>
-                            {badgeCount > 99 ? '99+' : badgeCount}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </View>
-        </View>
-
-        {/* Scrollable Content Area - starts under visible bottom of header */}
-        <View className="flex-1" style={containerPaddingTop}>
-          {/* Error message */}
-          {error && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity style={styles.errorCloseButton} onPress={() => setError(null)}>
-                  <Text style={styles.errorCloseText}>✕</Text>
-                </TouchableOpacity>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* Header */}
+      {/* Fixed header overlay, pulled up like the other tabs; its measured
+          height pads the list below. */}
+      <View
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+        style={[styles.header, { top: -HEADER_TOP_OFFSET, paddingTop: insets.top }, showShadow && styles.headerShadow]}
+      >
+        <View style={styles.headerRow}>
+          <BrandingLogo size="medium" />
+          <View style={styles.headerActions}>
+            <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
+            {/* All conversations, including ones not tied to a bounty. */}
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={() => router.push(ROUTES.TABS.MESSENGER as never)}
+              accessibilityRole="button"
+              accessibilityLabel={unreadMessageCount > 0 ? `Messages, ${unreadMessageCount} unread` : 'Messages'}
+              accessibilityHint="Opens all of your conversations"
+            >
+              <View>
+                <MaterialIcons name="chat-bubble-outline" size={20} color={theme.text} />
+                {unreadMessageCount > 0 && (
+                  <View style={styles.headerBadge}>
+                    <Text style={styles.headerBadgeText}>{unreadMessageCount > 99 ? '99+' : unreadMessageCount}</Text>
+                  </View>
+                )}
               </View>
-          )}
-
-          <View className="flex-1 px-4">
-            {activeTab === "inProgress" ? (
-              <FlatList
-                {...keyboardAwareListProps}
-                ref={inProgressListRef}
-                data={inProgressRows}
-                keyExtractor={keyExtractorRow}
-                extraData={{ inProgressBounties, expandedMap }}
-                ListHeaderComponent={(
-                  <View>
-                    <BountyWorkflowGuide variant="hunter-inprogress" />
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      className="mb-1"
-                    >
-                      <View className="flex-row gap-1.5">
-                      {IN_PROGRESS_FILTERS.map((f) => {
-                        const label = IN_PROGRESS_FILTER_LABELS[f]
-                        const selected = statusFilterInProgress === f
-                        const count = f === 'review' ? inProgressReviewCount : 0
-                          return (
-                          <TouchableOpacity
-                            key={f}
-                            onPress={() => setStatusFilterInProgress(f)}
-                            className="px-2 py-1.5 rounded-full border flex-row items-center"
-                            style={{ backgroundColor: selected ? theme.surfaceSecondary : theme.surface, borderColor: selected ? theme.primaryLight : theme.border }}
-                            accessibilityRole="button"
-                            accessibilityLabel={f === 'review' ? `Filter by work you submitted for review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} work`}
-                            accessibilityState={{ selected }}
-                            accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? "Tap to show only work you submitted that is awaiting the poster's review" : `Tap to show only ${label} work`}
-                          >
-                            <Text className="text-xs" style={{ fontWeight: selected ? '500' : 'normal', color: selected ? theme.text : theme.textSecondary }}>{label}</Text>
-                            {f === 'review' && count > 0 && (
-                              <View className="ml-1 px-1 rounded-full bg-amber-400 min-w-[16px] items-center">
-                                <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                        )
-                      })}
-                      </View>
-                    </ScrollView>
-                  </View>
-                )}
-                renderItem={renderInProgressItem}
-                ListEmptyComponent={
-                  isLoading.inProgress ? (
-                    <View className="px-4 py-6">
-                      <PostingsListSkeleton count={3} />
-                    </View>
-                  ) : error ? (
-                    <EmptyState
-                      icon="cloud-off"
-                      title="Unable to Load"
-                      description="Check your internet connection and try again"
-                      actionLabel="Try Again"
-                      onAction={loadInProgress}
-                    />
-                  ) : (
-                    <EmptyState
-                      icon="work-outline"
-                      title="Track Every Bounty You Accept"
-                      description="This is your work hub. Once you accept a bounty, it lands here so you can follow it from kickoff to payout."
-                      size="lg"
-                      features={[
-                        { icon: 'play-circle-outline', label: 'Active work' },
-                        { icon: 'check-circle-outline', label: 'Completed work' },
-                        { icon: 'archive', label: 'Archived work' },
-                        { icon: 'cancel', label: 'Canceled work' },
-                      ]}
-                      actionLabel="Find Bounties"
-                      onAction={() => setActiveScreen('bounty')}
-                      footnote="Browse nearby or online bounties to get started."
-                    />
-                  )
-                }
-                refreshControl={
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={refreshAll}
-                    tintColor={theme.text}
-                    colors={['#059669']}
-                  />
-                }
-                contentContainerStyle={listContentPadding}
-                showsVerticalScrollIndicator={false}
-                onScroll={(e) => {
-                  const y = e.nativeEvent.contentOffset.y || 0
-                  if (y > 2 && !showShadow) setShowShadow(true)
-                  else if (y <= 2 && showShadow) setShowShadow(false)
-                }}
-                onScrollBeginDrag={() => setIsListScrolling(true)}
-                onScrollEndDrag={() => setTimeout(() => setIsListScrolling(false), 50)}
-                onMomentumScrollEnd={() => setIsListScrolling(false)}
-                scrollEventThrottle={16}
-                // Performance optimizations
-                removeClippedSubviews={true}
-                maxToRenderPerBatch={5}
-                windowSize={5}
-                initialNumToRender={5}
-              />
-            ) : activeTab === "requests" ? (
-              <FlatList
-                {...keyboardAwareListProps}
-                data={bountyRequests}
-                keyExtractor={keyExtractorRequest}
-                renderItem={renderRequestItem}
-                ListHeaderComponent={<BountyWorkflowGuide variant="poster-requests" />}
-                ListEmptyComponent={
-                  isLoading.requests ? (
-                    <View className="px-4 py-6">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <ApplicantCardSkeleton key={i} />
-                      ))}
-                    </View>
-                  ) : error ? (
-                    <EmptyState
-                      icon="cloud-off"
-                      title="Unable to Load"
-                      description="Check your internet connection and try again"
-                      actionLabel="Try Again"
-                      onAction={loadRequestsForMyBounties.bind(null, myBounties)}
-                    />
-                  ) : (
-                    <EmptyState
-                      icon="mark-email-read"
-                      tone="success"
-                      title="You're All Caught Up"
-                      description="No pending requests right now. Anything that needs your attention — like a bounty application or invitation — will show up here automatically."
-                      size="lg"
-                      footnote="New requests appear instantly — no need to refresh."
-                    />
-                  )
-                }
-                refreshControl={
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={refreshAll}
-                    tintColor={theme.text}
-                    colors={['#059669']}
-                  />
-                }
-                contentContainerStyle={listContentPadding}
-                showsVerticalScrollIndicator={false}
-                onScroll={(e) => {
-                  const y = e.nativeEvent.contentOffset.y || 0
-                  if (y > 2 && !showShadow) setShowShadow(true)
-                  else if (y <= 2 && showShadow) setShowShadow(false)
-                }}
-                scrollEventThrottle={16}
-                // Performance optimizations. ApplicantCards are tall and variable-height,
-                // so keep a wider render window (5 was too small and caused blank gaps /
-                // remounts mid-fling). removeClippedSubviews is explicitly off (FlatList
-                // defaults it to true on Android): with measured variable-height rows it
-                // causes blank rows, flicker and content jumps.
-                removeClippedSubviews={false}
-                maxToRenderPerBatch={4}
-                updateCellsBatchingPeriod={30}
-                windowSize={9}
-                initialNumToRender={4}
-              />
-            ) : (
-              <FlatList
-                {...keyboardAwareListProps}
-                ref={myPostingsListRef}
-                data={myPostingsRows}
-                keyExtractor={keyExtractorRow}
-                extraData={{ myBounties, expandedMap }}
-                ListHeaderComponent={(
-                  <View>
-                    <BountyWorkflowGuide variant="poster-postings" />
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      className="mb-1"
-                    >
-                      <View className="flex-row gap-1.5">
-                      {MY_POSTINGS_FILTERS.map((f) => {
-                        const label = MY_POSTINGS_FILTER_LABELS[f]
-                        const selected = statusFilterMyPostings === f
-                        const count = f === 'review' ? myPostingsReviewCount : 0
-                          return (
-                          <TouchableOpacity
-                            key={f}
-                            onPress={() => setStatusFilterMyPostings(f)}
-                            className="px-2 py-1.5 rounded-full border flex-row items-center"
-                            style={{ backgroundColor: selected ? theme.surfaceSecondary : theme.surface, borderColor: selected ? theme.primaryLight : theme.border }}
-                            accessibilityRole="button"
-                            accessibilityLabel={f === 'review' ? `Filter by postings with work awaiting your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} postings`}
-                            accessibilityState={{ selected }}
-                            accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only postings where a hunter submitted work for your review' : `Tap to show only ${label} bounties`}
-                          >
-                            <Text className="text-xs" style={{ fontWeight: selected ? '500' : 'normal', color: selected ? theme.text : theme.textSecondary }}>{label}</Text>
-                            {f === 'review' && count > 0 && (
-                              <View className="ml-1 px-1 rounded-full bg-amber-400 min-w-[16px] items-center">
-                                <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                        )
-                      })}
-                      </View>
-                    </ScrollView>
-                  </View>
-                )}
-                renderItem={renderMyPostingItem}
-                ListEmptyComponent={
-                  isLoading.myBounties ? (
-                    <View className="px-4 py-6">
-                      <PostingsListSkeleton count={3} />
-                    </View>
-                  ) : error ? (
-                    <EmptyState
-                      icon="cloud-off"
-                      title="Unable to Load"
-                      description="Check your internet connection and try again"
-                      actionLabel="Try Again"
-                      onAction={loadMyBounties}
-                    />
-                  ) : (
-                    <EmptyState
-                      icon="post-add"
-                      title="Every Bounty You've Posted, In One Place"
-                      description="This is where you'll manage everything you post — from the first applicant to the final payout."
-                      size="lg"
-                      features={[
-                        { icon: 'person-search', label: 'Monitor applicants' },
-                        { icon: 'trending-up', label: 'Manage progress' },
-                        { icon: 'forum', label: 'Communicate with hunters' },
-                        { icon: 'task-alt', label: 'Track completed work' },
-                      ]}
-                      actionLabel="Post a Bounty"
-                      // Creating a bounty lives on the Post tab.
-                      onAction={() => setActiveScreen('postings')}
-                    />
-                  )
-                }
-                refreshControl={
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={refreshAll}
-                    tintColor={theme.text}
-                    colors={['#059669']}
-                  />
-                }
-                contentContainerStyle={listContentPadding}
-                showsVerticalScrollIndicator={false}
-                onScroll={(e) => {
-                  const y = e.nativeEvent.contentOffset.y || 0
-                  if (y > 2 && !showShadow) setShowShadow(true)
-                  else if (y <= 2 && showShadow) setShowShadow(false)
-                }}
-                scrollEventThrottle={16}
-                // Performance optimizations
-                removeClippedSubviews={true}
-                maxToRenderPerBatch={5}
-                windowSize={5}
-                initialNumToRender={5}
-              />
-            )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={() => setShowArchivedBounties(true)}
+              accessibilityRole="button"
+              accessibilityLabel="View archived bounties"
+              accessibilityHint="Opens a list of your archived bounties"
+            >
+              <MaterialIcons name="bookmark" size={20} color={theme.text} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Bottom navigation is provided by the app container (BountyApp) */}
+        <View style={{ paddingHorizontal: 16 }}>
+          <OfflineStatusBadge />
+        </View>
 
-        {/* Edit Posting Modal */}
-        {editingBounty && (
-          <EditPostingModal
-            key={editingBounty.id}
-            visible={showEditModal}
-            bounty={editingBounty}
-            onClose={() => {
-              setShowEditModal(false)
-              setEditingBounty(null)
-            }}
-            onSave={handleSaveEdit}
-          />
-        )}
+        {/* One fixed title; the segment below says which list is showing. */}
+        <Text style={styles.bigTitle} accessibilityRole="header">
+          Inbox
+        </Text>
+
+        {/* My Work / My Bounties */}
+        <View style={styles.segment} accessibilityRole="tablist">
+          {INBOX_TABS.map(tab => {
+            const active = activeTab === tab.id
+            const badge = tabBadge(tab.id)
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                onPress={() => {
+                  if (!active) hapticFeedback.selection()
+                  setActiveTab(tab.id)
+                }}
+                activeOpacity={0.85}
+                style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={badge > 0 ? `${tab.label}, ${badge} need your attention` : tab.label}
+              >
+                <Text style={[styles.segmentText, active && styles.segmentTextActive]} numberOfLines={1}>
+                  {tab.label}
+                </Text>
+                {badge > 0 && (
+                  <View style={[styles.segmentBadge, active && styles.segmentBadgeActive]}>
+                    <Text style={styles.segmentBadgeText}>{badge > 99 ? '99+' : badge}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
+        {/* Filter chips */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {filters.map(f => {
+            const label = isWork
+              ? IN_PROGRESS_FILTER_LABELS[f as InProgressStatusFilter]
+              : MY_POSTINGS_FILTER_LABELS[f as MyPostingsStatusFilter]
+            const selected = selectedFilter === f
+            const count = f === 'review' ? reviewCount : 0
+            return (
+              <TouchableOpacity
+                key={f}
+                onPress={() => {
+                  hapticFeedback.selection()
+                  if (isWork) setStatusFilterInProgress(f as InProgressStatusFilter)
+                  else setStatusFilterMyPostings(f as MyPostingsStatusFilter)
+                }}
+                style={[styles.chip, selected && styles.chipSelected]}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Filter: ${label}${count > 0 ? `, ${count} waiting` : ''}`}
+              >
+                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+                {count > 0 && (
+                  <View style={styles.chipCount}>
+                    <Text style={styles.chipCountText}>{count > 99 ? '99+' : count}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
       </View>
+
+      <View style={{ flex: 1, paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }}>
+      {error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.errorCloseButton} onPress={() => setError(null)} accessibilityLabel="Dismiss error">
+            <Text style={styles.errorCloseText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <FlatList
+        data={rows}
+        keyExtractor={keyExtractorRow}
+        renderItem={renderRow}
+        ItemSeparatorComponent={RowSeparator}
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.listContent, listContentPadding]}
+        ListEmptyComponent={
+          loadingList ? (
+            <PostingsListSkeleton count={3} />
+          ) : error ? (
+            <EmptyState
+              icon="cloud-off"
+              title="Unable to Load"
+              description="Check your internet connection and try again"
+              actionLabel="Try Again"
+              onAction={handleRefresh}
+            />
+          ) : isWork ? (
+            <EmptyState
+              icon="work-outline"
+              title={selectedFilter === 'all' ? 'No work yet' : 'Nothing here'}
+              description={
+                selectedFilter === 'all'
+                  ? 'Apply to a bounty and your conversation with the poster lands here — from application to payout.'
+                  : 'No bounties match this filter right now.'
+              }
+              size="lg"
+              actionLabel={selectedFilter === 'all' ? 'Find Bounties' : undefined}
+              onAction={selectedFilter === 'all' ? () => setActiveScreen('bounty') : undefined}
+            />
+          ) : (
+            <EmptyState
+              icon="post-add"
+              title={selectedFilter === 'all' ? 'No bounties posted yet' : 'Nothing here'}
+              description={
+                selectedFilter === 'all'
+                  ? 'Post a bounty and every applicant shows up here as a conversation you can hire from.'
+                  : 'No bounties match this filter right now.'
+              }
+              size="lg"
+              actionLabel={selectedFilter === 'all' ? 'Post a Bounty' : undefined}
+              onAction={selectedFilter === 'all' ? () => setActiveScreen('postings') : undefined}
+            />
+          )
+        }
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.text} colors={['#008E2A']} />
+        }
+        showsVerticalScrollIndicator={false}
+        onScroll={(e) => {
+          const y = e.nativeEvent.contentOffset.y || 0
+          if (y > 2 && !showShadow) setShowShadow(true)
+          else if (y <= 2 && showShadow) setShowShadow(false)
+        }}
+        scrollEventThrottle={16}
+        removeClippedSubviews={false}
+        initialNumToRender={6}
+        windowSize={7}
+      />
+      </View>
+
+      {/* Edit Posting Modal */}
+      {editingBounty && (
+        <EditPostingModal
+          key={editingBounty.id}
+          visible={showEditModal}
+          bounty={editingBounty}
+          onClose={() => {
+            setShowEditModal(false)
+            setEditingBounty(null)
+          }}
+          onSave={handleSaveEdit}
+        />
+      )}
+    </View>
   )
 }
 
 export default InboxScreen;
 
+type InboxTab = 'inProgress' | 'myPostings'
+
+const INBOX_TABS: { id: InboxTab; label: string }[] = [
+  { id: 'inProgress', label: 'My Work' },
+  { id: 'myPostings', label: 'My Bounties' },
+]
+
+interface InboxRow {
+  key: string
+  bounty: Bounty
+  role: 'hunter' | 'poster'
+  lifecycle: BountyLifecycleState
+  /** The person on the other side; null for an open bounty with no applicants. */
+  person: InboxPerson | null
+  conversation: Conversation | null
+  /** Poster side: the pending application this row is about. */
+  application: BountyRequestWithDetails | null
+  activityAt: string | null
+}
+
+const GROUP_RANK: Record<string, number> = { attention: 0, active: 1, waiting: 2, past: 3 }
+
+/** Whose-move first, then most recent activity — the way a DM inbox reads. */
+function sortInboxRows(rows: InboxRow[]): InboxRow[] {
+  return [...rows].sort((a, b) => {
+    const g = (GROUP_RANK[a.lifecycle.group] ?? 9) - (GROUP_RANK[b.lifecycle.group] ?? 9)
+    if (g !== 0) return g
+    return new Date(b.activityAt ?? 0).getTime() - new Date(a.activityAt ?? 0).getTime()
+  })
+}
+
+const keyExtractorRow = (row: InboxRow) => row.key
+
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
-    translateY2: { transform: [{ translateY: 2 }] },
+    header: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      backgroundColor: theme.background,
+      zIndex: 20,
+      paddingBottom: 10,
+    },
+    headerShadow: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: theme.isDark ? 0.35 : 0.08,
+      shadowRadius: 6,
+      elevation: 6,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    headerIconBtn: {
+      marginLeft: 12,
+      padding: 8,
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     headerBadge: {
       position: 'absolute',
       top: -5,
@@ -1418,8 +1210,127 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '700',
       lineHeight: 12,
     },
-    titleText: { fontSize: 20, color: theme.text },
-    errorBox: { marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
+    // The centred, letter-spaced uppercase title every Bounty tab uses.
+    bigTitle: {
+      color: theme.text,
+      fontSize: 20,
+      fontWeight: '700',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+      textAlign: 'center',
+      paddingHorizontal: 16,
+      marginTop: 2,
+      marginBottom: 12,
+    },
+    segment: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      padding: 4,
+      borderRadius: 999,
+      backgroundColor: theme.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    segmentBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      minHeight: 44,
+      borderRadius: 999,
+    },
+    // Active tab is filled in the brand action green with its glow — the
+    // same treatment as Bounty's primary Button.
+    segmentBtnActive: {
+      backgroundColor: theme.primary,
+      ...theme.shadows.brand,
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+    },
+    segmentText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+    },
+    segmentTextActive: {
+      color: '#fff',
+    },
+    segmentBadge: {
+      minWidth: 18,
+      height: 18,
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      backgroundColor: theme.error,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    segmentBadgeActive: {
+      borderWidth: 1.5,
+      borderColor: '#fff',
+    },
+    segmentBadgeText: {
+      color: '#fff',
+      fontSize: 10,
+      fontWeight: '800',
+    },
+    chips: {
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingTop: 14,
+    },
+    // Metrics from the shared FilterChip (44pt target, bordered pill); the
+    // selected chip is filled in the action green instead of black.
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      minHeight: 40,
+      borderRadius: 999,
+      backgroundColor: theme.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    chipSelected: {
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
+    },
+    chipText: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    chipTextSelected: {
+      color: '#fff',
+      fontWeight: '700',
+    },
+    chipCount: {
+      minWidth: 18,
+      height: 18,
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      backgroundColor: '#f59e0b',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    chipCountText: {
+      color: '#22262C',
+      fontSize: 10,
+      fontWeight: '800',
+    },
+    // Rows carry their own horizontal padding, as in Messages.
+    listContent: {
+      paddingTop: 4,
+    },
+    rowSeparator: {
+      height: 1,
+      backgroundColor: theme.textDisabled,
+      opacity: 0.6,
+    },
+    errorBox: { marginHorizontal: 16, marginBottom: 8, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
     errorText: { color: theme.text, fontSize: 14 },
     errorCloseButton: { position: 'absolute', right: 8, top: 8, padding: 8 },
     errorCloseText: { color: theme.text, fontSize: 16 },

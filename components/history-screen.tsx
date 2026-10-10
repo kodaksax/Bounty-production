@@ -102,7 +102,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
                 item.status === "completed" 
                   ? "#6366f1" 
                   : item.status === "archived"
-                  ? "#6b7280"
+                  ? "#61656B"
                   : "#ef4444", // deleted = red
             },
           ]}
@@ -225,12 +225,12 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#059669"
+              tintColor="#008E2A"
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <MaterialIcons name="history" size={64} color="#6ee7b780" />
+              <MaterialIcons name="history" size={64} color="#1FAE4980" />
               <Text style={styles.emptyTitle}>No History Yet</Text>
               <Text style={styles.emptyText}>
                 Your completed, archived, and deleted bounties will appear here
@@ -333,7 +333,7 @@ function makeStyles(theme: AppTheme) {
     honorBadge: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: "#9CA3AF",
+      backgroundColor: "#929497",
       borderRadius: 999,
       paddingHorizontal: 10,
       paddingVertical: 4,
@@ -354,7 +354,7 @@ function makeStyles(theme: AppTheme) {
       fontWeight: "800",
     },
     positiveAmount: {
-      color: "#059669",
+      color: "#008E2A",
     },
     negativeAmount: {
       color: "#ef4444",

@@ -54,7 +54,7 @@ export default function ConnectRefreshScreen() {
         </Text>
 
         <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={20} color="#9CA3AF" />
+          <MaterialIcons name="info-outline" size={20} color="#929497" />
           <Text style={styles.infoText}>
             {
               "This happens automatically after the link's security window closes. It only takes a moment to get a new one."
@@ -74,7 +74,7 @@ export default function ConnectRefreshScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     paddingHorizontal: 24,
   },
   brandingHeader: {
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#9CA3AF',
+    backgroundColor: '#929497',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,

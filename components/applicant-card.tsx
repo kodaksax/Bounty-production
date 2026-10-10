@@ -320,7 +320,7 @@ export const ApplicantCard = memo(function ApplicantCard({
             buried under bounty details the poster already knows. */}
         {request.message ? (
           <View style={s.pitchSection}>
-            <MaterialIcons name="format-quote" size={16} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+            <MaterialIcons name="format-quote" size={16} color={theme.isDark ? '#1FAE49' : theme.primary} />
             <Text style={s.pitchText}>{request.message}</Text>
           </View>
         ) : null}
@@ -430,7 +430,7 @@ function makeStyles(t: AppTheme) {
       padding: 16,
       marginBottom: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
     },
     header: {
       flexDirection: 'row',
@@ -444,16 +444,16 @@ function makeStyles(t: AppTheme) {
       width: 48,
       height: 48,
       borderWidth: 2,
-      borderColor: t.isDark ? '#6ee7b7' : t.primary,
+      borderColor: t.isDark ? '#1FAE49' : t.primary,
       borderRadius: 24,
     },
     avatarLoading: {
-      backgroundColor: t.isDark ? '#064e3b' : 'rgba(5,150,105,0.12)',
+      backgroundColor: t.isDark ? '#00571A' : 'rgba(0,142,42,0.12)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     avatarFallback: {
-      backgroundColor: t.isDark ? '#064e3b' : 'rgba(5,150,105,0.12)',
+      backgroundColor: t.isDark ? '#00571A' : 'rgba(0,142,42,0.12)',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -538,7 +538,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 12,
       paddingLeft: 10,
       borderLeftWidth: 2,
-      borderLeftColor: t.isDark ? '#6ee7b7' : t.primary,
+      borderLeftColor: t.isDark ? '#1FAE49' : t.primary,
     },
     pitchText: {
       flex: 1,
@@ -554,7 +554,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 16,
       paddingTop: 12,
       borderTopWidth: 1,
-      borderTopColor: t.isDark ? 'rgba(110,231,183,0.15)' : t.border,
+      borderTopColor: t.isDark ? 'rgba(31,174,73,0.15)' : t.border,
     },
     bountyContextText: {
       flex: 1,
@@ -562,7 +562,7 @@ function makeStyles(t: AppTheme) {
       fontSize: 12,
     },
     bountyContextAmount: {
-      color: t.isDark ? '#6ee7b7' : t.primary,
+      color: t.isDark ? '#1FAE49' : t.primary,
       fontWeight: '600',
       fontSize: 13,
     },
@@ -643,7 +643,7 @@ function makeStyles(t: AppTheme) {
       borderColor: t.primary,
     },
     acceptButton: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
     },
     buttonText: {
       color: '#fff',
@@ -657,7 +657,7 @@ function makeStyles(t: AppTheme) {
       marginTop: 12,
       paddingTop: 12,
       borderTopWidth: 1,
-      borderTopColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+      borderTopColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
     },
     statusText: {
       textAlign: 'center',
@@ -665,7 +665,7 @@ function makeStyles(t: AppTheme) {
       fontSize: 14,
     },
     statusAccepted: {
-      color: '#059669',
+      color: '#008E2A',
     },
     statusRejected: {
       color: '#dc2626',

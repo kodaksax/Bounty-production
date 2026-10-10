@@ -76,10 +76,9 @@ export const shadows = {
     shadowRadius: 16,
     elevation: 8,
   },
-  // Brand glow — matches the live brand green (#059669), not the legacy
-  // lib/theme.ts value (#00912C).
+  // Brand glow — matches the brand lead green (#008E2A).
   brand: {
-    shadowColor: '#059669',
+    shadowColor: '#008E2A',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -87,6 +86,28 @@ export const shadows = {
   },
 } as const;
 
+// App typeface — Inter, loaded in app/_layout.tsx and applied to every
+// <Text>/<TextInput> by applyGlobalFont.ts. Custom fonts don't synthesize
+// weights, so each weight is its own family.
+export const fonts = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  extrabold: 'Inter_800ExtraBold',
+  mono: 'SpaceMono',
+} as const;
+
+export function fontForWeight(weight?: string | number): string {
+  const w = weight === 'bold' ? 700 : Number(weight) || 400;
+  if (w >= 800) return fonts.extrabold;
+  if (w >= 700) return fonts.bold;
+  if (w >= 600) return fonts.semibold;
+  if (w >= 500) return fonts.medium;
+  return fonts.regular;
+}
+
+export type Fonts = typeof fonts;
 export type Spacing = typeof spacing;
 export type Radius = typeof radius;
 export type Typography = typeof typography;

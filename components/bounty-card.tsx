@@ -235,7 +235,7 @@ export function BountyCard({
         )}
         {bounty.status === 'in_progress' && bounty.accepted_by && (
           <View style={styles.filledBadge}>
-            <MaterialIcons name="check-circle" size={12} color="#111827" />
+            <MaterialIcons name="check-circle" size={12} color="#22262C" />
             <Text style={styles.filledText}>FILLED</Text>
           </View>
         )}
@@ -293,7 +293,7 @@ export function BountyCard({
         {/* Amount */}
         {bounty.is_for_honor ? (
           <View style={styles.honorBadge}>
-            <MaterialIcons name="favorite" size={14} color="#059669" />
+            <MaterialIcons name="favorite" size={14} color="#008E2A" />
             <Text style={styles.honorText}>For Honor</Text>
           </View>
         ) : (
@@ -317,7 +317,7 @@ export function BountyCard({
                       onEdit();
                     }}
                   >
-                    <MaterialIcons name="edit" size={16} color="#059669" />
+                    <MaterialIcons name="edit" size={16} color="#008E2A" />
                     <Text style={styles.actionButtonText}>Edit</Text>
                   </TouchableOpacity>
                 )}
@@ -519,14 +519,14 @@ function makeStyles(theme: AppTheme) {
     filledBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#9CA3AF',
+      backgroundColor: '#929497',
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 12,
       gap: 4,
     },
     filledText: {
-      color: '#111827',
+      color: '#22262C',
       fontSize: 10,
       fontWeight: '800',
       letterSpacing: 0.4,
@@ -591,12 +591,12 @@ function makeStyles(theme: AppTheme) {
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)',
       borderRadius: 999,
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(16,185,129,0.35)' : 'rgba(5,150,105,0.3)',
+      borderColor: theme.isDark ? 'rgba(0,142,42,0.35)' : 'rgba(0,142,42,0.3)',
       gap: 4,
     },
     honorText: {

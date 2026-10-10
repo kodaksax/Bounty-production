@@ -87,10 +87,10 @@ const ICONS: Record<ConnectOnboardingOutcome, keyof typeof MaterialIcons.glyphMa
 };
 
 const ICON_COLORS: Record<ConnectOnboardingOutcome, string> = {
-  success: '#22c55e',
+  success: '#008E2A',
   pending: '#f59e0b',
   action_required: '#f59e0b',
-  cancelled: '#9CA3AF',
+  cancelled: '#929497',
   verify_error: '#ef4444',
 };
 

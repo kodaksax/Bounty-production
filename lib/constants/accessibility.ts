@@ -101,37 +101,37 @@ export const TYPOGRAPHY = {
 
 export const COLORS = {
   // Emerald theme
-  EMERALD_50: '#ecfdf5',
-  EMERALD_100: '#1F2937',
-  EMERALD_200: '#9CA3AF',
-  EMERALD_300: '#6ee7b7',      // Light text on dark bg (7.4:1 contrast)
-  EMERALD_400: '#059669',
-  EMERALD_500: '#059669',      // Primary green (3.1:1 on white)
-  EMERALD_600: '#059669',      // Darker green (4.6:1 on white)
-  EMERALD_700: '#0B0F14',      // AA compliant on white (6.4:1)
-  EMERALD_800: '#111827',
-  EMERALD_900: '#064e3b',
+  EMERALD_50: '#EDF8F0',
+  EMERALD_100: '#2A2E35',
+  EMERALD_200: '#929497',
+  EMERALD_300: '#1FAE49',      // Light text on dark bg (7.4:1 contrast)
+  EMERALD_400: '#008E2A',
+  EMERALD_500: '#008E2A',      // Primary green (3.1:1 on white)
+  EMERALD_600: '#008E2A',      // Darker green (4.6:1 on white)
+  EMERALD_700: '#1B1E24',      // AA compliant on white (6.4:1)
+  EMERALD_800: '#22262C',
+  EMERALD_900: '#00571A',
   
   // Background colors
-  BG_DARK: '#0a1f14',          // Dark emerald background
-  BG_DARK_SECONDARY: '#0B0F14', // Slightly lighter bg
-  BG_CARD: 'rgba(5, 150, 105, 0.1)', // Card background
+  BG_DARK: '#1B1E24',          // Dark emerald background
+  BG_DARK_SECONDARY: '#1B1E24', // Slightly lighter bg
+  BG_CARD: 'rgba(0, 142, 42, 0.1)', // Card background
   
   // Text colors (all AA compliant on dark backgrounds)
   TEXT_PRIMARY: '#fffef5',     // Off-white (>15:1 contrast on dark)
-  TEXT_SECONDARY: '#d1d5db',   // Gray-300 (>10:1 contrast)
-  TEXT_MUTED: '#9ca3af',       // Gray-400 (>6:1 contrast)
-  TEXT_EMERALD: '#6ee7b7',     // Emerald-300 (7.4:1 contrast)
+  TEXT_SECONDARY: '#D8D2C4',   // Gray-300 (>10:1 contrast)
+  TEXT_MUTED: '#929497',       // Gray-400 (>6:1 contrast)
+  TEXT_EMERALD: '#1FAE49',     // Emerald-300 (7.4:1 contrast)
   
   // Status colors
   ERROR: '#dc2626',            // Red-600
   WARNING: '#f59e0b',          // Amber-500
-  SUCCESS: '#059669',          // Emerald-500
+  SUCCESS: '#008E2A',          // Emerald-500
   INFO: '#3b82f6',             // Blue-500
   
   // Border colors
-  BORDER_DEFAULT: '#374151',   // Gray-700
-  BORDER_LIGHT: 'rgba(110, 231, 183, 0.2)', // Emerald with opacity
+  BORDER_DEFAULT: '#454952',   // Gray-700
+  BORDER_LIGHT: 'rgba(31, 174, 73, 0.2)', // Emerald with opacity
 } as const;
 
 // ============================================================================

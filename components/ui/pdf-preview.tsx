@@ -314,7 +314,7 @@ export function PdfPreview({ uri, name, style, borderRadius = 8 }: PdfPreviewPro
       )}
       {isLoading && (
         <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#9CA3AF" />
+          <ActivityIndicator size="large" color="#929497" />
         </View>
       )}
     </View>
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   fallbackText: {
-    color: '#D1D5DB',
+    color: '#D8D2C4',
     fontSize: 13,
     marginTop: 6,
     textAlign: 'center',
@@ -364,7 +364,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
   },
   fallbackButtonText: {
     color: '#fff',

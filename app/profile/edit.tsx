@@ -640,8 +640,8 @@ export default function EditProfileScreen() {
 const BANNER_HEIGHT = 140; // Increased from 120px for better visual presence
 
 function makeStyles(theme: AppTheme) {
-  const primaryTint = theme.isDark ? 'rgba(5,150,105,0.16)' : 'rgba(5,150,105,0.06)';
-  const primaryTintFocused = theme.isDark ? 'rgba(5,150,105,0.24)' : 'rgba(5,150,105,0.1)';
+  const primaryTint = theme.isDark ? 'rgba(0,142,42,0.16)' : 'rgba(0,142,42,0.06)';
+  const primaryTintFocused = theme.isDark ? 'rgba(0,142,42,0.24)' : 'rgba(0,142,42,0.1)';
 
   return StyleSheet.create({
     container: {

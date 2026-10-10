@@ -510,8 +510,8 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
 function makeStyles(t: AppTheme) {
   const errorTint = t.isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)';
   const errorBorder = t.isDark ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)';
-  const primaryTint = t.isDark ? 'rgba(5,150,105,0.16)' : 'rgba(5,150,105,0.1)';
-  const primaryBorder = t.isDark ? 'rgba(5,150,105,0.35)' : 'rgba(5,150,105,0.25)';
+  const primaryTint = t.isDark ? 'rgba(0,142,42,0.16)' : 'rgba(0,142,42,0.1)';
+  const primaryBorder = t.isDark ? 'rgba(0,142,42,0.35)' : 'rgba(0,142,42,0.25)';
 
   return StyleSheet.create({
     screen: {

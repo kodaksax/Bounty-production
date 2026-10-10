@@ -116,7 +116,7 @@ export default function ChoosePeopleScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Avatar className="h-12 w-12">
             <AvatarImage src={item.avatar || '/placeholder.svg?height=48&width=48'} alt={item.name || item.username} />
-            <AvatarFallback className="bg-[#111827] text-[#9CA3AF]">{(item.name || '').split(' ').map((s: string) => s[0]).slice(0,2).join('')}</AvatarFallback>
+            <AvatarFallback className="bg-[#22262C] text-[#929497]">{(item.name || '').split(' ').map((s: string) => s[0]).slice(0,2).join('')}</AvatarFallback>
           </Avatar>
           <Text style={styles.name}>{item.name || item.username}</Text>
         </View>
@@ -182,7 +182,7 @@ export default function ChoosePeopleScreen() {
                   <View>
                     <Avatar className="h-14 w-14">
                       <AvatarImage src={p.avatar || '/placeholder.svg?height=56&width=56'} alt={p.name || p.username} />
-                      <AvatarFallback className="bg-[#111827] text-[#9CA3AF]">{(p.name || '').split(' ').map((s: string) => s[0]).slice(0,2).join('')}</AvatarFallback>
+                      <AvatarFallback className="bg-[#22262C] text-[#929497]">{(p.name || '').split(' ').map((s: string) => s[0]).slice(0,2).join('')}</AvatarFallback>
                     </Avatar>
                     <TouchableOpacity style={styles.removeBadge} onPress={() => onRemoveSelected(id)}>
                       <MaterialIcons name="close" size={14} color="#052e1b" />

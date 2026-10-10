@@ -294,7 +294,7 @@ function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
     },
     header: {
       flexDirection: 'row',
@@ -485,16 +485,16 @@ function makeStyles(theme: AppTheme) {
       flex: 1,
       paddingVertical: 12,
       alignItems: 'center',
-      backgroundColor: '#6ee7b7',
+      backgroundColor: '#1FAE49',
       borderRadius: 8,
     },
     saveBtnText: {
-      color: '#111827',
+      color: '#22262C',
       fontSize: 14,
       fontWeight: '700',
     },
     saveBtnDisabled: {
-      backgroundColor: 'rgba(110,231,183,0.4)',
+      backgroundColor: 'rgba(31,174,73,0.4)',
     },
     saveBtnTextDisabled: {
       color: theme.textDisabled,

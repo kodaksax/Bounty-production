@@ -265,8 +265,8 @@ export default function DisputeScreen() {
   
   if (loading) {
     return (
-      <View className="flex-1 bg-[#0B0F14] items-center justify-center">
-        <ActivityIndicator size="large" color="#059669" />
+      <View className="flex-1 bg-[#1B1E24] items-center justify-center">
+        <ActivityIndicator size="large" color="#008E2A" />
       </View>
     );
   }
@@ -292,12 +292,12 @@ export default function DisputeScreen() {
 
   if (!bounty || (!dispute && !cancellation && !canOpenWorkflowDispute)) {
     return (
-      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
+      <View className="flex-1 bg-[#1B1E24] items-center justify-center p-6">
         <AlertCircle size={48} color="#dc2626" />
         <Text className="text-lg font-semibold text-white mt-4">
           {bounty ? 'Nothing to report here' : 'Bounty not found'}
         </Text>
-        <Text className="text-[#9CA3AF] text-center mt-2">
+        <Text className="text-[#929497] text-center mt-2">
           {bounty
             ? 'You can report a problem once a hunter is working on this bounty. For anything else, contact support.'
             : 'We could not load this bounty. Contact support and we will look into it.'}
@@ -305,7 +305,7 @@ export default function DisputeScreen() {
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-[#008E2A] px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -314,7 +314,7 @@ export default function DisputeScreen() {
             onPress={handleGoBack}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-[#9CA3AF] font-medium text-center">Go Back</Text>
+            <Text className="text-[#929497] font-medium text-center">Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -322,10 +322,10 @@ export default function DisputeScreen() {
   }
   
   return (
-    <View className="flex-1 bg-[#0B0F14]">
+    <View className="flex-1 bg-[#1B1E24]">
       <KeyboardAwareScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-[#111827] px-4 py-6 pt-12">
+        <View className="bg-[#22262C] px-4 py-6 pt-12">
           <TouchableOpacity
             onPress={handleGoBack}
             className="mb-4"
@@ -335,7 +335,7 @@ export default function DisputeScreen() {
           <Text className="text-2xl font-bold text-white">
             {dispute ? 'Dispute Details' : 'Report a problem'}
           </Text>
-          <Text className="text-[#9CA3AF] mt-1">
+          <Text className="text-[#929497] mt-1">
             {bounty.title}
           </Text>
         </View>
@@ -354,7 +354,7 @@ export default function DisputeScreen() {
                 <View className="flex-row items-start">
                   <AlertCircle 
                     size={20} 
-                    color={dispute.status === 'resolved' ? '#059669' : '#f59e0b'} 
+                    color={dispute.status === 'resolved' ? '#008E2A' : '#f59e0b'} 
                   />
                   <View className="flex-1 ml-3">
                     <Text className={`font-semibold mb-1 ${
@@ -374,19 +374,19 @@ export default function DisputeScreen() {
               </View>
               
               {/* Dispute Details */}
-              <View className="bg-[#1F2937] rounded-lg p-4 mb-6">
-                <Text className="text-sm text-[#9CA3AF] mb-1">Reason</Text>
+              <View className="bg-[#2A2E35] rounded-lg p-4 mb-6">
+                <Text className="text-sm text-[#929497] mb-1">Reason</Text>
                 <Text className="text-base text-white mb-4">
                   {dispute.reason}
                 </Text>
                 
                 {dispute.evidence && dispute.evidence.length > 0 && (
                   <>
-                    <Text className="text-sm text-[#9CA3AF] mb-2">Evidence</Text>
+                    <Text className="text-sm text-[#929497] mb-2">Evidence</Text>
                     {dispute.evidence.map((ev, idx) => (
-                      <View key={ev.id} className="bg-[#1F2937] rounded p-3 mb-2">
+                      <View key={ev.id} className="bg-[#2A2E35] rounded p-3 mb-2">
                         <Text className="text-sm text-white">{ev.content}</Text>
-                        <Text className="text-xs text-[#9CA3AF] mt-1">
+                        <Text className="text-xs text-[#929497] mt-1">
                           {new Date(ev.uploadedAt).toLocaleString()}
                         </Text>
                       </View>
@@ -396,7 +396,7 @@ export default function DisputeScreen() {
                 
                 {dispute.resolution && (
                   <>
-                    <Text className="text-sm text-[#9CA3AF] mb-1 mt-4">Resolution</Text>
+                    <Text className="text-sm text-[#929497] mb-1 mt-4">Resolution</Text>
                     <Text className="text-base text-white">
                       {dispute.resolution}
                     </Text>
@@ -410,12 +410,12 @@ export default function DisputeScreen() {
                   <Text className="text-base font-semibold text-white mb-2">
                     Add More Evidence
                   </Text>
-                  <Text className="text-sm text-[#9CA3AF] mb-3">
+                  <Text className="text-sm text-[#929497] mb-3">
                     Provide additional text evidence to support your dispute. For images or documents, please contact support.
                   </Text>
                   <TouchableOpacity
                     onPress={() => setShowEvidenceModal(true)}
-                    className="flex-row items-center justify-center rounded-lg py-3 bg-[#059669]"
+                    className="flex-row items-center justify-center rounded-lg py-3 bg-[#008E2A]"
                   >
                     <Text className="text-white font-medium">
                       + Add Evidence
@@ -442,10 +442,10 @@ export default function DisputeScreen() {
                           accessibilityRole="button"
                           accessibilityState={{ selected }}
                           className={`px-3 py-2 rounded-full border ${
-                            selected ? 'bg-[#059669] border-[#059669]' : 'border-[#374151]'
+                            selected ? 'bg-[#008E2A] border-[#008E2A]' : 'border-[#454952]'
                           }`}
                         >
-                          <Text className={selected ? 'text-white font-medium' : 'text-[#D1D5DB]'}>
+                          <Text className={selected ? 'text-white font-medium' : 'text-[#D8D2C4]'}>
                             {option.label}
                           </Text>
                         </TouchableOpacity>
@@ -453,7 +453,7 @@ export default function DisputeScreen() {
                     })}
                   </View>
                   {selectedReason && (
-                    <Text className="text-sm text-[#9CA3AF] mt-3">{selectedReason.help}</Text>
+                    <Text className="text-sm text-[#929497] mt-3">{selectedReason.help}</Text>
                   )}
                 </View>
               )}
@@ -470,27 +470,27 @@ export default function DisputeScreen() {
           )}
           
           {/* Support Contact Section - Always visible */}
-          <View className="bg-[#1F2937] border border-[#374151] rounded-lg p-4 mt-6">
+          <View className="bg-[#2A2E35] border border-[#454952] rounded-lg p-4 mt-6">
             <View className="flex-row items-start">
-              <HelpCircle size={20} color="#059669" />
+              <HelpCircle size={20} color="#008E2A" />
               <View className="flex-1 ml-3">
                 <Text className="text-white font-semibold mb-1">
                   Dispute Mediation Support
                 </Text>
-                <Text className="text-[#9CA3AF] text-sm mb-2">
+                <Text className="text-[#929497] text-sm mb-2">
                   Our support team typically responds within {SUPPORT_RESPONSE_TIMES.dispute}. For urgent matters, please call us directly.
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   <TouchableOpacity
                     onPress={handleContactSupport}
-                    className="flex-row items-center bg-[#059669] px-3 py-2 rounded-lg"
+                    className="flex-row items-center bg-[#008E2A] px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">{SUPPORT_EMAIL}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handleCallSupport}
-                    className="flex-row items-center bg-[#059669] px-3 py-2 rounded-lg"
+                    className="flex-row items-center bg-[#008E2A] px-3 py-2 rounded-lg"
                   >
                     <Phone size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">{SUPPORT_PHONE}</Text>
@@ -505,7 +505,7 @@ export default function DisputeScreen() {
             disabled={submitting}
             className="mt-4 py-4"
           >
-            <Text className="text-[#9CA3AF] text-center font-medium">
+            <Text className="text-[#929497] text-center font-medium">
               Back
             </Text>
           </TouchableOpacity>
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#111827',
+    backgroundColor: '#22262C',
     borderRadius: 12,
     padding: 24,
     width: '100%',
@@ -592,12 +592,12 @@ const styles = StyleSheet.create({
   },
   modalSubtitle: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#929497',
     marginBottom: 16,
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#454952',
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -615,15 +615,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalButtonPrimary: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
   },
   modalButtonSecondary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#454952',
   },
   modalButtonDisabled: {
-    backgroundColor: '#374151',
+    backgroundColor: '#454952',
   },
   modalButtonText: {
     color: 'white',
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   modalButtonTextSecondary: {
-    color: '#9CA3AF',
+    color: '#929497',
     fontSize: 16,
     fontWeight: '600',
   },

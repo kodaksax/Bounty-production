@@ -228,7 +228,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
                   borderWidth: 1.5,
                   borderColor: active ? theme.primary : theme.border,
                   backgroundColor: active
-                    ? (theme.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(5,150,105,0.1)')
+                    ? (theme.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)')
                     : theme.surfaceSecondary,
                 }}
                 accessibilityRole="button"
@@ -407,7 +407,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
                       borderWidth: 1.5,
                       borderColor: active ? theme.primary : theme.border,
                       backgroundColor: active
-                        ? (theme.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(5,150,105,0.1)')
+                        ? (theme.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)')
                         : theme.surfaceSecondary,
                     }}
                     accessibilityRole="button"

@@ -329,12 +329,12 @@ export function makeOnboardingDetailsStyles(theme: AppTheme) {
     priceCurrency: {
       fontSize: 20,
       fontWeight: '700',
-      color: '#111827',
+      color: '#22262C',
     },
     priceInput: {
       fontSize: 20,
       fontWeight: '700',
-      color: '#111827',
+      color: '#22262C',
       minWidth: 40,
       padding: 0,
     },

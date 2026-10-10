@@ -1,6 +1,13 @@
 import { ThemeProvider } from 'components/theme-provider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Asset } from 'expo-asset';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+} from '@expo-google-fonts/inter';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
 import { AppMetrics, AppMetricsRoot } from 'expo-observe';
@@ -26,6 +33,7 @@ import { analyticsService } from '../lib/services/analytics-service';
 import { startMemoryPressureWatcher } from '../lib/services/memory-pressure';
 import { StripeProvider } from '../lib/stripe-context';
 import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { applyGlobalFont } from '../lib/themes/applyGlobalFont';
 import { WalletProvider } from '../lib/wallet-context';
 import { AppRuntimeProvider } from '../providers/app-runtime-provider';
 import AuthProvider from '../providers/auth-provider';
@@ -48,6 +56,9 @@ import posthog from '../lib/posthog';
 import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
+
+// Route every <Text>/<TextInput> through the Inter app typeface.
+applyGlobalFont();
 
 // HeyCatch analytics is intentionally NOT initialized here.
 //
@@ -265,9 +276,15 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
   const BRANDED_MIN_MS = 800; // kept for compatibility but branded splash disabled
 
-  // Load fonts used by the app (SpaceMono + a couple common icon families).
-  // Adding icon fonts ensures icons render consistently on first mount.
+  // Load fonts used by the app (Inter app typeface, SpaceMono + a couple
+  // common icon families). Adding icon fonts ensures icons render
+  // consistently on first mount.
   const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     MaterialIcons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf'),
     Ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
@@ -567,7 +584,7 @@ const SessionMonitorGate = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F14', // page background
+    backgroundColor: '#1B1E24', // page background
   },
   inner: {
     flex: 1,

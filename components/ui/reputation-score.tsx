@@ -25,7 +25,7 @@ function getReputationLevel(averageRating: number, ratingCount: number): {
   if (ratingCount === 0) {
     return {
       level: 'New',
-      color: '#9ca3af', // gray-400
+      color: '#929497', // gray-400
       description: 'This user is new and has not yet received any ratings.',
     };
   }
@@ -37,13 +37,13 @@ function getReputationLevel(averageRating: number, ratingCount: number): {
   if (weightedScore >= 4.5) {
     return {
       level: 'Excellent',
-      color: '#059669', // emerald-500
+      color: '#008E2A', // emerald-500
       description: 'Top-rated user with consistently excellent feedback from multiple transactions.',
     };
   } else if (weightedScore >= 4.0) {
     return {
       level: 'Great',
-      color: '#059669', // emerald-400
+      color: '#008E2A', // emerald-400
       description: 'Highly rated user with very positive feedback from completed transactions.',
     };
   } else if (weightedScore >= 3.5) {
@@ -165,7 +165,7 @@ export function ReputationScore({
       {variant === 'card' && completedJobs > 0 && (
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <MaterialIcons name="check-circle" size={14} color="#6ee7b7" />
+            <MaterialIcons name="check-circle" size={14} color="#1FAE49" />
             <Text style={styles.statText}>{completedJobs} completed</Text>
           </View>
         </View>
@@ -174,7 +174,7 @@ export function ReputationScore({
       {/* Info icon for tap hint */}
       {showDetails && (
         <View style={styles.infoHint}>
-          <MaterialIcons name="info-outline" size={12} color="#6ee7b7" style={{ opacity: 0.6 }} />
+          <MaterialIcons name="info-outline" size={12} color="#1FAE49" style={{ opacity: 0.6 }} />
         </View>
       )}
     </View>
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   ratingCount: {
-    color: '#9CA3AF',
+    color: '#929497',
   },
   levelBadge: {
     flexDirection: 'row',
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#929497',
   },
   infoHint: {
     position: 'absolute',
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#111827',
+    backgroundColor: '#22262C',
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#9CA3AF',
+    color: '#929497',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 12,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   },
   modalLevelDescription: {
     fontSize: 12,
-    color: '#1F2937',
+    color: '#2A2E35',
     lineHeight: 18,
     flex: 1,
   },
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   },
   modalStatLabel: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#929497',
     marginTop: 2,
   },
   infoBox: {
@@ -464,16 +464,16 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6ee7b7',
+    color: '#1FAE49',
     marginBottom: 6,
   },
   infoText: {
     fontSize: 12,
-    color: '#1F2937',
+    color: '#2A2E35',
     lineHeight: 18,
   },
   closeButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

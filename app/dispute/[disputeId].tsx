@@ -249,7 +249,7 @@ export default function DisputeDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6ee7b7" />
+          <ActivityIndicator size="large" color="#1FAE49" />
           <Text style={styles.loadingText}>Loading dispute...</Text>
         </View>
       </View>
@@ -312,7 +312,7 @@ export default function DisputeDetailScreen() {
       {/* Resolution banner */}
       {isResolved && dispute.resolution && (
         <View style={styles.resolutionBanner}>
-          <MaterialIcons name="check-circle" size={20} color="#059669" />
+          <MaterialIcons name="check-circle" size={20} color="#008E2A" />
           <View style={{ flex: 1 }}>
             <Text style={styles.resolutionTitle}>Resolution</Text>
             <Text style={styles.resolutionText}>{dispute.resolution}</Text>
@@ -339,7 +339,7 @@ export default function DisputeDetailScreen() {
           style={[styles.tab, activeTab === 'comments' && styles.tabActive]}
           onPress={() => setActiveTab('comments')}
         >
-          <MaterialIcons name="chat" size={18} color={activeTab === 'comments' ? '#059669' : '#6ee7b7'} />
+          <MaterialIcons name="chat" size={18} color={activeTab === 'comments' ? '#008E2A' : '#1FAE49'} />
           <Text style={[styles.tabText, activeTab === 'comments' && styles.tabTextActive]}>
             Messages ({comments.length})
           </Text>
@@ -348,7 +348,7 @@ export default function DisputeDetailScreen() {
           style={[styles.tab, activeTab === 'evidence' && styles.tabActive]}
           onPress={() => setActiveTab('evidence')}
         >
-          <MaterialIcons name="folder" size={18} color={activeTab === 'evidence' ? '#059669' : '#6ee7b7'} />
+          <MaterialIcons name="folder" size={18} color={activeTab === 'evidence' ? '#008E2A' : '#1FAE49'} />
           <Text style={[styles.tabText, activeTab === 'evidence' && styles.tabTextActive]}>
             Evidence ({evidence.length})
           </Text>
@@ -365,7 +365,7 @@ export default function DisputeDetailScreen() {
             contentContainerStyle={{ paddingBottom: 16, paddingHorizontal: 16 }}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <MaterialIcons name="chat-bubble-outline" size={40} color="rgba(110,231,183,0.3)" />
+                <MaterialIcons name="chat-bubble-outline" size={40} color="rgba(31,174,73,0.3)" />
                 <Text style={styles.emptyText}>No messages yet. Start the conversation.</Text>
               </View>
             }
@@ -419,7 +419,7 @@ export default function DisputeDetailScreen() {
             contentContainerStyle={{ paddingBottom: 16, paddingHorizontal: 16 }}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <MaterialIcons name="folder-open" size={40} color="rgba(110,231,183,0.3)" />
+                <MaterialIcons name="folder-open" size={40} color="rgba(31,174,73,0.3)" />
                 <Text style={styles.emptyText}>No evidence submitted yet.</Text>
               </View>
             }
@@ -444,7 +444,7 @@ export default function DisputeDetailScreen() {
                     </TouchableOpacity>
                   </View>
                   <TouchableOpacity style={styles.uploadBtn} onPress={() => pickAttachment()}>
-                    <MaterialIcons name="attach-file" size={18} color="#6ee7b7" />
+                    <MaterialIcons name="attach-file" size={18} color="#1FAE49" />
                     <Text style={styles.uploadBtnText}>Upload File</Text>
                   </TouchableOpacity>
                 </View>
@@ -460,7 +460,7 @@ export default function DisputeDetailScreen() {
                       item.type === 'image' ? 'image' : 'insert-drive-file'
                     }
                     size={20}
-                    color="#6ee7b7"
+                    color="#1FAE49"
                   />
                   <Text style={styles.evidenceUploader}>{item.uploaderName}</Text>
                   <Text style={styles.evidenceTime}>{relativeTime(item.createdAt)}</Text>
@@ -480,7 +480,7 @@ export default function DisputeDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
   },
   loadingContainer: {
     flex: 1,
@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 14,
   },
   errorContainer: {
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   backBtn: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 8,
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
+    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
   },
   headerTitle: {
     flex: 1,
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
+    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
   },
   stageTag: {
     flexDirection: 'row',
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   reasonLabel: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   resolutionTitle: {
-    color: '#059669',
+    color: '#008E2A',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   resolutionWinner: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 6,
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
+    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
   },
   tab: {
     flex: 1,
@@ -637,15 +637,15 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#059669',
+    borderBottomColor: '#008E2A',
   },
   tabText: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 13,
     fontWeight: '500',
   },
   tabTextActive: {
-    color: '#059669',
+    color: '#008E2A',
     fontWeight: '700',
   },
   list: {
@@ -661,15 +661,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   commentBubble: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(0, 142, 42, 0.15)',
     borderRadius: 12,
     padding: 12,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.1)',
+    borderColor: 'rgba(31, 174, 73, 0.1)',
   },
   commentBubbleMine: {
-    backgroundColor: '#374151',
+    backgroundColor: '#454952',
     borderColor: 'rgba(255,255,255,0.1)',
   },
   commentHeader: {
@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   commentUsername: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -698,22 +698,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(110, 231, 183, 0.1)',
-    backgroundColor: '#0B0F14',
+    borderTopColor: 'rgba(31, 174, 73, 0.1)',
+    backgroundColor: '#1B1E24',
   },
   commentInput: {
     flex: 1,
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     borderRadius: 10,
     padding: 10,
     color: '#fff',
     fontSize: 14,
     maxHeight: 100,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: 'rgba(31, 174, 73, 0.2)',
   },
   sendBtn: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -728,10 +728,10 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(110, 231, 183, 0.1)',
+    borderTopColor: 'rgba(31, 174, 73, 0.1)',
   },
   addEvidenceTitle: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -746,24 +746,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     padding: 10,
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: 'rgba(31, 174, 73, 0.2)',
     borderStyle: 'dashed',
   },
   uploadBtnText: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 13,
   },
   evidenceCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(0, 142, 42, 0.15)',
     borderRadius: 10,
     padding: 12,
     marginTop: 8,
     gap: 6,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.1)',
+    borderColor: 'rgba(31, 174, 73, 0.1)',
   },
   evidenceHeader: {
     flexDirection: 'row',
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
   },
   evidenceUploader: {
     flex: 1,
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 12,
     fontWeight: '600',
   },

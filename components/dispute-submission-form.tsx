@@ -209,7 +209,7 @@ export function DisputeSubmissionForm({
                           : 'text-fields'
                       }
                       size={16}
-                      color="#059669"
+                      color="#008E2A"
                     />
                     <Text className="text-xs text-gray-500 ml-2 uppercase">
                       {item.type}
@@ -248,13 +248,13 @@ export function DisputeSubmissionForm({
             onPress={handleAddTextEvidence}
             disabled={isSubmitting || !textEvidence.trim()}
             className={`rounded-lg py-2 px-4 flex-row items-center justify-center ${
-              isSubmitting || !textEvidence.trim() ? 'bg-gray-300' : 'bg-[#059669]'
+              isSubmitting || !textEvidence.trim() ? 'bg-gray-300' : 'bg-[#008E2A]'
             }`}
           >
             <MaterialIcons
               name="add"
               size={18}
-              color={isSubmitting || !textEvidence.trim() ? '#9ca3af' : 'white'}
+              color={isSubmitting || !textEvidence.trim() ? '#929497' : 'white'}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -272,13 +272,13 @@ export function DisputeSubmissionForm({
             onPress={handlePickImage}
             disabled={isSubmitting}
             className={`flex-1 rounded-lg py-3 px-4 flex-row items-center justify-center border-2 ${
-              isSubmitting ? 'border-gray-300 bg-gray-100' : 'border-[#059669] bg-white'
+              isSubmitting ? 'border-gray-300 bg-gray-100' : 'border-[#008E2A] bg-white'
             }`}
           >
             <MaterialIcons
               name="photo-library"
               size={18}
-              color={isSubmitting ? '#9ca3af' : '#059669'}
+              color={isSubmitting ? '#929497' : '#008E2A'}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -293,13 +293,13 @@ export function DisputeSubmissionForm({
             onPress={handlePickDocument}
             disabled={isSubmitting}
             className={`flex-1 rounded-lg py-3 px-4 flex-row items-center justify-center border-2 ${
-              isSubmitting ? 'border-gray-300 bg-gray-100' : 'border-[#059669] bg-white'
+              isSubmitting ? 'border-gray-300 bg-gray-100' : 'border-[#008E2A] bg-white'
             }`}
           >
             <MaterialIcons
               name="attach-file"
               size={18}
-              color={isSubmitting ? '#9ca3af' : '#059669'}
+              color={isSubmitting ? '#929497' : '#008E2A'}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -318,7 +318,7 @@ export function DisputeSubmissionForm({
           onPress={handleSubmit}
           disabled={isSubmitting || !reason.trim()}
           className={`rounded-lg py-4 ${
-            isSubmitting || !reason.trim() ? 'bg-gray-300' : 'bg-[#059669]'
+            isSubmitting || !reason.trim() ? 'bg-gray-300' : 'bg-[#008E2A]'
           }`}
         >
           {isSubmitting ? (

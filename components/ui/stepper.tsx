@@ -60,7 +60,7 @@ export function Stepper({ stages, activeIndex }: StepperProps) {
                     <MaterialIcons
                       name={stage.icon as any}
                       size={14}
-                      color={isActive ? '#fff' : theme.isDark ? 'rgba(110,231,183,0.45)' : 'rgba(5,150,105,0.4)'}
+                      color={isActive ? '#fff' : theme.isDark ? 'rgba(31,174,73,0.45)' : 'rgba(0,142,42,0.4)'}
                     />
                   ) : null}
                 </View>
@@ -124,10 +124,10 @@ function makeStyles(theme: AppTheme) {
       flex: 1,
     },
     connectorDone: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
     },
     connectorPending: {
-      backgroundColor: theme.isDark ? 'rgba(110,231,183,0.2)' : 'rgba(5,150,105,0.2)',
+      backgroundColor: theme.isDark ? 'rgba(31,174,73,0.2)' : 'rgba(0,142,42,0.2)',
     },
     bubble: {
       width: 32,
@@ -138,21 +138,21 @@ function makeStyles(theme: AppTheme) {
       flexShrink: 0,
     },
     bubbleActive: {
-      backgroundColor: '#059669',
-      shadowColor: '#059669',
+      backgroundColor: '#008E2A',
+      shadowColor: '#008E2A',
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: 0.5,
       shadowRadius: 6,
       elevation: 4,
     },
     bubbleCompleted: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       opacity: 0.85,
     },
     bubblePending: {
       backgroundColor: 'transparent',
       borderWidth: 1.5,
-      borderColor: theme.isDark ? 'rgba(110,231,183,0.25)' : 'rgba(5,150,105,0.25)',
+      borderColor: theme.isDark ? 'rgba(31,174,73,0.25)' : 'rgba(0,142,42,0.25)',
     },
     label: {
       marginTop: 6,
@@ -162,12 +162,12 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 2,
     },
     labelActive: {
-      color: theme.isDark ? '#6ee7b7' : '#059669',
+      color: theme.isDark ? '#1FAE49' : '#008E2A',
       fontWeight: '700',
       fontSize: 11,
     },
     labelCompleted: {
-      color: theme.isDark ? 'rgba(110,231,183,0.7)' : 'rgba(5,150,105,0.7)',
+      color: theme.isDark ? 'rgba(31,174,73,0.7)' : 'rgba(0,142,42,0.7)',
       fontWeight: '500',
     },
     labelPending: {

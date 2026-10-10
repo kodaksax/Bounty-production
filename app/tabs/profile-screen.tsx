@@ -302,7 +302,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
            tintColor={theme.textSecondary}
-            colors={['#374151']}
+            colors={['#454952']}
           />
         }
       >
@@ -477,7 +477,7 @@ function makeStyles(theme: AppTheme) {
       paddingVertical: 12,
       paddingHorizontal: 14,
       borderRadius: 12,
-      backgroundColor: theme.isDark ? 'rgba(5,46,27,0.45)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: theme.isDark ? 'rgba(5,46,27,0.45)' : 'rgba(0,142,42,0.1)',
       borderWidth: 1,
       borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : theme.primary,
     },

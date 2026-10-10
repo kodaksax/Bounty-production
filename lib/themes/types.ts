@@ -1,4 +1,4 @@
-import type { Radius, Shadows, Spacing, Typography } from './tokens';
+import type { Fonts, Radius, Shadows, Spacing, Typography } from './tokens';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -16,6 +16,8 @@ export type AppTheme = {
   background: string;         // outermost page / screen root
   surface: string;            // cards, sections, modals
   surfaceSecondary: string;   // inputs, interactive secondary surfaces
+  surfaceRaised: string;      // cards/panels that need depth above the screen
+  borderRaised: string;       // edge for surfaceRaised
 
   // ── Borders ──────────────────────────────────────────────────────────────
   border: string;
@@ -46,4 +48,5 @@ export type AppTheme = {
   radius: Radius;
   typography: Typography;
   shadows: Shadows;
+  fonts: Fonts;
 };

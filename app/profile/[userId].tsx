@@ -477,7 +477,7 @@ export default function UserProfileScreen() {
           style={[styles.moreMenuContainer, { top: 48 }]}
         >
           <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
-            <MaterialIcons name="share" size={20} color="#9CA3AF" />
+            <MaterialIcons name="share" size={20} color="#929497" />
             <Text style={styles.moreMenuText}>Share Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
@@ -522,7 +522,7 @@ export default function UserProfileScreen() {
         <View style={styles.actionButtons}>
           {isOwnProfile ? (
             <TouchableOpacity style={styles.primaryButton} onPress={handleEditProfile}>
-              <MaterialIcons name="edit" size={18} color="#111827" />
+              <MaterialIcons name="edit" size={18} color="#22262C" />
               <Text style={styles.primaryButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
@@ -533,13 +533,13 @@ export default function UserProfileScreen() {
                 disabled={followLoading}
               >
                 {followLoading ? (
-                  <ActivityIndicator size="small" color={isFollowing ? "#059669" : "#ffffff"} />
+                  <ActivityIndicator size="small" color={isFollowing ? "#008E2A" : "#ffffff"} />
                 ) : (
                   <>
                     <MaterialIcons
                       name={isFollowing ? "person-remove" : "person-add"}
                       size={18}
-                      color={isFollowing ? "#059669" : "#ffffff"}
+                      color={isFollowing ? "#008E2A" : "#ffffff"}
                     />
                     <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
                       {isFollowing ? "Following" : "Follow"}
@@ -568,7 +568,7 @@ export default function UserProfileScreen() {
                   disabled={resendLoading}
                 >
                   {resendLoading ? (
-                    <ActivityIndicator size="small" color="#111827" />
+                    <ActivityIndicator size="small" color="#22262C" />
                   ) : (
                     <Text style={styles.resendButtonText}>Resend email</Text>
                   )}
@@ -767,7 +767,7 @@ function makeStyles(theme: AppTheme) {
       marginBottom: 24,
     },
     retryButton: {
-      backgroundColor: "#059669",
+      backgroundColor: "#008E2A",
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,
@@ -871,7 +871,7 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: "rgba(167, 243, 208, 0.1)",
     },
     followingButtonText: {
-      color: "#059669",
+      color: "#008E2A",
     },
     statsContainer: {
       flexDirection: "row",

@@ -53,7 +53,7 @@ export default function VerificationVerifiedScreen() {
 
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="verified" size={56} color="#059669" accessibilityElementsHidden />
+            <MaterialIcons name="verified" size={56} color="#008E2A" accessibilityElementsHidden />
           </View>
           <Text style={styles.title} accessibilityRole="header">
             You&apos;re verified!
@@ -95,7 +95,7 @@ function makeStyles(theme: AppTheme) {
       width: 100,
       height: 100,
       borderRadius: 50,
-      backgroundColor: 'rgba(5,150,105,0.12)',
+      backgroundColor: 'rgba(0,142,42,0.12)',
       justifyContent: 'center',
       alignItems: 'center',
       marginBottom: SPACING.SCREEN_HORIZONTAL,

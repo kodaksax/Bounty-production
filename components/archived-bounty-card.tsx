@@ -166,7 +166,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 10,
     },
     amountBadge: {
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.18)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.18)' : 'rgba(0,142,42,0.1)',
       borderRadius: 8,
       paddingHorizontal: 10,
       paddingVertical: 4,

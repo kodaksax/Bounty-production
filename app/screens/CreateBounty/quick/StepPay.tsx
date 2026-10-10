@@ -290,8 +290,8 @@ export function StepPay({
                 {
                   backgroundColor: active
                     ? theme.isDark
-                      ? 'rgba(5,150,105,0.22)'
-                      : 'rgba(5,150,105,0.12)'
+                      ? 'rgba(0,142,42,0.22)'
+                      : 'rgba(0,142,42,0.12)'
                     : theme.surfaceSecondary,
                   borderColor: active ? theme.primary : 'transparent',
                 },
@@ -443,7 +443,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       padding: 12,
       borderRadius: 14,
-      backgroundColor: theme.isDark ? 'rgba(5,150,105,0.18)' : 'rgba(5,150,105,0.10)',
+      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.18)' : 'rgba(0,142,42,0.10)',
     },
     infoIcon: { marginRight: 10, marginTop: 1 },
     infoTextWrap: { flex: 1 },

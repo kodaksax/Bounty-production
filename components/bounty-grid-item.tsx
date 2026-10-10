@@ -209,7 +209,7 @@ function BountyGridItemComponent({
               colors={[
                 (categoryColor || theme.primary) + 'cc',
                 (categoryColor || theme.primary) + '66',
-                '#064e3b',
+                theme.primary,
               ]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -383,10 +383,10 @@ function makeStyles(t: AppTheme) {
       // Unchanged: the square, two-per-row footprint the grid places today.
       aspectRatio: 1,
       overflow: 'hidden',
-      backgroundColor: t.surface,
+      backgroundColor: t.surfaceRaised,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: t.border,
+      borderColor: t.borderRaised,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.15,
@@ -466,7 +466,7 @@ function makeStyles(t: AppTheme) {
     info: {
       flex: 1,
       padding: INFO_PADDING,
-      backgroundColor: t.surface,
+      backgroundColor: t.surfaceRaised,
     },
     title: {
       fontSize: FONT.title,
@@ -508,12 +508,12 @@ function makeStyles(t: AppTheme) {
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)',
       borderRadius: 999,
       paddingHorizontal: Math.round(CW * 0.04),
       paddingVertical: 2,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(16,185,129,0.35)' : 'rgba(5,150,105,0.3)',
+      borderColor: t.isDark ? 'rgba(0,142,42,0.35)' : 'rgba(0,142,42,0.3)',
       gap: 3,
     },
     honorText: {

@@ -25,7 +25,7 @@ export function NotFoundScreen({
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconContainer}>
-          <MaterialIcons name={icon} size={64} color="#9ca3af" />
+          <MaterialIcons name={icon} size={64} color="#929497" />
         </View>
         
         <Text style={styles.title}>{title}</Text>
@@ -63,19 +63,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#2A2E35',
     marginBottom: 8,
     textAlign: 'center',
   },
   message: {
     fontSize: 16,
-    color: '#6b7280',
+    color: '#61656B',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
   },
   button: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,

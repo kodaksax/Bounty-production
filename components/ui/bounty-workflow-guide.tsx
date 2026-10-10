@@ -29,22 +29,22 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
     steps: [
       {
         icon: 'touch-app',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'Tap any bounty card to expand it and track its progress',
       },
       {
         icon: 'group',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'Check the "Requests" tab to see hunters who have applied',
       },
       {
         icon: 'check-circle',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: `${trustSafetyStrings.posterHire} Paid bounties hold funds in escrow at posting or acceptance; honor bounties have no funds.`,
       },
       {
         icon: 'rate-review',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'When work is submitted, review it under "Review & Verify" in the expanded card',
       },
       {
@@ -60,12 +60,12 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
     steps: [
       {
         icon: 'person-search',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: "Review each applicant's profile and application message",
       },
       {
         icon: 'check-circle',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: `Tap "Accept" to officially hire a hunter. ${trustSafetyStrings.posterHire}`,
       },
       {
@@ -75,12 +75,12 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
       },
       {
         icon: 'chat',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'Coordinate in Bounty chat. A chat message is not official acceptance.',
       },
       {
         icon: 'trending-up',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'Track work progress in your "My Postings" tab',
       },
     ],
@@ -91,27 +91,27 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
     steps: [
       {
         icon: 'touch-app',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: trustSafetyStrings.beforeAcceptance,
       },
       {
         icon: 'chat',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'After official acceptance, use Bounty chat for agreements and updates. Keep any payment on Bounty.',
       },
       {
         icon: 'check-circle',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'When done, tap "Ready to Submit" to advance to the review step',
       },
       {
         icon: 'attach-file',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'Add proof of work (photos, files) and a description of what you completed',
       },
       {
         icon: 'send',
-        iconColor: '#6ee7b7',
+        iconColor: '#1FAE49',
         text: 'Tap "Submit" — the poster will review and either approve or request revisions',
       },
       {
@@ -260,7 +260,7 @@ export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: 'rgba(5, 150, 105, 0.15)',
+      backgroundColor: 'rgba(0, 142, 42, 0.15)',
       borderRadius: 14,
       padding: 14,
       marginBottom: 12,
@@ -314,7 +314,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 10,
       backgroundColor: theme.overlay,
       borderWidth: 1,
-      borderColor: 'rgba(110, 231, 183, 0.4)',
+      borderColor: 'rgba(31, 174, 73, 0.4)',
       alignItems: 'center',
       justifyContent: 'center',
       flexShrink: 0,

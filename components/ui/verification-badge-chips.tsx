@@ -24,11 +24,11 @@ const BADGE_COLORS: Record<string, string> = {
   email_confirmed: '#3b82f6',  // blue-500
   phone_verified: '#8b5cf6',   // violet-500
   id_verified: '#06b6d4',      // cyan-500
-  profile_complete: '#059669', // emerald-500
+  profile_complete: '#008E2A', // emerald-500
   trusted: '#f59e0b',          // amber-500
 };
 
-const HEADER_ICON_COLOR = '#6ee7b7'; // emerald-200
+const HEADER_ICON_COLOR = '#1FAE49'; // emerald-200
 
 interface VerificationBadgeChipsProps {
   input: VerificationBadgeInput;
@@ -88,7 +88,7 @@ export function VerificationBadgeChips({ input, isOwnProfile = true }: Verificat
 function BadgeChip({ badge }: { badge: VerificationBadge }) {
   const { theme } = useAppThemeContext();
   const styles = makeStyles(theme);
-  const color = BADGE_COLORS[badge.id] ?? '#9ca3af';
+  const color = BADGE_COLORS[badge.id] ?? '#929497';
   const iconName: MaterialIconName = BADGE_ICONS[badge.id] ?? 'help-outline';
 
   if (badge.earned) {

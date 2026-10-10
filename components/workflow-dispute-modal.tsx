@@ -213,7 +213,7 @@ export function WorkflowDisputeModal({
   }
 
   const stageLabel = stage === 'in_progress' ? 'Work In Progress' : 'Review & Verify'
-  const accentColor = theme.isDark ? '#6ee7b7' : theme.primary
+  const accentColor = theme.isDark ? '#1FAE49' : theme.primary
 
   const renderInfoStep = () => (
     <View style={styles.stepContent}>
@@ -274,7 +274,7 @@ export function WorkflowDisputeModal({
             <MaterialIcons
               name={selectedReason === reason ? 'radio-button-checked' : 'radio-button-unchecked'}
               size={20}
-              color={selectedReason === reason ? '#059669' : accentColor}
+              color={selectedReason === reason ? '#008E2A' : accentColor}
             />
             <Text style={styles.reasonOptionText}>{reason}</Text>
           </TouchableOpacity>
@@ -520,9 +520,9 @@ export function WorkflowDisputeModal({
 }
 
 function makeStyles(theme: AppTheme) {
-  const accentColor = theme.isDark ? '#6ee7b7' : theme.primary
-  const inputBg = theme.isDark ? 'rgba(5, 150, 105, 0.2)' : 'rgba(5, 150, 105, 0.08)'
-  const inputBorder = theme.isDark ? 'rgba(110, 231, 183, 0.2)' : theme.primary
+  const accentColor = theme.isDark ? '#1FAE49' : theme.primary
+  const inputBg = theme.isDark ? 'rgba(0, 142, 42, 0.2)' : 'rgba(0, 142, 42, 0.08)'
+  const inputBorder = theme.isDark ? 'rgba(31, 174, 73, 0.2)' : theme.primary
 
   return StyleSheet.create({
     container: {
@@ -592,11 +592,11 @@ function makeStyles(theme: AppTheme) {
       lineHeight: 20,
     },
     bountyCard: {
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : 'rgba(5, 150, 105, 0.08)',
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : 'rgba(0, 142, 42, 0.08)',
       borderRadius: 12,
       padding: 16,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.3)' : theme.primary,
+      borderColor: theme.isDark ? 'rgba(31, 174, 73, 0.3)' : theme.primary,
     },
     bountyTitleText: {
       color: theme.text,
@@ -604,7 +604,7 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '600',
     },
     infoBox: {
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.15)' : 'rgba(5, 150, 105, 0.08)',
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.15)' : 'rgba(0, 142, 42, 0.08)',
       borderRadius: 12,
       padding: 16,
       gap: 12,
@@ -643,7 +643,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.1)' : 'rgba(5, 150, 105, 0.06)',
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.1)' : 'rgba(0, 142, 42, 0.06)',
       borderRadius: 10,
       padding: 14,
       borderWidth: 1,
@@ -651,7 +651,7 @@ function makeStyles(theme: AppTheme) {
     },
     reasonOptionSelected: {
       backgroundColor: theme.surfaceSecondary,
-      borderColor: '#059669',
+      borderColor: '#008E2A',
     },
     reasonOptionText: {
       flex: 1,
@@ -682,7 +682,7 @@ function makeStyles(theme: AppTheme) {
       textAlign: 'right',
     },
     charCountValid: {
-      color: '#059669',
+      color: '#008E2A',
     },
     evidenceInputRow: {
       flexDirection: 'row',
@@ -699,7 +699,7 @@ function makeStyles(theme: AppTheme) {
       borderColor: inputBorder,
     },
     addButton: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       width: 40,
       height: 40,
       borderRadius: 20,
@@ -714,11 +714,11 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.3)' : 'rgba(5, 150, 105, 0.1)',
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.3)' : 'rgba(0, 142, 42, 0.1)',
       borderRadius: 10,
       padding: 14,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.3)' : theme.primary,
+      borderColor: theme.isDark ? 'rgba(31, 174, 73, 0.3)' : theme.primary,
       borderStyle: 'dashed',
     },
     uploadButtonText: {
@@ -739,11 +739,11 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : 'rgba(5, 150, 105, 0.08)',
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : 'rgba(0, 142, 42, 0.08)',
       borderRadius: 8,
       padding: 10,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.15)' : theme.primary,
+      borderColor: theme.isDark ? 'rgba(31, 174, 73, 0.15)' : theme.primary,
     },
     evidenceItemText: {
       flex: 1,
@@ -751,12 +751,12 @@ function makeStyles(theme: AppTheme) {
       fontSize: 13,
     },
     summaryCard: {
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : 'rgba(5, 150, 105, 0.08)',
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : 'rgba(0, 142, 42, 0.08)',
       borderRadius: 12,
       padding: 16,
       gap: 8,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.3)' : theme.primary,
+      borderColor: theme.isDark ? 'rgba(31, 174, 73, 0.3)' : theme.primary,
     },
     summaryLabel: {
       color: accentColor,
@@ -796,7 +796,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       paddingVertical: 12,
       paddingHorizontal: 20,
       borderRadius: 10,

@@ -26,6 +26,7 @@ import { Swipeable } from "react-native-gesture-handler"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { ConnectionStatus } from "../../components/connection-status"
+import { ConversationListRow } from "../../components/messaging/conversation-list-row"
 import {
   SEARCH_FIELD_MAX_FONT_SCALE,
   SEARCH_FIELD_TEXT,
@@ -540,7 +541,6 @@ const ConversationItem = React.memo(function ConversationItem({
     [conversation.updatedAt]
   )
   const unread = conversation.unread ?? 0
-  const hasUnread = unread > 0
 
   const otherUserId = conversation.otherUserId
   // fetchConversations already batch-loads every other user's name/avatar
@@ -584,97 +584,16 @@ const ConversationItem = React.memo(function ConversationItem({
         </TouchableOpacity>
       )}
     >
-      <TouchableOpacity
+      <ConversationListRow
+        displayName={displayName}
+        avatarUrl={avatarUrl}
+        initials={initials}
+        timeLabel={time}
+        preview={conversation.lastMessage ?? "No messages yet"}
+        unread={unread}
         onPress={onPress}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel={
-          hasUnread
-            ? `${displayName}, ${unread} unread. ${conversation.lastMessage ?? ""}`
-            : `${displayName}. ${conversation.lastMessage ?? ""}`
-        }
-        accessibilityHint="Opens the conversation"
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingVertical: theme.spacing.md,
-          paddingHorizontal: theme.spacing.lg,
-          backgroundColor: theme.background,
-        }}
-      >
-        <TouchableOpacity
-          onPress={handleAvatarPress}
-          disabled={!otherUserId}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel={`View ${displayName}'s profile`}
-          style={{ marginRight: theme.spacing.md }}
-        >
-          <Avatar className="h-12 w-12">
-            <AvatarImage src={avatarUrl} alt={displayName} />
-            <AvatarFallback style={{ backgroundColor: theme.surfaceSecondary }}>
-              <Text style={{ color: theme.primary, fontSize: 15, fontWeight: "700" }}>
-                {initials || "?"}
-              </Text>
-            </AvatarFallback>
-          </Avatar>
-        </TouchableOpacity>
-
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <View
-            style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
-          >
-            <Text
-              numberOfLines={1}
-              style={{
-                flex: 1,
-                marginRight: theme.spacing.sm,
-                fontSize: theme.typography.fontSize.base,
-                fontWeight: hasUnread ? "700" : "600",
-                color: theme.text,
-              }}
-            >
-              {displayName}
-            </Text>
-            <Text
-              style={{
-                fontSize: theme.typography.fontSize.xs,
-                fontWeight: hasUnread ? "600" : "400",
-                color: hasUnread ? theme.primary : theme.textDisabled,
-              }}
-            >
-              {time}
-            </Text>
-          </View>
-
-          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
-            <Text
-              numberOfLines={1}
-              style={{
-                flex: 1,
-                marginRight: hasUnread ? theme.spacing.sm : 0,
-                fontSize: theme.typography.fontSize.sm,
-                fontWeight: hasUnread ? "500" : "400",
-                color: hasUnread ? theme.text : theme.textSecondary,
-              }}
-            >
-              {conversation.lastMessage ?? "No messages yet"}
-            </Text>
-            {hasUnread && (
-              <View
-                accessibilityElementsHidden={true}
-                importantForAccessibility="no"
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: theme.primary,
-                }}
-              />
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
+        onAvatarPress={otherUserId ? handleAvatarPress : undefined}
+      />
     </Swipeable>
   )
 })

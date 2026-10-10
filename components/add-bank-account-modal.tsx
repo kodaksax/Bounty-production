@@ -305,7 +305,7 @@ function makeStyles(t: AppTheme) {
       width: 72,
       height: 72,
       borderRadius: 36,
-      backgroundColor: t.isDark ? 'rgba(34,197,94,0.15)' : 'rgba(5,150,105,0.12)',
+      backgroundColor: t.isDark ? 'rgba(34,197,94,0.15)' : 'rgba(0,142,42,0.12)',
       justifyContent: 'center',
       alignItems: 'center',
     },

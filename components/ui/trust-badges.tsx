@@ -31,7 +31,7 @@ const PLATFORM_BADGES: TrustBadge[] = [
     icon: 'lock',
     title: 'In-App Escrow',
     description: 'Funds handled through Bounty may be authorized or captured at posting or acceptance. An open listing does not prove funding. Releases depend on bounty state and any dispute review.',
-    color: '#059669', // emerald-500
+    color: '#008E2A', // emerald-500
   },
   {
     id: 'secure-payments',
@@ -274,7 +274,7 @@ function makeStyles(theme: AppTheme) {
       padding: 16,
       marginBottom: 16,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : 'rgba(5,150,105,0.35)',
+      borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : 'rgba(0,142,42,0.35)',
     },
     header: {
       flexDirection: 'row',
