@@ -4,6 +4,13 @@
 
 import { fetchWithTimeout } from '../../../lib/utils/fetch-with-timeout';
 
+// Explicit so the Sentry assertions below don't depend on the global mock's
+// shape; jest.clearAllMocks() in beforeEach resets these between tests.
+jest.mock('@sentry/react-native', () => ({
+  addBreadcrumb: jest.fn(),
+  captureException: jest.fn(),
+}));
+
 // Mock global fetch
 global.fetch = jest.fn();
 
@@ -182,6 +189,34 @@ describe('fetchWithTimeout', () => {
           category: 'http.connectivity',
           data: { url: 'https://api.example.com/wallet/transactions' },
         })
+      );
+    });
+
+    it('records an external abort under its own category, not connectivity', async () => {
+      const controller = new AbortController();
+      (global.fetch as jest.Mock).mockImplementation((_url, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            const error = new Error('The operation was aborted');
+            error.name = 'AbortError';
+            reject(error);
+          });
+        })
+      );
+
+      const pending = fetchWithTimeout('https://api.example.com/bounties', {
+        timeout: 5000,
+        retries: 2,
+        signal: controller.signal,
+      });
+      controller.abort();
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({ category: 'http.abort.external', level: 'info' })
       );
     });
 

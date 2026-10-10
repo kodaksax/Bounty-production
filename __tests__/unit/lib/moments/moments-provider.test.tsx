@@ -126,8 +126,13 @@ let latest: ReturnType<typeof useMoments> | null = null;
 // tests that dismiss/accept must first let the moment be "visible" that long.
 let dateNowSpy: jest.SpyInstance | null = null;
 function elapse(ms: number) {
+  // Reads the current (possibly already-mocked) time, so calls accumulate.
   const target = Date.now() + ms;
-  dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => target);
+  if (dateNowSpy) {
+    dateNowSpy.mockImplementation(() => target);
+  } else {
+    dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => target);
+  }
 }
 afterEach(() => {
   dateNowSpy?.mockRestore();

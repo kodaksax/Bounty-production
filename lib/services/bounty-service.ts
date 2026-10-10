@@ -79,7 +79,14 @@ async function attachProfilesToBounties(items: any[], opts?: { throwOnError?: bo
       .in('id', ids);
 
     if (error) {
-      if (opts?.throwOnError) throw new Error((error as any)?.message ?? 'Could not fetch poster profiles');
+      if (opts?.throwOnError) {
+        // Keep the PostgREST error (code/details/hint) reachable as `cause`.
+        const wrapped: Error & { cause?: unknown } = new Error(
+          (error as any)?.message ?? 'Could not fetch poster profiles'
+        );
+        wrapped.cause = error;
+        throw wrapped;
+      }
       logger.warning('Could not fetch profiles for bounties fallback', { error });
       return items.map((it: any) => ({ ...it }));
     }

@@ -35,14 +35,14 @@ import {
     incrementSessionCount,
     shouldRecordSession,
 } from '../lib/moments/sessionTracking';
-import type {
-    MomentContent,
-    MomentContext as MomentCtx,
-    MomentDefinition,
-    MomentState,
-    MomentType,
+import {
+    MIN_MOMENT_VISIBLE_MS,
+    type MomentContent,
+    type MomentContext as MomentCtx,
+    type MomentDefinition,
+    type MomentState,
+    type MomentType,
 } from '../lib/moments/types';
-import { MIN_MOMENT_VISIBLE_MS } from '../lib/moments/types';
 import { analyticsService } from '../lib/services/analytics-service';
 import { locationService } from '../lib/services/location-service';
 import { notificationService } from '../lib/services/notification-service';
@@ -562,9 +562,14 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   // instead of resolving it: markDismissed would refuse the write anyway,
   // leaving local state and analytics saying "dismissed" while the server
   // still says "shown".
+  //
+  // A missing shownAt is treated as "not too recent": the presentation effect
+  // always sets it, and if some path ever skipped that, ignoring taps would
+  // trap the user in a sheet they can't close. markDismissed's own backstop
+  // still reports such a dismissal.
   const isPresentationTooRecent = useCallback(() => {
     const shownAt = shownAtRef.current;
-    return shownAt == null || Date.now() - shownAt < MIN_MOMENT_VISIBLE_MS;
+    return shownAt != null && Date.now() - shownAt < MIN_MOMENT_VISIBLE_MS;
   }, []);
 
   const dismiss = useCallback(() => {

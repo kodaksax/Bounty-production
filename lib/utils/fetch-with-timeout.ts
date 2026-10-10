@@ -62,21 +62,44 @@ function isConnectivityError(error: any): boolean {
 }
 
 /**
+ * Fetch rejections are usually Errors, but anything can be thrown. Wrap
+ * non-Errors so the report has a readable message and keeps the original.
+ */
+function toError(value: unknown): Error {
+  if (value instanceof Error) return value;
+  const wrapped: Error & { cause?: unknown } = new Error(
+    typeof value === 'string' ? value : `Non-Error thrown: ${String(value)}`
+  );
+  wrapped.cause = value;
+  return wrapped;
+}
+
+/**
  * Connectivity failures are recorded as a breadcrumb, not an exception: as
  * exceptions every dead cellular connection became a Sentry issue that no code
  * change could fix. The breadcrumb still gives context to any real error that
  * follows. Anything else (e.g. a malformed URL) is still captured.
+ *
+ * Cancellation by the caller's own signal (navigation, unmount, app
+ * backgrounding) says nothing about the network, so it gets its own breadcrumb
+ * category instead of being counted as connectivity.
  */
-function reportFetchFailure(error: Error, url: string): void {
+function reportFetchFailure(
+  value: unknown,
+  url: string,
+  opts?: { abortedByExternalSignal?: boolean }
+): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
     const Sentry = require('@sentry/react-native');
     if (!Sentry) return;
-    if (isConnectivityError(error)) {
+    const error = toError(value);
+    const external = opts?.abortedByExternalSignal === true;
+    if (external || isConnectivityError(error)) {
       if (typeof Sentry.addBreadcrumb === 'function') {
         Sentry.addBreadcrumb({
-          category: 'http.connectivity',
-          level: 'warning',
+          category: external ? 'http.abort.external' : 'http.connectivity',
+          level: external ? 'info' : 'warning',
           message: `${error.name}: ${error.message}`,
           // Redact query params to avoid leaking sensitive data
           data: { url: url.split('?')[0] },
@@ -247,7 +270,7 @@ export async function fetchWithTimeout(
 
       // If cancellation was triggered externally, do not retry — short-circuit
       if (abortedByExternalSignal) {
-        reportFetchFailure(lastError!, url);
+        reportFetchFailure(lastError, url, { abortedByExternalSignal: true });
         throw lastError;
       }
       if (!isLastAttempt && retryOn(null, lastError)) {
@@ -263,7 +286,7 @@ export async function fetchWithTimeout(
       }
 
       // No more retries, report and throw the error
-      reportFetchFailure(lastError!, url);
+      reportFetchFailure(lastError, url);
       throw lastError;
     }
   }
@@ -278,7 +301,7 @@ export async function fetchWithTimeout(
         `backoffMultiplier=${retryConfig.backoffMultiplier}.` +
         (abortedByExternalSignal ? ' Request was aborted by an external signal.' : '')
     );
-  reportFetchFailure(fallbackError, url);
+  reportFetchFailure(fallbackError, url, { abortedByExternalSignal });
   throw fallbackError;
 }
 
