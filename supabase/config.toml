@@ -127,6 +127,11 @@ verify_jwt = false
 [functions.wallet]
 verify_jwt = false
 
+# contact-support: handles its own auth via supabaseAdmin.auth.getUser(token).
+# With gateway verification on, valid user JWTs were rejected with 401.
+[functions.contact-support]
+verify_jwt = false
+
 # completion: handles its own auth via supabaseAdmin.auth.getUser(token).
 [functions.completion]
 verify_jwt = false
