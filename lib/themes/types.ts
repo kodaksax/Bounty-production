@@ -32,20 +32,6 @@ export type AppTheme = {
     borderRightColor: string;
     borderBottomColor: string;
   };
-  /** Higher-contrast pressed-in edge for small controls (filter chips). */
-  insetBorderStrong: {
-    borderTopColor: string;
-    borderLeftColor: string;
-    borderRightColor: string;
-    borderBottomColor: string;
-  };
-  /** The same pressed-in edge for surfaces filled with `primary`. */
-  insetBorderPrimary: {
-    borderTopColor: string;
-    borderLeftColor: string;
-    borderRightColor: string;
-    borderBottomColor: string;
-  };
 
   // ── Text ─────────────────────────────────────────────────────────────────
   text: string;               // primary

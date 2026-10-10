@@ -48,7 +48,7 @@ export function FilterChip({
 }: FilterChipProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeChipStyles(theme), [theme])
-  const iconColor = active ? '#FFFFFF' : theme.textSecondary
+  const iconColor = active ? theme.primary : theme.textSecondary
 
   return (
     <TouchableOpacity
@@ -97,19 +97,17 @@ function makeChipStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      // Same surface as the View & Apply section, with a firmer 2pt
-      // pressed-in edge so the chip reads as set into the background.
-      backgroundColor: t.surfaceRaised,
-      borderWidth: 2,
-      ...t.insetBorderStrong,
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: t.border,
       paddingHorizontal: 14,
       borderRadius: 999,
       marginRight: SPACING.COMPACT_GAP,
       minHeight: SIZING.MIN_TOUCH_TARGET,
     },
     chipActive: {
-      backgroundColor: t.primary,
-      ...t.insetBorderPrimary,
+      backgroundColor: t.surface,
+      borderColor: t.primary,
     },
     leadingIcon: { marginRight: SPACING.COMPACT_GAP },
     trailingIcon: { marginLeft: 4, marginRight: -2 },
@@ -119,7 +117,7 @@ function makeChipStyles(t: AppTheme) {
       fontWeight: '600',
     },
     labelActive: {
-      color: '#FFFFFF',
+      color: t.primaryLight,
     },
   })
 }

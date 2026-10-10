@@ -1290,14 +1290,13 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 14,
       minHeight: 40,
       borderRadius: 999,
-      // Pressed-in chip, matching the View & Apply section.
-      backgroundColor: theme.surfaceRaised,
-      borderWidth: 2,
-      ...theme.insetBorderStrong,
+      backgroundColor: theme.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: theme.border,
     },
     chipSelected: {
       backgroundColor: theme.primary,
-      ...theme.insetBorderPrimary,
+      borderColor: theme.primary,
     },
     chipText: {
       color: theme.text,
