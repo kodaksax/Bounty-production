@@ -29,6 +29,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
+import { BrandingLogo } from "../../components/ui/branding-logo"
 import { BountyConversationRow, type InboxPerson } from "../../components/bounty-inbox/thread-list-row"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { getBottomNavContentPadding } from "../../lib/constants/navigation"
@@ -927,6 +928,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         style={[styles.header, { top: -HEADER_TOP_OFFSET, paddingTop: insets.top }, showShadow && styles.headerShadow]}
       >
         <View style={styles.headerRow}>
+          <BrandingLogo size="medium" />
           <View style={styles.headerActions}>
             <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
             {/* All conversations, including ones not tied to a bounty. */}
@@ -1174,7 +1176,7 @@ function makeStyles(theme: AppTheme) {
     },
     headerRow: {
       flexDirection: 'row',
-      justifyContent: 'flex-end',
+      justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 16,
     },
