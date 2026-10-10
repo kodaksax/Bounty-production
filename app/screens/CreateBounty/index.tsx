@@ -56,6 +56,12 @@ interface CreateBountyFlowProps {
    * re-introducing the leak.
    */
   deliberateTap?: boolean;
+  /**
+   * Top gap the host wants above the flow. Applied to every screen except
+   * step 1, whose green hero sits flush under the (green-tinted) status-bar
+   * strip. Defaults to 0.
+   */
+  topInset?: number;
 }
 
 /**
@@ -108,6 +114,7 @@ export function CreateBountyFlow({
   onStepChange,
   entryPoint = 'unknown',
   deliberateTap = false,
+  topInset = 0,
 }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
@@ -727,7 +734,7 @@ export function CreateBountyFlow({
     return (
       <View
         className="flex-1 items-center justify-center"
-        style={{ backgroundColor: theme.background }}
+        style={{ backgroundColor: theme.background, paddingTop: topInset }}
       >
         <ActivityIndicator size="large" color={theme.text} />
         <Text className="mt-4" style={{ color: theme.text }}>
@@ -738,7 +745,11 @@ export function CreateBountyFlow({
   }
 
   if (funding.showTopUp || funding.showInsufficientBalance) {
-    return <PublishFundingGate funding={funding} />;
+    return (
+      <View style={{ flex: 1, paddingTop: topInset }}>
+        <PublishFundingGate funding={funding} />
+      </View>
+    );
   }
 
   return (
@@ -758,7 +769,12 @@ export function CreateBountyFlow({
     <Animated.View
       style={{ flex: 1, backgroundColor: theme.background, paddingBottom: keyboardInset }}
     >
-      <View className="flex-1">
+      <View
+        className="flex-1"
+        // Step 1's hero sits flush against the status-bar strip (which it
+        // tints green); every other screen keeps the host's top gap.
+        style={{ paddingTop: !postedBountyId && currentStep === 1 ? 0 : topInset }}
+      >
         {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
 
         <StepDirectionContext.Provider value={stepDirection}>
@@ -770,6 +786,16 @@ export function CreateBountyFlow({
                 onUpdate={handleDraftUpdate}
                 onNext={handleNext}
                 onFieldFocus={handleFieldFocused}
+                tintStatusBar={isEmailVerified}
+                topInset={topInset}
+                onClose={
+                  onCancel
+                    ? () => {
+                        exitMethodRef.current = 'close';
+                        handleCancel();
+                      }
+                    : undefined
+                }
                 step={1}
                 totalSteps={TOTAL_STEPS}
               />

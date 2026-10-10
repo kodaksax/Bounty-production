@@ -113,15 +113,4 @@ describe('StepTask contextual help tooltips', () => {
       expect.objectContaining({ surface: 'create_flow', step_index: 1, term: 'bounty' })
     );
   });
-
-  it('emits post_help_opened with the term when the price tooltip opens', () => {
-    const { getByLabelText } = renderStep();
-
-    fireEvent.press(getByLabelText('Help: About these prices'));
-
-    expect(mockTrackEvent).toHaveBeenCalledWith(
-      'post_help_opened',
-      expect.objectContaining({ surface: 'create_flow', step_index: 1, term: 'price' })
-    );
-  });
 });

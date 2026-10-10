@@ -27,6 +27,98 @@ export const StepDirectionContext = React.createContext<number>(1);
 const SLIDE_DISTANCE = Math.round(Dimensions.get('window').width * 0.28);
 const SLIDE_DURATION = 280;
 
+/**
+ * The step entrance: each step mounts fresh, so this runs once — start offset
+ * to the side we came from, then settle to 0 while fading in. Returns the
+ * animated style for the part of the step that should slide.
+ */
+export function useStepEntrance() {
+  const direction = useContext(StepDirectionContext);
+  const enter = useRef(new Animated.Value(direction)).current;
+
+  useEffect(() => {
+    Animated.timing(enter, {
+      toValue: 0,
+      duration: SLIDE_DURATION,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [enter]);
+
+  const translateX = enter.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [-SLIDE_DISTANCE, 0, SLIDE_DISTANCE],
+  });
+  const opacity = enter.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [0, 1, 0],
+  });
+  return { opacity, transform: [{ translateX }] };
+}
+
+interface StepProgressRowProps {
+  step: number;
+  totalSteps: number;
+  /** Shows a back arrow in the leading slot. */
+  onBack?: () => void;
+  /** Shows a close (×) in the leading slot instead — step 1, which has no back. */
+  onClose?: () => void;
+  /** Light-on-green colours for a row drawn over the primary colour (step 1's hero). */
+  onPrimary?: boolean;
+}
+
+/**
+ * The flow's progress row: leading button slot, progress track, "n/N" counter.
+ * Every step renders it at the same place and size so it reads as one
+ * continuous indicator; step 1 draws it over its green hero with `onPrimary`.
+ */
+export function StepProgressRow({ step, totalSteps, onBack, onClose, onPrimary = false }: StepProgressRowProps) {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const progress = Math.max(0, Math.min(1, step / totalSteps));
+  const leading = onBack
+    ? { onPress: onBack, icon: 'arrow-back' as const, label: 'Go back' }
+    : onClose
+      ? { onPress: onClose, icon: 'close' as const, label: 'Close' }
+      : null;
+
+  return (
+    <View style={styles.progressRow}>
+      {/* The slot is always reserved, so the progress bar keeps the same
+          position and width on every step — only the button appears/disappears. */}
+      <View style={styles.backSlot}>
+        {leading ? (
+          <TouchableOpacity
+            onPress={leading.onPress}
+            style={[styles.backButton, onPrimary && styles.backButtonOnPrimary]}
+            accessibilityRole="button"
+            accessibilityLabel={leading.label}
+          >
+            <MaterialIcons name={leading.icon} size={22} color={onPrimary ? '#ffffff' : theme.text} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      <View style={[styles.progressTrack, onPrimary && styles.progressTrackOnPrimary]}>
+        <View
+          style={[
+            styles.progressFill,
+            onPrimary && styles.progressFillOnPrimary,
+            { width: `${progress * 100}%` },
+          ]}
+        />
+      </View>
+
+      <Text
+        style={[styles.stepCounter, onPrimary && styles.stepCounterOnPrimary]}
+        accessibilityLabel={`Step ${step} of ${totalSteps}`}
+      >
+        {step}/{totalSteps}
+      </Text>
+    </View>
+  );
+}
+
 interface QuickStepLayoutProps {
   step: number;
   totalSteps: number;
@@ -66,66 +158,17 @@ export function QuickStepLayout({
 }: QuickStepLayoutProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const progress = Math.max(0, Math.min(1, step / totalSteps));
   const ctaEnabled = !ctaDisabled && !ctaBusy;
 
-  // Each step mounts fresh, so the entrance animation runs once here: start
-  // offset to the side we came from, then settle to 0 while fading in.
-  const direction = useContext(StepDirectionContext);
-  const enter = useRef(new Animated.Value(direction)).current;
-
-  useEffect(() => {
-    Animated.timing(enter, {
-      toValue: 0,
-      duration: SLIDE_DURATION,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [enter]);
-
-  const translateX = enter.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: [-SLIDE_DISTANCE, 0, SLIDE_DISTANCE],
-  });
-  const opacity = enter.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: [0, 1, 0],
-  });
+  const entrance = useStepEntrance();
 
   return (
     <View style={styles.root}>
-      {/* Progress row */}
-      <View style={styles.progressRow}>
-        {/* The slot is always reserved, so the progress bar keeps the same
-            position and width on every step — only the arrow appears/disappears. */}
-        <View style={styles.backSlot}>
-          {onBack ? (
-            <TouchableOpacity
-              onPress={onBack}
-              style={styles.backButton}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <MaterialIcons name="arrow-back" size={22} color={theme.text} />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-        </View>
-
-        <Text
-          style={styles.stepCounter}
-          accessibilityLabel={`Step ${step} of ${totalSteps}`}
-        >
-          {step}/{totalSteps}
-        </Text>
-      </View>
+      <StepProgressRow step={step} totalSteps={totalSteps} onBack={onBack} />
 
       {/* Everything below the progress row slides + fades; the bar itself
           stays put so it reads as a single continuous indicator. */}
-      <Animated.View style={[styles.animated, { opacity, transform: [{ translateX }] }]}>
+      <Animated.View style={[styles.animated, entrance]}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
@@ -206,6 +249,7 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    backButtonOnPrimary: { backgroundColor: 'rgba(0,0,0,0.14)' },
     progressTrack: {
       flex: 1,
       height: 6,
@@ -213,11 +257,13 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: theme.surfaceSecondary,
       overflow: 'hidden',
     },
+    progressTrackOnPrimary: { backgroundColor: 'rgba(255,255,255,0.28)' },
     progressFill: {
       height: '100%',
       borderRadius: 3,
       backgroundColor: theme.primary,
     },
+    progressFillOnPrimary: { backgroundColor: '#ffffff' },
     stepCounter: {
       fontSize: 16,
       fontWeight: '500',
@@ -225,6 +271,7 @@ function makeStyles(theme: AppTheme) {
       minWidth: 34,
       textAlign: 'right',
     },
+    stepCounterOnPrimary: { color: 'rgba(255,255,255,0.9)' },
     animated: { flex: 1 },
     scroll: { flex: 1 },
     scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },

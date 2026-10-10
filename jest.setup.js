@@ -166,8 +166,11 @@ jest.mock('react-native', () => {
       stagger: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
       delay: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
       createAnimatedComponent: jest.fn(component => component),
+      // Scroll-linked values (onScroll={Animated.event(...)}) just need a handler.
+      event: jest.fn(() => jest.fn()),
       View: 'Animated.View',
       Text: 'Animated.Text',
+      ScrollView: 'Animated.ScrollView',
     },
     Easing: {
       ease: jest.fn(t => t),
