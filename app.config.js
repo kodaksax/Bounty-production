@@ -154,9 +154,10 @@ const GOOGLE_IOS_URL_SCHEME_PREFIX = 'com.googleusercontent.apps.';
  * Google Sign-In plugin to use real env values only when its required iOS URL
  * scheme is available.
  * @param {Array<string | [string, Record<string, string>]>} plugins
+ * @param {{ ios: string, android: string }} googleMapsKeys from resolveGoogleMapsKeys()
  * @returns {Array<string | [string, Record<string, string>]>}
  */
-function resolvePlugins(plugins = []) {
+function resolvePlugins(plugins = [], googleMapsKeys = resolveGoogleMapsKeys()) {
   const iosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
   const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
   const hasValidGoogleIosUrlScheme =
@@ -225,6 +226,34 @@ function resolvePlugins(plugins = []) {
       return [[pluginName, { ...existingPluginConfig, merchantIdentifier: APPLE_PAY_MERCHANT_ID }]];
     }
 
+    if (pluginName === 'react-native-maps') {
+      // app.json does not interpolate `${VAR}` strings, so the keys have to be
+      // injected here. Previously iOS shipped the literal placeholder as its
+      // GMSApiKey and Android shipped no com.google.android.geo.API_KEY at all,
+      // which crashes the Maps SDK the first time any MapView mounts. When a key
+      // is absent the JS side (lib/config/maps.ts) falls back to Apple Maps on
+      // iOS and hides maps on Android instead of crashing.
+      const { ios: iosKey, android: androidKey } = googleMapsKeys;
+      if (APP_ENV === 'production' && (!iosKey || !androidKey)) {
+        console.warn(
+          '[build-time warning] Google Maps is disabled on ' +
+            [!iosKey && 'iOS (EXPO_GOOGLE_MAPS_IOS_KEY)', !androidKey && 'Android (EXPO_GOOGLE_MAPS_ANDROID_KEY)']
+              .filter(Boolean)
+              .join(' and ') +
+            ' because the key is missing. iOS falls back to Apple Maps; Android hides map views.'
+        );
+      }
+      return [
+        [
+          pluginName,
+          {
+            ...(iosKey ? { iosGoogleMapsApiKey: iosKey } : {}),
+            ...(androidKey ? { androidGoogleMapsApiKey: androidKey } : {}),
+          },
+        ],
+      ];
+    }
+
     if (pluginName !== '@react-native-google-signin/google-signin') {
       return [plugin];
     }
@@ -269,6 +298,14 @@ function asString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/** Native Google Maps SDK keys; '' when unset. */
+function resolveGoogleMapsKeys() {
+  return {
+    ios: asString(process.env.EXPO_GOOGLE_MAPS_IOS_KEY),
+    android: asString(process.env.EXPO_GOOGLE_MAPS_ANDROID_KEY),
+  };
+}
+
 /**
  * Resolve the Edge Functions base URL deterministically.
  * The value must be identical on a developer machine and on EAS or the
@@ -289,6 +326,8 @@ function resolveSupabaseFunctionsUrl(config) {
 }
 
 module.exports = ({ config }) => {
+  // Resolved once so the plugin keys and the runtime flags can't disagree.
+  const googleMapsKeys = resolveGoogleMapsKeys();
   let result = {
     ...config,
     // Override icon for dev/preview builds when an env-specific asset exists.
@@ -327,7 +366,7 @@ module.exports = ({ config }) => {
           }
         : {}),
     },
-    plugins: resolvePlugins(config.plugins),
+    plugins: resolvePlugins(config.plugins, googleMapsKeys),
     extra: {
       ...(config.extra || {}),
       APP_ENV,
@@ -349,6 +388,12 @@ module.exports = ({ config }) => {
         asString(process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) ||
         asString(config.extra && config.extra.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) ||
         null,
+      // Whether the native binary was built with a Google Maps key. Only the
+      // booleans are exposed; read via lib/config/maps.ts. A bundle whose
+      // manifest lacks these flags (any build before this change) is treated
+      // as "no key", which is what those binaries actually have.
+      googleMapsIosKeyConfigured: !!googleMapsKeys.ios,
+      googleMapsAndroidKeyConfigured: !!googleMapsKeys.android,
     },
   };
 

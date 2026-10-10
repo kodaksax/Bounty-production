@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
+import { isNativeMapAvailable, mapProvider } from '../../lib/config/maps';
 import { formatExactAddress, useBountyExactLocation } from '../../hooks/useBountyExactLocation';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
@@ -54,10 +55,10 @@ export function ExactLocationReveal({ bountyId, canReveal, height = 160 }: Exact
 
   return (
     <View>
-      {location.latitude != null && location.longitude != null && (
+      {isNativeMapAvailable && location.latitude != null && location.longitude != null && (
         <View style={{ height, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.border }}>
           <MapView
-            provider={PROVIDER_GOOGLE}
+            provider={mapProvider}
             style={{ flex: 1 }}
             initialRegion={{
               latitude: location.latitude,

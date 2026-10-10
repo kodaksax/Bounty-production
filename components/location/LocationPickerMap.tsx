@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import MapView, { Marker, type Region } from 'react-native-maps';
+import { isNativeMapAvailable, mapProvider } from '../../lib/config/maps';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { addressAutocompleteService, isPlaceDetailsError, type AddressSuggestion } from '../../lib/services/address-autocomplete-service';
 import { locationService } from '../../lib/services/location-service';
@@ -191,24 +192,47 @@ export function LocationPickerMap({
         </View>
       )}
 
-      <View style={{ height, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.border }}>
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_GOOGLE}
-          style={{ flex: 1 }}
-          initialRegion={region}
-          region={hasPin ? region : undefined}
-          onPress={(e) => handleDragEnd(e as any)}
-        >
-          {hasPin && (
-            <Marker
-              coordinate={{ latitude: latitude!, longitude: longitude! }}
-              draggable
-              onDragEnd={handleDragEnd}
-              tracksViewChanges={false}
-            />
-          )}
-        </MapView>
+      <View
+        style={{
+          ...(isNativeMapAvailable ? { height } : { minHeight: 96 }),
+          borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.border,
+        }}
+      >
+        {isNativeMapAvailable ? (
+          <MapView
+            ref={mapRef}
+            provider={mapProvider}
+            style={{ flex: 1 }}
+            initialRegion={region}
+            region={hasPin ? region : undefined}
+            onPress={(e) => handleDragEnd(e as any)}
+          >
+            {hasPin && (
+              <Marker
+                coordinate={{ latitude: latitude!, longitude: longitude! }}
+                draggable
+                onDragEnd={handleDragEnd}
+                tracksViewChanges={false}
+              />
+            )}
+          </MapView>
+        ) : (
+          // No map SDK key in this binary (see lib/config/maps.ts): keep the
+          // current-location button working and show the chosen point as text.
+          <View
+            style={{
+              flex: 1, flexDirection: 'row', alignItems: 'flex-start',
+              padding: 12, paddingBottom: 52, backgroundColor: theme.surfaceSecondary,
+            }}
+          >
+            <MaterialIcons name="place" size={18} color={hasPin ? theme.primary : theme.textDisabled} />
+            <Text style={{ flex: 1, marginLeft: 6, color: hasPin ? theme.text : theme.textSecondary, fontSize: 13 }}>
+              {hasPin
+                ? address || `${latitude!.toFixed(4)}, ${longitude!.toFixed(4)}`
+                : 'No location set yet'}
+            </Text>
+          </View>
+        )}
 
         {(isLocating || isResolvingPin) && (
           <View
@@ -241,9 +265,11 @@ export function LocationPickerMap({
 
       {mode === 'full' && (
         <>
-          <Text style={{ marginTop: 6, fontSize: 11, color: theme.textSecondary }}>
-            Drag the pin or tap the map to fine-tune the exact spot.
-          </Text>
+          {isNativeMapAvailable && (
+            <Text style={{ marginTop: 6, fontSize: 11, color: theme.textSecondary }}>
+              Drag the pin or tap the map to fine-tune the exact spot.
+            </Text>
+          )}
           <TextInput
             value={unit}
             onChangeText={(text) => onUnitChange?.(text)}
