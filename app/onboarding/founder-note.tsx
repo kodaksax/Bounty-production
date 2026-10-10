@@ -515,6 +515,8 @@ function makeStyles(theme: AppTheme) {
       height: 56,
       borderRadius: radius.full,
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       alignItems: 'center',
       justifyContent: 'center',
     },

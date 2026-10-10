@@ -221,16 +221,22 @@ function makeButtonStyles(theme: AppTheme) {
       paddingVertical: theme.spacing.md,
       minHeight: 48,
     },
+    // Filled buttons get a darker band along the bottom edge for a raised,
+    // pressable look (borderBottom* wins over the all-sides border).
     default: {
       backgroundColor: theme.primary,
       borderWidth: 1,
       borderColor: withAlpha(theme.primary, 0.6),
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       ...theme.shadows.brand,
     },
     destructive: {
       backgroundColor: theme.error,
       borderWidth: 1,
       borderColor: withAlpha(theme.error, 0.6),
+      borderBottomWidth: 4,
+      borderBottomColor: theme.errorShade,
       ...theme.shadows.sm,
     },
     outline: {
@@ -242,6 +248,8 @@ function makeButtonStyles(theme: AppTheme) {
       backgroundColor: theme.surfaceSecondary,
       borderWidth: 1,
       borderColor: withAlpha(theme.primary, 0.3),
+      borderBottomWidth: 3,
+      borderBottomColor: theme.border,
       ...theme.shadows.sm,
     },
     ghost: {

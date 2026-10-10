@@ -1016,6 +1016,8 @@ const makeStyles = (theme: AppTheme) =>
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: theme.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: theme.primaryShade,
     borderRadius: 10,
     marginTop: 8,
   },

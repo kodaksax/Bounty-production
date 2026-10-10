@@ -262,6 +262,8 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButton: {
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       paddingVertical: 16,
       borderRadius: 999,
       alignItems: 'center',

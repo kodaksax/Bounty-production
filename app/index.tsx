@@ -346,6 +346,8 @@ const indexStyles = StyleSheet.create({
   retryButton: {
     alignItems: 'center',
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     borderRadius: 6,
     marginTop: 24,
     minWidth: 112,

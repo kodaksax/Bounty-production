@@ -727,6 +727,8 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -937,6 +939,8 @@ const styles = StyleSheet.create({
   },
   releaseButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -951,6 +955,8 @@ const styles = StyleSheet.create({
   },
   completeButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -965,6 +971,8 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: '#ef4444',
+    borderBottomWidth: 4,
+    borderBottomColor: '#933730',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

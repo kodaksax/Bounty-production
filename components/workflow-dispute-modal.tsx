@@ -700,6 +700,8 @@ function makeStyles(theme: AppTheme) {
     },
     addButton: {
       backgroundColor: '#008E2A',
+      borderBottomWidth: 4,
+      borderBottomColor: '#00701F',
       width: 40,
       height: 40,
       borderRadius: 20,
@@ -797,6 +799,8 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       gap: 6,
       backgroundColor: '#008E2A',
+      borderBottomWidth: 4,
+      borderBottomColor: '#00701F',
       paddingVertical: 12,
       paddingHorizontal: 20,
       borderRadius: 10,

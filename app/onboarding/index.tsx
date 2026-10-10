@@ -211,6 +211,8 @@ function makeStyles(theme: AppTheme) {
     },
     retryButton: {
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       paddingVertical: 14,
       paddingHorizontal: 32,
       borderRadius: 999,

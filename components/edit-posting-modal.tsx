@@ -438,6 +438,8 @@ function makeStyles(theme: AppTheme) {
     },
     saveButton: {
       backgroundColor: "#008E2A",
+      borderBottomWidth: 4,
+      borderBottomColor: '#00701F',
       padding: 16,
       borderRadius: 12,
       alignItems: "center",

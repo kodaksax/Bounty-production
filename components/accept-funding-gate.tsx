@@ -559,6 +559,8 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       borderRadius: 14,
       paddingVertical: metrics.buttonPaddingVertical,
     },

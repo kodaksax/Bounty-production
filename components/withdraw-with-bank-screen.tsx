@@ -1149,6 +1149,8 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: t.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: t.primaryShade,
     borderRadius: 12,
     paddingVertical: 16,
     shadowColor: t.primary,

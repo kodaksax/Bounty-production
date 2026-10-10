@@ -341,6 +341,8 @@ function makeStyles(theme: AppTheme) {
       justifyContent: 'center',
       gap: 6,
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       borderRadius: 20,
       paddingVertical: 8,
       paddingHorizontal: 20,

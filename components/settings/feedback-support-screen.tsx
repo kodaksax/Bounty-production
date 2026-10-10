@@ -230,6 +230,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
     },
     copyButtonText: {
       color: '#ffffff',

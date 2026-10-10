@@ -636,6 +636,8 @@ function makeStyles(t: AppTheme) {
     // Unique colors — kept as designed
     rejectButton: {
       backgroundColor: '#dc2626',
+      borderBottomWidth: 4,
+      borderBottomColor: '#933730',
     },
     infoButton: {
       backgroundColor: t.surface,
@@ -644,6 +646,8 @@ function makeStyles(t: AppTheme) {
     },
     acceptButton: {
       backgroundColor: '#008E2A',
+      borderBottomWidth: 4,
+      borderBottomColor: '#00701F',
     },
     buttonText: {
       color: '#fff',

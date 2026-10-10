@@ -599,6 +599,8 @@ function makeStyles(theme: AppTheme) {
     },
     submitButton: {
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       borderRadius: 8,
       paddingVertical: 16,
       alignItems: 'center',
@@ -637,6 +639,8 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButton: {
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,

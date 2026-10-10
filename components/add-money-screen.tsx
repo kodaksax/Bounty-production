@@ -472,6 +472,8 @@ function makeStyles(theme: AppTheme, metrics: ScreenMetrics) {
       minHeight: metrics.buttonHeight,
       borderRadius: 999,
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
     },
     primaryButtonMuted: {
       opacity: 0.45,

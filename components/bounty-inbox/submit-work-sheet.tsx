@@ -389,6 +389,8 @@ function makeStyles(t: AppTheme) {
       minHeight: 56,
       borderRadius: t.radius.xl,
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       borderWidth: 1,
       borderColor: 'rgba(0,142,42,0.6)',
       ...t.shadows.brand,

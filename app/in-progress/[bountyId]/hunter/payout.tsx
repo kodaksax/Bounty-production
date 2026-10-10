@@ -506,6 +506,8 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -765,9 +767,13 @@ const styles = StyleSheet.create({
   },
   archiveButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
   },
   deleteButton: {
     backgroundColor: '#ef4444',
+    borderBottomWidth: 4,
+    borderBottomColor: '#933730',
   },
   actionButtonText: {
     color: '#fff',

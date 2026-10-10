@@ -294,6 +294,8 @@ function makeStyles(t: AppTheme) {
     primaryButton: {
       flexDirection: 'row',
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       borderRadius: 12,
       paddingVertical: 16,
       alignItems: 'center',

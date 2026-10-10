@@ -614,6 +614,8 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -807,6 +809,8 @@ const styles = StyleSheet.create({
   },
   postUpdateButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -837,6 +841,8 @@ const styles = StyleSheet.create({
   },
   completeButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -874,6 +880,8 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -923,6 +931,8 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

@@ -384,6 +384,8 @@ const makeStyles = (theme: AppTheme) =>
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: theme.primaryShade,
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,

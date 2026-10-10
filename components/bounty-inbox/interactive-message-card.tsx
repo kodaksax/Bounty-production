@@ -525,8 +525,9 @@ const s = StyleSheet.create({
     flex: 0,
     marginTop: 10,
   },
-  btnOnMine: { backgroundColor: '#fff' },
-  btnOnTheirs: { backgroundColor: MINE_BG },
+  // Darker bottom band for a raised, pressable look (matches the shared Button).
+  btnOnMine: { backgroundColor: '#fff', borderBottomWidth: 3, borderBottomColor: '#D8D2C4' },
+  btnOnTheirs: { backgroundColor: MINE_BG, borderBottomWidth: 3, borderBottomColor: '#00701F' },
   btnOutline: {
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.5)',

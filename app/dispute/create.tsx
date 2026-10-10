@@ -548,6 +548,8 @@ const styles = StyleSheet.create({
   },
   typeButtonActive: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
   },
   typeButtonText: {
     fontSize: 12,
@@ -576,6 +578,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     padding: 10,
     borderRadius: 6,
     gap: 6,
@@ -600,6 +604,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#dc2626',
+    borderBottomWidth: 4,
+    borderBottomColor: '#933730',
     padding: 16,
     borderRadius: 8,
     gap: 8,

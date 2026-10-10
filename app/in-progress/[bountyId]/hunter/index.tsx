@@ -312,6 +312,8 @@ function makeStyles(t: AppTheme) {
     errorTitle: { color: t.text, fontSize: 18, fontWeight: '700' },
     retryButton: {
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 10,

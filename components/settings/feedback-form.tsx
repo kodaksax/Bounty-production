@@ -288,6 +288,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: t.error,
+      borderBottomWidth: 4,
+      borderBottomColor: t.errorShade,
     },
     retryButtonText: {
       color: '#ffffff',

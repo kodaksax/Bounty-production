@@ -764,6 +764,8 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -991,6 +993,8 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

@@ -616,6 +616,8 @@ const styles = StyleSheet.create({
   },
   modalButtonPrimary: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
   },
   modalButtonSecondary: {
     backgroundColor: 'transparent',

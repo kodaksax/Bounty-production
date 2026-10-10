@@ -23,6 +23,8 @@ export const darkTheme: AppTheme = {
 
   primary:           palette.green[600],  // #008E2A
   primaryLight:      palette.green[500],  // #1FAE49
+  primaryShade:      palette.green[700],  // #00701F — button depth band
+  errorShade:        '#A84E46',           // error #D9695F, ~25% darker
   overlay:           'rgba(230,222,209,0.1)',
 
   success:           palette.green[500],  // #1FAE49

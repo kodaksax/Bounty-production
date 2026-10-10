@@ -348,6 +348,8 @@ function makeStyles(t: AppTheme) {
     },
     primaryButton: {
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       borderRadius: 12,
       paddingVertical: 14,
       paddingHorizontal: 20,

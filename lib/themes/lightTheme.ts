@@ -24,6 +24,8 @@ export const lightTheme: AppTheme = {
 
   primary:           palette.green[600],  // #008E2A
   primaryLight:      palette.green[700],  // #00701F — darker for contrast on cream
+  primaryShade:      palette.green[700],  // #00701F — button depth band
+  errorShade:        '#933730',           // error #C24A42, ~25% darker
   overlay:           'rgba(49,54,63,0.05)',
 
   success:           palette.success,     // #008E2A

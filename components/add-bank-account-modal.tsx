@@ -331,6 +331,8 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       borderRadius: t.radius.lg,
       paddingVertical: 14,
       marginBottom: t.spacing.lg,

@@ -677,6 +677,8 @@ function makeStyles(theme: AppTheme) {
     },
     saveButton: {
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       borderRadius: 16,
       paddingHorizontal: 16,
       paddingVertical: 6,
@@ -795,6 +797,8 @@ function makeStyles(theme: AppTheme) {
       height: 44,
       borderRadius: 22,
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       justifyContent: "center",
       alignItems: "center",
       borderWidth: 4,

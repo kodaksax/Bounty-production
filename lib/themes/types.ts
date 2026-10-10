@@ -30,6 +30,8 @@ export type AppTheme = {
   // ── Brand ─────────────────────────────────────────────────────────────────
   primary: string;            // CTA buttons, active states
   primaryLight: string;       // accent icons, highlight text
+  primaryShade: string;       // darker band under filled primary buttons (3D depth)
+  errorShade: string;         // darker band under filled destructive buttons
   overlay: string;            // subtle button overlays
 
   // ── Semantic ──────────────────────────────────────────────────────────────

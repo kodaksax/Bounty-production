@@ -399,6 +399,8 @@ const makeStyles = (theme: AppTheme) =>
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: theme.error,
+    borderBottomWidth: 4,
+    borderBottomColor: theme.errorShade,
     borderRadius: 4,
   },
   retryButtonText: {
@@ -501,6 +503,8 @@ const makeStyles = (theme: AppTheme) =>
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: theme.primaryShade,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,

@@ -370,6 +370,8 @@ function makeStyles(t: AppTheme) {
     },
     closeButton: {
       backgroundColor: '#008E2A',
+      borderBottomWidth: 4,
+      borderBottomColor: '#00701F',
       paddingVertical: 14,
       borderRadius: 8,
       alignItems: 'center',

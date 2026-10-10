@@ -2138,6 +2138,8 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       gap: 6,
       backgroundColor: '#008E2A',
+      borderBottomWidth: 4,
+      borderBottomColor: '#00701F',
       paddingHorizontal: 12,
       paddingVertical: 10,
       borderRadius: 10,
@@ -2567,9 +2569,13 @@ function makeStyles(theme: AppTheme) {
     },
     archiveButton: {
       backgroundColor: '#008E2A',
+      borderBottomWidth: 4,
+      borderBottomColor: '#00701F',
     },
     deleteButton: {
       backgroundColor: '#ef4444',
+      borderBottomWidth: 4,
+      borderBottomColor: '#933730',
     },
     actionButtonText: {
       color: '#fff',

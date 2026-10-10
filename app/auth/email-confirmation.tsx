@@ -271,6 +271,8 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#008E2A',
+      borderBottomWidth: 4,
+      borderBottomColor: '#00701F',
       paddingVertical: 16,
       borderRadius: 999,
       gap: 8,

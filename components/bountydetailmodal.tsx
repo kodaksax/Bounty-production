@@ -1373,6 +1373,8 @@ function makeStyles(theme: AppTheme) {
     width: '100%',
     paddingVertical: 16,
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',

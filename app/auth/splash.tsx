@@ -216,6 +216,8 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 14,
 		borderRadius: 6,
 		backgroundColor: '#008E2A',
+		borderBottomWidth: 4,
+		borderBottomColor: '#00701F',
 		marginHorizontal: 6,
 	},
 	devBtnText: {

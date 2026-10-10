@@ -590,6 +590,8 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: t.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: t.primaryShade,
     borderRadius: 10,
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: 18,

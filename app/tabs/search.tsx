@@ -1537,6 +1537,8 @@ function makeStyles(t: AppTheme) {
     },
     retryBtn: {
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       paddingHorizontal: SPACING.ELEMENT_GAP,
       paddingVertical: 6,
       borderRadius: 20,
@@ -1652,6 +1654,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: SPACING.ELEMENT_GAP,
       alignItems: 'center',
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       borderRadius: 8,
       shadowColor: t.primary,
       shadowOpacity: 0.3,

@@ -560,6 +560,8 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       gap: 8,
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       paddingHorizontal: 20,
       paddingVertical: 14,
       borderRadius: 14,

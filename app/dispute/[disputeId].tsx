@@ -504,6 +504,8 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 8,
@@ -714,6 +716,8 @@ const styles = StyleSheet.create({
   },
   sendBtn: {
     backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     width: 40,
     height: 40,
     borderRadius: 20,
