@@ -154,7 +154,7 @@ function BountyFeaturedItemComponent({
             <ExpoImage source={{ uri: firstImageUri }} style={s.cover} contentFit="cover" recyclingKey={firstImageUri} />
           ) : (
             <LinearGradient
-              colors={[categoryColor + 'cc', categoryColor + '66', '#00571A']}
+              colors={[categoryColor + 'cc', categoryColor + '66', theme.primary]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={s.cover}
@@ -283,11 +283,12 @@ function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     card: {
       flex: 1,
-      backgroundColor: t.surface,
+      // Same raised surface as the regular grid cards (bounty-grid-item).
+      backgroundColor: t.surfaceRaised,
       borderRadius: 16,
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: t.border,
+      borderColor: t.borderRaised,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: t.isDark ? 0.3 : 0.1,
@@ -339,7 +340,7 @@ function makeStyles(t: AppTheme) {
       // lands in the elastic gap above metaRow.
       flex: 1,
       padding: INFO_PADDING,
-      backgroundColor: t.surface,
+      backgroundColor: t.surfaceRaised,
     },
     title: {
       fontSize: 15,
