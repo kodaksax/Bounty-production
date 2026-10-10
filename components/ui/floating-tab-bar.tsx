@@ -53,7 +53,7 @@ export function FloatingTabBar({
       {
         key: "messages",
         icon: "assignment",
-        title: "My Bounties",
+        title: "Inbox",
         label:
           unreadMessageCount > 0
             ? `My Bounties, ${unreadMessageCount} unread message${unreadMessageCount === 1 ? "" : "s"}`
