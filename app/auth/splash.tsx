@@ -56,7 +56,7 @@ export interface BrandedSplashProps {
 
 export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 	// Ensure safe area/status bar color matches branded splash
-	useScreenBackground('#15803d');
+	useScreenBackground('#00701F');
 	const { isDark } = useAppThemeContext();
 
 	const [devHealthOk, setDevHealthOk] = useState<boolean | null>(null)
@@ -160,7 +160,7 @@ export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#0B0F14', // page background
+		backgroundColor: '#1B1E24', // page background
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
 		paddingVertical: 8,
 		paddingHorizontal: 14,
 		borderRadius: 6,
-		backgroundColor: '#059669',
+		backgroundColor: '#008E2A',
 		marginHorizontal: 6,
 	},
 	devBtnText: {

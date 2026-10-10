@@ -28,7 +28,7 @@ export function EscrowExplainer({
       variant === 'banner' && s.bannerContainer,
     ]}>
       <View style={s.iconContainer}>
-        <MaterialIcons name="shield" size={variant === 'inline' ? 20 : 28} color="#059669" />
+        <MaterialIcons name="shield" size={variant === 'inline' ? 20 : 28} color="#008E2A" />
       </View>
 
       <View style={s.textContainer}>
@@ -80,7 +80,7 @@ export function EscrowExplainer({
               {/* Modal Header */}
               <View style={s.modalHeader}>
                 <View style={s.modalIconCircle}>
-                  <MaterialIcons name="lock" size={40} color="#059669" />
+                  <MaterialIcons name="lock" size={40} color="#008E2A" />
                 </View>
                 <Text style={s.modalTitle}>In-App Escrow</Text>
                 <Text style={s.modalSubtitle}>An open listing is not proof of funding</Text>
@@ -122,7 +122,7 @@ export function EscrowExplainer({
                   'Payout timing depends on Stripe and the receiving bank',
                 ].map(text => (
                   <View key={text} style={s.guarantee}>
-                    <MaterialIcons name="check-circle" size={20} color="#059669" />
+                    <MaterialIcons name="check-circle" size={20} color="#008E2A" />
                     <Text style={s.guaranteeText}>{text}</Text>
                   </View>
                 ))}
@@ -158,11 +158,11 @@ export function EscrowProtectionBanner({ amount }: { amount?: number }) {
 
   return (
     <View style={s.protectionBanner}>
-      <MaterialIcons name="lock" size={14} color="#059669" />
+      <MaterialIcons name="lock" size={14} color="#008E2A" />
       <Text style={s.protectionBannerText}>
         {amount ? `$${amount.toFixed(2)} · in-app escrow when funded` : 'In-app escrow when funded'}
       </Text>
-      <MaterialIcons name="verified-user" size={12} color="#059669" />
+      <MaterialIcons name="verified-user" size={12} color="#008E2A" />
     </View>
   );
 }
@@ -170,10 +170,10 @@ export function EscrowProtectionBanner({ amount }: { amount?: number }) {
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.1)' : t.surface,
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : t.surface,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(5,150,105,0.35)',
+      borderColor: t.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,142,42,0.35)',
       padding: 16,
       flexDirection: 'row',
       alignItems: 'flex-start',
@@ -186,8 +186,8 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
     },
     bannerContainer: {
-      backgroundColor: t.isDark ? '#111827' : t.surface,
-      borderColor: '#059669',
+      backgroundColor: t.isDark ? '#22262C' : t.surface,
+      borderColor: '#008E2A',
     },
     iconContainer: {
       width: 48,
@@ -228,14 +228,14 @@ function makeStyles(t: AppTheme) {
     learnMoreText: {
       fontSize: 13,
       fontWeight: '600',
-      color: t.isDark ? '#6ee7b7' : t.primary,
+      color: t.isDark ? '#1FAE49' : t.primary,
     },
     protectionBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.1)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : t.surfaceSecondary,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 16,
@@ -289,7 +289,7 @@ function makeStyles(t: AppTheme) {
     sectionTitle: {
       fontSize: 14,
       fontWeight: '700',
-      color: t.isDark ? '#6ee7b7' : t.primary,
+      color: t.isDark ? '#1FAE49' : t.primary,
       textTransform: 'uppercase',
       letterSpacing: 1,
       marginBottom: 16,
@@ -306,7 +306,7 @@ function makeStyles(t: AppTheme) {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -337,7 +337,7 @@ function makeStyles(t: AppTheme) {
       marginVertical: 8,
     },
     guaranteesContainer: {
-      backgroundColor: t.isDark ? 'rgba(6,78,59,0.5)' : 'rgba(5,150,105,0.07)',
+      backgroundColor: t.isDark ? 'rgba(6,78,59,0.5)' : 'rgba(0,142,42,0.07)',
       borderRadius: 12,
       padding: 16,
       marginBottom: 16,
@@ -369,7 +369,7 @@ function makeStyles(t: AppTheme) {
       lineHeight: 16,
     },
     closeButton: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       paddingVertical: 14,
       borderRadius: 8,
       alignItems: 'center',

@@ -231,7 +231,7 @@ export function EditPostingModal({
                   disabled={isSubmitting}
                 >
                   <View style={styles.toggleLeft}>
-                    <MaterialIcons name="favorite" size={20} color="#059669" />
+                    <MaterialIcons name="favorite" size={20} color="#008E2A" />
                     <Text style={styles.toggleLabel}>For Honor</Text>
                   </View>
                   <View
@@ -411,7 +411,7 @@ function makeStyles(theme: AppTheme) {
       justifyContent: "center",
     },
     toggleActive: {
-      backgroundColor: "#059669",
+      backgroundColor: "#008E2A",
     },
     toggleThumb: {
       width: 24,
@@ -437,7 +437,7 @@ function makeStyles(theme: AppTheme) {
       fontSize: 14,
     },
     saveButton: {
-      backgroundColor: "#059669",
+      backgroundColor: "#008E2A",
       padding: 16,
       borderRadius: 12,
       alignItems: "center",

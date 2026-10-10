@@ -1,40 +1,43 @@
 import { palette } from './colors';
-import { radius, shadows, spacing, typography } from './tokens';
+import { fonts, radius, shadows, spacing, typography } from './tokens';
 import type { AppTheme } from './types';
 
-// Light theme — same Bounty brand identity, inverted surfaces.
-// Green CTAs stay identical; accent icons shift to a darker green for contrast.
+// Light theme — "01 Complementary": #008E2A green leads, berry #B81E8A is the
+// contrast accent, warm cream screens with white cards and graphite text.
 export const lightTheme: AppTheme = {
-  foreground:        '#18181B',           // primary text/icons (matches text)
-  accent1:           palette.green[600],  // #059669 — brand / CTA
-  accent2:           palette.green[700],  // #047857 — highlight (darker for contrast)
-  accent3:           '#3B82F6',           // informational (richer blue on light bg)
+  foreground:        palette.ink,         // #31363F — primary text/icons
+  accent1:           palette.green[600],  // #008E2A — brand / CTA (lead)
+  accent2:           palette.green[700],  // #00701F — highlight (lead-deep)
+  accent3:           palette.berry[500],  // #B81E8A — contrast (urgent, alerts)
 
-  background:        palette.navy[50],    // #F9FAFB — warm off-white page bg
-  surface:           palette.white,       // #FFFFFF — pure white cards
-  surfaceSecondary:  palette.navy[200],   // #E5E7EB — distinct from white surface
+  background:        palette.navy[200],   // #E6DED1 — warm cream screen
+  surface:           palette.white,       // #FFFFFF — cards
+  surfaceSecondary:  palette.navy[100],   // #F4F1EC — inputs, secondary surfaces
+  surfaceRaised:     palette.navy[100],   // #F4F1EC — cream white, same as the search bar / tab bar
+  borderRaised:      palette.navy[300],   // #D8D2C4
 
-  border:            palette.navy[300],   // #D1D5DB — visible borders
+  border:            palette.navy[300],   // #D8D2C4
 
-  text:              '#18181B',           // near-neutral dark (zinc-900, no navy cast)
-  textSecondary:     palette.navy[600],   // #4B5563
-  textDisabled:      palette.navy[500],   // #6B7280
+  text:              palette.ink,         // #31363F
+  textSecondary:     palette.navy[600],   // #61656B
+  textDisabled:      palette.navy[500],   // #929497
 
-  primary:           palette.green[600],  // #059669 — same CTA green
-  primaryLight:      palette.green[700],  // #047857 — darker for contrast on white
-  overlay:           'rgba(0,0,0,0.05)',
+  primary:           palette.green[600],  // #008E2A
+  primaryLight:      palette.green[700],  // #00701F — darker for contrast on cream
+  overlay:           'rgba(49,54,63,0.05)',
 
-  success:           palette.success,
+  success:           palette.success,     // #008E2A
   error:             palette.error,
   warning:           palette.warning,
-  info:              '#3B82F6',           // slightly richer blue on light bg
+  info:              palette.info,
   completed:         palette.completed,
   cancelled:         palette.cancelled,
-  target:            palette.black,
+  target:            palette.ink,
   isDark: false,
 
   spacing,
   radius,
   typography,
   shadows,
+  fonts,
 };

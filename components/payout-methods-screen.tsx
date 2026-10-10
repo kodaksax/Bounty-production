@@ -268,10 +268,10 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   methodHeaderRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   methodName: { fontSize: 15, fontWeight: '600', color: t.text },
   methodStatus: { fontSize: 12, color: t.textDisabled, marginTop: 2 },
-  defaultBadge: { backgroundColor: '#059669', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  defaultBadge: { backgroundColor: '#008E2A', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
   defaultBadgeText: { fontSize: 10, fontWeight: '600', color: '#fff' },
   instantBadge: { backgroundColor: 'rgba(34,197,94,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  instantBadgeText: { fontSize: 10, fontWeight: '600', color: '#22c55e' },
+  instantBadgeText: { fontSize: 10, fontWeight: '600', color: '#008E2A' },
   ineligibleBadge: { backgroundColor: 'rgba(148,163,184,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
   ineligibleBadgeText: { fontSize: 10, fontWeight: '600', color: t.textDisabled },
   paymentActivityLink: {

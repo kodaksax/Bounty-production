@@ -117,12 +117,9 @@ const PAGE_SIZE = 10;
 const MY_ACTIVE_BOUNTIES_PAGE_SIZE = 100;
 const MY_ACTIVE_BOUNTIES_MAX_PAGES = 10;
 
-// Grid banner gradient, top-left to bottom-right. The first stop is also what
-// RootFrame paints behind the status bar while the banner is at the top of the
-// screen (see gridBannerCoversStatusBar), so the green reads as one unbroken
-// block from the very top of the display down through the banner.
-const GRID_BANNER_GRADIENT: readonly [string, string, string] = ['#064e3b', '#059669', '#10b981'];
-const GRID_BANNER_TOP_COLOR = GRID_BANNER_GRADIENT[0];
+// Grid banner fill. Solid brand green from the theme context (theme.primary);
+// kept as a 3-stop gradient so RootFrame's status-bar strip and the banner
+// stay one continuous slice. Built per-theme inside the component.
 const GRID_BANNER_GRADIENT_START = { x: 0, y: 0 };
 const GRID_BANNER_GRADIENT_END = { x: 1, y: 1 };
 
@@ -237,6 +234,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const includeTestBounties = isInternalViewer && showTestBounties;
 
   const { theme } = useAppThemeContext();
+  const gridBannerGradient = useMemo(
+    () => [theme.primary, theme.primary, theme.primary] as const,
+    [theme.primary]
+  );
   const { bountyFormat } = useBountyFormat();
   const isCompact = bountyFormat === 'compact';
   const insets = useSafeAreaInsets();
@@ -749,14 +750,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       bountyFormat === 'grid' && activeScreen === 'bounty' && gridBannerCoversStatusBar;
     if (!tinted || !setTopInsetOverlay) return;
     setTopInsetOverlay({
-      colors: GRID_BANNER_GRADIENT,
+      colors: gridBannerGradient,
       start: GRID_BANNER_GRADIENT_START,
       end: GRID_BANNER_GRADIENT_END,
       // The strip is the top `insets.top` of a gradient this tall — the same
       // slice the banner's own gradient draws and the inset then hides.
       height: gridBannerHeight || insets.top,
       scrollY: gridScrollY,
-      barColor: GRID_BANNER_TOP_COLOR,
+      barColor: theme.primary,
     });
     return () => setTopInsetOverlay(null);
   }, [
@@ -767,6 +768,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     insets.top,
     gridScrollY,
     setTopInsetOverlay,
+    gridBannerGradient,
+    theme.primary,
   ]);
 
   const loadBounties = useCallback(
@@ -1529,7 +1532,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                   onLayout={e => setGridBannerHeight(e.nativeEvent.layout.height)}
                 >
                   <LinearGradient
-                    colors={GRID_BANNER_GRADIENT}
+                    colors={gridBannerGradient}
                     start={GRID_BANNER_GRADIENT_START}
                     end={GRID_BANNER_GRADIENT_END}
                     style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}

@@ -1223,7 +1223,7 @@ export function MyPostingExpandable({
           {/* Pre-acceptance info when open */}
           {bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="hourglass-empty" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+              <MaterialIcons name="hourglass-empty" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
               {isOwner ? (
                 <Text style={styles.infoText}>
                   Awaiting a hunter. Review requests in the Requests tab.
@@ -1274,7 +1274,7 @@ export function MyPostingExpandable({
                 )}
 
                 <View style={styles.infoBox}>
-                  <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+                  <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
                   <Text style={styles.infoText}>
                     Congrats on being selected! Begin work on the bounty, money is in escrow; once
                     complete press the next button.
@@ -1400,7 +1400,7 @@ export function MyPostingExpandable({
                         style={styles.hunterToolBtn}
                         onPress={handleMessagePoster}
                       >
-                        <MaterialIcons name="chat" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+                        <MaterialIcons name="chat" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
                         <Text style={styles.hunterToolText}>Message Poster</Text>
                       </TouchableOpacity>
 
@@ -1525,7 +1525,7 @@ export function MyPostingExpandable({
                   <MaterialIcons
                     name={hasSubmission ? 'rate-review' : 'hourglass-top'}
                     size={18}
-                    color={theme.isDark ? '#6ee7b7' : theme.primary}
+                    color={theme.isDark ? '#1FAE49' : theme.primary}
                   />
                   <Text style={styles.infoText}>
                     {hasSubmission
@@ -1606,7 +1606,7 @@ export function MyPostingExpandable({
                         <MaterialIcons
                           name="chat"
                           size={18}
-                          color={theme.isDark ? '#6ee7b7' : theme.primary}
+                          color={theme.isDark ? '#1FAE49' : theme.primary}
                         />
                         <Text style={styles.hunterToolText}>Message Hunter</Text>
                       </TouchableOpacity>
@@ -1698,7 +1698,7 @@ export function MyPostingExpandable({
                       <DisputeFrozenBanner message="A dispute has been opened for this bounty. The flow is paused until an admin resolves the dispute." />
                     )}
                     <View style={styles.infoBox}>
-                      <MaterialIcons name="hourglass-top" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+                      <MaterialIcons name="hourglass-top" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
                       <Text style={styles.infoText}>
                         Waiting for poster to review your submission.
                       </Text>
@@ -1740,7 +1740,7 @@ export function MyPostingExpandable({
                             <MaterialIcons
                               name={item.type === 'image' ? 'image' : 'insert-drive-file'}
                               size={24}
-                              color={theme.isDark ? '#6ee7b7' : theme.primary}
+                              color={theme.isDark ? '#1FAE49' : theme.primary}
                             />
                           </View>
                           <View style={styles.proofInfo}>
@@ -1766,7 +1766,7 @@ export function MyPostingExpandable({
                             (readyToSubmitPressed || !!readyRecord) && !hasDispute ? 'add' : 'lock'
                           }
                           size={20}
-                          color="#059669"
+                          color="#008E2A"
                         />
                         <Text style={styles.addFileText}>
                           {hasDispute
@@ -1813,7 +1813,7 @@ export function MyPostingExpandable({
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
                 <View style={styles.successPanel}>
-                  <MaterialIcons name="check-circle" size={48} color="#059669" />
+                  <MaterialIcons name="check-circle" size={48} color="#008E2A" />
                   <Text style={styles.successTitle}>Payout Released!</Text>
                   <Text style={styles.successText}>
                     {isOwner
@@ -1846,7 +1846,7 @@ export function MyPostingExpandable({
                 {!bounty.is_for_honor && (
                   <View style={styles.receiptCard}>
                     <View style={styles.receiptHeader}>
-                      <MaterialIcons name="receipt" size={24} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+                      <MaterialIcons name="receipt" size={24} color={theme.isDark ? '#1FAE49' : theme.primary} />
                       <Text style={styles.receiptTitle}>Transaction Receipt</Text>
                     </View>
                     <View style={styles.receiptDivider} />
@@ -1865,7 +1865,7 @@ export function MyPostingExpandable({
                     <View style={styles.receiptRow}>
                       <Text style={styles.receiptLabel}>Status</Text>
                       <View style={styles.statusPill}>
-                        <MaterialIcons name="check-circle" size={16} color="#059669" />
+                        <MaterialIcons name="check-circle" size={16} color="#008E2A" />
                         <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
@@ -2045,7 +2045,7 @@ export function MyPostingExpandable({
           {/* Conversation hint - only show when status is 'open', not when in_progress since bounty has already been accepted */}
           {!conversation && bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="chat-bubble-outline" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
+              <MaterialIcons name="chat-bubble-outline" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
               <Text style={styles.infoText}>
                 {isOwner
                   ? 'Conversation will appear after acceptance.'
@@ -2092,7 +2092,7 @@ export function MyPostingExpandable({
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     panel: {
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.25)' : theme.surface,
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.25)' : theme.surface,
       borderRadius: 12,
       padding: 12,
       borderWidth: 1,
@@ -2111,22 +2111,22 @@ function makeStyles(theme: AppTheme) {
     timelineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
     timelineItem: { flexDirection: 'row', alignItems: 'center' },
     bubble: { width: 12, height: 12, borderRadius: 6 },
-    bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
-    bubbleActive: { backgroundColor: '#059669' },
-    bubbleCompleted: { backgroundColor: '#059669' },
+    bubbleIdle: { backgroundColor: 'rgba(31,174,73,0.3)' },
+    bubbleActive: { backgroundColor: '#008E2A' },
+    bubbleCompleted: { backgroundColor: '#008E2A' },
     connector: {
       width: 18,
       height: 2,
-      backgroundColor: 'rgba(110,231,183,0.35)',
+      backgroundColor: 'rgba(31,174,73,0.35)',
       marginHorizontal: 6,
     },
     infoBox: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 8,
-      backgroundColor: theme.isDark ? 'rgba(5, 46, 27, 0.35)' : 'rgba(5, 150, 105, 0.07)',
+      backgroundColor: theme.isDark ? 'rgba(5, 46, 27, 0.35)' : 'rgba(0, 142, 42, 0.07)',
       borderWidth: 1,
-      borderColor: theme.isDark ? 'transparent' : 'rgba(5, 150, 105, 0.15)',
+      borderColor: theme.isDark ? 'transparent' : 'rgba(0, 142, 42, 0.15)',
       padding: 10,
       borderRadius: 8,
       marginBottom: 8,
@@ -2137,7 +2137,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       paddingHorizontal: 12,
       paddingVertical: 10,
       borderRadius: 10,
@@ -2162,7 +2162,7 @@ function makeStyles(theme: AppTheme) {
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#9CA3AF',
+      backgroundColor: '#929497',
       borderRadius: 999,
       paddingHorizontal: 10,
       paddingVertical: 4,
@@ -2193,7 +2193,7 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       paddingVertical: 20,
       gap: 8,
-      backgroundColor: 'rgba(5, 150, 105, 0.1)',
+      backgroundColor: 'rgba(0, 142, 42, 0.1)',
       borderRadius: 12,
     },
     timerLabel: {
@@ -2212,7 +2212,7 @@ function makeStyles(theme: AppTheme) {
       fontSize: 11,
     },
     messageTextArea: {
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 12,
       color: theme.text,
@@ -2224,7 +2224,7 @@ function makeStyles(theme: AppTheme) {
     proofItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 12,
       gap: 12,
@@ -2236,7 +2236,7 @@ function makeStyles(theme: AppTheme) {
       width: 40,
       height: 40,
       borderRadius: 8,
-      backgroundColor: 'rgba(5, 150, 105, 0.3)',
+      backgroundColor: 'rgba(0, 142, 42, 0.3)',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -2280,7 +2280,7 @@ function makeStyles(theme: AppTheme) {
       opacity: 0.5,
     },
     successPanel: {
-      backgroundColor: 'rgba(16, 185, 129, 0.1)',
+      backgroundColor: 'rgba(0, 142, 42, 0.1)',
       borderRadius: 12,
       padding: 24,
       alignItems: 'center',
@@ -2300,7 +2300,7 @@ function makeStyles(theme: AppTheme) {
       lineHeight: 20,
     },
     payoutAmountCard: {
-      backgroundColor: 'rgba(5, 150, 105, 0.2)',
+      backgroundColor: 'rgba(0, 142, 42, 0.2)',
       borderRadius: 12,
       padding: 20,
       alignItems: 'center',
@@ -2315,7 +2315,7 @@ function makeStyles(theme: AppTheme) {
       letterSpacing: 0.5,
     },
     payoutAmount: {
-      color: '#059669',
+      color: '#008E2A',
       fontSize: 32,
       fontWeight: '700',
     },
@@ -2343,7 +2343,7 @@ function makeStyles(theme: AppTheme) {
       textAlign: 'center',
     },
     receiptCard: {
-      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.1)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.1)' : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 16,
       gap: 12,
@@ -2390,7 +2390,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 999,
     },
     statusPillText: {
-      color: '#059669',
+      color: '#008E2A',
       fontSize: 12,
       fontWeight: '600',
     },
@@ -2482,7 +2482,7 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 10,
       paddingVertical: 10,
       borderRadius: 8,
-      backgroundColor: 'rgba(5, 150, 105, 0.25)',
+      backgroundColor: 'rgba(0, 142, 42, 0.25)',
     },
     hunterToolBtnDanger: {
       flexDirection: 'row',
@@ -2566,7 +2566,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 10,
     },
     archiveButton: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
     },
     deleteButton: {
       backgroundColor: '#ef4444',

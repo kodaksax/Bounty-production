@@ -109,7 +109,7 @@ export function AdminHeader({
               style={[
                 styles.adminBadge,
                 {
-                  backgroundColor: theme.isDark ? 'rgba(5,150,105,0.2)' : 'rgba(5,150,105,0.12)',
+                  backgroundColor: theme.isDark ? 'rgba(0,142,42,0.2)' : 'rgba(0,142,42,0.12)',
                   borderColor: theme.primary,
                 },
               ]}

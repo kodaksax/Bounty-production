@@ -14,6 +14,7 @@ import { MomentsProvider } from '../../providers/moments-provider'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BottomNav } from 'components/ui/bottom-nav'
+import { FloatingTabBar } from 'components/ui/floating-tab-bar'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Animated, Text, View } from 'react-native'
@@ -30,6 +31,11 @@ import { authProfileService } from '../../lib/services/auth-profile-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
+
+// Main tab bar style. FloatingTabBar is the compact floating pill; BottomNav
+// is the classic full-width bar with the raised crosshair, kept for later —
+// swap this line back to `BottomNav` to restore it.
+const MainTabBar: typeof BottomNav = FloatingTabBar
 
 // Fades a conditionally-mounted tab screen in on mount, so switching tabs
 // reads as a smooth transition instead of an instant cut. Respects the
@@ -392,7 +398,9 @@ function BountyAppInner() {
           </FadeInScreen>
         )}
 
-        {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={handleNavigate} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />}
+        {showBottomNav && (
+          <MainTabBar activeScreen={activeScreen} onNavigate={handleNavigate} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />
+        )}
 
         {/* Moments Queue host — global, so a contextual activation prompt
             (verify identity, set up payouts, enable notifications, etc.)

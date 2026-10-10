@@ -27,7 +27,7 @@ interface VerificationConfig {
 const VERIFICATION_CONFIGS: Record<VerificationLevel, VerificationConfig> = {
   verified: {
     icon: 'verified',
-    color: '#059669',
+    color: '#008E2A',
     label: 'ID verified',
     title: 'ID Verified',
     description: 'This user has verified their government-issued ID through Stripe Identity. This confirms their identity document -- it is not a background check or a general safety guarantee.',
@@ -41,7 +41,7 @@ const VERIFICATION_CONFIGS: Record<VerificationLevel, VerificationConfig> = {
   },
   unverified: {
     icon: 'help-outline',
-    color: '#9ca3af',
+    color: '#929497',
     label: 'Unverified',
     title: 'Not Yet Verified',
     description: 'This user has not yet completed the verification process. Consider asking for additional proof of identity before engaging in transactions.',
@@ -56,7 +56,7 @@ const VERIFICATION_CONFIGS: Record<VerificationLevel, VerificationConfig> = {
 };
 
 function getBadgeBg(status: VerificationLevel, isDark: boolean): string {
-  if (status === 'verified') return isDark ? 'rgba(255,255,255,0.05)' : 'rgba(5,150,105,0.1)';
+  if (status === 'verified') return isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,142,42,0.1)';
   if (status === 'pending') return 'rgba(251,191,36,0.15)';
   if (status === 'rejected') return 'rgba(239,68,68,0.12)';
   return isDark ? 'rgba(156,163,175,0.15)' : 'rgba(156,163,175,0.12)';
@@ -140,7 +140,7 @@ export function VerificationBadge({
             {status === 'verified' && (
               <View style={s.verificationDetails}>
                 <View style={s.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color="#059669" />
+                  <MaterialIcons name="check-circle" size={16} color="#008E2A" />
                   <Text style={s.detailText}>Government-issued ID verified via Stripe Identity</Text>
                 </View>
               </View>
@@ -230,7 +230,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 16,
     },
     verificationDetails: {
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.1)' : 'rgba(5,150,105,0.07)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : 'rgba(0,142,42,0.07)',
       borderRadius: 12,
       padding: 12,
       marginBottom: 16,
@@ -261,7 +261,7 @@ function makeStyles(t: AppTheme) {
       lineHeight: 18,
     },
     closeButton: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       paddingVertical: 12,
       borderRadius: 8,
       alignItems: 'center',

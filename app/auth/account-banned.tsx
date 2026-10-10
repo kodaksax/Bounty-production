@@ -41,7 +41,7 @@ export default function AccountBannedScreen() {
         </Text>
 
         <TouchableOpacity style={styles.primaryButton} onPress={handleContactSupport}>
-          <MaterialIcons name="mail-outline" size={18} color="#0B0F14" />
+          <MaterialIcons name="mail-outline" size={18} color="#1B1E24" />
           <Text style={styles.primaryButtonText}>Contact Support</Text>
         </TouchableOpacity>
 
@@ -56,7 +56,7 @@ export default function AccountBannedScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   primaryButtonText: {
-    color: '#0B0F14',
+    color: '#1B1E24',
     fontSize: 16,
     fontWeight: '600',
   },

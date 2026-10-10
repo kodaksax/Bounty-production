@@ -642,7 +642,7 @@ export function WithdrawWithBankScreen({
           </View>
 
           {isLoadingAccounts ? (
-            <ActivityIndicator size="small" color="#059669" style={{ marginVertical: 8 }} />
+            <ActivityIndicator size="small" color="#008E2A" style={{ marginVertical: 8 }} />
           ) : bankAccounts.length === 0 ? (
             <TouchableOpacity
               style={s.emptyState}
@@ -668,7 +668,7 @@ export function WithdrawWithBankScreen({
               >
                 <View style={s.radioButton}>
                   {selectedBankAccount === account.id ? (
-                    <MaterialIcons name="radio-button-checked" size={24} color="#059669" />
+                    <MaterialIcons name="radio-button-checked" size={24} color="#008E2A" />
                   ) : (
                     <MaterialIcons
                       name="radio-button-unchecked"
@@ -802,7 +802,7 @@ export function WithdrawWithBankScreen({
                 <Text style={s.historyGroupLabel}>Completed</Text>
                 {completedWithdrawals.map(tx => (
                   <View key={tx.id} style={s.historyRow}>
-                    <MaterialIcons name="check-circle-outline" size={18} color="#6ee7b7" />
+                    <MaterialIcons name="check-circle-outline" size={18} color="#1FAE49" />
                     <Text style={s.historyAmount}>{formatCurrency(Math.abs(tx.amount))}</Text>
                     <Text style={s.historyDate}>{tx.date.toLocaleDateString()}</Text>
                   </View>
@@ -1041,7 +1041,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     borderColor: 'transparent',
   },
   bankAccountCardSelected: {
-    borderColor: '#059669',
+    borderColor: '#008E2A',
     backgroundColor: t.surface,
   },
   radioButton: {
@@ -1062,7 +1062,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     marginRight: 8,
   },
   defaultBadge: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,

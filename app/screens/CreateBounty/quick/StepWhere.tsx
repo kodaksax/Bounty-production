@@ -201,7 +201,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
         activeOpacity={0.8}
         style={[
           styles.row,
-          usedCurrentLocation ? { backgroundColor: theme.isDark ? 'rgba(5,150,105,0.22)' : 'rgba(5,150,105,0.12)' } : null,
+          usedCurrentLocation ? { backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.12)' } : null,
         ]}
         accessibilityRole="button"
         accessibilityLabel="Use current location"
@@ -253,7 +253,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
         activeOpacity={0.8}
         style={[
           styles.row,
-          isOnline ? { backgroundColor: theme.isDark ? 'rgba(5,150,105,0.22)' : 'rgba(5,150,105,0.12)' } : null,
+          isOnline ? { backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.12)' } : null,
         ]}
         accessibilityRole="button"
         accessibilityLabel="This can be done online"

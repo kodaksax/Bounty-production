@@ -22,7 +22,7 @@ const labelStyles = StyleSheet.create({
   base: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: '#454952',
     marginBottom: 4,
   },
 })

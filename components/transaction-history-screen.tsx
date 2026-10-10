@@ -148,7 +148,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       case "escrow":
         return <MaterialIcons name="lock" size={20} color="#f59e0b" />
       case "release":
-        return <MaterialIcons name="lock-open" size={20} color="#059669" />
+        return <MaterialIcons name="lock-open" size={20} color="#008E2A" />
       case "refund":
         return <MaterialIcons name="refresh" size={20} color="#6366f1" />
     }
@@ -450,8 +450,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
               <RefreshControl
                 refreshing={isRefreshing}
                 onRefresh={handleRefresh}
-                tintColor="#6ee7b7"
-                colors={['#6ee7b7']}
+                tintColor="#1FAE49"
+                colors={['#1FAE49']}
               />
             }
             ListFooterComponent={

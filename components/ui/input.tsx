@@ -110,14 +110,14 @@ const Input = React.forwardRef<TextInput, InputProps>(
     // Determine border color based on state
     const getBorderColor = () => {
       if (error) return '#ef4444' // red-500
-      if (isValid) return '#059669' // emerald-500
-      if (isFocused) return '#059669' // emerald-600
-      return variant === 'outline' ? '#3b82f6' : '#d1d5db'
+      if (isValid) return '#008E2A' // emerald-500
+      if (isFocused) return '#008E2A' // emerald-600
+      return variant === 'outline' ? '#3b82f6' : '#D8D2C4'
     }
 
     const animatedBorderColor = borderAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: ['#d1d5db', '#059669'],
+      outputRange: ['#D8D2C4', '#008E2A'],
     })
 
     // Generate unique ID for accessibility
@@ -144,7 +144,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             error && inputStyles.errorBorder,
             isValid && inputStyles.validBorder,
             {
-              borderColor: error ? '#ef4444' : isValid ? '#059669' :
+              borderColor: error ? '#ef4444' : isValid ? '#008E2A' :
                 prefersReducedMotion ? getBorderColor() : animatedBorderColor
             },
           ]}
@@ -153,7 +153,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name={leftIcon}
               size={20}
-              color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
+              color={error ? '#ef4444' : isFocused ? '#008E2A' : '#929497'}
               style={inputStyles.leftIcon}
             />
           )}
@@ -166,7 +166,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
               style
             ]}
             ref={ref}
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor="#929497"
             onFocus={handleFocus}
             onBlur={handleBlur}
             accessible={true}
@@ -188,7 +188,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
               <MaterialIcons
                 name={rightIcon}
                 size={20}
-                color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
+                color={error ? '#ef4444' : isFocused ? '#008E2A' : '#929497'}
               />
             </TouchableOpacity>
           )}
@@ -197,7 +197,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name={rightIcon}
               size={20}
-              color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
+              color={error ? '#ef4444' : isFocused ? '#008E2A' : '#929497'}
               style={inputStyles.rightIcon}
               accessibilityElementsHidden={true}
             />
@@ -207,7 +207,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name="check-circle"
               size={20}
-              color="#059669"
+              color="#008E2A"
               style={inputStyles.rightIcon}
               accessibilityLabel="Valid input"
             />
@@ -248,7 +248,7 @@ const inputStyles = StyleSheet.create({
   label: {
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: '600',
-    color: '#374151', // gray-700
+    color: '#454952', // gray-700
     marginBottom: SPACING.COMPACT_GAP / 2,
   },
   labelError: {
@@ -268,7 +268,7 @@ const inputStyles = StyleSheet.create({
     paddingHorizontal: SPACING.ELEMENT_GAP,
     paddingVertical: SPACING.COMPACT_GAP,
     fontSize: TYPOGRAPHY.SIZE_BODY,
-    color: '#1f2937', // gray-800
+    color: '#2A2E35', // gray-800
   },
   inputWithLeftIcon: {
     paddingLeft: SPACING.COMPACT_GAP,
@@ -277,7 +277,7 @@ const inputStyles = StyleSheet.create({
     paddingRight: SPACING.COMPACT_GAP,
   },
   default: {
-    borderColor: '#d1d5db',
+    borderColor: '#D8D2C4',
   },
   outline: {
     borderWidth: 2,
@@ -288,7 +288,7 @@ const inputStyles = StyleSheet.create({
     borderColor: 'transparent',
   },
   focused: {
-    borderColor: '#059669', // emerald-600
+    borderColor: '#008E2A', // emerald-600
     ...theme.shadows.sm,
   },
 
@@ -296,7 +296,7 @@ const inputStyles = StyleSheet.create({
     borderColor: '#ef4444',
   },
   validBorder: {
-    borderColor: '#059669',
+    borderColor: '#008E2A',
   },
   leftIcon: {
     marginLeft: SPACING.ELEMENT_GAP,
@@ -324,7 +324,7 @@ const inputStyles = StyleSheet.create({
   },
   helperText: {
     fontSize: TYPOGRAPHY.SIZE_SMALL,
-    color: '#6b7280', // gray-500
+    color: '#61656B', // gray-500
     marginTop: SPACING.COMPACT_GAP / 2,
   },
 })

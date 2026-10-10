@@ -34,7 +34,7 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
     outputRange: ['0deg', '180deg'],
   });
 
-  const accentColor = theme.isDark ? '#6ee7b7' : theme.primary;
+  const accentColor = theme.isDark ? '#1FAE49' : theme.primary;
 
   const handleToggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -73,10 +73,10 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: t.isDark ? 'rgba(5, 150, 105, 0.15)' : 'rgba(5, 150, 105, 0.06)',
+      backgroundColor: t.isDark ? 'rgba(0, 142, 42, 0.15)' : 'rgba(0, 142, 42, 0.06)',
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? '#374151' : 'rgba(5, 150, 105, 0.25)',
+      borderColor: t.isDark ? '#454952' : 'rgba(0, 142, 42, 0.25)',
       marginVertical: 8,
       overflow: 'hidden',
     },

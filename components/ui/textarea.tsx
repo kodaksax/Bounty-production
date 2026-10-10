@@ -12,7 +12,7 @@ const Textarea = React.forwardRef<TextInput, RNTextareaProps>(({ style, classNam
       multiline
       textAlignVertical="top"
       numberOfLines={props.numberOfLines || 4}
-      placeholderTextColor="#9ca3af"
+      placeholderTextColor="#929497"
       style={[textareaStyles.base, style]}
       {...props}
     />
@@ -26,7 +26,7 @@ const textareaStyles = StyleSheet.create({
     width: '100%',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#D8D2C4',
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 14,

@@ -154,7 +154,7 @@ function BountyFeaturedItemComponent({
             <ExpoImage source={{ uri: firstImageUri }} style={s.cover} contentFit="cover" recyclingKey={firstImageUri} />
           ) : (
             <LinearGradient
-              colors={[categoryColor + 'cc', categoryColor + '66', '#064e3b']}
+              colors={[categoryColor + 'cc', categoryColor + '66', '#00571A']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={s.cover}
@@ -403,12 +403,12 @@ function makeStyles(t: AppTheme) {
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)',
       borderRadius: 999,
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(16,185,129,0.35)' : 'rgba(5,150,105,0.3)',
+      borderColor: t.isDark ? 'rgba(0,142,42,0.35)' : 'rgba(0,142,42,0.3)',
       gap: 4,
     },
     honorText: {

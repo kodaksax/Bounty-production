@@ -225,7 +225,7 @@ function makeStyles(theme: AppTheme) {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: theme.isDark ? 'rgba(5,150,105,0.22)' : 'rgba(5,150,105,0.12)',
+      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.12)',
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 16,

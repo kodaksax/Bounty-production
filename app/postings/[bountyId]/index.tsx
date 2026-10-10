@@ -796,7 +796,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
       paddingHorizontal: 8,
     },
-    countPillText: { color: '#111827', fontSize: 12, fontWeight: '800' },
+    countPillText: { color: '#22262C', fontSize: 12, fontWeight: '800' },
     linkRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },
     linkText: { color: t.primaryLight, fontSize: 13, fontWeight: '700' },
     expandBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },

@@ -163,12 +163,12 @@ function BountyListItemComponent({
           <View style={s.workTypeBadge}>
             {work_type === 'online' ? (
               <View style={s.onlineBadge}>
-                <MaterialIcons name="wifi" size={12} color="#059669" />
+                <MaterialIcons name="wifi" size={12} color="#008E2A" />
                 <Text style={s.onlineText}>Remote</Text>
               </View>
             ) : (
               <View style={s.inPersonBadge}>
-                <MaterialIcons name="near-me" size={12} color="#059669" />
+                <MaterialIcons name="near-me" size={12} color="#008E2A" />
                 <Text style={s.inPersonText}>In Person</Text>
               </View>
             )}
@@ -186,7 +186,7 @@ function BountyListItemComponent({
             <Text style={s.title}>{title}</Text>
             {isForHonor && (
               <View style={s.honorBadgeLarge}>
-                <MaterialIcons name="favorite" size={16} color="#059669" />
+                <MaterialIcons name="favorite" size={16} color="#008E2A" />
                 <Text style={s.honorBadgeLargeText}>For Honor</Text>
               </View>
             )}
@@ -382,12 +382,12 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.1)' : 'rgba(5,150,105,0.08)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : 'rgba(0,142,42,0.08)',
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.25)',
+      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.25)',
     },
     onlineText: {
       fontSize: 12,
@@ -398,12 +398,12 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.1)' : 'rgba(5,150,105,0.08)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : 'rgba(0,142,42,0.08)',
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.25)',
+      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.25)',
     },
     inPersonText: {
       fontSize: 12,
@@ -426,13 +426,13 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.12)' : 'rgba(5,150,105,0.08)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.12)' : 'rgba(0,142,42,0.08)',
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 20,
       alignSelf: 'flex-start',
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.25)',
+      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.25)',
     },
     honorBadgeLargeText: {
       color: t.primary,
@@ -517,13 +517,13 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: t.surface,
+      backgroundColor: t.surfaceRaised,
       borderRadius: 20,
       padding: 16,
       borderWidth: 1,
-      borderColor: t.border,
+      borderColor: t.borderRaised,
       shadowColor: '#000',
-      shadowOpacity: t.isDark ? 0.4 : 0.08,
+      shadowOpacity: t.isDark ? 0.4 : 0.16,
       shadowRadius: 12,
       shadowOffset: { width: 0, height: 4 },
       elevation: 4,

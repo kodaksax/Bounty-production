@@ -854,7 +854,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     </View>
                     {bounty.work_type === 'online' ? (
                       <View style={styles.onlineBadge}>
-                        <MaterialIcons name="wifi" size={14} color="#059669" />
+                        <MaterialIcons name="wifi" size={14} color="#008E2A" />
                         <Text style={styles.onlineText}>Online</Text>
                       </View>
                     ) : bounty.distance === null ? (
@@ -1176,13 +1176,13 @@ function makeStyles(theme: AppTheme) {
     color: theme.isDark ? '#ffffff' : theme.primary,
   },
   priceContainer: {
-    backgroundColor: theme.isDark ? '#064e3b80' : 'rgba(5,150,105,0.08)',
+    backgroundColor: theme.isDark ? '#00571A80' : 'rgba(0,142,42,0.08)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   priceText: {
-    color: theme.isDark ? '#6ee7b7' : theme.primary,
+    color: theme.isDark ? '#1FAE49' : theme.primary,
     fontWeight: 'bold',
   },
   distanceText: {
@@ -1192,7 +1192,7 @@ function makeStyles(theme: AppTheme) {
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.isDark ? '#1F2937' : 'rgba(5,150,105,0.08)',
+    backgroundColor: theme.isDark ? '#2A2E35' : 'rgba(0,142,42,0.08)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -1201,7 +1201,7 @@ function makeStyles(theme: AppTheme) {
   categoryPill: {
     marginTop: 8,
     alignSelf: 'flex-start',
-    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(5,150,105,0.08)',
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,142,42,0.08)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1214,7 +1214,7 @@ function makeStyles(theme: AppTheme) {
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#9CA3AF',
+    backgroundColor: '#929497',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -1372,18 +1372,18 @@ function makeStyles(theme: AppTheme) {
   acceptButton: {
     width: '100%',
     paddingVertical: 16,
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#059669',
+    shadowColor: '#008E2A',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 6,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     opacity: 0.6,
   },
   acceptButtonText: {

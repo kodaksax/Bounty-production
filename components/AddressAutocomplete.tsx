@@ -219,7 +219,7 @@ export function AddressAutocomplete({
         />
         {isLoading && (
           <View className="absolute right-4 top-3">
-            <ActivityIndicator size="small" color="#6ee7b7" />
+            <ActivityIndicator size="small" color="#1FAE49" />
           </View>
         )}
       </View>

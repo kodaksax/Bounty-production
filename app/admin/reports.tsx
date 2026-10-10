@@ -338,7 +338,7 @@ export default function AdminReportsScreen() {
       case 'medium':
         return { color: theme.warning, bg: 'rgba(251,191,36,0.15)', icon: 'info' };
       case 'low':
-        return { color: theme.success, bg: 'rgba(16,185,129,0.15)', icon: 'check-circle' };
+        return { color: theme.success, bg: 'rgba(0,142,42,0.15)', icon: 'check-circle' };
       default:
         return { color: theme.primaryLight, bg: 'rgba(167,243,208,0.15)', icon: 'help' };
     }
@@ -433,7 +433,7 @@ export default function AdminReportsScreen() {
             </Text>
           </View>
         )}
-        <View style={[styles.statBadge, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+        <View style={[styles.statBadge, { backgroundColor: 'rgba(0,142,42,0.15)' }]}>
           <MaterialIcons name="pending" size={14} color={theme.success} />
           <Text style={[styles.statBadgeText, { color: theme.success }]}>
             {stats.pending} Pending
@@ -964,7 +964,7 @@ const makeStyles = (theme: AppTheme) =>
     color: theme.info,
   },
   resolveAction: {
-    backgroundColor: 'rgba(16,185,129,0.15)',
+    backgroundColor: 'rgba(0,142,42,0.15)',
   },
   resolveActionText: {
     fontSize: 13,
@@ -983,7 +983,7 @@ const makeStyles = (theme: AppTheme) =>
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
-    backgroundColor: 'rgba(16,185,129,0.1)',
+    backgroundColor: 'rgba(0,142,42,0.1)',
     padding: 10,
     borderRadius: 8,
   },
@@ -1004,7 +1004,7 @@ const makeStyles = (theme: AppTheme) =>
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(16,185,129,0.15)',
+    backgroundColor: 'rgba(0,142,42,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,

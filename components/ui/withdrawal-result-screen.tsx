@@ -205,7 +205,7 @@ export function WithdrawalResultScreen({
     <View style={[s.container, { paddingTop: insets.top + 24, paddingBottom: footerClearance }]}>
       <View style={s.centered}>
         <View style={[s.iconCircle, s.iconCircleSuccess]}>
-          <MaterialIcons name={isInstant ? 'bolt' : 'check'} size={44} color="#22c55e" />
+          <MaterialIcons name={isInstant ? 'bolt' : 'check'} size={44} color="#008E2A" />
         </View>
         <Text style={s.resultTitle}>
           {fellBackToStandard ? 'Sent via Standard Transfer' : isInstant ? 'Cash Out Sent' : 'Withdrawal Initiated'}

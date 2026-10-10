@@ -231,6 +231,6 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
     },
     readAction: { backgroundColor: '#3B82F6' },
-    archiveAction: { backgroundColor: '#6B7280' },
+    archiveAction: { backgroundColor: '#61656B' },
   });
 }

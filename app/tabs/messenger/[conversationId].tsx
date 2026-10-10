@@ -69,7 +69,7 @@ function ConversationRouteContent() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color="#008E2A" />
       </View>
     );
   }

@@ -123,7 +123,7 @@ function makeStyles(theme: AppTheme) {
       textAlignVertical: 'top',
     },
     sendButton: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       width: 48,
       height: 48,
       borderRadius: 24,

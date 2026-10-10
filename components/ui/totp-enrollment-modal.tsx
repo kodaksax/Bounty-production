@@ -257,13 +257,13 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 32,
     },
     qrUnavailableTitle: {
-      color: '#374151',
+      color: '#454952',
       fontSize: 13,
       textAlign: 'center',
       marginBottom: 8,
     },
     qrUnavailableSubtitle: {
-      color: '#6b7280',
+      color: '#61656B',
       fontSize: 12,
       textAlign: 'center',
     },

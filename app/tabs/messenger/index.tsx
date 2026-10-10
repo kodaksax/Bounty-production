@@ -264,7 +264,7 @@ export function MessengerScreen({
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-[#059669] text-white" style={{ marginTop: -20 }}>
+    <View className="flex flex-col min-h-screen bg-[#008E2A] text-white" style={{ marginTop: -20 }}>
       {/* Connection Status Banner - appears at top when offline */}
       <ConnectionStatus showQueueCount={true} />
       <View className="p-4 pt-8 pb-2">
@@ -311,7 +311,7 @@ export function MessengerScreen({
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor="#ffffff"
-            colors={['#059669']}
+            colors={['#008E2A']}
           />
         }
         // Performance optimizations
@@ -406,7 +406,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
       overshootRight={false}
       friction={2}
     >
-      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-[#059669]" onPress={onPress}>
+      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-[#008E2A]" onPress={onPress}>
         <TouchableOpacity onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
           <View className="relative">
             {conversation.isGroup ? (
@@ -414,7 +414,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
             ) : (
               <Avatar className="h-12 w-12">
                 <AvatarImage src={avatarUrl || "/placeholder.svg?height=48&width=48"} alt={displayName} />
-                <AvatarFallback className="bg-[#111827] text-[#9CA3AF]">
+                <AvatarFallback className="bg-[#22262C] text-[#929497]">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -425,10 +425,10 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
         <View className="ml-3 flex-1 min-w-0">
           <View className="flex-row justify-between items-center">
             <Text className="font-medium text-white">{displayName}</Text>
-            <Text className="text-xs text-[#6ee7b7]">{time}</Text>
+            <Text className="text-xs text-[#1FAE49]">{time}</Text>
           </View>
           <View className="flex-row justify-between items-center mt-1">
-            <Text className={cn("text-sm truncate max-w-[200px]", "text-[#9CA3AF]")}>
+            <Text className={cn("text-sm truncate max-w-[200px]", "text-[#929497]")}>
               {conversation.lastMessage ?? 'No messages yet'}
             </Text>
             {(conversation.unread ?? 0) > 0 && (
@@ -446,22 +446,22 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
 function GroupAvatar() {
   return (
     <View className="relative h-12 w-12">
-      <View className="absolute top-0 left-0 h-8 w-8 rounded-full bg-[#111827] border-2 border-[#059669] flex items-center justify-center overflow-hidden">
+      <View className="absolute top-0 left-0 h-8 w-8 rounded-full bg-[#22262C] border-2 border-[#008E2A] flex items-center justify-center overflow-hidden">
         <Avatar className="h-full w-full">
           <AvatarImage src="/placeholder.svg?height=32&width=32" alt="Member 1" />
-          <AvatarFallback className="bg-[#111827] text-[#9CA3AF] text-xs">M1</AvatarFallback>
+          <AvatarFallback className="bg-[#22262C] text-[#929497] text-xs">M1</AvatarFallback>
         </Avatar>
       </View>
-      <View className="absolute top-1 right-0 h-8 w-8 rounded-full bg-[#111827] border-2 border-[#059669] flex items-center justify-center overflow-hidden">
+      <View className="absolute top-1 right-0 h-8 w-8 rounded-full bg-[#22262C] border-2 border-[#008E2A] flex items-center justify-center overflow-hidden">
         <Avatar className="h-full w-full">
           <AvatarImage src="/placeholder.svg?height=32&width=32" alt="Member 2" />
-          <AvatarFallback className="bg-[#111827] text-[#9CA3AF] text-xs">M2</AvatarFallback>
+          <AvatarFallback className="bg-[#22262C] text-[#929497] text-xs">M2</AvatarFallback>
         </Avatar>
       </View>
-      <View className="absolute bottom-0 left-1 h-8 w-8 rounded-full bg-[#111827] border-2 border-[#059669] flex items-center justify-center overflow-hidden">
+      <View className="absolute bottom-0 left-1 h-8 w-8 rounded-full bg-[#22262C] border-2 border-[#008E2A] flex items-center justify-center overflow-hidden">
         <Avatar className="h-full w-full">
           <AvatarImage src="/placeholder.svg?height=32&width=32" alt="Member 3" />
-          <AvatarFallback className="bg-[#111827] text-[#9CA3AF] text-xs">M3</AvatarFallback>
+          <AvatarFallback className="bg-[#22262C] text-[#929497] text-xs">M3</AvatarFallback>
         </Avatar>
       </View>
     </View>

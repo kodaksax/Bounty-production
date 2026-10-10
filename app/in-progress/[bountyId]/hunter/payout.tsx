@@ -324,7 +324,7 @@ export default function HunterPayoutScreen() {
                     <MaterialIcons
                       name={stage.icon as any}
                       size={24}
-                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
+                      color={isActive || isCompleted ? '#fff' : '#1FAE49'}
                     />
                   </View>
                   <Text style={styles.stageLabel}>{stage.label}</Text>
@@ -370,7 +370,7 @@ export default function HunterPayoutScreen() {
           <>
             {/* Success Panel */}
             <View style={styles.successPanel}>
-              <MaterialIcons name="check-circle" size={48} color="#059669" />
+              <MaterialIcons name="check-circle" size={48} color="#008E2A" />
               <Text style={styles.successTitle}>
                 {bounty.is_for_honor ? 'Completed for Honor' : 'Bounty Completed'}
               </Text>
@@ -416,7 +416,7 @@ export default function HunterPayoutScreen() {
             {!bounty.is_for_honor && (
               <View style={styles.receiptCard}>
                 <View style={styles.receiptHeader}>
-                  <MaterialIcons name="receipt" size={24} color="#6ee7b7" />
+                  <MaterialIcons name="receipt" size={24} color="#1FAE49" />
                   <Text style={styles.receiptTitle}>Transaction Receipt</Text>
                 </View>
                 <View style={styles.receiptDivider} />
@@ -449,7 +449,7 @@ export default function HunterPayoutScreen() {
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Status</Text>
                   <View style={styles.statusPill}>
-                    <MaterialIcons name="check-circle" size={16} color="#059669" />
+                    <MaterialIcons name="check-circle" size={16} color="#008E2A" />
                     <Text style={styles.statusPillText}>Completed</Text>
                   </View>
                 </View>
@@ -485,15 +485,15 @@ export default function HunterPayoutScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 16,
   },
   header: {
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
+    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
   },
   backIcon: {
     padding: 4,
@@ -547,11 +547,11 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   bountyInfoCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
+    borderColor: 'rgba(31, 174, 73, 0.3)',
     gap: 8,
   },
   bountyTitle: {
@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   bountyAmount: {
-    color: '#059669',
+    color: '#008E2A',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -582,19 +582,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 142, 42, 0.1)',
     borderWidth: 1,
     borderColor: 'transparent',
     minWidth: 120,
   },
   stageItemActive: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderColor: '#059669',
+    borderColor: '#008E2A',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: '#374151',
-    borderColor: '#059669',
+    backgroundColor: '#454952',
+    borderColor: '#008E2A',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -603,19 +603,19 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(0, 142, 42, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
   },
   stageLabel: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 12,
     textAlign: 'center',
   },
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   payoutAmountCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -699,13 +699,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   payoutLabel: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 14,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#059669',
+    color: '#008E2A',
     fontSize: 32,
     fontWeight: '700',
   },
@@ -733,20 +733,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   balanceCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 142, 42, 0.1)',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     gap: 8,
   },
   balanceLabel: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 14,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   balanceAmount: {
-    color: '#059669',
+    color: '#008E2A',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -764,7 +764,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   archiveButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
   },
   deleteButton: {
     backgroundColor: '#ef4444',
@@ -775,12 +775,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   receiptCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 142, 42, 0.1)',
     borderRadius: 12,
     padding: 16,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: 'rgba(31, 174, 73, 0.2)',
   },
   receiptHeader: {
     flexDirection: 'row',
@@ -788,13 +788,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   receiptTitle: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 16,
     fontWeight: '600',
   },
   receiptDivider: {
     height: 1,
-    backgroundColor: 'rgba(110, 231, 183, 0.2)',
+    backgroundColor: 'rgba(31, 174, 73, 0.2)',
   },
   receiptRow: {
     flexDirection: 'row',
@@ -816,13 +816,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#374151',
+    backgroundColor: '#454952',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#059669',
+    color: '#008E2A',
     fontSize: 12,
     fontWeight: '600',
   },

@@ -34,7 +34,7 @@ import { RatingStars } from './ui/rating-stars';
 import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
 
 const EMERALD_SHADOW = {
-  shadowColor: '#059669',
+  shadowColor: '#008E2A',
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.3,
   shadowRadius: 8,
@@ -251,7 +251,7 @@ export function PosterReviewModal({
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
-  const accentColor = theme.isDark ? '#6ee7b7' : theme.primary;
+  const accentColor = theme.isDark ? '#1FAE49' : theme.primary;
 
   const [submission, setSubmission] = useState<CompletionSubmission | null>(null);
   const [hunterProfile, setHunterProfile] = useState<any | null>(null);
@@ -580,7 +580,7 @@ export function PosterReviewModal({
 
           {isLoading ? (
             <View style={s.loadingContainer}>
-              <ActivityIndicator size="large" color="#059669" />
+              <ActivityIndicator size="large" color="#008E2A" />
               <Text style={s.loadingText}>Loading submission...</Text>
             </View>
           ) : !submission ? (
@@ -826,20 +826,20 @@ function makeSliderStyles(t: AppTheme) {
     },
     sliderTrack: {
       position: 'relative',
-      backgroundColor: t.isDark ? 'rgba(4,120,87,0.4)' : 'rgba(5,150,105,0.15)',
+      backgroundColor: t.isDark ? 'rgba(4,120,87,0.4)' : 'rgba(0,142,42,0.15)',
       borderRadius: 999,
       height: 60,
       justifyContent: 'center',
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.25)' : 'rgba(5,150,105,0.3)',
+      borderColor: t.isDark ? 'rgba(31,174,73,0.25)' : 'rgba(0,142,42,0.3)',
     },
     sliderFill: {
       position: 'absolute',
       left: 0,
       top: 0,
       bottom: 0,
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.45)' : 'rgba(16,185,129,0.35)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.45)' : 'rgba(0,142,42,0.35)',
     },
     sliderLabel: {
       color: t.isDark ? 'rgba(255,254,245,0.85)' : t.text,
@@ -853,7 +853,7 @@ function makeSliderStyles(t: AppTheme) {
       width: SLIDER_HANDLE_WIDTH,
       height: 56,
       borderRadius: 28,
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       justifyContent: 'center',
       alignItems: 'center',
       top: SLIDER_HANDLE_INSET,
@@ -875,7 +875,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'space-between',
       padding: 16,
       borderBottomWidth: 1,
-      borderBottomColor: t.isDark ? 'rgba(110,231,183,0.1)' : t.border,
+      borderBottomColor: t.isDark ? 'rgba(31,174,73,0.1)' : t.border,
     },
     closeButton: {
       padding: 4,
@@ -923,17 +923,17 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.2)' : 'rgba(5,150,105,0.07)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : 'rgba(0,142,42,0.07)',
       padding: 16,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.3)' : 'rgba(5,150,105,0.2)',
+      borderColor: t.isDark ? 'rgba(31,174,73,0.3)' : 'rgba(0,142,42,0.2)',
     },
     hunterAvatar: {
       width: 56,
       height: 56,
       borderRadius: 28,
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.3)' : 'rgba(5,150,105,0.12)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.12)',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -956,7 +956,7 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
     },
     submittedText: {
-      color: t.isDark ? '#6ee7b7' : t.primary,
+      color: t.isDark ? '#1FAE49' : t.primary,
       fontSize: 13,
       marginTop: 4,
     },
@@ -964,18 +964,18 @@ function makeStyles(t: AppTheme) {
       gap: 12,
     },
     sectionTitle: {
-      color: t.isDark ? '#6ee7b7' : t.primary,
+      color: t.isDark ? '#1FAE49' : t.primary,
       fontSize: 14,
       fontWeight: '600',
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
     messageBox: {
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.2)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
       padding: 16,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
     },
     messageText: {
       color: t.text,
@@ -988,18 +988,18 @@ function makeStyles(t: AppTheme) {
     proofItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.2)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
       borderRadius: 12,
       padding: 12,
       gap: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
     },
     proofIcon: {
       width: 48,
       height: 48,
       borderRadius: 8,
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.3)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.1)',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1013,12 +1013,12 @@ function makeStyles(t: AppTheme) {
       fontWeight: '500',
     },
     proofSize: {
-      color: t.isDark ? '#6ee7b7' : t.primary,
+      color: t.isDark ? '#1FAE49' : t.primary,
       fontSize: 12,
     },
     emptyProof: {
       padding: 24,
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.1)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : t.surfaceSecondary,
       borderRadius: 12,
       alignItems: 'center',
     },
@@ -1052,7 +1052,7 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       paddingVertical: 16,
       borderRadius: 12,
       ...EMERALD_SHADOW,
@@ -1084,18 +1084,18 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 20,
     },
     commentInput: {
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.2)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
       borderRadius: 12,
       padding: 16,
       color: t.text,
       fontSize: 15,
       minHeight: 120,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
       width: '100%',
     },
     primaryButton: {
-      backgroundColor: '#059669',
+      backgroundColor: '#008E2A',
       paddingVertical: 16,
       paddingHorizontal: 32,
       borderRadius: 12,
@@ -1133,14 +1133,14 @@ function makeStyles(t: AppTheme) {
       textAlign: 'center',
     },
     feedbackInput: {
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.2)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
       borderRadius: 12,
       padding: 16,
       color: t.text,
       fontSize: 15,
       minHeight: 150,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
       width: '100%',
     },
     buttonRow: {
@@ -1150,7 +1150,7 @@ function makeStyles(t: AppTheme) {
     },
     secondaryButton: {
       flex: 1,
-      backgroundColor: t.isDark ? '#374151' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? '#454952' : t.surfaceSecondary,
       paddingVertical: 16,
       borderRadius: 12,
       alignItems: 'center',
@@ -1166,9 +1166,9 @@ function makeStyles(t: AppTheme) {
       gap: 16,
       padding: 20,
       borderRadius: 16,
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.18)' : 'rgba(5,150,105,0.07)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.18)' : 'rgba(0,142,42,0.07)',
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.35)' : 'rgba(5,150,105,0.2)',
+      borderColor: t.isDark ? 'rgba(31,174,73,0.35)' : 'rgba(0,142,42,0.2)',
       alignItems: 'center',
       alignSelf: 'stretch',
     },
@@ -1226,8 +1226,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 10,
       borderRadius: 999,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.35)' : t.border,
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.2)' : t.surfaceSecondary,
+      borderColor: t.isDark ? 'rgba(31,174,73,0.35)' : t.border,
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
     },
     warningCancelText: {
       color: t.textSecondary,

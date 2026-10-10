@@ -126,8 +126,8 @@ export function StepWhen({ draft, onUpdate, onNext, onBack, isSaving = false, st
                 {
                   backgroundColor: active
                     ? theme.isDark
-                      ? 'rgba(5,150,105,0.22)'
-                      : 'rgba(5,150,105,0.12)'
+                      ? 'rgba(0,142,42,0.22)'
+                      : 'rgba(0,142,42,0.12)'
                     : theme.surfaceSecondary,
                   borderColor: active ? theme.primary : 'transparent',
                 },

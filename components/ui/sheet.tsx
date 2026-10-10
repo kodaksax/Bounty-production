@@ -99,7 +99,7 @@ const SheetTitle = React.forwardRef<Text, any>(({ children, ...props }, ref) => 
 SheetTitle.displayName = "SheetTitle"
 
 const SheetDescription = React.forwardRef<Text, any>(({ children, ...props }, ref) => (
-  <Text ref={ref as any} style={{ fontSize: 14, color: '#6b7280' }} {...(props as any)}>{children}</Text>
+  <Text ref={ref as any} style={{ fontSize: 14, color: '#61656B' }} {...(props as any)}>{children}</Text>
 ))
 SheetDescription.displayName = "SheetDescription"
 

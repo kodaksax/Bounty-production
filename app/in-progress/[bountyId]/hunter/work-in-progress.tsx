@@ -338,7 +338,7 @@ export default function HunterWorkInProgressScreen() {
         <View style={styles.bountyCard}>
           <View style={styles.bountyHeader}>
             <View style={styles.avatarPlaceholder}>
-              <MaterialIcons name="person" size={32} color="#6ee7b7" />
+              <MaterialIcons name="person" size={32} color="#1FAE49" />
             </View>
             <View style={styles.bountyInfo}>
               <Text style={styles.bountyTitle} numberOfLines={2}>
@@ -400,7 +400,7 @@ export default function HunterWorkInProgressScreen() {
                     <MaterialIcons
                       name={stage.icon as any}
                       size={24}
-                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
+                      color={isActive || isCompleted ? '#fff' : '#1FAE49'}
                     />
                   </View>
                   <Text style={styles.stageLabel}>{stage.label}</Text>
@@ -453,7 +453,7 @@ export default function HunterWorkInProgressScreen() {
               <MaterialIcons
                 name={showProgressForm ? 'remove' : 'add'}
                 size={20}
-                color="#059669"
+                color="#008E2A"
               />
               <Text style={styles.addUpdateText}>
                 {showProgressForm ? 'Hide' : 'Add Update'}
@@ -495,7 +495,7 @@ export default function HunterWorkInProgressScreen() {
           )}
 
           <View style={styles.progressHint}>
-            <MaterialIcons name="info-outline" size={16} color="#6ee7b7" />
+            <MaterialIcons name="info-outline" size={16} color="#1FAE49" />
             <Text style={styles.progressHintText}>
               Share progress updates with the poster to keep them informed
             </Text>
@@ -521,13 +521,13 @@ export default function HunterWorkInProgressScreen() {
         <View style={styles.infoRow}>
           {locationText && (
             <View style={styles.infoItem}>
-              <MaterialIcons name="location-on" size={16} color="#6ee7b7" />
+              <MaterialIcons name="location-on" size={16} color="#1FAE49" />
               <Text style={styles.infoText}>{locationText}</Text>
             </View>
           )}
           {bounty.timeline && (
             <View style={styles.infoItem}>
-              <MaterialIcons name="schedule" size={16} color="#6ee7b7" />
+              <MaterialIcons name="schedule" size={16} color="#1FAE49" />
               <Text style={styles.infoText}>{bounty.timeline}</Text>
             </View>
           )}
@@ -593,15 +593,15 @@ export default function HunterWorkInProgressScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 16,
   },
   header: {
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
+    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
   },
   backIcon: {
     padding: 4,
@@ -655,11 +655,11 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   bountyCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
+    borderColor: 'rgba(31, 174, 73, 0.3)',
   },
   bountyHeader: {
     flexDirection: 'row',
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(0, 142, 42, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -684,14 +684,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   postedTime: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 12,
   },
   amountContainer: {
     alignItems: 'flex-end',
   },
   amount: {
-    color: '#059669',
+    color: '#008E2A',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -713,7 +713,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -727,19 +727,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 142, 42, 0.1)',
     borderWidth: 1,
     borderColor: 'transparent',
     minWidth: 120,
   },
   stageItemActive: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderColor: '#059669',
+    borderColor: '#008E2A',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: '#374151',
-    borderColor: '#059669',
+    backgroundColor: '#454952',
+    borderColor: '#008E2A',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -748,19 +748,19 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(0, 142, 42, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
   },
   stageLabel: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 12,
     textAlign: 'center',
   },
@@ -779,23 +779,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#374151',
+    backgroundColor: '#454952',
   },
   addUpdateText: {
-    color: '#059669',
+    color: '#008E2A',
     fontSize: 13,
     fontWeight: '600',
   },
   progressFormContainer: {
     gap: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(0, 142, 42, 0.15)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: 'rgba(31, 174, 73, 0.2)',
   },
   progressInput: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     borderRadius: 12,
     padding: 12,
     color: '#fff',
@@ -803,10 +803,10 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: 'rgba(31, 174, 73, 0.2)',
   },
   postUpdateButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   postUpdateButtonDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.5)',
+    backgroundColor: 'rgba(0, 142, 42, 0.5)',
   },
   postUpdateButtonText: {
     color: '#fff',
@@ -827,16 +827,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     padding: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 142, 42, 0.1)',
     borderRadius: 8,
   },
   progressHintText: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 12,
     flex: 1,
   },
   completeButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -862,7 +862,7 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     flex: 1,
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     borderRadius: 12,
     padding: 12,
     color: '#fff',
@@ -870,10 +870,10 @@ const styles = StyleSheet.create({
     minHeight: 48,
     maxHeight: 120,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: 'rgba(31, 174, 73, 0.2)',
   },
   sendButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -881,16 +881,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.5)',
+    backgroundColor: 'rgba(0, 142, 42, 0.5)',
   },
   contextPanel: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 142, 42, 0.1)',
     borderRadius: 12,
     padding: 16,
     gap: 8,
   },
   contextTitle: {
-    color: '#6ee7b7',
+    color: '#1FAE49',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -902,7 +902,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   expandText: {
-    color: '#059669',
+    color: '#008E2A',
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
@@ -922,7 +922,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   nextButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

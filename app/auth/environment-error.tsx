@@ -55,7 +55,7 @@ export default function EnvironmentErrorScreen() {
           onPress={handleRetry}
           disabled={isReloading}
         >
-          <MaterialIcons name="refresh" size={18} color="#0B0F14" />
+          <MaterialIcons name="refresh" size={18} color="#1B1E24" />
           <Text style={styles.primaryButtonText}>{isReloading ? 'Reloading…' : 'Try Again'}</Text>
         </TouchableOpacity>
 
@@ -70,7 +70,7 @@ export default function EnvironmentErrorScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   primaryButtonText: {
-    color: '#0B0F14',
+    color: '#1B1E24',
     fontSize: 16,
     fontWeight: '600',
   },

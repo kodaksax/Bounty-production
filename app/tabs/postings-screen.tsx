@@ -1224,7 +1224,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
           {/* Success message */}
           {postSuccess && (
-            <View className="mx-4 mb-4 p-3 bg-[#059669]/70 rounded-lg">
+            <View className="mx-4 mb-4 p-3 bg-[#008E2A]/70 rounded-lg">
               <Text className="text-white text-sm">Bounty posted successfully!</Text>
             </View>
           )}
@@ -1290,7 +1290,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                               <Text className="text-xs" style={{ fontWeight: selected ? '500' : 'normal', color: selected ? theme.text : theme.textSecondary }}>{label}</Text>
                               {f === 'review' && count > 0 && (
                                 <View className="ml-1 px-1 rounded-full bg-amber-400 min-w-[16px] items-center">
-                                  <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
+                                  <Text className="text-[10px] font-bold text-[#22262C]">{count > 99 ? "99+" : count}</Text>
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -1337,7 +1337,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor={theme.text}
-                      colors={['#059669']}
+                      colors={['#008E2A']}
                     />
                   }
                   contentContainerStyle={listContentPadding}
@@ -1395,7 +1395,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor={theme.text}
-                      colors={['#059669']}
+                      colors={['#008E2A']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }}
@@ -1452,7 +1452,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                               <Text className="text-xs" style={{ fontWeight: selected ? '500' : 'normal', color: selected ? theme.text : theme.textSecondary }}>{label}</Text>
                               {f === 'review' && count > 0 && (
                                 <View className="ml-1 px-1 rounded-full bg-amber-400 min-w-[16px] items-center">
-                                  <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
+                                  <Text className="text-[10px] font-bold text-[#22262C]">{count > 99 ? "99+" : count}</Text>
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -1501,7 +1501,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor={theme.text}
-                      colors={['#059669']}
+                      colors={['#008E2A']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }}

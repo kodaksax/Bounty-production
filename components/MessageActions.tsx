@@ -63,7 +63,7 @@ export function MessageActions({
                   accessibilityLabel="Reply to message"
                   accessibilityHint="Quotes this message in your reply"
                 >
-                  <MaterialIcons name="reply" size={22} color="#9CA3AF" accessibilityElementsHidden={true} />
+                  <MaterialIcons name="reply" size={22} color="#929497" accessibilityElementsHidden={true} />
                   <Text style={styles.actionText}>Reply</Text>
                 </TouchableOpacity>
 
@@ -81,7 +81,7 @@ export function MessageActions({
               <MaterialIcons
                 name="push-pin"
                 size={22}
-                color="#9CA3AF"
+                color="#929497"
                 accessibilityElementsHidden={true}
               />
               <Text style={styles.actionText}>{isPinned ? 'Unpin Message' : 'Pin Message'}</Text>
@@ -96,7 +96,7 @@ export function MessageActions({
               accessibilityLabel="Copy message text"
               accessibilityHint="Copies message text to clipboard"
             >
-              <MaterialIcons name="content-copy" size={22} color="#9CA3AF" accessibilityElementsHidden={true} />
+              <MaterialIcons name="content-copy" size={22} color="#929497" accessibilityElementsHidden={true} />
               <Text style={styles.actionText}>Copy Text</Text>
             </TouchableOpacity>
 
@@ -139,7 +139,7 @@ export function MessageActions({
               accessibilityLabel="Cancel"
               accessibilityHint="Closes message actions menu"
             >
-              <MaterialIcons name="close" size={22} color="#9CA3AF" accessibilityElementsHidden={true} />
+              <MaterialIcons name="close" size={22} color="#929497" accessibilityElementsHidden={true} />
               <Text style={styles.actionText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   actionSheet: {
-    backgroundColor: '#111827',
+    backgroundColor: '#22262C',
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: '#929497',
     fontWeight: '500',
   },
   dangerText: {
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#374151',
+    backgroundColor: '#454952',
     marginHorizontal: 20,
   },
 });

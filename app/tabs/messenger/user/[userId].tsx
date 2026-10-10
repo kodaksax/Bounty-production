@@ -127,7 +127,7 @@ export default function UserConversationRoute() {
   if (error) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#6ee7b7' }}>Unable to load conversation.</Text>
+        <Text style={{ color: '#1FAE49' }}>Unable to load conversation.</Text>
       </View>
     );
   }
@@ -135,7 +135,7 @@ export default function UserConversationRoute() {
   if (!conversation) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color="#008E2A" />
       </View>
     );
   }

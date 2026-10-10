@@ -52,7 +52,7 @@ export function useRejectRequest({
       }
 
       // Show confirmation with next-step guidance
-      const nextSteps = `\n\nNext steps:\n• Review other applicants in Requests or go to My Postings to edit the posting.`
+      const nextSteps = `\n\nNext steps:\n• Review your other applicants in My Bounties, or edit the posting from there.`
       Alert.alert('Request Rejected', `The request has been rejected and removed.${nextSteps}`, [{ text: 'OK' }])
     } catch (err: any) {
       console.error("Error rejecting request:", err)
