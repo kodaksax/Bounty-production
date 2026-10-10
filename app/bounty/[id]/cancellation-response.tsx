@@ -22,8 +22,9 @@ import type { BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
+import { withReplayMask } from '../../../components/replay-mask';
 
-export default function CancellationResponseScreen() {
+function CancellationResponseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { session } = useAuthContext();
@@ -496,3 +497,5 @@ export default function CancellationResponseScreen() {
     </View>
   );
 }
+
+export default withReplayMask(CancellationResponseScreen);

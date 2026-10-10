@@ -16,6 +16,7 @@ import { disputeService } from '../../lib/services/dispute-service';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { generateEvidenceId } from '../../lib/utils/dispute-helpers';
 import { KeyboardAwareScrollView } from '../../components/ui/keyboard-avoiding';
+import { withReplayMask } from '../../components/replay-mask';
 
 type LocalEvidenceItem = {
   id: string;
@@ -25,7 +26,7 @@ type LocalEvidenceItem = {
   uploadedAt: string;
 };
 
-export default function CreateDisputeScreen() {
+function CreateDisputeScreen() {
   const { cancellationId } = useLocalSearchParams<{
     cancellationId: string;
     bountyId?: string;
@@ -659,3 +660,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+
+export default withReplayMask(CreateDisputeScreen);

@@ -25,8 +25,9 @@ import {
 } from 'react-native';
 import { ROUTES } from '../../../lib/routes';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
+import { withReplayMask } from '../../../components/replay-mask';
 
-export default function DisputeScreen() {
+function DisputeScreen() {
   const { id, from, reason: reasonParam } = useLocalSearchParams<{
     id: string;
     from?: string;
@@ -636,3 +637,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default withReplayMask(DisputeScreen);

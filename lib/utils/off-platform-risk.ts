@@ -18,8 +18,27 @@ function withoutNegatedInstructions(text: string): string {
 const normalize = (text: string) => text.normalize('NFKC').replace(/[’‘]/g, "'").toLowerCase();
 const safetyNotices = new Set(Object.values(trustSafetyStrings).map(normalize));
 
+// A live row can still hold an encrypted envelope before the messaging
+// pipeline decrypts it; its key bytes can look like phone numbers. Only an
+// envelope whose fields are all encoded data (base64, no spaces) is skipped —
+// JSON carrying readable text in those fields is attacker-controlled and is
+// still scanned like any other message.
+const encodedField = /^[A-Za-z0-9+/=_-]+$/;
+function isEncryptedEnvelope(text: string): boolean {
+  if (!text.trimStart().startsWith('{')) return false;
+  try {
+    const payload = JSON.parse(text);
+    return [payload?.ciphertext, payload?.nonce, payload?.senderPublicKey].every(
+      field => typeof field === 'string' && encodedField.test(field)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Advisory heuristics over local plaintext only; never inspects attachments or calls a service. */
 export function detectOffPlatformRisk(plaintext: string): OffPlatformRisk | null {
+  if (isEncryptedEnvelope(plaintext)) return null;
   const normalized = normalize(plaintext);
   if (safetyNotices.has(normalized.trim())) return null;
   const clauses = normalized.split(/(?:[.!?]\s+|[;\n]+|,\s+(?:or|and)\s+|\bbut\b|\bhowever\b)/);
