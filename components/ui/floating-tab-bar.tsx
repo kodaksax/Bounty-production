@@ -11,8 +11,8 @@ import type { ScreenKey } from "./bottom-nav";
 /**
  * Floating pill tab bar — the compact, detached bar most iOS apps now use.
  * Same tabs and behaviour as the classic BottomNav (components/ui/bottom-nav.tsx,
- * kept for later); icon-only, with a highlight capsule that slides to the
- * active tab.
+ * kept for later); icon + label per tab, with a highlight capsule that
+ * slides to the active tab.
  *
  * Its top edge sits below the classic bar's visible height, so screens that
  * clear BottomNav via getBottomNavContentPadding() clear this too.
@@ -26,13 +26,15 @@ interface FloatingTabBarProps {
   unreadMessageCount?: number;
 }
 
-const BAR_HEIGHT = 60;
-const BAR_SIDE_MARGIN = 20;
-const BAR_PADDING = 6;
-const ICON_SIZE = 26;
-const CENTER_ICON_SIZE = 28;
+const BAR_HEIGHT = 64;
+const BAR_SIDE_MARGIN = 16;
+const BAR_PADDING = 5;
+const ICON_SIZE = 23;
+const CENTER_ICON_SIZE = 25;
+// Caps Dynamic Type so labels can't push the bar taller than BAR_HEIGHT.
+const LABEL_MAX_FONT_SCALE = 1.2;
 
-type Tab = { key: ScreenKey; icon: keyof typeof MaterialIcons.glyphMap; label: string };
+type Tab = { key: ScreenKey; icon: keyof typeof MaterialIcons.glyphMap; title: string; label: string };
 
 export function FloatingTabBar({
   activeScreen,
@@ -51,17 +53,18 @@ export function FloatingTabBar({
       {
         key: "messages",
         icon: "assignment",
+        title: "My Bounties",
         label:
           unreadMessageCount > 0
             ? `My Bounties, ${unreadMessageCount} unread message${unreadMessageCount === 1 ? "" : "s"}`
             : "View your bounties",
       },
-      { key: "wallet", icon: "account-balance-wallet", label: "View wallet and transactions" },
-      { key: "bounty", icon: "gps-fixed", label: "View bounty dashboard - Main screen" },
-      { key: "postings", icon: "post-add", label: "Post a new bounty" },
+      { key: "wallet", icon: "account-balance-wallet", title: "Wallet", label: "View wallet and transactions" },
+      { key: "bounty", icon: "gps-fixed", title: "Home", label: "View bounty dashboard - Main screen" },
+      { key: "postings", icon: "post-add", title: "Post", label: "Post a new bounty" },
       showAdmin
-        ? { key: "admin", icon: "admin-panel-settings", label: "Admin panel" }
-        : { key: "profile", icon: "person", label: "View and edit profile" },
+        ? { key: "admin", icon: "admin-panel-settings", title: "Admin", label: "Admin panel" }
+        : { key: "profile", icon: "person", title: "Profile", label: "View and edit profile" },
     ],
     [showAdmin, unreadMessageCount]
   );
@@ -141,6 +144,13 @@ export function FloatingTabBar({
                     </View>
                   )}
                 </View>
+                <Text
+                  style={[s.label, active && s.labelActive, isCenter && { color: theme.primary }]}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={LABEL_MAX_FONT_SCALE}
+                >
+                  {tab.title}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -188,6 +198,15 @@ function makeStyles(t: AppTheme) {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
+      gap: 2,
+    },
+    label: {
+      fontSize: 10,
+      fontWeight: "600",
+      color: t.textSecondary,
+    },
+    labelActive: {
+      color: t.text,
     },
     badge: {
       position: "absolute",
