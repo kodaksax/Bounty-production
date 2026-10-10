@@ -3,13 +3,15 @@
  *
  * Centralized service layer for the "Feedback & Support" section of Settings.
  * Handles bug reports and feature requests (persisted to Supabase), and provides
- * helpers for contacting support (mailto fallback) and rating the app (store links).
+ * sends support messages in-app (via the contact-support edge function), and
+ * provides helpers for contacting support (mailto fallback) and rating the app (store links).
  */
 
 import { Platform } from 'react-native';
 import { supabase } from '../supabase';
 import { storageService } from './storage-service';
 import { authProfileService } from './auth-profile-service';
+import { invokePayments } from './stripe-internal';
 
 export type FeedbackReportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type FeatureRequestStatus =
@@ -51,6 +53,11 @@ export interface SubmitBugReportInput {
 export interface SubmitFeatureRequestInput {
   title: string;
   description: string;
+}
+
+export interface SubmitSupportRequestInput {
+  subject: string;
+  message: string;
 }
 
 export interface SubmitResult {
@@ -248,6 +255,56 @@ export const feedbackService = {
         error:
           error instanceof Error ? error.message : 'Failed to submit feature request',
       };
+    } finally {
+      inFlight.delete(dedupeKey);
+    }
+  },
+
+  /**
+   * Send a support message from inside the app. The `contact-support` edge
+   * function emails it to SUPPORT_REQUEST_EMAIL with the user's account email
+   * as reply-to, so no mail app is needed on the device.
+   */
+  async submitSupportRequest(input: SubmitSupportRequestInput): Promise<SubmitResult> {
+    const subject = (input.subject || '').trim();
+    const message = (input.message || '').trim();
+
+    if (!subject) {
+      return { success: false, error: 'Subject is required' };
+    }
+    if (!message) {
+      return { success: false, error: 'Message is required' };
+    }
+
+    const userId = authProfileService.getAuthUserId();
+    if (!userId) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    const dedupeKey = `support:${userId}:${subject}:${message}`;
+    if (isDuplicate(dedupeKey)) {
+      return { success: false, error: 'Duplicate submission ignored' };
+    }
+    inFlight.add(dedupeKey);
+
+    try {
+      // Direct fetch rather than supabase.functions.invoke(): invoke() can hang
+      // on the supabase-js session lock and never send the request (see
+      // invokePayments in stripe-internal.ts).
+      const data = await invokePayments<{ success?: boolean; id?: string }>('contact-support', {
+        body: {
+          subject,
+          message,
+          appVersion: getAppVersion(),
+          platform: getPlatform(),
+        },
+      });
+
+      recentSubmissions.set(dedupeKey, Date.now());
+      return { success: true, id: data?.id };
+    } catch (error) {
+      console.error('[FeedbackService] Support request failed:', error);
+      return { success: false, error: 'Could not send your message. Please try again.' };
     } finally {
       inFlight.delete(dedupeKey);
     }
