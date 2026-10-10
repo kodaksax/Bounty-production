@@ -63,7 +63,7 @@ describe('onboarding role step', () => {
       role: 'poster',
       surface: 'onboarding',
     });
-    expect(mockPush).toHaveBeenCalledWith('/onboarding/founder-note');
+    expect(mockPush).toHaveBeenCalledWith('/onboarding/poster-profile');
   });
 
   it('routes hunters to payout setup', () => {

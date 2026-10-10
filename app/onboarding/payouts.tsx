@@ -3,7 +3,8 @@
  * The last step that asks for anything, immediately after role selection
  * (app/onboarding/role-select.tsx) and before the founder note
  * (app/onboarding/founder-note.tsx), which closes the flow. Only hunters
- * ("I'd rather earn") land here. Posters go straight to the founder note:
+ * ("I'd rather earn") land here. Posters go to their profile step instead
+ * (app/onboarding/poster-profile.tsx):
  * nothing they do needs a payout account until they withdraw, and the
  * withdraw flow asks then (lib/onboarding/next-step-after-role.ts).
  *
