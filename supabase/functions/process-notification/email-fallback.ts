@@ -73,14 +73,29 @@ export function fallbackDedupeKey(data: Record<string, unknown>, outboxId: strin
   return `outbox:${outboxId}`
 }
 
-export function applicantListLink(base: string, bountyId: string): string {
-  const normalized = base.endsWith('/') ? base : `${base}/`
-  return `${normalized}postings/${encodeURIComponent(bountyId)}`
+/**
+ * What replying to this email does, said plainly. A poster replied "Accept"
+ * to one of these on 2026-10-07 and nothing happened: replies went to the
+ * support inbox and nothing read them. When inbound reply handling is on
+ * (EMAIL_REPLY_DOMAIN, see email-inbound/) a reply gets a one-tap
+ * confirmation link back; otherwise the email must not imply a reply works.
+ */
+export function replyExpectation(replyHandled: boolean): string {
+  return replyHandled
+    ? 'You can also reply ACCEPT or DECLINE and we’ll email you a link to confirm — a reply on its own never accepts anyone.'
+    : 'Replying to this email reaches our support team; it does not accept or decline anyone.'
 }
 
+/**
+ * The button goes to the website (see _shared/web-links.ts), so the copy must
+ * not send people to the app: the poster this was written for paid on the
+ * web, never installed it, and could not act on "Accept or decline in the
+ * Bounty app".
+ */
 export function buildPosterFallbackEmail(params: {
   bountyTitle: string | null
   applicantCount: number
+  replyHandled?: boolean
 }): { title: string; body: string } {
   const bountyTitle = (params.bountyTitle ?? '').trim() || 'your bounty'
   const count = Math.max(1, Math.floor(params.applicantCount || 0))
@@ -88,10 +103,13 @@ export function buildPosterFallbackEmail(params: {
     count === 1
       ? `Someone applied to "${bountyTitle}"`
       : `${count} applicants are waiting on "${bountyTitle}"`
-  const body =
+  const who =
     count === 1
-      ? `A hunter applied to "${bountyTitle}" and is waiting for your answer. Accept or decline in the Bounty app — unanswered applications close automatically.`
-      : `${count} hunters applied to "${bountyTitle}" and are waiting for your answer. Accept or decline in the Bounty app — unanswered applications close automatically.`
+      ? `A hunter applied to "${bountyTitle}" and is waiting for your answer.`
+      : `${count} hunters applied to "${bountyTitle}" and are waiting for your answer.`
+  const body =
+    `${who} Use the button below to see who applied and accept or decline in your web browser — you don’t need the app. ` +
+    `Unanswered applications close automatically. ${replyExpectation(params.replyHandled === true)}`
   return { title, body }
 }
 
@@ -164,10 +182,14 @@ export function isLegacyOptedOut(type: string, prefs: LegacyNotificationPreferen
 /** Title/body for a fallback email of `type`, from the outbox payload. */
 export function buildFallbackEmail(
   type: string,
-  params: { bountyTitle: string | null; applicantCount: number; data: Record<string, unknown> }
+  params: { bountyTitle: string | null; applicantCount: number; data: Record<string, unknown>; replyHandled?: boolean }
 ): { title: string; body: string } {
   if (POSTER_EMAIL_FALLBACK_TYPES.has(type)) {
-    return buildPosterFallbackEmail({ bountyTitle: params.bountyTitle, applicantCount: params.applicantCount })
+    return buildPosterFallbackEmail({
+      bountyTitle: params.bountyTitle,
+      applicantCount: params.applicantCount,
+      replyHandled: params.replyHandled,
+    })
   }
   return buildHunterClosedEmail({
     bountyTitle: params.bountyTitle,

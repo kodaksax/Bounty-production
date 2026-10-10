@@ -3996,10 +3996,17 @@ Deno.serve(async (req: Request) => {
             // key and only logs to console, so it would deliver nothing. This
             // is the same mechanism and template as the app's existing
             // forgot-password flow (lib/services/auth-service.ts), and the
-            // redirect matches its convention — a universal link that opens
-            // the app on mobile and a web reset form on desktop.
+            // redirect used to be the app's universal link,
+            // https://bountyfinder.app/auth/callback — but that host fails TLS
+            // (verified 2026-10-08), so a web-only poster who clicked it was
+            // stranded. It now lands on the website's poster dashboard, which
+            // works in any browser and finishes the sign-in there
+            // (Bounty-landing-page manage/). The URL must be in Supabase Auth's
+            // Redirect URLs allowlist, or Auth falls back to the Site URL; the
+            // homepage forwards auth tokens to /manage/ for that case too.
             const authRedirectUrl =
-              Deno.env.get('BOUNTY_AUTH_REDIRECT_URL') ?? 'https://bountyfinder.app/auth/callback';
+              Deno.env.get('BOUNTY_AUTH_REDIRECT_URL') ??
+              'https://www.bountyfinder.net/manage/?utm_source=bounty_email&utm_medium=email&utm_campaign=account_access';
             const { error: signInEmailErr } = await supabase.auth.resetPasswordForEmail(
               checkoutEmail,
               { redirectTo: authRedirectUrl }

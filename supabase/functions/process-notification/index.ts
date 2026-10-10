@@ -10,8 +10,9 @@
 // in sync by hand, since Deno's bundler can't import from lib/.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { webManageLink } from '../_shared/web-links.ts'
+import { createReplyContext, replyAddressFor, resolveReplyDomain } from '../_shared/reply-context.ts'
 import {
-  applicantListLink,
   buildFallbackEmail,
   describeTicketError,
   fallbackDedupeKey,
@@ -236,10 +237,18 @@ function extractInvalidTokens(chunkTokens: string[], expoResponseBody: unknown):
   return invalid
 }
 
-// Where the fallback email's button points. Defaults to the app's custom
-// scheme; set to an HTTPS handoff once bountyfinder.app serves TLS, since some
-// mail clients (notably Gmail web) strip non-http(s) links.
+// Where the fallback email's button points. It used to default to the app's
+// custom scheme (bountyexpo-workspace://postings/<id>), which does nothing for
+// a poster without the app and is stripped by Gmail web — the 2026-10-06
+// incident. It is now always an HTTPS page on the website that works in any
+// browser; WEB_MANAGE_BASE overrides the host (https only, see web-links.ts).
+const WEB_MANAGE_BASE = Deno.env.get('WEB_MANAGE_BASE')
+// Hunter-facing closure email: "find other bounties" is an app action, so it
+// keeps the app scheme unless an https handoff is configured.
 const APP_LINK_BASE = Deno.env.get('NOTIFICATION_APP_LINK_BASE') || 'bountyexpo-workspace://'
+// Set only once the reply subdomain's MX points at Resend inbound and
+// email-inbound is deployed; until then replies keep going to support.
+const REPLY_DOMAIN = resolveReplyDomain(Deno.env.get('EMAIL_REPLY_DOMAIN'))
 
 // PostHog delivery-funnel instrumentation (notification_generated/sent/failed).
 // Same HTTP capture pattern as process-analytics-person/index.ts. Every event
@@ -796,7 +805,30 @@ Deno.serve(async (req: Request) => {
             continue
           }
 
-          const { title: emailTitle, body: emailBody } = buildFallbackEmail(notificationType, { bountyTitle, applicantCount, data: outboxData })
+          // A single applicant is linked directly; several go to the list.
+          const requestId = typeof outboxData.requestId === 'string' ? outboxData.requestId : null
+          const linkRequestId = applicantCount === 1 ? requestId : null
+
+          // Reply handling: a per-email reply address that routes a reply to
+          // this poster/bounty/applicant. Best-effort — if the context can't
+          // be stored the email still goes out, saying replies reach support.
+          let replyTo: string | null = null
+          if (posterFallback && REPLY_DOMAIN) {
+            const token = await createReplyContext(supabaseAdmin, {
+              posterId: userId,
+              bountyId,
+              requestId: linkRequestId,
+              notificationType,
+            })
+            replyTo = token ? replyAddressFor(token, REPLY_DOMAIN) : null
+          }
+
+          const { title: emailTitle, body: emailBody } = buildFallbackEmail(notificationType, {
+            bountyTitle,
+            applicantCount,
+            data: outboxData,
+            replyHandled: replyTo !== null,
+          })
           let result: FallbackResult = 'failed'
           let emailError: string | null = null
           try {
@@ -813,8 +845,15 @@ Deno.serve(async (req: Request) => {
                   ...outboxData,
                   ...(posterFallback
                     ? {
-                        ctaUrl: applicantListLink(APP_LINK_BASE, bountyId),
+                        ctaUrl: webManageLink(WEB_MANAGE_BASE, {
+                          bountyId,
+                          requestId: linkRequestId,
+                          view: linkRequestId ? 'applicant' : 'bounty',
+                          campaign: 'applicant_review',
+                        }),
                         ctaLabel: applicantCount === 1 ? 'Review applicant' : `Review ${applicantCount} applicants`,
+                        helpUrl: webManageLink(WEB_MANAGE_BASE, { bountyId, view: 'help', campaign: 'applicant_review' }),
+                        ...(replyTo ? { replyTo } : {}),
                       }
                     : { ctaUrl: APP_LINK_BASE, ctaLabel: 'Find other bounties' }),
                 },

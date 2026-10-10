@@ -27,6 +27,21 @@
     "ratings": "trg_ratings_guard"
   },
   "protected": {
+    "support_cases": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
+    "email_reply_contexts": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
+    "bounty_geocode_attempts": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
     "profiles": {
       "commands": [],
       "required_triggers": [
@@ -309,6 +324,9 @@
     }
   },
   "functions": [
+    { "signature": "fn_claim_geocode_batch(integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_apply_bounty_geocode(uuid,double precision,double precision,text,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_record_geocode_failure(uuid,text,boolean,integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     {
       "signature": "reserve_connect_account_operation(uuid,text,text,text)",
       "forbid_execute": ["anon", "authenticated", "PUBLIC"]

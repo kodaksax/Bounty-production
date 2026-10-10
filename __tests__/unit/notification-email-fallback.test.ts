@@ -1,5 +1,4 @@
 import {
-  applicantListLink,
   buildFallbackEmail,
   buildHunterClosedEmail,
   buildPosterFallbackEmail,
@@ -8,6 +7,7 @@ import {
   isEmailFallbackType,
   isLegacyOptedOut,
   isPosterFallbackType,
+  replyExpectation,
   selectFallbackCandidates,
   type FallbackPushOutcome,
   truncateMessage,
@@ -129,6 +129,11 @@ describe('buildFallbackEmail', () => {
     expect(closed.title).toBe('Your application to "X" closed')
     expect(closed.body).toMatch(/closed the bounty/)
   })
+
+  test('passes replyHandled through to the poster email', () => {
+    const body = buildFallbackEmail('application', { bountyTitle: 'X', applicantCount: 1, data: {}, replyHandled: true }).body
+    expect(body).toContain(replyExpectation(true))
+  })
 })
 
 describe('describeTicketError', () => {
@@ -171,13 +176,6 @@ describe('fallbackDedupeKey', () => {
   })
 })
 
-describe('applicantListLink', () => {
-  test('points at the poster applicant-management route', () => {
-    expect(applicantListLink('bountyexpo-workspace://', 'b1')).toBe('bountyexpo-workspace://postings/b1')
-    expect(applicantListLink('https://example.com/app', 'b1')).toBe('https://example.com/app/postings/b1')
-  })
-})
-
 describe('buildPosterFallbackEmail', () => {
   test('single applicant', () => {
     const { title, body } = buildPosterFallbackEmail({ bountyTitle: 'Walk my dog', applicantCount: 1 })
@@ -194,5 +192,27 @@ describe('buildPosterFallbackEmail', () => {
   test('tolerates a missing title or count', () => {
     const { title } = buildPosterFallbackEmail({ bountyTitle: null, applicantCount: 0 })
     expect(title).toBe('Someone applied to "your bounty"')
+  })
+
+  // Incident 2026-10-06: a web-only poster was told to "Accept or decline in
+  // the Bounty app", which she never installed.
+  test('never sends a web poster to the app', () => {
+    for (const applicantCount of [1, 3]) {
+      const { body } = buildPosterFallbackEmail({ bountyTitle: 'Trash removal', applicantCount })
+      expect(body).not.toMatch(/Bounty app/i)
+      expect(body).toMatch(/web browser/)
+      expect(body).toMatch(/don’t need the app/)
+    }
+  })
+
+  // Incident 2026-10-07: she replied "Accept" and nothing happened.
+  test('says plainly what a reply does, with or without reply handling', () => {
+    const off = buildPosterFallbackEmail({ bountyTitle: 'X', applicantCount: 1 }).body
+    expect(off).toContain(replyExpectation(false))
+    expect(off).toMatch(/does not accept or decline anyone/)
+
+    const on = buildPosterFallbackEmail({ bountyTitle: 'X', applicantCount: 1, replyHandled: true }).body
+    expect(on).toContain(replyExpectation(true))
+    expect(on).toMatch(/never accepts anyone/)
   })
 })
