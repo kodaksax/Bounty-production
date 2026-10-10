@@ -40,6 +40,59 @@ function calculateBackoff(attempt: number, config: RetryConfig): number {
 }
 
 /**
+ * True for failures caused by the device's connection rather than the app.
+ * Only thrown fetch failures reach the reporting paths below — an HTTP error
+ * status resolves as a Response — so these are almost always a dropped or
+ * stalled connection (e.g. cellular going dead mid-startup).
+ */
+function isConnectivityError(error: any): boolean {
+  if (!error) return false;
+  if (error.name === 'TimeoutError' || error.name === 'AbortError' || error.name === 'NetworkError') {
+    return true;
+  }
+  const message = String(error.message ?? '').toLowerCase();
+  return (
+    message.includes('timed out') ||
+    message.includes('timeout') ||
+    message.includes('network') ||
+    message.includes('failed to fetch') ||
+    message.includes('load failed') ||
+    message.includes('connection')
+  );
+}
+
+/**
+ * Connectivity failures are recorded as a breadcrumb, not an exception: as
+ * exceptions every dead cellular connection became a Sentry issue that no code
+ * change could fix. The breadcrumb still gives context to any real error that
+ * follows. Anything else (e.g. a malformed URL) is still captured.
+ */
+function reportFetchFailure(error: Error, url: string): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const Sentry = require('@sentry/react-native');
+    if (!Sentry) return;
+    if (isConnectivityError(error)) {
+      if (typeof Sentry.addBreadcrumb === 'function') {
+        Sentry.addBreadcrumb({
+          category: 'http.connectivity',
+          level: 'warning',
+          message: `${error.name}: ${error.message}`,
+          // Redact query params to avoid leaking sensitive data
+          data: { url: url.split('?')[0] },
+        });
+      }
+      return;
+    }
+    if (typeof Sentry.captureException === 'function') {
+      Sentry.captureException(error);
+    }
+  } catch {
+    // ignore when Sentry is not available
+  }
+}
+
+/**
  * Default retry logic: retry on network errors and 5xx server errors
  */
 function shouldRetryDefault(response: Response | null, error: Error | null): boolean {
@@ -194,16 +247,7 @@ export async function fetchWithTimeout(
 
       // If cancellation was triggered externally, do not retry — short-circuit
       if (abortedByExternalSignal) {
-        // Report to Sentry if available (best-effort)
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-          const Sentry = require('@sentry/react-native');
-          if (Sentry && typeof Sentry.captureException === 'function') {
-            Sentry.captureException(lastError);
-          }
-        } catch {
-          // ignore when Sentry is not available
-        }
+        reportFetchFailure(lastError!, url);
         throw lastError;
       }
       if (!isLastAttempt && retryOn(null, lastError)) {
@@ -219,15 +263,7 @@ export async function fetchWithTimeout(
       }
 
       // No more retries, report and throw the error
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-        const Sentry = require('@sentry/react-native');
-        if (Sentry && typeof Sentry.captureException === 'function') {
-          Sentry.captureException(lastError);
-        }
-      } catch {
-        // ignore when Sentry is not available
-      }
+      reportFetchFailure(lastError!, url);
       throw lastError;
     }
   }
@@ -242,16 +278,7 @@ export async function fetchWithTimeout(
         `backoffMultiplier=${retryConfig.backoffMultiplier}.` +
         (abortedByExternalSignal ? ' Request was aborted by an external signal.' : '')
     );
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-    // Dynamically require Sentry so this utility can be used without it in non-production environments
-    const Sentry = require('@sentry/react-native');
-    if (Sentry && typeof Sentry.captureException === 'function') {
-      Sentry.captureException(fallbackError);
-    }
-  } catch {
-    // ignore when Sentry not available
-  }
+  reportFetchFailure(fallbackError, url);
   throw fallbackError;
 }
 
@@ -279,17 +306,8 @@ export async function fetchWithTimeoutOnly(
     return response;
   } catch (error: any) {
     clearTimeout(timeoutId);
-    
-    // Report to Sentry if available (best-effort)
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-      const Sentry = require('@sentry/react-native');
-      if (Sentry && typeof Sentry.captureException === 'function') {
-        Sentry.captureException(error);
-      }
-    } catch {
-      // ignore when Sentry not available
-    }
+
+    reportFetchFailure(error, url);
 
     // Convert AbortError to timeout error for clarity
     if (error.name === 'AbortError') {

@@ -42,6 +42,7 @@ import type {
     MomentState,
     MomentType,
 } from '../lib/moments/types';
+import { MIN_MOMENT_VISIBLE_MS } from '../lib/moments/types';
 import { analyticsService } from '../lib/services/analytics-service';
 import { locationService } from '../lib/services/location-service';
 import { notificationService } from '../lib/services/notification-service';
@@ -555,8 +556,20 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     analyticsService.trackEvent('moment_shown', { momentType: activeMoment.type });
   }, [activeMoment, userId, patchState]);
 
+  // Nothing spaces moments apart, so resolving one can present the next in the
+  // same sheet with its buttons in the same place — a double-tap then lands on
+  // a moment the user never saw. Ignore such taps (the sheet stays open)
+  // instead of resolving it: markDismissed would refuse the write anyway,
+  // leaving local state and analytics saying "dismissed" while the server
+  // still says "shown".
+  const isPresentationTooRecent = useCallback(() => {
+    const shownAt = shownAtRef.current;
+    return shownAt == null || Date.now() - shownAt < MIN_MOMENT_VISIBLE_MS;
+  }, []);
+
   const dismiss = useCallback(() => {
     if (!activeMoment || !userId) return;
+    if (isPresentationTooRecent()) return;
     const shownAtMs = shownAtRef.current;
     hapticFeedback.light();
     void momentsService.markDismissed(userId, activeMoment.type, shownAtMs);
@@ -567,7 +580,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     });
     setActiveMoment(null);
     setActiveContent(null);
-  }, [activeMoment, userId, patchState]);
+  }, [activeMoment, userId, patchState, isPresentationTooRecent]);
 
   const snooze = useCallback(
     (hours = 24) => {
@@ -584,6 +597,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
 
   const accept = useCallback(async () => {
     if (!activeMoment || !userId) return;
+    if (isPresentationTooRecent()) return;
     hapticFeedback.light();
     analyticsService.trackEvent('moment_accepted', { momentType: activeMoment.type });
 
@@ -630,7 +644,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       });
     }
     await refresh();
-  }, [activeMoment, userId, router, refresh, patchState]);
+  }, [activeMoment, userId, router, refresh, patchState, isPresentationTooRecent]);
 
   const value = useMemo<MomentsContextValue>(
     () => ({ activeMoment, activeContent, accept, dismiss, snooze, refresh }),

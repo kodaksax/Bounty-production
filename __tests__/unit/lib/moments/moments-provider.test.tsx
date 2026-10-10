@@ -122,6 +122,18 @@ import { analyticsService } from '../../../../lib/services/analytics-service';
 
 let latest: ReturnType<typeof useMoments> | null = null;
 
+// The provider ignores taps within MIN_MOMENT_VISIBLE_MS of presentation, so
+// tests that dismiss/accept must first let the moment be "visible" that long.
+let dateNowSpy: jest.SpyInstance | null = null;
+function elapse(ms: number) {
+  const target = Date.now() + ms;
+  dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => target);
+}
+afterEach(() => {
+  dateNowSpy?.mockRestore();
+  dateNowSpy = null;
+});
+
 function Capture() {
   latest = useMoments();
   return null;
@@ -145,6 +157,7 @@ describe('MomentsProvider — dismiss does not reopen on subsequent re-renders',
 
     await waitFor(() => expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding'));
 
+    elapse(1000);
     await act(async () => {
       latest!.dismiss();
     });
@@ -170,6 +183,7 @@ describe('MomentsProvider — dismiss does not reopen on subsequent re-renders',
 
     await waitFor(() => expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding'));
 
+    elapse(1000);
     await act(async () => {
       await latest!.accept();
     });
@@ -188,6 +202,57 @@ describe('MomentsProvider — dismiss does not reopen on subsequent re-renders',
       rerender(<Root activeScreen="wallet" />);
     });
     expect(latest?.activeMoment).toBeNull();
+  });
+});
+
+// Sentry "[moments] rejected suspiciously fast or unordered dismissal"
+// (Android, 2026-10): nothing spaces moments apart, so a double-tap on one
+// moment's button lands on the next moment's button. markDismissed refused the
+// write, but the provider had already hidden the moment and tracked
+// moment_dismissed, so the user lost a prompt they never saw.
+describe('MomentsProvider — taps right after presentation are ignored', () => {
+  const { momentsService } = require('../../../../lib/moments/momentsService');
+
+  beforeEach(() => {
+    latest = null;
+    (analyticsService.trackEvent as jest.Mock).mockClear();
+    (momentsService.markDismissed as jest.Mock).mockClear();
+    (momentsService.markStarted as jest.Mock).mockClear();
+  });
+
+  it('keeps the moment open and records nothing for a dismiss inside the window', async () => {
+    render(<Root activeScreen="wallet" />);
+    await waitFor(() => expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding'));
+
+    await act(async () => {
+      latest!.dismiss();
+    });
+
+    expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding');
+    expect(momentsService.markDismissed).not.toHaveBeenCalled();
+    expect(
+      (analyticsService.trackEvent as jest.Mock).mock.calls.some(([e]) => e === 'moment_dismissed')
+    ).toBe(false);
+
+    // A deliberate tap once the window has passed still dismisses.
+    elapse(1000);
+    await act(async () => {
+      latest!.dismiss();
+    });
+    expect(latest?.activeMoment).toBeNull();
+    expect(momentsService.markDismissed).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores an accept inside the window', async () => {
+    render(<Root activeScreen="wallet" />);
+    await waitFor(() => expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding'));
+
+    await act(async () => {
+      await latest!.accept();
+    });
+
+    expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding');
+    expect(momentsService.markStarted).not.toHaveBeenCalled();
   });
 });
 

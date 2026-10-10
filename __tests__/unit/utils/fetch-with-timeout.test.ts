@@ -159,6 +159,41 @@ describe('fetchWithTimeout', () => {
     });
   });
 
+  describe('Sentry reporting', () => {
+    const Sentry = require('@sentry/react-native');
+
+    it('records a connectivity timeout as a breadcrumb, not an exception', async () => {
+      (global.fetch as jest.Mock).mockImplementation(() =>
+        new Promise((resolve, reject) => {
+          const error = new Error('The operation was aborted');
+          error.name = 'AbortError';
+          setTimeout(() => reject(error), 100);
+        })
+      );
+
+      await expect(fetchWithTimeout('https://api.example.com/wallet/transactions?limit=100', {
+        timeout: 50,
+        retries: 0,
+      })).rejects.toMatchObject({ name: 'TimeoutError' });
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: 'http.connectivity',
+          data: { url: 'https://api.example.com/wallet/transactions' },
+        })
+      );
+    });
+
+    it('still captures failures that are not connectivity', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(new TypeError('Invalid URL'));
+
+      await expect(fetchWithTimeout('not a url', { retries: 0 })).rejects.toThrow('Invalid URL');
+
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('success scenarios', () => {
     it('should return successful response immediately', async () => {
       const mockResponse = { ok: true, status: 200, json: async () => ({ data: 'test' }) };
