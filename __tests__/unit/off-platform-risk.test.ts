@@ -72,7 +72,7 @@ describe('local off-platform risk detection', () => {
     'I accept cash register repair jobs.',
     'We need a developer: https://paypal.com/docs',
     "I don't want to pay outside Bounty.",
-    '{"ciphertext":"12345678901","nonce":"abc","senderPublicKey":"12345678901"}',
+    '{"ciphertext":"AAAAAAAAAAAAAAAAAAAAAA==","nonce":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","senderPublicKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","version":"2.0"}',
     'Here is my portfolio https://example.com/paypal/contact-me',
     'Job reference: https://example.com/2025/1234567890',
     'Due on 2026-10-04',
@@ -93,6 +93,18 @@ describe('local off-platform risk detection', () => {
   it('does not allow a support address to hide a different contact', () => {
     expect(detectOffPlatformRisk(`Contact ${SUPPORT_EMAIL} or worker@example.com`)).toBe('contact');
     expect(detectOffPlatformRisk(`Contact ${SUPPORT_EMAIL}. Pay me through Venmo`)).toBe('payment');
+  });
+
+  it('only skips well-formed v2 encrypted envelopes', () => {
+    const validEnvelope =
+      '{"ciphertext":"AAAAAAAAAAAAAAAAAAAAAA==","nonce":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","senderPublicKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","version":"2.0"}';
+    expect(detectOffPlatformRisk(validEnvelope)).toBeNull();
+    expect(detectOffPlatformRisk(
+      '{"ciphertext":"PayMeViaVenmo","nonce":"abc","senderPublicKey":"key","version":"2.0"}'
+    )).toBe('payment');
+    expect(detectOffPlatformRisk(
+      '{"ciphertext":"Pay me through Venmo @hunter","nonce":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","senderPublicKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","version":"1.0"}'
+    )).toBe('payment');
   });
 
   it('does not treat attacker-controlled JSON as an encrypted envelope', () => {

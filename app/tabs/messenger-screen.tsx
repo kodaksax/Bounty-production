@@ -26,6 +26,7 @@ import { Swipeable } from "react-native-gesture-handler"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { ConnectionStatus } from "../../components/connection-status"
+import { withReplayMask } from "../../components/replay-mask"
 import {
   SEARCH_FIELD_MAX_FONT_SCALE,
   SEARCH_FIELD_TEXT,
@@ -459,7 +460,7 @@ export function MessengerScreen({
   )
 }
 
-export default MessengerScreen
+export default withReplayMask(MessengerScreen)
 
 /** A user search result, laid out like a conversation row. */
 const UserResultItem = React.memo(function UserResultItem({
