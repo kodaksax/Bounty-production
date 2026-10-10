@@ -38,6 +38,8 @@ import {
   __resetFeedbackGuards,
   SUPPORT_REQUEST_EMAIL,
   SUPPORT_REQUEST_SUBJECT,
+  SUPPORT_SUBJECT_MAX_LENGTH,
+  SUPPORT_MESSAGE_MAX_LENGTH,
   APP_STORE_URL,
   PLAY_STORE_URL,
 } from '../../../lib/services/feedback-service';
@@ -283,6 +285,34 @@ describe('Feedback Service', () => {
       const result = await feedbackService.submitSupportRequest({ subject: 'Help', message: 'Details' });
       expect(result.success).toBe(false);
       expect(result.error).toBe('Could not send your message. Please try again.');
+    });
+
+    it('rejects text over the server limits without calling the function', async () => {
+      const longSubject = await feedbackService.submitSupportRequest({
+        subject: 'a'.repeat(SUPPORT_SUBJECT_MAX_LENGTH + 1),
+        message: 'Details',
+      });
+      expect(longSubject).toEqual({
+        success: false,
+        error: `Subject must be ${SUPPORT_SUBJECT_MAX_LENGTH} characters or fewer`,
+      });
+
+      const longMessage = await feedbackService.submitSupportRequest({
+        subject: 'Help',
+        message: 'a'.repeat(SUPPORT_MESSAGE_MAX_LENGTH + 1),
+      });
+      expect(longMessage).toEqual({
+        success: false,
+        error: `Message must be ${SUPPORT_MESSAGE_MAX_LENGTH} characters or fewer`,
+      });
+      expect(invokePayments).not.toHaveBeenCalled();
+    });
+
+    it('explains a rate-limit rejection', async () => {
+      invokePayments.mockRejectedValue({ type: 'api_error', status: 429, message: 'Request failed (429)' });
+      const result = await feedbackService.submitSupportRequest({ subject: 'Help', message: 'Details' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/wait a while/);
     });
 
     it('ignores an identical resubmission inside the duplicate window', async () => {

@@ -25,12 +25,15 @@ export type FeatureRequestStatus =
 export const SUPPORT_REQUEST_EMAIL = 'support@bountyfinder.app';
 export const SUPPORT_REQUEST_SUBJECT = 'Bounty Support Request';
 
+/** Mirrors the limits enforced by the contact-support edge function. */
+export const SUPPORT_SUBJECT_MAX_LENGTH = 200;
+export const SUPPORT_MESSAGE_MAX_LENGTH = 5000;
+
 /**
- * Public store listings used by the "Rate Bounty" action.
- * NOTE: `APP_STORE_URL` contains a placeholder App Store ID that must be
- * replaced with the real numeric app ID before production release.
+ * Public store listings used by the "Rate Bounty" action. The App Store ID is
+ * the `ascAppId` in eas.json; `action=write-review` opens the review sheet.
  */
-export const APP_STORE_URL = 'https://apps.apple.com/app/id0000000000';
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6756679797?action=write-review';
 export const PLAY_STORE_URL =
   'https://play.google.com/store/apps/details?id=com.bountyapp.app';
 
@@ -275,6 +278,18 @@ export const feedbackService = {
     if (!message) {
       return { success: false, error: 'Message is required' };
     }
+    if (subject.length > SUPPORT_SUBJECT_MAX_LENGTH) {
+      return {
+        success: false,
+        error: `Subject must be ${SUPPORT_SUBJECT_MAX_LENGTH} characters or fewer`,
+      };
+    }
+    if (message.length > SUPPORT_MESSAGE_MAX_LENGTH) {
+      return {
+        success: false,
+        error: `Message must be ${SUPPORT_MESSAGE_MAX_LENGTH} characters or fewer`,
+      };
+    }
 
     const userId = authProfileService.getAuthUserId();
     if (!userId) {
@@ -304,6 +319,12 @@ export const feedbackService = {
       return { success: true, id: data?.id };
     } catch (error) {
       console.error('[FeedbackService] Support request failed:', error);
+      if ((error as { status?: number } | null)?.status === 429) {
+        return {
+          success: false,
+          error: "You've sent several messages recently. Please wait a while before sending another.",
+        };
+      }
       return { success: false, error: 'Could not send your message. Please try again.' };
     } finally {
       inFlight.delete(dedupeKey);

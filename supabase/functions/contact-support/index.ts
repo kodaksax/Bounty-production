@@ -7,6 +7,11 @@
 // support can answer by replying to the message. The caller cannot choose the
 // recipient — it is fixed server-side.
 //
+// Rate limit: at most RATE_LIMIT_MAX sends per user per RATE_LIMIT_WINDOW,
+// counted in public.support_requests (service-role only). Each request
+// reserves a row before counting, so concurrent requests cannot both slip
+// under the limit; a rejected or failed send deletes its reservation.
+//
 // Uses the same RESEND_API_KEY / NOTIFICATION_FROM_EMAIL secrets as
 // send-notification-email, so no new secrets are needed.
 
@@ -31,6 +36,8 @@ const fromEmail = Deno.env.get('NOTIFICATION_FROM_EMAIL') || 'Bounty <notificati
 
 const MAX_SUBJECT_LENGTH = 200
 const MAX_MESSAGE_LENGTH = 5000
+const RATE_LIMIT_MAX = 5
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -56,12 +63,17 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Please sign in to contact support.' }, 401)
   }
 
-  let body: Record<string, unknown>
+  let parsed: unknown
   try {
-    body = await req.json()
+    parsed = await req.json()
   } catch {
     return jsonResponse({ error: 'Invalid request body' }, 400)
   }
+  // JSON null, arrays and primitives parse fine but are not a request record.
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return jsonResponse({ error: 'Invalid request body' }, 400)
+  }
+  const body = parsed as Record<string, unknown>
 
   const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
   const message = typeof body.message === 'string' ? body.message.trim() : ''
@@ -75,6 +87,37 @@ Deno.serve(async (req: Request) => {
   }
   const appVersion = typeof body.appVersion === 'string' ? body.appVersion.slice(0, 50) : 'unknown'
   const platform = typeof body.platform === 'string' ? body.platform.slice(0, 20) : 'unknown'
+
+  const { data: reservation, error: reserveError } = await supabaseAdmin
+    .from('support_requests')
+    .insert({ user_id: user.id, subject })
+    .select('id')
+    .single()
+  if (reserveError || !reservation) {
+    console.error('[contact-support] Failed to reserve rate-limit slot', reserveError)
+    return jsonResponse({ error: 'Support messaging is temporarily unavailable.' }, 500)
+  }
+  const releaseReservation = () =>
+    supabaseAdmin.from('support_requests').delete().eq('id', reservation.id)
+
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
+  const { count, error: countError } = await supabaseAdmin
+    .from('support_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', windowStart)
+  if (countError || count === null) {
+    console.error('[contact-support] Failed to count recent requests', countError)
+    await releaseReservation()
+    return jsonResponse({ error: 'Support messaging is temporarily unavailable.' }, 500)
+  }
+  if (count > RATE_LIMIT_MAX) {
+    await releaseReservation()
+    return jsonResponse(
+      { error: "You've sent several messages recently. Please wait a while before sending another.", code: 'RATE_LIMITED' },
+      429
+    )
+  }
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
@@ -118,10 +161,15 @@ Deno.serve(async (req: Request) => {
   if (!resp.ok) {
     const errBody = await resp.text().catch(() => '')
     console.error('[contact-support] Resend error', resp.status, errBody.slice(0, 300))
+    await releaseReservation()
     return jsonResponse({ error: 'Could not send your message. Please try again.' }, 502)
   }
 
   const result = await resp.json().catch(() => ({}))
+  await supabaseAdmin
+    .from('support_requests')
+    .update({ email_id: (result as { id?: string }).id ?? null })
+    .eq('id', reservation.id)
   console.log('[contact-support] sent', { userId: user.id, emailId: (result as { id?: string }).id })
   return jsonResponse({ success: true, id: (result as { id?: string }).id })
 })
