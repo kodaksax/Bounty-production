@@ -10,7 +10,8 @@ import {
     type DimensionValue,
 } from 'react-native';
 import ClusteredMapView from 'react-native-map-clustering';
-import { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import { Marker, type Region } from 'react-native-maps';
+import { isNativeMapAvailable, mapProvider } from '../../lib/config/maps';
 import { useLocation } from '../../app/hooks/useLocation';
 import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
 import { analyticsService } from '../../lib/services/analytics-service';
@@ -73,7 +74,28 @@ interface BountyMapViewProps {
   height?: DimensionValue;
 }
 
-export function BountyMapView({ category, height = '100%' }: BountyMapViewProps) {
+/**
+ * Mounting any map view on an Android binary without a Google Maps key is a
+ * native crash, so callers get a placeholder instead — whatever they gate on.
+ */
+export function BountyMapView(props: BountyMapViewProps) {
+  if (!isNativeMapAvailable) return <MapUnavailable height={props.height} />;
+  return <BountyMapViewInner {...props} />;
+}
+
+function MapUnavailable({ height = '100%' }: { height?: DimensionValue }) {
+  const { theme } = useAppThemeContext();
+  return (
+    <View style={{ height, width: '100%', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <MaterialIcons name="map" size={28} color={theme.textSecondary} />
+      <Text style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center' }}>
+        Map view isn't available on this device yet.
+      </Text>
+    </View>
+  );
+}
+
+function BountyMapViewInner({ category, height = '100%' }: BountyMapViewProps) {
   const { theme } = useAppThemeContext();
   const router = useRouter();
   const { location: userLocation, permission } = useLocation();
@@ -133,7 +155,7 @@ export function BountyMapView({ category, height = '100%' }: BountyMapViewProps)
     <View style={{ height, width: '100%' }}>
       <ClusteredMapView
         // @ts-ignore — react-native-map-clustering's types lag react-native-maps'
-        provider={PROVIDER_GOOGLE}
+        provider={mapProvider}
         style={{ flex: 1 }}
         initialRegion={initialRegion}
         showsTraffic

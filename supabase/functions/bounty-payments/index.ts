@@ -25,6 +25,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // @ts-ignore: Allow runtime npm import for Deno/edge function.
 import Stripe from 'npm:stripe@14';
 import { checkOwnerRefundGate } from '../_shared/owner-refund-gate.ts';
+import { reserveAccountOperation, finishAccountOperation, isDefinitiveStripeRejection } from '../_shared/connect-account-operations.ts';
 
 declare const Deno: any;
 
@@ -1030,6 +1031,15 @@ Deno.serve(async (req: Request) => {
         };
 
         // 1. Capture the full authorized amount.
+        let accountOperation: string;
+        try {
+          accountOperation = await reserveAccountOperation(
+            supabaseAdmin, v3HunterId, v3Hunter.stripe_connect_account_id,
+            'bounty_release_v3', `release_v3:${bountyId}:${requestId}`
+          );
+        } catch {
+          return reply({ error: 'Hunter payout account changed or is busy. Resume/cancel account replacement or contact support for reconciliation.', code: 'account_operation_blocked' }, 409);
+        }
         let v3Captured: any;
         try {
           v3Captured = await stripe.paymentIntents.capture(
@@ -1038,6 +1048,9 @@ Deno.serve(async (req: Request) => {
             { idempotencyKey: `v3_capture_${bountyId}` }
           );
         } catch (capErr: any) {
+          if (isDefinitiveStripeRejection(capErr)) await finishAccountOperation(supabaseAdmin, accountOperation);
+          else return await failCapture('capture_uncertain',
+            'We could not confirm the charge. Financial operations are blocked until support reconciles this release.', 503);
           const expired =
             capErr?.code === 'payment_intent_unexpected_state' ||
             capErr?.raw?.code === 'payment_intent_unexpected_state';
@@ -1098,6 +1111,7 @@ Deno.serve(async (req: Request) => {
             { idempotencyKey: `v3_release_${bountyId}` }
           );
         } catch (trErr: any) {
+          if (isDefinitiveStripeRejection(trErr)) await finishAccountOperation(supabaseAdmin, accountOperation);
           // Captured but not transferred: the money is sitting on the platform
           // balance, so this must be loud rather than silent.
           console.error('[bounty-payments] v3 transfer failed AFTER capture', {
@@ -1108,7 +1122,9 @@ Deno.serve(async (req: Request) => {
           });
           return await failCapture(
             'transfer_failed_after_capture',
-            trErr?.message ?? 'The payment was captured but could not be sent to the hunter.',
+            isDefinitiveStripeRejection(trErr)
+              ? (trErr?.message ?? 'The payment was captured but could not be sent to the hunter.')
+              : 'We could not confirm the transfer. Financial operations are blocked until support reconciles this release.',
             502
           );
         }
@@ -1148,7 +1164,7 @@ Deno.serve(async (req: Request) => {
           });
         }
 
-        await withDbTimeout(
+        const { error: v3FundingUpdateError } = await withDbTimeout(
           supabaseAdmin
             .from('bounty_v3_funding')
             .update({
@@ -1159,7 +1175,10 @@ Deno.serve(async (req: Request) => {
               updated_at: new Date().toISOString(),
             })
             .eq('bounty_id', bountyId)
-        );
+        ) as any;
+        if (!v3RelLedgerErr && !v3FundingUpdateError) {
+          await finishAccountOperation(supabaseAdmin, accountOperation);
+        }
 
         return reply({
           released: false,
@@ -1328,6 +1347,15 @@ Deno.serve(async (req: Request) => {
         bp.status === 'failed' && bp.stripe_transfer_id
           ? `bounty_release_retry_${bp.id}_${bp.stripe_transfer_id}`
           : `bounty_release_${bp.id}`;
+      let accountOperation: string;
+      try {
+        accountOperation = await reserveAccountOperation(
+          supabaseAdmin, hunterId, hunterProfile.stripe_connect_account_id,
+          'bounty_release_v2', `release_v2:${bp.id}:${requestId}`
+        );
+      } catch {
+        return reply({ error: 'Hunter payout account changed or is busy. Resume/cancel account replacement or contact support for reconciliation.', code: 'account_operation_blocked' }, 409);
+      }
       let transfer: any;
       try {
         transfer = await stripe.transfers.create(
@@ -1347,6 +1375,7 @@ Deno.serve(async (req: Request) => {
           { idempotencyKey: transferIdempotencyKey }
         );
       } catch (transferErr: any) {
+        if (isDefinitiveStripeRejection(transferErr)) await finishAccountOperation(supabaseAdmin, accountOperation);
         // The charge was captured successfully; only the transfer failed. Leave
         // status at 'captured' so a retry goes straight back to this step. No
         // funds are lost — they remain on the platform balance.
@@ -1359,7 +1388,9 @@ Deno.serve(async (req: Request) => {
         return reply(
           {
             error:
-              'Payment is held safely but the transfer to the hunter failed. No funds were lost — please retry.',
+              isDefinitiveStripeRejection(transferErr)
+                ? 'Payment is held safely but the transfer to the hunter failed. Please retry.'
+                : 'We could not confirm the transfer. Financial operations are blocked until support reconciles this release.',
             code: 'transfer_failed',
             retryable: true,
           },
@@ -1396,15 +1427,16 @@ Deno.serve(async (req: Request) => {
         return reply(
           {
             error:
-              'Stripe accepted the transfer but its record could not be updated. Retrying is safe and reconciliation will repair it.',
+              'Stripe accepted the transfer but its record could not be confirmed. Financial operations are blocked; contact support for reconciliation before retrying.',
             code: 'record_update_failed',
             transferId: transfer.id,
-            retryable: true,
+            retryable: false,
           },
           500
         );
       }
 
+      await finishAccountOperation(supabaseAdmin, accountOperation);
       return reply({
         released: false,
         transferId: transfer.id,

@@ -10,7 +10,13 @@
 import * as Sentry from '@sentry/react-native';
 import { analyticsService } from '../services/analytics-service';
 import { supabase } from '../supabase';
-import { MAX_MOMENT_SHOWS, type MomentState, type MomentStatus, type MomentType } from './types';
+import {
+  MAX_MOMENT_SHOWS,
+  MIN_MOMENT_VISIBLE_MS,
+  type MomentState,
+  type MomentStatus,
+  type MomentType,
+} from './types';
 
 interface MomentRow {
   moment_type: string;
@@ -108,7 +114,9 @@ export const momentsService = {
     const referenceShownAt =
       shownAtMs ?? (persistedShownAt ? new Date(persistedShownAt).getTime() : null);
     const msVisible = referenceShownAt == null ? null : Date.now() - referenceShownAt;
-    if (msVisible == null || msVisible < 750) {
+    // Backstop only: MomentsProvider already ignores taps this early, so this
+    // firing means a dismissal arrived by some other path.
+    if (msVisible == null || msVisible < MIN_MOMENT_VISIBLE_MS) {
       Sentry.captureMessage('[moments] rejected suspiciously fast or unordered dismissal', {
         level: 'warning',
         extra: { momentType, msVisible },

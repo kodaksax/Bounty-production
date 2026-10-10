@@ -13,7 +13,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Href } from 'expo-router';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../../components/ui/branding-logo';
@@ -21,6 +21,7 @@ import { markInitialNavigationDone } from '../../initial-navigation/initialNavig
 
 export default function ConnectRefreshScreen() {
   const router = useRouter();
+  const { replacementId } = useLocalSearchParams<{ replacementId?: string }>();
   const insets = useSafeAreaInsets();
 
   const handleRestartSetup = () => {
@@ -30,7 +31,9 @@ export default function ConnectRefreshScreen() {
       /* ignore */
     }
     // Navigate to the wallet/withdraw area where onboarding can be restarted
-    router.replace('/tabs/wallet-screen' as Href);
+    if (typeof replacementId === 'string' && replacementId) {
+      router.replace({ pathname: '/wallet/connect/embedded-onboarding', params: { replacementId } } as Href);
+    } else router.replace('/tabs/wallet-screen' as Href);
   };
 
   return (
@@ -60,7 +63,7 @@ export default function ConnectRefreshScreen() {
         </View>
 
         <TouchableOpacity style={styles.primaryButton} onPress={handleRestartSetup}>
-          <Text style={styles.primaryButtonText}>Return to Wallet</Text>
+          <Text style={styles.primaryButtonText}>{replacementId ? 'Resume New Account Setup' : 'Return to Wallet'}</Text>
           <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
         </TouchableOpacity>
       </View>

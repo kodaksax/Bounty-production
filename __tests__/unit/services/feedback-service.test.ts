@@ -21,6 +21,11 @@ jest.mock('../../../lib/services/storage-service', () => ({
   },
 }));
 
+// Mock the direct edge-function caller used by submitSupportRequest
+jest.mock('../../../lib/services/stripe-internal', () => ({
+  invokePayments: jest.fn(),
+}));
+
 // Mock auth-profile-service
 jest.mock('../../../lib/services/auth-profile-service', () => ({
   authProfileService: {
@@ -33,6 +38,8 @@ import {
   __resetFeedbackGuards,
   SUPPORT_REQUEST_EMAIL,
   SUPPORT_REQUEST_SUBJECT,
+  SUPPORT_SUBJECT_MAX_LENGTH,
+  SUPPORT_MESSAGE_MAX_LENGTH,
   APP_STORE_URL,
   PLAY_STORE_URL,
 } from '../../../lib/services/feedback-service';
@@ -40,6 +47,7 @@ import {
 const { supabase } = require('../../../lib/supabase');
 const { storageService } = require('../../../lib/services/storage-service');
 const { authProfileService } = require('../../../lib/services/auth-profile-service');
+const { invokePayments } = require('../../../lib/services/stripe-internal');
 const { Platform } = require('react-native');
 
 /** Build a Supabase query chain for `.insert(...).select(...).single()`. */
@@ -237,6 +245,82 @@ describe('Feedback Service', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('insert failed');
+    });
+  });
+
+  describe('submitSupportRequest', () => {
+    it('sends the message through the contact-support edge function', async () => {
+      invokePayments.mockResolvedValue({ success: true, id: 'email-1' });
+
+      const result = await feedbackService.submitSupportRequest({
+        subject: '  Payout missing ',
+        message: ' My payout has not arrived. ',
+      });
+
+      expect(result).toEqual({ success: true, id: 'email-1' });
+      expect(invokePayments).toHaveBeenCalledWith('contact-support', {
+        body: expect.objectContaining({
+          subject: 'Payout missing',
+          message: 'My payout has not arrived.',
+          platform: 'ios',
+        }),
+      });
+    });
+
+    it('requires a subject and message', async () => {
+      expect((await feedbackService.submitSupportRequest({ subject: '', message: 'x' })).success).toBe(false);
+      expect((await feedbackService.submitSupportRequest({ subject: 'x', message: '  ' })).success).toBe(false);
+      expect(invokePayments).not.toHaveBeenCalled();
+    });
+
+    it('requires an authenticated user', async () => {
+      authProfileService.getAuthUserId.mockReturnValue(null);
+      const result = await feedbackService.submitSupportRequest({ subject: 'Help', message: 'Details' });
+      expect(result).toEqual({ success: false, error: 'User not authenticated' });
+      expect(invokePayments).not.toHaveBeenCalled();
+    });
+
+    it('reports failure when the edge function errors', async () => {
+      invokePayments.mockRejectedValue({ type: 'api_error', status: 502, message: 'Request failed (502)' });
+      const result = await feedbackService.submitSupportRequest({ subject: 'Help', message: 'Details' });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Could not send your message. Please try again.');
+    });
+
+    it('rejects text over the server limits without calling the function', async () => {
+      const longSubject = await feedbackService.submitSupportRequest({
+        subject: 'a'.repeat(SUPPORT_SUBJECT_MAX_LENGTH + 1),
+        message: 'Details',
+      });
+      expect(longSubject).toEqual({
+        success: false,
+        error: `Subject must be ${SUPPORT_SUBJECT_MAX_LENGTH} characters or fewer`,
+      });
+
+      const longMessage = await feedbackService.submitSupportRequest({
+        subject: 'Help',
+        message: 'a'.repeat(SUPPORT_MESSAGE_MAX_LENGTH + 1),
+      });
+      expect(longMessage).toEqual({
+        success: false,
+        error: `Message must be ${SUPPORT_MESSAGE_MAX_LENGTH} characters or fewer`,
+      });
+      expect(invokePayments).not.toHaveBeenCalled();
+    });
+
+    it('explains a rate-limit rejection', async () => {
+      invokePayments.mockRejectedValue({ type: 'api_error', status: 429, message: 'Request failed (429)' });
+      const result = await feedbackService.submitSupportRequest({ subject: 'Help', message: 'Details' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/wait a while/);
+    });
+
+    it('ignores an identical resubmission inside the duplicate window', async () => {
+      invokePayments.mockResolvedValue({ success: true, id: 'email-1' });
+      await feedbackService.submitSupportRequest({ subject: 'Help', message: 'Details' });
+      const second = await feedbackService.submitSupportRequest({ subject: 'Help', message: 'Details' });
+      expect(second).toEqual({ success: false, error: 'Duplicate submission ignored' });
+      expect(invokePayments).toHaveBeenCalledTimes(1);
     });
   });
 

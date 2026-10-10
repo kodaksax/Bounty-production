@@ -11,6 +11,31 @@ function slug(value: string | undefined, fallback: string): string {
   return normalized.slice(0, 100) || fallback;
 }
 
+const APP_STORE_URL = 'https://apps.apple.com/app/id6756679797';
+const PLAY_STORE_PACKAGE = 'app.bountyfinder.BOUNTYExpo';
+
+// Used when Branch is not configured or link creation fails. Never redirects to
+// the caller-supplied `landing` param, so this cannot become an open redirect.
+function storeFallbackUrl(
+  userAgent: string,
+  origin: string,
+  utm: { source: string; medium: string; campaign: string }
+): string {
+  if (/iphone|ipad|ipod/i.test(userAgent)) return APP_STORE_URL;
+  if (/android/i.test(userAgent)) {
+    const referrer = new URLSearchParams({
+      utm_source: utm.source,
+      utm_medium: utm.medium,
+      utm_campaign: utm.campaign,
+    }).toString();
+    return `https://play.google.com/store/apps/details?${new URLSearchParams({
+      id: PLAY_STORE_PACKAGE,
+      referrer,
+    })}`;
+  }
+  return origin;
+}
+
 async function captureRedirect(properties: Record<string, unknown>): Promise<void> {
   const apiKey = Deno.env.get('POSTHOG_PROJECT_API_KEY');
   if (!apiKey) return;
@@ -38,9 +63,6 @@ Deno.serve(async request => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });
 
-  const branchKey = Deno.env.get('BRANCH_KEY');
-  if (!branchKey) return new Response('App link is not configured', { status: 503 });
-
   const requestUrl = new URL(request.url);
   const segments = requestUrl.pathname.split('/').filter(Boolean);
   const functionIndex = segments.lastIndexOf('app-link');
@@ -56,6 +78,13 @@ Deno.serve(async request => {
     requestUrl.searchParams.get('landing')?.slice(0, 1000) ??
     `${configuredOrigin}/r/${source}/${campaign}`;
   const referrer = request.headers.get('referer')?.slice(0, 1000);
+  const fallbackUrl = storeFallbackUrl(request.headers.get('user-agent') ?? '', configuredOrigin, {
+    source,
+    medium,
+    campaign,
+  });
+
+  const branchKey = Deno.env.get('BRANCH_KEY');
 
   await captureRedirect({
     utm_source: source,
@@ -63,37 +92,43 @@ Deno.serve(async request => {
     utm_campaign: campaign,
     initial_referrer: referrer,
     initial_landing_page: landingPage,
+    link_provider: branchKey ? 'branch' : 'store_fallback',
   });
 
-  const branchResponse = await fetch('https://api2.branch.io/v1/url', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(5000),
-    body: JSON.stringify({
-      branch_key: branchKey,
-      channel: source,
-      feature: medium,
-      campaign,
-      data: {
-        ...(deepLinkPath ? { $deeplink_path: deepLinkPath } : {}),
-        $canonical_url: landingPage,
-        utm_source: source,
-        utm_medium: medium,
-        utm_campaign: campaign,
-        initial_referrer: referrer,
-        initial_landing_page: landingPage,
-        install_source: source,
-        install_campaign: campaign,
-      },
-    }),
-  });
+  if (!branchKey) return Response.redirect(fallbackUrl, 302);
 
-  if (!branchResponse.ok) {
-    console.error('[app-link] Branch link creation failed', branchResponse.status);
-    return new Response('App link is temporarily unavailable', { status: 502 });
+  let url: string | undefined;
+  try {
+    const branchResponse = await fetch('https://api2.branch.io/v1/url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+      body: JSON.stringify({
+        branch_key: branchKey,
+        channel: source,
+        feature: medium,
+        campaign,
+        data: {
+          ...(deepLinkPath ? { $deeplink_path: deepLinkPath } : {}),
+          $canonical_url: landingPage,
+          utm_source: source,
+          utm_medium: medium,
+          utm_campaign: campaign,
+          initial_referrer: referrer,
+          initial_landing_page: landingPage,
+          install_source: source,
+          install_campaign: campaign,
+        },
+      }),
+    });
+    if (!branchResponse.ok) {
+      console.error('[app-link] Branch link creation failed', branchResponse.status);
+    } else {
+      ({ url } = (await branchResponse.json()) as { url?: string });
+    }
+  } catch (error) {
+    console.error('[app-link] Branch link creation failed', error);
   }
-  const { url } = (await branchResponse.json()) as { url?: string };
-  if (!url) return new Response('App link is temporarily unavailable', { status: 502 });
 
-  return Response.redirect(url, 302);
+  return Response.redirect(url ?? fallbackUrl, 302);
 });

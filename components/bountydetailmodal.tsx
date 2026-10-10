@@ -143,6 +143,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const { exact: exactLocation } = useBountyExactLocation(bounty.id, isLocationParticipant)
   const locationText = formatExactAddress(exactLocation) || formatPublicLocation(bounty)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
+  const [cachedImageUris, setCachedImageUris] = useState<Record<string, string>>({})
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [viewerAttachment, setViewerAttachment] = useState<AttachmentMeta | null>(null)
   const [viewerVisible, setViewerVisible] = useState(false)
@@ -295,6 +296,27 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
     return () => { mounted = false }
   }, [detailBounty, initialBounty])
+
+  useEffect(() => {
+    let mounted = true
+
+    const resolveCachedImages = async () => {
+      const resolved = await Promise.all(actualAttachments.map(async attachment => {
+        const uri = attachment.remoteUri || attachment.uri
+        if (!uri?.startsWith('attachment-cache-')) return null
+
+        const cachedUri = await storageService.getFromAsyncStorage(uri)
+        return cachedUri ? [attachment.id, cachedUri] as const : null
+      }))
+
+      if (mounted) {
+        setCachedImageUris(Object.fromEntries(resolved.filter((entry): entry is readonly [string, string] => entry !== null)))
+      }
+    }
+
+    void resolveCachedImages()
+    return () => { mounted = false }
+  }, [actualAttachments])
 
   // Cleanup effect: clear timeouts and mark as unmounted
   useEffect(() => {
@@ -747,7 +769,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                           style={{ width: carouselWidth }}
                         >
                           <Image
-                            source={{ uri: att.remoteUri || att.uri }}
+                            source={{ uri: cachedImageUris[att.id] || att.remoteUri || att.uri }}
                             style={[styles.carouselImage, { width: carouselWidth }]}
                             resizeMode="cover"
                           />

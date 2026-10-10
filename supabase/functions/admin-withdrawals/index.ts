@@ -29,6 +29,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
+import { reserveAccountOperation, finishAccountOperation, isDefinitiveStripeRejection, isDefinitiveDatabaseRejection, withdrawalAccountMatches } from '../_shared/connect-account-operations.ts';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
 import { mayAdminReopenFailedWithdrawal } from '../_shared/payout-state.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
@@ -760,6 +761,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const amount = Math.abs(t.amount);
+    if (!await withdrawalAccountMatches(supabase, targetUserId, t.stripe_connect_account_id, p.stripe_connect_account_id)) {
+      return jsonResponse({ error: 'This transaction belongs to an old payout account. Reconcile it without retargeting its history.' }, 409);
+    }
 
     // The state machine, consulted explicitly rather than assumed. `failed` is
     // an absorbing state for webhooks; this admin path is its single audited
@@ -884,11 +888,20 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Insufficient balance for retry' }, 400);
     }
 
-    const { error: rpcError } = await supabase.rpc('withdraw_balance', {
-      p_user_id: targetUserId,
-      p_amount: amount,
-    });
+    let accountOperation: string;
+    try {
+      accountOperation = await reserveAccountOperation(
+        supabase, targetUserId, p.stripe_connect_account_id, 'admin_retry',
+        `admin_retry:${transactionId}:${retryCount + 1}:${crypto.randomUUID()}`
+      );
+    } catch {
+      return jsonResponse({ error: 'Account operation in progress or awaiting reconciliation. Contact support before retrying.' }, 409);
+    }
+    const { error: rpcError } = await supabase.rpc('retry_failed_withdrawal', {
+      p_transaction_id: transactionId, p_user_id: targetUserId, p_amount: amount,
+    }).single();
     if (rpcError) {
+      if (isDefinitiveDatabaseRejection(rpcError)) await finishAccountOperation(supabase, accountOperation);
       await logAdminAction(supabase, {
         adminUserId: adminUser.id,
         actionType: 'force_retry_withdrawal',
@@ -919,10 +932,24 @@ Deno.serve(async (req: Request) => {
         { idempotencyKey: `admin_retry_${transactionId}_${retryCount + 1}` }
       );
     } catch (stripeError) {
-      const { error: retryRefundError } = await supabase.rpc('update_balance', {
-        p_user_id: targetUserId,
-        p_amount: amount,
-      });
+      if (!isDefinitiveStripeRejection(stripeError)) {
+        await logAdminAction(supabase, {
+          adminUserId: adminUser.id, actionType: 'force_retry_withdrawal',
+          targetUserId, targetTransactionId: transactionId, amount, reason,
+          result: 'failure', metadata: { accountOperation, outcome: 'uncertain' },
+        });
+        return jsonResponse({
+          error: 'Transfer outcome is unknown. Withdrawal remains reserved; reconcile with Stripe before retrying or replacing the account.',
+          code: 'account_operation_uncertain',
+        }, 503);
+      }
+      const { error: retryRefundError } = await supabase.rpc('fail_legacy_withdrawal', {
+        p_transaction_id: transactionId, p_user_id: targetUserId,
+        p_metadata_patch: { admin_retry_failed: true },
+      }).single();
+      if (!retryRefundError && isDefinitiveStripeRejection(stripeError)) {
+        await finishAccountOperation(supabase, accountOperation);
+      }
       if (retryRefundError) {
         logCritical('balance refund after failed admin retry transfer also failed — manual reconciliation required', {
           targetUserId, amount, error: retryRefundError,
@@ -1034,6 +1061,7 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
+    if (!retryUpdateError && retryPayout) await finishAccountOperation(supabase, accountOperation);
 
     await logAdminAction(supabase, {
       adminUserId: adminUser.id,
@@ -1377,6 +1405,19 @@ Deno.serve(async (req: Request) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
 
+    const originalTransfer = await stripe.transfers.retrieve(t.stripe_transfer_id);
+    const destinationId = typeof originalTransfer.destination === 'string'
+      ? originalTransfer.destination : originalTransfer.destination?.id;
+    if (!destinationId) return jsonResponse({ error: 'Could not verify the historical transfer account.' }, 409);
+    let accountOperation: string;
+    try {
+      accountOperation = await reserveAccountOperation(
+        supabase, t.user_id, destinationId, 'admin_reversal',
+        `admin_reversal:${transactionId}:${crypto.randomUUID()}`
+      );
+    } catch {
+      return jsonResponse({ error: 'Account is busy or needs reconciliation. Do not reverse while replacement is pending.' }, 409);
+    }
     let reversal: Stripe.TransferReversal;
     try {
       reversal = await stripe.transfers.createReversal(t.stripe_transfer_id, {
@@ -1386,8 +1427,9 @@ Deno.serve(async (req: Request) => {
           admin_user_id: adminUser.id,
           reason,
         },
-      });
+      }, { idempotencyKey: `admin_reverse_${transactionId}` });
     } catch (stripeError) {
+      if (isDefinitiveStripeRejection(stripeError)) await finishAccountOperation(supabase, accountOperation);
       const errMsg = (stripeError as { message?: string })?.message ?? 'Unknown Stripe error';
       await logAdminAction(supabase, {
         adminUserId: adminUser.id,
@@ -1419,6 +1461,7 @@ Deno.serve(async (req: Request) => {
         transactionId, reversalId: reversal.id, error: updateError,
       });
     }
+    if (!updateError) await finishAccountOperation(supabase, accountOperation);
 
     await logAdminAction(supabase, {
       adminUserId: adminUser.id,
