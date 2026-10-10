@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Text, View } from 'react-native';
-import MapView, { Circle, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Circle } from 'react-native-maps';
+import { isNativeMapAvailable, mapProvider } from '../../lib/config/maps';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
 interface ApproxLocationMapProps {
@@ -22,7 +23,7 @@ interface ApproxLocationMapProps {
 export function ApproxLocationMap({ approxLatitude, approxLongitude, neighborhood, height = 140 }: ApproxLocationMapProps) {
   const { theme } = useAppThemeContext();
 
-  if (approxLatitude == null || approxLongitude == null) {
+  if (!isNativeMapAvailable || approxLatitude == null || approxLongitude == null) {
     return (
       <View
         style={{
@@ -48,7 +49,7 @@ export function ApproxLocationMap({ approxLatitude, approxLongitude, neighborhoo
   return (
     <View style={{ height, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.border }}>
       <MapView
-        provider={PROVIDER_GOOGLE}
+        provider={mapProvider}
         style={{ flex: 1 }}
         initialRegion={region}
         scrollEnabled={false}

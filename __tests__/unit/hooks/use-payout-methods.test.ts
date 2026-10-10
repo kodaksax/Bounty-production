@@ -41,6 +41,39 @@ describe('usePayoutMethods', () => {
     (useAuthContext as jest.Mock).mockReturnValue({ session: { access_token: 'test-token' } });
   });
 
+  it('prepares authenticated confirmed replacement without opening the payout dashboard', async () => {
+    mockFetchSequence([
+      { ok: false }, { ok: false },
+      { ok: true, json: async () => ({ replacementId: 'replacement' }) },
+    ]);
+    const { result } = renderHook(() => usePayoutMethods());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    let replacement;
+    await act(async () => { replacement = await result.current.prepareAccountReplacement(); });
+    expect(replacement).toEqual({ ok: true, replacementId: 'replacement' });
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      'https://api.example.com/connect/prepare-account-replacement',
+      expect.objectContaining({
+        method: 'POST', body: JSON.stringify({ confirmed: true }),
+        headers: expect.objectContaining({ Authorization: 'Bearer ' + 'test-token' }),
+      })
+    );
+    expect(openUrlInBrowser).not.toHaveBeenCalled();
+  });
+
+  it('failed prepare is retryable and does not invent an account token', async () => {
+    mockFetchSequence([
+      { ok: true }, { ok: true }, { ok: false, json: async () => ({ error: 'Finish pending payouts first' }) },
+    ]);
+    const { result } = renderHook(() => usePayoutMethods());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    let replacement;
+    await act(async () => { replacement = await result.current.prepareAccountReplacement(); });
+    expect(replacement).toEqual({ ok: false, error: 'Finish pending payouts first' });
+    await act(async () => { replacement = await result.current.prepareAccountReplacement(); });
+    expect(replacement).toEqual({ ok: false, error: 'Finish pending payouts first' });
+  });
+
   it('fetches bank accounts and debit cards in parallel and merges the results', async () => {
     mockFetchSequence([
       {

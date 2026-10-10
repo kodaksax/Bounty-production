@@ -119,8 +119,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       // Silent so it doesn't flash the balance skeleton, and keyed on the
       // stable access-token string rather than the whole `session` object —
       // the object's identity churns on every token refresh / re-render, which
-      // was re-firing this refresh (and the flash) repeatedly.
-      refreshFromApi(accessToken, { silent: true });
+      // was re-firing this refresh (and the flash) repeatedly. Coalesce: if the
+      // provider's startup sync is already fetching with this token, join it.
+      refreshFromApi(accessToken, { silent: true, coalesce: true });
     }
   }, [accessToken, hasValidSession, refreshFromApi]);
 

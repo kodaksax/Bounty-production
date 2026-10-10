@@ -311,9 +311,10 @@ describe('connect edge function — route wiring', () => {
 
 describe('connect edge function — create-account-link capability regression', () => {
   test('requests both capabilities for new accounts and backfills legacy accounts before creating the account link', () => {
-    const createStart = connectSource.indexOf('stripe.accounts.create({');
-    const updateStart = connectSource.indexOf('stripe.accounts.update(accountId, {');
-    const linkStart = connectSource.indexOf('stripe.accountLinks.create({');
+    const routeStart = connectSource.indexOf("if (subPath === '/create-account-link')");
+    const createStart = connectSource.indexOf('stripe.accounts.create({', routeStart);
+    const updateStart = connectSource.indexOf('stripe.accounts.update(accountId, {', routeStart);
+    const linkStart = connectSource.indexOf('stripe.accountLinks.create({', routeStart);
 
     expect(createStart).toBeGreaterThan(-1);
     expect(updateStart).toBeGreaterThan(-1);

@@ -159,12 +159,7 @@
       ],
       "expo-font",
       "@react-native-community/datetimepicker",
-      [
-        "react-native-maps",
-        {
-          "iosGoogleMapsApiKey": "${EXPO_GOOGLE_MAPS_IOS_KEY}"
-        }
-      ],
+      "react-native-maps",
       [
         "@sentry/react-native/expo",
         {

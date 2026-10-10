@@ -92,9 +92,14 @@ class PerformanceService {
       // Track timing in analytics
       await analyticsService.trackTiming(timer.name, duration, metadata);
 
-      // Log slow operations (> 1 second)
+      // Log slow operations (> 1 second). Only report to Sentry past 5s: these
+      // spans include network round-trips (bounty_create = geocode + insert),
+      // so 1-5s on mobile is normal and every duration already reaches
+      // analytics via trackTiming above.
       if (duration > 1000) {
-        console.error(`[Performance] Slow operation detected: ${name} took ${duration}ms`);
+        console.warn(`[Performance] Slow operation detected: ${name} took ${duration}ms`);
+      }
+      if (duration > 5000) {
         try {
           getSentry()?.captureMessage?.(`Slow operation: ${name}`, {
             level: 'warning',

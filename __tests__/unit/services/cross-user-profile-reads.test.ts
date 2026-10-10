@@ -129,4 +129,23 @@ describe('cross-user profile reads go through public_profiles, never profiles', 
     expect(res).toHaveLength(1);
     expect(res[0].username).toBe('still_here');
   });
+
+  it('bountyService.getAll with throwOnError rejects when the poster lookup fails', async () => {
+    // A failed public_profiles read leaves every username unset; without
+    // throwOnError the deleted-poster filter above empties the page, which the
+    // feed rendered as "no bounties" instead of its retryable error state.
+    supabase.from.mockImplementation((table: string) => {
+      if (table === 'bounties') {
+        return makeQueryStub({
+          data: [{ id: 1, poster_id: 'alive', status: 'open' }],
+          error: null,
+        });
+      }
+      return makeQueryStub({ data: null, error: { message: 'Network request failed' } });
+    });
+
+    await expect(
+      bountyService.getAll({ status: 'open', throwOnError: true })
+    ).rejects.toThrow('Network request failed');
+  });
 });

@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 // Saving media is performed through the system share sheet (expo-sharing) so the
 // app never requests the restricted READ_MEDIA_IMAGES / READ_MEDIA_VIDEO
 // permissions (Google Play policy compliance). expo-media-library is intentionally

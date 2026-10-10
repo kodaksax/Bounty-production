@@ -36,6 +36,8 @@ export interface WalletTransaction {
   stripe_charge_id?: string | null;
   stripe_payout_id?: string | null;
   stripe_refund_id?: string | null;
+  /** Connect account the withdrawal was paid to; immutable once written (guard_withdrawal_account_identity). */
+  stripe_connect_account_id?: string | null;
   /** Stripe's own payout.status, written only by the payout webhooks. */
   stripe_payout_status?: string | null;
   /** Derived by fn_derive_settlement_state(); never written by application code. */

@@ -109,7 +109,7 @@ describe('instant-payout fallback — the exact path that caused the incident', 
 
 describe('connect Edge Function — no route completes a withdrawal', () => {
   const withdrawalInserts = [
-    ...stripComments(connectSource).matchAll(/type:\s*'withdrawal'[\s\S]{0,900}?\}/g),
+    ...stripComments(connectSource).matchAll(/type:\s*'withdrawal'[\s\S]*?\}/g),
   ].map(m => m[0]);
 
   test('there are withdrawal-writing sites to check', () => {
@@ -221,7 +221,7 @@ describe('withdrawal serialization pre-check', () => {
       "if (subPath === '/instant-payout')"
     );
     expect(retryRoute).toContain('retry transfer succeeded but transaction record failed');
-    expect(retryRoute).toContain('Transaction history may take a moment to update.');
+    expect(retryRoute).toContain('Contact support to reconcile this withdrawal before retrying');
     expect(retryRoute).toContain('.select()');
     expect(retryRoute).toContain('.single()');
   });
@@ -492,10 +492,9 @@ describe('connect Edge Function — stripeAttempted marks genuine provider failu
       "if (subPath === '/retry-transfer')"
     );
     const stripeAttemptedFlags = transferRoute.match(/stripeAttempted:\s*true/g) ?? [];
-    // Two exits from the stripe.transfers.create() catch block are
-    // client-facing failure responses: the refund-also-failed case and the
-    // mapped Stripe error case. Nothing else in this route may carry the flag.
-    expect(stripeAttemptedFlags.length).toBe(2);
+    // Three post-Stripe exits: unknown outcome (no automatic refund),
+    // refund-also-failed, and the mapped definitive Stripe rejection.
+    expect(stripeAttemptedFlags.length).toBe(3);
   });
 
   test('the same contract holds for /retry-transfer', () => {
@@ -505,7 +504,7 @@ describe('connect Edge Function — stripeAttempted marks genuine provider failu
       "if (subPath === '/payout')"
     );
     const stripeAttemptedFlags = retryRoute.match(/stripeAttempted:\s*true/g) ?? [];
-    expect(stripeAttemptedFlags.length).toBe(2);
+    expect(stripeAttemptedFlags.length).toBe(3);
   });
 
   test('the /instant-payout platform-transfer step marks its failures as stripeAttempted', () => {
@@ -515,11 +514,11 @@ describe('connect Edge Function — stripeAttempted marks genuine provider failu
       "if (req.method === 'GET' && subPath === '/bank-accounts')"
     );
     const stripeAttemptedFlags = instantRoute.match(/stripeAttempted:\s*true/g) ?? [];
-    // The platform-transfer step's catch block accounts for both of these;
+    // The platform-transfer step's catch block accounts for all three;
     // the later instant-payout-falls-back-to-standard path never returns a
     // client-facing error (it always leaves the row pending), so it must not
     // add any more.
-    expect(stripeAttemptedFlags.length).toBe(2);
+    expect(stripeAttemptedFlags.length).toBe(3);
   });
 
   test('handleConnectNativePayout marks only its post-payouts.create() catch as stripeAttempted', () => {
@@ -541,6 +540,6 @@ describe('connect Edge Function — stripeAttempted marks genuine provider failu
     // insufficient balance, no in-flight check needed here since the caller
     // does it, account/balance read failures) is pre-flight and must not
     // carry the flag — only the payouts.create() catch does.
-    expect(stripeAttemptedFlags.length).toBe(1);
+    expect(stripeAttemptedFlags.length).toBe(2);
   });
 });
