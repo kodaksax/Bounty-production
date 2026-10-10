@@ -56,7 +56,7 @@ export function BrandingLogo({
       <Image
         source={(isDark || forceWhite)
           ? require('../../assets/images/bounty-logo.png')
-          : require('../../assets/images/bounty-logo2.png')}
+          : require('../../assets/images/bounty-logo-green-wordmark.png')}
         style={[dimensions, imageStyle]}
         contentFit="contain"
         accessibilityLabel="BOUNTY"

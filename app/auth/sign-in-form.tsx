@@ -1093,7 +1093,7 @@ export function SignInForm() {
                 source={
                   isDark
                     ? require('../../assets/images/bounty-logo.png')
-                    : require('../../assets/images/bounty-logo2.png')
+                    : require('../../assets/images/bounty-logo-green-wordmark.png')
                 }
                 style={{ width: 220, height: 60 }}
                 resizeMode="contain"

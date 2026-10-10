@@ -130,7 +130,7 @@ export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 					<Image
 						source={isDark
 					? require('../../assets/images/bounty-logo.png')
-					: require('../../assets/images/bounty-logo2.png')}
+					: require('../../assets/images/bounty-logo-green-wordmark.png')}
 						style={styles.logoImage}
 						resizeMode="contain"
 						accessibilityLabel="BOUNTY Logo"
