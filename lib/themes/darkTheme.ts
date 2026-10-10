@@ -22,6 +22,12 @@ export const darkTheme: AppTheme = {
     borderRightColor:  '#3A3E46',
     borderBottomColor: '#5E636C',           // light bottom edge
   },
+  insetBorderStrong: {
+    borderTopColor:    '#08090B',           // dark top edge
+    borderLeftColor:   '#4E535C',
+    borderRightColor:  '#4E535C',
+    borderBottomColor: '#7D838D',           // light bottom edge
+  },
   insetBorderPrimary: {
     borderTopColor:    palette.green[800],  // #00571A — dark top edge
     borderLeftColor:   palette.green[700],  // #00701F

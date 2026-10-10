@@ -97,11 +97,11 @@ function makeChipStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      // Same surface and pressed-in edge as the View & Apply section, with a
-      // firmer 1.5pt border so the chip reads as set into the background.
+      // Same surface as the View & Apply section, with a firmer 2pt
+      // pressed-in edge so the chip reads as set into the background.
       backgroundColor: t.surfaceRaised,
-      borderWidth: 1.5,
-      ...t.insetBorder,
+      borderWidth: 2,
+      ...t.insetBorderStrong,
       paddingHorizontal: 14,
       borderRadius: 999,
       marginRight: SPACING.COMPACT_GAP,

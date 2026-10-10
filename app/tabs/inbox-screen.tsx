@@ -1292,8 +1292,8 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 999,
       // Pressed-in chip, matching the View & Apply section.
       backgroundColor: theme.surfaceRaised,
-      borderWidth: 1.5,
-      ...theme.insetBorder,
+      borderWidth: 2,
+      ...theme.insetBorderStrong,
     },
     chipSelected: {
       backgroundColor: theme.primary,
