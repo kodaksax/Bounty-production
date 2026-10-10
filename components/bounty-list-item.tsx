@@ -522,11 +522,6 @@ function makeStyles(t: AppTheme) {
       padding: 16,
       borderWidth: 1,
       ...t.insetBorder, // pressed-in edge: dark top → light bottom
-      shadowColor: '#000',
-      shadowOpacity: t.isDark ? 0.4 : 0.16,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 4,
     },
     priceBlock: {
       gap: 2,
@@ -565,11 +560,6 @@ function makeStyles(t: AppTheme) {
       paddingHorizontal: 20,
       paddingVertical: 14,
       borderRadius: 14,
-      shadowColor: t.primary,
-      shadowOpacity: 0.3,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 4,
     },
     applyButtonText: {
       color: '#ffffff',
