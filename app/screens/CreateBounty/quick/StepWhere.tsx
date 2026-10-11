@@ -54,10 +54,14 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
   // Bumped on every search/selection so a slow response for an older query
   // can't reopen the list after the poster has moved on.
   const searchSeq = useRef(0);
+  const addressActionSeq = useRef(0);
+  const currentAddress = useRef(draft.location);
   const placesEnabled = addressAutocompleteService.isConfigured();
 
   useEffect(() => () => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    searchSeq.current += 1;
+    addressActionSeq.current += 1;
   }, []);
 
   const isOnline = draft.workType === 'online';
@@ -68,6 +72,14 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
     debounceTimer.current = null;
     searchSeq.current += 1;
     setIsSearching(false);
+  };
+
+  const invalidatePendingAddressActions = () => {
+    addressActionSeq.current += 1;
+    setIsLocating(false);
+    setIsSelecting(false);
+    setIsResolving(false);
+    return addressActionSeq.current;
   };
 
   const fetchSuggestions = async (query: string): Promise<AddressSuggestion[] | null> => {
@@ -84,11 +96,15 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
   };
 
   const handleUseCurrentLocation = async () => {
+    const actionSeq = invalidatePendingAddressActions();
+    cancelPendingSearch();
+    setSuggestions([]);
     setError(null);
     setIsLocating(true);
     try {
       // Check current permission status first.
       const permStatus = await locationService.getPermissionStatus();
+      if (actionSeq !== addressActionSeq.current) return;
 
       if (!permStatus.granted) {
         if (!permStatus.canAskAgain) {
@@ -116,6 +132,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
 
         // Permission not yet requested (or denied but can ask again) — request now.
         const requested = await locationService.requestPermission();
+        if (actionSeq !== addressActionSeq.current) return;
         if (!requested.granted) {
           if (!requested.canAskAgain) {
             Alert.alert(
@@ -143,37 +160,45 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       }
 
       const coords = await locationService.getCurrentLocation();
+      if (actionSeq !== addressActionSeq.current) return;
       if (!coords) {
         setError('We could not get your location right now. Please try again or search an address.');
         return;
       }
       const detail = await locationService.reverseGeocodeDetailed(coords);
+      if (actionSeq !== addressActionSeq.current) return;
+      const location = detail?.formattedAddress || 'Current location';
+      currentAddress.current = location;
       onUpdate({
         workType: 'in_person',
         latitude: coords.latitude,
         longitude: coords.longitude,
-        location: detail?.formattedAddress || 'Current location',
+        location,
         neighborhood: detail?.neighborhood,
       });
       setUsedCurrentLocation(true);
     } catch {
-      setError('We could not get your location right now. Please try again or search an address.');
+      if (actionSeq === addressActionSeq.current) {
+        setError('We could not get your location right now. Please try again or search an address.');
+      }
     } finally {
-      setIsLocating(false);
+      if (actionSeq === addressActionSeq.current) setIsLocating(false);
     }
   };
 
   const handleAddressChange = (value: string) => {
+    invalidatePendingAddressActions();
+    cancelPendingSearch();
+    currentAddress.current = value;
     setError(null);
     setUsedCurrentLocation(false);
+    setSuggestions([]);
     // Coordinates belong to the previous address — drop them so the geocode
     // below runs against what the poster actually typed.
     onUpdate({ workType: 'in_person', location: value, latitude: undefined, longitude: undefined, neighborhood: undefined });
 
     if (!placesEnabled) return;
-    cancelPendingSearch();
     if (value.trim().length < 2) {
-      setSuggestions([]);
       return;
     }
     debounceTimer.current = setTimeout(() => {
@@ -182,16 +207,19 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
   };
 
   const handleSelectSuggestion = async (suggestion: AddressSuggestion) => {
+    const actionSeq = invalidatePendingAddressActions();
     cancelPendingSearch();
     setSuggestions([]);
     setError(null);
     setUsedCurrentLocation(false);
     Keyboard.dismiss();
+    currentAddress.current = suggestion.description;
     onUpdate({ workType: 'in_person', location: suggestion.description, latitude: undefined, longitude: undefined, neighborhood: undefined });
 
     setIsSelecting(true);
     try {
       const details = await addressAutocompleteService.getPlaceDetails(suggestion.placeId);
+      if (actionSeq !== addressActionSeq.current) return;
       if (!isPlaceDetailsError(details) && details.latitude != null && details.longitude != null) {
         onUpdate({
           workType: 'in_person',
@@ -205,24 +233,30 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       // Place details failed — the suggestion text is still a real address,
       // so let the device geocoder pin it.
       const coords = await locationService.geocodeAddress(suggestion.description);
+      if (actionSeq !== addressActionSeq.current) return;
       if (!coords) {
         setError("We couldn't pin that address. Try another suggestion or use your current location.");
         return;
       }
       const detail = await locationService.reverseGeocodeDetailed(coords).catch(() => null);
+      if (actionSeq !== addressActionSeq.current) return;
       onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood: detail?.neighborhood });
     } catch {
-      setError('Could not verify that address right now. Check your connection and try again.');
+      if (actionSeq === addressActionSeq.current) {
+        setError('Could not verify that address right now. Check your connection and try again.');
+      }
     } finally {
-      setIsSelecting(false);
+      if (actionSeq === addressActionSeq.current) setIsSelecting(false);
     }
   };
 
   const handleSelectOnline = () => {
+    invalidatePendingAddressActions();
+    cancelPendingSearch();
     setError(null);
     setUsedCurrentLocation(false);
-    cancelPendingSearch();
     setSuggestions([]);
+    currentAddress.current = '';
     // Online bounties carry no address or coordinates — bountyService drops
     // them from the payload anyway when work_type is 'online'.
     onUpdate({
@@ -245,6 +279,9 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       return;
     }
 
+    const actionSeq = invalidatePendingAddressActions();
+    const address = draft.location || '';
+    currentAddress.current = address;
     setIsResolving(true);
     setError(null);
     try {
@@ -253,13 +290,15 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       // whatever the device geocoder guesses.
       if (placesEnabled) {
         cancelPendingSearch();
-        const matches = await fetchSuggestions(draft.location);
+        const matches = await fetchSuggestions(address);
+        if (actionSeq !== addressActionSeq.current || matches === null) return;
         if (matches && matches.length > 0) {
           setError('Select your address from the suggestions so hunters nearby can find it.');
           return;
         }
       }
-      const coords = await locationService.geocodeAddress(draft.location);
+      const coords = await locationService.geocodeAddress(address);
+      if (actionSeq !== addressActionSeq.current || currentAddress.current !== address) return;
       if (!coords) {
         setError("We couldn't locate that address. Try a more specific address, or use your current location.");
         return;
@@ -274,12 +313,15 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       } catch {
         // ignore — locality is a nice-to-have
       }
+      if (actionSeq !== addressActionSeq.current || currentAddress.current !== address) return;
       onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood });
       onNext();
     } catch {
-      setError('Could not verify that address right now. Check your connection and try again.');
+      if (actionSeq === addressActionSeq.current) {
+        setError('Could not verify that address right now. Check your connection and try again.');
+      }
     } finally {
-      setIsResolving(false);
+      if (actionSeq === addressActionSeq.current) setIsResolving(false);
     }
   };
 
