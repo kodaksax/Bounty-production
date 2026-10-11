@@ -50,10 +50,10 @@ export interface OnboardingData {
   // 'poster' = "Get something done", 'hunter' = "Start earning nearby"
   intent: 'poster' | 'hunter' | null;
 
-  // Profile fields. Nothing in the funnel collects these any more (the details
-  // form was removed with the post-founder-note screens); they stay because
-  // useCompleteOnboarding still writes whichever are non-empty to the profile,
-  // so a draft left by an older build is still honoured on completion.
+  // Profile fields. useCompleteOnboarding writes whichever are non-empty to the
+  // profile. displayName, bio and avatarUri (a remote URL, uploaded on pick)
+  // are collected by the poster profile step (app/onboarding/poster-profile.tsx);
+  // the rest stay so a draft left by an older build is still honoured.
   displayName: string;
   title: string;
   bio: string;

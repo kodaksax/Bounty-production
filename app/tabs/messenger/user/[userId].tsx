@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 import FullChatDetailScreen from 'app/tabs/full-chat-detail-screen';
+import { withReplayMask } from 'components/replay-mask';
 import { messageService } from '../../../../lib/services/message-service';
 import * as supabaseMessaging from '../../../../lib/services/supabase-messaging';
 import type { FullConversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 
-export default function UserConversationRoute() {
+function UserConversationRoute() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
 
@@ -142,3 +143,5 @@ export default function UserConversationRoute() {
 
   return <FullChatDetailScreen conversation={conversation} onBack={() => router.back()} />;
 }
+
+export default withReplayMask(UserConversationRoute);

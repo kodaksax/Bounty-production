@@ -3,13 +3,15 @@
  *
  * Centralized service layer for the "Feedback & Support" section of Settings.
  * Handles bug reports and feature requests (persisted to Supabase), and provides
- * helpers for contacting support (mailto fallback) and rating the app (store links).
+ * sends support messages in-app (via the contact-support edge function), and
+ * provides helpers for contacting support (mailto fallback) and rating the app (store links).
  */
 
 import { Platform } from 'react-native';
 import { supabase } from '../supabase';
 import { storageService } from './storage-service';
 import { authProfileService } from './auth-profile-service';
+import { invokePayments } from './stripe-internal';
 
 export type FeedbackReportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type FeatureRequestStatus =
@@ -23,12 +25,15 @@ export type FeatureRequestStatus =
 export const SUPPORT_REQUEST_EMAIL = 'support@bountyfinder.app';
 export const SUPPORT_REQUEST_SUBJECT = 'Bounty Support Request';
 
+/** Mirrors the limits enforced by the contact-support edge function. */
+export const SUPPORT_SUBJECT_MAX_LENGTH = 200;
+export const SUPPORT_MESSAGE_MAX_LENGTH = 5000;
+
 /**
- * Public store listings used by the "Rate Bounty" action.
- * NOTE: `APP_STORE_URL` contains a placeholder App Store ID that must be
- * replaced with the real numeric app ID before production release.
+ * Public store listings used by the "Rate Bounty" action. The App Store ID is
+ * the `ascAppId` in eas.json; `action=write-review` opens the review sheet.
  */
-export const APP_STORE_URL = 'https://apps.apple.com/app/id0000000000';
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6756679797?action=write-review';
 export const PLAY_STORE_URL =
   'https://play.google.com/store/apps/details?id=com.bountyapp.app';
 
@@ -51,6 +56,11 @@ export interface SubmitBugReportInput {
 export interface SubmitFeatureRequestInput {
   title: string;
   description: string;
+}
+
+export interface SubmitSupportRequestInput {
+  subject: string;
+  message: string;
 }
 
 export interface SubmitResult {
@@ -248,6 +258,74 @@ export const feedbackService = {
         error:
           error instanceof Error ? error.message : 'Failed to submit feature request',
       };
+    } finally {
+      inFlight.delete(dedupeKey);
+    }
+  },
+
+  /**
+   * Send a support message from inside the app. The `contact-support` edge
+   * function emails it to SUPPORT_REQUEST_EMAIL with the user's account email
+   * as reply-to, so no mail app is needed on the device.
+   */
+  async submitSupportRequest(input: SubmitSupportRequestInput): Promise<SubmitResult> {
+    const subject = (input.subject || '').trim();
+    const message = (input.message || '').trim();
+
+    if (!subject) {
+      return { success: false, error: 'Subject is required' };
+    }
+    if (!message) {
+      return { success: false, error: 'Message is required' };
+    }
+    if (subject.length > SUPPORT_SUBJECT_MAX_LENGTH) {
+      return {
+        success: false,
+        error: `Subject must be ${SUPPORT_SUBJECT_MAX_LENGTH} characters or fewer`,
+      };
+    }
+    if (message.length > SUPPORT_MESSAGE_MAX_LENGTH) {
+      return {
+        success: false,
+        error: `Message must be ${SUPPORT_MESSAGE_MAX_LENGTH} characters or fewer`,
+      };
+    }
+
+    const userId = authProfileService.getAuthUserId();
+    if (!userId) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    const dedupeKey = `support:${userId}:${subject}:${message}`;
+    if (isDuplicate(dedupeKey)) {
+      return { success: false, error: 'Duplicate submission ignored' };
+    }
+    inFlight.add(dedupeKey);
+
+    try {
+      // Direct fetch rather than supabase.functions.invoke(): invoke() can hang
+      // on the supabase-js session lock and never send the request (see
+      // invokePayments in stripe-internal.ts).
+      const data = await invokePayments<{ success?: boolean; id?: string }>('contact-support', {
+        body: {
+          subject,
+          message,
+          appVersion: getAppVersion(),
+          platform: getPlatform(),
+        },
+      });
+
+      recentSubmissions.set(dedupeKey, Date.now());
+      return { success: true, id: data?.id };
+    } catch (error) {
+      console.error('[FeedbackService] Support request failed:', error);
+      if ((error as { status?: number } | null)?.status === 429) {
+        return {
+          success: false,
+          error: "You've sent several messages recently. Please wait a while before sending another.",
+        };
+      }
+      return { success: false, error: 'Could not send your message. Please try again.' };
     } finally {
       inFlight.delete(dedupeKey);
     }

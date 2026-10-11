@@ -23,6 +23,7 @@
     "bounty_disputes": "trg_bounty_disputes_guard",
     "bounty_requests": "trg_bounty_requests_guard_assignment",
     "completion_submissions": "trg_completion_submissions_guard",
+    "messages": "trg_messages_guard_event_cards",
     "profiles": "trg_prevent_client_writes_to_protected_profile_columns",
     "ratings": "trg_ratings_guard"
   },
@@ -47,6 +48,10 @@
       "policies": [],
       "grants": { "anon": [], "authenticated": [] },
       "required_triggers": []
+    },
+    "messages": {
+      "commands": ["INSERT", "UPDATE", "DELETE"],
+      "required_triggers": ["trg_messages_guard_event_cards"]
     },
     "bounties": {
       "policies": [

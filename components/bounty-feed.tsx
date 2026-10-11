@@ -802,11 +802,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 API_TIMEOUTS.DEFAULT
               )
             : await withTimeout(
+                // throwOnError: getAll otherwise resolves a failed fetch as
+                // `[]`, which renders "no bounties" instead of the retryable
+                // load-error state below.
                 bountyService.getAll({
                   status: 'open',
                   limit: PAGE_SIZE,
                   offset: pageOffset,
                   includeTest: includeTestBounties,
+                  throwOnError: true,
                 }),
                 API_TIMEOUTS.DEFAULT
               );

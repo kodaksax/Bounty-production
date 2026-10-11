@@ -6,8 +6,9 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { useConversations } from '../../../hooks/useConversations';
 import { ErrorBoundary } from '../../../lib/error-boundary';
 import { ChatDetailScreen } from '../chat-detail-screen';
+import { withReplayMask } from '../../../components/replay-mask';
 
-export default function ConversationRoute() {
+function ConversationRoute() {
   // A throw inside the chat screen (or the hooks it renders) must not unmount
   // the whole app — before this boundary the only one above it was the root
   // boundary in app/_layout.tsx, so a chat crash killed the entire app.
@@ -84,3 +85,5 @@ function ConversationRouteContent() {
 
   return <ChatDetailScreen conversation={conversation} onBack={() => router.back()} />;
 }
+
+export default withReplayMask(ConversationRoute);

@@ -13,8 +13,9 @@ import { Stack } from 'expo-router';
 import React, { useEffect } from 'react';
 import { useBackgroundColor } from '../../../../lib/context/BackgroundColorContext';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
+import { withReplayMask } from '../../../../components/replay-mask';
 
-export default function HunterFlowLayout() {
+function HunterFlowLayout() {
   const { pushColor, popColor } = useBackgroundColor();
   const { theme } = useAppThemeContext();
 
@@ -41,3 +42,5 @@ export default function HunterFlowLayout() {
     </Stack>
   );
 }
+
+export default withReplayMask(HunterFlowLayout);

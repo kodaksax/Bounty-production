@@ -40,11 +40,97 @@ function calculateBackoff(attempt: number, config: RetryConfig): number {
 }
 
 /**
+ * True for failures caused by the device's connection rather than the app.
+ * Only thrown fetch failures reach the reporting paths below — an HTTP error
+ * status resolves as a Response — so these are almost always a dropped or
+ * stalled connection (e.g. cellular going dead mid-startup).
+ */
+function isConnectivityError(error: any): boolean {
+  if (!error) return false;
+  if (error.name === 'TimeoutError' || error.name === 'AbortError' || error.name === 'NetworkError') {
+    return true;
+  }
+  const message = String(error.message ?? '').toLowerCase();
+  return (
+    message.includes('timed out') ||
+    message.includes('timeout') ||
+    message.includes('network') ||
+    message.includes('failed to fetch') ||
+    message.includes('load failed') ||
+    message.includes('connection')
+  );
+}
+
+/**
+ * Fetch rejections are usually Errors, but anything can be thrown. Wrap
+ * non-Errors so the report has a readable message and keeps the original.
+ */
+function toError(value: unknown): Error {
+  if (value instanceof Error) return value;
+  const wrapped: Error & { cause?: unknown } = new Error(
+    typeof value === 'string' ? value : `Non-Error thrown: ${String(value)}`
+  );
+  wrapped.cause = value;
+  return wrapped;
+}
+
+/**
+ * Connectivity failures are recorded as a breadcrumb, not an exception: as
+ * exceptions every dead cellular connection became a Sentry issue that no code
+ * change could fix. The breadcrumb still gives context to any real error that
+ * follows. Anything else (e.g. a malformed URL) is still captured.
+ *
+ * Cancellation by the caller's own signal (navigation, unmount, app
+ * backgrounding) says nothing about the network, so it gets its own breadcrumb
+ * category instead of being counted as connectivity.
+ */
+function reportFetchFailure(
+  value: unknown,
+  url: string,
+  opts?: { abortedByExternalSignal?: boolean }
+): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const Sentry = require('@sentry/react-native');
+    if (!Sentry) return;
+    const error = toError(value);
+    const external = opts?.abortedByExternalSignal === true;
+    if (external || isConnectivityError(error)) {
+      if (typeof Sentry.addBreadcrumb === 'function') {
+        Sentry.addBreadcrumb({
+          category: external ? 'http.abort.external' : 'http.connectivity',
+          level: external ? 'info' : 'warning',
+          message: `${error.name}: ${error.message}`,
+          // Redact query params to avoid leaking sensitive data
+          data: { url: url.split('?')[0] },
+        });
+      }
+      return;
+    }
+    if (typeof Sentry.captureException === 'function') {
+      Sentry.captureException(error);
+    }
+  } catch {
+    // ignore when Sentry is not available
+  }
+}
+
+/**
  * Default retry logic: retry on network errors and 5xx server errors
  */
 function shouldRetryDefault(response: Response | null, error: Error | null): boolean {
   // Retry on network errors (no response)
   if (error) {
+    // Never retry our own timeout. The attempt already spent the caller's whole
+    // budget on a stalled connection, so retrying multiplies the wait (retries: 2
+    // turns a 15s failure into ~45s of spinner) for little gain. The caller's
+    // next refresh trigger (focus, foreground, pull-to-refresh) is the retry.
+    // This was already the de facto behavior: the TimeoutError message says
+    // "timed out", which the 'timeout' check below never matched.
+    if (error.name === 'TimeoutError') {
+      return false;
+    }
+
     // Normalize message for case-insensitive matching (catches "Network request failed", etc.)
     const message = error.message.toLowerCase();
     
@@ -194,16 +280,7 @@ export async function fetchWithTimeout(
 
       // If cancellation was triggered externally, do not retry — short-circuit
       if (abortedByExternalSignal) {
-        // Report to Sentry if available (best-effort)
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-          const Sentry = require('@sentry/react-native');
-          if (Sentry && typeof Sentry.captureException === 'function') {
-            Sentry.captureException(lastError);
-          }
-        } catch {
-          // ignore when Sentry is not available
-        }
+        reportFetchFailure(lastError, url, { abortedByExternalSignal: true });
         throw lastError;
       }
       if (!isLastAttempt && retryOn(null, lastError)) {
@@ -219,15 +296,7 @@ export async function fetchWithTimeout(
       }
 
       // No more retries, report and throw the error
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-        const Sentry = require('@sentry/react-native');
-        if (Sentry && typeof Sentry.captureException === 'function') {
-          Sentry.captureException(lastError);
-        }
-      } catch {
-        // ignore when Sentry is not available
-      }
+      reportFetchFailure(lastError, url);
       throw lastError;
     }
   }
@@ -242,16 +311,7 @@ export async function fetchWithTimeout(
         `backoffMultiplier=${retryConfig.backoffMultiplier}.` +
         (abortedByExternalSignal ? ' Request was aborted by an external signal.' : '')
     );
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-    // Dynamically require Sentry so this utility can be used without it in non-production environments
-    const Sentry = require('@sentry/react-native');
-    if (Sentry && typeof Sentry.captureException === 'function') {
-      Sentry.captureException(fallbackError);
-    }
-  } catch {
-    // ignore when Sentry not available
-  }
+  reportFetchFailure(fallbackError, url, { abortedByExternalSignal });
   throw fallbackError;
 }
 
@@ -279,17 +339,8 @@ export async function fetchWithTimeoutOnly(
     return response;
   } catch (error: any) {
     clearTimeout(timeoutId);
-    
-    // Report to Sentry if available (best-effort)
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-      const Sentry = require('@sentry/react-native');
-      if (Sentry && typeof Sentry.captureException === 'function') {
-        Sentry.captureException(error);
-      }
-    } catch {
-      // ignore when Sentry not available
-    }
+
+    reportFetchFailure(error, url);
 
     // Convert AbortError to timeout error for clarity
     if (error.name === 'AbortError') {

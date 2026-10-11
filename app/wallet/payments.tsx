@@ -16,8 +16,9 @@ import { ConnectEmbeddedWebView } from '../../components/connect-embedded-webvie
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withReplayMask } from '../../components/replay-mask';
 
-export default function PaymentsDashboardScreen() {
+function PaymentsDashboardScreen() {
   const router = useRouter();
   const { session, isLoading: authLoading } = useAuthContext();
   const { theme } = useAppThemeContext();
@@ -93,3 +94,5 @@ function makeStyles(t: AppTheme) {
     muted: { color: t.textSecondary, marginTop: 8, fontSize: 14 },
   });
 }
+
+export default withReplayMask(PaymentsDashboardScreen);

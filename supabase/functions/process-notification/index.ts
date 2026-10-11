@@ -528,7 +528,9 @@ Deno.serve(async (req: Request) => {
             type: notificationType,
             title: rows.title || '',
             body: rows.body || '',
-            data: outboxData,
+            // Message notifications carry the bounty only on the outbox row;
+            // send-notification-email links the email to the bounty's web page.
+            data: { ...outboxData, bountyId: outboxData.bountyId ?? rows.bounty_id ?? undefined },
           }),
         })
       } catch (e) {

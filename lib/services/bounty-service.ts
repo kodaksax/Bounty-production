@@ -63,7 +63,12 @@ async function getWsAdapter(): Promise<WsAdapter> {
 // feed show nothing but the caller's own bounties. `public_profiles` is the
 // curated safe-columns view that intentionally bypasses base-table RLS for
 // exactly this purpose. See docs/withdrawals/08-profiles-rls-migration-strategy.md.
-async function attachProfilesToBounties(items: any[]) {
+//
+// `throwOnError` lets callers that filter on `username` (getAll drops rows with
+// no poster profile) tell a failed lookup apart from deleted posters: without
+// it, a dropped connection here leaves every username unset and the caller
+// filters the whole page away, which renders as an empty feed, not an error.
+async function attachProfilesToBounties(items: any[], opts?: { throwOnError?: boolean }) {
   if (!items || items.length === 0) return items;
   try {
     const ids = Array.from(new Set(items.map(i => i.poster_id).filter(Boolean)));
@@ -74,6 +79,14 @@ async function attachProfilesToBounties(items: any[]) {
       .in('id', ids);
 
     if (error) {
+      if (opts?.throwOnError) {
+        // Keep the PostgREST error (code/details/hint) reachable as `cause`.
+        const wrapped: Error & { cause?: unknown } = new Error(
+          (error as any)?.message ?? 'Could not fetch poster profiles'
+        );
+        wrapped.cause = error;
+        throw wrapped;
+      }
       logger.warning('Could not fetch profiles for bounties fallback', { error });
       return items.map((it: any) => ({ ...it }));
     }
@@ -86,6 +99,7 @@ async function attachProfilesToBounties(items: any[]) {
       poster_avatar: map.get(String(it.poster_id))?.avatar,
     }));
   } catch (e) {
+    if (opts?.throwOnError) throw e;
     // If anything goes wrong, return original items
     logger.warning('attachProfilesToBounties fallback failed', { error: (e as any)?.message });
     return items;
@@ -739,7 +753,9 @@ export const bountyService = {
           user_id: it.user_id ?? it.poster_id,
         }));
 
-        const merged = await attachProfilesToBounties(normalized);
+        const merged = await attachProfilesToBounties(normalized, {
+          throwOnError: options?.throwOnError,
+        });
 
         // Preserves the old `!inner` semantic: a bounty whose poster profile no
         // longer exists (deleted account) drops out of the feed rather than

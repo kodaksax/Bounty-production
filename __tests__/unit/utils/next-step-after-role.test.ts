@@ -1,8 +1,8 @@
 import { isOnboardingRole, nextStepAfterRole } from '../../../lib/onboarding/next-step-after-role';
 
 describe('nextStepAfterRole', () => {
-  test('posters skip Stripe payout setup', () => {
-    expect(nextStepAfterRole('poster')).toBe('/onboarding/founder-note');
+  test('posters skip Stripe payout setup and build their profile', () => {
+    expect(nextStepAfterRole('poster')).toBe('/onboarding/poster-profile');
   });
 
   test('hunters go to payout setup', () => {

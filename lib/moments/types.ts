@@ -45,6 +45,14 @@ export type MomentStatus =
 /** Universal persistence backstop; definitions may choose a lower limit. */
 export const MAX_MOMENT_SHOWS = 3;
 
+/**
+ * A tap on a moment's buttons sooner than this after it was presented can't be
+ * a choice about that moment (e.g. a double-tap carried over from the previous
+ * moment's sheet). MomentsProvider ignores such taps; momentsService rejects
+ * such dismissals as a backstop.
+ */
+export const MIN_MOMENT_VISIBLE_MS = 750;
+
 /** Persisted per-user state for one moment type. One row per (user, moment_type) server-side. */
 export interface MomentState {
   momentType: MomentType;

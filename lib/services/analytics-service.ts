@@ -172,6 +172,10 @@ export type AnalyticsEvent =
   // with the `source` property when you need to tell the two apart.
   | 'onboarding_location_step_viewed'
   | 'onboarding_location_step_answered'
+  // Poster profile step (app/onboarding/poster-profile.tsx), after role select.
+  | 'onboarding_poster_profile_viewed'
+  | 'onboarding_poster_avatar_uploaded'
+  | 'onboarding_poster_profile_saved'
   | 'onboarding_profile_step_viewed'
   | 'onboarding_profile_submitted'
   | 'onboarding_step_skipped'

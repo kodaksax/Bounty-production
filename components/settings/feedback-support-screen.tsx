@@ -29,12 +29,7 @@ export const FeedbackSupportScreen: React.FC<FeedbackSupportScreenProps> = ({ on
     setContactProcessing(true);
     try {
       const url = feedbackService.getSupportMailtoUrl();
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        setShowEmailFallback(true);
-      }
+      await Linking.openURL(url);
     } catch (e) {
       console.error('[FeedbackSupport] Failed to open mail composer:', e);
       setShowEmailFallback(true);
@@ -61,12 +56,7 @@ export const FeedbackSupportScreen: React.FC<FeedbackSupportScreenProps> = ({ on
         Alert.alert('Unavailable', 'App store rating is not available on this device.');
         return;
       }
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert('Unavailable', 'Could not open the app store. Please try again later.');
-      }
+      await Linking.openURL(url);
     } catch (e) {
       console.error('[FeedbackSupport] Failed to open store link:', e);
       Alert.alert('Unavailable', 'Could not open the app store. Please try again later.');

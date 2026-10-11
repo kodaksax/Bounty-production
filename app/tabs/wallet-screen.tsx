@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { ConnectionStatus } from "../../components/connection-status";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
+import { withReplayMask } from "../../components/replay-mask";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { BrandingLogo } from "../../components/ui/branding-logo";
 import { EmptyState } from "../../components/ui/empty-state";
@@ -118,8 +119,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       // Silent so it doesn't flash the balance skeleton, and keyed on the
       // stable access-token string rather than the whole `session` object —
       // the object's identity churns on every token refresh / re-render, which
-      // was re-firing this refresh (and the flash) repeatedly.
-      refreshFromApi(accessToken, { silent: true });
+      // was re-firing this refresh (and the flash) repeatedly. Coalesce: if the
+      // provider's startup sync is already fetching with this token, join it.
+      refreshFromApi(accessToken, { silent: true, coalesce: true });
     }
   }, [accessToken, hasValidSession, refreshFromApi]);
 
@@ -478,7 +480,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
 }
 
-export default WalletScreen;
+export default withReplayMask(WalletScreen);
 
 function makeStyles(t: AppTheme) { return StyleSheet.create({
   container: {

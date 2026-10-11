@@ -56,6 +56,7 @@ import { logger } from '../../lib/utils/error-logger';
 import { formatPublicLocation } from '../../lib/utils/public-location';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
+import { isNativeMapAvailable } from '../../lib/config/maps';
 /**
  * react-native-maps and its clustering wrapper are heavy modules, and a static
  * import runs their initialisation the first time this screen's module is
@@ -813,21 +814,23 @@ export default function EnhancedSearchScreen() {
             results anyway. */}
         {activeTab === 'bounties' && (
           <View style={s.tabActions}>
-            <TouchableOpacity
-              onPress={() => setShowMap(v => !v)}
-              style={s.actionBtn}
-              accessibilityRole="button"
-              accessibilityLabel={showMap ? 'Show list view' : 'Show map view'}
-              accessibilityHint="Toggles between list and map view of bounty results"
-              accessibilityState={{ selected: showMap }}
-            >
-              <MaterialIcons
-                name={showMap ? 'view-list' : 'map'}
-                size={20}
-                color={theme.primaryLight}
-                accessibilityElementsHidden={true}
-              />
-            </TouchableOpacity>
+            {isNativeMapAvailable && (
+              <TouchableOpacity
+                onPress={() => setShowMap(v => !v)}
+                style={s.actionBtn}
+                accessibilityRole="button"
+                accessibilityLabel={showMap ? 'Show list view' : 'Show map view'}
+                accessibilityHint="Toggles between list and map view of bounty results"
+                accessibilityState={{ selected: showMap }}
+              >
+                <MaterialIcons
+                  name={showMap ? 'view-list' : 'map'}
+                  size={20}
+                  color={theme.primaryLight}
+                  accessibilityElementsHidden={true}
+                />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => router.push('/search/saved-searches')}
               style={s.actionBtn}
@@ -1009,7 +1012,9 @@ export default function EnhancedSearchScreen() {
         )}
 
         {/* Results */}
-        {activeTab === 'bounties' && showMap ? (
+        {/* Gate the mount itself, not just the toggle: a map view on an
+            unkeyed Android binary is a native crash. */}
+        {activeTab === 'bounties' && showMap && isNativeMapAvailable ? (
           <Suspense
             fallback={
               <View style={s.mapFallback}>

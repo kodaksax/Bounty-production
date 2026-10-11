@@ -25,6 +25,8 @@ export interface FeedbackFormProps {
   /** Label for the first (single-line) field, e.g. "Subject" or "Feature Title". */
   subjectLabel: string;
   subjectPlaceholder?: string;
+  /** Label for the multi-line field. Defaults to "Description". */
+  descriptionLabel?: string;
   descriptionPlaceholder?: string;
   /** Allow attaching an optional screenshot (bug reports only). */
   allowScreenshot?: boolean;
@@ -47,6 +49,7 @@ export interface FeedbackFormProps {
 export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   subjectLabel,
   subjectPlaceholder,
+  descriptionLabel = 'Description',
   descriptionPlaceholder,
   allowScreenshot = false,
   submitLabel = 'Submit',
@@ -127,7 +130,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         style={s.input}
       />
 
-      <Text style={s.label}>Description</Text>
+      <Text style={s.label}>{descriptionLabel}</Text>
       <TextInput
         value={description}
         onChangeText={setDescription}
@@ -137,7 +140,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         multiline
         numberOfLines={6}
         textAlignVertical="top"
-        accessibilityLabel="Description"
+        accessibilityLabel={descriptionLabel}
         style={[s.input, s.textArea]}
       />
 
