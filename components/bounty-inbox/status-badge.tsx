@@ -1,21 +1,20 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { BountyDisplayStatus } from 'lib/utils/bounty-display-status';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
 /**
  * Solid status tag for the inbox cards ("Active", "Completed", "Expired"…).
  * Colours are fixed semantic hues with white text, so they read the same on
- * light and dark surfaces; muted states use the theme's own neutral.
+ * light and dark surfaces; muted states use an AA-safe neutral.
  */
 const BADGES: Partial<Record<BountyDisplayStatus, { label: string; color: string | null }>> = {
-  open: { label: 'Open', color: '#008E2A' },
-  applied: { label: 'Applied', color: '#0284c7' },
+  open: { label: 'Open', color: '#00701F' },
+  applied: { label: 'Applied', color: '#0369a1' },
   in_progress: { label: 'Active', color: '#2563eb' },
   submitted_for_review: { label: 'In review', color: '#7c3aed' },
-  review_needed: { label: 'Review', color: '#d97706' },
-  completed: { label: 'Completed', color: '#008E2A' },
-  cancellation_requested: { label: 'Cancelling', color: '#ea580c' },
+  review_needed: { label: 'Review', color: '#b45309' },
+  completed: { label: 'Completed', color: '#00701F' },
+  cancellation_requested: { label: 'Cancelling', color: '#c2410c' },
   rejected: { label: 'Not selected', color: null },
   cancelled: { label: 'Cancelled', color: null },
   deadline_passed: { label: 'Expired', color: null },
@@ -28,9 +27,8 @@ export function statusBadgeLabel(status: BountyDisplayStatus): string {
 }
 
 export function StatusBadge({ status }: { status: BountyDisplayStatus }) {
-  const { theme } = useAppThemeContext();
   const badge = BADGES[status] ?? { label: 'Bounty', color: null };
-  const bg = badge.color ?? (theme.isDark ? '#61656B' : '#929497');
+  const bg = badge.color ?? '#61656B';
   return (
     <View style={[styles.badge, { backgroundColor: bg }]}>
       <Text style={styles.text} numberOfLines={1}>

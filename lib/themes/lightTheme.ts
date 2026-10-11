@@ -28,7 +28,7 @@ export const lightTheme: AppTheme = {
   textSecondary:     palette.navy[600],   // #61656B
   textDisabled:      palette.navy[500],   // #929497
 
-  primary:           palette.green[600],  // #008E2A
+  primary:           palette.green[700],  // #00701F — AA-safe on cream and under white control text
   primaryLight:      palette.green[700],  // #00701F — darker for contrast on cream
   primaryShade:      palette.green[700],  // #00701F — button depth band
   errorShade:        '#933730',           // error #C24A42, ~25% darker

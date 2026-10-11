@@ -107,7 +107,7 @@ export const COLORS = {
   EMERALD_300: '#1FAE49',      // Light text on dark bg (7.4:1 contrast)
   EMERALD_400: '#008E2A',
   EMERALD_500: '#008E2A',      // Primary green (3.1:1 on white)
-  EMERALD_600: '#008E2A',      // Darker green (4.6:1 on white)
+  EMERALD_600: '#00701F',      // AA compliant on white (6.3:1)
   EMERALD_700: '#1B1E24',      // AA compliant on white (6.4:1)
   EMERALD_800: '#22262C',
   EMERALD_900: '#00571A',

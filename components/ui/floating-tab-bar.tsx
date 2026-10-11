@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useHapticFeedback } from "lib/haptic-feedback";
+import { useAccessibleAnimation } from "../../hooks/use-accessible-animation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, LayoutChangeEvent, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -45,6 +46,7 @@ export function FloatingTabBar({
 }: FloatingTabBarProps) {
   const { theme } = useAppThemeContext();
   const { triggerHaptic } = useHapticFeedback();
+  const { createSpring } = useAccessibleAnimation();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
@@ -78,13 +80,11 @@ export function FloatingTabBar({
     [tabs.length]
   );
   useEffect(() => {
-    Animated.spring(highlightX, {
-      toValue: activeIndex * tabWidth,
-      useNativeDriver: true,
+    createSpring(highlightX, activeIndex * tabWidth, {
       speed: 18,
       bounciness: 6,
     }).start();
-  }, [activeIndex, tabWidth, highlightX]);
+  }, [activeIndex, tabWidth, highlightX, createSpring]);
 
   const handlePress = useCallback(
     (screen: ScreenKey) => {
