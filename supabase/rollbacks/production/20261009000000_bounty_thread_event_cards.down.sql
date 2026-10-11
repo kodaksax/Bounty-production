@@ -1,13 +1,23 @@
 -- Rollback for 20261009000000_bounty_thread_event_cards.sql
 --
 -- Drops the event-card triggers and helpers and restores the original
--- handle_new_message_notification. The event-card guard is retained because
--- event-card columns and rows are retained. Existing system messages and threads
--- are kept; the event_type / ref_id columns are kept too so no data is lost.
--- Drop the guard only after deleting the system rows and columns:
+-- handle_new_message_notification. Existing system messages and threads are
+-- kept; the event_type / ref_id columns are kept too so no data is lost.
+--
+-- trg_messages_guard_event_cards and fn_messages_guard_event_cards() are KEPT
+-- because the card columns and rows are. Without them the ordinary messages
+-- policies apply again, which let a participant insert message_type = 'system'
+-- rows and edit or delete rows they sent; cards carry a real sender (the
+-- hunter or the poster), so the kept cards would become forgeable. While kept,
+-- the guard also keeps its per-sender message rate limit. Remove it by hand,
+-- only together with the card data, in this order:
 --   DELETE FROM public.messages WHERE event_type IS NOT NULL;
+--   DROP TRIGGER IF EXISTS trg_messages_guard_event_cards ON public.messages;
+--   DROP FUNCTION IF EXISTS public.fn_messages_guard_event_cards();
 --   ALTER TABLE public.messages DROP CONSTRAINT messages_event_type_check,
 --     DROP COLUMN event_type, DROP COLUMN ref_id;
+-- (Run as the postgres role, which the guard lets through. Drop the guard
+-- before the columns: it reads NEW.event_type / NEW.ref_id.)
 
 BEGIN;
 
