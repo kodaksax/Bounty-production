@@ -77,11 +77,9 @@ export function useAccessibleAnimation() {
       }
       // Animated.spring throws if more than one config family is set, so only
       // apply the default tension/friction when the caller picked no family.
-      const usesOtherSpringFamily =
-        config != null &&
-        (['bounciness', 'speed', 'stiffness', 'damping', 'mass'] as const).some(
-          key => config[key] !== undefined
-        );
+      const usesOtherSpringFamily = (
+        ['bounciness', 'speed', 'stiffness', 'damping', 'mass'] as const
+      ).some(key => config?.[key] !== undefined);
       return Animated.spring(value, {
         toValue,
         useNativeDriver: true,
