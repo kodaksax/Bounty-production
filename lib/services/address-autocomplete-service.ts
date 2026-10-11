@@ -72,9 +72,13 @@ class AddressAutocompleteService {
   private minRequestInterval = 300; // Rate limiting: 300ms between requests
   
   constructor() {
-    // Try to get API key from environment
-    this.apiKey = Constants.expoConfig?.extra?.googlePlacesApiKey || 
-                  process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || 
+    // Prefer the bundle-inlined env var. app.json's extra.googlePlacesApiKey is
+    // the literal string "${EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}" (app.json does
+    // not interpolate), so an unresolved placeholder must never be used as the
+    // key — Google rejects it with REQUEST_DENIED and every search comes back empty.
+    const extraKey = Constants.expoConfig?.extra?.googlePlacesApiKey;
+    this.apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ||
+                  (typeof extraKey === 'string' && extraKey && !extraKey.includes('${') ? extraKey : null) ||
                   null;
     
     if (!this.apiKey) {

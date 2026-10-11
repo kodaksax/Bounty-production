@@ -1,7 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Keyboard, Linking, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  addressAutocompleteService,
+  isPlaceDetailsError,
+  type AddressSuggestion,
+} from '../../../../lib/services/address-autocomplete-service';
 import { locationService } from '../../../../lib/services/location-service';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
@@ -23,8 +28,11 @@ interface StepWhereProps {
  *
  * In-person bounties must carry coordinates or they never match nearby hunters
  * (hunter_service_areas proximity notifications + the feed's radius search), so
- * a typed address is forward-geocoded before advancing — the same guard the
- * previous location step applied.
+ * a typed address must resolve to coordinates before advancing. Typing shows
+ * Places suggestions; picking one pins the exact coordinates. If the poster
+ * skips the list, Continue re-surfaces the suggestions rather than guessing,
+ * and only falls back to the device geocoder when Places has nothing (outage,
+ * no key) so posting is never hard-blocked.
  */
 export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, step, totalSteps }: StepWhereProps) {
   const { theme } = useAppThemeContext();
@@ -39,14 +47,64 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
     draft.latitude != null && draft.longitude != null && !draft.location
   );
 
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bumped on every search/selection so a slow response for an older query
+  // can't reopen the list after the poster has moved on.
+  const searchSeq = useRef(0);
+  const addressActionSeq = useRef(0);
+  const currentAddress = useRef(draft.location);
+  const placesEnabled = addressAutocompleteService.isConfigured();
+
+  useEffect(() => () => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    searchSeq.current += 1;
+    addressActionSeq.current += 1;
+  }, []);
+
   const isOnline = draft.workType === 'online';
+  const addressResolved = !isOnline && !usedCurrentLocation && draft.latitude != null && draft.longitude != null;
+
+  const cancelPendingSearch = () => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = null;
+    searchSeq.current += 1;
+    setIsSearching(false);
+  };
+
+  const invalidatePendingAddressActions = () => {
+    addressActionSeq.current += 1;
+    setIsLocating(false);
+    setIsSelecting(false);
+    setIsResolving(false);
+    return addressActionSeq.current;
+  };
+
+  const fetchSuggestions = async (query: string): Promise<AddressSuggestion[] | null> => {
+    const seq = ++searchSeq.current;
+    setIsSearching(true);
+    try {
+      const results = await addressAutocompleteService.searchAddresses(query);
+      if (seq !== searchSeq.current) return null; // superseded
+      setSuggestions(results);
+      return results;
+    } finally {
+      if (seq === searchSeq.current) setIsSearching(false);
+    }
+  };
 
   const handleUseCurrentLocation = async () => {
+    const actionSeq = invalidatePendingAddressActions();
+    cancelPendingSearch();
+    setSuggestions([]);
     setError(null);
     setIsLocating(true);
     try {
       // Check current permission status first.
       const permStatus = await locationService.getPermissionStatus();
+      if (actionSeq !== addressActionSeq.current) return;
 
       if (!permStatus.granted) {
         if (!permStatus.canAskAgain) {
@@ -74,6 +132,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
 
         // Permission not yet requested (or denied but can ask again) — request now.
         const requested = await locationService.requestPermission();
+        if (actionSeq !== addressActionSeq.current) return;
         if (!requested.granted) {
           if (!requested.canAskAgain) {
             Alert.alert(
@@ -101,37 +160,103 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       }
 
       const coords = await locationService.getCurrentLocation();
+      if (actionSeq !== addressActionSeq.current) return;
       if (!coords) {
         setError('We could not get your location right now. Please try again or search an address.');
         return;
       }
       const detail = await locationService.reverseGeocodeDetailed(coords);
+      if (actionSeq !== addressActionSeq.current) return;
+      const location = detail?.formattedAddress || 'Current location';
+      currentAddress.current = location;
       onUpdate({
         workType: 'in_person',
         latitude: coords.latitude,
         longitude: coords.longitude,
-        location: detail?.formattedAddress || 'Current location',
+        location,
         neighborhood: detail?.neighborhood,
       });
       setUsedCurrentLocation(true);
     } catch {
-      setError('We could not get your location right now. Please try again or search an address.');
+      if (actionSeq === addressActionSeq.current) {
+        setError('We could not get your location right now. Please try again or search an address.');
+      }
     } finally {
-      setIsLocating(false);
+      if (actionSeq === addressActionSeq.current) setIsLocating(false);
     }
   };
 
   const handleAddressChange = (value: string) => {
+    invalidatePendingAddressActions();
+    cancelPendingSearch();
+    currentAddress.current = value;
     setError(null);
     setUsedCurrentLocation(false);
+    setSuggestions([]);
     // Coordinates belong to the previous address — drop them so the geocode
     // below runs against what the poster actually typed.
     onUpdate({ workType: 'in_person', location: value, latitude: undefined, longitude: undefined, neighborhood: undefined });
+
+    if (!placesEnabled) return;
+    if (value.trim().length < 2) {
+      return;
+    }
+    debounceTimer.current = setTimeout(() => {
+      fetchSuggestions(value);
+    }, 350);
+  };
+
+  const handleSelectSuggestion = async (suggestion: AddressSuggestion) => {
+    const actionSeq = invalidatePendingAddressActions();
+    cancelPendingSearch();
+    setSuggestions([]);
+    setError(null);
+    setUsedCurrentLocation(false);
+    Keyboard.dismiss();
+    currentAddress.current = suggestion.description;
+    onUpdate({ workType: 'in_person', location: suggestion.description, latitude: undefined, longitude: undefined, neighborhood: undefined });
+
+    setIsSelecting(true);
+    try {
+      const details = await addressAutocompleteService.getPlaceDetails(suggestion.placeId);
+      if (actionSeq !== addressActionSeq.current) return;
+      if (!isPlaceDetailsError(details) && details.latitude != null && details.longitude != null) {
+        onUpdate({
+          workType: 'in_person',
+          location: details.formattedAddress || suggestion.description,
+          latitude: details.latitude,
+          longitude: details.longitude,
+          neighborhood: details.components?.neighborhood || details.components?.city || undefined,
+        });
+        return;
+      }
+      // Place details failed — the suggestion text is still a real address,
+      // so let the device geocoder pin it.
+      const coords = await locationService.geocodeAddress(suggestion.description);
+      if (actionSeq !== addressActionSeq.current) return;
+      if (!coords) {
+        setError("We couldn't pin that address. Try another suggestion or use your current location.");
+        return;
+      }
+      const detail = await locationService.reverseGeocodeDetailed(coords).catch(() => null);
+      if (actionSeq !== addressActionSeq.current) return;
+      onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood: detail?.neighborhood });
+    } catch {
+      if (actionSeq === addressActionSeq.current) {
+        setError('Could not verify that address right now. Check your connection and try again.');
+      }
+    } finally {
+      if (actionSeq === addressActionSeq.current) setIsSelecting(false);
+    }
   };
 
   const handleSelectOnline = () => {
+    invalidatePendingAddressActions();
+    cancelPendingSearch();
     setError(null);
     setUsedCurrentLocation(false);
+    setSuggestions([]);
+    currentAddress.current = '';
     // Online bounties carry no address or coordinates — bountyService drops
     // them from the payload anyway when work_type is 'online'.
     onUpdate({
@@ -154,10 +279,26 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       return;
     }
 
+    const actionSeq = invalidatePendingAddressActions();
+    const address = draft.location || '';
+    currentAddress.current = address;
     setIsResolving(true);
     setError(null);
     try {
-      const coords = await locationService.geocodeAddress(draft.location);
+      // The poster typed but never picked a suggestion. If Places recognises
+      // the text, make them choose the exact match instead of silently pinning
+      // whatever the device geocoder guesses.
+      if (placesEnabled) {
+        cancelPendingSearch();
+        const matches = await fetchSuggestions(address);
+        if (actionSeq !== addressActionSeq.current || matches === null) return;
+        if (matches && matches.length > 0) {
+          setError('Select your address from the suggestions so hunters nearby can find it.');
+          return;
+        }
+      }
+      const coords = await locationService.geocodeAddress(address);
+      if (actionSeq !== addressActionSeq.current || currentAddress.current !== address) return;
       if (!coords) {
         setError("We couldn't locate that address. Try a more specific address, or use your current location.");
         return;
@@ -172,16 +313,20 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       } catch {
         // ignore — locality is a nice-to-have
       }
+      if (actionSeq !== addressActionSeq.current || currentAddress.current !== address) return;
       onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood });
       onNext();
     } catch {
-      setError('Could not verify that address right now. Check your connection and try again.');
+      if (actionSeq === addressActionSeq.current) {
+        setError('Could not verify that address right now. Check your connection and try again.');
+      }
     } finally {
-      setIsResolving(false);
+      if (actionSeq === addressActionSeq.current) setIsResolving(false);
     }
   };
 
-  const canContinue = isOnline || (draft.location || '').trim().length >= 3;
+  const canContinue = !isSelecting && (isOnline || (draft.location || '').trim().length >= 3);
+  const showSuggestions = !isOnline && !usedCurrentLocation && !addressResolved && suggestions.length > 0;
 
   return (
     <QuickStepLayout
@@ -237,9 +382,39 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
           style={styles.input}
           autoCorrect={false}
           keyboardType="default"
+          returnKeyType="search"
           accessibilityLabel="ZIP / postal code or address"
         />
+        {isSearching || isSelecting ? (
+          <ActivityIndicator size="small" color={theme.textSecondary} />
+        ) : addressResolved ? (
+          <MaterialIcons name="check-circle" size={22} color={theme.primary} accessibilityLabel="Address verified" />
+        ) : null}
       </View>
+
+      {showSuggestions ? (
+        <View style={styles.suggestions} accessibilityLiveRegion="polite">
+          {suggestions.map((s, i) => (
+            <TouchableOpacity
+              key={s.id}
+              onPress={() => handleSelectSuggestion(s)}
+              activeOpacity={0.7}
+              style={[styles.suggestionRow, i > 0 ? styles.suggestionDivider : null]}
+              accessibilityRole="button"
+              accessibilityLabel={`Select address: ${s.description}`}
+            >
+              <MaterialIcons name="place" size={20} color={theme.textSecondary} />
+              <View style={styles.suggestionText}>
+                <Text style={styles.suggestionMain} numberOfLines={1}>{s.mainText}</Text>
+                {s.secondaryText ? (
+                  <Text style={styles.suggestionSecondary} numberOfLines={1}>{s.secondaryText}</Text>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          ))}
+          <Text style={styles.attribution}>Powered by Google</Text>
+        </View>
+      ) : null}
 
       {usedCurrentLocation && draft.location ? (
         <Text style={styles.resolved} numberOfLines={2}>
@@ -297,6 +472,19 @@ function makeStyles(theme: AppTheme) {
       color: theme.text,
       paddingVertical: 0,
     },
+    suggestions: {
+      marginTop: -6,
+      marginBottom: 14,
+      borderRadius: 20,
+      backgroundColor: theme.surfaceSecondary,
+      overflow: 'hidden',
+    },
+    suggestionRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12 },
+    suggestionDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
+    suggestionText: { flex: 1, marginLeft: 12 },
+    suggestionMain: { fontSize: 16, fontWeight: '600', color: theme.text },
+    suggestionSecondary: { marginTop: 2, fontSize: 13, color: theme.textSecondary },
+    attribution: { paddingHorizontal: 18, paddingBottom: 8, fontSize: 11, color: theme.textSecondary, textAlign: 'right' },
     resolved: { marginTop: 2, marginBottom: 8, fontSize: 14, color: theme.textSecondary },
     error: { marginTop: 4, fontSize: 14, color: theme.error },
     privacy: { marginTop: 20, fontSize: 13, lineHeight: 19, color: theme.textSecondary },
