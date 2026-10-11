@@ -31,6 +31,7 @@ const FLOW_FILES = [
   'app/onboarding/location.tsx',
   'app/onboarding/role-select.tsx',
   'app/onboarding/payouts.tsx',
+  'app/onboarding/poster-profile.tsx',
   'app/onboarding/founder-note.tsx',
   'components/onboarding/WelcomeCarousel.tsx',
   'components/onboarding/CarouselGlow.tsx',

@@ -128,14 +128,14 @@ describe('onboarding gate (app/onboarding/index.tsx)', () => {
       expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/welcome');
     });
 
-    it('resumes a signed-in poster past payout setup (posters are never asked for Stripe in onboarding)', async () => {
+    it('resumes a signed-in poster at their profile step, past payout setup (posters are never asked for Stripe in onboarding)', async () => {
       mockAuthContext.session = SIGNED_IN;
       mockAuthProfile.profile = { username: 'newuser', onboarding_completed: false };
       mockOnboarding.data.intent = 'poster';
 
       render(<OnboardingIndex />);
 
-      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/founder-note'));
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/poster-profile'));
       expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/payouts');
     });
 

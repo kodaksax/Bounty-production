@@ -113,7 +113,7 @@ export default function OnboardingIndex() {
       // unless a role was already picked (e.g. resuming a draft, or an
       // existing-but-incomplete account signing back in), which means both of
       // those steps are behind them, so resume at the step after role
-      // (payouts.tsx for hunters, founder-note.tsx for posters). Role
+      // (payouts.tsx for hunters, poster-profile.tsx for posters). Role
       // stays optional for the rest of the flow either way —
       // totalStepsFor(null) in username.tsx already covers the no-intent
       // variant.
