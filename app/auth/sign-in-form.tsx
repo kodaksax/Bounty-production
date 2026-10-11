@@ -317,8 +317,11 @@ export function SignInForm() {
         }
 
         if (data.session) {
-          // Identify the user in PostHog and capture the sign-in event
-          // (safe no-op if the client isn't configured).
+          // Identify the user in PostHog (safe no-op if the client isn't
+          // configured). No sign-in event here: `user_logged_in` (auth
+          // provider, every method) is the business event and
+          // AUTH_LOGIN_SUCCESS the diagnostic one; an email-only "Sign In"
+          // was a third copy, retired 2026-10-06.
           try {
             posthogIdentify(data.session.user.id, {
               email: data.session.user.email,
@@ -326,14 +329,6 @@ export function SignInForm() {
                 (data.session.user.user_metadata as any)?.full_name ||
                 (data.session.user.user_metadata as any)?.name,
             });
-            try {
-              // email/name live on the person profile via identify() above —
-              // omit PII from the event payload itself.
-              posthogCapture('Sign In', {
-                user_id: data.session.user.id,
-                correlation_id: correlationId,
-              });
-            } catch {}
           } catch {
             // swallow analytics errors
           }

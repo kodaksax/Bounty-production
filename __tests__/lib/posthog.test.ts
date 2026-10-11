@@ -487,15 +487,29 @@ describe('lib/posthog — session replay configuration', () => {
   test('before_send drops the SDK duplicate "Application Opened" and nothing else', () => {
     expect(options.before_send({ event: 'Application Opened', properties: {} })).toBeNull();
     for (const name of ['app_opened', 'Application Installed', 'Application Updated', '$screen']) {
-      const event = { event: name, properties: {} };
-      expect(options.before_send(event)).toBe(event);
+      expect(options.before_send({ event: name, properties: {} })).toEqual(
+        expect.objectContaining({ event: name })
+      );
     }
     expect(options.before_send(null)).toBeNull();
   });
+
+  test('before_send tags events the constructor queued before register() ran', () => {
+    const tagged = options.before_send({ event: 'Application Installed', properties: { build: '96' } });
+    expect(tagged.properties).toEqual({ build: '96', app_env: 'development' });
+    expect(options.before_send({ event: 'Application Installed' }).properties).toEqual({
+      app_env: 'development',
+    });
+  });
+
+  test('before_send leaves an app_env that is already set alone', () => {
+    const event = { event: 'app_opened', properties: { app_env: 'production' } };
+    expect(options.before_send(event).properties.app_env).toBe('production');
+  });
 });
 
-describe('lib/posthog — exception autocapture follows Sentry availability', () => {
-  const buildOptions = (sentryRuns: boolean) => {
+describe('lib/posthog — exception autocapture', () => {
+  test('captures uncaught exceptions and rejections on every device, never console', () => {
     const MockPostHog = jest.fn().mockImplementation(() => ({
       capture: jest.fn(),
       register: jest.fn(),
@@ -506,26 +520,75 @@ describe('lib/posthog — exception autocapture follows Sentry availability', ()
         PostHog: MockPostHog,
         useFeatureFlag: jest.fn(),
       }));
-      jest.doMock('../../lib/utils/sentry-gate', () => ({ isSentryInitSafe: () => sentryRuns }));
       require('../../lib/posthog');
     });
     delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
-    return MockPostHog.mock.calls[0]?.[1];
-  };
-
-  test('where Sentry runs, it owns uncaught exceptions and rejections', () => {
-    expect(buildOptions(true).errorTracking.autocapture).toEqual({
-      uncaughtExceptions: false,
-      unhandledRejections: false,
-      console: false,
-    });
-  });
-
-  test('where Sentry is skipped (iOS 26+), PostHog captures them instead', () => {
-    expect(buildOptions(false).errorTracking.autocapture).toEqual({
+    expect(MockPostHog.mock.calls[0]?.[1].errorTracking.autocapture).toEqual({
       uncaughtExceptions: true,
       unhandledRejections: true,
       console: false,
     });
+  });
+});
+
+describe('lib/posthog — device-level properties survive reset()', () => {
+  const load = (persistedProps?: Record<string, unknown>) => {
+    const client = {
+      capture: jest.fn(),
+      identify: jest.fn(),
+      register: jest.fn(),
+      reset: jest.fn(),
+      getDistinctId: jest.fn(() => 'anon'),
+      getAnonymousId: jest.fn(() => 'anon'),
+      getPersistedProperty: jest.fn((key: string) => (key === 'props' ? persistedProps : undefined)),
+    };
+    let mod: typeof import('../../lib/posthog') | undefined;
+    process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-key-device';
+    jest.isolateModules(() => {
+      jest.doMock('posthog-react-native', () => ({
+        PostHog: jest.fn(() => client),
+        useFeatureFlag: jest.fn(),
+      }));
+      mod = require('../../lib/posthog');
+    });
+    delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
+    client.register.mockClear();
+    return { client, mod: mod! };
+  };
+
+  test('reset() re-registers app_env, and only app_env on an ordinary device', () => {
+    const { client, mod } = load();
+    mod.reset();
+    expect(client.reset).toHaveBeenCalledTimes(1);
+    expect(client.register).toHaveBeenCalledWith({ app_env: 'development' });
+    expect(client.register).not.toHaveBeenCalledWith({ internal_device: true });
+  });
+
+  test('an internal profile marks the device, and logout keeps the mark', () => {
+    const { client, mod } = load();
+    mod.syncInternalFlag('tester', true);
+    expect(client.register).toHaveBeenCalledWith({ internal_device: true });
+    client.register.mockClear();
+    mod.reset();
+    expect(client.register).toHaveBeenCalledWith({ internal_device: true });
+  });
+
+  test('a non-internal profile never marks the device', () => {
+    const { client, mod } = load();
+    mod.syncInternalFlag('user', false);
+    mod.reset();
+    expect(client.register).not.toHaveBeenCalledWith({ internal_device: true });
+  });
+
+  test('a device marked in an earlier launch stays marked after reset()', () => {
+    const { client, mod } = load({ internal_device: true, app_env: 'production' });
+    mod.reset();
+    expect(client.register).toHaveBeenCalledWith({ internal_device: true });
+  });
+
+  test('an internal email marks the device', () => {
+    const { client, mod } = load();
+    mod.identify('tester', { email: 'jordanmag11@yahoo.com' });
+    expect(client.register).toHaveBeenCalledWith({ internal_device: true });
   });
 });

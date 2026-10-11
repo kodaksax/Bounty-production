@@ -12,8 +12,6 @@
 // Sharing one instance guarantees autocapture, manual `capture()` calls, and
 // service-level events all flow into the same PostHog project with a single,
 // consistent distinct id.
-import { isSentryInitSafe } from './utils/sentry-gate';
-
 const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
@@ -45,6 +43,43 @@ type CapturedEvent = {
 
 let _posthog: any | null = null;
 
+// Device-level internal marker. `is_internal` is per user and reset() clears
+// it on logout, so a tester's logged-out sessions and any fresh test account
+// they sign up on the same device used to count as real users. Once an
+// internal user has been on a device, every later event from it carries this.
+const INTERNAL_DEVICE_PROPERTY = 'internal_device';
+let _internalDevice = false;
+
+const markInternalDevice = (): void => {
+  _internalDevice = true;
+  if (typeof _posthog?.register === 'function') {
+    _posthog.register({ [INTERNAL_DEVICE_PROPERTY]: true });
+  }
+};
+
+// Super properties live in the SDK's persisted 'props', which also carries a
+// device marked in an earlier launch. Read at reset time, not at startup:
+// the SDK's storage may not have loaded yet when this module is evaluated.
+const deviceIsInternal = (): boolean => {
+  if (_internalDevice) return true;
+  try {
+    const props = _posthog?.getPersistedProperty?.('props');
+    return props?.[INTERNAL_DEVICE_PROPERTY] === true;
+  } catch {
+    return false;
+  }
+};
+
+// reset() wipes every super property; put back the ones that describe the
+// device and build rather than the user.
+const resetKeepingDeviceProperties = (): void => {
+  const internal = deviceIsInternal();
+  _posthog.reset();
+  if (typeof _posthog.register !== 'function') return;
+  _posthog.register({ app_env: APP_ENVIRONMENT });
+  if (internal) markInternalDevice();
+};
+
 // Construct the client eagerly (synchronously) so it is available to the
 // PostHogProvider at first render. The PostHog React Native SDK constructs
 // synchronously and lazily flushes in the background, so this is safe.
@@ -54,8 +89,6 @@ try {
     const mod = require('posthog-react-native');
     const PostHog = mod.PostHog ?? mod.default;
     if (PostHog) {
-      // One decision for both error-tracking flags below.
-      const sentryRuns = isSentryInitSafe();
       _posthog = new PostHog(POSTHOG_KEY, {
         host: POSTHOG_HOST,
         // Explicit even though it matches the SDK default: only create a
@@ -72,21 +105,30 @@ try {
         // duplicates our canonical `app_opened` (one per cold start, fired
         // from app/_layout.tsx) and is dropped in `before_send` below.
         captureAppLifecycleEvents: true,
-        // Drops "Application Opened" (see above). Retired 2026-09-25, after
-        // 2026-09-13 had kept both: two open events meant every dashboard
-        // had to know which one to trust.
-        before_send: (event: CapturedEvent | null) =>
-          event?.event === 'Application Opened' ? null : event,
-        // Sentry owns uncaught exceptions and rejections wherever it runs. It
-        // does NOT run on iOS 26+ (lib/utils/sentry-gate.ts), which was ~72%
-        // of app users in the 14 days to 2026-09-25, and nothing captured
-        // their uncaught errors at all. PostHog takes over there. Its handler
-        // chains to the previous one, so the two never compete.
+        before_send: (event: CapturedEvent | null) => {
+          // Drops "Application Opened" (see above). Retired 2026-09-25, after
+          // 2026-09-13 had kept both: two open events meant every dashboard
+          // had to know which one to trust.
+          if (!event || event.event === 'Application Opened') return null;
+          // `register({ app_env })` below runs after the constructor, but the
+          // constructor already queues "Application Installed"/"Updated", so
+          // those arrived untagged (503 installs in the 30 days to
+          // 2026-10-06) and vanished from any app_env-filtered funnel.
+          if (event.properties?.app_env === undefined) {
+            event.properties = { ...event.properties, app_env: APP_ENVIRONMENT };
+          }
+          return event;
+        },
+        // Uncaught exceptions and rejections go to PostHog on every device, so
+        // its error tracking is one complete picture instead of only the
+        // iOS 26+ slice where Sentry can't run (lib/utils/sentry-gate.ts).
+        // Where Sentry does run it still gets them too: each handler chains to
+        // the previous one, so the two never compete.
         // Console capture stays off everywhere (see sessionReplayConfig).
         errorTracking: {
           autocapture: {
-            uncaughtExceptions: !sentryRuns,
-            unhandledRejections: !sentryRuns,
+            uncaughtExceptions: true,
+            unhandledRejections: true,
             console: false,
           },
         },
@@ -162,11 +204,9 @@ export const capture = (event: string, properties?: Record<string, any>): void =
 /**
  * Report an exception to PostHog error tracking as a `$exception` event.
  *
- * Global exception/rejection autocapture is disabled for this client (see the
- * `errorTracking` option above — Sentry owns the global handlers), so an
- * explicit call is the only way a `$exception` reaches PostHog. The app's error
- * boundaries use it so a caught render crash is visible in PostHog error
- * tracking, not just Sentry.
+ * Global autocapture (the `errorTracking` option above) only sees errors
+ * nothing caught. The app's error boundaries catch render crashes first, so
+ * they call this to make those visible in PostHog error tracking too.
  * @param error - The thrown value (Error or otherwise).
  * @param properties - Optional properties to attach to the event.
  */
@@ -218,11 +258,12 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
       currentDistinctId !== distinctId &&
       typeof _posthog.reset === 'function'
     ) {
-      _posthog.reset();
+      resetKeepingDeviceProperties();
     }
 
     if (emailInternal && typeof _posthog.register === 'function') {
       _posthog.register({ is_internal: true });
+      markInternalDevice();
     }
     _posthog.identify(distinctId, identityProperties);
   } catch (e) {
@@ -262,6 +303,7 @@ export const syncInternalFlag = (userId: string, isInternal: boolean): void => {
     if (_syncedInternalFlag === key) return;
     _syncedInternalFlag = key;
     if (typeof _posthog.register === 'function') _posthog.register({ is_internal: isInternal });
+    if (isInternal) markInternalDevice();
     if (typeof _posthog.capture === 'function') {
       _posthog.capture('$set', { $set: { is_internal: isInternal } });
     }
@@ -312,7 +354,7 @@ export const reset = (): void => {
   _syncedInternalFlag = null;
   try {
     if (!_posthog || typeof _posthog.reset !== 'function') return;
-    _posthog.reset();
+    resetKeepingDeviceProperties();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[posthog] reset failed', e);

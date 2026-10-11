@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { ConnectionStatus } from "../../components/connection-status";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
+import { withReplayMask } from "../../components/replay-mask";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { BrandingLogo } from "../../components/ui/branding-logo";
 import { EmptyState } from "../../components/ui/empty-state";
@@ -479,7 +480,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
 }
 
-export default WalletScreen;
+export default withReplayMask(WalletScreen);
 
 function makeStyles(t: AppTheme) { return StyleSheet.create({
   container: {

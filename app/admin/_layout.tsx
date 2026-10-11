@@ -18,8 +18,9 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdmin } from '../../lib/admin-context';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
+import { withReplayMask } from '../../components/replay-mask';
 
-export default function AdminLayout() {
+function AdminLayout() {
   const { isAdmin, isLoading } = useAdmin();
   const { theme } = useAppTheme();
 
@@ -73,3 +74,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+
+export default withReplayMask(AdminLayout);

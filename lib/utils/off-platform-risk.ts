@@ -18,11 +18,67 @@ function withoutNegatedInstructions(text: string): string {
 const normalize = (text: string) => text.normalize('NFKC').replace(/[’‘]/g, "'").toLowerCase();
 const safetyNotices = new Set(Object.values(trustSafetyStrings).map(normalize));
 
+// A live row can still hold an encrypted envelope before the messaging
+// pipeline decrypts it; its key bytes can look like phone numbers. Only an
+// envelope whose fields are all encoded data (base64, no spaces) is skipped —
+// JSON carrying readable text in those fields is attacker-controlled and is
+// still scanned like any other message.
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+function isBase64(value: unknown): value is string {
+  if (typeof value !== 'string' || !BASE64.test(value)) return false;
+  if (value.endsWith('==')) {
+    return BASE64_ALPHABET.indexOf(value[value.length - 3]) % 16 === 0;
+  }
+  if (value.endsWith('=')) {
+    return BASE64_ALPHABET.indexOf(value[value.length - 2]) % 4 === 0;
+  }
+  return true;
+}
+
+function base64ByteLength(value: unknown): number | null {
+  if (!isBase64(value)) return null;
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  return (value.length / 4) * 3 - padding;
+}
+
+function hasBase64ByteLength(value: unknown, byteLength: number): boolean {
+  return base64ByteLength(value) === byteLength;
+}
+
+function isEncryptedEnvelope(text: string): boolean {
+  if (!text.trimStart().startsWith('{')) return false;
+  try {
+    const payload = JSON.parse(text);
+    return payload !== null &&
+      typeof payload === 'object' &&
+      !Array.isArray(payload) &&
+      typeof payload.version === 'string' &&
+      payload.version.startsWith('2.') &&
+      isBase64(payload.ciphertext) &&
+      hasBase64ByteLength(payload.nonce, 24) &&
+      hasBase64ByteLength(payload.senderPublicKey, 32) &&
+      (payload.recipientPublicKey === undefined ||
+        hasBase64ByteLength(payload.recipientPublicKey, 32)) &&
+      (base64ByteLength(payload.ciphertext) ?? 0) >= 16;
+  } catch {
+    return false;
+  }
+}
+
 /** Advisory heuristics over local plaintext only; never inspects attachments or calls a service. */
 export function detectOffPlatformRisk(plaintext: string): OffPlatformRisk | null {
+  if (isEncryptedEnvelope(plaintext)) return null;
   const normalized = normalize(plaintext);
   if (safetyNotices.has(normalized.trim())) return null;
-  const clauses = normalized.split(/(?:[.!?]\s+|[;\n]+|,\s+(?:or|and)\s+|\bbut\b|\bhowever\b)/);
+  const scanTexts = [normalized];
+  if (plaintext.trimStart().startsWith('{')) {
+    scanTexts.push(normalize(plaintext.replace(/([a-z0-9])([A-Z])/g, '$1 $2')));
+  }
+  const clauses = scanTexts.flatMap(text =>
+    text.split(/(?:[.!?]\s+|[;\n]+|,\s+(?:or|and)\s+|\bbut\b|\bhowever\b)/)
+  );
   let contact = false;
 
   for (const raw of clauses) {

@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
+import { withReplayMask } from '../../../components/replay-mask';
 
 const CANCELLATION_REASON_OPTIONS: { label: string; value: CancellationReasonCategory }[] = [
   { label: 'Changed my mind', value: 'changed_mind' },
@@ -36,7 +37,7 @@ const CANCELLATION_REASON_OPTIONS: { label: string; value: CancellationReasonCat
 /** Text on the brand-green CTA / on the blue support buttons, in both themes. */
 const ON_ACCENT_TEXT = '#ffffff';
 
-export default function CancellationRequestScreen() {
+function CancellationRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { session } = useAuthContext();
@@ -665,3 +666,5 @@ function makeStyles(theme: AppTheme) {
     },
   });
 }
+
+export default withReplayMask(CancellationRequestScreen);
