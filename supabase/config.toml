@@ -155,6 +155,24 @@ verify_jwt = true
 [functions.webhooks]
 verify_jwt = false
 
+# poster-web: the website's poster dashboard (bountyfinder.net/manage/).
+# Verifies the user's access token itself (auth.getUser) on every route and
+# acts as that user for every write. Must be off so the browser's CORS
+# preflight (OPTIONS, no Authorization header) reaches the function.
+[functions.poster-web]
+verify_jwt = false
+
+# email-inbound: Resend `email.received` webhook. Resend cannot present a
+# Supabase JWT; the Svix signature (RESEND_INBOUND_WEBHOOK_SECRET) is the
+# authentication and is verified inside the function, fail-closed.
+[functions.email-inbound]
+verify_jwt = false
+
+# geocode-bounties: pg_cron job. Requires the service role key as a bearer
+# token, checked inside the function.
+[functions.geocode-bounties]
+verify_jwt = false
+
 # app-link: public marketing redirect (guerilla/share links) clicked by
 # anonymous visitors who have no Supabase session. Reads no user data and
 # uses no service-role key; it only mints a Branch link and 302s to it.

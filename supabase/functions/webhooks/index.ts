@@ -150,6 +150,15 @@ async function reconcilePhase2Transfer(
   if (updateError) throw updateError;
 }
 
+async function completeBountyAfterConfirmedRelease(supabase: any, bountyId: string): Promise<void> {
+  const { error } = await supabase
+    .from('bounties')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', bountyId)
+    .eq('status', 'in_progress');
+  if (error) throw error;
+}
+
 /**
  * Syncs a Stripe Connect `Account` snapshot into `profiles`. Writes the
  * current capability booleans and requirements payload on every call, but
@@ -2360,6 +2369,17 @@ Deno.serve(async (req: Request) => {
             throw v3LedgerConfirmErr;
           }
 
+          const { data: confirmedFunding, error: confirmedFundingErr } = await supabase
+            .from('bounty_v3_funding')
+            .select('bounty_id')
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('state', 'released')
+            .maybeSingle();
+          if (confirmedFundingErr) throw confirmedFundingErr;
+          if (confirmedFunding?.bounty_id === v3BountyId) {
+            await completeBountyAfterConfirmedRelease(supabase, v3BountyId);
+          }
+
           console.log(
             `[webhooks] v3 release confirmed for bounty ${v3BountyId} via transfer ${transfer.id}`
           );
@@ -2372,7 +2392,20 @@ Deno.serve(async (req: Request) => {
         // amount/user-id heuristic backfill entirely so it can never
         // mis-match a Phase 2 transfer onto a legacy withdrawal row.
         if (transfer.metadata?.bounty_id) {
+          if (transfer.reversed === true) {
+            console.warn(`[webhooks] Phase 2 transfer ${transfer.id} arrived already reversed — not confirming`);
+            break;
+          }
           await reconcilePhase2Transfer(supabase, transfer, 'created');
+          const { data: payment, error: paymentError } = await supabase
+            .from('bounty_payments')
+            .select('status, stripe_transfer_id')
+            .eq('bounty_id', transfer.metadata.bounty_id)
+            .maybeSingle();
+          if (paymentError) throw paymentError;
+          if (payment?.status === 'released' && payment.stripe_transfer_id === transfer.id) {
+            await completeBountyAfterConfirmedRelease(supabase, transfer.metadata.bounty_id);
+          }
           break;
         }
         const transferUserId = transfer.metadata?.user_id;
@@ -3996,10 +4029,17 @@ Deno.serve(async (req: Request) => {
             // key and only logs to console, so it would deliver nothing. This
             // is the same mechanism and template as the app's existing
             // forgot-password flow (lib/services/auth-service.ts), and the
-            // redirect matches its convention — a universal link that opens
-            // the app on mobile and a web reset form on desktop.
+            // redirect used to be the app's universal link,
+            // https://bountyfinder.app/auth/callback — but that host fails TLS
+            // (verified 2026-10-08), so a web-only poster who clicked it was
+            // stranded. It now lands on the website's poster dashboard, which
+            // works in any browser and finishes the sign-in there
+            // (Bounty-landing-page manage/). The URL must be in Supabase Auth's
+            // Redirect URLs allowlist, or Auth falls back to the Site URL; the
+            // homepage forwards auth tokens to /manage/ for that case too.
             const authRedirectUrl =
-              Deno.env.get('BOUNTY_AUTH_REDIRECT_URL') ?? 'https://bountyfinder.app/auth/callback';
+              Deno.env.get('BOUNTY_AUTH_REDIRECT_URL') ??
+              'https://www.bountyfinder.net/manage/?utm_source=bounty_email&utm_medium=email&utm_campaign=account_access';
             const { error: signInEmailErr } = await supabase.auth.resetPasswordForEmail(
               checkoutEmail,
               { redirectTo: authRedirectUrl }

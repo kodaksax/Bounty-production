@@ -82,9 +82,27 @@ function ctaFrom(data: Record<string, unknown>): { url: string; label: string } 
   return { url, label }
 }
 
+// "Talk to a person" link under the main button. https only, and only to the
+// same site the main button may use — it never carries anything but ids.
+function helpFrom(data: Record<string, unknown>): string | null {
+  const url = typeof data.helpUrl === 'string' ? data.helpUrl.trim() : ''
+  return url.startsWith('https://') ? url : null
+}
+
+// Per-email reply address minted by process-notification (see
+// _shared/reply-context.ts). Accepted only when it is on the configured reply
+// domain, so a payload can never redirect replies to an arbitrary address.
+const REPLY_DOMAIN = (Deno.env.get('EMAIL_REPLY_DOMAIN') ?? '').trim().toLowerCase()
+function replyToFrom(data: Record<string, unknown>): string | null {
+  const v = typeof data.replyTo === 'string' ? data.replyTo.trim().toLowerCase() : ''
+  if (!REPLY_DOMAIN || !v) return null
+  return /^reply\+[a-z2-7]{26}@/.test(v) && v.endsWith(`@${REPLY_DOMAIN}`) ? v : null
+}
+
 function buildEmail(category: string, title: string, body: string, data: Record<string, unknown>): EmailContent {
   const appName = 'Bounty'
   const cta = ctaFrom(data)
+  const help = helpFrom(data)
   const subjectByCategory: Record<string, string> = {
     marketplace: title || `${appName}: bounty update`,
     messages: title || `${appName}: new message`,
@@ -97,12 +115,13 @@ function buildEmail(category: string, title: string, body: string, data: Record<
   const subject = subjectByCategory[category] || title || appName
   const html = `
     <div style="font-family: -apple-system, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-      <h2 style="margin: 0 0 12px; font-size: 18px; color: #111827;">${escapeHtml(subject)}</h2>
-      <p style="margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: #374151;">${escapeHtml(body)}</p>
-      ${cta ? `<p style="margin: 0 0 16px;"><a href="${escapeHtml(cta.url)}" style="display: inline-block; padding: 10px 18px; border-radius: 8px; background: #111827; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none;">${escapeHtml(cta.label)}</a></p>` : ''}
-      <p style="margin: 24px 0 0; font-size: 12px; color: #9CA3AF;">You're receiving this because of your ${escapeHtml(category)} notification preferences in ${appName}. You can change this anytime in Settings &rsaquo; Notifications.</p>
+      <h2 style="margin: 0 0 12px; font-size: 20px; color: #111827;">${escapeHtml(subject)}</h2>
+      <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.55; color: #1F2937;">${escapeHtml(body)}</p>
+      ${cta ? `<p style="margin: 0 0 16px;"><a href="${escapeHtml(cta.url)}" style="display: inline-block; padding: 14px 22px; border-radius: 8px; background: #00631d; color: #FFFFFF; font-size: 17px; font-weight: 700; text-decoration: none;">${escapeHtml(cta.label)}</a></p>` : ''}
+      ${help ? `<p style="margin: 0 0 16px; font-size: 15px; color: #1F2937;">Need a hand? <a href="${escapeHtml(help)}" style="color: #00631d; font-weight: 600;">Talk to a real person</a></p>` : ''}
+      <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.5; color: #4B5563;">You're receiving this because of your ${escapeHtml(category)} notification preferences in ${appName}. You can change this anytime in Settings &rsaquo; Notifications.</p>
     </div>`
-  const text = `${subject}\n\n${body}\n\n${cta ? `${cta.label}: ${cta.url}\n\n` : ''}Manage this in Settings > Notifications.`
+  const text = `${subject}\n\n${body}\n\n${cta ? `${cta.label}: ${cta.url}\n\n` : ''}${help ? `Talk to a real person: ${help}\n\n` : ''}Manage this in Settings > Notifications.`
   return { subject, html, text }
 }
 
@@ -174,7 +193,7 @@ async function providerError(label: string, resp: Response): Promise<false> {
   return false
 }
 
-async function sendViaResend(apiKey: string, toEmail: string, content: EmailContent, fromEmail: string): Promise<boolean> {
+async function sendViaResend(apiKey: string, toEmail: string, content: EmailContent, fromEmail: string, replyTo: string = replyToEmail): Promise<boolean> {
   const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -186,14 +205,92 @@ async function sendViaResend(apiKey: string, toEmail: string, content: EmailCont
       text: content.text,
       // Replies to a notification should reach a human, not bounce off an
       // unmonitored sending address.
-      ...(replyToEmail ? { reply_to: replyToEmail } : {}),
+      ...(replyTo ? { reply_to: replyTo } : {}),
     }),
   })
   if (!resp.ok) return providerError('Resend', resp)
   return true
 }
 
-async function sendViaSendGrid(apiKey: string, toEmail: string, content: EmailContent, fromEmail: string): Promise<boolean> {
+// ---------------------------------------------------------------------------
+// Resend-template emails. A notification `type` listed here is rendered by a
+// PUBLISHED Resend template instead of the generic buildEmail() layout.
+// Every other type is untouched.
+//
+// Reference the template by ID, not alias: the alias has already been renamed
+// once (bounty-posted-copy -> bounty-posted-final-copy) and an ID survives that.
+//
+// Ported 2026-10-08 from the deployed function (v34, deployed by hand
+// 2026-10-02 and never committed). Without this port, deploying this file
+// would silently drop the "You're live" template.
+// ---------------------------------------------------------------------------
+const RESEND_TEMPLATE_BY_TYPE: Record<string, string> = {
+  bounty_posted: '386c9e82-f564-40e0-ae4c-83dac4db318d', // "Bounty Posted (Final Copy)"
+}
+
+type TemplateSend = { id: string; variables: Record<string, string>; idempotencyKey: string | null }
+
+function str(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : ''
+}
+
+// Resend inserts {{{VAR}}} UNESCAPED, so every user-controlled value is escaped
+// here (bountyTitle is user-generated). AUDIENCE_LINE / PAY_LINE are fixed
+// strings we own. Keys with empty values are dropped so the template's declared
+// fallback applies instead of an empty string being passed through.
+function buildTemplateSend(type: string, data: Record<string, unknown>): TemplateSend | null {
+  const id = RESEND_TEMPLATE_BY_TYPE[type]
+  if (!id) return null
+
+  if (type === 'bounty_posted') {
+    const cta = ctaFrom(data) // https:// or the app scheme only
+    const prefsUrl = Deno.env.get('NOTIFICATION_PREFERENCES_URL') || ''
+    const postal = Deno.env.get('NOTIFICATION_POSTAL_ADDRESS') || ''
+    const bountyId = str(data.bountyId)
+
+    const raw: Record<string, string> = {
+      BOUNTY_TITLE: escapeHtml(str(data.bountyTitle)),
+      // Pre-formatted by the producer, e.g. "$40" or "For honor".
+      BOUNTY_REWARD: escapeHtml(str(data.rewardDisplay)),
+      AUDIENCE_LINE:
+        data.isInPerson === true
+          ? "We're letting people nearby know about it."
+          : "We're letting people who do this kind of work know about it.",
+      // Trailing space is intentional: the template butts it against the next sentence.
+      PAY_LINE: data.payAtHire === true ? "That's when you pay. " : '',
+      CTA_URL: cta ? escapeHtml(cta.url) : '',
+      PREFERENCES_URL: escapeHtml(prefsUrl),
+      POSTAL_LINE: postal ? `Bounty &middot; ${escapeHtml(postal)}` : '',
+    }
+    const variables = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== ''))
+    return { id, variables, idempotencyKey: bountyId ? `bounty-posted/${bountyId}` : null }
+  }
+  return null
+}
+
+// `from` is intentionally omitted: the template carries its own verified sender
+// (Bounty <bounty@notifications.bountyfinder.app>). Resend does not allow
+// html/text alongside `template`. The idempotency key makes a repeated call for
+// the same bounty a no-op instead of a second email.
+async function sendTemplateViaResend(apiKey: string, toEmail: string, tpl: TemplateSend, replyTo: string = replyToEmail): Promise<boolean> {
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      ...(tpl.idempotencyKey ? { 'Idempotency-Key': `${tpl.idempotencyKey}/${toEmail}` } : {}),
+    },
+    body: JSON.stringify({
+      to: [toEmail],
+      template: { id: tpl.id, variables: tpl.variables },
+      ...(replyTo ? { reply_to: replyTo } : {}),
+    }),
+  })
+  if (!resp.ok) return providerError('Resend template', resp)
+  return true
+}
+
+async function sendViaSendGrid(apiKey: string, toEmail: string, content: EmailContent, fromEmail: string, replyTo: string = replyToEmail): Promise<boolean> {
   const resp = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -205,7 +302,7 @@ async function sendViaSendGrid(apiKey: string, toEmail: string, content: EmailCo
         { type: 'text/plain', value: content.text },
         { type: 'text/html', value: content.html },
       ],
-      ...(replyToEmail ? { reply_to: { email: bareAddress(replyToEmail) } } : {}),
+      ...(replyTo ? { reply_to: { email: bareAddress(replyTo) } } : {}),
     }),
   })
   if (!resp.ok) return providerError('SendGrid', resp)
@@ -233,9 +330,28 @@ Deno.serve(async (req: Request) => {
 
   const userIds: string[] = Array.isArray(payload.userIds) ? payload.userIds.filter((x: unknown) => typeof x === 'string') : []
   const category: string = typeof payload.category === 'string' ? payload.category : 'marketplace'
+  const type: string = typeof payload.type === 'string' ? payload.type : ''
   const title: string = typeof payload.title === 'string' ? payload.title : ''
   const body: string = typeof payload.body === 'string' ? payload.body : ''
   const data: Record<string, unknown> = (payload.data && typeof payload.data === 'object') ? payload.data : {}
+
+  // Support alert: the one case addressed to the team rather than to users.
+  // poster-web / email-inbound / geocode-bounties open a support_cases row and
+  // send this so a person sees it now, not on the next dashboard check. The
+  // case row is the record; this email is only the nudge. Bodies carry ids
+  // and a case summary, never a customer address.
+  if (payload.supportAlert === true) {
+    const to = Deno.env.get('SUPPORT_ALERT_EMAIL') || replyToEmail
+    const content = buildEmail('support', title || 'Bounty: support case opened', body, data)
+    if (!PROVIDER.key || PROVIDER.name === 'none') {
+      console.warn('[send-notification-email] support alert NOT SENT — no email provider configured')
+      return jsonResponse({ ok: true, delivered: false, providerConfigured: false, sent: 0, failed: 0, skipped: 1, provider: PROVIDER.name })
+    }
+    const ok = PROVIDER.name === 'resend'
+      ? await sendViaResend(PROVIDER.key, bareAddress(to), content, fromEmail, '')
+      : await sendViaSendGrid(PROVIDER.key, bareAddress(to), content, fromEmail, '')
+    return jsonResponse({ ok, delivered: ok, providerConfigured: true, sent: ok ? 1 : 0, failed: ok ? 0 : 1, skipped: 0, provider: PROVIDER.name })
+  }
 
   if (userIds.length === 0) return jsonResponse({ message: 'No recipients' })
 
@@ -248,6 +364,9 @@ Deno.serve(async (req: Request) => {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
   const content = buildEmail(category, title, body, data)
+  const replyTo = replyToFrom(data) ?? replyToEmail
+  // Non-null only for types that render through a published Resend template.
+  const templateSend = buildTemplateSend(type, data)
 
   let sent = 0
   let failed = 0
@@ -262,10 +381,12 @@ Deno.serve(async (req: Request) => {
         return
       }
       if (PROVIDER.name === 'resend' && PROVIDER.key) {
-        const ok = await sendViaResend(PROVIDER.key, email, content, fromEmail)
+        const ok = templateSend
+          ? await sendTemplateViaResend(PROVIDER.key, email, templateSend, replyTo)
+          : await sendViaResend(PROVIDER.key, email, content, fromEmail, replyTo)
         if (ok) sent++; else failed++
       } else if (PROVIDER.name === 'sendgrid' && PROVIDER.key) {
-        const ok = await sendViaSendGrid(PROVIDER.key, email, content, fromEmail)
+        const ok = await sendViaSendGrid(PROVIDER.key, email, content, fromEmail, replyTo)
         if (ok) sent++; else failed++
       } else {
         // No provider configured. Counted as `skipped`, never as `sent`: this
