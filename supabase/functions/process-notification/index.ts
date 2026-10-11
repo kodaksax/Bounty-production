@@ -101,6 +101,7 @@ const TYPE_CATEGORY: Record<string, Category> = {
   message: 'messages',
   payment: 'payments', payout_paid: 'payments', payout_failed: 'payments', payout_canceled: 'payments',
   withdrawal_reversed: 'payments', bank_disconnected: 'payments', payout_method_changed: 'payments',
+  payout_setup_required: 'payments', release_waiting_on_hunter: 'payments',
   balance_update: 'payments',
   dispute_created: 'security', dispute_resolved: 'security', workflow_dispute_created: 'security',
   dispute_escalated: 'security', account_warning: 'security', account_restricted: 'security',

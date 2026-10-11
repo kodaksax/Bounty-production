@@ -663,6 +663,10 @@ export type NotificationType =
   | 'withdrawal_reversed'
   | 'bank_disconnected'
   | 'payout_method_changed'
+  /** Hunter-facing: their work was approved but the payout is waiting on their Stripe payout setup. */
+  | 'payout_setup_required'
+  /** Poster-facing: they approved the work; the payment releases once the hunter finishes payout setup. */
+  | 'release_waiting_on_hunter'
   | 'verification_submitted'
   | 'verification_verified'
   | 'verification_rejected'

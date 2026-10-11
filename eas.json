@@ -43,7 +43,9 @@
         "EXPO_PUBLIC_SUPABASE_URL": "${STAGING_SUPABASE_URL}",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "${STAGING_SUPABASE_ANON_KEY}",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "${STRIPE_TEST_PUBLISHABLE_KEY}",
-        "EXPO_PUBLIC_ENVIRONMENT": "preview"
+        "EXPO_PUBLIC_ENVIRONMENT": "preview",
+        "EXPO_PUBLIC_PAYMENT_ARCHITECTURE_VERSION": "1",
+        "EXPO_PUBLIC_WALLET_BALANCE_SOURCE": "ledger"
       }
     },
     "production": {
@@ -63,7 +65,9 @@
       "env": {
         "APP_ENV": "production",
         "EXPO_PUBLIC_ENVIRONMENT": "production",
-        "EXPO_PUBLIC_SENTRY_DEBUG": "false"
+        "EXPO_PUBLIC_SENTRY_DEBUG": "false",
+        "EXPO_PUBLIC_PAYMENT_ARCHITECTURE_VERSION": "1",
+        "EXPO_PUBLIC_WALLET_BALANCE_SOURCE": "ledger"
       }
     }
   },

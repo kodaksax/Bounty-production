@@ -38,6 +38,8 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   withdrawal_reversed: 'payments',
   bank_disconnected: 'payments',
   payout_method_changed: 'payments',
+  payout_setup_required: 'payments',
+  release_waiting_on_hunter: 'payments',
   balance_update: 'payments',
 
   dispute_created: 'security',

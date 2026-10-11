@@ -2411,11 +2411,16 @@ Deno.serve(async (req: Request) => {
         const transferUserId = transfer.metadata?.user_id;
         const transferAmountDollars = transfer.amount / 100;
         if (transferUserId) {
+          // Only an in-flight withdrawal can be waiting for this transfer: the
+          // row stays 'pending' until payout.paid. Without the status filter a
+          // same-amount 'failed' row (whose transfer never happened) could be
+          // tagged with this transfer instead.
           const { data: candidateTx, error: candidateErr } = await supabase
             .from('wallet_transactions')
-            .select('id')
+            .select('id, metadata')
             .eq('user_id', transferUserId)
             .eq('type', 'withdrawal')
+            .eq('status', 'pending')
             .eq('amount', -transferAmountDollars)
             .is('stripe_transfer_id', null)
             .order('created_at', { ascending: false })
@@ -2432,11 +2437,15 @@ Deno.serve(async (req: Request) => {
               }
             );
           } else if (candidateTx) {
+            // Merge, never replace: the row's metadata carries retry_count and
+            // transfer_status, which handleTransferSetback relies on to avoid
+            // refunding the same withdrawal twice.
+            const candidate = candidateTx as { id: string; metadata: Record<string, unknown> | null };
             const { error: backfillErr } = await supabase
               .from('wallet_transactions')
               .update({
                 stripe_transfer_id: transfer.id,
-                metadata: { transfer_status: 'created' },
+                metadata: { ...(candidate.metadata ?? {}), transfer_status: 'created' },
               })
               .eq('id', (candidateTx as { id: string }).id)
               .is('stripe_transfer_id', null); // optimistic-lock guard against a concurrent backfill
