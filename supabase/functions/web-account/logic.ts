@@ -77,6 +77,9 @@ export function payoutStageV2(bp: V2Payment | null): PayoutStage {
       return 'refunding'
     case 'refunded':
       return 'refunded'
+    case 'pending_payment':
+    case 'canceled':
+      return 'none'
     default:
       return 'held'
   }
@@ -427,9 +430,6 @@ export function bountyStage(i: StageInput): { stage: string; label: string } {
 // ─── Messages ─────────────────────────────────────────────────────────────
 
 export const MAX_MESSAGE_LENGTH = 2000
-export const RATE_LIMIT_PER_MINUTE = 10
-export const RATE_LIMIT_PER_HOUR = 120
-
 export function validateMessageText(raw: unknown): { ok: true; text: string } | { ok: false; error: string } {
   const text = typeof raw === 'string' ? raw.trim() : ''
   if (!text) return { ok: false, error: 'Write a message first.' }
@@ -437,8 +437,4 @@ export function validateMessageText(raw: unknown): { ok: true; text: string } | 
     return { ok: false, error: `Messages can be up to ${MAX_MESSAGE_LENGTH} characters.` }
   }
   return { ok: true, text }
-}
-
-export function rateLimited(lastMinute: number, lastHour: number): boolean {
-  return lastMinute >= RATE_LIMIT_PER_MINUTE || lastHour >= RATE_LIMIT_PER_HOUR
 }

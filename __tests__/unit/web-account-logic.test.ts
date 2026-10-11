@@ -12,7 +12,6 @@ import {
   payoutStageV2,
   payoutStageV3,
   platformFeePercent,
-  rateLimited,
   releaseMayStart,
   releaseRoute,
   submittedCard,
@@ -53,6 +52,8 @@ describe('payout stages', () => {
     expect(payoutStageV2({ status: 'released', stripe_transfer_id: 'tr_1' })).toBe('paid')
     expect(payoutStageV2({ status: 'failed' })).toBe('failed')
     expect(payoutStageV2({ status: 'refunded' })).toBe('refunded')
+    expect(payoutStageV2({ status: 'pending_payment' })).toBe('none')
+    expect(payoutStageV2({ status: 'canceled' })).toBe('none')
     expect(payoutStageV2(null)).toBe('none')
   })
 
@@ -225,11 +226,5 @@ describe('messages', () => {
     expect(validateMessageText('   ').ok).toBe(false)
     expect(validateMessageText('x'.repeat(2001)).ok).toBe(false)
     expect(validateMessageText(42).ok).toBe(false)
-  })
-
-  it('rate-limits per minute and per hour', () => {
-    expect(rateLimited(9, 50)).toBe(false)
-    expect(rateLimited(10, 50)).toBe(true)
-    expect(rateLimited(0, 120)).toBe(true)
   })
 })

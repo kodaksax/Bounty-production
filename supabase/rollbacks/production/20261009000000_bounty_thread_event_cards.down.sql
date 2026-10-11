@@ -1,17 +1,16 @@
 -- Rollback for 20261009000000_bounty_thread_event_cards.sql
 --
--- Drops the card triggers and helpers and restores the original
--- handle_new_message_notification. Existing system messages and threads are
--- kept (they are ordinary conversations/messages); the event_type / ref_id
--- columns are kept too so no data is lost. Drop them by hand only after
--- deleting the system rows:
+-- Drops the event-card triggers and helpers and restores the original
+-- handle_new_message_notification. The event-card guard is retained because
+-- event-card columns and rows are retained. Existing system messages and threads
+-- are kept; the event_type / ref_id columns are kept too so no data is lost.
+-- Drop the guard only after deleting the system rows and columns:
 --   DELETE FROM public.messages WHERE event_type IS NOT NULL;
 --   ALTER TABLE public.messages DROP CONSTRAINT messages_event_type_check,
 --     DROP COLUMN event_type, DROP COLUMN ref_id;
 
 BEGIN;
 
-DROP TRIGGER IF EXISTS trg_messages_guard_event_cards ON public.messages;
 DROP TRIGGER IF EXISTS trg_thread_events_from_requests ON public.bounty_requests;
 DROP TRIGGER IF EXISTS trg_thread_events_from_completions ON public.completion_submissions;
 DROP TRIGGER IF EXISTS trg_thread_events_from_bounty_payments ON public.bounty_payments;
@@ -21,7 +20,6 @@ DO $$ BEGIN
   END IF;
 END $$;
 
-DROP FUNCTION IF EXISTS public.fn_messages_guard_event_cards();
 DROP FUNCTION IF EXISTS public.trg_thread_events_from_requests();
 DROP FUNCTION IF EXISTS public.trg_thread_events_from_completions();
 DROP FUNCTION IF EXISTS public.trg_thread_events_from_bounty_payments();

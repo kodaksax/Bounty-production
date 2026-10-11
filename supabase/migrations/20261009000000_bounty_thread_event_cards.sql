@@ -243,7 +243,7 @@ BEGIN
     IF NEW.status IN ('release_pending', 'released') OR NEW.stripe_transfer_id IS NOT NULL THEN
       v_hunter := COALESCE(NEW.hunter_id, (SELECT accepted_by FROM public.bounties WHERE id = NEW.bounty_id));
       PERFORM public.fn_upsert_thread_event(NEW.bounty_id, v_hunter, 'payout', NEW.id,
-        NEW.poster_id, 'Released the payment.');
+        NEW.poster_id, 'Payment status updated.');
     ELSE
       PERFORM public.fn_touch_thread_events('payout', NEW.id);
     END IF;
@@ -275,7 +275,7 @@ BEGIN
     IF NEW.state IN ('capturing', 'released') OR NEW.stripe_transfer_id IS NOT NULL THEN
       SELECT * INTO v_bounty FROM public.bounties WHERE id = NEW.bounty_id;
       PERFORM public.fn_upsert_thread_event(NEW.bounty_id, COALESCE(NEW.hunter_id, v_bounty.accepted_by),
-        'payout', NEW.bounty_id, v_bounty.poster_id, 'Released the payment.');
+        'payout', NEW.bounty_id, v_bounty.poster_id, 'Payment status updated.');
     ELSE
       PERFORM public.fn_touch_thread_events('payout', NEW.bounty_id);
     END IF;
@@ -313,19 +313,27 @@ BEGIN
     IF NEW.message_type = 'system' OR NEW.event_type IS NOT NULL OR NEW.ref_id IS NOT NULL THEN
       RAISE EXCEPTION 'system messages are written by Bounty only' USING ERRCODE = '42501';
     END IF;
+    PERFORM pg_advisory_xact_lock(hashtext('message_rate_limit:' || NEW.sender_id::text));
+    IF (
+      SELECT count(*) FROM public.messages
+      WHERE sender_id = NEW.sender_id
+        AND message_type IS DISTINCT FROM 'system'
+        AND created_at >= now() - interval '1 minute'
+    ) >= 10 OR (
+      SELECT count(*) FROM public.messages
+      WHERE sender_id = NEW.sender_id
+        AND message_type IS DISTINCT FROM 'system'
+        AND created_at >= now() - interval '1 hour'
+    ) >= 120 THEN
+      RAISE EXCEPTION 'rate_limited' USING ERRCODE = 'P0001';
+    END IF;
   ELSIF TG_OP = 'UPDATE' THEN
-    IF (OLD.message_type = 'system' OR NEW.message_type = 'system')
-       AND (NEW.message_type IS DISTINCT FROM OLD.message_type
-            OR NEW.event_type IS DISTINCT FROM OLD.event_type
-            OR NEW.ref_id IS DISTINCT FROM OLD.ref_id
-            OR NEW.text IS DISTINCT FROM OLD.text
-            OR NEW.conversation_id IS DISTINCT FROM OLD.conversation_id
-            OR NEW.sender_id IS DISTINCT FROM OLD.sender_id
-            OR NEW.deleted_at IS DISTINCT FROM OLD.deleted_at) THEN
+    IF OLD.message_type = 'system' OR OLD.event_type IS NOT NULL OR OLD.ref_id IS NOT NULL
+       OR NEW.message_type = 'system' OR NEW.event_type IS NOT NULL OR NEW.ref_id IS NOT NULL THEN
       RAISE EXCEPTION 'system messages are written by Bounty only' USING ERRCODE = '42501';
     END IF;
   ELSIF TG_OP = 'DELETE' THEN
-    IF OLD.message_type = 'system' THEN
+    IF OLD.message_type = 'system' OR OLD.event_type IS NOT NULL OR OLD.ref_id IS NOT NULL THEN
       RAISE EXCEPTION 'system messages are written by Bounty only' USING ERRCODE = '42501';
     END IF;
   END IF;

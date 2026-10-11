@@ -513,9 +513,16 @@ Deno.serve(async (req: Request) => {
         .eq('bounty_id', b.id)
         .order('created_at', { ascending: true })
       if (reqErr) throw reqErr
+      const { data: appliedCards, error: cardErr } = await admin
+        .from('messages')
+        .select('sender_id, conversations!inner(bounty_id)')
+        .eq('event_type', 'applied')
+        .eq('conversations.bounty_id', b.id)
+      if (cardErr) throw cardErr
       const hunterIds = [...new Set([
         ...(b.accepted_by ? [b.accepted_by] : []),
         ...((requests ?? []) as any[]).map((r) => r.hunter_id).filter(Boolean),
+        ...((appliedCards ?? []) as any[]).map((m) => m.sender_id).filter((id) => id && id !== b.poster_id),
       ])]
       const [cards, tids] = await Promise.all([
         people(hunterIds),
@@ -678,15 +685,6 @@ Deno.serve(async (req: Request) => {
       const v = validateMessageText(body?.text)
       if (!v.ok) return reply({ error: v.error, code: 'invalid_message' }, 400)
 
-      const since = (ms: number) => new Date(Date.now() - ms).toISOString()
-      const [{ count: lastMinute }, { count: lastHour }] = await Promise.all([
-        admin.from('messages').select('id', { count: 'exact', head: true }).eq('sender_id', userId).gte('created_at', since(60e3)),
-        admin.from('messages').select('id', { count: 'exact', head: true }).eq('sender_id', userId).gte('created_at', since(3600e3)),
-      ])
-      if (rateLimited(lastMinute ?? 0, lastHour ?? 0)) {
-        return reply({ error: 'You’re sending messages too quickly. Wait a minute and try again.', code: 'rate_limited' }, 429)
-      }
-
       // RLS decides: participant, active account, no block in the thread.
       const { data, error } = await asUser
         .from('messages')
@@ -694,6 +692,9 @@ Deno.serve(async (req: Request) => {
         .select('id, created_at')
         .single()
       if (error || !data) {
+        if (error?.code === 'P0001' && error.message === 'rate_limited') {
+          return reply({ error: 'You’re sending messages too quickly. Wait a minute and try again.', code: 'rate_limited' }, 429)
+        }
         return reply({ error: 'You can’t send messages in this conversation.', code: 'forbidden' }, 403)
       }
       return reply({ id: data.id, created_at: data.created_at })
@@ -740,26 +741,44 @@ Deno.serve(async (req: Request) => {
 
       // 1. Approve, with the poster's own token (the same write the app makes).
       if (sub.status === 'pending') {
-        const { error } = await asUser
+        const { data: approval, error } = await asUser
           .from('completion_submissions')
           .update({ status: 'approved', reviewed_at: new Date().toISOString() })
           .eq('id', sub.id)
           .eq('status', 'pending')
+          .select('id')
+          .maybeSingle()
         if (error) {
           console.error('[web-account] approve failed', { bountyId: b.id, error })
           return reply({ error: 'We couldn’t save your approval. Nothing was released. Please try again.', code: 'approve_failed' }, 500)
+        }
+        if (!approval) {
+          const { data: current, error: reloadError } = await admin
+            .from('completion_submissions')
+            .select('status')
+            .eq('id', sub.id)
+            .maybeSingle()
+          if (reloadError) {
+            console.error('[web-account] approval reload failed', { bountyId: b.id, error: reloadError })
+            return reply({ error: 'We couldn’t verify your approval. Nothing was released. Please try again.', code: 'approve_failed' }, 500)
+          }
+          if (current?.status !== 'approved') {
+            return reply({ error: 'This submission is no longer awaiting approval. Nothing was released.', code: 'approval_conflict' }, 409)
+          }
         }
       }
 
       const completeBounty = async () => {
         // trg_bounties_a_paid_completion_guard allows this only once a release
         // is confirmed (20261005010000); a refusal just leaves it in_progress.
-        const { error } = await asUser
+        const { data, error } = await asUser
           .from('bounties')
           .update({ status: 'completed', completed_at: new Date().toISOString() })
           .eq('id', b.id)
           .eq('status', 'in_progress')
-        if (error) console.warn('[web-account] could not mark completed yet', { bountyId: b.id, code: error.code })
+          .select('id')
+          .maybeSingle()
+        if (error || !data) console.warn('[web-account] could not mark completed yet', { bountyId: b.id, code: error?.code })
       }
 
       if (b.is_for_honor) {
@@ -838,12 +857,15 @@ Deno.serve(async (req: Request) => {
       if (state.submission?.status !== 'approved' || !['paid', 'balance_credited'].includes(state.payoutStage)) {
         return reply({ completed: false })
       }
-      const { error } = await asUser
+      const { data, error } = await asUser
         .from('bounties')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', b.id)
         .eq('status', 'in_progress')
-      return reply({ completed: !error })
+        .select('id')
+        .maybeSingle()
+      if (error) return reply({ error: 'We couldn’t complete this bounty. Please try again.', code: 'completion_failed' }, 500)
+      return reply({ completed: Boolean(data) })
     }
 
     // ── POST /payout-link ────────────────────────────────────────────────
