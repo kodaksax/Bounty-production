@@ -51,7 +51,7 @@ export async function openSupportCase(
           .eq('status', 'resolved')
           .select('id')
           .maybeSingle()
-        if (reopened?.id) return notifySupportCase(c, supabaseUrl, reopened.id)
+        if (reopened?.id) return notifySupportCase(c, supabaseUrl, serviceKey, reopened.id)
       }
       const { data: existing } = await admin
         .from('support_cases')
@@ -64,12 +64,13 @@ export async function openSupportCase(
     console.error('[support-cases] insert failed', { kind: c.kind, code: error.code })
     return { id: null, created: false }
   }
-  return data?.id ? notifySupportCase(c, supabaseUrl, data.id) : { id: null, created: false }
+  return data?.id ? notifySupportCase(c, supabaseUrl, serviceKey, data.id) : { id: null, created: false }
 }
 
 async function notifySupportCase(
   c: { kind: string; channel: 'web' | 'email' | 'system'; posterId: string | null; bountyId: string | null; summary: string },
   supabaseUrl: string,
+  serviceKey: string,
   id: string
 ): Promise<{ id: string; created: true }> {
   // Nudge a person now. The case row is the record; the email is best-effort.

@@ -461,7 +461,7 @@ Deno.serve(async (req: Request) => {
           .eq('id', body!.request_id as string)
           .maybeSingle()
         const requestBounty = request ? await loadOwnedBounty(admin, request.bounty_id as string, userId) : null
-        if (!requestBounty) return reply({ ok: false, error: 'We couldn’t find that application on your account.', code: 'not_found' }, 404)
+        if (!request || !requestBounty) return reply({ ok: false, error: 'We couldn’t find that application on your account.', code: 'not_found' }, 404)
         if (bountyId && requestBounty.id !== bountyId) {
           return reply({ ok: false, error: 'That application doesn’t match this bounty.', code: 'invalid_input' }, 400)
         }
