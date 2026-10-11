@@ -182,28 +182,27 @@ Deno.serve(async (req: Request) => {
       const requests = (reqRows ?? []) as Json[]
       const hunterIds = [...new Set(requests.map((r) => r.hunter_id as string).filter(isUuid))]
 
-      const [{ data: profiles }, { data: ratings }, { data: completed }] = hunterIds.length
-        ? await Promise.all([
-            admin
-              .from('profiles')
-              .select('id, display_name, full_name, username, avatar, created_at, id_verification_status, stripe_identity_status, phone_verified')
-              .in('id', hunterIds),
-            admin
-              .from('ratings')
-              .select('to_user_id, rating, comment, created_at, hidden_at')
-              .in('to_user_id', hunterIds)
-              .order('created_at', { ascending: false })
-              .limit(300),
-            admin.from('bounties').select('accepted_by').in('accepted_by', hunterIds).eq('status', 'completed'),
-          ])
-        : [{ data: [] }, { data: [] }, { data: [] }]
+      let profiles: Json[] = []
+      let activityStats: Json[] = []
+      const reviewsByHunter = new Map<string, Json[]>()
+      if (hunterIds.length) {
+        const [{ data: profileRows }, { data: statsRows }] = await Promise.all([
+          admin
+            .from('profiles')
+            .select('id, display_name, full_name, username, avatar, created_at, id_verification_status, stripe_identity_status, phone_verified')
+            .in('id', hunterIds),
+          admin.rpc('get_profile_activity_stats_batch', { target_user_ids: hunterIds }),
+        ])
+        profiles = (profileRows ?? []) as Json[]
+        activityStats = (statsRows ?? []) as Json[]
+        await Promise.all(hunterIds.map(async (hunterId) => {
+          const { data } = await admin.rpc('get_user_reviews', { p_user_id: hunterId, p_limit: 3, p_offset: 0 })
+          reviewsByHunter.set(hunterId, (data ?? []) as Json[])
+        }))
+      }
 
       const profileBy = new Map(((profiles ?? []) as Json[]).map((p) => [p.id as string, p]))
-      const completedBy = countBy((completed ?? []) as Json[], 'accepted_by')
-      const ratingsFor = (id: string) =>
-        ((ratings ?? []) as Array<{ to_user_id: string; rating: number; comment: string | null; created_at: string; hidden_at: string | null }>).filter(
-          (r) => r.to_user_id === id
-        )
+      const statsBy = new Map(((activityStats ?? []) as Json[]).map((stats) => [stats.user_id as string, stats]))
 
       // Viewing applicants is the poster engaging with them. The absent-poster
       // sweep and the request-expiry copy read poster_interacted_at, and a
@@ -242,8 +241,8 @@ Deno.serve(async (req: Request) => {
           applied_at: r.created_at,
           hunter: summarizeHunter(
             (profileBy.get(r.hunter_id as string) as Json) ?? null,
-            ratingsFor(r.hunter_id as string),
-            completedBy.get(r.hunter_id as string) ?? 0
+            (statsBy.get(r.hunter_id as string) as { rating_avg?: number | string | null; rating_count?: number; hunter_completed?: number } | undefined) ?? null,
+            (reviewsByHunter.get(r.hunter_id as string) ?? []) as Array<{ rating: number; comment: string | null; created_at: string }>
           ),
         })),
         submission: sub
@@ -351,7 +350,7 @@ Deno.serve(async (req: Request) => {
         // The hunter never marked it done (e.g. finished in person). Payment
         // is not released from a poster's word alone with no hunter record of
         // the work — a person checks with both sides first.
-        const caseId = await openSupportCase(admin, supabaseUrl, serviceKey, {
+        const { id: caseId } = await openSupportCase(admin, supabaseUrl, serviceKey, {
           kind: 'completion_without_submission',
           channel: 'web',
           posterId: userId,
@@ -379,6 +378,21 @@ Deno.serve(async (req: Request) => {
           console.error('[poster-web] approve failed', { bountyId, code: approveErr.code, message: approveErr.message })
           return reply({ ok: false, outcome: 'retry', message: 'We couldn’t save your confirmation. Nothing changed — please try again.' }, 503)
         }
+      }
+
+      if (bounty.is_for_honor) {
+        const { data: completed, error: completeErr } = await asUser
+          .from('bounties')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', bountyId)
+          .eq('status', 'in_progress')
+          .select('id')
+        if (completeErr || !completed?.length) {
+          console.error('[poster-web] honor completion failed', { bountyId, code: completeErr?.code })
+          return reply({ ok: false, outcome: 'retry', message: 'We couldn’t save your confirmation. Nothing changed — please try again.' }, 503)
+        }
+        capture(userId, 'web_completion_confirmed', { bounty_id: bountyId, outcome: 'completed' })
+        return reply({ ok: true, outcome: 'completed', message: 'Thank you — the job is complete.' })
       }
 
       // 2. Release through the unchanged payments endpoint, as the user. It
@@ -412,7 +426,7 @@ Deno.serve(async (req: Request) => {
 
       let caseId: string | null = null
       if (result.needsSupport) {
-        caseId = await openSupportCase(admin, supabaseUrl, serviceKey, {
+        const opened = await openSupportCase(admin, supabaseUrl, serviceKey, {
           kind: 'release_blocked',
           channel: 'web',
           posterId: userId,
@@ -420,7 +434,9 @@ Deno.serve(async (req: Request) => {
           summary: `Poster confirmed "${bounty.title}" is done, but payout could not start (${String(releaseBody?.code ?? releaseStatus)}). Help the hunter finish payout setup, then release.`,
           metadata: { release_status: releaseStatus, release_code: releaseBody?.code ?? null },
           dedupeKey: `release_blocked:${bountyId}`,
+          reopenResolved: true,
         })
+        caseId = opened.id
       }
       capture(userId, 'web_completion_confirmed', { bounty_id: bountyId, outcome: result.outcome })
       return reply({ ...result, case_id: caseId }, result.httpStatus)
@@ -437,12 +453,27 @@ Deno.serve(async (req: Request) => {
         const owned = await loadOwnedBounty(admin, body!.bounty_id as string, userId)
         bountyId = owned ? owned.id : null
       }
-      const caseId = await openSupportCase(admin, supabaseUrl, serviceKey, {
+      let requestId: string | null = null
+      if (isUuid(body?.request_id)) {
+        const { data: request } = await admin
+          .from('bounty_requests')
+          .select('id, bounty_id')
+          .eq('id', body!.request_id as string)
+          .maybeSingle()
+        const requestBounty = request ? await loadOwnedBounty(admin, request.bounty_id as string, userId) : null
+        if (!requestBounty) return reply({ ok: false, error: 'We couldn’t find that application on your account.', code: 'not_found' }, 404)
+        if (bountyId && requestBounty.id !== bountyId) {
+          return reply({ ok: false, error: 'That application doesn’t match this bounty.', code: 'invalid_input' }, 400)
+        }
+        bountyId = requestBounty.id
+        requestId = request.id as string
+      }
+      const { id: caseId } = await openSupportCase(admin, supabaseUrl, serviceKey, {
         kind: input.reason === 'general' || input.reason === 'payment' ? 'web_contact' : 'problem_report',
         channel: 'web',
         posterId: userId,
         bountyId,
-        requestId: isUuid(body?.request_id) ? (body!.request_id as string) : null,
+        requestId,
         summary: input.message || '(No message — please call back.)',
         metadata: { reason: input.reason, ...(input.phone ? { callback_phone: input.phone } : {}) },
       })

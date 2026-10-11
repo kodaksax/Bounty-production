@@ -185,11 +185,10 @@ describe('summarizeHunter — only what a poster should see', () => {
   const ratings = [
     { rating: 5, comment: 'Great', created_at: '2026-09-01T00:00:00Z' },
     { rating: 4, comment: null, created_at: '2026-09-10T00:00:00Z' },
-    { rating: 1, comment: 'hidden spam', created_at: '2026-09-11T00:00:00Z', hidden_at: '2026-09-12T00:00:00Z' },
   ]
 
   test('allowlisted fields, with verification and reviews', () => {
-    const h = summarizeHunter(profile, ratings, 7)!
+    const h = summarizeHunter(profile, { rating_avg: 4.5, rating_count: 2, hunter_completed: 7 }, ratings)!
     expect(h.name).toBe('Jordan M.')
     expect(h.id_verified).toBe(true)
     expect(h.phone_verified).toBe(true)
@@ -200,15 +199,15 @@ describe('summarizeHunter — only what a poster should see', () => {
   })
 
   test('no contact, location, payment or risk data ever leaves', () => {
-    const json = JSON.stringify(summarizeHunter(profile, ratings, 7))
-    for (const leaked of ['jordan@example.com', '555-0100', '38.8', '-77.1', 'acct_123', 'risk', 'Maglalang', 'hidden spam']) {
+    const json = JSON.stringify(summarizeHunter(profile, { rating_avg: 4.5, rating_count: 2, hunter_completed: 7 }, ratings))
+    for (const leaked of ['jordan@example.com', '555-0100', '38.8', '-77.1', 'acct_123', 'risk', 'Maglalang']) {
       expect(json).not.toContain(leaked)
     }
   })
 
   test('a non-https avatar is dropped; a missing profile is null', () => {
-    expect(summarizeHunter({ ...profile, avatar: 'javascript:alert(1)' }, [], 0)!.avatar_url).toBeNull()
-    expect(summarizeHunter(null, [], 0)).toBeNull()
+    expect(summarizeHunter({ ...profile, avatar: 'javascript:alert(1)' }, null, [])!.avatar_url).toBeNull()
+    expect(summarizeHunter(null, null, [])).toBeNull()
   })
 })
 

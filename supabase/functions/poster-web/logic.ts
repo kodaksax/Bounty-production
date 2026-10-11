@@ -290,12 +290,12 @@ export interface HunterSummary {
  */
 export function summarizeHunter(
   profile: Record<string, unknown> | null,
-  ratings: Array<{ rating: number; comment?: string | null; created_at: string; hidden_at?: string | null }>,
-  completedJobs: number
+  stats: { rating_avg?: number | string | null; rating_count?: number; hunter_completed?: number } | null,
+  reviews: Array<{ rating: number; comment?: string | null; created_at: string }>
 ): HunterSummary | null {
   if (!profile || typeof profile.id !== 'string') return null
-  const visible = ratings.filter((r) => !r.hidden_at && Number.isFinite(r.rating))
-  const avg = visible.length ? visible.reduce((s, r) => s + r.rating, 0) / visible.length : null
+  const avg = stats?.rating_avg == null ? null : Number(stats.rating_avg)
+  const ratingAverage = avg !== null && Number.isFinite(avg) ? Math.round(avg * 10) / 10 : null
   const name =
     pickString(profile.display_name) ||
     firstName(pickString(profile.full_name)) ||
@@ -309,10 +309,10 @@ export function summarizeHunter(
     member_since: pickString(profile.created_at) || null,
     id_verified: profile.id_verification_status === 'verified' || profile.stripe_identity_status === 'verified',
     phone_verified: profile.phone_verified === true,
-    rating_average: avg === null ? null : Math.round(avg * 10) / 10,
-    rating_count: visible.length,
-    completed_jobs: Math.max(0, Math.floor(completedJobs || 0)),
-    recent_reviews: visible
+    rating_average: ratingAverage,
+    rating_count: Math.max(0, Math.floor(Number(stats?.rating_count) || 0)),
+    completed_jobs: Math.max(0, Math.floor(Number(stats?.hunter_completed) || 0)),
+    recent_reviews: reviews
       .slice()
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
       .slice(0, 3)

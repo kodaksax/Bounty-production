@@ -110,7 +110,7 @@ Deno.serve(async (req: Request) => {
   const intent = classifyReplyIntent(replyText)
 
   if (!live) {
-    await openSupportCase(admin, supabaseUrl, serviceKey, {
+    const opened = await openSupportCase(admin, supabaseUrl, serviceKey, {
       kind: 'email_reply_unmatched',
       channel: 'email',
       posterId: null,
@@ -121,6 +121,8 @@ Deno.serve(async (req: Request) => {
       metadata: { from: fromAddress, intent, expired: Boolean(context), email_id: emailId },
       dedupeKey,
     })
+    if (!opened.id) return json({ error: 'Could not record this reply' }, 503)
+    if (!opened.created) return json({ ok: true, duplicate: true })
     capture('system', 'email_reply_received', { matched: false, intent })
     return json({ ok: true, matched: false })
   }
@@ -132,7 +134,7 @@ Deno.serve(async (req: Request) => {
   const accountEmail = bareEmail(account?.user?.email)
   const fromMatchesAccount = Boolean(accountEmail) && accountEmail === fromAddress
 
-  await openSupportCase(admin, supabaseUrl, serviceKey, {
+  const opened = await openSupportCase(admin, supabaseUrl, serviceKey, {
     kind: 'email_reply',
     channel: 'email',
     posterId: context.poster_id,
@@ -145,6 +147,8 @@ Deno.serve(async (req: Request) => {
     metadata: { intent, from_matches_account: fromMatchesAccount, email_id: emailId, bounty_status: bounty?.status ?? null },
     dedupeKey,
   })
+  if (!opened.id) return json({ error: 'Could not record this reply' }, 503)
+  if (!opened.created) return json({ ok: true, duplicate: true })
 
   let acknowledged = false
   if (shouldSendAck(context.last_reply_at)) {

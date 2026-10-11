@@ -62,7 +62,7 @@ export function pickGeocodeHit(address: string, response: unknown): GeocodeOutco
 
   const usable = features.filter((f: any) =>
     f?.properties?.countrycode === 'US' &&
-    !['country', 'state', 'county'].includes(f?.properties?.type) &&
+    ['house', 'street'].includes(f?.properties?.type) &&
     !JUNK_OSM_VALUES.includes(f?.properties?.osm_value) &&
     Array.isArray(f?.geometry?.coordinates) &&
     f.geometry.coordinates.length >= 2

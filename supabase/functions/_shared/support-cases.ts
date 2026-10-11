@@ -25,8 +25,9 @@ export async function openSupportCase(
     summary: string
     metadata?: Json
     dedupeKey?: string
+    reopenResolved?: boolean
   }
-): Promise<string | null> {
+): Promise<{ id: string | null; created: boolean }> {
   const row = {
     kind: c.kind,
     channel: c.channel,
@@ -39,14 +40,38 @@ export async function openSupportCase(
   }
   const { data, error } = await admin.from('support_cases').insert(row).select('id').maybeSingle()
   if (error) {
-    // 23505 = an open case for this situation already exists; that's fine.
+    // 23505 = this situation already has a case. Reopen only recurring cases;
+    // event-level keys (such as inbound email ids) remain deduped permanently.
     if (error.code === '23505' && c.dedupeKey) {
-      const { data: existing } = await admin.from('support_cases').select('id').eq('dedupe_key', c.dedupeKey).maybeSingle()
-      return existing?.id ?? null
+      if (c.reopenResolved) {
+        const { data: reopened } = await admin
+          .from('support_cases')
+          .update({ ...row, status: 'open', updated_at: new Date().toISOString(), resolved_at: null, resolved_by: null })
+          .eq('dedupe_key', c.dedupeKey)
+          .eq('status', 'resolved')
+          .select('id')
+          .maybeSingle()
+        if (reopened?.id) return notifySupportCase(c, supabaseUrl, reopened.id)
+      }
+      const { data: existing } = await admin
+        .from('support_cases')
+        .select('id')
+        .eq('dedupe_key', c.dedupeKey)
+        .neq('status', 'resolved')
+        .maybeSingle()
+      return { id: existing?.id ?? null, created: false }
     }
     console.error('[support-cases] insert failed', { kind: c.kind, code: error.code })
-    return null
+    return { id: null, created: false }
   }
+  return data?.id ? notifySupportCase(c, supabaseUrl, data.id) : { id: null, created: false }
+}
+
+async function notifySupportCase(
+  c: { kind: string; channel: 'web' | 'email' | 'system'; posterId: string | null; bountyId: string | null; summary: string },
+  supabaseUrl: string,
+  id: string
+): Promise<{ id: string; created: true }> {
   // Nudge a person now. The case row is the record; the email is best-effort.
   try {
     await fetch(`${supabaseUrl}/functions/v1/send-notification-email`, {
@@ -55,13 +80,13 @@ export async function openSupportCase(
       body: JSON.stringify({
         supportAlert: true,
         title: `Support case: ${c.kind.replace(/_/g, ' ')}`,
-        body: `${c.summary}\n\nCase ${data?.id}${c.bountyId ? ` · bounty ${c.bountyId}` : ''}${c.posterId ? ` · poster ${c.posterId}` : ''}`,
+        body: `${c.summary}\n\nCase ${id}${c.bountyId ? ` · bounty ${c.bountyId}` : ''}${c.posterId ? ` · poster ${c.posterId}` : ''}`,
         data: {},
       }),
     })
   } catch (_) { /* best-effort */ }
   capture(c.posterId ?? 'system', 'support_intervention_required', { kind: c.kind, channel: c.channel, bounty_id: c.bountyId })
-  return data?.id ?? null
+  return { id, created: true }
 }
 
 // Server-side analytics, PostHog HTTP capture (same pattern as app-link /

@@ -150,6 +150,15 @@ async function reconcilePhase2Transfer(
   if (updateError) throw updateError;
 }
 
+async function completeBountyAfterConfirmedRelease(supabase: any, bountyId: string): Promise<void> {
+  const { error } = await supabase
+    .from('bounties')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', bountyId)
+    .eq('status', 'in_progress');
+  if (error) throw error;
+}
+
 /**
  * Syncs a Stripe Connect `Account` snapshot into `profiles`. Writes the
  * current capability booleans and requirements payload on every call, but
@@ -2360,6 +2369,17 @@ Deno.serve(async (req: Request) => {
             throw v3LedgerConfirmErr;
           }
 
+          const { data: confirmedFunding, error: confirmedFundingErr } = await supabase
+            .from('bounty_v3_funding')
+            .select('bounty_id')
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('state', 'released')
+            .maybeSingle();
+          if (confirmedFundingErr) throw confirmedFundingErr;
+          if (confirmedFunding?.bounty_id === v3BountyId) {
+            await completeBountyAfterConfirmedRelease(supabase, v3BountyId);
+          }
+
           console.log(
             `[webhooks] v3 release confirmed for bounty ${v3BountyId} via transfer ${transfer.id}`
           );
@@ -2372,7 +2392,20 @@ Deno.serve(async (req: Request) => {
         // amount/user-id heuristic backfill entirely so it can never
         // mis-match a Phase 2 transfer onto a legacy withdrawal row.
         if (transfer.metadata?.bounty_id) {
+          if (transfer.reversed === true) {
+            console.warn(`[webhooks] Phase 2 transfer ${transfer.id} arrived already reversed — not confirming`);
+            break;
+          }
           await reconcilePhase2Transfer(supabase, transfer, 'created');
+          const { data: payment, error: paymentError } = await supabase
+            .from('bounty_payments')
+            .select('status, stripe_transfer_id')
+            .eq('bounty_id', transfer.metadata.bounty_id)
+            .maybeSingle();
+          if (paymentError) throw paymentError;
+          if (payment?.status === 'released' && payment.stripe_transfer_id === transfer.id) {
+            await completeBountyAfterConfirmedRelease(supabase, transfer.metadata.bounty_id);
+          }
           break;
         }
         const transferUserId = transfer.metadata?.user_id;

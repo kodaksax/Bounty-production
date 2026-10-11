@@ -31,6 +31,16 @@ describe('pickGeocodeHit', () => {
     expect(r.ok && r.hit.exact).toBe(false)
   })
 
+  test('does not fall back to city or locality centroids', () => {
+    const r = pickGeocodeHit('999 King St', {
+      features: [
+        feature({ type: 'city', locality: 'Alexandria' }),
+        feature({ type: 'locality', locality: 'Old Town' }),
+      ],
+    })
+    expect(r).toEqual({ ok: false, reason: 'no_match' })
+  })
+
   test('ignores transit stops, admin areas and non-US results', () => {
     const r = pickGeocodeHit('King St', {
       features: [
