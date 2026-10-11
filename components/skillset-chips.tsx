@@ -46,7 +46,7 @@ export function SkillsetChips({ skills }: SkillsetChipsProps) {
           </Text>
           {skill.credentialUrl && (
             <View style={styles.credentialBadge}>
-              <MaterialIcons name="attach-file" size={12} color="#059669" />
+              <MaterialIcons name="attach-file" size={12} color="#008E2A" />
             </View>
           )}
         </View>

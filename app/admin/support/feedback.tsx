@@ -312,7 +312,7 @@ const makeStyles = (theme: AppTheme) =>
     borderColor: 'transparent',
   },
   typeCardActive: {
-    backgroundColor: 'rgba(45,82,64,0.8)',
+    backgroundColor: 'rgba(34,38,44,0.8)',
   },
   typeLabel: {
     fontSize: 13,
@@ -384,6 +384,8 @@ const makeStyles = (theme: AppTheme) =>
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: theme.primaryShade,
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,

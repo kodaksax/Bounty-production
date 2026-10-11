@@ -292,8 +292,9 @@ describe('CreateBountyFlow — keyboard inset under each host layout', () => {
 
       // NeedHelpScreen clears 60pt of visible BottomNav + the 34pt safe area,
       // so the flow ends 94pt above the window bottom — keyboard already
-      // covers that strip.
-      expect(measuredFrame).toEqual({ y: 47, height: WINDOW_HEIGHT - 47 - 94 });
+      // covers that strip. It starts at the window top: the flow clears the
+      // status bar itself (topInset) so step 1's hero can run under it.
+      expect(measuredFrame).toEqual({ y: 0, height: WINDOW_HEIGHT - 94 });
 
       showKeyboard(336);
       expect(effectiveInset()).toBe(336 - 94);

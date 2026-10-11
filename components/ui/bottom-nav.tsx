@@ -193,7 +193,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons
                 name="gps-fixed"
-                color={activeScreen === "bounty" ? theme.text : theme.textSecondary}
+                color={theme.primary}
                 size={CENTER_ICON_SIZE}
               />
             </TouchableOpacity>
@@ -300,7 +300,7 @@ function makeStyles(
       borderTopRightRadius: 28,
       ...legacyTheme.shadows.lg,
       borderWidth: 1,
-      borderColor: "rgba(5, 150, 105, 0.25)",
+      borderColor: "rgba(0, 142, 42, 0.25)",
     },
     sideSection: {
       flex: 1,
@@ -377,9 +377,9 @@ function makeStyles(
     centerButton: {
       height: centerButtonSize,
       width: centerButtonSize,
-      backgroundColor: "rgba(5, 150, 105, 0.15)",
+      backgroundColor: "rgba(0, 142, 42, 0.15)",
       borderWidth: 2.5,
-      borderColor: "#059669",
+      borderColor: theme.primary,
       borderRadius: centerButtonSize / 2,
       alignItems: "center",
       justifyContent: "center",

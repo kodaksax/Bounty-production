@@ -3,7 +3,8 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { BlurView } from "expo-blur"
 import { Image } from "expo-image"
 import { ActivityIndicator, Alert, FlatList, Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
@@ -32,16 +33,46 @@ import { ChatSafetyWarning } from "../../components/chat-safety-warning"
 import { useChatSendProtection, useChatSendScope } from "../../hooks/use-chat-send-protection"
 import { detectOffPlatformRisk, latestIncomingRisk } from "../../lib/utils/off-platform-risk"
  
+/**
+ * A non-message row interleaved into the thread by time — the bounty inbox
+ * uses these for its interactive action cards. Ids must not collide with
+ * message ids (prefix them).
+ */
+export interface ChatTimelineItem {
+  id: string
+  createdAt: string
+  render: () => ReactNode
+}
+
+type ThreadRow =
+  | { kind: 'message'; id: string; message: Message }
+  | { kind: 'timeline'; id: string; item: ChatTimelineItem }
+
 interface ChatDetailScreenProps {
   conversation: Conversation
   onBack?: () => void
   onNavigate?: (screen?: string) => void
+  /** Extra rows merged into the thread in time order. */
+  timelineItems?: ChatTimelineItem[]
+  /** Second header line (e.g. the bounty title). */
+  headerSubtitle?: string
+  /** Rendered at the right edge of the header. */
+  headerRight?: ReactNode
+  /** Rendered between the header and the thread. */
+  topBanner?: ReactNode
+  /** Replaces the composer, e.g. while no conversation exists yet. */
+  composerOverride?: ReactNode
 }
 
 export function ChatDetailScreen({
   conversation,
   onBack,
   onNavigate,
+  timelineItems,
+  headerSubtitle,
+  headerRight,
+  topBanner,
+  composerOverride,
 }: ChatDetailScreenProps) {
   const router = useRouter()
   const { theme } = useAppThemeContext()
@@ -74,11 +105,23 @@ export function ChatDetailScreen({
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<TextInput>(null)
   const sendInFlight = useRef(false)
-  const listRef = useRef<FlatList<Message>>(null)
+  const listRef = useRef<FlatList<ThreadRow>>(null)
   // The list is `inverted`, so it opens on the newest message with no scroll
   // choreography: index 0 is the bottom of the screen. Data is therefore
   // newest-first; `messages` stays oldest-first for everything else.
-  const listData = useMemo(() => [...messages].reverse(), [messages])
+  const listData = useMemo<ThreadRow[]>(() => {
+    const rows: ThreadRow[] = messages.map(m => ({ kind: 'message', id: m.id, message: m }))
+    if (timelineItems && timelineItems.length > 0) {
+      const timeOf = (r: ThreadRow) => {
+        const t = new Date(r.kind === 'message' ? r.message.createdAt : r.item.createdAt).getTime()
+        return Number.isFinite(t) ? t : 0
+      }
+      for (const item of timelineItems) rows.push({ kind: 'timeline', id: item.id, item })
+      // Stable sort keeps same-timestamp messages in their original order.
+      rows.sort((a, b) => timeOf(a) - timeOf(b))
+    }
+    return rows.reverse()
+  }, [messages, timelineItems])
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
   const confirmSend = useChatSendProtection(conversation.id)
@@ -333,7 +376,9 @@ export function ChatDetailScreen({
     }
   }
 
-  const renderMessage = useCallback(({ item: message }: { item: Message }) => {
+  const renderMessage = useCallback(({ item: row }: { item: ThreadRow }) => {
+    if (row.kind === 'timeline') return <>{row.item.render()}</>
+    const message = row.message
     return (
       <MessageBubble
         id={message.id}
@@ -420,8 +465,11 @@ export function ChatDetailScreen({
                 <Text style={s.avatarFallbackText}>{initials}</Text>
               </AvatarFallback>
             </Avatar>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={s.headerName} numberOfLines={1}>{displayName}</Text>
+              {!!headerSubtitle && (
+                <Text style={s.headerSubtext} numberOfLines={1}>{headerSubtitle}</Text>
+              )}
               {conversation.isGroup && (
                 <Text style={s.headerSubtext}>
                   {conversation.participantIds?.length || 0} members
@@ -429,8 +477,11 @@ export function ChatDetailScreen({
               )}
             </View>
           </TouchableOpacity>
+          {headerRight}
         </View>
       </View>
+
+      {topBanner}
 
       {/* Pinned Message Header */}
       {pinnedMessage && (
@@ -485,6 +536,9 @@ export function ChatDetailScreen({
               }}
             />
             {/* Message Input */}
+            {composerOverride ? (
+              <View style={s.inputContainer}>{composerOverride}</View>
+            ) : (
             <View style={s.inputContainer}>
               <ChatSafetyWarning risk={composerRisk} />
               {/* Message being replied to */}
@@ -539,63 +593,71 @@ export function ChatDetailScreen({
                   </TouchableOpacity>
                 </View>
               )}
+              {/* Glass composer (iOS-style): a round "+" button beside a pill
+                  input. Frosted with expo-blur (already in the native build);
+                  a hairline light rim and soft shadow give the glass edge. */}
               <View style={s.inputRow}>
                 <TouchableOpacity
-                  style={s.attachButton}
+                  style={[s.glass, s.attachButton]}
                   onPress={handlePickAttachment}
                   disabled={isPicking || isUploading}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   accessibilityRole="button"
                   accessibilityLabel="Add attachment"
                 >
+                  <BlurView intensity={40} tint={theme.isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
                   {isPicking || isUploading ? (
                     <ActivityIndicator size="small" color={theme.primary} />
                   ) : (
-                    <MaterialIcons name="attach-file" size={20} color={theme.textDisabled} />
+                    <MaterialIcons name="add" size={28} color={theme.text} />
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.emojiButton}
-                  onPress={handleToggleEmojiPicker}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={showEmojiPicker ? 'Hide emoji picker' : 'Add emoji'}
-                  accessibilityState={{ expanded: showEmojiPicker }}
-                >
-                  <MaterialIcons
-                    name={showEmojiPicker ? 'keyboard' : 'emoji-emotions'}
-                    size={20}
-                    color={showEmojiPicker ? theme.primary : theme.textDisabled}
+                <View style={[s.glass, s.inputPill]}>
+                  <BlurView intensity={40} tint={theme.isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+                  <TextInput
+                    ref={inputRef}
+                    style={s.inlineTextInput}
+                    value={inputText}
+                    onChangeText={setInputText}
+                    onFocus={handleInputFocus}
+                    placeholder={
+                      replyingTo ? 'Write a reply...' : pendingAttachment ? 'Add a caption...' : 'Message'
+                    }
+                    placeholderTextColor={theme.textSecondary}
+                    multiline
+                    textAlignVertical="center"
+                    accessibilityLabel="Message input field"
+                    accessibilityHint="Enter your message to send"
                   />
-                </TouchableOpacity>
-                <TextInput
-                  ref={inputRef}
-                  style={s.inlineTextInput}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  onFocus={handleInputFocus}
-                  placeholder={
-                    replyingTo ? 'Write a reply...' : pendingAttachment ? 'Add a caption...' : 'Type a message...'
-                  }
-                  placeholderTextColor={theme.textSecondary}
-                  multiline
-                  textAlignVertical="center"
-                  accessibilityLabel="Message input field"
-                  accessibilityHint="Enter your message to send"
-                />
-                <TouchableOpacity
-                  style={[s.sendButton, !canSend && s.sendButtonDisabled]}
-                  onPress={handleSend}
-                  disabled={!canSend}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Send message"
-                  accessibilityState={{ disabled: !canSend }}
-                >
-                  <MaterialIcons name="send" size={20} color={theme.primary} />
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.emojiButton}
+                    onPress={handleToggleEmojiPicker}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={showEmojiPicker ? 'Hide emoji picker' : 'Add emoji'}
+                    accessibilityState={{ expanded: showEmojiPicker }}
+                  >
+                    <MaterialIcons
+                      name={showEmojiPicker ? 'keyboard' : 'emoji-emotions'}
+                      size={22}
+                      color={showEmojiPicker ? theme.primary : theme.textSecondary}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.sendButton, canSend ? s.sendButtonActive : s.sendButtonDisabled]}
+                    onPress={handleSend}
+                    disabled={!canSend}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send message"
+                    accessibilityState={{ disabled: !canSend }}
+                  >
+                    <MaterialIcons name="arrow-upward" size={18} color={canSend ? '#FFFFFF' : theme.textSecondary} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
+            )}
             {/* Rendered outside the composer so it spans the full width. */}
             <EmojiPicker
               visible={showEmojiPicker}
@@ -743,32 +805,49 @@ function makeStyles(t: AppTheme) {
     },
     inputContainer: {
       paddingHorizontal: 12,
-      paddingTop: 10,
+      paddingTop: 8,
       // Safe area is handled by KeyboardAvoidingScreen, not here.
       paddingBottom: 10,
       backgroundColor: t.background,
-      borderTopWidth: 1,
-      borderTopColor: t.border,
     },
     inputRow: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      backgroundColor: t.surfaceSecondary,
+      gap: 10,
+    },
+    // Shared glass surface: frosted fill (BlurView child) + translucent tint,
+    // a hairline light rim, and a soft drop shadow.
+    glass: {
+      overflow: 'hidden',
+      backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.55)',
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      borderColor: t.isDark ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.9)',
+      shadowColor: '#000',
+      shadowOpacity: t.isDark ? 0.35 : 0.12,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 3,
+    },
+    inputPill: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      minHeight: 44,
       borderRadius: 22,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderWidth: 1,
-      borderColor: t.border,
-      minHeight: 48,
+      paddingLeft: 16,
+      paddingRight: 6,
+      paddingVertical: 6,
     },
     attachButton: {
-      marginRight: 8,
-      marginBottom: 2,
-      alignSelf: 'flex-end',
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     emojiButton: {
-      marginRight: 8,
-      marginBottom: 2,
+      marginLeft: 8,
+      marginBottom: 4,
       alignSelf: 'flex-end',
     },
     replyRow: {
@@ -840,18 +919,24 @@ function makeStyles(t: AppTheme) {
     inlineTextInput: {
       flex: 1,
       color: t.text,
-      fontSize: 15,
+      fontSize: 16,
       lineHeight: 20,
-      minHeight: 28,
+      minHeight: 30,
       maxHeight: 120,
-      paddingTop: 4,
-      paddingBottom: 4,
+      paddingTop: 5,
+      paddingBottom: 5,
     },
     sendButton: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
       marginLeft: 8,
-      marginBottom: 2,
-      padding: 6,
+      alignItems: 'center',
+      justifyContent: 'center',
       alignSelf: 'flex-end',
+    },
+    sendButtonActive: {
+      backgroundColor: t.primary,
     },
     sendButtonDisabled: {
       opacity: 0.4,

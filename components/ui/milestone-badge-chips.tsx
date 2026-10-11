@@ -19,7 +19,7 @@ const BADGE_ICONS: Record<string, MaterialIconName> = {
 };
 
 const BADGE_COLORS: Record<string, string> = {
-  first_bounty_posted: '#059669', // emerald-600
+  first_bounty_posted: '#008E2A', // emerald-600
   bounties_completed_5: '#d97706', // amber-600
   top_rated: '#eab308', // yellow-500
 };
@@ -65,7 +65,7 @@ export function MilestoneBadgeChips({ input, isOwnProfile = true }: MilestoneBad
 function BadgeChip({ badge }: { badge: MilestoneBadge }) {
   const { theme } = useAppThemeContext();
   const styles = makeStyles(theme);
-  const color = BADGE_COLORS[badge.id] ?? '#9ca3af';
+  const color = BADGE_COLORS[badge.id] ?? '#929497';
   const iconName: MaterialIconName = BADGE_ICONS[badge.id] ?? 'help-outline';
 
   if (badge.earned) {

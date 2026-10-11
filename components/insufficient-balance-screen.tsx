@@ -176,7 +176,7 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 10,
-      backgroundColor: theme.isDark ? 'rgba(5,150,105,0.22)' : 'rgba(5,150,105,0.10)',
+      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.10)',
     },
     title: {
       fontSize: 21,
@@ -198,7 +198,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 16,
       backgroundColor: theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       padding: 14,
     },
     row: {

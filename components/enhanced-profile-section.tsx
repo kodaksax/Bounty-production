@@ -488,7 +488,7 @@ export function EnhancedProfileSection({
                 </Pressable>
               ) : (
                 <View className="h-16 w-16 rounded-full overflow-hidden items-center justify-center" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
-                  <MaterialIcons name="person" size={32} color="#059669" />
+                  <MaterialIcons name="person" size={32} color="#008E2A" />
                 </View>
               )}
               {renderVerificationBadge()}
@@ -520,7 +520,7 @@ export function EnhancedProfileSection({
               accessibilityState={{ disabled: followLoading }}
             >
               {followLoading ? (
-                <ActivityIndicator size="small" color={isFollowing ? '#059669' : '#ffffff'} />
+                <ActivityIndicator size="small" color={isFollowing ? '#008E2A' : '#ffffff'} />
               ) : (
                 <Text className="text-sm font-medium" style={{ color: isFollowing ? theme.primary : '#ffffff' }}>
                   {isFollowing ? 'Following' : 'Follow'}
@@ -648,13 +648,13 @@ export function EnhancedProfileSection({
           <View className="mt-3 space-y-2">
             {effectiveProfile.location && (
               <View className="flex-row items-center">
-                <MaterialIcons name="location-on" size={16} color="#059669" />
+                <MaterialIcons name="location-on" size={16} color="#008E2A" />
                 <Text className="text-sm ml-2" style={{ color: theme.textSecondary }}>{effectiveProfile.location}</Text>
               </View>
             )}
             {effectiveProfile.portfolio && (
               <View className="flex-row items-center">
-                <MaterialIcons name="link" size={16} color="#059669" />
+                <MaterialIcons name="link" size={16} color="#008E2A" />
                 <Text className="text-sm ml-2" style={{ color: theme.textSecondary }} numberOfLines={1}>
                   {effectiveProfile.portfolio}
                 </Text>
@@ -705,7 +705,7 @@ export function EnhancedProfileSection({
         <TouchableOpacity
           onPress={handleMessagePress}
           className="ml-2 py-2 rounded-lg self-stretch mb-2"
-          style={{ backgroundColor: '#059669' }}
+          style={{ backgroundColor: '#008E2A' }}
         >
           <Text className="text-white text-sm font-medium text-center">Message</Text>
         </TouchableOpacity>
@@ -814,7 +814,7 @@ export function EnhancedProfileSection({
                   >
                     <View
                       className={`w-32 h-32 rounded-lg overflow-hidden items-center justify-center border ${
-                        isReordering ? 'border-2 border-dashed border-[#059669]' : ''
+                        isReordering ? 'border-2 border-dashed border-[#008E2A]' : ''
                       }`}
                       style={!isReordering ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.border } : { backgroundColor: theme.surfaceSecondary }}
                     >
@@ -856,7 +856,7 @@ export function EnhancedProfileSection({
                             {index > 0 && (
                               <TouchableOpacity
                                 className="rounded-full p-2"
-                                style={{ backgroundColor: '#059669' }}
+                                style={{ backgroundColor: '#008E2A' }}
                                 onPress={async () => {
                                   const newOrder = [...items];
                                   [newOrder[index - 1], newOrder[index]] = [
@@ -879,7 +879,7 @@ export function EnhancedProfileSection({
                             {index < items.length - 1 && (
                               <TouchableOpacity
                                 className="rounded-full p-2"
-                                style={{ backgroundColor: '#059669' }}
+                                style={{ backgroundColor: '#008E2A' }}
                                 onPress={async () => {
                                   const newOrder = [...items];
                                   [newOrder[index], newOrder[index + 1]] = [
@@ -1157,7 +1157,7 @@ export function PortfolioSection({
               >
                 <View
                   className={`w-32 h-32 rounded-lg overflow-hidden items-center justify-center border ${
-                    isReordering ? 'border-2 border-dashed border-[#059669]' : ''
+                    isReordering ? 'border-2 border-dashed border-[#008E2A]' : ''
                   }`}
                   style={!isReordering ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.border } : { backgroundColor: theme.surfaceSecondary }}
                 >
@@ -1199,7 +1199,7 @@ export function PortfolioSection({
                         {index > 0 && (
                           <TouchableOpacity
                             className="rounded-full p-2"
-                            style={{ backgroundColor: '#059669' }}
+                            style={{ backgroundColor: '#008E2A' }}
                             onPress={async () => {
                               const newOrder = [...items];
                               [newOrder[index - 1], newOrder[index]] = [
@@ -1219,7 +1219,7 @@ export function PortfolioSection({
                         {index < items.length - 1 && (
                           <TouchableOpacity
                             className="rounded-full p-2"
-                            style={{ backgroundColor: '#059669' }}
+                            style={{ backgroundColor: '#008E2A' }}
                             onPress={async () => {
                               const newOrder = [...items];
                               [newOrder[index], newOrder[index + 1]] = [

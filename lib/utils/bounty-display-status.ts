@@ -99,14 +99,14 @@ export const BOUNTY_DISPLAY_STATUS_LABELS: Record<BountyDisplayStatus, string> =
 export const BOUNTY_DISPLAY_STATUS_COLORS: Record<BountyDisplayStatus, string> = {
   review_needed: '#fbbf24', // amber-400
   submitted_for_review: '#38bdf8', // sky-400
-  deadline_passed: '#6b7280', // gray-500, same treatment as archived
+  deadline_passed: '#61656B', // gray-500, same treatment as archived
   applied: '#3b82f6', // blue-500
   rejected: '#ef4444', // red-500
-  open: '#059669', // emerald-600
+  open: '#008E2A', // emerald-600
   in_progress: '#fbbf24', // amber-400
   completed: '#6366f1', // indigo-500
-  archived: '#6b7280', // gray-500
+  archived: '#61656B', // gray-500
   cancelled: '#ef4444', // red-500
   cancellation_requested: '#f97316', // orange-500
-  deleted: '#6b7280', // gray-500, same treatment as archived
+  deleted: '#61656B', // gray-500, same treatment as archived
 };

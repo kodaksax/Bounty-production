@@ -711,6 +711,8 @@ function makeStyles(t: AppTheme) {
     errorTitle: { color: t.text, fontSize: 18, fontWeight: '700' },
     retryButton: {
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 10,
@@ -740,7 +742,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surface,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       padding: 16,
       marginBottom: 16,
       gap: 12,
@@ -774,7 +776,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surface,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       padding: 16,
       marginBottom: 16,
       gap: 10,
@@ -796,7 +798,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
       paddingHorizontal: 8,
     },
-    countPillText: { color: '#111827', fontSize: 12, fontWeight: '800' },
+    countPillText: { color: '#22262C', fontSize: 12, fontWeight: '800' },
     linkRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },
     linkText: { color: t.primaryLight, fontSize: 13, fontWeight: '700' },
     expandBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },

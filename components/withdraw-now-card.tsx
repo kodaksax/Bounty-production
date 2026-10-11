@@ -282,7 +282,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 16,
       padding: 20,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       gap: 6,
     },
     label: {
@@ -348,6 +348,8 @@ function makeStyles(t: AppTheme) {
     },
     primaryButton: {
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       borderRadius: 12,
       paddingVertical: 14,
       paddingHorizontal: 20,

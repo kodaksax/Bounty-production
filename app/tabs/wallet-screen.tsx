@@ -592,6 +592,8 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: t.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: t.primaryShade,
     borderRadius: 10,
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: 18,
@@ -663,7 +665,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: SPACING.COMPACT_GAP,
     borderWidth: 1,
-    borderColor: t.border,
+    ...t.insetBorder, // pressed-in edge: dark top → light bottom
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,

@@ -1,11 +1,11 @@
 // components/admin/AdminUI.tsx - Shared, themed building blocks for the admin console.
 //
 // Every admin screen previously drew itself from a private StyleSheet full of
-// hardcoded legacy colours (`#1a3d2e` page, `#2d5240` cards, `#00dc50` accent,
+// hardcoded legacy colours (`#1B1E24` page, `#22262C` cards, `#00dc50` accent,
 // `#fffef5` text) while the rest of the app had already moved to the
 // `useAppTheme()` token set in lib/themes/. That is why the admin section
 // looked like a different product, and why AdminHeader (already on the
-// canonical `#0B0F14`) sat on top of a green body.
+// canonical `#1B1E24`) sat on top of a green body.
 //
 // These components own the loading / empty / error / list-footer states that
 // each screen used to reimplement, so the states stay consistent and every
@@ -506,7 +506,7 @@ function buttonColors(theme: AppTheme, variant: AdminButtonVariant) {
     case 'warning':
       // Amber needs dark text for contrast in both light and dark mode, so
       // this is deliberately not theme-dependent.
-      return { bg: theme.warning, fg: '#111827', border: '' };
+      return { bg: theme.warning, fg: '#22262C', border: '' };
     case 'secondary':
       return { bg: 'transparent', fg: theme.text, border: theme.border };
     case 'primary':

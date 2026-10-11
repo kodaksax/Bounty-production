@@ -12,8 +12,8 @@ export const Separator = React.forwardRef<
     ref={ref}
     style={
       orientation === 'horizontal'
-        ? [ { height: 1, width: '100%', backgroundColor: '#e5e7eb' }, style ]
-        : [ { width: 1, height: '100%', backgroundColor: '#e5e7eb' }, style ]
+        ? [ { height: 1, width: '100%', backgroundColor: '#F4F1EC' }, style ]
+        : [ { width: 1, height: '100%', backgroundColor: '#F4F1EC' }, style ]
     }
     {...props}
   />

@@ -214,7 +214,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
           <TouchableOpacity onPress={addNewSkill} className="px-3 py-2 rounded-lg mr-2" style={{ backgroundColor: theme.surfaceSecondary }} accessibilityRole="button" accessibilityLabel="Add new skill">
             <Text className="text-sm" style={{ color: theme.text }}>Add</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleSave} className="px-3 py-2 bg-[#059669] rounded-lg" accessibilityRole="button" accessibilityLabel="Save skillsets">
+          <TouchableOpacity onPress={handleSave} className="px-3 py-2 bg-[#008E2A] rounded-lg" accessibilityRole="button" accessibilityLabel="Save skillsets">
             <Text className="text-white text-sm font-semibold">Save</Text>
           </TouchableOpacity>
         </View>

@@ -298,7 +298,7 @@ export function InstantCashOutScreen({
                 <MaterialIcons
                   name={item.met ? 'check-circle' : 'radio-button-unchecked'}
                   size={20}
-                  color={item.met ? '#22c55e' : theme.textDisabled}
+                  color={item.met ? '#008E2A' : theme.textDisabled}
                 />
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={[s.checklistLabel, item.met && s.checklistLabelMet]}>{item.label}</Text>
@@ -325,7 +325,7 @@ export function InstantCashOutScreen({
                 <MaterialIcons
                   name={selectedCardId === card.id ? 'radio-button-checked' : 'radio-button-unchecked'}
                   size={22}
-                  color={selectedCardId === card.id ? '#22c55e' : theme.textDisabled}
+                  color={selectedCardId === card.id ? '#008E2A' : theme.textDisabled}
                 />
                 <Text style={s.cardRowText}>{card.brand ?? 'Card'} •••• {card.last4}</Text>
               </TouchableOpacity>
@@ -451,7 +451,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', backgroundColor: t.surfaceSecondary,
     borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 2, borderColor: 'transparent',
   },
-  cardRowSelected: { borderColor: '#22c55e', backgroundColor: t.surface },
+  cardRowSelected: { borderColor: '#008E2A', backgroundColor: t.surface },
   cardRowText: { marginLeft: 10, fontSize: 15, fontWeight: '600', color: t.text },
   addCardButton: {
     flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
@@ -468,7 +468,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   feeLabel: { fontSize: 13, color: t.textSecondary },
   feeValue: { fontSize: 13, color: t.textSecondary },
   feeLabelStrong: { fontSize: 14, fontWeight: '600', color: t.text },
-  feeValueStrong: { fontSize: 14, fontWeight: '700', color: '#22c55e' },
+  feeValueStrong: { fontSize: 14, fontWeight: '700', color: '#008E2A' },
   infoCard: {
     flexDirection: 'row', backgroundColor: t.surface, borderRadius: 12, padding: 12, marginBottom: 24,
   },
@@ -476,8 +476,8 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   footer: { padding: 16 },
   cashOutButton: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    backgroundColor: '#22c55e', borderRadius: 12, paddingVertical: 16,
-    shadowColor: '#22c55e', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3,
+    backgroundColor: '#008E2A', borderRadius: 12, paddingVertical: 16,
+    shadowColor: '#008E2A', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3,
   },
   cashOutButtonDisabled: { opacity: 0.5 },
   cashOutButtonText: { fontSize: 16, fontWeight: '600', color: '#ffffff' },

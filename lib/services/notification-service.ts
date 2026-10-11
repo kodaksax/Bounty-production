@@ -168,7 +168,7 @@ export class NotificationService {
 
       const importance = Notifications.AndroidImportance;
       const vibrationPattern = [0, 250, 250, 250];
-      const lightColor = '#10B981';
+      const lightColor = '#008E2A';
 
       await Promise.all([
         Notifications.setNotificationChannelAsync('messages', {

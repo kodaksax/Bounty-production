@@ -72,7 +72,7 @@ export function WithdrawMethodSelect({
           <MaterialIcons
             name="bolt"
             size={22}
-            color={!instantEligible ? theme.textDisabled : selected === 'instant' ? '#22c55e' : theme.textSecondary}
+            color={!instantEligible ? theme.textDisabled : selected === 'instant' ? '#008E2A' : theme.textSecondary}
           />
           {!instantEligible && <MaterialIcons name="lock" size={14} color={theme.textDisabled} style={{ marginLeft: 4 }} />}
         </View>
@@ -104,7 +104,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   instantIconRow: { flexDirection: 'row', alignItems: 'center' },
   cardTitle: { fontSize: 15, fontWeight: '700', color: t.text, marginTop: 8 },
   cardTitleSelected: { color: t.primary },
-  cardTitleSelectedInstant: { color: '#22c55e' },
+  cardTitleSelectedInstant: { color: '#008E2A' },
   cardTitleDisabled: { color: t.textSecondary },
   cardSubtitle: { fontSize: 12, color: t.textSecondary, marginTop: 2 },
   cardSubtitleDisabled: { color: t.textDisabled },

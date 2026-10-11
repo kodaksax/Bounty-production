@@ -89,7 +89,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#059669', // emerald-600
+      backgroundColor: '#008E2A', // emerald-600
     },
     header: {
       flexDirection: 'row',
@@ -156,10 +156,10 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       justifyContent: 'center',
     },
     toggleButtonActive: {
-      backgroundColor: '#10B981', // emerald-400
+      backgroundColor: '#008E2A', // emerald-400
     },
     toggleButtonInactive: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#00571A', // emerald-800
     },
     toggleCircle: {
       position: 'absolute',
@@ -181,7 +181,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     },
     honorDescriptionText: {
       fontSize: 12,
-      color: '#6EE7B7', // emerald-300
+      color: '#1FAE49', // emerald-300
     },
     keypadContainer: {
       flex: 1,
@@ -222,7 +222,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       justifyContent: 'center',
     },
     addButtonEnabled: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#00571A', // emerald-800
     },
     addButtonDisabled: {
       backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-800/50
@@ -233,7 +233,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       fontSize: 16,
     },
     addButtonTextDisabled: {
-      color: '#6EE7B7', // emerald-300
+      color: '#1FAE49', // emerald-300
     },
     // Style aliases to match JSX usage
     toggle: {
@@ -244,10 +244,10 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       justifyContent: 'center',
     },
     toggleActive: {
-      backgroundColor: '#10B981', // emerald-400
+      backgroundColor: '#008E2A', // emerald-400
     },
     toggleInactive: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#00571A', // emerald-800
     },
     toggleSlider: {
       position: 'absolute',
@@ -269,7 +269,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     },
     honorText: {
       fontSize: 12,
-      color: '#6EE7B7', // emerald-300
+      color: '#1FAE49', // emerald-300
     },
     bottomButtonContainer: {
       padding: 16,
@@ -317,7 +317,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               title="What are Honor Bounties?"
               content="Honor bounties are non-paid tasks that help build reputation in the community. People complete them to gain experience, help others, and build their profile rating. Great for simple tasks or community support."
               iconSize={16}
-              iconColor="#059669"
+              iconColor="#008E2A"
             />
           </View>
         </View>

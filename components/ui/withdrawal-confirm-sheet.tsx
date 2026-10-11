@@ -126,7 +126,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   rowLabel: { fontSize: 14, color: t.textSecondary },
   rowValue: { fontSize: 14, fontWeight: '600', color: t.text, flexShrink: 1, textAlign: 'right', marginLeft: 12 },
   rowLabelStrong: { fontSize: 14, fontWeight: '600', color: t.text },
-  rowValueStrong: { fontSize: 15, fontWeight: '700', color: '#22c55e' },
+  rowValueStrong: { fontSize: 15, fontWeight: '700', color: '#008E2A' },
   disclaimer: { fontSize: 12, color: t.textDisabled, textAlign: 'center', marginTop: 16, lineHeight: 17 },
   confirmButton: {
     width: '100%', backgroundColor: t.primary, borderRadius: 12, paddingVertical: 16,

@@ -335,7 +335,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 12,
       backgroundColor: theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
     },
     nextUpText: {
       flex: 1,

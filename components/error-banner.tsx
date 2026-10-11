@@ -110,8 +110,8 @@ export function ErrorBanner({
   // contrast badly, so the warning variant uses fixed dark "ink" text instead
   // (matching how amber alerts read elsewhere). The red error variant keeps
   // white text, consistent with ThemedButton's destructive variant.
-  const contentColor = isWarning ? '#1F2937' : '#ffffff';
-  const actionPillBg = isWarning ? 'rgba(31,41,55,0.12)' : 'rgba(255,255,255,0.25)';
+  const contentColor = isWarning ? '#2A2E35' : '#ffffff';
+  const actionPillBg = isWarning ? 'rgba(42,46,53,0.12)' : 'rgba(255,255,255,0.25)';
   const iconName = getIconForErrorType(error.type);
 
   return (

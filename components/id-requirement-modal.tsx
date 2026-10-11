@@ -56,7 +56,7 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: theme.surface,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       paddingHorizontal: 24,
       paddingTop: 28,
       paddingBottom: 20,

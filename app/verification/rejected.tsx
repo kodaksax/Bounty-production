@@ -134,6 +134,8 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       paddingVertical: SPACING.CARD_PADDING,
       borderRadius: 999,
       marginBottom: SPACING.ELEMENT_GAP,

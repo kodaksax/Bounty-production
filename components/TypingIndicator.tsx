@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bubble: {
-    backgroundColor: '#1F2937',
+    backgroundColor: '#2A2E35',
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -84,11 +84,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#9CA3AF',
+    backgroundColor: '#929497',
   },
   text: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#929497',
     fontStyle: 'italic',
   },
 });

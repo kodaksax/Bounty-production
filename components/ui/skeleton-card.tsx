@@ -11,30 +11,30 @@ export function SkeletonCard() {
     <View style={styles.card}>
       {/* Header: avatar and poster info */}
       <View style={styles.header}>
-        <Skeleton className="h-10 w-10 rounded-full bg-[#111827]" />
+        <Skeleton className="h-10 w-10 rounded-full bg-[#22262C]" />
         <View style={styles.headerText}>
-          <Skeleton className="h-4 w-32 mb-2 bg-[#111827]" />
-          <Skeleton className="h-3 w-20 bg-[#111827]" />
+          <Skeleton className="h-4 w-32 mb-2 bg-[#22262C]" />
+          <Skeleton className="h-3 w-20 bg-[#22262C]" />
         </View>
       </View>
       
       {/* Title */}
-      <Skeleton className="h-5 w-full mb-2 bg-[#111827]" />
+      <Skeleton className="h-5 w-full mb-2 bg-[#22262C]" />
       
       {/* Description lines */}
-      <Skeleton className="h-3 w-full mb-2 bg-[#111827]" />
-      <Skeleton className="h-3 w-4/5 mb-3 bg-[#111827]" />
+      <Skeleton className="h-3 w-full mb-2 bg-[#22262C]" />
+      <Skeleton className="h-3 w-4/5 mb-3 bg-[#22262C]" />
       
       {/* Footer: amount, location, and actions */}
       <View style={styles.footer}>
-        <Skeleton className="h-4 w-24 bg-[#111827]" />
-        <Skeleton className="h-4 w-28 bg-[#111827]" />
+        <Skeleton className="h-4 w-24 bg-[#22262C]" />
+        <Skeleton className="h-4 w-28 bg-[#22262C]" />
       </View>
       
       {/* Action buttons */}
       <View style={styles.actions}>
-        <Skeleton className="h-10 flex-1 rounded-lg mr-2 bg-[#111827]" />
-        <Skeleton className="h-10 flex-1 rounded-lg bg-[#111827]" />
+        <Skeleton className="h-10 flex-1 rounded-lg mr-2 bg-[#22262C]" />
+        <Skeleton className="h-10 flex-1 rounded-lg bg-[#22262C]" />
       </View>
     </View>
   );
@@ -55,12 +55,12 @@ export function SkeletonCardList({ count = 3 }: { count?: number }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#454952',
   },
   header: {
     flexDirection: 'row',

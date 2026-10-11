@@ -7,7 +7,7 @@
 // admins saw the console, everyone else was redirected to the feed
 // (GitHub #809, #812). __tests__/unit/route-url-collisions.test.ts guards this.
 //
-// The admin group used to paint itself `#1a3d2e` (a legacy dark green) while
+// The admin group used to paint itself `#1B1E24` (a legacy dark green) while
 // AdminHeader had already moved to the canonical dark surface, so every admin
 // screen rendered a navy header on a green body. Both now come from the app
 // theme, which also means the console follows light mode like the rest of the

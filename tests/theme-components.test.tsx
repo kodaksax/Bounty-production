@@ -31,9 +31,9 @@ describe('Theme System', () => {
   });
 
   test('theme has emerald color palette', () => {
-    expect(theme.colors.primary[500]).toBe('#059669');
-    expect(theme.colors.primary[600]).toBe('#007423');
-    expect(theme.colors.primary[700]).toBe('#00571a');
+    expect(theme.colors.primary[500]).toBe('#008E2A');
+    expect(theme.colors.primary[600]).toBe('#00701F');
+    expect(theme.colors.primary[700]).toBe('#00571A');
     expect(theme.colors.primary[800]).toBe('#003a12');
   });
 

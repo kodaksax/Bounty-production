@@ -143,7 +143,7 @@ export default function MfaChallengeScreen() {
 
           {/* Icon */}
           <View className="items-center mb-8">
-            <View className="bg-[#059669] rounded-full p-5 mb-4">
+            <View className="bg-[#008E2A] rounded-full p-5 mb-4">
               <MaterialIcons name="security" size={40} color="#fff" />
             </View>
             <Text className="text-2xl font-bold text-center" style={{ color: theme.text }}>
@@ -197,7 +197,7 @@ export default function MfaChallengeScreen() {
             onPress={handleVerify}
             disabled={isLoading || code.length !== 6}
             className={`w-full rounded-lg py-4 items-center flex-row justify-center ${
-              code.length === 6 && !isLoading ? 'bg-[#059669]' : 'bg-[#059669]/40'
+              code.length === 6 && !isLoading ? 'bg-[#008E2A]' : 'bg-[#008E2A]/40'
             }`}
             accessibilityRole="button"
             accessibilityLabel="Verify code"

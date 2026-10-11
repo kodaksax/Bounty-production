@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   },
   successText: {
     fontSize: 13,
-    color: '#059669',
+    color: '#008E2A',
     fontWeight: '600',
   },
   dismissButton: {

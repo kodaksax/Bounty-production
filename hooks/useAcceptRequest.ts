@@ -57,6 +57,13 @@ interface UseAcceptRequestParams {
     bountyId: string | number,
     context?: { hunterName?: string; hunterAvatar?: string | null; variant?: string }
   ) => Promise<boolean>
+  /**
+   * Show the "Request Accepted" confirmation alert. Defaults to true. The
+   * bounty thread turns it off because the thread itself answers with a
+   * "Hired" card — an alert on top would point at a conversation the poster
+   * is already looking at. Failure alerts are never suppressed.
+   */
+  showSuccessAlert?: boolean
 }
 
 /**
@@ -104,6 +111,7 @@ export function useAcceptRequest({
   ensureFunded,
   refreshWallet,
   handleAcceptFailure,
+  showSuccessAlert = true,
 }: UseAcceptRequestParams) {
   const handleAcceptRequest = useCallback(async (requestId: string | number) => {
     // Track the conversation id created during this accept flow so
@@ -531,6 +539,8 @@ export function useAcceptRequest({
         return
       }
 
+      if (!showSuccessAlert) return
+
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
         Alert.alert(
           'Request Accepted',
@@ -567,6 +577,7 @@ export function useAcceptRequest({
     ensureFunded,
     refreshWallet,
     handleAcceptFailure,
+    showSuccessAlert,
   ])
 
   return { handleAcceptRequest }

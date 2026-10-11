@@ -326,7 +326,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surface,
       borderRadius: t.radius.xl,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       paddingHorizontal: 24,
       paddingTop: 28,
       paddingBottom: 24,
@@ -503,7 +503,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surface,
       borderRadius: t.radius.xl,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       paddingVertical: 12,
       paddingHorizontal: 8,
     },

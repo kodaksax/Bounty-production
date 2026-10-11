@@ -199,9 +199,9 @@ function makeStyles(t: AppTheme) {
       borderRadius: 44,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.16)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.16)' : 'rgba(0,142,42,0.1)',
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(5,150,105,0.35)' : 'rgba(5,150,105,0.25)',
+      borderColor: t.isDark ? 'rgba(0,142,42,0.35)' : 'rgba(0,142,42,0.25)',
       marginBottom: 20,
     },
     emptyTitle: {

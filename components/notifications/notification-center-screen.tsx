@@ -328,6 +328,8 @@ function makeStyles(t: AppTheme, m: HeaderMetrics) {
       paddingHorizontal: m.actionPaddingH,
       borderRadius: RADIUS.PILL,
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       borderWidth: 1,
       borderColor: t.primary,
       ...t.shadows.sm,

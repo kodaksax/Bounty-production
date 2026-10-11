@@ -243,7 +243,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surfaceSecondary,
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       padding: 12,
     },
     screenshotImage: {
@@ -291,6 +291,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: t.error,
+      borderBottomWidth: 4,
+      borderBottomColor: t.errorShade,
     },
     retryButtonText: {
       color: '#ffffff',

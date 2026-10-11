@@ -199,8 +199,8 @@ describe('Password Validation', () => {
       expect(getStrengthColor('very-weak')).toBe('#ef4444');
       expect(getStrengthColor('weak')).toBe('#f97316');
       expect(getStrengthColor('fair')).toBe('#eab308');
-      expect(getStrengthColor('strong')).toBe('#22c55e');
-      expect(getStrengthColor('very-strong')).toBe('#059669');
+      expect(getStrengthColor('strong')).toBe('#008E2A');
+      expect(getStrengthColor('very-strong')).toBe('#008E2A');
     });
   });
 

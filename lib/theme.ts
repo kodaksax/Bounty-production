@@ -1,50 +1,51 @@
 // Design system tokens for BountyExpo
-// Spy-themed emerald color palette with glass-morphism effects
+// Legacy tokens — mirrors lib/themes (use useAppTheme() in new code)
 
 export const colors = {
-  // Primary green palette (company branding)
+  // Primary green palette (company branding) — #008E2A leads.
+  // Mirrors lib/themes/colors.ts, the source of truth.
   primary: {
-    50: '#e6f7ec',
-    100: '#ccefda',
-    200: '#99deb4',
-    300: '#66ce8f',
-    400: '#33bd69',
-    500: '#059669', // Main brand color - matches live lib/themes green
-    600: '#007423',
-    700: '#00571a',
-    800: '#003a12',
-    900: '#001d09',
-    950: '#000e04',
+    50: '#EDF8F0',
+    100: '#DBF0E1',
+    200: '#B5E3C2',
+    300: '#1FAE49',
+    400: '#1FAE49',
+    500: '#008E2A', // Main brand color - matches lib/themes green
+    600: '#00701F',
+    700: '#00571A',
+    800: '#00410F',
+    900: '#002E0E',
+    950: '#001D09',
   },
 
-  // Background colors (dark navy theme)
+  // Background colors (warm graphite dark theme)
   background: {
-    primary: '#0B0F14', // Main background - page/screen
-    secondary: '#111827', // Section/card/modal background
-    surface: '#1F2937', // Input/secondary interactive background
-    elevated: '#111827', // Modal/elevated surface
+    primary: '#1B1E24', // Main background - page/screen
+    secondary: '#22262C', // Section/card/modal background
+    surface: '#2A2E35', // Input/secondary interactive background
+    elevated: '#22262C', // Modal/elevated surface
   },
 
   // Text colors
   text: {
-    primary: '#ffffff', // White for readability
-    secondary: '#9CA3AF',
-    muted: '#6B7280',
-    inverse: '#ffffff',
+    primary: '#E6DED1',
+    secondary: '#929497',
+    muted: '#61656B',
+    inverse: '#31363F',
   },
 
   // Border colors
   border: {
-    primary: '#374151',
-    muted: '#374151',
-    strong: '#374151',
+    primary: '#454952',
+    muted: '#454952',
+    strong: '#454952',
   },
 
   // Status colors
-  success: '#00912C',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#3b82f6',
+  success: '#1FAE49',
+  warning: '#D9A054',
+  error: '#D9695F',
+  info: '#6C9DBF',
 } as const;
 
 // Spacing scale
@@ -125,7 +126,7 @@ export const shadows = {
     elevation: 8,
   },
   emerald: {
-    shadowColor: '#059669', // matches live lib/themes green
+    shadowColor: '#008E2A', // matches lib/themes brand green
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -136,15 +137,15 @@ export const shadows = {
 // Glass morphism effects
 export const glassMorphism = {
   light: {
-    backgroundColor: 'rgba(45, 82, 64, 0.6)',
+    backgroundColor: 'rgba(34, 38, 44, 0.6)',
     backdropFilter: 'blur(10px)',
   },
   medium: {
-    backgroundColor: 'rgba(45, 82, 64, 0.75)',
+    backgroundColor: 'rgba(34, 38, 44, 0.75)',
     backdropFilter: 'blur(20px)',
   },
   heavy: {
-    backgroundColor: 'rgba(45, 82, 64, 0.85)',
+    backgroundColor: 'rgba(34, 38, 44, 0.85)',
     backdropFilter: 'blur(30px)',
   },
 } as const;

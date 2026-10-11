@@ -1362,7 +1362,7 @@ function makeStyles(t: AppTheme) {
       padding: SPACING.ELEMENT_GAP,
       marginBottom: 10,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       shadowColor: '#000',
       shadowOpacity: t.isDark ? 0.3 : 0.06,
       shadowRadius: 8,
@@ -1480,12 +1480,12 @@ function makeStyles(t: AppTheme) {
       flexWrap: 'wrap',
     },
     skillChip: {
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.12)' : 'rgba(5,150,105,0.08)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.12)' : 'rgba(0,142,42,0.08)',
       paddingHorizontal: SPACING.COMPACT_GAP,
       paddingVertical: 4,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.2)',
+      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.2)',
     },
     skillText: {
       color: t.primaryLight,
@@ -1542,6 +1542,8 @@ function makeStyles(t: AppTheme) {
     },
     retryBtn: {
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       paddingHorizontal: SPACING.ELEMENT_GAP,
       paddingVertical: 6,
       borderRadius: 20,
@@ -1657,6 +1659,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: SPACING.ELEMENT_GAP,
       alignItems: 'center',
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       borderRadius: 8,
       shadowColor: t.primary,
       shadowOpacity: 0.3,
@@ -1697,12 +1701,12 @@ function makeStyles(t: AppTheme) {
       marginTop: 2,
     },
     suggestionTypeBadge: {
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.12)' : 'rgba(5,150,105,0.08)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.12)' : 'rgba(0,142,42,0.08)',
       paddingHorizontal: SPACING.COMPACT_GAP,
       paddingVertical: 3,
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.2)',
+      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.2)',
     },
     suggestionTypeText: {
       color: t.primaryLight,

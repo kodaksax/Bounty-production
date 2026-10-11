@@ -268,7 +268,7 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: withAlpha(theme.primary, theme.isDark ? 0.08 : 0.05),
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       marginHorizontal: SPACING.SCREEN_HORIZONTAL,
       marginVertical: SPACING.ELEMENT_GAP,
     },

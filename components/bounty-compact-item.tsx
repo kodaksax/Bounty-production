@@ -216,10 +216,10 @@ function makeStyles(t: AppTheme) {
       height: 36,
       borderRadius: 18,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.5)' : t.border,
+      borderColor: t.isDark ? 'rgba(31,174,73,0.5)' : t.border,
     },
     avatarFallback: {
-      backgroundColor: t.isDark ? '#064e3b' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? '#00571A' : t.surfaceSecondary,
       width: 36,
       height: 36,
       borderRadius: 18,
@@ -227,7 +227,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
     },
     avatarText: {
-      color: t.isDark ? '#a7f3d0' : t.primaryLight,
+      color: t.isDark ? '#B5E3C2' : t.primaryLight,
       fontSize: 12,
       fontWeight: '700',
     },
@@ -270,7 +270,7 @@ function makeStyles(t: AppTheme) {
       flexShrink: 1,
     },
     username: {
-      color: t.isDark ? '#a7f3d0' : t.primary,
+      color: t.isDark ? '#B5E3C2' : t.primary,
       fontSize: TYPOGRAPHY.SIZE_XSMALL,
     },
     dot: {
@@ -289,7 +289,7 @@ function makeStyles(t: AppTheme) {
     onlineBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(5,150,105,0.08)',
+      backgroundColor: t.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.08)',
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: SPACING.COMPACT_GAP,
@@ -314,7 +314,7 @@ function makeStyles(t: AppTheme) {
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#a7f3d0',
+      backgroundColor: '#B5E3C2',
       borderRadius: 999,
       paddingHorizontal: 8,
       paddingVertical: 4,

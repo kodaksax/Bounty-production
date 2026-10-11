@@ -308,6 +308,8 @@ const makeStyles = (theme: AppTheme) =>
   },
   button: {
     backgroundColor: theme.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: theme.primaryShade,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',

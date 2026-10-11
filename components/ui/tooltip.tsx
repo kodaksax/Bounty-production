@@ -2,7 +2,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons'
 import * as React from "react"
-import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type TextStyle } from "react-native"
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
 
@@ -138,6 +138,9 @@ interface InfoTooltipProps {
   /** Fired when the poster opens the tooltip. Lets a call site measure which
    * help a poster reads. Optional so existing call sites need no change. */
   onOpen?: () => void
+  /** Renders this text as the trigger in place of the help icon. */
+  label?: string
+  labelStyle?: StyleProp<TextStyle>
 }
 
 export const InfoTooltip: React.FC<InfoTooltipProps> = ({
@@ -146,6 +149,8 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
   iconSize = 18,
   iconColor,
   onOpen,
+  label,
+  labelStyle,
 }) => {
   const [isOpen, setIsOpen] = React.useState(false)
   const { theme } = useAppThemeContext()
@@ -163,9 +168,14 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
         accessibilityLabel={`Help: ${title}`}
         accessibilityRole="button"
         accessibilityHint="Opens help information"
-        style={styles.infoIcon}
+        style={label ? undefined : styles.infoIcon}
+        hitSlop={label ? 8 : undefined}
       >
-        <MaterialIcons name="help-outline" size={iconSize} color={resolvedIconColor} />
+        {label ? (
+          <Text style={labelStyle}>{label}</Text>
+        ) : (
+          <MaterialIcons name="help-outline" size={iconSize} color={resolvedIconColor} />
+        )}
       </TouchableOpacity>
 
       <Modal

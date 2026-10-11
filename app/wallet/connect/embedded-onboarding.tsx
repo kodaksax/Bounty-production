@@ -623,6 +623,8 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       gap: 8,
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
       paddingVertical: 12,
       paddingHorizontal: 28,
       borderRadius: 999,

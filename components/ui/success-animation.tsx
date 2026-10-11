@@ -45,7 +45,7 @@ export function SuccessAnimation({
   visible,
   icon = 'check-circle',
   size = 80,
-  color = '#059669',
+  color = '#008E2A',
   onComplete,
 }: SuccessAnimationProps) {
   const scale = useSharedValue(0);
@@ -167,7 +167,7 @@ export function ConfettiAnimation({ visible, onComplete }: { visible: boolean; o
     Array.from({ length: 20 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
-      color: ['#059669', '#6ee7b7', '#059669', '#059669'][Math.floor(Math.random() * 4)],
+      color: ['#008E2A', '#1FAE49', '#008E2A', '#008E2A'][Math.floor(Math.random() * 4)],
     }))
   );
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
@@ -274,14 +274,14 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   circle: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'rgba(0, 142, 42, 0.1)',
     borderRadius: 80,
     width: 160,
     height: 160,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#059669',
+    borderColor: '#008E2A',
     ...theme.shadows.emerald,
   },
 

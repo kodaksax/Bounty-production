@@ -87,9 +87,9 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
         className="flex items-center justify-center w-full h-full px-4"
         onStartShouldSetResponder={() => true}
       >
-        <View className="bg-[#059669] rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto" style={{ maxHeight: windowHeight * 0.8 }}>
+        <View className="bg-[#008E2A] rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto" style={{ maxHeight: windowHeight * 0.8 }}>
           {/* Header */}
-          <View className="p-4 bg-[#111827] flex items-center justify-center">
+          <View className="p-4 bg-[#22262C] flex items-center justify-center">
             <MaterialIcons name="place" size={20} color="#ffffff" style={{ marginRight: 8 }} />
             <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
           </View>
@@ -100,15 +100,15 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
             <Text className="text-white mb-4 text-base line-clamp-3">{bountyData.description}</Text>
 
             <View className="flex justify-between items-center mb-4">
-              <View className="bg-[#111827] px-4 py-2 rounded-lg text-white font-bold text-lg">
+              <View className="bg-[#22262C] px-4 py-2 rounded-lg text-white font-bold text-lg">
                 {bountyData.isForHonor ? "For Honor" : `$${bountyData.amount.toLocaleString()}`}
               </View>
               <View className="items-end">
                 {bountyData.workType && (
-                  <Text className="text-[#9CA3AF] text-sm mb-1">{bountyData.workType === 'online' ? 'Online' : 'In Person'}</Text>
+                  <Text className="text-[#929497] text-sm mb-1">{bountyData.workType === 'online' ? 'Online' : 'In Person'}</Text>
                 )}
                 {bountyData.workType === 'in_person' && !!bountyData.location && (
-                  <Text className="text-base text-[#9CA3AF]">{bountyData.location}</Text>
+                  <Text className="text-base text-[#929497]">{bountyData.location}</Text>
                 )}
                 {bountyData.isTimeSensitive && bountyData.deadline && (
                   <Text className="text-white text-xs mt-1">Deadline: {bountyData.deadline}</Text>
@@ -118,18 +118,18 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
 
             {/* Swipe indicator */}
               <View className="mt-8 flex flex-col items-center" {...panResponder.panHandlers}>
-                <View style={{ opacity: isConfirming ? 0 : 1 }} className="text-center text-[#9CA3AF] font-medium mb-3">
-                  <Text className="text-center text-[#9CA3AF] font-medium">
+                <View style={{ opacity: isConfirming ? 0 : 1 }} className="text-center text-[#929497] font-medium mb-3">
+                  <Text className="text-center text-[#929497] font-medium">
                     {dragProgress > 0.4 ? "Release to confirm" : "Swipe up to confirm"}
                   </Text>
                 </View>
 
                 <View className="relative h-16 w-full flex justify-center">
                   {/* Progress bar background */}
-                  <View style={{ position: 'absolute', left: 0, right: 0, backgroundColor: '#1F2937', borderRadius: 999, height: 16, alignSelf: 'center', width: 192 }} />
+                  <View style={{ position: 'absolute', left: 0, right: 0, backgroundColor: '#2A2E35', borderRadius: 999, height: 16, alignSelf: 'center', width: 192 }} />
 
                   {/* Progress bar fill */}
-                  <View style={{ position: 'absolute', left: 0, right: 0, borderRadius: 999, height: 16, alignSelf: 'center', width: (dragProgress * 192), backgroundColor: '#059669' }} />
+                  <View style={{ position: 'absolute', left: 0, right: 0, borderRadius: 999, height: 16, alignSelf: 'center', width: (dragProgress * 192), backgroundColor: '#008E2A' }} />
 
                   {/* Chevron indicators */}
                   <View className="absolute inset-0 flex flex-col items-center justify-center space-y-1 overflow-hidden max-w-48 mx-auto">
@@ -143,7 +143,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
 
           {/* Confirmation state */}
           {isConfirming && (
-            <View className="absolute inset-0 bg-[#059669] flex items-center justify-center flex-col">
+            <View className="absolute inset-0 bg-[#008E2A] flex items-center justify-center flex-col">
               <View className="h-16 w-16 rounded-full border-4 border-white border-t-transparent animate-spin mb-4"></View>
               <Text className="text-white font-medium text-lg">Posting your bounty...</Text>
             </View>

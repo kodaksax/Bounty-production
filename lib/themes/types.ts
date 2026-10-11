@@ -1,4 +1,4 @@
-import type { Radius, Shadows, Spacing, Typography } from './tokens';
+import type { Fonts, Radius, Shadows, Spacing, Typography } from './tokens';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -16,9 +16,22 @@ export type AppTheme = {
   background: string;         // outermost page / screen root
   surface: string;            // cards, sections, modals
   surfaceSecondary: string;   // inputs, interactive secondary surfaces
+  surfaceRaised: string;      // cards/panels that need depth above the screen
+  borderRaised: string;       // edge for surfaceRaised
 
   // ── Borders ──────────────────────────────────────────────────────────────
   border: string;
+  /**
+   * Pressed-in card edge: per-side colours that read as a gradient from a
+   * dark top edge to a light bottom edge. Spread into a style that already
+   * has a borderWidth: `{ borderWidth: 1, ...theme.insetBorder }`.
+   */
+  insetBorder: {
+    borderTopColor: string;
+    borderLeftColor: string;
+    borderRightColor: string;
+    borderBottomColor: string;
+  };
 
   // ── Text ─────────────────────────────────────────────────────────────────
   text: string;               // primary
@@ -28,6 +41,8 @@ export type AppTheme = {
   // ── Brand ─────────────────────────────────────────────────────────────────
   primary: string;            // CTA buttons, active states
   primaryLight: string;       // accent icons, highlight text
+  primaryShade: string;       // darker band under filled primary buttons (3D depth)
+  errorShade: string;         // darker band under filled destructive buttons
   overlay: string;            // subtle button overlays
 
   // ── Semantic ──────────────────────────────────────────────────────────────
@@ -46,4 +61,5 @@ export type AppTheme = {
   radius: Radius;
   typography: Typography;
   shadows: Shadows;
+  fonts: Fonts;
 };

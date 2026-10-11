@@ -108,7 +108,7 @@ jest.mock('../../lib/themes/AppThemeContext', () => ({
       border: '#333',
       text: '#fff',
       textSecondary: '#aaa',
-      primary: '#059669',
+      primary: '#008E2A',
       isDark: true,
     },
   }),

@@ -219,7 +219,7 @@ export function ResetPasswordScreen() {
           {/* Success Message */}
           {message && (
             <View className="rounded-lg p-4 mb-4 flex-row items-start" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
-              <MaterialIcons name="check-circle" size={20} color="#059669" style={{ marginTop: 2 }} />
+              <MaterialIcons name="check-circle" size={20} color="#008E2A" style={{ marginTop: 2 }} />
               <View className="ml-3 flex-1">
                 <Text style={{ color: theme.text, fontSize: 14 }}>{message}</Text>
               </View>
@@ -276,7 +276,7 @@ export function ResetPasswordScreen() {
                 {/* Open Email App */}
                 <TouchableOpacity
                   onPress={handleOpenEmailApp}
-                  className="w-full bg-[#059669] rounded-lg py-3 items-center"
+                  className="w-full bg-[#008E2A] rounded-lg py-3 items-center"
                 >
                   <Text className="text-white font-medium">Open Email App</Text>
                 </TouchableOpacity>
@@ -297,7 +297,7 @@ export function ResetPasswordScreen() {
                     <Text className="text-sm" style={{ color: theme.text }}>
                       Didn
                       {"'"}
-                      t receive the email? <Text className="text-[#6ee7b7] underline">Resend</Text>
+                      t receive the email? <Text className="text-[#1FAE49] underline">Resend</Text>
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -320,8 +320,8 @@ export function ResetPasswordScreen() {
                 onPress={handleReset}
                 className={`w-full rounded-lg py-3 items-center ${
                   loading || resendCooldown > 0 || isLockedOut
-                    ? 'bg-[#059669]/50'
-                    : 'bg-[#059669]'
+                    ? 'bg-[#008E2A]/50'
+                    : 'bg-[#008E2A]'
                 }`}
               >
                 {loading ? (

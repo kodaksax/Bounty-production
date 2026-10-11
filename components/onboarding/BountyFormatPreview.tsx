@@ -111,7 +111,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 12,
       backgroundColor: theme.background,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       overflow: 'hidden',
     },
     cardImage: {

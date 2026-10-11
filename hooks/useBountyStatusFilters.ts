@@ -27,12 +27,12 @@ import {
 import * as React from 'react'
 import { useEffect, useState } from 'react'
 
-export type InProgressStatusFilter = 'all' | 'applied' | 'in_progress' | 'review' | 'completed'
+export type InProgressStatusFilter = 'all' | 'active' | 'applied' | 'in_progress' | 'review' | 'completed'
 export type MyPostingsStatusFilter = 'all' | 'review' | 'open' | 'in_progress' | 'completed'
 
 /** Each chip (other than 'all') selects exactly one badge a card can render. */
 export const IN_PROGRESS_FILTER_STATUS: Record<
-  Exclude<InProgressStatusFilter, 'all'>,
+  Exclude<InProgressStatusFilter, 'all' | 'active'>,
   BountyDisplayStatus
 > = {
   applied: 'applied',
@@ -53,6 +53,7 @@ export const MY_POSTINGS_FILTER_STATUS: Record<
 
 export const IN_PROGRESS_FILTER_LABELS: Record<InProgressStatusFilter, string> = {
   all: 'All',
+  active: 'Active',
   applied: 'Applied',
   in_progress: 'In Progress',
   review: 'Review',
@@ -70,6 +71,7 @@ export const MY_POSTINGS_FILTER_LABELS: Record<MyPostingsStatusFilter, string> =
 /** Chip display order — follows each tab's workflow, ending on "Review". */
 export const IN_PROGRESS_FILTERS: readonly InProgressStatusFilter[] = [
   'all',
+  'active',
   'applied',
   'in_progress',
   'review',
@@ -291,9 +293,14 @@ export function useBountyStatusFilters({
 
   const displayedInProgress = React.useMemo(() => {
     if (statusFilterInProgress === 'all') return inProgressBounties
+    // "Active" is every card that is still moving — anything not filed under
+    // past & archived (completed, rejected, cancelled…).
+    if (statusFilterInProgress === 'active') {
+      return inProgressBounties.filter((b) => getLifecycle(b, 'hunter').group !== 'past')
+    }
     const target = IN_PROGRESS_FILTER_STATUS[statusFilterInProgress]
     return inProgressBounties.filter((b) => getDisplayStatus(b, 'hunter') === target)
-  }, [inProgressBounties, statusFilterInProgress, getDisplayStatus])
+  }, [inProgressBounties, statusFilterInProgress, getDisplayStatus, getLifecycle])
 
   const displayedMyPostings = React.useMemo(() => {
     if (statusFilterMyPostings === 'all') return myBounties

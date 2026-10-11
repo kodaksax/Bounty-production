@@ -211,7 +211,7 @@ function CreateDisputeScreen() {
                 style={styles.addButton}
                 disabled={isSubmitting}
               >
-                <MaterialIcons name="add" size={20} color="#059669" />
+                <MaterialIcons name="add" size={20} color="#008E2A" />
                 <Text style={styles.addButtonText}>Add</Text>
               </TouchableOpacity>
             )}
@@ -238,7 +238,7 @@ function CreateDisputeScreen() {
                           : 'text-fields'
                       }
                       size={18}
-                      color="#059669"
+                      color="#008E2A"
                     />
                     <Text style={styles.evidenceType}>{item.type.toUpperCase()}</Text>
                     <TouchableOpacity
@@ -403,7 +403,7 @@ function CreateDisputeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F14',
+    backgroundColor: '#1B1E24',
   },
   header: {
     flexDirection: 'row',
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     paddingTop: 48,
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
   },
   backButton: {
     padding: 4,
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   reasonInput: {
-    backgroundColor: 'rgba(5,150,105,0.15)',
+    backgroundColor: 'rgba(0,142,42,0.15)',
     borderRadius: 8,
     padding: 12,
     color: '#fffef5',
@@ -486,14 +486,14 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#059669',
+    color: '#008E2A',
   },
   evidenceList: {
     gap: 12,
     marginTop: 12,
   },
   evidenceItem: {
-    backgroundColor: 'rgba(5,150,105,0.1)',
+    backgroundColor: 'rgba(0,142,42,0.1)',
     borderRadius: 8,
     padding: 12,
   },
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
   evidenceType: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#059669',
+    color: '#008E2A',
     flex: 1,
   },
   removeButton: {
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,254,245,0.8)',
   },
   addEvidenceForm: {
-    backgroundColor: 'rgba(5,150,105,0.1)',
+    backgroundColor: 'rgba(0,142,42,0.1)',
     borderRadius: 8,
     padding: 16,
     marginTop: 12,
@@ -544,11 +544,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
-    backgroundColor: 'rgba(5,150,105,0.15)',
+    backgroundColor: 'rgba(0,142,42,0.15)',
     alignItems: 'center',
   },
   typeButtonActive: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
   },
   typeButtonText: {
     fontSize: 12,
@@ -560,7 +562,7 @@ const styles = StyleSheet.create({
     color: '#fffef5',
   },
   evidenceInput: {
-    backgroundColor: 'rgba(5,150,105,0.2)',
+    backgroundColor: 'rgba(0,142,42,0.2)',
     borderRadius: 6,
     padding: 10,
     color: '#fffef5',
@@ -576,7 +578,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#059669',
+    backgroundColor: '#008E2A',
+    borderBottomWidth: 4,
+    borderBottomColor: '#00701F',
     padding: 10,
     borderRadius: 6,
     gap: 6,
@@ -601,6 +605,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#dc2626',
+    borderBottomWidth: 4,
+    borderBottomColor: '#933730',
     padding: 16,
     borderRadius: 8,
     gap: 8,

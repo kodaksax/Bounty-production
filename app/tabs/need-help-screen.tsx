@@ -37,8 +37,8 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
       style={{
         flex: 1,
         backgroundColor: theme.background,
-        paddingTop: insets.top,
-        // The flow owns its own CTA spacing, so this screen only clears the
+        // No paddingTop: the flow applies it (topInset) so step 1's hero can
+        // sit flush under the status-bar strip. The flow owns its own CTA spacing, so this screen only clears the
         // shared BottomNav itself and does not add the extra 16px list gap.
         paddingBottom: getBottomNavBaseClearance(insets.bottom),
       }}
@@ -53,6 +53,7 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
         // comment above) happens on exit, not a fresh tap, so it must not
         // re-count.
         deliberateTap={flowKey === 0}
+        topInset={insets.top}
         onComplete={() => {
           // After creation, go to the main feed and refresh the public list
           setShowBottomNav?.(true)

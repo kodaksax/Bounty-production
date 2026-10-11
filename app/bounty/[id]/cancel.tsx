@@ -405,9 +405,9 @@ function CancellationRequestScreen() {
 
 /**
  * Every color comes from the active AppTheme — the screen was previously
- * hardcoded to the dark palette (#0B0F14 page, white text) with two stray
+ * hardcoded to the dark palette (#1B1E24 page, white text) with two stray
  * light-mode callouts (amber-50 / blue-50), so it read as a dark screen in
- * light mode and had unreadable amber-900-on-cream / gray-700-on-#1F2937 text
+ * light mode and had unreadable amber-900-on-cream / gray-700-on-#2A2E35 text
  * in dark mode. Callout tints are the semantic color at low alpha, which works
  * on both a white and a near-black page.
  */
@@ -522,7 +522,7 @@ function makeStyles(theme: AppTheme) {
     detailsCard: {
       backgroundColor: theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       borderRadius: 8,
       padding: 16,
       marginBottom: 24,
@@ -600,6 +600,8 @@ function makeStyles(theme: AppTheme) {
     },
     submitButton: {
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       borderRadius: 8,
       paddingVertical: 16,
       alignItems: 'center',
@@ -638,6 +640,8 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButton: {
       backgroundColor: theme.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.primaryShade,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,

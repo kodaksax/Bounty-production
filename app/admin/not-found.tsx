@@ -110,6 +110,8 @@ const makeStyles = (theme: AppTheme) =>
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.primary,
+    borderBottomWidth: 4,
+    borderBottomColor: theme.primaryShade,
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,

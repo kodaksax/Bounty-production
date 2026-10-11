@@ -39,7 +39,7 @@ export const ConnectOnboardingButton: React.FC<Props> = ({ onError, label = 'Set
         onPress={startOnboarding}
         disabled={loading}
         style={{
-          backgroundColor: '#059669', // emerald-600
+          backgroundColor: '#008E2A', // emerald-600
           paddingVertical: 12,
           paddingHorizontal: 16,
           borderRadius: 8,

@@ -210,7 +210,7 @@ export function UpdatePasswordScreen() {
               router.replace(ROUTES.AUTH.RESET_PASSWORD)
               try { markInitialNavigationDone(); } catch {}
             }}
-            className="bg-[#059669] rounded-lg py-3 px-6 mb-4"
+            className="bg-[#008E2A] rounded-lg py-3 px-6 mb-4"
           >
             <Text className="text-white font-medium">Request New Reset Link</Text>
           </TouchableOpacity>
@@ -230,8 +230,8 @@ export function UpdatePasswordScreen() {
     return (
       <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
         <View className="items-center">
-          <View className="bg-[#059669]/30 rounded-full p-4 mb-4">
-            <MaterialIcons name="check-circle" size={48} color="#059669" />
+          <View className="bg-[#008E2A]/30 rounded-full p-4 mb-4">
+            <MaterialIcons name="check-circle" size={48} color="#008E2A" />
           </View>
           <Text className="font-bold text-xl mb-2" style={{ color: theme.text }}>Password Updated!</Text>
           <Text className="text-center text-sm px-4 mb-6" style={{ color: theme.text }}>
@@ -247,7 +247,7 @@ export function UpdatePasswordScreen() {
               router.replace(ROUTES.ROOT)
               try { markInitialNavigationDone(); } catch {}
             }}
-            className="bg-[#059669] rounded-lg py-3 px-6"
+            className="bg-[#008E2A] rounded-lg py-3 px-6"
           >
             <View className="flex-row items-center">
               <MaterialIcons name="arrow-forward" size={20} color="#fff" style={{ marginRight: 8 }} />
@@ -364,11 +364,11 @@ export function UpdatePasswordScreen() {
                         <MaterialIcons
                           name={req.met ? 'check-circle' : 'radio-button-unchecked'}
                           size={14}
-                          color={req.met ? '#059669' : theme.textSecondary}
+                          color={req.met ? '#008E2A' : theme.textSecondary}
                         />
                         <Text
                           className="text-xs ml-2"
-                          style={{ color: req.met ? '#6ee7b7' : theme.textSecondary }}
+                          style={{ color: req.met ? '#1FAE49' : theme.textSecondary }}
                         >
                           {req.label}
                         </Text>
@@ -425,8 +425,8 @@ export function UpdatePasswordScreen() {
                 <View className="flex-row items-center mt-2">
                   {password === confirmPassword ? (
                     <>
-                      <MaterialIcons name="check-circle" size={14} color="#059669" />
-                      <Text className="text-[#6ee7b7] text-xs ml-1">Passwords match</Text>
+                      <MaterialIcons name="check-circle" size={14} color="#008E2A" />
+                      <Text className="text-[#1FAE49] text-xs ml-1">Passwords match</Text>
                     </>
                   ) : (
                     <>
@@ -444,8 +444,8 @@ export function UpdatePasswordScreen() {
               disabled={loading || !passwordStrength?.isValid || password !== confirmPassword}
               className={`w-full rounded-lg py-4 items-center flex-row justify-center ${
                 loading || !passwordStrength?.isValid || password !== confirmPassword
-                  ? 'bg-[#059669]/50'
-                  : 'bg-[#059669]'
+                  ? 'bg-[#008E2A]/50'
+                  : 'bg-[#008E2A]'
               }`}
             >
               {loading ? (

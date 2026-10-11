@@ -182,7 +182,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surface,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       padding: 16,
       marginTop: 8,
     },
@@ -220,6 +220,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: t.primary,
+      borderBottomWidth: 4,
+      borderBottomColor: t.primaryShade,
     },
     copyButtonText: {
       color: '#ffffff',

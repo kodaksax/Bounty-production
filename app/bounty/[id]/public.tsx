@@ -644,7 +644,7 @@ export default function PublicBountyDetail() {
               accessibilityState={{ disabled: isApplying, busy: isApplying }}
             >
               <LinearGradient
-                colors={['#059669', '#047857']}
+                colors={['#008E2A', '#00701F']}
                 style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
               />
               {isApplying ? (
@@ -676,7 +676,7 @@ export default function PublicBountyDetail() {
                 accessibilityLabel="Browse other bounties"
               >
                 <LinearGradient
-                  colors={['#059669', '#047857']}
+                  colors={['#008E2A', '#00701F']}
                   style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
                 />
                 <Text style={s.actionButtonText}>Browse other bounties</Text>
@@ -817,7 +817,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 24,
       padding: 24,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       overflow: 'hidden',
     },
     heroTopRow: {
@@ -927,7 +927,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 24,
       padding: 24,
       borderWidth: 1,
-      borderColor: t.border,
+      ...t.insetBorder, // pressed-in edge: dark top → light bottom
       gap: 24,
     },
     sectionTitle: {
