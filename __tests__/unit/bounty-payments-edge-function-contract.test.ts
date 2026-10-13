@@ -79,6 +79,22 @@ describe('bounty-payments edge function request/error contract', () => {
     expect(cancelRoute).not.toContain('detail: refundErr?.message');
   });
 
+  it('v2 release pays only bounties.accepted_by, never a client-supplied hunterId', () => {
+    // The v2 path used to pick `hunterIdInput || bp.hunter_id || accepted_by`,
+    // so a poster could send the captured escrow to any payout-enabled account.
+    // It must use the same rule as /wallet/release.
+    const v2Release = releaseRoute.slice(releaseRoute.indexOf("from('bounty_payments')"));
+    expect(bountyPaymentsSource).toContain("from '../_shared/release-authorization.ts'");
+    expect(v2Release).toContain('authorizeRelease(');
+    expect(v2Release).toContain("select('accepted_by')");
+    expect(v2Release).not.toMatch(/hunterIdInput\s*\|\|/);
+    expect(v2Release).not.toMatch(/bp\.hunter_id\s*\|\|/);
+    // The payee lookup and the check both run before the Connect profile is read.
+    expect(v2Release.indexOf('authorizeRelease(')).toBeLessThan(
+      v2Release.indexOf("select('stripe_connect_account_id, stripe_connect_payouts_enabled')")
+    );
+  });
+
   it('outer handler returns sanitized errors with request ids', () => {
     const catchStart = bountyPaymentsSource.lastIndexOf('} catch (err: any) {');
     expect(catchStart).toBeGreaterThan(-1);
