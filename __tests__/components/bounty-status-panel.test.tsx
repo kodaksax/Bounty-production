@@ -112,6 +112,23 @@ describe('BountyStatusPanel', () => {
     expect(queryByText('More actions')).toBeNull();
   });
 
+  // #892: the inline row was clamped to 2 lines, which cut the applied hunter's
+  // safety copy ("A chat message is not acceptance…") off mid-sentence.
+  it('does not truncate the inline next step', () => {
+    const state = resolveBountyLifecycle({
+      bounty: { id: 'b1', status: 'open', amount: 35 },
+      role: 'hunter',
+      requestStatus: 'pending',
+      otherPartyName: 'Maggie',
+    });
+    expect(state.nextStep).toMatch(/A chat message is not acceptance/);
+    const { getByText } = render(
+      <BountyStatusPanel state={state} role="hunter" otherPartyName="Maggie" variant="inline" />
+    );
+    const line = getByText(/A chat message is not acceptance/);
+    expect(line.props.numberOfLines).toBeUndefined();
+  });
+
   it('marks the primary action disabled while it is running', () => {
     const state = posterAwaitingApproval();
     const { getByLabelText } = render(
