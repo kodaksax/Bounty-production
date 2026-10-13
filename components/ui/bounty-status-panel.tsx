@@ -102,7 +102,9 @@ export function BountyStatusPanel({
     return (
       <View style={styles.inlineRow}>
         <View style={[styles.dot, { backgroundColor: accent }]} />
-        <Text style={styles.inlineText} numberOfLines={2}>
+        {/* Not clamped: next steps carry safety copy ("A chat message is not
+            acceptance…") that was being cut off mid-sentence. */}
+        <Text style={styles.inlineText}>
           <Text style={[styles.inlineStrong, { color: accent }]}>
             {waitingLabel ?? state.headline}
           </Text>
