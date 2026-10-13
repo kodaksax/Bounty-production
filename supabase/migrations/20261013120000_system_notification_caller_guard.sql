@@ -88,14 +88,14 @@ BEGIN
       RAISE EXCEPTION 'Invalid notification recipient' USING ERRCODE = '42501';
     END IF;
 
-    IF COALESCE(p_data ->> 'disputeId', '') !~ '^[0-9]{1,18}$' THEN
+    IF COALESCE(p_data ->> 'disputeId', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
       RAISE EXCEPTION 'A disputeId is required' USING ERRCODE = '42501';
     END IF;
 
     SELECT d.id, d.bounty_id, d.initiator_id, d.respondent_id, d.cancellation_id
       INTO v_dispute
       FROM public.bounty_disputes d
-     WHERE d.id = (p_data ->> 'disputeId')::bigint;
+     WHERE d.id = (p_data ->> 'disputeId')::uuid;
 
     IF NOT FOUND OR v_dispute.initiator_id IS DISTINCT FROM v_caller
        OR v_dispute.bounty_id IS NULL THEN
