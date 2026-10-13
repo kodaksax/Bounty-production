@@ -1521,6 +1521,8 @@ Deno.serve(async (req: Request) => {
 
       // Escrow commitment: same rule as /wallet/refund. After a hunter is
       // accepted the poster cannot cancel or refund the payment unilaterally.
+      // Passing the gate also claims the bounty under its row lock, so an
+      // acceptance can't land before the Stripe cancel/refund below (#883).
       const gate = await checkOwnerRefundGate(supabaseAdmin, bountyId, userId);
       if (!gate.ok) {
         return reply(

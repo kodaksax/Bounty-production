@@ -16,6 +16,12 @@
  * after acceptance, after the hunter submitted work, or mid-dispute
  * (trust-spine audit 2026-09-30, T4 / S2).
  *
+ * The check goes through `fn_claim_owner_refund` (migration 20261013140000),
+ * which evaluates that rule under the bounty row lock the accept RPCs take
+ * and, when allowed, records a short-lived claim that makes acceptance refuse.
+ * A plain read of the rule left a window where the poster could accept a
+ * hunter after the check and before the money moved (#883).
+ *
  * Fails closed: if the gate cannot be evaluated (RPC missing because the
  * migration has not been applied, or a database error), the refund is refused
  * with a retryable 503 rather than silently falling back to the old,
@@ -24,7 +30,7 @@
 
 export interface OwnerRefundGateClient {
   rpc(
-    fn: 'fn_owner_refund_block_reason',
+    fn: 'fn_claim_owner_refund',
     args: { p_bounty_id: string; p_caller: string }
   ): PromiseLike<{ data: unknown; error: { message?: string; code?: string } | null }>;
 }
@@ -56,7 +62,7 @@ export async function checkOwnerRefundGate(
   let data: unknown;
   let error: { message?: string; code?: string } | null;
   try {
-    ({ data, error } = await client.rpc('fn_owner_refund_block_reason', {
+    ({ data, error } = await client.rpc('fn_claim_owner_refund', {
       p_bounty_id: bountyId,
       p_caller: callerId,
     }));

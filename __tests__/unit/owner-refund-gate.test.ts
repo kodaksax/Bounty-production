@@ -24,11 +24,14 @@ describe('checkOwnerRefundGate', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
-  it('asks the database rule about this bounty and caller', async () => {
+  // #883: the locking claim RPC, not the plain read of the rule. Reading the
+  // rule without the bounty lock let an acceptance land between the check and
+  // the refund.
+  it('claims the refund through the locking RPC for this bounty and caller', async () => {
     const { c, calls } = client({ data: null });
     await checkOwnerRefundGate(c, BOUNTY, POSTER);
     expect(calls).toEqual([
-      { fn: 'fn_owner_refund_block_reason', args: { p_bounty_id: BOUNTY, p_caller: POSTER } },
+      { fn: 'fn_claim_owner_refund', args: { p_bounty_id: BOUNTY, p_caller: POSTER } },
     ]);
   });
 

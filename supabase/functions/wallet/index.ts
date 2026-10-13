@@ -829,7 +829,9 @@ Deno.serve(async (req: Request) => {
         // the escrow back unilaterally. Only a never-accepted bounty or the
         // accepted hunter's own cancellation request releases it to the poster.
         // (A responding hunter consenting to the poster's request is the other
-        // party's own decision and is not gated.)
+        // party's own decision and is not gated.) The gate also claims the
+        // bounty under its row lock, so the poster can't accept a hunter between
+        // this check and the refund below (#883).
         if (isOwner) {
           const gate = await checkOwnerRefundGate(supabase, bountyId, userId);
           if (!gate.ok) {
