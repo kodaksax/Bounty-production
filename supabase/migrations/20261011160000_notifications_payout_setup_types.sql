@@ -10,7 +10,9 @@
 -- but was missing here for the same reason.
 --
 -- Superset of the live constraint (pg_get_constraintdef, 2026-10-11): every
--- existing row still passes. Do not apply with `supabase db push`.
+-- existing row still passes. The constraint was manually updated in production
+-- on 2026-10-11; keep this migration in the normal stream and use `supabase db
+-- push` to apply or record it across environments.
 
 ALTER TABLE public.notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 

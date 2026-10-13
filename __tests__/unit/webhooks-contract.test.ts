@@ -43,6 +43,20 @@ describe("case 'payout.created'", () => {
   });
 });
 
+describe("case 'transfer.created'", () => {
+  test('matches and updates only pending withdrawals while preserving existing metadata', () => {
+    const start = webhooksSource.indexOf("case 'transfer.created':");
+    expect(start).toBeGreaterThan(-1);
+    const nextCase = webhooksSource.indexOf("case 'transfer.paid':", start);
+    expect(nextCase).toBeGreaterThan(start);
+    const body = webhooksSource.slice(start, nextCase);
+    expect(body.match(/\.eq\('status', 'pending'\)/g)).toHaveLength(2);
+    expect(body).toMatch(
+      /metadata:\s*\{\s*\.\.\.\(candidate\.metadata\s*\?\?\s*\{\}\),\s*transfer_status:\s*'created'/
+    );
+  });
+});
+
 describe('handleUndeliveredPayout (payout.failed / payout.canceled)', () => {
   const body = extractFunctionBody(webhooksSource, 'handleUndeliveredPayout');
 

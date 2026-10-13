@@ -96,6 +96,7 @@ const TYPE_CATEGORY: Record<string, Category> = {
   stale_bounty: 'marketplace', stale_bounty_cancelled: 'marketplace', stale_bounty_reposted: 'marketplace',
   update: 'marketplace', bounty_nearby: 'marketplace', bounty_expiry: 'marketplace', review_needed: 'marketplace',
   bounty_quality_nudge: 'marketplace',
+  bounty_location_nudge: 'marketplace',
   application_pending_reminder: 'marketplace', application_expired: 'marketplace',
   application_bounty_closed: 'marketplace', rating_reminder: 'marketplace',
   message: 'messages',

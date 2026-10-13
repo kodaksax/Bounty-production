@@ -42,6 +42,9 @@ export function supportsActionSheet(ctx: NotificationDeepLinkContext, notificati
     // applicant/conversation to act on — fall back to plain navigation.
     return false;
   }
+  if (ctx.type === 'payout_setup_required' || ctx.type === 'release_waiting_on_hunter') {
+    return false;
+  }
   const category = ctx.category ?? categoryForNotificationType(ctx.type);
   return category === 'marketplace' || category === 'messages' || category === 'payments';
 }

@@ -2448,6 +2448,7 @@ Deno.serve(async (req: Request) => {
                 metadata: { ...(candidate.metadata ?? {}), transfer_status: 'created' },
               })
               .eq('id', (candidateTx as { id: string }).id)
+              .eq('status', 'pending')
               .is('stripe_transfer_id', null); // optimistic-lock guard against a concurrent backfill
             if (backfillErr) {
               console.error(
