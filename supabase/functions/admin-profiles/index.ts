@@ -238,6 +238,12 @@ Deno.serve(async (req: Request) => {
     if (!reason || !reason.trim()) {
       return jsonResponse({ error: 'reason is required' }, 400);
     }
+    if (id === adminUser.id) {
+      // Mirrors updateRole: an admin restoring their own suspended account
+      // (or suspending it by mistake) is exactly the case a second admin
+      // should handle.
+      return jsonResponse({ error: 'You cannot change your own account status' }, 400);
+    }
 
     const { data: existing, error: existingError } = await supabase
       .from('profiles')

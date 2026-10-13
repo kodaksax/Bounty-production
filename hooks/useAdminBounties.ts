@@ -28,7 +28,7 @@ export function useAdminBounties(filters?: AdminBountyFilters): UseAdminBounties
       // or rejects outright, so a local patch is safe to show immediately.
       patchItem(id, { status, lastModified: new Date().toISOString() });
       try {
-        await adminDataClient.updateBountyStatus(id, status);
+        await adminDataClient.updateBountyStatus(id, status, `Admin console list: set status to ${status}`);
       } finally {
         // Refetch either way: on success to pick up server-side side effects,
         // on failure to roll the optimistic patch back to the real value.

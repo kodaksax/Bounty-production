@@ -20,10 +20,49 @@ import { useAdmin } from '../../../lib/admin-context';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { cancellationService } from '../../../lib/services/cancellation-service';
 import type { Bounty } from '../../../lib/services/database.types';
-import { disputeService } from '../../../lib/services/dispute-service';
+import { disputeService, type DisputeSettlement } from '../../../lib/services/dispute-service';
 import type { BountyCancellation, BountyDispute } from '../../../lib/types';
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
+
+/**
+ * Admin-facing copy for what happened to the money. Never claims funds moved
+ * unless the settlement step says so.
+ */
+function describeSettlement(
+  settlement: DisputeSettlement,
+  winner: 'hunter' | 'poster'
+): { title: string; message: string } {
+  switch (settlement.status) {
+    case 'released':
+      return { title: 'Resolved and paid', message: 'The escrow was released to the hunter.' };
+    case 'refunded':
+      return { title: 'Resolved and refunded', message: 'The escrow was refunded to the poster.' };
+    case 'already_settled':
+      return {
+        title: 'Already settled',
+        message: 'A release or refund for this bounty was already recorded, so nothing moved again.',
+      };
+    case 'not_applicable':
+      return { title: 'Resolved', message: 'There was no escrow to settle for this bounty.' };
+    case 'nothing_held':
+      return {
+        title: 'Resolved, nothing moved',
+        message: settlement.detail ?? 'No escrow record was found, so no money moved.',
+      };
+    case 'failed':
+    default:
+      return {
+        title: 'Decision saved, money NOT moved',
+        message:
+          `The dispute is recorded as decided for the ${winner}, but the ${winner === 'hunter' ? 'release' : 'refund'} did not happen.
+
+${settlement.detail ?? 'No money moved.'}
+
+Use "Settle money" on this dispute to retry. Retrying is safe.`,
+      };
+  }
+}
 
 interface DisputeDetailData {
   dispute: BountyDispute;
@@ -44,6 +83,7 @@ export default function AdminDisputeDetailScreen() {
   const [resolution, setResolution] = useState('');
   const [winner, setWinner] = useState<'hunter' | 'poster' | null>(null);
   const [showResolveForm, setShowResolveForm] = useState(false);
+  const [settling, setSettling] = useState(false);
 
   const loadDisputeDetails = useCallback(async () => {
     if (!isAdmin || isAdminLoading) {
@@ -103,7 +143,9 @@ export default function AdminDisputeDetailScreen() {
     try {
       const success = await disputeService.escalateDispute(data.dispute.id, 'Escalated by admin via UI');
       if (success) {
-        Alert.alert('Success', 'Dispute marked as escalated and admins notified');
+        // Not "admins notified": the admin_notifications table the service
+        // writes to does not exist, so no notification is delivered.
+        Alert.alert('Escalated', 'Dispute marked as escalated.');
         loadDisputeDetails();
       } else {
         Alert.alert('Error', 'Failed to escalate dispute');
@@ -131,7 +173,6 @@ export default function AdminDisputeDetailScreen() {
     }
 
     const winnerAction = winner === 'hunter' ? 'Release to Hunter' : 'Refund to Poster';
-    const winnerOutcome = winner === 'hunter' ? 'Funds released to hunter.' : 'Funds refunded to poster.';
 
     Alert.alert(
       'Confirm Resolution',
@@ -144,16 +185,17 @@ export default function AdminDisputeDetailScreen() {
           onPress: async () => {
             try {
               setResolving(true);
-              const success = await disputeService.resolveDispute(
+              const outcome = await disputeService.resolveDisputeWithOutcome(
                 data.dispute.id,
                 resolution,
                 winner
               );
 
-              if (success) {
+              if (outcome.resolved) {
+                const { title, message } = describeSettlement(outcome.settlement, winner);
                 Alert.alert(
-                  'Success',
-                  `Dispute has been resolved successfully. ${winnerOutcome}`,
+                  title,
+                  message,
                   [
                     {
                       text: 'OK',
@@ -166,7 +208,7 @@ export default function AdminDisputeDetailScreen() {
                   ]
                 );
               } else {
-                Alert.alert('Error', 'Failed to resolve dispute');
+                Alert.alert('Not resolved', outcome.error ?? 'The dispute could not be resolved. Nothing changed.');
               }
             } catch (error) {
               console.error('Error resolving dispute:', error);
@@ -178,6 +220,23 @@ export default function AdminDisputeDetailScreen() {
         },
       ]
     );
+  };
+
+  const handleRetrySettlement = async () => {
+    const decided = data?.dispute.winner;
+    if (!data || (decided !== 'hunter' && decided !== 'poster')) return;
+    try {
+      setSettling(true);
+      const settlement = await disputeService.retryDisputeSettlement(String(data.dispute.id));
+      const { title, message } = describeSettlement(settlement, decided);
+      Alert.alert(title, message);
+      loadDisputeDetails();
+    } catch (error) {
+      console.error('Error settling dispute:', error);
+      Alert.alert('Settlement failed', 'An unexpected error occurred. No money moved.');
+    } finally {
+      setSettling(false);
+    }
   };
 
   // Helper functions for status display (commented out for future use)
@@ -410,9 +469,11 @@ export default function AdminDisputeDetailScreen() {
             </View>
             {dispute.winner && (
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Winner</Text>
+                <Text style={styles.infoLabel}>Decided for</Text>
                 <Text style={[styles.infoValue, { color: theme.success }]}>
-                  {dispute.winner === 'hunter' ? 'Hunter (Funds Released)' : 'Poster (Funds Refunded)'}
+                  {/* The decision, not proof that money moved: settlement is a
+                      separate step that can fail (see Settle money below). */}
+                  {dispute.winner === 'hunter' ? 'Hunter' : 'Poster'}
                 </Text>
               </View>
             )}
@@ -420,11 +481,28 @@ export default function AdminDisputeDetailScreen() {
               <Text style={styles.textLabel}>Resolution Details</Text>
               <Text style={styles.textContent}>{dispute.resolution}</Text>
             </View>
+            {dispute.winner && (
+              <TouchableOpacity
+                onPress={handleRetrySettlement}
+                disabled={settling}
+                style={[styles.actionButton, settling && styles.actionButtonDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel="Settle money for this dispute"
+              >
+                {settling ? (
+                  <ActivityIndicator size="small" color={theme.text} />
+                ) : (
+                  <Text style={styles.actionButtonText}>
+                    Settle money ({dispute.winner === 'hunter' ? 'release to hunter' : 'refund poster'})
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
           </AdminCard>
         )}
 
         {/* Admin Actions */}
-        {dispute.status !== 'resolved' && dispute.status !== 'closed' && (
+        {!['resolved', 'closed', 'resolved_hunter_wins', 'resolved_poster_wins', 'cancelled'].includes(dispute.status) && (
           <AdminCard>
             <View style={styles.sectionHeader}>
               <MaterialIcons name="admin-panel-settings" size={20} color={theme.primary} />
