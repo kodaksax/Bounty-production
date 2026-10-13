@@ -126,6 +126,9 @@ BEGIN
     END IF;
 
     -- One notification per dispute, recipient and type; repeats are a no-op.
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended(format('%s:%s:%s', p_user_id, p_type, v_dispute.id), 0)
+    );
     IF EXISTS (
       SELECT 1 FROM public.notifications n
        WHERE n.user_id = p_user_id
