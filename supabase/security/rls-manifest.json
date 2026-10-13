@@ -28,6 +28,11 @@
     "ratings": "trg_ratings_guard"
   },
   "protected": {
+    "bounty_owner_refund_claims": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
     "support_cases": {
       "policies": [],
       "grants": { "anon": [], "authenticated": [] },
@@ -368,6 +373,22 @@
     },
     {
       "signature": "fn_owner_refund_block_reason(uuid,uuid)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_claim_owner_refund(uuid,uuid)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_release_owner_refund_claim(uuid,uuid)",
       "forbid_execute": [
         "anon",
         "authenticated",
