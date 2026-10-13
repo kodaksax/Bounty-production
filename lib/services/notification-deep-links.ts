@@ -42,6 +42,9 @@ export function supportsActionSheet(ctx: NotificationDeepLinkContext, notificati
     // applicant/conversation to act on — fall back to plain navigation.
     return false;
   }
+  if (ctx.type === 'payout_setup_required' || ctx.type === 'release_waiting_on_hunter') {
+    return false;
+  }
   const category = ctx.category ?? categoryForNotificationType(ctx.type);
   return category === 'marketplace' || category === 'messages' || category === 'payments';
 }
@@ -102,6 +105,14 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
     case 'payments': {
       if (ctx.type === 'payout_method_changed' || ctx.type === 'bank_disconnected') {
         return { kind: 'route', path: '/tabs/bounty-app?screen=wallet' };
+      }
+      // The only thing a hunter can do about it is finish Connect onboarding.
+      if (ctx.type === 'payout_setup_required') {
+        return { kind: 'route', path: '/wallet/connect/embedded-onboarding' };
+      }
+      // Poster: back to their own bounty, where the payout state is shown.
+      if (ctx.type === 'release_waiting_on_hunter' && bountyId) {
+        return { kind: 'route', path: `/postings/${bountyId}` };
       }
       if (bountyId) return { kind: 'route', path: `/bounty/${bountyId}?source=notification` };
       return { kind: 'route', path: '/tabs/bounty-app?screen=wallet' };
