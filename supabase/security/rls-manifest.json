@@ -329,6 +329,8 @@
     }
   },
   "functions": [
+    { "signature": "increment_withdrawal_counter(uuid,timestamp with time zone)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "send_system_notification(uuid,text,text,text,jsonb)", "forbid_execute": ["anon", "PUBLIC"] },
     { "signature": "fn_claim_geocode_batch(integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_apply_bounty_geocode(uuid,double precision,double precision,text,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_record_geocode_failure(uuid,text,boolean,integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
