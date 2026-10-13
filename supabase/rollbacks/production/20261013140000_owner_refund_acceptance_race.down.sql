@@ -65,6 +65,7 @@ REVOKE ALL ON FUNCTION public.fn_reserve_escrow_for_acceptance(public.bounties) 
 REVOKE ALL ON FUNCTION public.fn_reserve_escrow_for_acceptance(public.bounties) FROM authenticated;
 
 DROP FUNCTION IF EXISTS public.fn_claim_owner_refund(uuid, uuid);
+DROP FUNCTION IF EXISTS public.fn_release_owner_refund_claim(uuid, uuid);
 DROP TABLE IF EXISTS public.bounty_owner_refund_claims;
 
 COMMIT;

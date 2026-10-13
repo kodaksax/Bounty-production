@@ -15,8 +15,12 @@
 --   fn_claim_owner_refund(bounty, caller)
 --     SELECT ... FOR UPDATE on the bounty, evaluate fn_owner_refund_block_reason
 --     (unchanged rule), and if allowed record a claim in the same transaction.
---     Returns the rule's verdict (NULL = allowed), so the edge-function gate
---     helper only swaps which RPC it calls.
+--     Returns NULL when claimed, the rule's verdict when blocked, or
+--     owner_refund_in_progress if another refund already owns the claim.
+--
+--   fn_release_owner_refund_claim(bounty, caller)
+--     Explicitly release only after a definitive failure that proves no refund
+--     occurred. Unknown Stripe outcomes remain blocked for reconciliation.
 --
 --   fn_reserve_escrow_for_acceptance(bounty)
 --     Called by BOTH accept RPCs after they lock the bounty and before any
@@ -29,12 +33,9 @@
 --   accept first -> the claim blocks on the lock, then sees accepted_by and
 --                   returns refund_requires_cancellation_or_dispute.
 --
--- The claim expires after 15 minutes rather than being released explicitly.
--- A successful owner refund is followed by the client deleting the bounty. If
--- a refund fails, the poster can still retry the refund at once, but can't
--- accept an applicant on that bounty until the claim lapses. Both refund
--- endpoints finish in seconds, so the window only matters if the money path
--- stalls past 15 minutes.
+-- Claims are durable. Successful refunds remain blocked until the bounty is
+-- deleted/terminal; definitive failures explicitly release the claim. Unknown
+-- Stripe outcomes remain blocked for reconciliation.
 --
 -- Rollback: supabase/rollbacks/production/20261013140000_owner_refund_acceptance_race.down.sql
 -- Deploy order: apply this migration BEFORE the edge functions that call
@@ -45,13 +46,13 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS public.bounty_owner_refund_claims (
   bounty_id  uuid PRIMARY KEY REFERENCES public.bounties(id) ON DELETE CASCADE,
   claimed_by uuid NOT NULL,
-  claimed_at timestamptz NOT NULL DEFAULT now(),
-  expires_at timestamptz NOT NULL
+  claimed_at timestamptz NOT NULL DEFAULT now()
 );
 
 COMMENT ON TABLE public.bounty_owner_refund_claims IS
-  'Short-lived claim written by fn_claim_owner_refund under the bounty row lock; '
+  'Durable claim written by fn_claim_owner_refund under the bounty row lock; '
   'fn_reserve_escrow_for_acceptance refuses acceptance while a claim is live (#883). '
+  'Definitive refund failures release it explicitly; uncertain outcomes remain blocked. '
   'Server-only: RLS on, no policies, no client grants.';
 
 ALTER TABLE public.bounty_owner_refund_claims ENABLE ROW LEVEL SECURITY;
@@ -84,16 +85,46 @@ BEGIN
     RETURN v_reason;
   END IF;
 
-  INSERT INTO public.bounty_owner_refund_claims (bounty_id, claimed_by, claimed_at, expires_at)
-  VALUES (p_bounty_id, p_caller, now(), now() + interval '15 minutes')
-  ON CONFLICT (bounty_id) DO UPDATE
-    SET claimed_by = EXCLUDED.claimed_by,
-        claimed_at = EXCLUDED.claimed_at,
-        expires_at = EXCLUDED.expires_at;
+  IF EXISTS (
+    SELECT 1 FROM public.bounty_owner_refund_claims
+     WHERE bounty_id = p_bounty_id
+  ) THEN
+    RETURN 'owner_refund_in_progress';
+  END IF;
+
+  INSERT INTO public.bounty_owner_refund_claims (bounty_id, claimed_by, claimed_at)
+  VALUES (p_bounty_id, p_caller, now())
+  ON CONFLICT (bounty_id) DO NOTHING;
 
   RETURN NULL;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION public.fn_release_owner_refund_claim(p_bounty_id uuid, p_caller uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $$
+BEGIN
+  -- Serialize release with both the claim and acceptance RPCs.
+  PERFORM 1 FROM public.bounties WHERE id = p_bounty_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  DELETE FROM public.bounty_owner_refund_claims
+   WHERE bounty_id = p_bounty_id
+     AND claimed_by = p_caller;
+  RETURN FOUND;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.fn_release_owner_refund_claim(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_release_owner_refund_claim(uuid, uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.fn_release_owner_refund_claim(uuid, uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_release_owner_refund_claim(uuid, uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.fn_claim_owner_refund(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.fn_claim_owner_refund(uuid, uuid) FROM anon;
@@ -116,7 +147,6 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.bounty_owner_refund_claims c
      WHERE c.bounty_id = p_bounty.id
-       AND c.expires_at > now()
   ) THEN
     RAISE EXCEPTION 'bounty_not_open: owner_refund_in_progress'
       USING ERRCODE = 'P0001',

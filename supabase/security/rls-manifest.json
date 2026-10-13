@@ -388,6 +388,14 @@
       ]
     },
     {
+      "signature": "fn_release_owner_refund_claim(uuid,uuid)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
       "signature": "request_dispute_escalation(integer)",
       "forbid_execute": [
         "anon",

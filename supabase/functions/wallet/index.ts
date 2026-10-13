@@ -15,7 +15,11 @@ import {
     verifyDepositPaymentIntent,
     type DepositPaymentIntent,
 } from '../_shared/deposit-verification.ts';
-import { checkOwnerRefundGate } from '../_shared/owner-refund-gate.ts';
+import {
+    checkOwnerRefundGate,
+    releaseOwnerRefundClaim,
+} from '../_shared/owner-refund-gate.ts';
+import { isDefinitiveDatabaseRejection } from '../_shared/connect-account-operations.ts';
 import {
     resolveReleasePayee,
     type ReleaseBountyLookupClient,
@@ -933,11 +937,13 @@ Deno.serve(async (req: Request) => {
           .eq('type', 'escrow')
           .eq('status', 'completed')
           .single();
-        if (escrowErr || !escrowTx)
+        if (escrowErr || !escrowTx) {
+          await releaseOwnerRefundClaim(supabase, bountyId, userId);
           return jsonResponse(
             errorPayload('Escrow transaction not found', 'escrow_not_found'),
             404
           );
+        }
 
         // The refund goes back to whoever funded the escrow — the poster — which
         // is not the caller when a hunter accepts a poster's cancellation.
@@ -974,6 +980,12 @@ Deno.serve(async (req: Request) => {
           .single();
         if (refundTxErr) {
           console.error('[wallet] create refund tx error:', refundTxErr);
+          if (
+            isDefinitiveDatabaseRejection(refundTxErr) &&
+            (refundTxErr as { code?: string }).code !== '23505'
+          ) {
+            await releaseOwnerRefundClaim(supabase, bountyId, userId);
+          }
           return jsonResponse(
             errorPayload('Failed to create refund transaction', 'refund_create_failed', true),
             500
@@ -993,10 +1005,18 @@ Deno.serve(async (req: Request) => {
         if (refundRpcErr) {
           console.error('[wallet] apply_refund_tx RPC error:', refundRpcErr);
           // Roll back the pending transaction so the caller can retry cleanly.
-          await supabase
+          const { data: deletedRefundTx, error: deleteRefundErr } = await supabase
             .from('wallet_transactions')
             .delete()
-            .eq('id', (refundTxRow as WalletTransaction).id);
+            .eq('id', (refundTxRow as WalletTransaction).id)
+            .select('id');
+          if (
+            isDefinitiveDatabaseRejection(refundRpcErr) &&
+            !deleteRefundErr &&
+            deletedRefundTx?.length
+          ) {
+            await releaseOwnerRefundClaim(supabase, bountyId, userId);
+          }
           return jsonResponse(
             errorPayload('Failed to finalize refund transaction', 'refund_finalize_failed', true),
             500

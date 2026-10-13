@@ -24,7 +24,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // @ts-ignore: Allow runtime npm import for Deno/edge function.
 import Stripe from 'npm:stripe@14';
-import { checkOwnerRefundGate } from '../_shared/owner-refund-gate.ts';
+import {
+  checkOwnerRefundGate,
+  releaseOwnerRefundClaim,
+} from '../_shared/owner-refund-gate.ts';
 import { authorizeRelease } from '../_shared/release-authorization.ts';
 import { reserveAccountOperation, finishAccountOperation, isDefinitiveStripeRejection } from '../_shared/connect-account-operations.ts';
 
@@ -1540,6 +1543,9 @@ Deno.serve(async (req: Request) => {
             // If it already captured between our read and now, fall through to
             // the refund path below by re-reading status.
             if (cancelErr?.code !== 'payment_intent_unexpected_state') {
+              if (isDefinitiveStripeRejection(cancelErr)) {
+                await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
+              }
               throw cancelErr;
             }
           }
@@ -1566,6 +1572,7 @@ Deno.serve(async (req: Request) => {
       // Post-capture: issue a real refund.
       if (bp.status === 'captured') {
         if (!bp.stripe_payment_intent_id) {
+          await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
           return reply(
             { error: 'Missing payment intent; cannot refund.', code: 'no_payment_intent' },
             500
@@ -1588,6 +1595,9 @@ Deno.serve(async (req: Request) => {
             bpId: bp.id,
             refundErr,
           });
+          if (isDefinitiveStripeRejection(refundErr)) {
+            await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
+          }
           return reply(
             {
               error: 'Refund could not be processed. Please try again.',
@@ -1627,6 +1637,7 @@ Deno.serve(async (req: Request) => {
         return reply({ refunded: true, status: newStatus, refundId: refund.id });
       }
 
+      await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
       return reply(
         {
           error: `Cannot cancel a bounty payment in status "${bp.status}".`,

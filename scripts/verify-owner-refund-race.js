@@ -104,8 +104,11 @@ async function main() {
   let bountyId = null;
 
   try {
-    const present = (await q("SELECT to_regproc('public.fn_claim_owner_refund') IS NOT NULL AS ok"))[0].ok;
-    if (!present) throw new Error('fn_claim_owner_refund is missing: apply 20261013140000 to staging first.');
+    const present = (await q(
+      `SELECT to_regproc('public.fn_claim_owner_refund') IS NOT NULL
+        AND to_regproc('public.fn_release_owner_refund_claim') IS NOT NULL AS ok`
+    ))[0].ok;
+    if (!present) throw new Error('Owner-refund claim RPCs are missing: apply 20261013140000 to staging first.');
 
     // ---- fixtures (committed) ----
     bountyId = (await q(
@@ -134,6 +137,17 @@ async function main() {
       }
       await admin.query('ROLLBACK');
       check(`${role} cannot execute fn_claim_owner_refund`, /permission denied/i.test(fnErr || ''), fnErr || 'no error');
+
+      await admin.query('BEGIN');
+      await admin.query(`SET LOCAL ROLE ${role}`);
+      let releaseErr = null;
+      try {
+        await admin.query('SELECT public.fn_release_owner_refund_claim($1, $2)', [bountyId, POSTER]);
+      } catch (e) {
+        releaseErr = e.message;
+      }
+      await admin.query('ROLLBACK');
+      check(`${role} cannot execute fn_release_owner_refund_claim`, /permission denied/i.test(releaseErr || ''), releaseErr || 'no error');
 
       await admin.query('BEGIN');
       await admin.query(`SET LOCAL ROLE ${role}`);
@@ -176,6 +190,13 @@ async function main() {
     const state1 = (await q('SELECT status::text, accepted_by FROM public.bounties WHERE id = $1', [bountyId]))[0];
     check('bounty is still open with no hunter', state1.status === 'open' && state1.accepted_by === null, state1);
 
+    const duplicateClaim = (await q(
+      'SELECT public.fn_claim_owner_refund($1, $2) AS r',
+      [bountyId, POSTER]
+    ))[0].r;
+    check('a concurrent refund cannot replace the active claim',
+      duplicateClaim === 'owner_refund_in_progress', duplicateClaim);
+
     // ---- 2. legacy accept_bounty_request is covered by the same check ----
     await poster.query('BEGIN');
     await actAsPoster(poster);
@@ -189,21 +210,38 @@ async function main() {
     check('accept_bounty_request also refuses during a live claim',
       /owner_refund_in_progress/.test(legacyErr || ''), legacyErr || 'accepted!');
 
-    // ---- 3. an expired claim no longer blocks ----
-    await q("UPDATE public.bounty_owner_refund_claims SET expires_at = now() - interval '1 second' WHERE bounty_id = $1", [bountyId]);
+    // ---- 3. old claims remain blocking until an explicit release ----
+    await q("UPDATE public.bounty_owner_refund_claims SET claimed_at = now() - interval '1 day' WHERE bounty_id = $1", [bountyId]);
     await poster.query('BEGIN');
     await actAsPoster(poster);
-    let expiredErr = null;
+    let durableClaimErr = null;
     try {
       await poster.query('SELECT * FROM public.fn_accept_bounty_request($1)', [requestId]);
     } catch (e) {
-      expiredErr = e.message;
+      durableClaimErr = e.message;
     }
     await poster.query('ROLLBACK');
-    check('an expired claim does not block acceptance', expiredErr === null, expiredErr || 'accepted (rolled back)');
+    check('a one-day-old claim still blocks acceptance',
+      /owner_refund_in_progress/.test(durableClaimErr || ''), durableClaimErr || 'accepted!');
+
+    const released = (await q(
+      'SELECT public.fn_release_owner_refund_claim($1, $2) AS ok',
+      [bountyId, POSTER]
+    ))[0].ok;
+    check('the service can explicitly release the owner claim', released === true, released);
+    await poster.query('BEGIN');
+    await actAsPoster(poster);
+    let afterReleaseErr = null;
+    try {
+      await poster.query('SELECT * FROM public.fn_accept_bounty_request($1)', [requestId]);
+    } catch (e) {
+      afterReleaseErr = e.message;
+    }
+    await poster.query('ROLLBACK');
+    check('acceptance proceeds after an explicit release',
+      afterReleaseErr === null, afterReleaseErr || 'accepted (rolled back)');
 
     // ---- 4. accept first: the claim waits on the lock, then sees the hunter ----
-    await q('DELETE FROM public.bounty_owner_refund_claims WHERE bounty_id = $1', [bountyId]);
     await poster.query('BEGIN');
     await actAsPoster(poster);
     await poster.query('SELECT * FROM public.fn_accept_bounty_request($1)', [requestId]);
