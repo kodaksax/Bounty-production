@@ -81,6 +81,7 @@ const heycatch = (): HeyCatchApi | null => {
 // PostHog is behavioural analytics; the Supabase row state is operational truth.
 // ──────────────────────────────────────────────────────────────────────────
 export type AnalyticsEvent =
+  | 'capabilities_saved'
   // App lifecycle / acquisition funnel. `app_opened` is the canonical open
   // event (once per cold start). The SDK's duplicate `Application Opened` is
   // dropped in lib/posthog.ts before_send.

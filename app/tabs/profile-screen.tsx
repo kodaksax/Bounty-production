@@ -144,45 +144,14 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           const storedProfile = await AsyncStorage.getItem(`profileData:${authUserId || 'anon'}`)
           if (storedProfile) setProfileData(JSON.parse(storedProfile))
         }
-        const storedSkills = await AsyncStorage.getItem(`profileSkills:${authUserId || 'anon'}`)
-        if (storedSkills) {
-          const parsed = JSON.parse(storedSkills)
-          if (Array.isArray(parsed)) setSkills(parsed)
-        } else {
-          // Generate skills from profiles
-          const defaultSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = []
-
-          // Prefer auth profile data
-          const profileToUse = authProfile || userProfile
-
-          // If we have phone or location in the raw profile, prefer those
-          const raw = (profileToUse as any)?._raw || null;
-          // Only "Verified contact" when the phone number is actually
-          // verified, not merely present (raw.phone truthy previously
-          // conflated "entered a phone number" with "verified it").
-          if (raw && raw.phone_verified === true) {
-            defaultSkills.push({ id: '2', icon: 'verified-user', text: 'Verified contact' })
-          }
-
-          if (raw && raw.location) {
-            defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${raw.location}` })
-          }
-
-          // Only show a join date when we actually have one — never fabricate one.
-          if (authProfile?.created_at) {
-            const joinDate = new Date(authProfile.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-            defaultSkills.push({ id: '3', icon: 'favorite', text: `Joined ${joinDate}` })
-          }
-
-          setSkills(defaultSkills)
-        }
+        setSkills((authProfile?.skills || []).map((text, i) => ({ id: String(i + 1), icon: 'public', text })))
       } catch (error) {
         console.error('Error fetching stored profile/skills:', error)
       }
     }
     load()
     // Only depend on primitive identity fields to avoid repeated triggers when objects change by ref
-  }, [authProfile?.id, authProfile?.username, userProfile?.id, userProfile?.username, authUserId, showSettings]);
+  }, [authProfile?.id, authProfile?.username, authProfile?.skills, userProfile?.id, userProfile?.username, authUserId, showSettings]);
 
   const handleSaveSkills = (updatedSkills: { id: string; icon: string; text: string; credentialUrl?: string }[]) => {
     setSkills(updatedSkills)

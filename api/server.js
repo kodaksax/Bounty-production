@@ -17,6 +17,7 @@ const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
+const { rejectUnsupportedRequirements } = require('./lib/ordinary-requirements');
 
 // Notification message helpers
 const { createMessages: createExpoMessages } = require('./lib/notificationMessage');
@@ -737,7 +738,7 @@ app.get('/api/bounties/:id', async (req, res) => {
 });
 
 // Create new bounty
-app.post('/api/bounties', async (req, res) => {
+app.post('/api/bounties', rejectUnsupportedRequirements, async (req, res) => {
   let conn;
   try {
     conn = await connect();
@@ -843,7 +844,7 @@ app.post('/api/bounties', async (req, res) => {
 });
 
 // Relay: Insert bounty into Supabase (service role)
-app.post('/api/supabase/bounties', async (req, res) => {
+app.post('/api/supabase/bounties', rejectUnsupportedRequirements, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(500).json({ error: 'Supabase admin not configured' });
   }
@@ -940,7 +941,7 @@ app.post('/api/supabase/bounties', async (req, res) => {
 })
 
 // Update bounty
-app.patch('/api/bounties/:id', async (req, res) => {
+app.patch('/api/bounties/:id', rejectUnsupportedRequirements, async (req, res) => {
   let conn;
   try {
     conn = await connect();

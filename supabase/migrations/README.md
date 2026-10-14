@@ -122,6 +122,79 @@ deploying that migration, before the linked issue is closed.
 
 ## Migration Order
 
+### Hunter qualification foundation (phases 1–3)
+
+The October 14 qualification migrations prepare notification consolidation,
+optional self-reported hunter capabilities, and poster-confirmed task
+requirements. Committing these files does **not** apply them. This work does
+not change escrow, acceptance, settlement, or existing identity requirements.
+
+- `20261014230000_consolidate_bounty_targeting.sql` routes ZIP, radius,
+  service-area, and existing liquidity scoring through the targeting ledger.
+  `bounty_targeting_config.consolidated_enabled` defaults to false: geographic
+  sources remain separate, but deduplication and caps share the dispatcher.
+  Enabling the setting unions initial geographic candidates; disabling it is
+  the legacy-geography fallback, not a bypass of safety reservations.
+- `20261014231000_capability_requirements.sql` seeds a small ordinary-task
+  taxonomy and adds owner-scoped declarations and atomically projected
+  requirements. `HUNTER_CAPABILITIES_ENABLED` defaults to false, hiding the
+  new editors and leaving legacy feed column selections unchanged.
+- Operator-reviewed rollout order is worker compatibility first, then database
+  migrations and staging verification, then a client pilot and server cohort
+  consolidation. Even legacy-geography mode produces versioned targeting
+  outbox rows requiring the updated worker. Existing historical outbox rows
+  keep their original delivery path.
+- Capability completion is optional. Legacy skills are not automatically
+  promoted into standardized declarations; uploaded evidence, independently
+  verified credentials, and completed-platform-work evidence are not supplied
+  by these phases.
+- Client writes pin the taxonomy version; a changed catalog requires explicit
+  review rather than automatic conversion. Requirements have a separate
+  server-owned revision and confirmation timestamp. Material requirement
+  edits freeze after an application or assignment, including after withdrawal,
+  while unchanged legacy edits remain compatible.
+- Structured requirements describe poster expectations. They do not yet
+  enforce application eligibility or provide a new hunter ranking model.
+  Legally regulated work and credential verification require separate policy
+  review before enabling any category-specific eligibility rules.
+- Keep the client capability/requirements flag and server notification rollout
+  controls disabled until schema and worker compatibility have been verified
+  in an isolated environment. Do not enable new client column selections
+  against an environment missing the migrations.
+- Validate owner isolation, anonymous access, forged provenance, malformed
+  taxonomy references, and the application-versus-requirement-edit race.
+  Confirm ordinary legacy creation/editing and financial behavior are
+  unchanged.
+- Exercise overlapping geographic sources, simultaneous dispatches for one
+  hunter, retry/partial-failure behavior, moderation/test exclusions, and
+  quiet-hour/channel preferences before enabling notification consolidation.
+  An outbox entry records queued outreach; an Expo ticket is not proof of
+  device delivery, availability, or interest.
+- The legacy-outbox reservation import is intentionally not delivery proof.
+  Review outbox/ledger sizes and migration lock duration in staging before
+  scheduling the schema change; do not remove deduplication history to shorten
+  deployment without reviewing the risk of repeated outreach.
+- Monitor duplicate outreach, hourly caps, outbox retry exhaustion, candidate
+  coverage, capability save failures, and requirement write conflicts.
+  Roll back rollout flags rather than dropping populated tables or rewriting
+  already-published requirements.
+- Targeted delivery events carry an outbox `notification_id`, channel, and
+  `targeting_version`. Count distinct recipient/outbox pairs for outreach
+  rather than summing channel acknowledgements; use durable delivery records
+  for retry/reconciliation metrics.
+- The targeted worker retries known pre-send failures or explicit provider
+  rejections, but never automatically reclaims an ambiguous provider send.
+  Interrupted claims become `unknown`; inspect/reconcile those outcomes
+  rather than clearing reservations and risking duplicate outreach. Accepted
+  channels are not resent on partial retries. Existing quiet-hour behavior
+  remains suppression rather than proof of interest or deferred availability.
+
+Automated unit and migration-contract tests do not replace executing database
+concurrency/RLS checks against a disposable, fully migrated environment.
+Mobile changes also require iOS and Android review before enabling the pilot.
+No migration application, production-data modification, or deployment is part
+of preparing these changes.
+
 All files in this directory are applied in lexicographic (filename) order.  
 The table below shows the intended sequence:
 

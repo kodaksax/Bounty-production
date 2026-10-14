@@ -15,6 +15,14 @@
  * const depositAmount: Money = 10000; // $100.00
  */
 export type Money = number;
+export type {
+  BountyRequirementsInput,
+  CapabilityCatalog,
+  CapabilityExperience,
+  CapabilityProficiency,
+  HunterCapability,
+  HunterCapabilityInput,
+} from './capabilities';
 
 /**
  * Schedule type for a bounty — how the poster wants to express timing.
@@ -68,6 +76,7 @@ export interface BountySchedule {
  * @property {BountySchedule} [schedule] - Structured scheduling information
  */
 export interface BountyFormValues {
+  requirements_payload?: import('./capabilities').BountyRequirementsInput | null;
   title: string;
   description: string;
   amount: number;

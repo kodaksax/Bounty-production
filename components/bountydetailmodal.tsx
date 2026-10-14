@@ -1,4 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
+import { BountyRequirementsSummary } from './bounty-requirements-summary'
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
@@ -95,6 +96,7 @@ interface BountyDetailModalProps {
     status?: string
     is_for_honor?: boolean
     category?: string
+    requirements_payload?: import('../lib/capabilities').BountyRequirementsInput | null
     created_at?: string
     /** 0-based index in the feed's rendered order, for bounty_viewed's
      * position_in_list. See components/bounty-feed.tsx. */
@@ -875,6 +877,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                   )}
 
                   {/* Description — omitted entirely when the bounty has none */}
+                  <BountyRequirementsSummary value={bounty.requirements_payload} />
                   {!!description && (
                     <View style={styles.descriptionContainer}>
                       <Text style={styles.sectionHeader}>Description</Text>

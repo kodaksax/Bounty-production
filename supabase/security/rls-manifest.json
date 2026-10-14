@@ -28,6 +28,93 @@
     "ratings": "trg_ratings_guard"
   },
   "protected": {
+    "bounty_targeting_config": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] }
+    },
+    "bounty_targeting_dispatches": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] }
+    },
+    "bounty_targeting_deliveries": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] }
+    },
+    "bounty_hunter_notifications": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] }
+    },
+    "capability_taxonomy_versions": {
+      "policies": [
+        {
+          "policyname": "capability_versions_read", "cmd": "SELECT",
+          "permissive": "PERMISSIVE", "roles": ["authenticated"],
+          "qual": "true", "with_check": null
+        }
+      ],
+      "grants": { "anon": [], "authenticated": ["SELECT"] }
+    },
+    "capability_tasks": {
+      "policies": [
+        {
+          "policyname": "capability_tasks_read", "cmd": "SELECT",
+          "permissive": "PERMISSIVE", "roles": ["authenticated"],
+          "qual": "true", "with_check": null
+        }
+      ],
+      "grants": { "anon": [], "authenticated": ["SELECT"] }
+    },
+    "capability_terms": {
+      "policies": [
+        {
+          "policyname": "capability_terms_read", "cmd": "SELECT",
+          "permissive": "PERMISSIVE", "roles": ["authenticated"],
+          "qual": "true", "with_check": null
+        }
+      ],
+      "grants": { "anon": [], "authenticated": ["SELECT"] }
+    },
+    "capability_task_terms": {
+      "policies": [
+        {
+          "policyname": "capability_links_read", "cmd": "SELECT",
+          "permissive": "PERMISSIVE", "roles": ["authenticated"],
+          "qual": "true", "with_check": null
+        }
+      ],
+      "grants": { "anon": [], "authenticated": ["SELECT"] }
+    },
+    "hunter_capabilities": {
+      "policies": [
+        {
+          "policyname": "hunter_capabilities_owner_read", "cmd": "SELECT",
+          "permissive": "PERMISSIVE", "roles": ["authenticated"],
+          "qual": "(owner_id = auth.uid())", "with_check": null
+        }
+      ],
+      "grants": { "anon": [], "authenticated": ["SELECT"] }
+    },
+    "bounty_requirements": {
+      "policies": [
+        {
+          "policyname": "bounty_requirements_read", "cmd": "SELECT",
+          "permissive": "PERMISSIVE", "roles": ["authenticated"],
+          "qual": "(EXISTS ( SELECT 1 FROM bounties b WHERE (b.id = bounty_requirements.bounty_id)))",
+          "with_check": null
+        }
+      ],
+      "grants": { "anon": [], "authenticated": ["SELECT"] }
+    },
+    "bounty_requirement_locks": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] }
+    },
+    "bounty_requests": {
+      "required_triggers": [
+        "trg_bounty_requests_guard_assignment",
+        "a00_lock_bounty_requirements"
+      ]
+    },
     "bounty_owner_refund_claims": {
       "policies": [],
       "grants": { "anon": [], "authenticated": [] },
@@ -139,6 +226,8 @@
       "required_triggers": [
         "trg_bounties_guard_lifecycle",
         "trg_bounties_enforce_funding_before_work",
+        "a00_validate_bounty_requirements",
+        "a00_project_bounty_requirements",
         "zz_bounties_privatize_location",
         "zz_bounties_store_private_location"
       ]
@@ -334,6 +423,19 @@
     }
   },
   "functions": [
+    { "signature": "fn_score_and_dispatch_bounty_notification(uuid,uuid[],smallint,text,text,jsonb)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_dispatch_bounty_targeting(uuid,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_notify_zip_matched_bounty()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_notify_radius_matched_bounty()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_notify_service_area_matched_bounty()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_claim_bounty_targeting_delivery(uuid,uuid,text,uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_ack_bounty_targeting_delivery(uuid,uuid,text,uuid,text,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_finish_bounty_targeting_outbox(uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "get_my_hunter_capabilities()", "forbid_execute": ["anon", "PUBLIC"] },
+    { "signature": "set_my_hunter_capabilities(jsonb,integer)", "forbid_execute": ["anon", "PUBLIC"] },
+    { "signature": "validate_bounty_requirements()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "project_bounty_requirements()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "lock_bounty_requirements_for_application()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "increment_withdrawal_counter(uuid,timestamp with time zone)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "send_system_notification(uuid,text,text,text,jsonb)", "forbid_execute": ["anon", "PUBLIC"] },
     { "signature": "fn_claim_geocode_batch(integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
