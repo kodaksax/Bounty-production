@@ -106,6 +106,29 @@ describe('new bounty-nearby durable delivery claims', () => {
     expect(f.insert).toHaveBeenCalledTimes(2)
   })
 
+  it('retries an HTTP 429 rejection without resending already accepted recipients', async () => {
+    const f = fixture()
+    f.fetcher.mockResolvedValueOnce({
+      ok: false, status: 429, json: async () => ({ errors: [{ code: 'TOO_MANY_REQUESTS' }] }),
+    } as Response)
+    expect((await f.run()).ok).toBe(false)
+    expect(f.states.get('hunter-a:push')?.state).toBe('failed')
+    expect(f.states.get('hunter-b:push')?.state).toBe('accepted')
+    expect((await f.run()).ok).toBe(true)
+    expect(f.fetcher).toHaveBeenCalledTimes(3)
+    expect(f.insert).toHaveBeenCalledTimes(2)
+    expect(f.states.get('hunter-a:push')?.state).toBe('accepted')
+  })
+
+  it('keeps HTTP 5xx outcomes terminal unknown rather than treating them as request rejections', async () => {
+    const f = fixture()
+    f.fetcher.mockResolvedValueOnce({ ok: false, status: 503, json: async () => null } as Response)
+    await f.run()
+    expect(f.states.get('hunter-a:push')?.state).toBe('unknown')
+    await f.run()
+    expect(f.fetcher).toHaveBeenCalledTimes(2)
+  })
+
   it('never retries acknowledged recipients when another device ticket was rejected', async () => {
     const f = fixture()
     f.tables.push_tokens = [{ token: 'ExpoPushToken[one]' }, { token: 'ExpoPushToken[two]' }]

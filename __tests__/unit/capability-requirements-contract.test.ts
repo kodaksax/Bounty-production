@@ -21,6 +21,15 @@ describe('ordinary requirements validation', () => {
     expect(requirementsFingerprint({ taxonomy_version: 1, task_id: 'organize_items', terms })).toEqual(
       requirementsFingerprint({ taxonomy_version: 1, task_id: 'organize_items', terms: [...terms].reverse() }));
   });
+  it('treats JSON property order as non-material for retry deduplication', () => {
+    expect(requirementsFingerprint({
+      taxonomy_version: 1, task_id: 'organize_items',
+      terms: [{ term_id: 'organization', importance: 'required' }],
+    })).toEqual(requirementsFingerprint({
+      task_id: 'organize_items', taxonomy_version: 1,
+      terms: [{ importance: 'required', term_id: 'organization' }],
+    }));
+  });
   it.each([
     { ...payload, verified: true },
     { ...payload, version: 1 },

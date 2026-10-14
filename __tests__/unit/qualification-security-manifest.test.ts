@@ -1,10 +1,12 @@
 import manifest from '../../supabase/security/rls-manifest.json';
+import { analyze } from '../../scripts/rls-policy-check/rules';
 
 describe('qualification security manifest', () => {
   const protectedTables = manifest.protected as Record<string, {
     grants?: { anon: string[]; authenticated: string[] };
     policies?: { policyname: string; cmd: string; roles: string[]; qual: string | null }[];
     required_triggers?: string[];
+    commands?: string[];
   }>;
 
   it.each([
@@ -55,6 +57,25 @@ describe('qualification security manifest', () => {
       'trg_bounty_requests_guard_assignment',
       'a00_lock_bounty_requirements',
     ]));
+    expect(protectedTables.bounty_requests.commands).toEqual(['INSERT', 'UPDATE']);
+  });
+
+  it('leaves pre-existing request SELECT/DELETE policy findings in the baseline ratchet', () => {
+    const snapshot = {
+      tables: [{ table_name: 'bounty_requests', rls_enabled: true }],
+      policies: ['SELECT', 'DELETE'].flatMap(cmd => ['hunter', 'poster'].map(policyname => ({
+        tablename: 'bounty_requests', policyname, cmd, permissive: 'PERMISSIVE',
+        roles: ['authenticated'], qual: 'true', with_check: null,
+      }))),
+      triggers: protectedTables.bounty_requests.required_triggers!.map(tgname => ({
+        table_name: 'bounty_requests', tgname, enabled: 'O',
+      })),
+      grants: [], columns: [], column_grants: [], functions: [],
+    };
+    expect(analyze(snapshot, {
+      protected: { bounty_requests: protectedTables.bounty_requests },
+      baseline: ['multi_permissive:bounty_requests:SELECT', 'multi_permissive:bounty_requests:DELETE'],
+    }).errors).toEqual([]);
   });
 
   it.each([

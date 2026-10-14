@@ -2,7 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { CapabilityEditor } from './capability-editor'
@@ -15,7 +15,7 @@ interface SkillsetEditScreenProps {
   onBack?: () => void
   onSave?: (skills: Skill[]) => void
   initialSkills?: Skill[]
-  userId?: string // User ID for scoped storage to prevent data leaks
+  userId?: string // Legacy prop; persistence uses the authenticated owner
 }
 
 interface Skill {
@@ -31,25 +31,23 @@ const ICON_LIBRARY = [
 
 export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) {
   const { theme } = useAppThemeContext();
-  const { profile: authProfile, userId: authUserId, updateProfile } = useAuthProfile();
+  const { profile: authProfile, userId: authUserId, updateProfile, loading, profileFetchError, refreshProfile } = useAuthProfile();
+  const profileReady = !!authUserId && authProfile?.id === authUserId && !loading && !profileFetchError;
+  const editState = useRef({ owner: authUserId, skillsDirty: false, categoriesDirty: false });
 
   const [skills, setSkills] = useState<Skill[]>(() =>
-    (authProfile?.skills || []).map((text, i) => ({ id: String(i + 1), icon: 'public', text })))
+    (profileReady ? authProfile?.skills || [] : []).map((text, i) => ({ id: String(i + 1), icon: 'public', text })))
 
   // Preset skill-category tags (Tech/Design/Writing/Labor/Delivery/Other),
   // saved as profile metadata for a future recommended-bounty notification
   // feature. Distinct from the free-text skills below.
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
-    () => authProfile?.skill_categories ?? []
+    () => profileReady ? authProfile?.skill_categories ?? [] : []
   )
 
-  useEffect(() => {
-    if (authProfile?.skill_categories) {
-      setSelectedCategories(authProfile.skill_categories)
-    }
-  }, [authProfile?.skill_categories])
-
   const toggleCategory = (categoryId: string) => {
+    if (!profileReady) return
+    editState.current.categoriesDirty = true
     setSelectedCategories((prev) =>
       prev.includes(categoryId) ? prev.filter((c) => c !== categoryId) : [...prev, categoryId]
     )
@@ -60,33 +58,52 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
   const getIconComponent = (iconName: string) => <MaterialIcons name={(alias[iconName] || iconName) as any} size={20} color={theme.text} />
   
   useEffect(() => {
-    setSkills((authProfile?.skills || []).map((text, i) => ({ id: String(i + 1), icon: 'public', text })))
-  }, [authProfile?.skills, authUserId])
+    if (editState.current.owner !== authUserId) {
+      editState.current = { owner: authUserId, skillsDirty: false, categoriesDirty: false }
+      setSelectedSkill("1")
+      setSkills([])
+      setSelectedCategories([])
+    }
+    if (!profileReady) return
+    if (!editState.current.skillsDirty) {
+      setSkills((authProfile?.skills || []).map((text, i) => ({ id: String(i + 1), icon: 'public', text })))
+    }
+    if (!editState.current.categoriesDirty) {
+      setSelectedCategories(authProfile?.skill_categories || [])
+    }
+  }, [authProfile?.skills, authProfile?.skill_categories, authUserId, profileReady])
 
   const handleSkillChange = (id: string, text: string) => {
+    if (!profileReady) return
+    editState.current.skillsDirty = true
     setSkills(skills.map((skill) => (skill.id === id ? { ...skill, text } : skill)))
   }
 
   const [banner, setBanner] = useState<string | null>(null)
 
   const addNewSkill = () => {
+    if (!profileReady) return
     if (skills.length >= 4) {
       setBanner('Maximum of 4 skills reached')
       return
     }
     const lastId = skills.reduce((m,s)=>Math.max(m, Number.parseInt(s.id)||0),0)
     const newId = (lastId + 1).toString()
+    editState.current.skillsDirty = true
     setSkills([...skills, { id: newId, icon: "globe", text: "" }])
     setSelectedSkill(newId)
   }
 
   const removeSkill = (id: string) => {
+    if (!profileReady) return
+    editState.current.skillsDirty = true
     const remaining = skills.filter((skill) => skill.id !== id)
     setSkills(remaining)
     setSelectedSkill(remaining[0]?.id || '')
   }
 
   const handleSave = async () => {
+    if (!profileReady) return
     const cleaned = skills.filter((skill) => skill.text.trim() !== "")
     try {
       // Persist via the authenticated profile service so the update actually
@@ -105,6 +122,8 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
           setBanner('Error saving skills to profile')
           return
         } else {
+          editState.current.skillsDirty = false
+          editState.current.categoriesDirty = false
           const added = skillTexts.filter(s => !previousSkills.includes(s))
           const removed = previousSkills.filter(s => !skillTexts.includes(s))
           if (added.length) analyticsService.trackEvent('skill_added', { count: added.length })
@@ -137,12 +156,16 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
   }
 
   const removeCredential = (skillId: string) => {
+    if (!profileReady) return
+    editState.current.skillsDirty = true
     setSkills(prev => prev.map(s => s.id === skillId ? { ...s, credentialUrl: undefined } : s))
     setBanner('Credential removed')
     setTimeout(()=>setBanner(null), 1200)
   }
 
   const changeIcon = (skillId: string, icon: string) => {
+    if (!profileReady) return
+    editState.current.skillsDirty = true
     setSkills(prev => prev.map(s => s.id === skillId ? { ...s, icon } : s))
   }
 
@@ -155,9 +178,11 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
         </View>
         <TouchableOpacity
           onPress={handleSave}
+          disabled={!profileReady}
           className="p-2"
           accessibilityRole="button"
           accessibilityLabel="Save and close"
+          accessibilityState={{ disabled: !profileReady }}
           accessibilityHint="Saves skillset changes and returns to profile"
         >
           <MaterialIcons name="check" size={24} color={theme.text} />
@@ -168,15 +193,26 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
       <View className="flex-row items-center justify-between px-4 pb-2">
         <Text className="text-base font-bold" style={{ color: theme.text }}>Edit Skillsets</Text>
         <View className="flex-row">
-          <TouchableOpacity onPress={addNewSkill} className="px-3 py-2 rounded-lg mr-2" style={{ backgroundColor: theme.surfaceSecondary }} accessibilityRole="button" accessibilityLabel="Add new skill">
+          <TouchableOpacity onPress={addNewSkill} disabled={!profileReady} className="px-3 py-2 rounded-lg mr-2" style={{ backgroundColor: theme.surfaceSecondary }} accessibilityRole="button" accessibilityLabel="Add new skill" accessibilityState={{ disabled: !profileReady }}>
             <Text className="text-sm" style={{ color: theme.text }}>Add</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleSave} className="px-3 py-2 bg-[#008E2A] rounded-lg" accessibilityRole="button" accessibilityLabel="Save skillsets">
+          <TouchableOpacity onPress={handleSave} disabled={!profileReady} className="px-3 py-2 bg-[#008E2A] rounded-lg" accessibilityRole="button" accessibilityLabel="Save skillsets" accessibilityState={{ disabled: !profileReady }}>
             <Text className="text-white text-sm font-semibold">Save</Text>
           </TouchableOpacity>
         </View>
       </View>
 
+      {!profileReady && (
+        <View className="mx-4 mb-2">
+          <Text style={{ color: theme.textSecondary }}>Load your profile before editing skills.</Text>
+          <TouchableOpacity onPress={() => { void refreshProfile().catch(() => {}) }} accessibilityRole="button" accessibilityLabel="Retry profile loading">
+            <Text style={{ color: theme.primary }}>Retry</Text>
+          </TouchableOpacity>
+          {onBack && <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Cancel skill editing">
+            <Text style={{ color: theme.text }}>Cancel</Text>
+          </TouchableOpacity>}
+        </View>
+      )}
       {banner && (
         <View className="mx-4 mb-2 rounded-md px-3 py-2" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
           <Text className="text-xs" style={{ color: theme.text }}>{banner}</Text>
@@ -197,11 +233,12 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
                 <TouchableOpacity
                   key={category.id}
                   onPress={() => toggleCategory(category.id)}
+                  disabled={!profileReady}
                   className="m-1 flex-row items-center px-4 py-2 rounded-full"
                   style={{ backgroundColor: isSelected ? theme.primary : theme.surfaceSecondary }}
                   accessibilityRole="button"
                   accessibilityLabel={`${isSelected ? 'Remove' : 'Add'} ${category.label} skill category`}
-                  accessibilityState={{ selected: isSelected }}
+                  accessibilityState={{ selected: isSelected, disabled: !profileReady }}
                 >
                   <MaterialIcons
                     name={category.icon as any}
@@ -231,6 +268,7 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
                 <View className="flex-1">
                   <TextInput
                     value={skill.text}
+                    editable={profileReady}
                     onChangeText={(text) => handleSkillChange(skill.id, text)}
                     placeholder="Describe your skill or credential"
                     placeholderTextColor={theme.textDisabled}
@@ -243,9 +281,11 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
                 </View>
                 <TouchableOpacity
                   onPress={() => removeSkill(skill.id)}
+                  disabled={!profileReady}
                   className="ml-2 p-2"
                   accessibilityRole="button"
                   accessibilityLabel="Delete skill"
+                  accessibilityState={{ disabled: !profileReady }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <MaterialIcons name="delete" size={20} color={theme.text} />
@@ -260,11 +300,12 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
                       <TouchableOpacity
                         key={ic}
                         onPress={() => changeIcon(skill.id, ic)}
+                        disabled={!profileReady}
                         className="m-1 h-11 w-11 rounded-lg items-center justify-center"
                         style={{ backgroundColor: skill.icon === ic ? theme.primary : theme.surfaceSecondary }}
                         accessibilityRole="button"
                         accessibilityLabel={`Select ${ic} icon`}
-                        accessibilityState={{ selected: skill.icon === ic }}
+                        accessibilityState={{ selected: skill.icon === ic, disabled: !profileReady }}
                       >
                         <MaterialIcons name={ic as any} size={18} color={skill.icon === ic ? '#ffffff' : theme.primaryLight} />
                       </TouchableOpacity>

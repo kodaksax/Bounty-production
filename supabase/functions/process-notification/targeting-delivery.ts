@@ -117,7 +117,7 @@ export async function processTargetingOutbox(options: {
                 }))),
               })
               const result = await response.json().catch(() => null)
-              const invalid = options.invalidTokens(tokens, result)
+              const invalid = response.ok ? options.invalidTokens(tokens, result) : []
               if (invalid.length > 0) {
                 // Reuse the worker's permanent-token classification. Project
                 // credential failures must never prune healthy device tokens.
@@ -129,7 +129,12 @@ export async function processTargetingOutbox(options: {
                 }
               }
               const tickets: any[] | null = Array.isArray(result?.data) ? result.data : null
-              if (response.ok && tickets?.some(t => t?.status === 'ok' && typeof t.id === 'string')) {
+              if (response.status === 429) {
+                // Expo explicitly rejects a rate-limited request before sending.
+                // Unlike a timeout/5xx response, this is safe to retry.
+                state = 'failed'
+                reason = 'Provider rejected push request due to rate limiting'
+              } else if (response.ok && tickets?.some(t => t?.status === 'ok' && typeof t.id === 'string')) {
                 state = 'accepted'
                 acceptedPushRecipients++
               } else if (response.ok && tickets?.length === tokens.length && tickets.every(t => t?.status === 'error')) {

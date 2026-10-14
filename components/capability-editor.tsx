@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import type { CapabilityCatalog, HunterCapabilityInput, CapabilityProficiency, CapabilityExperience } from '../lib/capabilities';
 import { HUNTER_CAPABILITIES_ENABLED } from '../lib/feature-flags';
 import { capabilityService } from '../lib/services/capability-service';
 import { analyticsService } from '../lib/services/analytics-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { useAuthContext } from '../hooks/use-auth-context';
 
 export function CapabilityEditor() {
-  return HUNTER_CAPABILITIES_ENABLED ? <EnabledCapabilityEditor /> : null;
+  const { session, isLoading } = useAuthContext();
+  const userId = session?.user?.id;
+  return HUNTER_CAPABILITIES_ENABLED && userId && !isLoading
+    ? <EnabledCapabilityEditor key={userId} /> : null;
 }
 
 function EnabledCapabilityEditor() {
@@ -18,11 +22,15 @@ function EnabledCapabilityEditor() {
   const [saving, setSaving] = useState(false);
   const [requiresReconfirmation, setRequiresReconfirmation] = useState(false);
   const [requiresReload, setRequiresReload] = useState(false);
+  const mountedRef = useRef(false);
+  const loadGenerationRef = useRef(0);
   const load = async () => {
+    const generation = ++loadGenerationRef.current;
     setCatalog(null);
     setMessage('');
     try {
       const [nextCatalog, mine] = await Promise.all([capabilityService.catalog(), capabilityService.mine()]);
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
       setDeclarations(mine.filter(item => item.taxonomy_version === nextCatalog.taxonomy_version).map(({ task_id, term_id, proficiency, experience }) => ({
         task_id, term_id, ...(proficiency ? { proficiency } : {}), ...(experience ? { experience } : {}),
       })));
@@ -34,22 +42,32 @@ function EnabledCapabilityEditor() {
         setMessage('The task catalog changed. Review and select capabilities again; prior declarations are not automatically converted.');
       }
     } catch (error) {
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
       setMessage(error instanceof Error ? error.message : 'Unable to load capabilities');
     }
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    void load();
+    return () => {
+      mountedRef.current = false;
+      loadGenerationRef.current += 1;
+    };
+  }, []);
   const save = async () => {
-    if (requiresReload || requiresReconfirmation || !catalog) return;
+    if (!mountedRef.current || requiresReload || requiresReconfirmation || !catalog) return;
     setSaving(true);
     setMessage('');
     try {
       await capabilityService.save(declarations, catalog.taxonomy_version);
+      if (!mountedRef.current) return;
       setMessage('Self-reported capabilities saved');
       void analyticsService.trackEvent('capabilities_saved', { count: declarations.length });
     } catch (error) {
+      if (!mountedRef.current) return;
       setMessage(error instanceof Error ? error.message : 'Unable to save capabilities');
       if (error instanceof Error && error.message.includes('task catalog changed')) setRequiresReload(true);
-    } finally { setSaving(false); }
+    } finally { if (mountedRef.current) setSaving(false); }
   };
   const button = (label: string, onPress: () => void, selected = false, blocked = false) => (
     <TouchableOpacity key={label} accessibilityRole="button" accessibilityLabel={label}

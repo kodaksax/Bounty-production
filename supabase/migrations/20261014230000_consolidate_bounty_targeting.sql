@@ -45,8 +45,12 @@ GRANT ALL ON public.bounty_targeting_config, public.bounty_targeting_dispatches,
 
 -- Import the old ZIP/service-area bypass into the dedup ledger. Never replay old
 -- outbox rows or manufacture delivery acknowledgements.
-INSERT INTO public.bounty_hunter_notifications (bounty_id, hunter_id, stage, reasons, created_at)
-SELECT b.id, p.id, 1, '{"source":"legacy_outbox","delivery":"unknown"}'::jsonb, min(o.created_at)
+-- Count the latest queued exposure toward the cap, even for existing ledger
+-- pairs; retain the earliest observation and original scoring provenance.
+INSERT INTO public.bounty_hunter_notifications AS ledger (bounty_id, hunter_id, stage, reasons, created_at)
+SELECT b.id, p.id, 1, jsonb_build_object(
+  'source', 'legacy_outbox', 'delivery', 'unknown',
+  'first_queued_at', min(o.created_at), 'last_queued_at', max(o.created_at)), max(o.created_at)
 FROM public.notifications_outbox o
 JOIN public.bounties b ON b.id::text = COALESCE(o.data->>'bountyId', o.data->>'bounty_id', o.bounty_id)
 CROSS JOIN LATERAL jsonb_array_elements_text(
@@ -55,7 +59,10 @@ CROSS JOIN LATERAL jsonb_array_elements_text(
 JOIN public.profiles p ON p.id::text = r.id
 WHERE o.data->>'type' = 'bounty_nearby'
 GROUP BY b.id, p.id
-ON CONFLICT (bounty_id, hunter_id) DO NOTHING;
+ON CONFLICT (bounty_id, hunter_id) DO UPDATE
+SET created_at = GREATEST(ledger.created_at, EXCLUDED.created_at),
+    reasons = COALESCE(ledger.reasons, '{}'::jsonb)
+      || jsonb_build_object('legacy_outbox_import', EXCLUDED.reasons);
 
 CREATE OR REPLACE FUNCTION public.fn_score_and_dispatch_bounty_notification(
   p_bounty_id uuid, p_candidates uuid[], p_stage smallint,
@@ -70,6 +77,7 @@ DECLARE
   v_outbox uuid := gen_random_uuid();
   v_recipients uuid[];
   v_hunter uuid;
+  v_pool jsonb;
 BEGIN
   SELECT * INTO v_bounty FROM public.bounties WHERE id = p_bounty_id;
   IF NOT FOUND OR COALESCE(v_bounty.is_test, false) OR v_bounty.status <> 'open' THEN RETURN 0; END IF;
@@ -78,20 +86,15 @@ BEGIN
   IF p_candidates IS NULL OR cardinality(p_candidates) = 0 THEN RETURN 0; END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended('bounty-targeting-score:' || p_bounty_id::text, 0));
 
-  -- Stable lock ordering avoids deadlocks between overlapping candidate pools.
-  -- Recheck the rolling cap AFTER acquiring these locks in a fresh statement.
-  FOR v_hunter IN
-    SELECT DISTINCT id FROM unnest(p_candidates[1:1000]) id ORDER BY id
-  LOOP
-    PERFORM pg_advisory_xact_lock(hashtextextended('bounty-targeting:' || v_hunter::text, 0));
-  END LOOP;
-
   v_cap := CASE WHEN v_bounty.is_for_honor THEN 15
     WHEN v_bounty.amount >= 100 THEN 60 WHEN v_bounty.amount >= 40 THEN 40 ELSE 25 END;
   -- Legacy source triggers cannot multiply the initial reward-scaled reach.
   v_cap := GREATEST(0, v_cap - (SELECT count(*) FROM public.bounty_hunter_notifications
     WHERE bounty_id = p_bounty_id AND stage = p_stage));
+  IF v_cap = 0 THEN RETURN 0; END IF;
 
+  -- Filter and score the whole supplied pool BEFORE bounding it. Otherwise
+  -- stale/applied hunters in the first 1000 IDs can hide every recruitable one.
   WITH candidates AS (
     SELECT p.id AS hunter_id,
       CASE WHEN v_bounty.category IS NULL OR cardinality(p.skill_categories) IS NULL
@@ -104,7 +107,7 @@ BEGIN
       CASE WHEN v_bounty.geom IS NULL OR p.geom IS NULL THEN 0.5
         ELSE GREATEST(0.0, 1.0 - (ST_Distance(v_bounty.geom, p.geom) / 1000.0) / 25.0) END AS distance_score
     FROM public.profiles p
-    WHERE p.id = ANY(p_candidates[1:1000])
+    WHERE p.id = ANY(p_candidates)
       AND p.id IS DISTINCT FROM COALESCE(v_bounty.poster_id, v_bounty.user_id)
       AND p.deleted_at IS NULL AND p.account_status = 'active'
       AND NOT EXISTS (SELECT 1 FROM public.bounty_hunter_notifications n
@@ -116,6 +119,34 @@ BEGIN
   ), scored AS (
     SELECT *, category_score * 0.35 + activity_score * 0.2
       + reliability_score * 0.15 + distance_score * 0.3 AS score FROM candidates
+  ), bounded AS (
+    SELECT * FROM scored ORDER BY score DESC, hunter_id LIMIT 1000
+  )
+  SELECT jsonb_agg(to_jsonb(bounded) ORDER BY score DESC, hunter_id) INTO v_pool FROM bounded;
+  IF v_pool IS NULL THEN RETURN 0; END IF;
+
+  -- At most 1000 selected hunters are locked, in stable order. Recheck all
+  -- eligibility and the rolling cap AFTER locking in a fresh statement.
+  FOR v_hunter IN
+    SELECT hunter_id FROM jsonb_to_recordset(v_pool) AS pool(hunter_id uuid) ORDER BY hunter_id
+  LOOP
+    PERFORM pg_advisory_xact_lock(hashtextextended('bounty-targeting:' || v_hunter::text, 0));
+  END LOOP;
+
+  WITH eligible AS (
+    SELECT pool.*
+    FROM jsonb_to_recordset(v_pool) AS pool(
+      hunter_id uuid, category_score numeric, activity_score numeric,
+      reliability_score numeric, distance_score numeric, score numeric)
+    JOIN public.profiles p ON p.id = pool.hunter_id
+    WHERE p.deleted_at IS NULL AND p.account_status = 'active'
+      AND p.id IS DISTINCT FROM COALESCE(v_bounty.poster_id, v_bounty.user_id)
+      AND NOT EXISTS (SELECT 1 FROM public.bounty_hunter_notifications n
+        WHERE n.bounty_id = p_bounty_id AND n.hunter_id = p.id)
+      AND NOT EXISTS (SELECT 1 FROM public.bounty_requests r
+        WHERE r.bounty_id = p_bounty_id AND r.hunter_id = p.id)
+      AND (SELECT count(*) FROM public.bounty_hunter_notifications n
+        WHERE n.hunter_id = p.id AND n.created_at > now() - interval '1 hour') < 5
   ), logged AS (
     INSERT INTO public.bounty_hunter_notifications (bounty_id, hunter_id, stage, score, reasons)
     SELECT p_bounty_id, hunter_id, p_stage, score,
@@ -124,7 +155,7 @@ BEGIN
         'match_sources', COALESCE(p_extra_data->'geo_matches'->hunter_id::text,
           jsonb_build_array(COALESCE(p_extra_data->>'match', 'liquidity'))),
         'targeting_mode', COALESCE(p_extra_data->>'targeting_mode', 'liquidity'))
-    FROM scored ORDER BY score DESC, hunter_id LIMIT v_cap
+    FROM eligible ORDER BY score DESC, hunter_id LIMIT v_cap
     ON CONFLICT (bounty_id, hunter_id) DO NOTHING RETURNING hunter_id
   )
   SELECT array_agg(hunter_id ORDER BY hunter_id) INTO v_recipients FROM logged;
@@ -185,7 +216,6 @@ BEGIN
       AND p.deleted_at IS NULL AND p.account_status = 'active'
       AND p.id IS DISTINCT FROM COALESCE(b.poster_id, b.user_id)
       AND (v_mode = 'consolidated' OR p_source = 'zip')
-    ORDER BY p.id LIMIT 1000
   ), radius AS (
     SELECT p.id, 'radius'::text AS source FROM public.profiles p
     WHERE b.geom IS NOT NULL AND p.geom IS NOT NULL AND ST_DWithin(p.geom, b.geom, 20 * 1609.344)
@@ -193,7 +223,6 @@ BEGIN
       AND p.id IS DISTINCT FROM COALESCE(b.poster_id, b.user_id)
       AND (v_mode = 'consolidated' OR (p_source = 'radius'
         AND NOT COALESCE(btrim(b.zip_code) <> '' AND p.zip_code = b.zip_code, false)))
-    ORDER BY p.id LIMIT 1000
   ), service_area AS (
     SELECT DISTINCT p.id, 'service_area'::text AS source
     FROM public.hunter_service_areas a JOIN public.profiles p ON p.id = a.hunter_id
@@ -204,14 +233,38 @@ BEGIN
       AND p.id IS DISTINCT FROM COALESCE(b.poster_id, b.user_id)
       AND (v_mode = 'consolidated' OR (p_source = 'service_area'
         AND NOT COALESCE(btrim(b.zip_code) <> '' AND p.zip_code = b.zip_code, false)))
-    ORDER BY p.id LIMIT 1000
   ), merged AS (
     SELECT id, jsonb_agg(source ORDER BY source) AS sources FROM (
       SELECT * FROM zip UNION ALL SELECT * FROM radius UNION ALL SELECT * FROM service_area
-    ) geo GROUP BY id ORDER BY id LIMIT 1000
+    ) geo GROUP BY id
+  ), eligible AS (
+    SELECT m.id, m.sources,
+      CASE WHEN b.category IS NULL OR cardinality(p.skill_categories) IS NULL
+        OR cardinality(p.skill_categories) = 0 THEN 0.5
+        WHEN b.category = ANY(p.skill_categories) THEN 1.0 ELSE 0.0 END AS category_score,
+      CASE WHEN p.last_session_at IS NULL THEN 0.3
+        WHEN p.last_session_at > now() - interval '3 days' THEN 1.0
+        WHEN p.last_session_at > now() - interval '14 days' THEN 0.6 ELSE 0.3 END AS activity_score,
+      GREATEST(0.0, 1.0 - COALESCE(p.cancellation_count, 0) * 0.15) AS reliability_score,
+      CASE WHEN b.geom IS NULL OR p.geom IS NULL THEN 0.5
+        ELSE GREATEST(0.0, 1.0 - (ST_Distance(b.geom, p.geom) / 1000.0) / 25.0) END AS distance_score
+    FROM merged m JOIN public.profiles p ON p.id = m.id
+    WHERE p.deleted_at IS NULL AND p.account_status = 'active'
+      AND p.id IS DISTINCT FROM COALESCE(b.poster_id, b.user_id)
+      AND NOT EXISTS (SELECT 1 FROM public.bounty_hunter_notifications n
+        WHERE n.bounty_id = b.id AND n.hunter_id = p.id)
+      AND NOT EXISTS (SELECT 1 FROM public.bounty_requests r
+        WHERE r.bounty_id = b.id AND r.hunter_id = p.id)
+      AND (SELECT count(*) FROM public.bounty_hunter_notifications n
+        WHERE n.hunter_id = p.id AND n.created_at > now() - interval '1 hour') < 5
+  ), scored AS (
+    SELECT *, category_score * 0.35 + activity_score * 0.2
+      + reliability_score * 0.15 + distance_score * 0.3 AS score FROM eligible
+  ), bounded AS (
+    SELECT id, sources FROM scored ORDER BY score DESC, id LIMIT 1000
   )
   SELECT array_agg(id ORDER BY id), jsonb_object_agg(id::text, sources)
-    INTO v_candidates, v_matches FROM merged;
+    INTO v_candidates, v_matches FROM bounded;
   RETURN public.fn_score_and_dispatch_bounty_notification(b.id, v_candidates, 1::smallint,
     'New Bounty Near You', '"' || b.title || '" was just posted near you.',
     jsonb_build_object('match', v_source, 'targeting_mode', v_mode, 'geo_matches', v_matches));

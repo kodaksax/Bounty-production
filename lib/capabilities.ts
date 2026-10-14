@@ -62,5 +62,6 @@ export function requirementsFingerprint(value: BountyRequirementsInput | null | 
   if (value == null) return 'null';
   validateRequirements(value);
   return JSON.stringify({ taxonomy_version: value.taxonomy_version, task_id: value.task_id,
-    terms: [...value.terms].sort((a, b) => a.term_id.localeCompare(b.term_id)) });
+    terms: value.terms.map(({ term_id, importance }) => ({ term_id, importance }))
+      .sort((a, b) => a.term_id.localeCompare(b.term_id)) });
 }

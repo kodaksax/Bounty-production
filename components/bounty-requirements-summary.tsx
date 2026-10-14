@@ -21,6 +21,6 @@ export function BountyRequirementsSummary({ value }: { value?: BountyRequirement
     {value.terms.map(term => <Text key={term.term_id} style={{ color: theme.text }}>
       {term.importance === 'required' ? 'Required' : 'Preferred'}: {catalog?.terms.find(item => item.id === term.term_id)?.label || term.term_id}
     </Text>)}
-    <Text style={{ color: theme.textSecondary }}>Ordinary skills/tools only. These declarations are not verification.</Text>
+    <Text style={{ color: theme.textSecondary }}>Poster expectations only, not verified qualifications. Applications are not automatically screened against these yet.</Text>
   </View>;
 }

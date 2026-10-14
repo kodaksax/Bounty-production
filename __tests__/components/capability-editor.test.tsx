@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { CapabilityEditor } from '../../components/capability-editor';
 import { BountyRequirementsEditor } from '../../components/bounty-requirements-editor';
 import { capabilityService } from '../../lib/services/capability-service';
@@ -9,6 +9,10 @@ import { BountyRequirementsSummary } from '../../components/bounty-requirements-
 jest.mock('../../hooks/useBountyExactLocation', () => ({ useBountyExactLocation: () => ({ exact: null }) }));
 jest.mock('../../hooks/usePostingPolicy', () => ({ usePostingPolicy: () => ({ honorPostsEnabled: true, minimumAmount: 5 }) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+let mockAuthUserId: string | null = 'owner-a';
+jest.mock('../../hooks/use-auth-context', () => ({
+  useAuthContext: () => ({ session: mockAuthUserId ? { user: { id: mockAuthUserId } } : null, isLoading: false }),
+}));
 
 jest.mock('../../lib/feature-flags', () => ({ HUNTER_CAPABILITIES_ENABLED: true }));
 jest.mock('../../lib/services/capability-service', () => ({
@@ -23,6 +27,7 @@ const catalog = {
   links: [{ task_id: 'organize_items', term_id: 'organization', taxonomy_version: 1 }],
 };
 beforeEach(() => {
+  mockAuthUserId = 'owner-a';
   jest.clearAllMocks();
   (capabilityService.catalog as jest.Mock).mockResolvedValue(catalog);
   (capabilityService.mine as jest.Mock).mockResolvedValue([]);
@@ -74,7 +79,7 @@ it('details summary displays only ordinary poster declarations, not verification
   }} />);
   await waitFor(() => expect(view.getByText('Required: Organization')).toBeTruthy());
   expect(view.getByText('Organize items')).toBeTruthy();
-  expect(view.getByText('Ordinary skills/tools only. These declarations are not verification.')).toBeTruthy();
+  expect(view.getByText('Poster expectations only, not verified qualifications. Applications are not automatically screened against these yet.')).toBeTruthy();
   expect(capabilityService.catalog).toHaveBeenCalledWith(1);
 });
 const bounty: any = {
@@ -134,4 +139,56 @@ it('requires catalog reload after a stale-version rejection before retrying a wr
   await waitFor(() => expect(view.getByText('Organization (skill)')).toBeTruthy());
   fireEvent.press(view.getByText('Save self-reported capabilities'));
   await waitFor(() => expect(capabilityService.save).toHaveBeenCalledTimes(2));
+});
+it('remounts on authenticated account changes and ignores the old account loading response', async () => {
+  let resolveOld: (value: unknown[]) => void = () => {};
+  (capabilityService.mine as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+  const view = render(<CapabilityEditor />);
+  mockAuthUserId = 'owner-b';
+  view.rerender(<CapabilityEditor />);
+  await waitFor(() => expect(view.getByText('Organization (skill)')).toBeTruthy());
+  await act(async () => resolveOld([{
+    taxonomy_version: 1, task_id: 'organize_items', term_id: 'organization', proficiency: 'experienced',
+  }]));
+  expect(view.queryByText('Organization: experienced')).toBeNull();
+  fireEvent.press(view.getByText('Save self-reported capabilities'));
+  await waitFor(() => expect(capabilityService.save).toHaveBeenCalledWith([], 1));
+  expect(capabilityService.mine).toHaveBeenCalledTimes(2);
+  expect((capabilityService.mine as jest.Mock).mock.calls.every(call => call.length === 0)).toBe(true);
+});
+it('ignores older overlapping remote loads after a newer retry finishes', async () => {
+  let resolveOld: (value: unknown[]) => void = () => {};
+  (capabilityService.mine as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+  const view = render(<CapabilityEditor />);
+  fireEvent.press(view.getByText('Retry capability loading'));
+  await waitFor(() => expect(view.getByText('Organization (skill)')).toBeTruthy());
+  await act(async () => resolveOld([{
+    taxonomy_version: 1, task_id: 'organize_items', term_id: 'organization', proficiency: 'experienced',
+  }]));
+  expect(view.queryByText('Organization: experienced')).toBeNull();
+});
+it('does not show or track an old account save result after switching accounts', async () => {
+  let resolveSave: () => void = () => {};
+  (capabilityService.save as jest.Mock).mockImplementationOnce(() => new Promise<void>(resolve => { resolveSave = resolve; }));
+  const view = render(<CapabilityEditor />);
+  await waitFor(() => expect(view.getByText('Organization (skill)')).toBeTruthy());
+  fireEvent.press(view.getByText('Organization (skill)'));
+  fireEvent.press(view.getByText('Save self-reported capabilities'));
+  mockAuthUserId = 'owner-b';
+  view.rerender(<CapabilityEditor />);
+  await waitFor(() => expect(view.getByText('Organization (skill)')).toBeTruthy());
+  await act(async () => resolveSave());
+  expect(view.queryByText('Self-reported capabilities saved')).toBeNull();
+  expect(view.queryByText('Organization: comfortable')).toBeNull();
+  expect(analyticsService.trackEvent).not.toHaveBeenCalled();
+});
+it('unmounts declarations on sign-out instead of retaining a writable editor', async () => {
+  const view = render(<CapabilityEditor />);
+  await waitFor(() => expect(view.getByText('Organization (skill)')).toBeTruthy());
+  fireEvent.press(view.getByText('Organization (skill)'));
+  mockAuthUserId = null;
+  view.rerender(<CapabilityEditor />);
+  expect(view.queryByText('Save self-reported capabilities')).toBeNull();
+  expect(view.queryByText('Organization (skill)')).toBeNull();
+  expect(capabilityService.save).not.toHaveBeenCalled();
 });
