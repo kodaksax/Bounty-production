@@ -1,7 +1,7 @@
 // Supabase Edge Function: share-og-image
 //
 // Renders a branded 1200x630 PNG (the standard Open Graph/Twitter Card
-// "summary_large_image" size) for a bounty or profile, referenced as
+// "summary_large_image" size), generic for bounties, public for profiles, referenced as
 // og:image/twitter:image by share-bounty/share-profile.
 //
 // Route: GET /share-og-image?type=bounty|profile&id=<uuid>&v=<cache-buster>
@@ -10,8 +10,8 @@
 //   record can never cascade into a broken image too.
 //
 // Rendering has two tiers:
-//   1. Primary: hand-built SVG (title/reward/stats + optional embedded
-//      photo/avatar fetched and inlined as a base64 data URI, since the
+//   1. Primary: hand-built SVG (brand card or profile/stats + optional
+//      avatar fetched and inlined as a base64 data URI, since the
 //      rasterizer does not fetch remote image refs) rasterized to PNG via
 //      @resvg/resvg-wasm.
 //   2. Fallback: if anything in tier 1 throws (bad data, wasm init

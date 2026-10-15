@@ -69,6 +69,8 @@ Assumptions: retain mobile-only app architecture, existing navigation, both iOS 
 
 First loop: **successful publish → optional share → branded, generic bounty preview → existing Branch/store handoff → signup → first published bounty → accepted work → completed bounty → another optional share**. The share page invites viewers to post their own task as well as open the linked task. Details remain behind existing app access checks; deleted/completed links must be handled by the app's normal unavailable-task UI. No claim that every link refers to a still-open task.
 
+The “Post a task of your own” CTA uses the existing `app-link/share/poster` handoff (source `share`, campaign `poster`, medium `organic`). It opens the app/store home, not a new unauthenticated posting route; users then follow the normal posting flow. The separate website fallback stays visible.
+
 Prioritize one local community and poster-oriented content. Invite hunters only where open bounties lack applicants; monitor unclaimed time, acceptance and completion before expanding geography.
 
 Costs below are relative implementation/maintenance scope, not monetary or duration estimates:
@@ -142,3 +144,13 @@ Success gate: verify one real bounty can be shared without private data; a human
 - Confirm installed app and store fallbacks on real iOS/Android devices, with and without Branch, including Facebook/Instagram/TikTok in-app browsers. Desktop and blocked app opens must retain a visible website CTA.
 - Preserve existing profile sharing, but do not amplify it until its separate consent/public-projection review is complete. No automatic sharing after completion, media upload or contact access is enabled.
 - Manual acceptance: flag off/on; post once; optional share/cancel/retry; Android does not emit completion; web clipboard missing/rejected does not emit copy; public page/direct image reveal no bounty title, description, address, identity, reward or photo; existing profile preview still renders; unavailable bounty handled in app; PostHog events and attribution person properties verified without duplicate signup/activation emissions.
+
+### Verification record
+
+- `npx tsc --noEmit`: passed.
+- Seven focused Jest suites: **113 tests passed**, including share privacy/outcomes, feature-gate/live-ID wiring, repeated-tap control, posting/funding/timing regressions and existing marketing attribution.
+- Existing ESLint on changed mobile files: no errors; five pre-existing hook warnings in the posting orchestrator.
+- Existing esbuild bundles the changed edge entry points successfully. Deno runtime/type validation and deployed Storage/PNG/crawler checks remain operator gates. Confirm actual card text and crosshair render, not merely a successful response or the solid-color error fallback.
+- Secret scan: no findings. Automated review was unavailable; supplemental read-only code review found no significant issues. CodeQL analysis was **skipped because the database was too large**, not a completed clean security analysis.
+- Expo started locally in offline mode. Browser preview transport was unavailable and the installed Playwright browser executable was missing; no screenshot or physical-device verification is claimed.
+- Live `.app`/`.net` routing, signed-out signup destination preservation, in-app browsers, platform approvals, end-to-end conversion/attribution and cache purging remain unverified. These are release gates, not completed production checks.

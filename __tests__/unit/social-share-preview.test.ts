@@ -12,6 +12,7 @@ describe('public bounty sharing privacy contract', () => {
     expect(source).not.toMatch(/bounty\.(title|description|location|username|attachments_json|amount)/);
     expect(source).toContain('type=bounty&id=_fallback');
     expect(source).toContain('/functions/v1/app-link/share/bounty?path=');
+    expect(source).toContain('/functions/v1/app-link/share/poster?medium=organic');
     expect(source).toContain('id6756679797');
   });
 
@@ -37,6 +38,7 @@ describe('public bounty sharing privacy contract', () => {
       appDeepLink: 'bountyexpo-workspace://bounty/abc',
       handoffUrl: 'https://example.test/app-link/share/bounty?path=bounty%2Fabc&medium=organic',
       websiteUrl: 'https://bountyfinder.net',
+      postTaskUrl: 'https://example.test/app-link/share/poster?medium=organic&landing=website',
       iosStoreUrl: 'https://apps.apple.com/app/id6756679797',
     });
     expect(html).toContain('property="og:image"');
@@ -44,6 +46,8 @@ describe('public bounty sharing privacy contract', () => {
     expect(html).toContain('width="1200" height="630"');
     expect(html).toContain('href="https://bountyfinder.net"');
     expect(html).toContain('path=bounty%2Fabc&amp;medium=organic');
+    expect(html).toContain('poster?medium=organic&amp;landing=website');
+    expect(html).toContain('Post a task of your own');
     expect(html).not.toContain('<script>');
     expect(html).toContain('Open in Bounty');
   });

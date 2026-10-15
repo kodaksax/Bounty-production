@@ -29,6 +29,7 @@ export interface OgPageOptions {
   siteName?: string;
   /** Optional website fallback; supplying it keeps the landing page user-driven. */
   websiteUrl?: string;
+  postTaskUrl?: string;
 }
 
 export function renderOgPage(opts: OgPageOptions): string {
@@ -43,14 +44,16 @@ export function renderOgPage(opts: OgPageOptions): string {
     androidStoreUrl,
     siteName = 'Bounty',
     websiteUrl,
+    postTaskUrl,
   } = opts;
 
   const safeTitle = escapeHtml(title);
   const safeDescription = escapeHtml(description);
   const safeSiteName = escapeHtml(siteName);
 
-  // Always emitted, regardless of whether the requester looked like a
-  // crawler: bot detection is UA-sniffing (inherently unreliable), and the
+  // Legacy redirect pages emit this regardless of crawler detection.
+  // Website-fallback pages instead stay user-driven. Bot detection is
+  // UA-sniffing (inherently unreliable), and the
   // page is cached/re-served from Storage by content id, not per-request —
   // gating this on isBot risks a real visitor being served a cached
   // no-script copy that a crawler's request happened to generate moments
@@ -133,6 +136,7 @@ export function renderOgPage(opts: OgPageOptions): string {
     <h1>${safeTitle}</h1>
     <p>${safeDescription}</p>
     <a class="button" href="${escapeHtml(handoffUrl || appDeepLink)}">Open in Bounty</a>
+    ${postTaskUrl ? `<p><a class="button" href="${escapeHtml(postTaskUrl)}">Post a task of your own</a></p>` : ''}
     ${websiteUrl ? `<p><a class="button" href="${escapeHtml(websiteUrl)}">Need help? Explore Bounty</a></p>` : ''}
   </div>
 </body>

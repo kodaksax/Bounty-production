@@ -5,9 +5,8 @@
 // bountyfinder.app to route that path to this function; not yet wired up,
 // see the sharing feature's follow-up notes). Serves Open Graph/Twitter
 // Card metadata for link-unfurling bots (Slack, Discord, iMessage, X,
-// Facebook, LinkedIn, ...) and a smart-redirect page for real visitors: try
-// the app's custom-scheme deep link first, then fall back to the App/Play
-// Store after a short timeout.
+// Facebook, LinkedIn, ...) and a user-driven landing page. The app CTA uses
+// the existing Branch/store handoff; the website fallback remains visible.
 //
 // Route shape: GET /share-bounty/:id
 //   ?log=app_redirect|store_redirect  — beacon from the client-side redirect
@@ -94,6 +93,7 @@ Deno.serve(async (req: Request) => {
     iosStoreUrl: IOS_STORE_URL || undefined,
     androidStoreUrl: ANDROID_STORE_URL,
     websiteUrl: 'https://bountyfinder.net',
+    postTaskUrl: `${supabaseUrl}/functions/v1/app-link/share/poster?medium=organic&landing=${encodeURIComponent('https://bountyfinder.net')}`,
   });
 
   return redirectToSharePage(supabaseAdmin, `bounty/${id}.html`, html, handoffUrl);
