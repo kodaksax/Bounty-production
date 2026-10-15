@@ -646,14 +646,17 @@ export type AnalyticsEvent =
   | 'trust_requirement_blocked_apply'
   | 'verification_started_from_requirement'
   // Sharing events (bounty + profile) — see lib/utils/share-utils.ts.
-  // Funnel per share attempt: {bounty,profile}_shared (share sheet opened)
-  // -> exactly one of share_completed/share_cancelled/share_link_copied.
+  // Funnel per attempt: {bounty,profile}_shared (intent), then an observable
+  // outcome. iOS native-activity completion is NOT proof of social publication;
+  // Android only reports chooser presentation. Errors/display-only have no
+  // completion or copy event.
   // deep_link_opened fires app-side when a bountyfinder.app/bounty|profile
   // link (or its custom-scheme equivalent) opens the app, independent of
   // whether that open originated from a share.
   | 'bounty_shared'
   | 'profile_shared'
   | 'share_completed'
+  | 'share_presented'
   | 'share_cancelled'
   | 'share_link_copied'
   | 'deep_link_opened'

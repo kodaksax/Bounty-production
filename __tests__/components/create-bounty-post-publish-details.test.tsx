@@ -87,6 +87,10 @@ jest.mock('lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: jest.fn() },
 }));
 
+jest.mock('lib/utils/share-utils', () => ({
+  shareBounty: jest.fn().mockResolvedValue('presented'),
+}));
+
 jest.mock('app/services/bountyService', () => ({
   bountyService: {
     createBounty: jest.fn(),
@@ -153,6 +157,11 @@ jest.mock('app/screens/CreateBounty/quick/StepPostPublish', () => ({
     return (
       <View>
         <Text>StepPostPublish</Text>
+        {props.onShare && (
+          <TouchableOpacity accessibilityLabel="stub-share" onPress={props.onShare}>
+            <Text>Share your bounty</Text>
+          </TouchableOpacity>
+        )}
         {/* Renders the summary the poster actually sees, so a save that
             didn't land can't masquerade as one that did. */}
         <Text accessibilityLabel="summary-photos">
@@ -258,6 +267,7 @@ jest.mock('app/screens/CreateBounty/quick/StepWhen', () => ({
 
 import { CreateBountyFlow } from 'app/screens/CreateBounty';
 import { bountyService } from 'app/services/bountyService';
+import { shareBounty } from 'lib/utils/share-utils';
 
 const mockedService = bountyService as jest.Mocked<typeof bountyService>;
 
@@ -279,6 +289,36 @@ beforeEach(() => {
     created: true,
   });
   mockedService.updateBountyDetails.mockResolvedValue({ id: 'bounty-1' } as any);
+});
+
+describe('optional post-publish sharing', () => {
+  const originalFlag = process.env.EXPO_PUBLIC_SOCIAL_SHARING_ENABLED;
+  afterEach(() => {
+    if (originalFlag === undefined) delete process.env.EXPO_PUBLIC_SOCIAL_SHARING_ENABLED;
+    else process.env.EXPO_PUBLIC_SOCIAL_SHARING_ENABLED = originalFlag;
+  });
+
+  it('does not show a new share prompt when the flag is off', async () => {
+    delete process.env.EXPO_PUBLIC_SOCIAL_SHARING_ENABLED;
+    await publishThenReachConfirmation();
+    expect(screen.queryByLabelText('stub-share')).toBeNull();
+    expect(shareBounty).not.toHaveBeenCalled();
+  });
+
+  it('shares the live ID only after the poster explicitly taps', async () => {
+    process.env.EXPO_PUBLIC_SOCIAL_SHARING_ENABLED = 'true';
+    await publishThenReachConfirmation();
+    expect(shareBounty).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('stub-share'));
+    });
+    expect(shareBounty).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'bounty-1',
+      surface: 'post_publish',
+    }));
+    expect(mockedService.createBounty).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('StepPostPublish')).toBeTruthy();
+  });
 });
 
 describe('post-publish detail saves', () => {

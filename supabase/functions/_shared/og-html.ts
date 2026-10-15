@@ -27,6 +27,8 @@ export interface OgPageOptions {
   /** Android Play Store URL. */
   androidStoreUrl?: string;
   siteName?: string;
+  /** Optional website fallback; supplying it keeps the landing page user-driven. */
+  websiteUrl?: string;
 }
 
 export function renderOgPage(opts: OgPageOptions): string {
@@ -40,6 +42,7 @@ export function renderOgPage(opts: OgPageOptions): string {
     iosStoreUrl,
     androidStoreUrl,
     siteName = 'Bounty',
+    websiteUrl,
   } = opts;
 
   const safeTitle = escapeHtml(title);
@@ -53,7 +56,7 @@ export function renderOgPage(opts: OgPageOptions): string {
   // no-script copy that a crawler's request happened to generate moments
   // earlier. Crawlers never execute <script> anyway, so unconditionally
   // including it is free for them and safe for everyone else.
-  const redirectScript = `
+  const redirectScript = websiteUrl ? '' : `
   <script>
     (function () {
       var appUrl = ${JSON.stringify(handoffUrl || appDeepLink)};
@@ -130,6 +133,7 @@ export function renderOgPage(opts: OgPageOptions): string {
     <h1>${safeTitle}</h1>
     <p>${safeDescription}</p>
     <a class="button" href="${escapeHtml(handoffUrl || appDeepLink)}">Open in Bounty</a>
+    ${websiteUrl ? `<p><a class="button" href="${escapeHtml(websiteUrl)}">Need help? Explore Bounty</a></p>` : ''}
   </div>
 </body>
 </html>`;

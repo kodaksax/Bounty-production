@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
@@ -21,6 +21,7 @@ interface StepPostPublishProps {
   onAddDetail: (target: DetailTarget) => void;
   /** Leaves the flow for the bounty feed. */
   onContinue: () => void;
+  onShare?: () => Promise<unknown>;
   step: number;
   totalSteps: number;
 }
@@ -69,11 +70,26 @@ export function StepPostPublish({
   draft,
   onAddDetail,
   onContinue,
+  onShare,
   step,
   totalSteps,
 }: StepPostPublishProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const sharingRef = useRef(false);
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleShare = async () => {
+    if (!onShare || sharingRef.current) return;
+    sharingRef.current = true;
+    setIsSharing(true);
+    try {
+      await onShare();
+    } finally {
+      sharingRef.current = false;
+      setIsSharing(false);
+    }
+  };
 
   const photoCount = draft.attachments?.length ?? 0;
   const locationValue =
@@ -197,6 +213,19 @@ export function StepPostPublish({
           );
         })}
       </View>
+      {onShare && (
+        <TouchableOpacity
+          style={styles.shareButton}
+          onPress={handleShare}
+          disabled={isSharing}
+          accessibilityRole="button"
+          accessibilityLabel="Share your bounty with friends or your local community"
+          accessibilityState={{ disabled: isSharing, busy: isSharing }}
+        >
+          <MaterialIcons name="share" size={20} color={theme.primary} />
+          <Text style={styles.add}>{isSharing ? 'Opening share options…' : 'Share your bounty'}</Text>
+        </TouchableOpacity>
+      )}
     </QuickStepLayout>
   );
 }
@@ -205,6 +234,14 @@ export default StepPostPublish;
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
+    shareButton: {
+      minHeight: 48,
+      marginTop: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
     sectionLabel: {
       marginBottom: 10,
       fontSize: 15,

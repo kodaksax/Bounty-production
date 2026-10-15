@@ -1,7 +1,7 @@
 /**
  * Unit tests for lib/utils/share-utils.ts — covers URL/message building for
- * bounty and profile shares, the reward-vs-honor branch, description
- * truncation, and that share outcomes (completed/cancelled/link copied)
+ * bounty and profile shares, privacy-safe bounty copy, and observable
+ * share outcomes (completed/presented/cancelled/link copied)
  * are tracked via analyticsService.
  */
 
@@ -100,41 +100,39 @@ describe('share-utils', () => {
       const [content] = mockShare.mock.calls[0];
       expect(content.url).toBeUndefined();
       expect(content.message).toContain('https://bountyfinder.app/bounty/abc123');
+      expect(mockTrackEvent).toHaveBeenCalledWith('share_presented', expect.objectContaining({
+        content_type: 'bounty',
+      }));
+      expect(mockTrackEvent).not.toHaveBeenCalledWith('share_completed', expect.anything());
     });
 
-    it('shows a dollar reward line for normal bounties', async () => {
-      await shareBounty({ id: '1', title: 'Task', amount: 250 });
-      const [content] = mockShare.mock.calls[0];
-      expect(content.message).toContain('$250 reward');
-    });
-
-    it('shows "For Honor" instead of a dollar amount when isForHonor is true', async () => {
-      await shareBounty({ id: '1', title: 'Task', amount: 0, isForHonor: true });
-      const [content] = mockShare.mock.calls[0];
-      expect(content.message).toContain('For Honor');
-      expect(content.message).not.toContain('$0');
-    });
-
-    it('truncates a long description to 140 characters with an ellipsis', async () => {
-      const longDescription = 'x'.repeat(200);
-      await shareBounty({ id: '1', title: 'Task', amount: 10, description: longDescription });
-      const [content] = mockShare.mock.calls[0];
-      expect(content.message).toContain(`${'x'.repeat(140)}...`);
-      expect(content.message).not.toContain('x'.repeat(141));
-    });
-
-    it('includes category, location, and poster name when provided', async () => {
+    it('never includes raw bounty fields in messages, titles or analytics', async () => {
       await shareBounty({
         id: '1',
-        title: 'Task',
-        amount: 10,
-        category: 'Design',
-        location: 'Remote',
-        posterName: '@alex',
+        title: 'Contact Alice at alice@example.test',
+        amount: 250,
+        description: 'Call 555-555-0123 at 123 Private Street',
+        category: 'Private category',
+        location: '123 Private Street',
+        posterName: 'Alice',
       });
-      const [content] = mockShare.mock.calls[0];
-      expect(content.message).toContain('Design • Remote');
-      expect(content.message).toContain('Posted by @alex');
+      const payload = JSON.stringify([mockShare.mock.calls, mockTrackEvent.mock.calls]);
+      for (const secret of ['alice@example.test', '555-555-0123', 'Private Street', 'Private category', 'Alice', '$250']) {
+        expect(payload).not.toContain(secret);
+      }
+      expect(mockShare.mock.calls[0][0].message).toContain('post a task of your own');
+    });
+
+    it('preserves privacy for honor bounties too', async () => {
+      await shareBounty({ id: '1', title: 'Private title', amount: 0, isForHonor: true });
+      expect(mockShare.mock.calls[0][0].message).not.toContain('Private title');
+    });
+
+    it('tracks post-publish placement without inventing a social destination', async () => {
+      await shareBounty({ id: '1', title: 'Task', amount: 10, surface: 'post_publish' });
+      expect(mockTrackEvent).toHaveBeenCalledWith('bounty_shared', {
+        content_id: '1', content_type: 'bounty', surface: 'post_publish',
+      });
     });
 
     it('tracks bounty_shared before presenting the share sheet, then share_completed on success', async () => {
@@ -145,7 +143,7 @@ describe('share-utils', () => {
       );
       expect(mockTrackEvent).toHaveBeenCalledWith(
         'share_completed',
-        expect.objectContaining({ content_id: '1' })
+        expect.objectContaining({ content_id: '1', completion_scope: 'native_activity' })
       );
     });
 
@@ -157,6 +155,38 @@ describe('share-utils', () => {
         expect.objectContaining({ content_id: '1' })
       );
       expect(mockTrackEvent).not.toHaveBeenCalledWith('share_completed', expect.anything());
+    });
+
+    it('does not report completion when sharing fails', async () => {
+      const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockShare.mockRejectedValueOnce(new Error('Share unavailable'));
+      try {
+        expect(await shareBounty({ id: '1', title: 'Task', amount: 10 })).toBeUndefined();
+        expect(mockTrackEvent).not.toHaveBeenCalledWith('share_completed', expect.anything());
+      } finally {
+        log.mockRestore();
+      }
+    });
+
+    it('reports link display, not copy, when no clipboard exists', async () => {
+      mockPlatformOS = 'web';
+      installClipboardMock();
+      delete (global.navigator as { clipboard?: Clipboard }).clipboard;
+      expect(await shareBounty({ id: '1', title: 'Task', amount: 10 })).toBe('link_displayed');
+      expect(mockTrackEvent).not.toHaveBeenCalledWith('share_link_copied', expect.anything());
+      expect(mockShare).not.toHaveBeenCalled();
+    });
+
+    it('does not report a copy after a rejected clipboard write', async () => {
+      mockPlatformOS = 'web';
+      installClipboardMock().mockRejectedValueOnce(new Error('Permission denied'));
+      const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        expect(await shareBounty({ id: '1', title: 'Task', amount: 10 })).toBeUndefined();
+        expect(mockTrackEvent).not.toHaveBeenCalledWith('share_link_copied', expect.anything());
+      } finally {
+        log.mockRestore();
+      }
     });
   });
 

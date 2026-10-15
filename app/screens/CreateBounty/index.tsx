@@ -25,6 +25,7 @@ import { validateContactInfo } from 'lib/utils/bounty-validation';
 import { getBountyPublishError } from 'lib/utils/bounty-publish-error';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { createForegroundTimer, getMonotonicNow } from 'lib/utils/foreground-timer';
+import { shareBounty } from 'lib/utils/share-utils';
 import { useWallet } from 'lib/wallet-context';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -838,6 +839,14 @@ export function CreateBountyFlow({
                 draft={postedDraft}
                 onAddDetail={handleAddDetail}
                 onContinue={handleFinish}
+                onShare={process.env.EXPO_PUBLIC_SOCIAL_SHARING_ENABLED === 'true'
+                  ? () => shareBounty({
+                    id: postedBountyId,
+                    title: postedDraft.title,
+                    amount: Number(postedDraft.amount),
+                    surface: 'post_publish',
+                  })
+                  : undefined}
                 step={TOTAL_STEPS}
                 totalSteps={TOTAL_STEPS}
               />

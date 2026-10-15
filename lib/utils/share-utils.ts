@@ -1,6 +1,5 @@
 import { Alert, Platform, Share } from 'react-native';
 import { analyticsService } from '../services/analytics-service';
-import { publicLocationLabel } from './public-location';
 
 // Production domain for shareable links. Each link is served by a Supabase
 // Edge Function (supabase/functions/share-bounty, share-profile) that
@@ -30,6 +29,7 @@ interface ShareBountyOptions {
     category?: string;
     location?: string;
     posterName?: string;
+    surface?: 'bounty_detail' | 'post_publish';
 }
 
 interface ShareProfileOptions {
@@ -42,7 +42,7 @@ interface ShareProfileOptions {
     completedCount?: number;
 }
 
-type ShareOutcome = 'completed' | 'cancelled' | 'link_copied';
+type ShareOutcome = 'completed' | 'cancelled' | 'presented' | 'link_copied' | 'link_displayed';
 
 async function presentShare(params: {
     contentType: 'bounty' | 'profile';
@@ -51,8 +51,10 @@ async function presentShare(params: {
     message: string;
     title: string;
     dialogTitle: string;
+    surface: string;
 }): Promise<ShareOutcome> {
-    const { contentType, contentId, url, message, title, dialogTitle } = params;
+    const { contentType, contentId, url, message, title, dialogTitle, surface } = params;
+    const properties = { content_type: contentType, content_id: String(contentId), surface };
 
     if (Platform.OS === 'web') {
         if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -60,11 +62,9 @@ async function presentShare(params: {
             Alert.alert('Link Copied', 'Link copied to clipboard!');
         } else {
             Alert.alert('Share Link', url);
+            return 'link_displayed';
         }
-        analyticsService.trackEvent('share_link_copied', {
-            content_type: contentType,
-            content_id: String(contentId),
-        });
+        analyticsService.trackEvent('share_link_copied', properties);
         return 'link_copied';
     }
 
@@ -87,57 +87,45 @@ async function presentShare(params: {
     // when the user actually picks an app, so `dismissedAction` (iOS-only)
     // is the only reliable cancellation signal available from this API.
     if (result.action === Share.dismissedAction) {
-        analyticsService.trackEvent('share_cancelled', {
-            content_type: contentType,
-            content_id: String(contentId),
-        });
+        analyticsService.trackEvent('share_cancelled', properties);
         return 'cancelled';
     }
 
+    if (Platform.OS !== 'ios' || result.action !== Share.sharedAction) {
+        analyticsService.trackEvent('share_presented', properties);
+        return 'presented';
+    }
+
     analyticsService.trackEvent('share_completed', {
-        content_type: contentType,
-        content_id: String(contentId),
+        ...properties,
+        completion_scope: 'native_activity',
         activity_type: (result as { activityType?: string }).activityType,
     });
     return 'completed';
 }
 
 /**
- * Share a bounty with a rich message and a deep link to its public share page.
+ * Share a bounty link without syndicating authenticated marketplace data.
  */
 export const shareBounty = async ({
     id,
-    title,
-    amount,
-    isForHonor,
-    description,
-    category,
-    location,
-    posterName,
+    surface = 'bounty_detail',
 }: ShareBountyOptions) => {
     try {
-        const url = `${APP_SCHEME}/bounty/${id}`;
-        const rewardLine = isForHonor ? 'For Honor' : `$${amount.toLocaleString()} reward`;
-
-        // Shared text leaves the app: never let a street address through, even
-        // from a stale cached row (see lib/utils/public-location.ts).
-        const detailParts = [category, publicLocationLabel(location)].filter(Boolean);
-        const detailLine = detailParts.length > 0 ? detailParts.join(' • ') : '';
-
+        const url = `${APP_SCHEME}/bounty/${encodeURIComponent(String(id))}`;
+        const title = 'Get help with Bounty';
+        // Titles, descriptions and attachments can themselves contain personal
+        // data. Share only a link until a consented public projection exists.
         const lines = [
-            `Check out this bounty on Bounty: ${title}`,
-            rewardLine,
+            'A task worth getting done. A community ready to help.',
+            'View this bounty in Bounty, or post a task of your own.',
+            url,
         ];
-        if (detailLine) lines.push(detailLine);
-        const truncatedDescription = truncate(description, DESCRIPTION_TRUNCATE_LENGTH);
-        if (truncatedDescription) lines.push(truncatedDescription);
-        if (posterName) lines.push(`Posted by ${posterName}`);
-        lines.push(url);
 
         analyticsService.trackEvent('bounty_shared', {
             content_id: String(id),
-            has_description: Boolean(description),
-            is_for_honor: Boolean(isForHonor),
+            content_type: 'bounty',
+            surface,
         });
 
         return await presentShare({
@@ -147,9 +135,11 @@ export const shareBounty = async ({
             message: lines.join('\n\n'),
             title,
             dialogTitle: `Share ${title}`,
+            surface,
         });
     } catch (error) {
         console.error('Error sharing bounty:', error);
+        Alert.alert('Unable to share', 'Please try sharing your bounty again.');
         return undefined;
     }
 };
@@ -188,6 +178,8 @@ export const shareProfile = async ({
 
         analyticsService.trackEvent('profile_shared', {
             content_id: String(id),
+            content_type: 'profile',
+            surface: 'profile',
             has_rating: typeof averageRating === 'number',
         });
 
@@ -198,6 +190,7 @@ export const shareProfile = async ({
             message: lines.join('\n\n'),
             title: `${displayName} on Bounty`,
             dialogTitle: `Share ${displayName}'s Profile`,
+            surface: 'profile',
         });
     } catch (error) {
         console.error('Error sharing profile:', error);

@@ -43,28 +43,6 @@ function ensureWasmInitialized(): Promise<void> {
   return wasmInit;
 }
 
-function wrapText(text: string, maxCharsPerLine: number, maxLines: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = '';
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (candidate.length > maxCharsPerLine && current) {
-      lines.push(current);
-      current = word;
-      if (lines.length === maxLines) break;
-    } else {
-      current = candidate;
-    }
-  }
-  if (lines.length < maxLines && current) lines.push(current);
-  if (lines.length === maxLines) {
-    const last = lines[maxLines - 1];
-    lines[maxLines - 1] = last.length > maxCharsPerLine - 1 ? `${last.slice(0, maxCharsPerLine - 1).trimEnd()}...` : last;
-  }
-  return lines;
-}
-
 async function fetchImageAsDataUri(url: string | null | undefined): Promise<string | null> {
   if (!url) return null;
   try {
@@ -93,23 +71,6 @@ function resolveStorageUrl(supabaseUrl: string, bucket: string, pathOrUrl: strin
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${pathOrUrl}`;
 }
 
-function firstImageAttachmentUrl(supabaseUrl: string, attachmentsJson: string | null | undefined): string | null {
-  if (!attachmentsJson) return null;
-  try {
-    const attachments = JSON.parse(attachmentsJson) as Array<{
-      remoteUri?: string;
-      mimeType?: string;
-      name?: string;
-    }>;
-    const image = attachments.find(
-      (a) => a.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.name || '')
-    );
-    return resolveStorageUrl(supabaseUrl, 'attachments', image?.remoteUri);
-  } catch {
-    return null;
-  }
-}
-
 function baseSvgOpen(): string {
   return `<svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -120,39 +81,11 @@ function baseSvgOpen(): string {
   </defs>
   <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)" />
   <rect x="0" y="0" width="10" height="${HEIGHT}" fill="${BRAND_GREEN}" />
+  <g stroke="#18a772" stroke-width="5" fill="none" transform="translate(1010 104)">
+    <circle r="48" /><circle r="24" />
+    <path d="M-64 0H-16 M16 0H64 M0-64V-16 M0 16V64" />
+  </g>
   <text x="64" y="72" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="${BRAND_GREEN}" letter-spacing="2">BOUNTY</text>`;
-}
-
-function buildBountySvg(params: {
-  title: string;
-  rewardLine: string;
-  detailLine: string;
-  posterLine: string;
-  photoDataUri: string | null;
-}): string {
-  const { title, rewardLine, detailLine, posterLine, photoDataUri } = params;
-  const hasPhoto = Boolean(photoDataUri);
-  const textX = 64;
-  const titleLines = wrapText(title, hasPhoto ? 22 : 34, 2);
-
-  const photoBlock = hasPhoto
-    ? `<clipPath id="photoClip"><rect x="720" y="0" width="${WIDTH - 720}" height="${HEIGHT}" /></clipPath>
-       <image href="${photoDataUri}" x="720" y="0" width="${WIDTH - 720}" height="${HEIGHT}" preserveAspectRatio="xMidYMid slice" clip-path="url(#photoClip)" />
-       <rect x="700" y="0" width="20" height="${HEIGHT}" fill="url(#bg)" opacity="0.6" />`
-    : '';
-
-  const titleTspans = titleLines
-    .map((line, i) => `<tspan x="${textX}" dy="${i === 0 ? 0 : 56}">${escapeHtml(line)}</tspan>`)
-    .join('');
-
-  return `${baseSvgOpen()}
-  ${photoBlock}
-  <text x="${textX}" y="220" font-family="Arial, sans-serif" font-size="64" font-weight="800" fill="#ffffff">${escapeHtml(rewardLine)}</text>
-  <text x="${textX}" y="${300}" font-family="Arial, sans-serif" font-size="46" font-weight="700" fill="#ffffff">${titleTspans}</text>
-  ${detailLine ? `<text x="${textX}" y="440" font-family="Arial, sans-serif" font-size="26" fill="#9CA3AF">${escapeHtml(detailLine)}</text>` : ''}
-  ${posterLine ? `<text x="${textX}" y="480" font-family="Arial, sans-serif" font-size="24" fill="#9CA3AF">${escapeHtml(posterLine)}</text>` : ''}
-  <text x="${textX}" y="${HEIGHT - 48}" font-family="Arial, sans-serif" font-size="22" fill="#4B5563">bountyfinder.app</text>
-</svg>`;
 }
 
 function buildProfileSvg(params: {
@@ -185,8 +118,9 @@ function buildProfileSvg(params: {
 function buildFallbackSvg(kind: 'bounty' | 'profile'): string {
   return `${baseSvgOpen()}
   <text x="64" y="300" font-family="Arial, sans-serif" font-size="48" font-weight="800" fill="#ffffff">${
-    kind === 'bounty' ? 'Find work worth doing' : 'Join Bounty'
+    kind === 'bounty' ? 'Get help. Get it done.' : 'Join Bounty'
   }</text>
+  ${kind === 'bounty' ? '<text x="64" y="368" font-family="Arial, sans-serif" font-size="30" fill="#18a772">Post a task. Find your community.</text>' : ''}
   <text x="64" y="${HEIGHT - 48}" font-family="Arial, sans-serif" font-size="22" fill="#4B5563">bountyfinder.app</text>
 </svg>`;
 }
@@ -222,7 +156,9 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    if (id === '_fallback') {
+    // Never expose bounty rows or attachments through a public image URL,
+    // including callers that bypass share-bounty and request an ID directly.
+    if (type === 'bounty' || id === '_fallback') {
       const png = await svgToPng(buildFallbackSvg(type));
       return pngResponse(png, 3600);
     }
@@ -231,29 +167,6 @@ Deno.serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !serviceRoleKey) throw new Error('Missing Supabase env vars');
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-
-    if (type === 'bounty') {
-      const { data: bounty } = await supabaseAdmin
-        .from('bounties')
-        .select('title, amount, is_for_honor, category, location, username, attachments_json')
-        .eq('id', id)
-        .maybeSingle();
-
-      if (!bounty) {
-        const png = await svgToPng(buildFallbackSvg('bounty'));
-        return pngResponse(png, 300);
-      }
-
-      const rewardLine = bounty.is_for_honor ? 'For Honor' : `$${Number(bounty.amount).toLocaleString()}`;
-      const detailLine = [bounty.category, bounty.location].filter(Boolean).join(' • ');
-      const posterLine = bounty.username ? `Posted by @${bounty.username}` : '';
-      const photoDataUri = await fetchImageAsDataUri(firstImageAttachmentUrl(supabaseUrl, bounty.attachments_json));
-
-      const png = await svgToPng(
-        buildBountySvg({ title: bounty.title, rewardLine, detailLine, posterLine, photoDataUri })
-      );
-      return pngResponse(png, 600);
-    }
 
     const { data: profile } = await supabaseAdmin
       .from('profiles')
