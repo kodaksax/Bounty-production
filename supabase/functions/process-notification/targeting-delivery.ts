@@ -1,3 +1,5 @@
+import { evaluateHunterQualification } from '../../../lib/matching/hunter-qualification.ts'
+
 // Only targeting_version=1 bounty_nearby rows use these durable channel claims.
 // A claim is NEVER stolen: interrupted provider calls become unknown, not resent.
 // Provider acceptance is not device delivery. Exactly-once delivery is impossible
@@ -21,6 +23,7 @@ export async function processTargetingOutbox(options: {
   isValidToken: (token: unknown) => boolean
   isQuiet: (start: number | null, end: number | null, timezone: string | null) => boolean
   invalidTokens: (tokens: string[], response: unknown) => string[]
+  qualificationMatchingEnabled?: boolean
   emitEvent?: (event: { event: string; distinct_id: string; properties: Record<string, unknown> }) => void
 }): Promise<{ ok: boolean; acceptedPushRecipients: number }> {
   const { admin, row, fetcher } = options
@@ -30,6 +33,52 @@ export async function processTargetingOutbox(options: {
   const { data: bounty, error: bountyError } = await admin.from('bounties')
     .select('id, status, is_test, poster_id, user_id').eq('id', bountyId).maybeSingle()
   if (bountyError) throw new Error('Targeting bounty lookup failed')
+  const qualificationResults = new Map<string, ReturnType<typeof evaluateHunterQualification>>()
+  let qualificationTaskId: string | undefined
+  let qualificationTaxonomyVersion: number | undefined
+  if (options.qualificationMatchingEnabled) {
+    const { data: requirements, error: requirementsError } = await admin.from('bounty_requirements')
+      .select('taxonomy_version, task_id, term_id, importance').eq('bounty_id', bountyId)
+    if (requirementsError) throw new Error('Targeting requirements lookup failed')
+    if (requirements?.length) {
+      const versions = new Set(requirements.map((term: any) => term.taxonomy_version))
+      const tasks = new Set(requirements.map((term: any) => term.task_id))
+      if (versions.size !== 1 || tasks.size !== 1) throw new Error('Targeting requirements are inconsistent')
+      const { data: declarations, error: capabilitiesError } = recipients.length
+        ? await admin.from('hunter_capabilities')
+          .select('owner_id, taxonomy_version, task_id, term_id, provenance').in('owner_id', recipients)
+        : { data: [], error: null }
+      if (capabilitiesError) throw new Error('Targeting capability lookup failed')
+      const capabilitiesByHunter = new Map<string, any[]>()
+      for (const declaration of declarations ?? []) {
+        if (declaration.provenance !== 'self_reported') continue
+        const current = capabilitiesByHunter.get(declaration.owner_id) ?? []
+        current.push({
+          taxonomy_version: declaration.taxonomy_version,
+          task_id: declaration.task_id,
+          term_id: declaration.term_id,
+          provenance: 'self_reported',
+        })
+        capabilitiesByHunter.set(declaration.owner_id, current)
+      }
+      const input = {
+        taxonomy_version: [...versions][0],
+        task_id: [...tasks][0],
+        terms: requirements.map(({ term_id, importance }: any) => ({ term_id, importance })),
+      }
+      qualificationTaskId = input.task_id
+      qualificationTaxonomyVersion = input.taxonomy_version
+      for (const hunterId of recipients) {
+        qualificationResults.set(
+          hunterId,
+          evaluateHunterQualification(input, capabilitiesByHunter.get(hunterId) ?? []),
+        )
+      }
+      recipients.sort((a, b) =>
+        (qualificationResults.get(b)?.score ?? 0) - (qualificationResults.get(a)?.score ?? 0)
+        || a.localeCompare(b))
+    }
+  }
   const { data: gate, error: gateError } = await admin.rpc('fn_bounty_distribution_gate', {
     p_bounty_id: bountyId, p_path: 'targeting', p_stage: row.data.stage ?? 1,
     p_require_credibility: (row.data.stage ?? 1) > 1,
@@ -51,9 +100,26 @@ export async function processTargetingOutbox(options: {
   let acceptedPushRecipients = 0
 
   for (const hunterId of recipients) {
+    const qualification = qualificationResults.get(hunterId)
+    if (qualification) options.emitEvent?.({
+      event: 'qualification_match_evaluated',
+      distinct_id: hunterId,
+      properties: {
+        bounty_id: bountyId,
+        task_id: qualificationTaskId,
+        taxonomy_version: qualificationTaxonomyVersion,
+        eligible: qualification.eligible,
+        score: qualification.score,
+        matched_required_count: qualification.matchedTerms.filter(term => term.importance === 'required').length,
+        matched_preferred_count: qualification.matchedTerms.filter(term => term.importance === 'preferred').length,
+        missing_required_count: qualification.missingRequiredTerms.length,
+        evidence_basis: 'self_reported',
+      },
+    })
     const profile = profileMap.get(hunterId)
     const eligible = eligibleBounty && profile && profile.account_status === 'active'
       && !profile.deleted_at && hunterId !== (bounty.poster_id ?? bounty.user_id) && !applicantIds.has(hunterId)
+      && qualification?.eligible !== false
     for (const channel of ['in_app', 'push', 'email'] as Channel[]) {
       const claimId = options.newClaimId()
       const args = { p_outbox_id: row.id, p_hunter_id: hunterId, p_channel: channel, p_claim_id: claimId }

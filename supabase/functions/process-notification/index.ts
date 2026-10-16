@@ -410,6 +410,7 @@ Deno.serve(async (req: Request) => {
           admin: supabaseAdmin, row: rows, recipients, supabaseUrl, serviceRoleKey,
           fetcher: fetch, newClaimId: () => crypto.randomUUID(),
           isValidToken: isValidExpoPushToken, isQuiet: isInQuietHours,
+          qualificationMatchingEnabled: Deno.env.get('QUALIFIED_BOUNTY_TARGETING_ENABLED') === 'true',
           invalidTokens: extractInvalidTokens, emitEvent: event => events.push(event),
         })
         return jsonResponse(result, result.ok ? 200 : 503)

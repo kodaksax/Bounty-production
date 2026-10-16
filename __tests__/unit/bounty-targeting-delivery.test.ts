@@ -16,6 +16,8 @@ function fixture() {
     })),
     notification_channel_preferences: ['hunter-a', 'hunter-b'].map(user_id => ({ user_id, channel: 'email', enabled: false })),
     bounty_requests: [],
+    bounty_requirements: [],
+    hunter_capabilities: [],
     push_tokens: [{ token: 'ExpoPushToken[one]' }],
   }
   const insert = jest.fn(async () => ({ error: null }))
@@ -24,6 +26,7 @@ function fixture() {
   const errors: Record<string, any> = {}
   let allowed = true
   let quiet = false
+  let qualificationMatchingEnabled = false
   const admin = {
     from(table: string) {
       const query: any = {
@@ -69,12 +72,14 @@ function fixture() {
     supabaseUrl: 'https://example.invalid', serviceRoleKey: 'test-only',
     fetcher, newClaimId: () => String(++claim), isValidToken: token => typeof token === 'string',
     isQuiet: () => quiet,
+    qualificationMatchingEnabled,
     invalidTokens: extractInvalidTokens,
     emitEvent: event => events.push(event),
   })
   return { run, states, tables, errors, fetcher, insert, admin, prune, events,
     setAllowed: (value: boolean) => { allowed = value },
     setQuiet: (value: boolean) => { quiet = value },
+    setQualificationMatchingEnabled: (value: boolean) => { qualificationMatchingEnabled = value },
   }
 }
 
@@ -213,6 +218,61 @@ describe('new bounty-nearby durable delivery claims', () => {
     expect(f.fetcher).not.toHaveBeenCalled()
     expect(f.insert).toHaveBeenCalledTimes(2)
     expect(f.states.get('hunter-a:push')?.state).toBe('suppressed')
+  })
+
+  it('keeps qualification matching disabled unless the worker rollout flag is enabled', async () => {
+    const f = fixture()
+    f.tables.bounty_requirements = [{
+      taxonomy_version: 1, task_id: 'organize_items', term_id: 'organization', importance: 'required',
+    }]
+    await f.run()
+    expect(f.insert).toHaveBeenCalledTimes(2)
+    expect(f.fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it('targets only hunters declaring every required term and emits aggregate-safe explanations', async () => {
+    const f = fixture()
+    f.setQualificationMatchingEnabled(true)
+    f.tables.bounty_requirements = [
+      { taxonomy_version: 1, task_id: 'organize_items', term_id: 'organization', importance: 'required' },
+      { taxonomy_version: 1, task_id: 'organize_items', term_id: 'storage_bins', importance: 'preferred' },
+    ]
+    f.tables.hunter_capabilities = [
+      {
+        owner_id: 'hunter-a', taxonomy_version: 1, task_id: 'organize_items',
+        term_id: 'organization', provenance: 'self_reported',
+      },
+      {
+        owner_id: 'hunter-b', taxonomy_version: 1, task_id: 'organize_items',
+        term_id: 'storage_bins', provenance: 'self_reported',
+      },
+    ]
+    await f.run()
+    expect(f.insert).toHaveBeenCalledTimes(1)
+    expect(f.states.get('hunter-a:in_app')?.state).toBe('accepted')
+    expect(f.states.get('hunter-b:in_app')?.state).toBe('suppressed')
+    const matches = f.events.filter(e => e.event === 'qualification_match_evaluated')
+    expect(matches).toHaveLength(2)
+    expect(matches.find(e => e.distinct_id === 'hunter-a')?.properties).toMatchObject({
+      eligible: true, matched_required_count: 1, evidence_basis: 'self_reported',
+    })
+    expect(matches.find(e => e.distinct_id === 'hunter-b')?.properties).toMatchObject({
+      eligible: false, missing_required_count: 1,
+    })
+    expect(JSON.stringify(matches)).not.toContain('organization')
+    expect(JSON.stringify(matches)).not.toContain('storage_bins')
+  })
+
+  it('fails closed before delivery when enabled qualification data cannot be read', async () => {
+    const f = fixture()
+    f.setQualificationMatchingEnabled(true)
+    f.tables.bounty_requirements = [{
+      taxonomy_version: 1, task_id: 'organize_items', term_id: 'organization', importance: 'required',
+    }]
+    f.errors.hunter_capabilities = { message: 'Lookup failed' }
+    await expect(f.run()).rejects.toThrow('capability lookup failed')
+    expect(f.fetcher).not.toHaveBeenCalled()
+    expect(f.insert).not.toHaveBeenCalled()
   })
 
   it('acknowledges email per recipient and does not repeat it on retries', async () => {
