@@ -77,6 +77,14 @@ beforeEach(() => {
 });
 
 describe('updateBountyDetails column mapping', () => {
+  it('passes structured requirements and category unchanged, while old clients omit both', async () => {
+    const requirements = { taxonomy_version: 1, task_id: 'organize_items', terms: [{ term_id: 'organization', importance: 'required' as const }] };
+    await bountyService.updateBountyDetails('bounty-1', makeDraft({ category: 'labor', requirements }));
+    expect(baseBountyService.update.mock.calls[0][1]).toMatchObject({ category: 'labor', requirements_payload: requirements });
+    baseBountyService.update.mockClear();
+    await bountyService.updateBountyDetails('bounty-1', makeDraft());
+    expect(baseBountyService.update.mock.calls[0][1]).not.toHaveProperty('requirements_payload');
+  });
   it('sends is_time_sensitive as a boolean, never null (NOT NULL column)', async () => {
     for (const scheduleType of ['flexible', 'scheduled', undefined] as const) {
       baseBountyService.update.mockClear();
