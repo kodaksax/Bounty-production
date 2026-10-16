@@ -101,7 +101,10 @@ export async function processTargetingOutbox(options: {
 
   for (const hunterId of recipients) {
     const qualification = qualificationResults.get(hunterId)
-    if (qualification) options.emitEvent?.({
+    const profile = profileMap.get(hunterId)
+    const candidateEligible = Boolean(eligibleBounty && profile && profile.account_status === 'active'
+      && !profile.deleted_at && hunterId !== (bounty.poster_id ?? bounty.user_id) && !applicantIds.has(hunterId))
+    if (candidateEligible && qualification) options.emitEvent?.({
       event: 'qualification_match_evaluated',
       distinct_id: hunterId,
       properties: {
@@ -116,10 +119,7 @@ export async function processTargetingOutbox(options: {
         evidence_basis: 'self_reported',
       },
     })
-    const profile = profileMap.get(hunterId)
-    const eligible = eligibleBounty && profile && profile.account_status === 'active'
-      && !profile.deleted_at && hunterId !== (bounty.poster_id ?? bounty.user_id) && !applicantIds.has(hunterId)
-      && qualification?.eligible !== false
+    const eligible = candidateEligible && qualification?.eligible !== false
     for (const channel of ['in_app', 'push', 'email'] as Channel[]) {
       const claimId = options.newClaimId()
       const args = { p_outbox_id: row.id, p_hunter_id: hunterId, p_channel: channel, p_claim_id: claimId }

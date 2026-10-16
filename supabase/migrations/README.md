@@ -189,6 +189,36 @@ not change escrow, acceptance, settlement, or existing identity requirements.
   channels are not resent on partial retries. Existing quiet-hour behavior
   remains suppression rather than proof of interest or deferred availability.
 
+### Qualification follow-on (phases 4–7)
+
+- The deterministic evaluator compares exact task, taxonomy-version, and term
+  IDs. Every required term must have an exact self-reported declaration for a
+  hunter to qualify for targeted outreach; preferred-term coverage is a
+  normalized score with UUID tie-breaking. It does not block applications or
+  represent verified ability, identity, or credentials. No equivalence mapping
+  exists yet; taxonomy differences are not silently treated as equivalent.
+- `QUALIFIED_BOUNTY_TARGETING_ENABLED` defaults off. When enabled, the worker
+  checks requirements against only the recipient cohort already reserved by
+  geographic targeting, and sends only to candidates who declared all required
+  terms. It orders that cohort by preferred-term coverage. It does not expand
+  the cohort, infer availability, or fall back to unqualified recipients when
+  no exact match exists. Disable the flag to restore current targeting behavior.
+- `get_bounty_applicant_qualification` is a bounded, owner-authorized RPC for
+  pending/accepted applicants. It returns only matching taxonomy labels and
+  missing required labels; base hunter-capability rows remain owner-only.
+  Applicant summaries are hidden with `HUNTER_CAPABILITIES_ENABLED` off and
+  label all declarations as self-reported.
+- `qualification_match_evaluated` contains task/version, match counts, and
+  self-reported evidence basis only. Do not add document contents, portfolio
+  URLs, raw skill text, or precise location to these analytics events. Existing
+  notification events remain the source for channel outcomes; provider
+  acceptance is not device delivery or hunter interest.
+- Roll out only after worker compatibility, migration verification in an
+  isolated database, and mobile review. Leave both flags off until then.
+  Rollback by disabling the worker flag and hiding the client UI; do not drop
+  the summary function or capability data. No migration application or
+  deployment is part of this change.
+
 Automated unit and migration-contract tests do not replace executing database
 concurrency/RLS checks against a disposable, fully migrated environment.
 Mobile changes also require iOS and Android review before enabling the pilot.
