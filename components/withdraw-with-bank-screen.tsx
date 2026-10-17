@@ -183,7 +183,14 @@ export function WithdrawWithBankScreen({
       needsRefreshOnFocusRef.current = true;
       router.push({
         pathname: '/wallet/connect/embedded-onboarding',
-        params: { hasExistingAccount: eligibility.connectedAccountExists ? 'true' : 'false' },
+        params: {
+          hasExistingAccount:
+            eligibility.connectedAccountExists === null
+              ? 'unknown'
+              : eligibility.connectedAccountExists
+                ? 'true'
+                : 'false',
+        },
       } as Href);
       // Status refresh and isOnboarding reset are handled by useFocusEffect
       // when this screen regains focus after the user returns.

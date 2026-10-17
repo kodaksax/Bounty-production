@@ -158,11 +158,17 @@ function replacementHarness() {
 
 describe('replacement account safety', () => {
   test('withdrawal onboarding errors offer the existing guarded replacement flow', () => {
-    expect(withdrawalScreen).toContain("hasExistingAccount: eligibility.connectedAccountExists ? 'true' : 'false'");
+    expect(withdrawalScreen).toContain("eligibility.connectedAccountExists === null");
     expect(onboardingScreen).toContain("params.hasExistingAccount === 'true'");
-    expect(onboardingScreen).toContain('hasExistingAccount && !replacementId');
+    expect(onboardingScreen).toContain('canOfferAccountReplacement && !replacementId');
     expect(onboardingScreen).toContain('prepareAccountReplacement()');
     expect(onboardingScreen).toContain('params: { replacementId: result.replacementId, source: \'account_replacement\' }');
+    expect(onboardingScreen).toContain('if (replacingAccountRef.current) return;');
+    expect(onboardingScreen).toContain("navigation.addListener('beforeRemove'");
+    expect(onboardingScreen).toContain('if (!isScreenFocusedRef.current) return;');
+    expect(onboardingScreen).toContain('BackHandler.addEventListener');
+    expect(onboardingScreen).toContain('gestureEnabled: !returnTo && !isReplacingAccount');
+    expect(onboardingScreen).toContain('profile?.stripe_connect_account_linked');
   });
 
   test.each([
