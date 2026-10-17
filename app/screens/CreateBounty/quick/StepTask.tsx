@@ -11,7 +11,8 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useTopInsetOverlay } from '../../../../lib/context/TopInsetOverlayContext';
+import { DEFAULT_OVERLAY_KEY, useTopInsetOverlay } from '../../../../lib/context/TopInsetOverlayContext';
+import { pageTranslateX, useTabPager } from '../../../../components/ui/tab-pager';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { validateTitle } from '../../../../lib/utils/bounty-validation';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
@@ -112,16 +113,22 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const scrollY = useRef(new Animated.Value(0)).current;
   const [heroHeight, setHeroHeight] = useState(0);
   const setTopInsetOverlay = useTopInsetOverlay()?.setOverlay;
+  // In the tab shell's pager (the Post tab) the green slides with this page,
+  // so it never lingers over a neighbouring tab mid-swipe.
+  const tabPager = useTabPager();
+  const overlayTranslateX = useMemo(() => pageTranslateX(tabPager, 'postings'), [tabPager]);
+  const overlayKey = overlayTranslateX ? 'postings' : DEFAULT_OVERLAY_KEY;
   useEffect(() => {
     if (!tintStatusBar || !setTopInsetOverlay) return;
     setTopInsetOverlay({
       colors: [theme.primary, theme.primary],
       height: heroHeight,
       scrollY,
+      translateX: overlayTranslateX,
       barColor: theme.primary,
-    });
-    return () => setTopInsetOverlay(null);
-  }, [tintStatusBar, setTopInsetOverlay, theme.primary, heroHeight, scrollY]);
+    }, overlayKey);
+    return () => setTopInsetOverlay(null, overlayKey);
+  }, [tintStatusBar, setTopInsetOverlay, theme.primary, heroHeight, scrollY, overlayTranslateX, overlayKey]);
 
   const error = validateTitle(draft.title);
   const length = (draft.title || '').length;

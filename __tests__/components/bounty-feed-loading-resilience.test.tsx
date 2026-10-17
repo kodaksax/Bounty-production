@@ -145,7 +145,7 @@ jest.mock('expo-linear-gradient', () => ({
   LinearGradient: ({ children }: any) => require('react').createElement('View', {}, children),
 }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }), useIsFocused: () => true }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));

@@ -1,7 +1,6 @@
 "use client"
 
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
-import { MaterialIcons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
 import { failureEventProps } from "lib/utils/stripe-error"
@@ -26,9 +25,14 @@ import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+// Gesture-handler's ScrollView so the filter chips claim horizontal drags
+// before the tab shell's swipe-between-tabs pan (app/tabs/bounty-app.tsx).
+import { Gesture, GestureDetector, ScrollView } from "react-native-gesture-handler"
+import Reanimated, { Easing, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated"
+import type { SharedValue } from "react-native-reanimated"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
+import { useTabPager } from "../../components/ui/tab-pager"
 import { BrandingLogo } from "../../components/ui/branding-logo"
 import { BountyConversationRow, type InboxPerson } from "../../components/bounty-inbox/thread-list-row"
 import { EditPostingModal } from "../../components/edit-posting-modal"
@@ -36,13 +40,11 @@ import { getBottomNavContentPadding } from "../../lib/constants/navigation"
 import { useConversations } from '../../hooks/useConversations'
 import { findPairConversation } from '../../hooks/useBountyThread'
 import { useValidUserId } from '../../hooks/useValidUserId'
-import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
 import { uniqueRealtimeTopic } from '../../lib/utils/realtime-topic'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { EmptyState } from '../../components/ui/empty-state'
 import { PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
-import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useApplicantListViewed } from '../../hooks/useApplicantListViewed'
 import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
@@ -90,7 +92,6 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const [activeTab, setActiveTab] = useState<InboxTab>(
     initialTab === "myPostings" || initialTab === "requests" ? "myPostings" : "inProgress"
   )
-  const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   const [headerHeight, setHeaderHeight] = useState(0)
   const [showShadow, setShowShadow] = useState(false)
 
@@ -114,7 +115,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   const insets = useSafeAreaInsets()
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
-  const { totalUnreadCount: unreadMessageCount, conversations, refresh: refreshConversations } = useConversations()
+  const { conversations, refresh: refreshConversations } = useConversations()
   const { refundEscrow } = useWallet()
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
@@ -913,16 +914,167 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     [insets.bottom]
   )
 
-  if (showArchivedBounties) {
-    return <ArchivedBountiesScreen onBack={() => setShowArchivedBounties(false)} />
-  }
+  // ── Swipe between My Work and My Bounties ────────────────────────────
+  // Both lists stay mounted side by side and slide on the UI thread, driven
+  // by `segmentProgress` (0 = My Work, 1 = My Bounties, fractional
+  // mid-swipe). The segment pill tracks the same value, so it follows the
+  // finger. activeTab — the filter chips, the applicants-viewed analytics —
+  // only commits once a swipe settles, so no React work runs mid-slide.
+  const segmentProgress = useSharedValue(activeTab === 'inProgress' ? 0 : 1)
+  const segmentBase = useSharedValue(activeTab === 'inProgress' ? 0 : 1)
+  const segmentSettling = useSharedValue(false)
+  const segmentIgnoreDrag = useSharedValue(false)
+  const [pagerWidth, setPagerWidth] = useState(0)
+  const pagerWidthSV = useSharedValue(0)
+  const [segmentWidth, setSegmentWidth] = useState(0)
+
+  const selectSegment = React.useCallback((tab: InboxTab) => {
+    setActiveTab(tab)
+    segmentBase.value = tab === 'inProgress' ? 0 : 1
+    segmentSettling.value = true
+    segmentProgress.value = withTiming(
+      tab === 'inProgress' ? 0 : 1,
+      { duration: 240, easing: Easing.out(Easing.cubic) },
+      finished => {
+        'worklet'
+        if (finished) segmentSettling.value = false
+      }
+    )
+  }, [segmentBase, segmentSettling, segmentProgress])
+
+  const commitSegment = React.useCallback((index: number) => {
+    setActiveTab(index === 0 ? 'inProgress' : 'myPostings')
+  }, [])
+
+  const segmentHaptic = React.useCallback(() => hapticFeedback.selection(), [])
+
+  // Only claims a drag towards the other segment. The tab shell's native
+  // pager (app/tabs/bounty-app.tsx) is made to wait for this pan to fail
+  // before it scrolls, so this wins that direction; the other direction
+  // fails within 10pt and the pager takes the swipe — left off My Bounties
+  // goes on to the Wallet tab. Rebuilt only when activeTab commits, never
+  // mid-drag.
+  const tabPagerGesture = useTabPager()?.gesture ?? null
+  const onWork = activeTab === 'inProgress'
+  const segmentGesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .activeOffsetX(onWork ? [-15, 100000] : [-100000, 15])
+      .failOffsetX(onWork ? [-100000, 10] : [-10, 100000])
+      .failOffsetY([-15, 15])
+      .onStart(() => {
+        'worklet'
+        segmentIgnoreDrag.value = segmentSettling.value || pagerWidthSV.value === 0
+      })
+      .onUpdate(e => {
+        'worklet'
+        if (segmentIgnoreDrag.value) return
+        const next = segmentBase.value - e.translationX / pagerWidthSV.value
+        segmentProgress.value = Math.min(1, Math.max(0, next))
+      })
+      .onEnd(e => {
+        'worklet'
+        if (segmentIgnoreDrag.value) return
+        const width = pagerWidthSV.value
+        const base = segmentBase.value
+        const target = base === 0 ? 1 : 0
+        // Towards the other segment = left from My Work, right from My Bounties.
+        const towards = base === 0 ? -1 : 1
+        const fast = Math.abs(e.velocityX) > 500
+        const commit = fast
+          ? Math.sign(e.velocityX) === towards
+          : Math.abs(e.translationX) > width * 0.3
+        if (commit) {
+          segmentBase.value = target
+          runOnJS(segmentHaptic)()
+        }
+        segmentSettling.value = true
+        segmentProgress.value = withSpring(
+          segmentBase.value,
+          { velocity: -e.velocityX / width, damping: 30, stiffness: 300, overshootClamping: true },
+          finished => {
+            'worklet'
+            if (!finished) return
+            segmentSettling.value = false
+            if (commit) runOnJS(commitSegment)(target)
+          }
+        )
+      })
+    return tabPagerGesture ? pan.blocksExternalGesture(tabPagerGesture) : pan
+  }, [onWork, tabPagerGesture, segmentIgnoreDrag, segmentSettling, pagerWidthSV, segmentBase, segmentProgress, segmentHaptic, commitSegment])
+
+  const segmentPillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: segmentProgress.value * ((segmentWidth - 8) / 2) }],
+  }))
 
   const isWork = activeTab === 'inProgress'
-  const rows = isWork ? workRows : bountyRows
-  const loadingList = isWork ? isLoading.inProgress : isLoading.myBounties
   const filters = isWork ? IN_PROGRESS_FILTERS : MY_POSTINGS_FILTERS
   const selectedFilter = isWork ? statusFilterInProgress : statusFilterMyPostings
   const reviewCount = isWork ? inProgressReviewCount : myPostingsReviewCount
+
+  const renderList = (tab: InboxTab) => (
+        <FlatList
+          data={tab === 'inProgress' ? workRows : bountyRows}
+          keyExtractor={keyExtractorRow}
+          renderItem={renderRow}
+          ItemSeparatorComponent={RowSeparator}
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.listContent, listContentPadding]}
+          ListEmptyComponent={
+            (tab === 'inProgress' ? isLoading.inProgress : isLoading.myBounties) ? (
+              <PostingsListSkeleton count={3} />
+            ) : error ? (
+              <EmptyState
+                icon="cloud-off"
+                title="Unable to Load"
+                description="Check your internet connection and try again"
+                actionLabel="Try Again"
+                onAction={handleRefresh}
+              />
+            ) : tab === 'inProgress' ? (
+              <EmptyState
+                icon="work-outline"
+                title={statusFilterInProgress === 'all' ? 'No work yet' : 'Nothing here'}
+                description={
+                  statusFilterInProgress === 'all'
+                    ? 'Apply to a bounty and your conversation with the poster lands here — from application to payout.'
+                    : 'No bounties match this filter right now.'
+                }
+                size="lg"
+                actionLabel={statusFilterInProgress === 'all' ? 'Find Bounties' : undefined}
+                onAction={statusFilterInProgress === 'all' ? () => setActiveScreen('bounty') : undefined}
+              />
+            ) : (
+              <EmptyState
+                icon="post-add"
+                title={statusFilterMyPostings === 'all' ? 'No bounties posted yet' : 'Nothing here'}
+                description={
+                  statusFilterMyPostings === 'all'
+                    ? 'Post a bounty and every applicant shows up here as a conversation you can hire from.'
+                    : 'No bounties match this filter right now.'
+                }
+                size="lg"
+                actionLabel={statusFilterMyPostings === 'all' ? 'Post a Bounty' : undefined}
+                onAction={statusFilterMyPostings === 'all' ? () => setActiveScreen('postings') : undefined}
+              />
+            )
+          }
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.text} colors={['#008E2A']} />
+          }
+          showsVerticalScrollIndicator={false}
+          onScroll={(e) => {
+            // Only the list on screen drives the header shadow.
+            if (tab !== activeTab) return
+            const y = e.nativeEvent.contentOffset.y || 0
+            if (y > 2 && !showShadow) setShowShadow(true)
+            else if (y <= 2 && showShadow) setShowShadow(false)
+          }}
+          scrollEventThrottle={16}
+          removeClippedSubviews={false}
+          initialNumToRender={6}
+          windowSize={7}
+        />
+  )
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -935,35 +1087,6 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       >
         <View style={styles.headerRow}>
           <BrandingLogo size="medium" />
-          <View style={styles.headerActions}>
-            <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
-            {/* All conversations, including ones not tied to a bounty. */}
-            <TouchableOpacity
-              style={styles.headerIconBtn}
-              onPress={() => router.push(ROUTES.TABS.MESSENGER as never)}
-              accessibilityRole="button"
-              accessibilityLabel={unreadMessageCount > 0 ? `Messages, ${unreadMessageCount} unread` : 'Messages'}
-              accessibilityHint="Opens all of your conversations"
-            >
-              <View>
-                <MaterialIcons name="chat-bubble-outline" size={20} color={theme.text} />
-                {unreadMessageCount > 0 && (
-                  <View style={styles.headerBadge}>
-                    <Text style={styles.headerBadgeText}>{unreadMessageCount > 99 ? '99+' : unreadMessageCount}</Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.headerIconBtn}
-              onPress={() => setShowArchivedBounties(true)}
-              accessibilityRole="button"
-              accessibilityLabel="View archived bounties"
-              accessibilityHint="Opens a list of your archived bounties"
-            >
-              <MaterialIcons name="bookmark" size={20} color={theme.text} />
-            </TouchableOpacity>
-          </View>
         </View>
 
         <View style={{ paddingHorizontal: 16 }}>
@@ -975,27 +1098,44 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
           Inbox
         </Text>
 
-        {/* My Work / My Bounties */}
-        <View style={styles.segment} accessibilityRole="tablist">
-          {INBOX_TABS.map(tab => {
+        {/* My Work / My Bounties. The green pill is one view sliding under
+            both buttons with segmentProgress, so it follows a swipe. */}
+        <View
+          style={styles.segment}
+          accessibilityRole="tablist"
+          onLayout={(e) => setSegmentWidth(e.nativeEvent.layout.width)}
+        >
+          {segmentWidth > 0 && (
+            <Reanimated.View
+              pointerEvents="none"
+              style={[styles.segmentPill, { width: (segmentWidth - 8) / 2 }, segmentPillStyle]}
+            />
+          )}
+          {INBOX_TABS.map((tab, index) => {
             const active = activeTab === tab.id
             const badge = tabBadge(tab.id)
             return (
               <TouchableOpacity
                 key={tab.id}
                 onPress={() => {
-                  if (!active) hapticFeedback.selection()
-                  setActiveTab(tab.id)
+                  if (active) return
+                  hapticFeedback.selection()
+                  selectSegment(tab.id)
                 }}
                 activeOpacity={0.85}
-                style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                style={styles.segmentBtn}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
                 accessibilityLabel={badge > 0 ? `${tab.label}, ${badge} need your attention` : tab.label}
               >
-                <Text style={[styles.segmentText, active && styles.segmentTextActive]} numberOfLines={1}>
-                  {tab.label}
-                </Text>
+                <SegmentLabel
+                  label={tab.label}
+                  index={index}
+                  progress={segmentProgress}
+                  activeColor="#fff"
+                  inactiveColor={theme.textSecondary}
+                  style={styles.segmentText}
+                />
                 {badge > 0 && (
                   <View style={[styles.segmentBadge, active && styles.segmentBadgeActive]}>
                     <Text style={styles.segmentBadgeText}>{badge > 99 ? '99+' : badge}</Text>
@@ -1049,66 +1189,23 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         </View>
       )}
 
-      <FlatList
-        data={rows}
-        keyExtractor={keyExtractorRow}
-        renderItem={renderRow}
-        ItemSeparatorComponent={RowSeparator}
-        style={{ flex: 1 }}
-        contentContainerStyle={[styles.listContent, listContentPadding]}
-        ListEmptyComponent={
-          loadingList ? (
-            <PostingsListSkeleton count={3} />
-          ) : error ? (
-            <EmptyState
-              icon="cloud-off"
-              title="Unable to Load"
-              description="Check your internet connection and try again"
-              actionLabel="Try Again"
-              onAction={handleRefresh}
-            />
-          ) : isWork ? (
-            <EmptyState
-              icon="work-outline"
-              title={selectedFilter === 'all' ? 'No work yet' : 'Nothing here'}
-              description={
-                selectedFilter === 'all'
-                  ? 'Apply to a bounty and your conversation with the poster lands here — from application to payout.'
-                  : 'No bounties match this filter right now.'
-              }
-              size="lg"
-              actionLabel={selectedFilter === 'all' ? 'Find Bounties' : undefined}
-              onAction={selectedFilter === 'all' ? () => setActiveScreen('bounty') : undefined}
-            />
-          ) : (
-            <EmptyState
-              icon="post-add"
-              title={selectedFilter === 'all' ? 'No bounties posted yet' : 'Nothing here'}
-              description={
-                selectedFilter === 'all'
-                  ? 'Post a bounty and every applicant shows up here as a conversation you can hire from.'
-                  : 'No bounties match this filter right now.'
-              }
-              size="lg"
-              actionLabel={selectedFilter === 'all' ? 'Post a Bounty' : undefined}
-              onAction={selectedFilter === 'all' ? () => setActiveScreen('postings') : undefined}
-            />
-          )
-        }
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.text} colors={['#008E2A']} />
-        }
-        showsVerticalScrollIndicator={false}
-        onScroll={(e) => {
-          const y = e.nativeEvent.contentOffset.y || 0
-          if (y > 2 && !showShadow) setShowShadow(true)
-          else if (y <= 2 && showShadow) setShowShadow(false)
-        }}
-        scrollEventThrottle={16}
-        removeClippedSubviews={false}
-        initialNumToRender={6}
-        windowSize={7}
-      />
+      <GestureDetector gesture={segmentGesture}>
+        <View
+          style={{ flex: 1, overflow: 'hidden' }}
+          onLayout={(e) => {
+            const w = e.nativeEvent.layout.width
+            setPagerWidth(w)
+            pagerWidthSV.value = w
+          }}
+        >
+          {pagerWidth > 0 &&
+            INBOX_TABS.map((tab, index) => (
+              <SegmentPage key={tab.id} index={index} progress={segmentProgress} width={pagerWidth}>
+                {renderList(tab.id)}
+              </SegmentPage>
+            ))}
+        </View>
+      </GestureDetector>
       </View>
 
       {/* Edit Posting Modal */}
@@ -1129,6 +1226,52 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 }
 
 export default InboxScreen;
+
+// One segment's list, slid by segmentProgress: at (index - progress) pager
+// widths, so the active list sits at 0 and the other parks beside it.
+function SegmentPage({
+  index,
+  progress,
+  width,
+  children,
+}: {
+  index: number
+  progress: SharedValue<number>
+  width: number
+  children: React.ReactNode
+}) {
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: (index - progress.value) * width }],
+  }))
+  return <Reanimated.View style={[StyleSheet.absoluteFill, style]}>{children}</Reanimated.View>
+}
+
+// Segment label whose colour blends with segmentProgress, so it brightens
+// as the pill slides under it rather than flipping at the end.
+function SegmentLabel({
+  label,
+  index,
+  progress,
+  activeColor,
+  inactiveColor,
+  style,
+}: {
+  label: string
+  index: number
+  progress: SharedValue<number>
+  activeColor: string
+  inactiveColor: string
+  style: object
+}) {
+  const colorStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(Math.abs(index - progress.value), [0, 1], [activeColor, inactiveColor]),
+  }))
+  return (
+    <Reanimated.Text style={[style, colorStyle]} numberOfLines={1}>
+      {label}
+    </Reanimated.Text>
+  )
+}
 
 type InboxTab = 'inProgress' | 'myPostings'
 
@@ -1186,36 +1329,6 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       paddingHorizontal: 16,
     },
-    headerActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    headerIconBtn: {
-      marginLeft: 12,
-      padding: 8,
-      minWidth: 44,
-      minHeight: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    headerBadge: {
-      position: 'absolute',
-      top: -5,
-      right: -8,
-      minWidth: 16,
-      height: 16,
-      borderRadius: 8,
-      paddingHorizontal: 3,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.error,
-    },
-    headerBadgeText: {
-      color: '#fff',
-      fontSize: 9,
-      fontWeight: '700',
-      lineHeight: 12,
-    },
     // The centred, letter-spaced uppercase title every Bounty tab uses.
     bigTitle: {
       color: theme.text,
@@ -1246,9 +1359,15 @@ function makeStyles(theme: AppTheme) {
       minHeight: 44,
       borderRadius: 999,
     },
-    // Active tab is filled in the brand action green with its glow — the
-    // same treatment as Bounty's primary Button.
-    segmentBtnActive: {
+    // The active tab's fill — the brand action green with its glow, the same
+    // treatment as Bounty's primary Button — as one pill that slides between
+    // the two buttons.
+    segmentPill: {
+      position: 'absolute',
+      top: 4,
+      bottom: 4,
+      left: 4,
+      borderRadius: 999,
       backgroundColor: theme.primary,
       ...theme.shadows.brand,
       shadowOpacity: 0.35,
@@ -1260,9 +1379,6 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '700',
       letterSpacing: 0.6,
       textTransform: 'uppercase',
-    },
-    segmentTextActive: {
-      color: '#fff',
     },
     segmentBadge: {
       minWidth: 18,
