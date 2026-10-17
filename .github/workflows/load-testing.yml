@@ -64,57 +64,68 @@ jobs:
           elif [ -n "${{ secrets.STAGING_API_URL }}" ]; then
             TARGET_URL="${{ secrets.STAGING_API_URL }}"
           else
-            TARGET_URL="http://localhost:3001"
+            # Nothing is served on the runner, so there is no local fallback,
+            # and the production API must never be load-tested by default.
+            echo "::notice::No target_url input and no STAGING_API_URL secret; skipping load tests"
+            echo "SKIP_LOAD_TESTS=true" >> $GITHUB_ENV
+            exit 0
           fi
           echo "TARGET_URL=$TARGET_URL" >> $GITHUB_ENV
           echo "Testing against: $TARGET_URL"
       
       - name: Run baseline test
-        if: github.event.inputs.test_type == 'baseline' || github.event.inputs.test_type == 'all' || github.event_name == 'schedule'
+        if: env.SKIP_LOAD_TESTS != 'true' && (github.event.inputs.test_type == 'baseline' || github.event.inputs.test_type == 'all' || github.event_name == 'schedule')
         run: |
           k6 run -e BASE_URL=$TARGET_URL \
             --out json=baseline-results.json \
+            --summary-export=baseline-summary.json \
             tests/load/baseline-test.js
         continue-on-error: true
       
       - name: Run bounty flow test
-        if: github.event.inputs.test_type == 'bounty-flow' || github.event.inputs.test_type == 'all'
+        if: env.SKIP_LOAD_TESTS != 'true' && (github.event.inputs.test_type == 'bounty-flow' || github.event.inputs.test_type == 'all')
         run: |
           k6 run -e BASE_URL=$TARGET_URL \
             --out json=bounty-flow-results.json \
+            --summary-export=bounty-flow-summary.json \
             tests/load/bounty-flow.js
         continue-on-error: true
       
       - name: Run spike test
-        if: github.event.inputs.test_type == 'spike' || github.event.inputs.test_type == 'all'
+        if: env.SKIP_LOAD_TESTS != 'true' && (github.event.inputs.test_type == 'spike' || github.event.inputs.test_type == 'all')
         run: |
           k6 run -e BASE_URL=$TARGET_URL \
             --out json=spike-results.json \
+            --summary-export=spike-summary.json \
             tests/load/spike-test.js
         continue-on-error: true
       
       - name: Run stress test
-        if: github.event.inputs.test_type == 'stress'
+        if: env.SKIP_LOAD_TESTS != 'true' && (github.event.inputs.test_type == 'stress')
         run: |
           k6 run -e BASE_URL=$TARGET_URL \
             --out json=stress-results.json \
+            --summary-export=stress-summary.json \
             tests/load/stress-test.js
         continue-on-error: true
       
       - name: Run mixed scenario test
-        if: github.event.inputs.test_type == 'mixed'
+        if: env.SKIP_LOAD_TESTS != 'true' && (github.event.inputs.test_type == 'mixed')
         run: |
           k6 run -e BASE_URL=$TARGET_URL \
             --out json=mixed-results.json \
+            --summary-export=mixed-summary.json \
             tests/load/mixed-scenario.js
         continue-on-error: true
       
       - name: Install dependencies for report generation
+        if: env.SKIP_LOAD_TESTS != 'true'
         run: npm ci --legacy-peer-deps
       
       - name: Generate HTML reports
+        if: env.SKIP_LOAD_TESTS != 'true'
         run: |
-          for file in *-results.json; do
+          for file in *-summary.json; do
             if [ -f "$file" ]; then
               node scripts/generate-load-test-report.js "$file"
             fi
@@ -127,7 +138,9 @@ jobs:
           name: load-test-results
           path: |
             *-results.json
+            *-summary.json
             *-results.html
+            *-summary.html
           retention-days: 30
       
       - name: Create summary

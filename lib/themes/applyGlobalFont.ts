@@ -39,6 +39,6 @@ export function applyGlobalFont() {
     const inputModule = require('react-native/Libraries/Components/TextInput/TextInput');
     inputModule.default = withAppFont(inputModule.default);
   } catch {
-    // Non-native environments (web, jest mocks) keep the platform default.
+    // Jest mocks keep the platform default. Web uses applyGlobalFont.web.ts.
   }
 }
