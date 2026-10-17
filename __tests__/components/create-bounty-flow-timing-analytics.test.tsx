@@ -617,6 +617,61 @@ describe('CreateBountyFlow — deliberateTap gating', () => {
   });
 });
 
+// The tab shell preloads the Post tab off-screen beside Home and Profile so
+// swiping in is instant (app/tabs/bounty-app.tsx). A preloaded flow is
+// mounted with isActive={false} and must leave no funnel trace until the
+// poster actually lands on it — otherwise every app open would log a
+// phantom composer visit.
+describe('CreateBountyFlow — isActive gating (preloaded off-screen)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNow = 0;
+    mockIsLoading = false;
+    appStateHandlers = [];
+    installPerformanceNowMock();
+    installAppStateMock();
+  });
+
+  afterEach(() => {
+    restorePerformanceNow();
+    jest.restoreAllMocks();
+  });
+
+  it('emits nothing while inactive, including when torn down without ever being shown', () => {
+    const { unmount } = render(<CreateBountyFlow deliberateTap isActive={false} />);
+    expect(eventsNamed('composer_opened')).toHaveLength(0);
+    expect(eventsNamed('post_step_viewed')).toHaveLength(0);
+
+    unmount();
+    expect(eventsNamed('post_step_abandoned')).toHaveLength(0);
+    expect(eventsNamed('post_abandoned')).toHaveLength(0);
+  });
+
+  it('starts the funnel once it becomes active, exactly as a fresh mount would', () => {
+    const { rerender, unmount } = render(<CreateBountyFlow deliberateTap isActive={false} />);
+    rerender(<CreateBountyFlow deliberateTap isActive />);
+
+    expect(eventsNamed('composer_opened')).toHaveLength(1);
+    expect(lastEventNamed('composer_opened')).toMatchObject({ deliberate_entry: true });
+    expect(eventsNamed('post_step_viewed')).toHaveLength(1);
+    expect(lastEventNamed('post_step_viewed')).toMatchObject({ step_index: 1, direction: 'forward' });
+
+    unmount();
+    expect(eventsNamed('post_step_abandoned')).toHaveLength(1);
+    expect(lastEventNamed('post_step_abandoned')).toMatchObject({ exit_method: 'tab' });
+  });
+
+  it('does not count time spent preloaded towards the first step', () => {
+    const { rerender, unmount } = render(<CreateBountyFlow deliberateTap isActive={false} />);
+    mockNow += 120_000;
+    rerender(<CreateBountyFlow deliberateTap isActive />);
+    mockNow += 5_000;
+
+    unmount();
+    expect(lastEventNamed('post_step_abandoned')).toMatchObject({ seconds_on_step: 5 });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // bounty_started must mean COMPOSER INTENT, not composer render.
 //

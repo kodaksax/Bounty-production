@@ -25,7 +25,7 @@ import { AdminProvider } from '../lib/admin-context';
 import { BountyFormatProvider } from '../lib/bounty-format-context';
 import { COLORS } from '../lib/constants/accessibility';
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
-import { TopInsetOverlayProvider, useTopInsetOverlay } from '../lib/context/TopInsetOverlayContext';
+import { DEFAULT_OVERLAY_KEY, TopInsetOverlayProvider, useTopInsetOverlayState } from '../lib/context/TopInsetOverlayContext';
 import { NotificationProvider } from '../lib/context/notification-context';
 import { ProfileImageViewerProvider } from '../lib/context/ProfileImageViewerContext';
 import { ErrorBoundary } from '../lib/error-boundary';
@@ -150,8 +150,15 @@ const RootFrame = ({
   // TopInsetOverlayContext); the strip then shows that gradient's true top
   // slice instead of a flat color, and the status-bar icons take their
   // contrast from it.
-  const overlay = useTopInsetOverlay()?.overlay ?? null;
-  const barStyle = getBarStyleForHex(overlay?.barColor ?? bgColor);
+  //
+  // Several overlays can be up at once (the grid feed's and the Post tab's,
+  // each sliding with its page in the tab shell's pager); the bar style comes
+  // from whichever belongs to the tab mostly on screen.
+  const { overlays, focusKey } = useTopInsetOverlayState();
+  const overlayEntries = Object.entries(overlays);
+  const focusOverlay =
+    (focusKey !== null ? overlays[focusKey] : undefined) ?? overlays[DEFAULT_OVERLAY_KEY];
+  const barStyle = getBarStyleForHex(focusOverlay?.barColor ?? bgColor);
 
   const topInsetStyle = useMemo(
     () => ({ height: insets.top, backgroundColor: bgColor, overflow: 'hidden' as const }),
@@ -166,32 +173,43 @@ const RootFrame = ({
     <View style={[styles.container, { backgroundColor: bgColor }]}>
       {/* top safe area behind status icons (time, battery, network) */}
       <View style={topInsetStyle}>
-        {overlay ? (
+        {overlayEntries.map(([key, overlay]) => (
+          // Two layers: translateX may be natively driven (the tab pager's
+          // scroll) while translateY is JS-driven (the list's scroll), and
+          // one Animated.View can't mix the two.
           <Animated.View
+            key={key}
             pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: Math.max(overlay.height, insets.top),
-              transform: [
-                {
-                  translateY: overlay.scrollY
-                    ? Animated.multiply(overlay.scrollY, -1)
-                    : 0,
-                },
-              ],
-            }}
+            style={[
+              StyleSheet.absoluteFill,
+              overlay.translateX ? { transform: [{ translateX: overlay.translateX }] } : null,
+            ]}
           >
-            <LinearGradient
-              colors={overlay.colors}
-              start={overlay.start ?? { x: 0, y: 0 }}
-              end={overlay.end ?? { x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
+            <Animated.View
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: Math.max(overlay.height, insets.top),
+                transform: [
+                  {
+                    translateY: overlay.scrollY
+                      ? Animated.multiply(overlay.scrollY, -1)
+                      : 0,
+                  },
+                ],
+              }}
+            >
+              <LinearGradient
+                colors={overlay.colors}
+                start={overlay.start ?? { x: 0, y: 0 }}
+                end={overlay.end ?? { x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </Animated.View>
           </Animated.View>
-        ) : null}
+        ))}
       </View>
 
       {/* app content */}
