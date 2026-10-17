@@ -161,7 +161,7 @@ describe('replacement account safety', () => {
     expect(withdrawalScreen).toContain("hasExistingAccount: eligibility.connectedAccountExists ? 'true' : 'false'");
     expect(onboardingScreen).toContain("params.hasExistingAccount === 'true'");
     expect(onboardingScreen).toContain('hasExistingAccount && !replacementId');
-    expect(onboardingScreen).toContain('payoutMethods.prepareAccountReplacement()');
+    expect(onboardingScreen).toContain('prepareAccountReplacement()');
     expect(onboardingScreen).toContain('params: { replacementId: result.replacementId, source: \'account_replacement\' }');
   });
 

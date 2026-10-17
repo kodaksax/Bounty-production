@@ -124,7 +124,7 @@ export default function ConnectOnboardingScreen() {
   const hasExistingAccount = params.hasExistingAccount === 'true';
   const returnTo = typeof params.returnTo === 'string' && params.returnTo ? params.returnTo : undefined;
   const { session, isLoading: authLoading } = useAuthContext();
-  const payoutMethods = usePayoutMethods();
+  const { prepareAccountReplacement } = usePayoutMethods();
   const { theme } = useAppThemeContext();
   const { refreshFromApi } = useWallet();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -436,7 +436,7 @@ export default function ConnectOnboardingScreen() {
             replacingAccountRef.current = true;
             setIsReplacingAccount(true);
             try {
-              const result = await payoutMethods.prepareAccountReplacement();
+              const result = await prepareAccountReplacement();
               if (!result.ok) {
                 Alert.alert('Could not replace account', result.error);
                 return;
@@ -454,7 +454,7 @@ export default function ConnectOnboardingScreen() {
         },
       ]
     );
-  }, [payoutMethods.prepareAccountReplacement, router]);
+  }, [prepareAccountReplacement, router]);
 
   const handleRetryVerify = useCallback(() => {
     verifyOnboardingStatus(lastBrowserResultRef.current);
