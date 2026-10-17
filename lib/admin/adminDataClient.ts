@@ -50,9 +50,10 @@ export interface SendWarningParams {
  * `admin_moderation_transition` raises server-side:
  *  - 42501 (insufficient_privilege, from admin_assert_role())    -> NOT_ADMIN
  *  - P0002 (no_data_found, the bounty row does not exist)        -> BOUNTY_NOT_FOUND
+ *  - 55000 (admin_set_bounty_status: money still held)           -> ESCROW_UNSETTLED
  *  - anything else (illegal transition, connection failure, ...) -> DATABASE_ERROR
  */
-export type AdminModerationErrorCode = 'NOT_ADMIN' | 'BOUNTY_NOT_FOUND' | 'DATABASE_ERROR';
+export type AdminModerationErrorCode = 'NOT_ADMIN' | 'BOUNTY_NOT_FOUND' | 'ESCROW_UNSETTLED' | 'DATABASE_ERROR';
 
 export class AdminModerationError extends Error {
   code: AdminModerationErrorCode;
@@ -451,6 +452,15 @@ export const adminDataClient = {
       }
       if (error.code === 'P0002') {
         throw new AdminModerationError('BOUNTY_NOT_FOUND', 'This bounty no longer exists.');
+      }
+      // The server refuses to end, archive or reopen a bounty whose escrow is
+      // still held (20261012120100): flipping the status would strand the
+      // poster's money or close the job without paying the hunter.
+      if (error.code === '55000') {
+        throw new AdminModerationError(
+          'ESCROW_UNSETTLED',
+          "This bounty still holds money, so its status can't be changed here. Settle it first: approve the cancellation to refund the poster, or resolve the dispute to release or refund."
+        );
       }
       console.error('[adminDataClient.updateBountyStatus]', error);
       throw new AdminModerationError('DATABASE_ERROR', "We couldn't update this bounty. Please try again.");

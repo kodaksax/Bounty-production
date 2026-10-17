@@ -625,6 +625,7 @@ Deno.serve(async (req: Request) => {
     reason?: string;
     bankAccountId?: string;
     relatedTransactionId?: string;
+    idempotencyKey?: string;
     limit?: number;
     confirmedNoStripePayout?: boolean;
     note?: string;
@@ -738,6 +739,9 @@ Deno.serve(async (req: Request) => {
 
     const t = tx as WalletTransaction;
     const targetUserId = t.user_id;
+    if (targetUserId === adminUser.id) {
+      return jsonResponse({ error: 'You cannot act on your own withdrawal' }, 403);
+    }
     const retryCount = ((t.metadata as Record<string, unknown> | null)?.retry_count as number) ?? 0;
 
     const { data: profile } = await supabase
@@ -1099,12 +1103,21 @@ Deno.serve(async (req: Request) => {
   if (action === 'manual_adjustment') {
     const { userId, reason, relatedTransactionId } = body;
     const amount = Number(body.amount);
+    const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
 
     if (!userId) {
       return jsonResponse({ error: 'userId is required' }, 400);
     }
     if (!reason || !reason.trim()) {
       return jsonResponse({ error: 'reason is required' }, 400);
+    }
+    if (idempotencyKey.length < 8 || idempotencyKey.length > 200) {
+      // Without a key a timed-out request that the admin re-submits would
+      // credit the user twice.
+      return jsonResponse({ error: 'idempotencyKey is required (8-200 characters)' }, 400);
+    }
+    if (userId === adminUser.id) {
+      return jsonResponse({ error: 'You cannot adjust your own balance' }, 403);
     }
     if (!Number.isFinite(amount) || amount === 0) {
       return jsonResponse({ error: 'amount must be a non-zero finite number' }, 400);
@@ -1120,12 +1133,22 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'amount cannot include fractions of a cent' }, 400);
     }
 
-    const { data: newBalance, error: rpcError } = await supabase.rpc('update_balance', {
+    // Balance, ledger row and audit row commit together or not at all, keyed
+    // by the idempotency key. This used to be update_balance() followed by a
+    // separate ledger insert that prod's wallet_transactions_type_check always
+    // rejected ('admin_adjustment'), so every adjustment would have moved a
+    // balance with no ledger row. See 20261012120100_admin_financial_action_guards.sql.
+    const { data: rows, error: rpcError } = await supabase.rpc('admin_apply_balance_adjustment', {
+      p_admin_id: adminUser.id,
       p_user_id: userId,
       p_amount: amount,
+      p_reason: reason.trim(),
+      p_idempotency_key: idempotencyKey,
+      p_related_transaction_id: relatedTransactionId ?? null,
     });
 
     if (rpcError) {
+      // The RPC rolled back, so nothing moved; record the attempt separately.
       await logAdminAction(supabase, {
         adminUserId: adminUser.id,
         actionType: 'manual_balance_adjustment',
@@ -1134,48 +1157,28 @@ Deno.serve(async (req: Request) => {
         amount,
         reason,
         result: 'failure',
-        metadata: { error: rpcError.message },
+        metadata: { error: rpcError.message, code: rpcError.code, idempotencyKey },
       });
-      return jsonResponse({ error: rpcError.message || 'Balance adjustment failed' }, 400);
+      const status = rpcError.code === '23505' ? 409 : rpcError.code === '42501' ? 403 : 400;
+      return jsonResponse({ error: rpcError.message || 'Balance adjustment failed', applied: false }, status);
     }
 
-    // Record a real ledger row (type='admin_adjustment') so the amount is
-    // visible in wallet_transactions history and reconciliation, not just an
-    // opaque profiles.balance change — see the accompanying migration.
-    const { error: txInsertError } = await supabase.from('wallet_transactions').insert({
-      user_id: userId,
-      type: 'admin_adjustment',
-      amount,
-      status: 'completed',
-      description: `Manual admin adjustment: ${reason}`,
-      metadata: {
-        admin_user_id: adminUser.id,
-        reason,
-        related_transaction_id: relatedTransactionId ?? null,
-      },
-    });
-    if (txInsertError) {
-      logCritical('balance adjusted but wallet_transactions insert failed — manual backfill required', {
-        userId, amount, error: txInsertError,
-      });
-    }
-
-    await logAdminAction(supabase, {
-      adminUserId: adminUser.id,
-      actionType: 'manual_balance_adjustment',
-      targetUserId: userId,
-      targetTransactionId: relatedTransactionId ?? null,
-      amount,
-      reason,
-      result: 'success',
-      metadata: { newBalance, ledgerRowRecorded: !txInsertError },
-    });
+    const row = (Array.isArray(rows) ? rows[0] : rows) as
+      | { transaction_id: string; new_balance: number | string; replayed: boolean }
+      | null;
 
     console.log(
-      `[admin-withdrawals] Admin ${adminUser.id} adjusted balance for user ${userId} by $${amount}: ${reason}`
+      `[admin-withdrawals] Admin ${adminUser.id} adjusted balance for user ${userId} by $${amount}` +
+        (row?.replayed ? ' (replayed, no new effect)' : '') + `: ${reason}`
     );
 
-    return jsonResponse({ success: true, newBalance });
+    return jsonResponse({
+      success: true,
+      applied: true,
+      replayed: row?.replayed === true,
+      transactionId: row?.transaction_id ?? null,
+      newBalance: row?.new_balance == null ? null : Number(row.new_balance),
+    });
   }
 
   // ─── mark_externally_settled ────────────────────────────────
@@ -1225,6 +1228,9 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Transaction not found' }, 404);
     }
     const t = tx as WalletTransaction;
+    if (t.user_id === adminUser.id) {
+      return jsonResponse({ error: 'You cannot settle your own withdrawal' }, 403);
+    }
 
     if (t.status === 'manually_paid') {
       // Already settled — idempotent no-op, not an error.
@@ -1379,6 +1385,9 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Transaction not found' }, 404);
     }
     const t = tx as WalletTransaction;
+    if (t.user_id === adminUser.id) {
+      return jsonResponse({ error: 'You cannot reverse a transfer on your own withdrawal' }, 403);
+    }
     const existingMeta = (t.metadata as Record<string, unknown> | null) ?? {};
 
     if (existingMeta.transfer_reversed === true) {

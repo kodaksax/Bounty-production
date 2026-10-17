@@ -150,6 +150,199 @@ export type DisputeReasonCode =
   | 'communication'
   | 'other';
 
+/**
+ * What happened to the escrow when a dispute was decided.
+ *  - released / refunded: money moved in this call
+ *  - already_settled:     a release or refund was already on the ledger
+ *  - nothing_held:        no escrow record to move (check Transactions)
+ *  - not_applicable:      no winner, or an honor / unpaid bounty
+ *  - failed:              the decision stands but NO money moved
+ */
+export type DisputeSettlementStatus =
+  | 'released'
+  | 'refunded'
+  | 'already_settled'
+  | 'nothing_held'
+  | 'not_applicable'
+  | 'failed';
+
+export interface DisputeSettlement {
+  status: DisputeSettlementStatus;
+  /** Operator-facing explanation, set for 'failed' and 'nothing_held'. */
+  detail?: string;
+}
+
+export interface DisputeResolutionOutcome {
+  /** The dispute row carries the resolved status (and winner, if any). */
+  resolved: boolean;
+  settlement: DisputeSettlement;
+  /** Why the resolution itself failed, when resolved is false. */
+  error?: string;
+}
+
+function settlementErrorDetail(err: unknown): string {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null && 'message' in err
+      ? String((err as { message: unknown }).message)
+      : String(err);
+  const code =
+    typeof err === 'object' && err !== null && 'code' in err
+      ? String((err as { code: unknown }).code)
+      : '';
+  if (code === 'not_poster' || /only the poster/i.test(message)) {
+    return 'The payment service only lets the poster release or cancel this Stripe payment, so it cannot be settled from the admin console yet. No money moved.';
+  }
+  return `${message || 'Unknown error'}. No money moved.`;
+}
+
+/**
+ * Move the escrow for a decided dispute. Never throws: every path ends in a
+ * DisputeSettlement so the caller can tell the admin exactly what happened.
+ */
+async function settleDisputeEscrow(
+  disputeId: string,
+  bountyId: string,
+  bounty: Bounty | null,
+  winner: 'hunter' | 'poster'
+): Promise<DisputeSettlement> {
+  const isHonorBounty = !bounty || bounty.is_for_honor || !bounty.amount || bounty.amount <= 0;
+  if (isHonorBounty) return { status: 'not_applicable' };
+  const isPhase2 = isPhase2Bounty(bounty);
+  const architecture = isV3Bounty(bounty) ? 'v3' : 'v2';
+
+  try {
+    await analyticsService.trackEvent('payment_architecture_routed', {
+      bountyId,
+      version: isV3Bounty(bounty) ? 3 : isPhase2 ? 2 : 1,
+      context: 'dispute_resolution',
+    });
+  } catch {
+    /* analytics is best-effort */
+  }
+
+  try {
+    if (isPhase2) {
+      // Stripe-native Phase 2 escrow (bounty_payments) — see
+      // lib/services/bounty-payments-service.ts.
+      if (winner === 'hunter') {
+        try {
+          await bountyPaymentsService.releaseBountyPayment(bountyId);
+          await analyticsService.trackEvent('escrow_released', {
+            bountyId,
+            architecture,
+            via: 'dispute_resolution',
+          });
+          return { status: 'released' };
+        } catch (releaseErr) {
+          logger.error('Failed to release Phase 2 escrow to hunter during dispute resolution', {
+            disputeId,
+            bountyId,
+            error: releaseErr,
+          });
+          await analyticsService.trackEvent('payment_failed', {
+            bountyId,
+            architecture,
+            stage: 'dispute_release',
+            ...failureEventProps(releaseErr),
+          });
+          return { status: 'failed', detail: settlementErrorDetail(releaseErr) };
+        }
+      }
+      try {
+        await bountyPaymentsService.cancelBountyPayment(bountyId);
+        await analyticsService.trackEvent('escrow_refunded', {
+          bountyId,
+          architecture,
+          via: 'dispute_resolution',
+        });
+        return { status: 'refunded' };
+      } catch (refundErr) {
+        logger.error('Failed to refund Phase 2 escrow to poster during dispute resolution', {
+          disputeId,
+          bountyId,
+          error: refundErr,
+        });
+        await analyticsService.trackEvent('payment_failed', {
+          bountyId,
+          architecture,
+          stage: 'dispute_cancel',
+          ...failureEventProps(refundErr),
+        });
+        return { status: 'failed', detail: settlementErrorDetail(refundErr) };
+      }
+    }
+
+    if (bounty.payment_intent_id) {
+      const result =
+        winner === 'hunter'
+          ? await paymentService.releaseEscrow(bounty.payment_intent_id)
+          : await paymentService.refundEscrow(bounty.payment_intent_id);
+      if (!result.success) {
+        logger.error(
+          winner === 'hunter'
+            ? 'Failed to release escrow to hunter during dispute resolution'
+            : 'Failed to refund escrow to poster during dispute resolution',
+          {
+            disputeId,
+            bountyId,
+            escrowId: bounty.payment_intent_id,
+            error: result.error,
+          }
+        );
+        return {
+          status: 'failed',
+          detail: settlementErrorDetail(result.error ?? 'Payment service refused'),
+        };
+      }
+      return { status: winner === 'hunter' ? 'released' : 'refunded' };
+    }
+
+    // Wallet-escrow path (no Stripe PaymentIntent). Funds were deducted from
+    // the poster's wallet and live in the wallet ledger. Both RPCs are
+    // SECURITY DEFINER, atomic and idempotent, and return
+    // { applied, transaction_id, <amount> }.
+    const rpcName =
+      winner === 'poster'
+        ? 'fn_refund_wallet_escrow_for_dispute'
+        : 'fn_release_wallet_escrow_for_dispute';
+    const { data, error: rpcError } = await (supabase as any).rpc(rpcName, {
+      p_dispute_id: normalizeDisputeIdParam(disputeId),
+    });
+    if (rpcError) {
+      logger.error(
+        winner === 'poster'
+          ? 'Failed to refund wallet escrow to poster during dispute resolution'
+          : 'Failed to release wallet escrow to hunter during dispute resolution',
+        { disputeId, bountyId, error: rpcError }
+      );
+      return { status: 'failed', detail: settlementErrorDetail(rpcError) };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.applied) {
+      return { status: winner === 'hunter' ? 'released' : 'refunded' };
+    }
+    if (row?.transaction_id) {
+      // No-op because a release/refund is already on the ledger.
+      return { status: 'already_settled' };
+    }
+    logger.warning(`${rpcName} found nothing to settle`, { disputeId, bountyId });
+    return {
+      status: 'nothing_held',
+      detail:
+        'No escrow record was found for this bounty, so no money moved. Check Transactions before closing this out.',
+    };
+  } catch (escrowError) {
+    logger.error('Error executing escrow action during dispute resolution', {
+      disputeId,
+      winner,
+      error: escrowError instanceof Error ? escrowError.message : String(escrowError),
+    });
+    return { status: 'failed', detail: settlementErrorDetail(escrowError) };
+  }
+}
+
 export const disputeService = {
   /**
    * Create a dispute from a cancellation request
@@ -512,9 +705,11 @@ export const disputeService = {
         throw new Error('Unauthorized: admin role required');
       }
 
+      // bounty_disputes has no escalated_at column (prod or staging); writing
+      // it made PostgREST reject the whole update, so this button never worked.
       const { error } = await supabase
         .from('bounty_disputes')
-        .update({ escalated: true, escalated_at: new Date().toISOString() })
+        .update({ escalated: true, last_activity_at: new Date().toISOString() })
         .eq('id', disputeId);
 
       if (error) {
@@ -571,7 +766,11 @@ export const disputeService = {
   },
 
   /**
-   * Resolve a dispute
+   * Resolve a dispute.
+   *
+   * Returns true once the dispute row is resolved, whatever happened to the
+   * money. Use resolveDisputeWithOutcome() wherever the caller tells a person
+   * what happened: it reports the settlement separately.
    * @param prefetchedBounty - Optional pre-fetched bounty to avoid redundant DB call
    */
   async resolveDispute(
@@ -580,6 +779,31 @@ export const disputeService = {
     winner?: 'hunter' | 'poster' | null,
     prefetchedBounty?: Bounty | null
   ): Promise<boolean> {
+    const outcome = await this.resolveDisputeWithOutcome(
+      disputeId,
+      resolution,
+      winner,
+      prefetchedBounty
+    );
+    return outcome.resolved;
+  },
+
+  /**
+   * Resolve a dispute and report what actually happened to the money.
+   *
+   * The dispute row is resolved first (the wallet escrow RPCs only pay out
+   * against a dispute that already says resolved_hunter_wins /
+   * resolved_poster_wins), then the escrow is settled. Those are separate
+   * steps, so the outcome reports them separately: `resolved: true` with
+   * `settlement.status: 'failed'` means the decision is recorded but NO money
+   * moved, and retryDisputeSettlement() can finish the job.
+   */
+  async resolveDisputeWithOutcome(
+    disputeId: string,
+    resolution: string,
+    winner?: 'hunter' | 'poster' | null,
+    prefetchedBounty?: Bounty | null
+  ): Promise<DisputeResolutionOutcome> {
     try {
       if (!isSupabaseConfigured) {
         throw new Error('Supabase not configured');
@@ -616,11 +840,6 @@ export const disputeService = {
       const bounty = prefetchedBounty || (await bountyService.getById(dispute.bountyId));
       const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
       const hasStripeEscrow = bounty && !isHonorBounty && !!bounty.payment_intent_id;
-      // Stripe Phase 2 (payment_architecture_version=2) per-bounty escrow —
-      // see lib/utils/payment-architecture.ts. Checked ahead of
-      // hasStripeEscrow below (mutually exclusive: a bounty is funded via
-      // either the legacy payment_intent_id field or bounty_payments, never
-      // both).
       const isPhase2 = !!bounty && !isHonorBounty && isPhase2Bounty(bounty);
       const isStripeNative = !!bounty && !isHonorBounty && isStripeNativeBounty(bounty);
 
@@ -630,13 +849,13 @@ export const disputeService = {
         winner === 'hunter'
           ? 'resolved_hunter_wins'
           : winner === 'poster'
-            ? 'resolved_poster_wins'
-            : 'resolved';
+          ? 'resolved_poster_wins'
+          : 'resolved';
 
       // For Stripe-backed bounties resolved in the hunter's favour, fn_close_dispute_hold
       // must NOT deduct from the poster's wallet.  The wallet hold was placed purely to
       // prevent withdrawal during the dispute — the actual hunter payment is handled by
-      // paymentService.releaseEscrow() below.  Passing 'resolved' releases only the
+      // the escrow settlement below.  Passing 'resolved' releases only the
       // balance_on_hold without triggering the balance deduction that 'resolved_hunter_wins'
       // would cause, which would double-charge the poster (once via Stripe, once via wallet).
       // The dispute row's status is corrected to resolvedStatus by the update() call below.
@@ -673,7 +892,7 @@ export const disputeService = {
 
       // Funnel: dispute resolved. Emitted after the DB row is updated and
       // the wallet hold has been released; escrow side-effects (release/
-      // refund) are best-effort and tracked separately via payment_completed.
+      // refund) are tracked separately via payment_completed.
       try {
         await analyticsService.trackEvent('dispute_resolved', {
           disputeId: String(disputeId),
@@ -689,182 +908,26 @@ export const disputeService = {
         /* analytics is best-effort */
       }
 
+      const settlement = winner
+        ? await settleDisputeEscrow(disputeId, String(dispute.bountyId), bounty ?? null, winner)
+        : ({ status: 'not_applicable' } as DisputeSettlement);
+
+      await this.logAuditEvent(disputeId, 'resolved', resolvedBy, 'admin', {
+        winner: winner ?? null,
+        resolved_status: resolvedStatus,
+        settlement: settlement.status,
+        settlement_detail: settlement.detail ?? null,
+      });
+
       // Determine winner label for notifications
       const winnerLabel =
         winner === 'hunter'
           ? 'Funds released to hunter.'
           : winner === 'poster'
-            ? 'Funds refunded to poster.'
-            : '';
-
-      // Execute escrow action based on winner
-      let escrowActionExecuted = false;
-      if (winner) {
-        try {
-          await analyticsService.trackEvent('payment_architecture_routed', {
-            bountyId: String(dispute.bountyId),
-            version: isV3Bounty(bounty) ? 3 : isPhase2 ? 2 : 1,
-            context: 'dispute_resolution',
-          });
-        } catch {
-          /* analytics is best-effort */
-        }
-        try {
-          if (isPhase2) {
-            // Stripe-native Phase 2 escrow (bounty_payments) — see
-            // lib/services/bounty-payments-service.ts.
-            if (winner === 'hunter') {
-              try {
-                await bountyPaymentsService.releaseBountyPayment(dispute.bountyId);
-                escrowActionExecuted = true;
-                await analyticsService.trackEvent('escrow_released', {
-                  bountyId: String(dispute.bountyId),
-                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
-                  via: 'dispute_resolution',
-                });
-              } catch (releaseErr) {
-                logger.error('Failed to release Phase 2 escrow to hunter during dispute resolution', {
-                  disputeId,
-                  bountyId: dispute.bountyId,
-                  error: releaseErr,
-                });
-                await analyticsService.trackEvent('payment_failed', {
-                  bountyId: String(dispute.bountyId),
-                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
-                  stage: 'dispute_release',
-                  ...failureEventProps(releaseErr),
-                });
-              }
-            } else if (winner === 'poster') {
-              try {
-                await bountyPaymentsService.cancelBountyPayment(dispute.bountyId);
-                escrowActionExecuted = true;
-                await analyticsService.trackEvent('escrow_refunded', {
-                  bountyId: String(dispute.bountyId),
-                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
-                  via: 'dispute_resolution',
-                });
-              } catch (refundErr) {
-                logger.error('Failed to refund Phase 2 escrow to poster during dispute resolution', {
-                  disputeId,
-                  bountyId: dispute.bountyId,
-                  error: refundErr,
-                });
-                await analyticsService.trackEvent('payment_failed', {
-                  bountyId: String(dispute.bountyId),
-                  architecture: isV3Bounty(bounty) ? 'v3' : 'v2',
-                  stage: 'dispute_cancel',
-                  ...failureEventProps(refundErr),
-                });
-              }
-            }
-          } else if (bounty && !isHonorBounty && bounty.payment_intent_id) {
-            if (winner === 'hunter') {
-              const releaseResult = await paymentService.releaseEscrow(bounty.payment_intent_id);
-              if (!releaseResult.success) {
-                logger.error('Failed to release escrow to hunter during dispute resolution', {
-                  disputeId,
-                  bountyId: dispute.bountyId,
-                  escrowId: bounty.payment_intent_id,
-                  error: releaseResult.error,
-                });
-              } else {
-                escrowActionExecuted = true;
-              }
-            } else if (winner === 'poster') {
-              const refundResult = await paymentService.refundEscrow(bounty.payment_intent_id);
-              if (!refundResult.success) {
-                logger.error('Failed to refund escrow to poster during dispute resolution', {
-                  disputeId,
-                  bountyId: dispute.bountyId,
-                  escrowId: bounty.payment_intent_id,
-                  error: refundResult.error,
-                });
-              } else {
-                escrowActionExecuted = true;
-              }
-            }
-          } else if (bounty && !isHonorBounty && !bounty.payment_intent_id) {
-            // Wallet-escrow path (no Stripe PaymentIntent).  Funds were deducted
-            // from the poster's wallet at posting time and live in the wallet
-            // ledger, so Stripe-side refundEscrow is not applicable.
-            if (winner === 'poster') {
-              // Refund the poster atomically via the SECURITY DEFINER RPC,
-              // which inserts the refund wallet_transactions row and credits
-              // profiles.balance in a single transaction.  Idempotent — safe
-              // even if the resolution is retried.
-              const _pDisputeIdRefund = normalizeDisputeIdParam(disputeId);
-              const { data: refundData, error: refundRpcError } = await (supabase as any).rpc(
-                'fn_refund_wallet_escrow_for_dispute',
-                { p_dispute_id: _pDisputeIdRefund }
-              );
-
-              if (refundRpcError) {
-                logger.error('Failed to refund wallet escrow to poster during dispute resolution', {
-                  disputeId,
-                  bountyId: dispute.bountyId,
-                  error: refundRpcError,
-                });
-              } else {
-                // RPC returns a single row { applied, transaction_id, refund_amount }.
-                const row = Array.isArray(refundData) ? refundData[0] : refundData;
-                if (row?.applied) {
-                  escrowActionExecuted = true;
-                } else {
-                  logger.warning(
-                    'fn_refund_wallet_escrow_for_dispute reported no-op (already settled or nothing to refund)',
-                    {
-                      disputeId,
-                      bountyId: dispute.bountyId,
-                    }
-                  );
-                }
-              }
-            } else {
-              // Hunter wins on a wallet-escrow bounty: atomically credit the
-              // hunter's balance and insert a `release` ledger row via the
-              // SECURITY DEFINER RPC.  Idempotent — safe to retry.
-              const _pDisputeIdRelease = normalizeDisputeIdParam(disputeId);
-              const { data: releaseData, error: releaseRpcError } = await (supabase as any).rpc(
-                'fn_release_wallet_escrow_for_dispute',
-                { p_dispute_id: _pDisputeIdRelease }
-              );
-
-              if (releaseRpcError) {
-                logger.error(
-                  'Failed to release wallet escrow to hunter during dispute resolution',
-                  {
-                    disputeId,
-                    bountyId: dispute.bountyId,
-                    error: releaseRpcError,
-                  }
-                );
-              } else {
-                // RPC returns a single row { applied, transaction_id, release_amount }.
-                const row = Array.isArray(releaseData) ? releaseData[0] : releaseData;
-                if (row?.applied) {
-                  escrowActionExecuted = true;
-                } else {
-                  logger.warning(
-                    'fn_release_wallet_escrow_for_dispute reported no-op (already settled or nothing to release)',
-                    {
-                      disputeId,
-                      bountyId: dispute.bountyId,
-                    }
-                  );
-                }
-              }
-            }
-          }
-        } catch (escrowError) {
-          // Log but don't fail the resolution if escrow action fails
-          logger.error('Error executing escrow action during dispute resolution', {
-            disputeId,
-            winner,
-            error: escrowError instanceof Error ? escrowError.message : String(escrowError),
-          });
-        }
-      }
+          ? 'Funds refunded to poster.'
+          : '';
+      const escrowActionExecuted =
+        settlement.status === 'released' || settlement.status === 'refunded';
 
       // Send notifications to involved parties
       try {
@@ -932,15 +995,62 @@ export const disputeService = {
         logger.error('Error sending dispute resolution notifications', { error: notifError });
       }
 
-      return true;
+      return { resolved: true, settlement };
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
       logger.error('Error in resolveDispute', {
         disputeId,
         error: { message: error.message },
       });
-      return false;
+      return { resolved: false, settlement: { status: 'not_applicable' }, error: error.message };
     }
+  },
+
+  /**
+   * Finish the money side of a dispute that is already resolved but whose
+   * escrow did not move (resolveDisputeWithOutcome returned settlement
+   * 'failed'). Safe to repeat: the wallet RPCs refuse to settle twice and
+   * only act on a dispute whose status and winner agree.
+   */
+  async retryDisputeSettlement(disputeId: string): Promise<DisputeSettlement> {
+    if (!isSupabaseConfigured) {
+      return { status: 'failed', detail: 'Supabase not configured' };
+    }
+    if (!(await verifyAdminRole())) {
+      return { status: 'failed', detail: 'Admin role required' };
+    }
+    const dispute = await this.getDisputeById(disputeId);
+    if (!dispute) {
+      return { status: 'failed', detail: 'Dispute not found' };
+    }
+    const winner =
+      dispute.status === 'resolved_hunter_wins' && dispute.winner === 'hunter'
+        ? 'hunter'
+        : dispute.status === 'resolved_poster_wins' && dispute.winner === 'poster'
+        ? 'poster'
+        : null;
+    if (!winner) {
+      return {
+        status: 'failed',
+        detail: 'Only a dispute resolved for the hunter or the poster can be settled.',
+      };
+    }
+    const bounty = await bountyService.getById(dispute.bountyId);
+    const settlement = await settleDisputeEscrow(
+      disputeId,
+      String(dispute.bountyId),
+      bounty ?? null,
+      winner
+    );
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    await this.logAuditEvent(disputeId, 'settlement_retried', session?.user?.id ?? null, 'admin', {
+      winner,
+      settlement: settlement.status,
+      settlement_detail: settlement.detail ?? null,
+    });
+    return settlement;
   },
 
   /**
@@ -1746,13 +1856,18 @@ export const disputeService = {
         return;
       }
 
-      await supabase.from('dispute_audit_log').insert({
+      // PostgREST reports a rejected insert in `error`, it does not throw;
+      // without this check a failed audit write vanished silently.
+      const { error } = await supabase.from('dispute_audit_log').insert({
         dispute_id: disputeId,
         action,
         actor_id: actorId,
         actor_type: actorType,
         details,
       });
+      if (error) {
+        logger.error('dispute_audit_log insert failed', { disputeId, action, error });
+      }
     } catch (err) {
       // Don't throw errors from audit logging
       logger.error('Error logging audit event', { error: err });
