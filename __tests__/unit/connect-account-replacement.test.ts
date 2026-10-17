@@ -13,6 +13,8 @@ import {
 
 const source = fs.readFileSync(path.join(__dirname, '../../supabase/functions/connect/index.ts'), 'utf8');
 const migration = fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261006230000_connect_account_replacement.sql'), 'utf8');
+const onboardingScreen = fs.readFileSync(path.join(__dirname, '../../app/wallet/connect/embedded-onboarding.tsx'), 'utf8');
+const withdrawalScreen = fs.readFileSync(path.join(__dirname, '../../components/withdraw-with-bank-screen.tsx'), 'utf8');
 const operations = require('../../supabase/functions/_shared/connect-account-operations');
 
 describe('legacy withdrawal identity compatibility', () => {
@@ -155,6 +157,14 @@ function replacementHarness() {
 }
 
 describe('replacement account safety', () => {
+  test('withdrawal onboarding errors offer the existing guarded replacement flow', () => {
+    expect(withdrawalScreen).toContain("hasExistingAccount: eligibility.connectedAccountExists ? 'true' : 'false'");
+    expect(onboardingScreen).toContain("params.hasExistingAccount === 'true'");
+    expect(onboardingScreen).toContain('hasExistingAccount && !replacementId');
+    expect(onboardingScreen).toContain('payoutMethods.prepareAccountReplacement()');
+    expect(onboardingScreen).toContain('params: { replacementId: result.replacementId, source: \'account_replacement\' }');
+  });
+
   test.each([
     { available: [{ amount: 1, currency: 'eur' }], pending: [] },
     { available: [], pending: [{ amount: -1, currency: 'usd' }] },

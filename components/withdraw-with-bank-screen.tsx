@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { type Href, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -181,7 +181,10 @@ export function WithdrawWithBankScreen({
     try {
       setIsOnboarding(true);
       needsRefreshOnFocusRef.current = true;
-      router.push('/wallet/connect/embedded-onboarding');
+      router.push({
+        pathname: '/wallet/connect/embedded-onboarding',
+        params: { hasExistingAccount: eligibility.connectedAccountExists ? 'true' : 'false' },
+      } as Href);
       // Status refresh and isOnboarding reset are handled by useFocusEffect
       // when this screen regains focus after the user returns.
     } catch (error: unknown) {

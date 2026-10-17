@@ -43,6 +43,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     BackHandler,
     StyleSheet,
@@ -58,6 +59,7 @@ import {
 } from '../../../components/ui/connect-onboarding-result';
 import { useFadeAnimation } from '../../../hooks/use-accessible-animation';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { usePayoutMethods } from '../../../hooks/use-payout-methods';
 import { API_BASE_URL } from '../../../lib/config/api';
 import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../../../lib/config/app';
 import { momentsService } from '../../../lib/moments/momentsService';
@@ -115,11 +117,14 @@ export default function ConnectOnboardingScreen() {
     returnTo?: string;
     source?: string;
     replacementId?: string;
+    hasExistingAccount?: string;
   }>();
   const entryCountry = typeof params.country === 'string' ? params.country : undefined;
   const replacementId = typeof params.replacementId === 'string' ? params.replacementId : undefined;
+  const hasExistingAccount = params.hasExistingAccount === 'true';
   const returnTo = typeof params.returnTo === 'string' && params.returnTo ? params.returnTo : undefined;
   const { session, isLoading: authLoading } = useAuthContext();
+  const payoutMethods = usePayoutMethods();
   const { theme } = useAppThemeContext();
   const { refreshFromApi } = useWallet();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -134,6 +139,8 @@ export default function ConnectOnboardingScreen() {
   const [outcome, setOutcome] = useState<ConnectOnboardingOutcome | null>(null);
   const [requirementsCurrentlyDue, setRequirementsCurrentlyDue] = useState<string[]>([]);
   const [disabledReason, setDisabledReason] = useState<string | null>(null);
+  const [isReplacingAccount, setIsReplacingAccount] = useState(false);
+  const replacingAccountRef = useRef(false);
 
   // Guard against React strict-mode / re-focus double-invocations.
   const launchedRef = useRef(false);
@@ -414,6 +421,41 @@ export default function ConnectOnboardingScreen() {
     launchOnboarding();
   }, [launchOnboarding]);
 
+  const handleReplaceAccount = useCallback(() => {
+    if (replacingAccountRef.current) return;
+    Alert.alert(
+      'Replace your Stripe Express account?',
+      'This creates a NEW Stripe payout account and requires identity and payout setup again. It does not change your bank account. Your old account, wallet balance, and transaction history are preserved; no funds are moved. Replacement is blocked while funds, payouts, or financial operations are unresolved.',
+      [
+        { text: 'Keep current account', style: 'cancel' },
+        {
+          text: 'Create new account',
+          style: 'destructive',
+          onPress: async () => {
+            if (replacingAccountRef.current) return;
+            replacingAccountRef.current = true;
+            setIsReplacingAccount(true);
+            try {
+              const result = await payoutMethods.prepareAccountReplacement();
+              if (!result.ok) {
+                Alert.alert('Could not replace account', result.error);
+                return;
+              }
+              launchedRef.current = false;
+              router.replace({
+                pathname: '/wallet/connect/embedded-onboarding',
+                params: { replacementId: result.replacementId, source: 'account_replacement' },
+              } as Href);
+            } finally {
+              replacingAccountRef.current = false;
+              setIsReplacingAccount(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [payoutMethods.prepareAccountReplacement, router]);
+
   const handleRetryVerify = useCallback(() => {
     verifyOnboardingStatus(lastBrowserResultRef.current);
   }, [verifyOnboardingStatus]);
@@ -553,6 +595,22 @@ export default function ConnectOnboardingScreen() {
                     <MaterialIcons name="refresh" size={20} color="#ffffff" />
                     <Text style={styles.primaryBtnText}>Try again</Text>
                   </TouchableOpacity>
+                  {hasExistingAccount && !replacementId && (
+                    <TouchableOpacity
+                      style={styles.secondaryBtn}
+                      onPress={handleReplaceAccount}
+                      disabled={isReplacingAccount}
+                      accessibilityRole="button"
+                      accessibilityLabel="Replace Stripe account"
+                      accessibilityState={{ disabled: isReplacingAccount }}
+                    >
+                      {isReplacingAccount ? (
+                        <ActivityIndicator size="small" color={theme.primary} />
+                      ) : (
+                        <Text style={styles.secondaryBtnText}>Replace Stripe Account</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss}>
                     <Text style={styles.secondaryBtnText}>{exitLabel}</Text>
                   </TouchableOpacity>
