@@ -59,6 +59,7 @@ export interface AuthProfile {
   primary_role?: 'poster' | 'hunter' | 'both';
   stripe_connect_charges_enabled?: boolean;
   stripe_connect_payouts_enabled?: boolean;
+  stripe_connect_account_linked?: boolean;
   last_session_at?: string;
   // Moderation status. Read by providers/auth-provider.tsx right after
   // sign-in/session-restore to force-sign-out and route banned/suspended
@@ -633,6 +634,12 @@ export class AuthProfileService {
             typeof data.stripe_connect_payouts_enabled === 'boolean'
               ? data.stripe_connect_payouts_enabled
               : undefined,
+          stripe_connect_account_linked:
+            data.stripe_connect_account_id === null
+              ? false
+              : typeof data.stripe_connect_account_id === 'string'
+                ? data.stripe_connect_account_id.length > 0
+                : undefined,
           last_session_at: data.last_session_at || undefined,
           account_status: data.account_status || undefined,
           is_internal: typeof data.is_internal === 'boolean' ? data.is_internal : undefined,
@@ -813,6 +820,12 @@ export class AuthProfileService {
             typeof data.stripe_connect_payouts_enabled === 'boolean'
               ? data.stripe_connect_payouts_enabled
               : undefined,
+          stripe_connect_account_linked:
+            data.stripe_connect_account_id === null
+              ? false
+              : typeof data.stripe_connect_account_id === 'string'
+                ? data.stripe_connect_account_id.length > 0
+                : undefined,
           last_session_at: data.last_session_at || undefined,
           account_status: data.account_status || undefined,
           is_internal: typeof data.is_internal === 'boolean' ? data.is_internal : undefined,
