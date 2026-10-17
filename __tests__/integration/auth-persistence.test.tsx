@@ -1351,6 +1351,168 @@ describe('Authentication State Persistence', () => {
     });
   });
 
+  describe('Cold start never flashes the sign-in form for a signed-in user', () => {
+    // Regression tests for: on a cold start a signed-in user briefly saw the
+    // sign-in form between the loading screen and the bounty feed. The root
+    // gate (useAppBootstrap → app/index.tsx) shows sign-in for any render where
+    // isLoading is false and there is no session, so the provider must never
+    // expose that combination until startup has actually concluded the user is
+    // signed out.
+    const { AuthApiError, AuthRetryableFetchError } = require('@supabase/supabase-js');
+
+    const validSession = {
+      access_token: 'token',
+      refresh_token: 'refresh',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: 'returning-user', email: 'r@example.com' },
+    };
+
+    // Records every (isLoading, session) pair the provider renders.
+    const renderAndRecord = () => {
+      const { useContext } = require('react');
+      const { AuthContext } = require('../../hooks/use-auth-context');
+      const states: { isLoading: boolean; session: any }[] = [];
+      let captured: any;
+      const ContextCapture = () => {
+        captured = useContext(AuthContext);
+        states.push({ isLoading: captured.isLoading, session: captured.session });
+        return null;
+      };
+      render(
+        <AuthProvider>
+          <ContextCapture />
+        </AuthProvider>
+      );
+      const showedSignIn = () => states.some(s => !s.isLoading && !s.session);
+      return { getContext: () => captured, showedSignIn };
+    };
+
+    it('keeps loading through the synchronous null profile notification on mount', async () => {
+      const { authProfileService } = require('../../lib/services/auth-profile-service');
+      // The real service notifies new subscribers synchronously with the
+      // current (null) profile — before getSession() has resolved.
+      (authProfileService.subscribe as jest.Mock).mockImplementation((listener: any) => {
+        listener(null);
+        return jest.fn();
+      });
+      let resolveGetSession: (v: any) => void = () => {};
+      (supabase.auth.getSession as jest.Mock).mockImplementation(
+        () => new Promise(resolve => (resolveGetSession = resolve))
+      );
+
+      const { getContext, showedSignIn } = renderAndRecord();
+      await waitFor(() => expect(supabase.auth.getSession).toHaveBeenCalled());
+
+      // Past the 10s safety timeout but inside the 15s getSession budget.
+      await act(async () => {
+        jest.advanceTimersByTime(12_000);
+      });
+      expect(getContext()?.isLoading).toBe(true);
+
+      await act(async () => {
+        resolveGetSession({ data: { session: validSession }, error: null });
+      });
+
+      await waitFor(() => expect(getContext()?.session?.user?.id).toBe('returning-user'));
+      expect(getContext()?.isLoading).toBe(false);
+      expect(showedSignIn()).toBe(false);
+    });
+
+    it('retries a retryable network error on startup instead of signing out', async () => {
+      (supabase.auth.getSession as jest.Mock)
+        .mockResolvedValueOnce({
+          data: { session: null },
+          error: new AuthRetryableFetchError('Failed to fetch', 0),
+        })
+        .mockResolvedValueOnce({ data: { session: validSession }, error: null });
+
+      const { getContext, showedSignIn } = renderAndRecord();
+      await waitFor(() => expect(supabase.auth.getSession).toHaveBeenCalledTimes(1));
+
+      await act(async () => {
+        jest.advanceTimersByTime(1_000);
+      });
+
+      await waitFor(() => expect(getContext()?.session?.user?.id).toBe('returning-user'));
+      expect(supabase.auth.getSession).toHaveBeenCalledTimes(2);
+      expect(showedSignIn()).toBe(false);
+    });
+
+    it('falls back to the persisted session when the network error persists', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: new AuthRetryableFetchError('Failed to fetch', 0),
+      });
+      (authSessionStorage.readPersistedSession as jest.Mock).mockResolvedValue(validSession);
+
+      const { getContext, showedSignIn } = renderAndRecord();
+
+      // Initial attempt + one retry per backoff step, then the fallback.
+      for (const [attempt, delayMs] of [
+        [1, 1_000],
+        [2, 2_000],
+      ]) {
+        await waitFor(() => expect(supabase.auth.getSession).toHaveBeenCalledTimes(attempt));
+        await act(async () => {
+          jest.advanceTimersByTime(delayMs);
+        });
+      }
+      await waitFor(() => expect(supabase.auth.getSession).toHaveBeenCalledTimes(3));
+
+      await waitFor(() => expect(getContext()?.session?.user?.id).toBe('returning-user'));
+      expect(getContext()?.isLoading).toBe(false);
+      expect(getContext()?.isAuthStale).toBe(false);
+      expect(authSessionStorage.clearAllSessionData).not.toHaveBeenCalled();
+      expect(showedSignIn()).toBe(false);
+    });
+
+    it('ignores a null INITIAL_SESSION while the startup restore is in flight', async () => {
+      let authCallback: (event: string, session: any) => Promise<void> = async () => {};
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb: any) => {
+        authCallback = cb;
+        return { data: { subscription: { unsubscribe: jest.fn() } } };
+      });
+      let resolveGetSession: (v: any) => void = () => {};
+      (supabase.auth.getSession as jest.Mock).mockImplementation(
+        () => new Promise(resolve => (resolveGetSession = resolve))
+      );
+
+      const { getContext, showedSignIn } = renderAndRecord();
+      await waitFor(() => expect(supabase.auth.getSession).toHaveBeenCalled());
+
+      await act(async () => {
+        await authCallback('INITIAL_SESSION', null);
+        jest.advanceTimersByTime(100);
+      });
+      expect(getContext()?.isLoading).toBe(true);
+
+      await act(async () => {
+        resolveGetSession({ data: { session: validSession }, error: null });
+      });
+      await waitFor(() => expect(getContext()?.session?.user?.id).toBe('returning-user'));
+      expect(showedSignIn()).toBe(false);
+    });
+
+    it('still signs out when the refresh token is genuinely rejected', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: new AuthApiError(
+          'Invalid Refresh Token: Refresh Token Not Found',
+          400,
+          'refresh_token_not_found'
+        ),
+      });
+      (authSessionStorage.readPersistedSession as jest.Mock).mockResolvedValue(validSession);
+
+      const { getContext } = renderAndRecord();
+
+      await waitFor(() => expect(getContext()?.session).toBeNull());
+      expect(getContext()?.isLoading).toBe(false);
+      expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
+      expect(authSessionStorage.readPersistedSession).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Environment guard failure (env-guard)', () => {
     // Regression tests for: production Android devices hitting the
     // checkEnvironmentIntegrity() guard (lib/config/env-guard.ts) — confirmed
