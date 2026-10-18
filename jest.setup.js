@@ -297,6 +297,27 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
+// Mock react-native-gesture-handler. Its native module doesn't exist under
+// Jest, and its bundled jestSetup pulls in react-native internals this
+// transform pipeline can't parse. Screens import its ScrollView (the feed and
+// inbox filter carousels) and the tab shell wraps its pages in a pan gesture,
+// so a passthrough is enough. Test files can still override it.
+jest.mock('react-native-gesture-handler', () => {
+  const RN = require('react-native');
+  const chain = () => {
+    const gesture = new Proxy({}, { get: () => () => gesture });
+    return gesture;
+  };
+  return {
+    __esModule: true,
+    ScrollView: RN.ScrollView,
+    FlatList: RN.FlatList,
+    GestureHandlerRootView: RN.View,
+    GestureDetector: ({ children }) => children,
+    Gesture: new Proxy({}, { get: () => chain }),
+  };
+});
+
 // Mock expo-device
 jest.mock('expo-device', () => ({
   isDevice: true,

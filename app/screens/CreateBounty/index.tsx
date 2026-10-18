@@ -37,6 +37,7 @@ import {
   View,
 } from 'react-native';
 import { useKeyboardInset } from '../../../components/ui/keyboard-avoiding';
+import { useTabPager } from '../../../components/ui/tab-pager';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -62,6 +63,15 @@ interface CreateBountyFlowProps {
    * strip. Defaults to 0.
    */
   topInset?: number;
+  /**
+   * Whether the flow is the screen actually in front of the poster. A host
+   * that preloads it off-screen (the tab shell keeps the Post tab mounted
+   * beside Home and Profile so swiping in is instant) passes false until
+   * the poster lands on it. While false the flow is inert: no funnel
+   * analytics or timers, no Android back handler, no status-bar tint — so a
+   * preloaded flow the poster never opens leaves no trace. Defaults to true.
+   */
+  isActive?: boolean;
 }
 
 /**
@@ -115,6 +125,7 @@ export function CreateBountyFlow({
   entryPoint = 'unknown',
   deliberateTap = false,
   topInset = 0,
+  isActive = true,
 }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
@@ -170,6 +181,10 @@ export function CreateBountyFlow({
   const { paymentMethods } = useStripe();
   const { theme } = useAppThemeContext();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
+  // In the tab shell's pager, step 1's status-bar tint slides with this
+  // page, so it may be up while the flow is preloaded beside the current
+  // tab (it is off-screen then). Anywhere else it must wait for isActive.
+  const inTabPager = useTabPager() !== null;
 
   // Posting-funnel bookkeeping. These stay local to this orchestrator;
   // `publishedRef` (below) comes from useBountyPublish so post_abandoned
@@ -177,12 +192,12 @@ export function CreateBountyFlow({
   //
   // TWO distinct "started" notions, deliberately not merged:
   //
-  //  - `flowMountedRef` — the composer finished mounting and its draft
-  //    settled. This is a RENDER fact, not a user fact: the host screen
-  //    mounts this component whenever the Post tab is selected (see
-  //    app/tabs/bounty-app.tsx's `{activeScreen === "postings" && ...}`),
-  //    so it is also true for someone who merely tapped through the tab
-  //    bar. It gates the "graveyard" funnel's timers and
+  //  - `flowMountedRef` — the composer is in front of the poster
+  //    (`isActive`) and its draft settled. This is a RENDER fact, not a
+  //    user fact: it becomes true whenever the Post tab is landed on (see
+  //    app/tabs/bounty-app.tsx), so it is also true for someone who merely
+  //    tapped or swiped through the tab bar. A preloaded, never-shown flow
+  //    never sets it. It gates the "graveyard" funnel's timers and
   //    post_step_abandoned, whose denominator is post_flow_started.
   //
   //  - `composerStartedRef` — the poster actually interacted with the
@@ -527,7 +542,7 @@ export function CreateBountyFlow({
     exitMethodRef.current = 'back';
     handleCancel();
     return true;
-  }, true);
+  }, isActive);
 
   useEffect(() => {
     onStepChange?.(currentStep);
@@ -535,12 +550,13 @@ export function CreateBountyFlow({
 
   // Flow mount — starts the graveyard funnel's timers and, for a mount a
   // call site attests was a deliberate "Post a bounty" tap, emits
-  // post_flow_started. Runs once the draft load settles.
+  // post_flow_started. Runs once the draft load settles AND the flow is
+  // active, so a preloaded flow starts its funnel when the poster arrives.
   //
   // This effect deliberately does NOT emit post_started; see
   // markComposerStarted() below.
   useEffect(() => {
-    if (isLoading || flowMountedRef.current) return;
+    if (isLoading || !isActive || flowMountedRef.current) return;
     flowMountedRef.current = true;
     resumedDraftRef.current = Boolean(draft.title?.trim());
     flowTimerRef.current.start();
@@ -555,7 +571,7 @@ export function CreateBountyFlow({
         deliberate_entry: true,
       });
     }
-  }, [isLoading, draft.title, entryPoint]);
+  }, [isLoading, isActive, draft.title, entryPoint]);
 
   /**
    * post_started — emitted at most once per composer instance, on the FIRST
@@ -633,7 +649,8 @@ export function CreateBountyFlow({
   // genuine forward advance, timing how long the poster spent on the step
   // they just left.
   useEffect(() => {
-    if (isLoading) return;
+    // A preloaded flow's step 1 is first "viewed" when it becomes active.
+    if (isLoading || !isActive) return;
     if (lastViewedStepRef.current === currentStep) return;
 
     const previousStep = currentStepRef.current;
@@ -669,7 +686,7 @@ export function CreateBountyFlow({
     if (backgroundedAtRef.current !== null) {
       backgroundedAtRef.current = getMonotonicNow();
     }
-  }, [currentStep, isLoading]);
+  }, [currentStep, isLoading, isActive]);
 
   // post_abandoned / post_step_abandoned — fire when the flow unmounts
   // without a publish. Covers both explicit cancel and navigating away,
@@ -786,7 +803,9 @@ export function CreateBountyFlow({
                 onUpdate={handleDraftUpdate}
                 onNext={handleNext}
                 onFieldFocus={handleFieldFocused}
-                tintStatusBar={isEmailVerified}
+                // Off-screen outside the pager, tinting would turn the status
+                // bar green over whichever screen is actually showing.
+                tintStatusBar={isEmailVerified && (isActive || inTabPager)}
                 topInset={topInset}
                 onClose={
                   onCancel

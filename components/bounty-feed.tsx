@@ -24,7 +24,7 @@ import { FilterChip, type FilterChipIconName } from 'components/ui/filter-chip';
 import { FilterChipSelect, type FilterChipOption } from 'components/ui/filter-chip-select';
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import {
     forwardRef,
     useCallback,
@@ -40,12 +40,14 @@ import {
     Animated,
     FlatList,
     RefreshControl,
-    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+// Gesture-handler's ScrollView so the filter carousel claims horizontal drags
+// before the tab shell's swipe-between-tabs pan (app/tabs/bounty-app.tsx).
+import { ScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveHunters } from '../hooks/useActiveHunters';
 import { useForegroundRefresh } from '../hooks/useForegroundRefresh';
@@ -54,6 +56,7 @@ import { useValidUserId } from '../hooks/useValidUserId';
 import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags';
 import { useBountyFormat } from '../lib/bounty-format-context';
 import { useTopInsetOverlay } from '../lib/context/TopInsetOverlayContext';
+import { pageTranslateX, useTabPager } from './ui/tab-pager';
 import { API_TIMEOUTS } from '../lib/config/network';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
 import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories';
@@ -745,9 +748,24 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   );
 
   const setTopInsetOverlay = topInsetOverlay?.setOverlay;
+  // The overlay is painted by RootFrame above every route, so it must come
+  // down whenever the tab shell isn't the focused screen — otherwise a screen
+  // pushed from the grid feed (Search, a bounty detail) inherits the banner's
+  // green strip above its own header instead of its own background.
+  const isShellFocused = useIsFocused();
+  // Inside the tab shell's pager the strip slides with the feed's page on the
+  // UI thread, so it stays up while the feed is merely mounted beside the
+  // current tab — it is off-screen then. Gating it on activeScreen instead
+  // left the green behind after swiping away (and late arriving back),
+  // because activeScreen only commits once the swipe settles.
+  const tabPager = useTabPager();
+  const overlayTranslateX = useMemo(() => pageTranslateX(tabPager, 'bounty'), [tabPager]);
   useEffect(() => {
     const tinted =
-      bountyFormat === 'grid' && activeScreen === 'bounty' && gridBannerCoversStatusBar;
+      bountyFormat === 'grid' &&
+      (overlayTranslateX !== undefined || activeScreen === 'bounty') &&
+      isShellFocused &&
+      gridBannerCoversStatusBar;
     if (!tinted || !setTopInsetOverlay) return;
     setTopInsetOverlay({
       colors: gridBannerGradient,
@@ -757,12 +775,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       // slice the banner's own gradient draws and the inset then hides.
       height: gridBannerHeight || insets.top,
       scrollY: gridScrollY,
+      translateX: overlayTranslateX,
       barColor: theme.primary,
-    });
-    return () => setTopInsetOverlay(null);
+    }, 'bounty');
+    return () => setTopInsetOverlay(null, 'bounty');
   }, [
     bountyFormat,
     activeScreen,
+    overlayTranslateX,
+    isShellFocused,
     gridBannerCoversStatusBar,
     gridBannerHeight,
     insets.top,

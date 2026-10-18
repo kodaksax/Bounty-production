@@ -2,7 +2,7 @@
 
 import { CreateBountyFlow } from "app/screens/CreateBounty"
 import * as React from "react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { getBottomNavBaseClearance } from "../../lib/constants/navigation"
@@ -13,6 +13,13 @@ interface NeedHelpScreenProps {
   setActiveScreen: (screen: string) => void
   onBountyPosted?: () => void // Callback when a bounty is successfully posted
   setShowBottomNav?: (show: boolean) => void
+  /**
+   * Whether the Post tab is the settled, on-screen tab. The tab shell keeps
+   * this screen mounted off-screen beside Home and Profile so swiping in is
+   * instant; while false the flow is inert (see CreateBountyFlow's
+   * `isActive`). Defaults to true.
+   */
+  isActive?: boolean
 }
 
 /**
@@ -24,13 +31,24 @@ interface NeedHelpScreenProps {
  * flow owns the full screen so its progress bar sits at the top, matching the
  * design; there is deliberately no branding/wallet header here.
  */
-export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav }: NeedHelpScreenProps) {
+export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav, isActive = true }: NeedHelpScreenProps) {
   const insets = useSafeAreaInsets()
   const { theme } = useAppThemeContext()
 
-  // Bumping this remounts CreateBountyFlow so exiting the flow resets it to
-  // step 1 instead of dropping the poster back where they left off.
+  // Bumping this remounts CreateBountyFlow so leaving the tab — by tab bar,
+  // swipe, cancel or publish — resets it to step 1 instead of dropping the
+  // poster back where they left off. The shell used to unmount this whole
+  // screen on leave; now that it stays mounted as a neighbour, the reset
+  // happens here instead. The old flow instance unmounts exactly as it did
+  // then, so post_step_abandoned / post_abandoned still fire on leave. It
+  // runs once the shell reports the Post tab no longer settled, i.e. after
+  // the slide away, so the fresh mount never competes with the animation.
   const [flowKey, setFlowKey] = useState(0)
+  const wasActiveRef = useRef(isActive)
+  useEffect(() => {
+    if (wasActiveRef.current && !isActive) setFlowKey((k) => k + 1)
+    wasActiveRef.current = isActive
+  }, [isActive])
 
   return (
     <View
@@ -46,26 +64,25 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
       <CreateBountyFlow
         key={flowKey}
         entryPoint="need_help_tab"
-        // NeedHelpScreen only ever mounts as a direct result of navigating
-        // to the "postings" tab (see app/tabs/bounty-app.tsx), so the very
-        // first flow instance (flowKey === 0) is always the deliberate tap
-        // that got the poster here. A later flowKey bump (see the state
-        // comment above) happens on exit, not a fresh tap, so it must not
-        // re-count.
-        deliberateTap={flowKey === 0}
+        // Every flow instance here only becomes active when the poster
+        // navigates to the Post tab (tab bar, swipe or an in-app CTA), and
+        // CreateBountyFlow fires nothing while inactive — so whenever this
+        // instance reports anything, a deliberate navigation got the poster
+        // here. Instances remounted on leave sit inactive until the next one.
+        deliberateTap
+        isActive={isActive}
         topInset={insets.top}
         onComplete={() => {
           // After creation, go to the main feed and refresh the public list
           setShowBottomNav?.(true)
           setActiveScreen('bounty')
           onBountyPosted?.()
-          setFlowKey((k) => k + 1)
         }}
         onCancel={() => {
-          // Exit the flow: return to the feed, show nav, reset to step 1
+          // Exit the flow: return to the feed and show nav. Leaving the tab
+          // resets the flow to step 1 (see flowKey above).
           setShowBottomNav?.(true)
           setActiveScreen('bounty')
-          setFlowKey((k) => k + 1)
         }}
         onStepChange={() => {
           // Keep BottomNav visible on all steps
