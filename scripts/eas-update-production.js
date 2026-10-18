@@ -209,7 +209,15 @@ function main() {
       // still looks like a successful publish in `eas update:list`.
       '--platform',
       platforms.length === ALL_PLATFORMS.length ? 'all' : platforms[0],
-      ...(message ? ['--message', message, '--non-interactive'] : []),
+      // With shell enabled (Windows), Node joins args with bare spaces, so a
+      // multi-word message would split into stray positional args unless quoted.
+      ...(message
+        ? [
+            '--message',
+            process.platform === 'win32' ? `"${message.replace(/"/g, '""')}"` : message,
+            '--non-interactive',
+          ]
+        : []),
     ],
     {
       APP_ENV: ENVIRONMENT,

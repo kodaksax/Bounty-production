@@ -263,7 +263,7 @@ export function InstantCashOutScreen({
 
   const checklist: { label: string; met: boolean; hint?: string }[] = [
     { label: 'Instant Cash Out available', met: instantCashOutEnabled, hint: 'Instant Cash Out is temporarily unavailable. Please use a standard withdrawal.' },
-    { label: 'Payout account connected', met: eligibility.connectedAccountExists, hint: 'Complete Stripe Connect onboarding from the Withdraw screen.' },
+    { label: 'Payout account connected', met: eligibility.connectedAccountExists === true, hint: 'Complete Stripe Connect onboarding from the Withdraw screen.' },
     { label: 'Identity details submitted', met: eligibility.detailsSubmitted, hint: 'Finish submitting your identity details with Stripe.' },
     { label: 'Charges enabled', met: eligibility.chargesEnabled },
     { label: 'Payouts enabled', met: eligibility.payoutsEnabled, hint: payoutsEnabledHint },

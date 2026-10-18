@@ -75,10 +75,39 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: `decision must be one of: ${validDecisions.join(', ')}` }, 400)
   }
 
-  const now = new Date().toISOString()
+  if (userId.toLowerCase() === adminUser.id.toLowerCase()) {
+    return jsonResponse({ error: 'You cannot review your own verification' }, 403)
+  }
 
   // Map API-level decision values to DB-allowed id_verification_status values.
   const dbStatus = decision === 'approved' ? 'verified' : 'rejected'
+
+  // A decision needs something to decide on. Approving used to work on any
+  // profile, including one that never submitted an ID, which would mint a
+  // "verified" badge from nothing. Approve only a pending submission; reject
+  // a pending one or revoke an existing verification.
+  const { data: current, error: currentError } = await supabaseAdmin
+    .from('profiles')
+    .select('id_verification_status, id_submitted_at')
+    .eq('id', userId)
+    .maybeSingle()
+  if (currentError) {
+    console.error('[admin-review-id] Failed to read current status:', currentError)
+    return jsonResponse({ error: 'Failed to read verification status' }, 500)
+  }
+  if (!current) {
+    return jsonResponse({ error: 'Profile not found' }, 404)
+  }
+  const previousStatus = (current.id_verification_status as string | null) ?? 'unverified'
+  const allowedFrom = decision === 'approved' ? ['pending'] : ['pending', 'verified']
+  if (!allowedFrom.includes(previousStatus)) {
+    return jsonResponse(
+      { error: `Cannot ${decision === 'approved' ? 'approve' : 'reject'} a verification that is '${previousStatus}'.` },
+      409,
+    )
+  }
+
+  const now = new Date().toISOString()
 
   const profileUpdate: Record<string, unknown> = {
     id_verification_status: dbStatus,
@@ -96,15 +125,33 @@ Deno.serve(async (req: Request) => {
     .from('profiles')
     .update(profileUpdate)
     .eq('id', userId)
+    // Compare-and-set: a second reviewer acting on the same submission
+    // concurrently gets a conflict instead of silently overwriting.
+    .eq('id_verification_status', previousStatus)
     .select('id')
     .single()
 
   if (updateError) {
     if (typeof updateError === 'object' && updateError !== null && 'code' in updateError && (updateError as { code: string }).code === 'PGRST116') {
-      return jsonResponse({ error: 'Profile not found' }, 404)
+      return jsonResponse({ error: 'This verification was changed by someone else. Reload and try again.' }, 409)
     }
     console.error('[admin-review-id] Failed to update profile:', updateError)
     return jsonResponse({ error: 'Failed to update verification status' }, 500)
+  }
+
+  // Durable record of who decided what. admin_action_log is append-only and
+  // service-role-only for writes (20261012120000). The decision has already
+  // been applied, so a failed audit write is reported, not rolled back.
+  const { error: auditError } = await supabaseAdmin.from('admin_action_log').insert({
+    admin_user_id: adminUser.id,
+    action_type: 'id_verification_review',
+    target_user_id: userId,
+    reason: notes && String(notes).trim() ? String(notes).trim().slice(0, 1000) : `ID ${decision}`,
+    result: 'success',
+    metadata: { decision, old_status: previousStatus, new_status: dbStatus },
+  })
+  if (auditError) {
+    console.error('[admin-review-id] CRITICAL audit log insert failed', { userId, decision, error: auditError })
   }
 
   console.log(
@@ -112,5 +159,5 @@ Deno.serve(async (req: Request) => {
     (notes ? ` notes_present=true notes_length=${String(notes).length}` : ''),
   )
 
-  return jsonResponse({ success: true, userId, decision })
+  return jsonResponse({ success: true, userId, decision, auditRecorded: !auditError })
 })

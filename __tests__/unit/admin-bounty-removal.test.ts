@@ -198,6 +198,27 @@ describe('updateBountyStatus (the "Status actions" buttons -- Archive/Cancel/Com
     });
   });
 
+  test('a bounty that still holds escrow is refused with a specific, actionable message (RPC raises 55000)', async () => {
+    // 20261012120100: ending/reopening a bounty with unsettled escrow would
+    // strand the poster's money (prod bounty 5e96aaed) or skip paying the hunter.
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'escrow_unsettled:stripe_payment_captured', code: '55000' },
+    });
+
+    await expect(
+      adminDataClient.updateBountyStatus('b1', 'cancelled', 'Admin console: Cancel')
+    ).rejects.toMatchObject({
+      code: 'ESCROW_UNSETTLED',
+      message: expect.stringMatching(/still holds money/),
+    });
+    expect(rpc).toHaveBeenCalledWith('admin_set_bounty_status', {
+      p_bounty_id: 'b1',
+      p_status: 'cancelled',
+      p_reason: 'Admin console: Cancel',
+    });
+  });
+
   test('an illegal transition (e.g. completed -> in_progress) falls back to a safe generic message', async () => {
     rpc.mockResolvedValue({
       data: null,

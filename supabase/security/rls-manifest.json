@@ -445,6 +445,11 @@
     { "signature": "fn_claim_geocode_batch(integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_apply_bounty_geocode(uuid,double precision,double precision,text,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_record_geocode_failure(uuid,text,boolean,integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "admin_apply_balance_adjustment(uuid,uuid,numeric,text,text,uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_bounty_unsettled_escrow_reason(uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "record_reconciliation_finding(text,text,uuid,jsonb,boolean)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "increment_withdrawal_counter(uuid,timestamp with time zone)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "is_admin()", "forbid_execute": ["anon", "PUBLIC"] },
     {
       "signature": "reserve_connect_account_operation(uuid,text,text,text)",
       "forbid_execute": ["anon", "authenticated", "PUBLIC"]
