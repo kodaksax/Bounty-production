@@ -16,6 +16,12 @@
  * after acceptance, after the hunter submitted work, or mid-dispute
  * (trust-spine audit 2026-09-30, T4 / S2).
  *
+ * The check goes through `fn_claim_owner_refund` (migration 20261013140000),
+ * which evaluates that rule under the bounty row lock the accept RPCs take
+ * and, when allowed, records a durable claim that makes acceptance refuse.
+ * A plain read of the rule left a window where the poster could accept a
+ * hunter after the check and before the money moved (#883).
+ *
  * Fails closed: if the gate cannot be evaluated (RPC missing because the
  * migration has not been applied, or a database error), the refund is refused
  * with a retryable 503 rather than silently falling back to the old,
@@ -24,7 +30,7 @@
 
 export interface OwnerRefundGateClient {
   rpc(
-    fn: 'fn_owner_refund_block_reason',
+    fn: 'fn_claim_owner_refund' | 'fn_release_owner_refund_claim',
     args: { p_bounty_id: string; p_caller: string }
   ): PromiseLike<{ data: unknown; error: { message?: string; code?: string } | null }>;
 }
@@ -46,6 +52,10 @@ const BLOCK_MESSAGES: Record<string, { status: number; error: string }> = {
   },
   not_bounty_owner: { status: 403, error: 'Unauthorized to refund funds' },
   bounty_not_found: { status: 404, error: 'Bounty not found' },
+  owner_refund_in_progress: {
+    status: 409,
+    error: 'A refund is already being processed for this bounty.',
+  },
 };
 
 export async function checkOwnerRefundGate(
@@ -56,7 +66,7 @@ export async function checkOwnerRefundGate(
   let data: unknown;
   let error: { message?: string; code?: string } | null;
   try {
-    ({ data, error } = await client.rpc('fn_owner_refund_block_reason', {
+    ({ data, error } = await client.rpc('fn_claim_owner_refund', {
       p_bounty_id: bountyId,
       p_caller: callerId,
     }));
@@ -90,4 +100,22 @@ export async function checkOwnerRefundGate(
     error: 'This bounty cannot be refunded in its current state.',
   };
   return { ok: false, status: known.status, error: known.error, code, retryable: false };
+}
+
+export async function releaseOwnerRefundClaim(
+  client: OwnerRefundGateClient,
+  bountyId: string,
+  callerId: string
+): Promise<boolean> {
+  try {
+    const { error } = await client.rpc('fn_release_owner_refund_claim', {
+      p_bounty_id: bountyId,
+      p_caller: callerId,
+    });
+    if (!error) return true;
+    console.error('[owner-refund-gate] failed to release claim', { bountyId, error });
+  } catch (error) {
+    console.error('[owner-refund-gate] failed to release claim', { bountyId, error });
+  }
+  return false;
 }

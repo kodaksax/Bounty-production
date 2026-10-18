@@ -24,7 +24,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // @ts-ignore: Allow runtime npm import for Deno/edge function.
 import Stripe from 'npm:stripe@14';
-import { checkOwnerRefundGate } from '../_shared/owner-refund-gate.ts';
+import {
+  checkOwnerRefundGate,
+  releaseOwnerRefundClaim,
+} from '../_shared/owner-refund-gate.ts';
+import { authorizeRelease } from '../_shared/release-authorization.ts';
 import { reserveAccountOperation, finishAccountOperation, isDefinitiveStripeRejection } from '../_shared/connect-account-operations.ts';
 
 declare const Deno: any;
@@ -1250,18 +1254,37 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Resolve the hunter. Prefer the explicit input, else the accepted hunter
-      // recorded on the bounty.
-      let hunterId = hunterIdInput || bp.hunter_id || null;
-      if (!hunterId) {
-        const { data: bountyRow } = (await withDbTimeout(
-          supabaseAdmin.from('bounties').select('accepted_by').eq('id', bountyId).maybeSingle()
-        )) as any;
-        hunterId = bountyRow?.accepted_by ?? null;
+      // The payee is always the bounty's accepted hunter. A hunterId in the
+      // body is only checked against it, never used to pick who gets paid;
+      // otherwise a poster could send the captured escrow to any
+      // payout-enabled account. Same rule as /wallet/release.
+      const { data: bountyRow, error: bountyRowErr } = (await withDbTimeout(
+        supabaseAdmin.from('bounties').select('accepted_by').eq('id', bountyId).maybeSingle()
+      )) as any;
+      if (bountyRowErr) {
+        return reply(
+          { error: 'Failed to load bounty.', code: 'bounty_load_failed', retryable: true },
+          500
+        );
       }
-      if (!hunterId) {
+      if (!bountyRow?.accepted_by) {
         return reply({ error: 'No hunter is assigned to this bounty.', code: 'no_hunter' }, 400);
       }
+      const payee = authorizeRelease({
+        callerId: userId,
+        requestedHunterId: hunterIdInput,
+        // Ownership was checked above against bp.poster_id.
+        bounty: { user_id: bp.poster_id, accepted_by: bountyRow.accepted_by },
+      });
+      if (!payee.ok) {
+        console.warn('[bounty-payments] release rejected', {
+          requestId,
+          bountyId,
+          code: payee.code,
+        });
+        return reply({ error: payee.error, code: payee.code }, payee.status);
+      }
+      const hunterId = payee.hunterId;
 
       // Verify the hunter is payout-ready on Stripe Connect.
       const { data: hunterProfile, error: hunterErr } = (await withDbTimeout(
@@ -1501,6 +1524,8 @@ Deno.serve(async (req: Request) => {
 
       // Escrow commitment: same rule as /wallet/refund. After a hunter is
       // accepted the poster cannot cancel or refund the payment unilaterally.
+      // Passing the gate also claims the bounty under its row lock, so an
+      // acceptance can't land before the Stripe cancel/refund below (#883).
       const gate = await checkOwnerRefundGate(supabaseAdmin, bountyId, userId);
       if (!gate.ok) {
         return reply(
@@ -1518,6 +1543,9 @@ Deno.serve(async (req: Request) => {
             // If it already captured between our read and now, fall through to
             // the refund path below by re-reading status.
             if (cancelErr?.code !== 'payment_intent_unexpected_state') {
+              if (isDefinitiveStripeRejection(cancelErr)) {
+                await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
+              }
               throw cancelErr;
             }
           }
@@ -1544,6 +1572,7 @@ Deno.serve(async (req: Request) => {
       // Post-capture: issue a real refund.
       if (bp.status === 'captured') {
         if (!bp.stripe_payment_intent_id) {
+          await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
           return reply(
             { error: 'Missing payment intent; cannot refund.', code: 'no_payment_intent' },
             500
@@ -1566,6 +1595,9 @@ Deno.serve(async (req: Request) => {
             bpId: bp.id,
             refundErr,
           });
+          if (isDefinitiveStripeRejection(refundErr)) {
+            await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
+          }
           return reply(
             {
               error: 'Refund could not be processed. Please try again.',
@@ -1605,6 +1637,7 @@ Deno.serve(async (req: Request) => {
         return reply({ refunded: true, status: newStatus, refundId: refund.id });
       }
 
+      await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
       return reply(
         {
           error: `Cannot cancel a bounty payment in status "${bp.status}".`,

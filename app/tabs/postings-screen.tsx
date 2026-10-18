@@ -28,7 +28,7 @@ import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ActivityIndicator, Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -207,6 +207,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const itemRefs = useRef<Record<string, any>>({})
   // Pending scroll request (set when expanding an item, cleared after measuring)
   const pendingScrollRef = useRef<{ list: 'inProgress' | 'myPostings'; key: string } | null>(null)
+  // Last known scroll offset per list, so an expanded row can be scrolled into view
+  const scrollOffsetRef = useRef<Record<'inProgress' | 'myPostings', number>>({ inProgress: 0, myPostings: 0 })
+  const { height: windowHeight } = useWindowDimensions()
 
   // ---- Bounty form state and handlers (extracted to useBountyForm) ----
   // Manages form field values, validation, submission (including escrow creation),
@@ -258,6 +261,29 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     if (!willExpand) return
     // Mark pending scroll — we'll measure and scroll when the expanded content calls back
     pendingScrollRef.current = { list, key }
+  }
+
+  // Called by the expanded panel's onLayout. If the expanded row now runs under
+  // the floating tab bar, scroll just far enough to show its bottom — but never
+  // so far that the row's own top slides under the header.
+  const scrollExpandedIntoView = (list: 'inProgress' | 'myPostings', key: string) => {
+    const pending = pendingScrollRef.current
+    if (!pending || pending.list !== list || pending.key !== key) return
+    pendingScrollRef.current = null
+    requestAnimationFrame(() => {
+      const listRef = list === 'inProgress' ? inProgressListRef.current : myPostingsListRef.current
+      const itemNode = itemRefs.current[key]
+      if (!listRef || typeof itemNode?.measureInWindow !== 'function') return
+      itemNode.measureInWindow((_x: number, y: number, _w: number, height: number) => {
+        const visibleBottom = windowHeight - getBottomNavContentPadding(insets.bottom, 8)
+        const visibleTop = Math.max(72, headerHeight + insets.top + 12)
+        const overflowBelow = y + height - visibleBottom
+        if (overflowBelow <= 0) return
+        const delta = Math.min(overflowBelow, Math.max(0, y - visibleTop))
+        if (delta <= 0) return
+        listRef.scrollToOffset({ offset: scrollOffsetRef.current[list] + delta, animated: true })
+      })
+    })
   }
 
   // Deadline now simple text entry; dedicated screen removed
@@ -945,6 +971,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         currentUserId={currentUserId}
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
+        onExpandedLayout={() => scrollExpandedIntoView('myPostings', String(bounty.id))}
         onEdit={bounty.status === 'open' && !bounty.accepted_by && !isBountyDeadlinePassed(bounty) && !bountiesWithPendingRequestsSet.has(String(bounty.id)) ? () => handleEditBounty(bounty) : undefined}
         onDelete={bounty.status === 'open' && !bounty.accepted_by ? () => handleDeleteBounty(bounty) : undefined}
         onDiscard={bounty.status === 'cancelled' ? () => handleDiscardCancelledBounty(bounty) : undefined}
@@ -974,6 +1001,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         currentUserId={currentUserId}
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
+        onExpandedLayout={() => scrollExpandedIntoView('inProgress', String(bounty.id))}
         onWithdrawApplication={(requestStatus) => handleWithdrawApplication(bounty.id, requestStatus)}
         onHide={() => handleHideInProgressBounty(bounty)}
         onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
@@ -1344,6 +1372,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   showsVerticalScrollIndicator={false}
                   onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y || 0
+                    scrollOffsetRef.current.inProgress = y
                     if (y > 2 && !showShadow) setShowShadow(true)
                     else if (y <= 2 && showShadow) setShowShadow(false)
                   }}
@@ -1508,6 +1537,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   showsVerticalScrollIndicator={false}
                   onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y || 0
+                    scrollOffsetRef.current.myPostings = y
                     if (y > 2 && !showShadow) setShowShadow(true)
                     else if (y <= 2 && showShadow) setShowShadow(false)
                   }}

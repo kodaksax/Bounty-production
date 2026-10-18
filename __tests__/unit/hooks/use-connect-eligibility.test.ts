@@ -33,6 +33,7 @@ describe('useConnectEligibility', () => {
     mockFetchOnce({ ok: true, json: () => new Promise(() => {}) });
     const { result } = renderHook(() => useConnectEligibility());
     expect(result.current.loading).toBe(true);
+    expect(result.current.connectedAccountExists).toBeNull();
   });
 
   it('maps a fully-onboarded response', async () => {
@@ -118,6 +119,30 @@ describe('useConnectEligibility', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toMatch(/could not reach/i);
+  });
+
+  it('preserves persisted account linkage when Stripe status verification fails', async () => {
+    (useAuthContext as jest.Mock).mockReturnValue({
+      session: { access_token: 'test-token' },
+      profile: { stripe_connect_account_linked: true },
+    });
+    global.fetch = jest.fn().mockRejectedValue(new Error('network down')) as jest.Mock;
+    const { result } = renderHook(() => useConnectEligibility());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.connectedAccountExists).toBe(true);
+  });
+
+  it('uses persisted no-account state when Stripe status is unavailable', async () => {
+    (useAuthContext as jest.Mock).mockReturnValue({
+      session: { access_token: 'test-token' },
+      profile: { stripe_connect_account_linked: false },
+    });
+    global.fetch = jest.fn().mockRejectedValue(new Error('network down')) as jest.Mock;
+    const { result } = renderHook(() => useConnectEligibility());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.connectedAccountExists).toBe(false);
   });
 
   it('does not fetch without a session', () => {

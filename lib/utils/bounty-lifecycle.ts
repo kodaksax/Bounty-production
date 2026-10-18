@@ -735,7 +735,11 @@ function resolveHunter(args: {
   // theirs, or that they were paid for a bounty they never worked.
   const assignedToSomeoneElse =
     !!viewerId && !!bounty.accepted_by && String(bounty.accepted_by) !== String(viewerId);
-  const isSelected = requestStatus === 'accepted' && !assignedToSomeoneElse;
+  // accepted_by is the server's record of who was hired, so it wins even when
+  // the request row has not loaded yet or a screen seeded it as 'pending'.
+  const isAcceptedHunter =
+    !!viewerId && !!bounty.accepted_by && String(bounty.accepted_by) === String(viewerId);
+  const isSelected = isAcceptedHunter || (requestStatus === 'accepted' && !assignedToSomeoneElse);
   if (!isSelected && (bounty.status === 'in_progress' || bounty.status === 'completed')) {
     return finalize({
       status: 'rejected',

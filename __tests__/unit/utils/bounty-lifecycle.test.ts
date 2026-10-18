@@ -315,6 +315,30 @@ describe('resolveBountyLifecycle — hunter lifecycle', () => {
     expect(winner.status).toBe('in_progress');
   });
 
+  it('the hunter named in accepted_by is the hired hunter even before their request status loads', () => {
+    // accepted_by is the server's record of who was hired. Screens that have
+    // not loaded the request yet (null) or seed it as 'pending' used to tell
+    // the hired hunter "Another hunter was selected · Nothing is owed".
+    for (const requestStatus of [null, undefined, 'pending'] as const) {
+      const s = resolveBountyLifecycle({
+        bounty: bounty({ status: 'in_progress', accepted_by: 'hunter-a' }),
+        role: 'hunter',
+        viewerId: 'hunter-a',
+        requestStatus,
+      });
+      expect(s.headline).not.toBe('Another hunter was selected');
+      expect(s.status).toBe('in_progress');
+    }
+
+    const completed = resolveBountyLifecycle({
+      bounty: bounty({ status: 'completed', accepted_by: 'hunter-a' }),
+      role: 'hunter',
+      viewerId: 'hunter-a',
+      requestStatus: null,
+    });
+    expect(completed.status).not.toBe('rejected');
+  });
+
   it('never reports a payout to a hunter who was not the selected one', () => {
     const s = resolveBountyLifecycle({
       bounty: bounty({ status: 'completed', accepted_by: 'someone-else' }),

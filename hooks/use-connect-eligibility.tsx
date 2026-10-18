@@ -12,8 +12,8 @@ import { API_BASE_URL } from '../lib/config/api';
 
 export interface ConnectEligibilityState {
   loading: boolean;
-  /** True once a Stripe Connect account exists at all. */
-  connectedAccountExists: boolean;
+  /** True/false when account presence is known; null while it is unknown. */
+  connectedAccountExists: boolean | null;
   detailsSubmitted: boolean;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
@@ -34,7 +34,7 @@ export interface UseConnectEligibilityResult extends ConnectEligibilityState {
 
 const INITIAL_STATE: ConnectEligibilityState = {
   loading: true,
-  connectedAccountExists: false,
+  connectedAccountExists: null,
   detailsSubmitted: false,
   chargesEnabled: false,
   payoutsEnabled: false,
@@ -46,7 +46,7 @@ const INITIAL_STATE: ConnectEligibilityState = {
 };
 
 export function useConnectEligibility(): UseConnectEligibilityResult {
-  const { session } = useAuthContext();
+  const { session, profile } = useAuthContext();
   const [state, setState] = useState<ConnectEligibilityState>(INITIAL_STATE);
 
   const refresh = useCallback(async () => {
@@ -99,5 +99,10 @@ export function useConnectEligibility(): UseConnectEligibilityResult {
     refresh();
   }, [refresh]);
 
-  return { ...state, refresh };
+  return {
+    ...state,
+    connectedAccountExists:
+      state.connectedAccountExists ?? profile?.stripe_connect_account_linked ?? null,
+    refresh,
+  };
 }

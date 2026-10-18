@@ -38,11 +38,12 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { type Href, Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { type Href, Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     BackHandler,
     StyleSheet,
@@ -58,6 +59,7 @@ import {
 } from '../../../components/ui/connect-onboarding-result';
 import { useFadeAnimation } from '../../../hooks/use-accessible-animation';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { usePayoutMethods } from '../../../hooks/use-payout-methods';
 import { API_BASE_URL } from '../../../lib/config/api';
 import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../../../lib/config/app';
 import { momentsService } from '../../../lib/moments/momentsService';
@@ -101,6 +103,8 @@ const VERIFY_TIMEOUT_MS = 15000;
 
 export default function ConnectOnboardingScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
+  const { session, profile, isLoading: authLoading } = useAuthContext();
   // Optional entry params, set by the onboarding payout step
   // (app/onboarding/payouts.tsx). Every other caller pushes this route bare,
   // so all of them must stay optional.
@@ -115,11 +119,23 @@ export default function ConnectOnboardingScreen() {
     returnTo?: string;
     source?: string;
     replacementId?: string;
+    hasExistingAccount?: string;
   }>();
   const entryCountry = typeof params.country === 'string' ? params.country : undefined;
   const replacementId = typeof params.replacementId === 'string' ? params.replacementId : undefined;
+  const accountPresenceFromRoute =
+    params.hasExistingAccount === 'true'
+      ? true
+      : params.hasExistingAccount === 'false'
+        ? false
+        : null;
+  const hasExistingAccount =
+    accountPresenceFromRoute === true || profile?.stripe_connect_account_linked === true;
+  const canOfferAccountReplacement =
+    hasExistingAccount ||
+    (accountPresenceFromRoute === null && profile?.stripe_connect_account_linked !== false);
   const returnTo = typeof params.returnTo === 'string' && params.returnTo ? params.returnTo : undefined;
-  const { session, isLoading: authLoading } = useAuthContext();
+  const { prepareAccountReplacement } = usePayoutMethods();
   const { theme } = useAppThemeContext();
   const { refreshFromApi } = useWallet();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -134,6 +150,10 @@ export default function ConnectOnboardingScreen() {
   const [outcome, setOutcome] = useState<ConnectOnboardingOutcome | null>(null);
   const [requirementsCurrentlyDue, setRequirementsCurrentlyDue] = useState<string[]>([]);
   const [disabledReason, setDisabledReason] = useState<string | null>(null);
+  const [isReplacingAccount, setIsReplacingAccount] = useState(false);
+  const replacingAccountRef = useRef(false);
+  const replacementHandoffRef = useRef(false);
+  const isScreenFocusedRef = useRef(true);
 
   // Guard against React strict-mode / re-focus double-invocations.
   const launchedRef = useRef(false);
@@ -414,6 +434,43 @@ export default function ConnectOnboardingScreen() {
     launchOnboarding();
   }, [launchOnboarding]);
 
+  const handleReplaceAccount = useCallback(() => {
+    if (replacingAccountRef.current) return;
+    Alert.alert(
+      'Replace your Stripe Express account?',
+      'This creates a NEW Stripe payout account and requires identity and payout setup again. It does not change your bank account. Your old account, wallet balance, and transaction history are preserved; no funds are moved. Replacement is blocked while funds, payouts, or financial operations are unresolved.',
+      [
+        { text: 'Keep current account', style: 'cancel' },
+        {
+          text: 'Create new account',
+          style: 'destructive',
+          onPress: async () => {
+            if (replacingAccountRef.current) return;
+            replacingAccountRef.current = true;
+            setIsReplacingAccount(true);
+            try {
+              const result = await prepareAccountReplacement();
+              if (!result.ok) {
+                Alert.alert('Could not replace account', result.error);
+                return;
+              }
+              if (!isScreenFocusedRef.current) return;
+              launchedRef.current = false;
+              replacementHandoffRef.current = true;
+              router.replace({
+                pathname: '/wallet/connect/embedded-onboarding',
+                params: { replacementId: result.replacementId, source: 'account_replacement' },
+              } as Href);
+            } finally {
+              replacingAccountRef.current = false;
+              setIsReplacingAccount(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [prepareAccountReplacement, router]);
+
   const handleRetryVerify = useCallback(() => {
     verifyOnboardingStatus(lastBrowserResultRef.current);
   }, [verifyOnboardingStatus]);
@@ -424,6 +481,7 @@ export default function ConnectOnboardingScreen() {
   // the stack — which naturally returns to whatever screen launched
   // onboarding, with no route reset needed.
   const dismiss = useCallback(async () => {
+    if (replacingAccountRef.current) return;
     // fadeOut already collapses to an instant, 0-duration transition when
     // the user has Reduce Motion enabled (see useAccessibleAnimation).
     await fadeOut(180);
@@ -436,15 +494,43 @@ export default function ConnectOnboardingScreen() {
     router.back();
   }, [fadeOut, returnTo, router]);
 
+  useEffect(
+    () =>
+      navigation.addListener('beforeRemove', event => {
+        if (replacingAccountRef.current && !replacementHandoffRef.current) {
+          event.preventDefault();
+        }
+      }),
+    [navigation]
+  );
+
+  useEffect(() => {
+    isScreenFocusedRef.current = navigation.isFocused();
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      isScreenFocusedRef.current = true;
+    });
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      isScreenFocusedRef.current = false;
+    });
+    return () => {
+      isScreenFocusedRef.current = false;
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [navigation]);
+
   // With returnTo set, dismiss() is the only correct way out: a raw pop would
   // land back on the step that pushed us (and leave its busy flag set). The
   // iOS swipe is disabled via gestureEnabled on <Stack.Screen> below; Android
   // hardware back is routed through dismiss() here.
   useEffect(() => {
-    if (!returnTo) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      dismiss();
-      return true;
+      if (replacingAccountRef.current) return true;
+      if (returnTo) {
+        dismiss();
+        return true;
+      }
+      return false;
     });
     return () => sub.remove();
   }, [dismiss, returnTo]);
@@ -452,7 +538,11 @@ export default function ConnectOnboardingScreen() {
   // Rendered in every branch so the gesture lock holds from the first frame.
   const screenOptions = (
     <Stack.Screen
-      options={{ headerShown: false, animation: 'slide_from_bottom', gestureEnabled: !returnTo }}
+      options={{
+        headerShown: false,
+        animation: 'slide_from_bottom',
+        gestureEnabled: !returnTo && !isReplacingAccount,
+      }}
     />
   );
 
@@ -474,7 +564,7 @@ export default function ConnectOnboardingScreen() {
         <View style={styles.centered}>
           <Text style={styles.errorTitle}>Please sign in</Text>
           <Text style={styles.muted}>You must be signed in to set up payouts.</Text>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss} disabled={isReplacingAccount}>
             <Text style={styles.secondaryBtnText}>Go back</Text>
           </TouchableOpacity>
         </View>
@@ -511,8 +601,10 @@ export default function ConnectOnboardingScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             onPress={dismiss}
+            disabled={isReplacingAccount}
             accessibilityRole="button"
             accessibilityLabel="Close"
+            accessibilityState={{ disabled: isReplacingAccount }}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={styles.closeBtn}
           >
@@ -549,10 +641,26 @@ export default function ConnectOnboardingScreen() {
             {phase === 'error' ? (
               canRetry ? (
                 <>
-                  <TouchableOpacity style={styles.primaryBtn} onPress={handleRetry}>
+                  <TouchableOpacity style={styles.primaryBtn} onPress={handleRetry} disabled={isReplacingAccount}>
                     <MaterialIcons name="refresh" size={20} color="#ffffff" />
                     <Text style={styles.primaryBtnText}>Try again</Text>
                   </TouchableOpacity>
+                  {canOfferAccountReplacement && !replacementId && (
+                    <TouchableOpacity
+                      style={styles.secondaryBtn}
+                      onPress={handleReplaceAccount}
+                      disabled={isReplacingAccount}
+                      accessibilityRole="button"
+                      accessibilityLabel="Replace Stripe account"
+                      accessibilityState={{ disabled: isReplacingAccount }}
+                    >
+                      {isReplacingAccount ? (
+                        <ActivityIndicator size="small" color={theme.primary} />
+                      ) : (
+                        <Text style={styles.secondaryBtnText}>Replace Stripe Account</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss}>
                     <Text style={styles.secondaryBtnText}>{exitLabel}</Text>
                   </TouchableOpacity>
@@ -560,7 +668,7 @@ export default function ConnectOnboardingScreen() {
               ) : (
                 // Non-retryable failure (e.g. a platform credential problem):
                 // retrying reproduces it instantly, so offer only the exit.
-                <TouchableOpacity style={styles.primaryBtn} onPress={dismiss}>
+                <TouchableOpacity style={styles.primaryBtn} onPress={dismiss} disabled={isReplacingAccount}>
                   <Text style={styles.primaryBtnText}>{exitLabel}</Text>
                 </TouchableOpacity>
               )

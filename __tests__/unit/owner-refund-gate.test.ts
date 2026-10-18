@@ -1,5 +1,6 @@
 import {
   checkOwnerRefundGate,
+  releaseOwnerRefundClaim,
   type OwnerRefundGateClient,
 } from '../../supabase/functions/_shared/owner-refund-gate';
 
@@ -24,12 +25,31 @@ describe('checkOwnerRefundGate', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
-  it('asks the database rule about this bounty and caller', async () => {
+  // #883: the locking claim RPC, not the plain read of the rule. Reading the
+  // rule without the bounty lock let an acceptance land between the check and
+  // the refund.
+  it('claims the refund through the locking RPC for this bounty and caller', async () => {
     const { c, calls } = client({ data: null });
     await checkOwnerRefundGate(c, BOUNTY, POSTER);
     expect(calls).toEqual([
-      { fn: 'fn_owner_refund_block_reason', args: { p_bounty_id: BOUNTY, p_caller: POSTER } },
+      { fn: 'fn_claim_owner_refund', args: { p_bounty_id: BOUNTY, p_caller: POSTER } },
     ]);
+  });
+
+  it('releases only this caller’s claim through the service RPC', async () => {
+    const { c, calls } = client({ data: true });
+    await expect(releaseOwnerRefundClaim(c, BOUNTY, POSTER)).resolves.toBe(true);
+    expect(calls).toEqual([
+      {
+        fn: 'fn_release_owner_refund_claim',
+        args: { p_bounty_id: BOUNTY, p_caller: POSTER },
+      },
+    ]);
+  });
+
+  it('keeps the claim when the release RPC is unavailable', async () => {
+    const { c } = client({ error: { message: 'database unavailable' } });
+    await expect(releaseOwnerRefundClaim(c, BOUNTY, POSTER)).resolves.toBe(false);
   });
 
   it('allows the refund when the rule returns NULL (never accepted / hunter cancelled)', async () => {
@@ -45,6 +65,15 @@ describe('checkOwnerRefundGate', () => {
       status: 409,
       code: 'refund_requires_cancellation_or_dispute',
       retryable: false,
+    });
+  });
+
+  it('blocks a second refund attempt while the durable claim is active', async () => {
+    const { c } = client({ data: 'owner_refund_in_progress' });
+    await expect(checkOwnerRefundGate(c, BOUNTY, POSTER)).resolves.toMatchObject({
+      ok: false,
+      status: 409,
+      code: 'owner_refund_in_progress',
     });
   });
 

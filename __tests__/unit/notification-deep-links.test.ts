@@ -171,3 +171,22 @@ describe('resolveNotificationDeepLink: completion / rating_prompt', () => {
     expect(resolveNotificationDeepLink({ type: 'completion', data: { subtype: 'rating_prompt' } })).toEqual({ kind: 'none' });
   });
 });
+
+describe('payment notifications with direct destinations', () => {
+  test('opens payout setup and release-waiting destinations without the action sheet', () => {
+    expect(supportsActionSheet({ type: 'payout_setup_required', category: 'payments' })).toBe(false);
+    expect(supportsActionSheet({ type: 'release_waiting_on_hunter', category: 'payments' })).toBe(false);
+  });
+
+  test('resolves both notifications to their intended destinations', () => {
+    expect(resolveNotificationDeepLink({ type: 'payout_setup_required', category: 'payments' })).toEqual({
+      kind: 'route',
+      path: '/wallet/connect/embedded-onboarding',
+    });
+    expect(resolveNotificationDeepLink({
+      type: 'release_waiting_on_hunter',
+      category: 'payments',
+      data: { bountyId: 'abc-123' },
+    })).toEqual({ kind: 'route', path: '/postings/abc-123' });
+  });
+});

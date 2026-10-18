@@ -6,7 +6,8 @@
     "personas": "persona ids -- bounty-* come from qa/shoal/personas/bounty-personas.yaml, the rest are Shoal built-ins",
     "requiresAuth": "true when the scenario cannot get anywhere without a signed-in test account (BOUNTY_SHOAL_TEST_EMAIL / _PASSWORD are handed to the agent in the task text)",
     "oracle": "id of a server-side invariant check in qa/shoal/bin/oracle.mjs to run after the swarm -- agent observations are never sufficient proof for money or state",
-    "tags": "Bounty triage taxonomy applied to every finding this scenario produces"
+    "tags": "Bounty triage taxonomy applied to every finding this scenario produces",
+    "navigationHint": "optional; appended after the post-sign-in route instruction for requiresAuth scenarios whose route is not a top-level tab -- tells the agent how to reach it through the app UI, since agents have no address bar"
   },
   "scenarios": [
     {
@@ -845,6 +846,70 @@
         ]
       },
       "notes": "Trust re-audit 2026-10-02 (scenario 4). Seeded: in_progress \"[shoal] sNN Pick up dry cleaning...\" with a pending submission backdated 80 hours."
+    },
+    {
+      "id": "poster-first-hire",
+      "title": "Behavioral audit 2026-10-15 -- first-time poster decides on applicants from the notification landing",
+      "phase": 4,
+      "task": "You posted your first job on this app yesterday and you have never hired anyone through it. You just tapped a notification saying somebody applied, and it opened this screen. Decide, the way a careful first-time customer would, whether to hire one of the applicants. Before choosing, establish using only what the app shows you: how many people applied and which job each application is for; for each applicant, whether they are close enough to actually do an in-person job, whether they are verified, what work they have completed here and what others said about them; what you will pay, when you will be charged, and what happens to the money if they never show up; and how long you have to decide before the applications go away. If one applicant satisfies you, hire them and send them a message confirming the job. If none does, say exactly what was missing. Finish by listing each of those questions as ANSWERED (quote the on-screen text) or NOT ANSWERED. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs, treat them as real jobs. Your account is a disposable test account funded with test money, so you are authorised to hire or pay if that is the step in front of you. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-new-poster",
+        "bounty-skeptical-poster",
+        "careful-carl"
+      ],
+      "swarm": 3,
+      "maxSteps": 40,
+      "path": "/tabs/bounty-app?screen=messages&initialTab=requests",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:apply",
+          "funnel:trust",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux",
+          "area:supabase"
+        ]
+      },
+      "notes": "Behavioral audit 2026-10-15 (POST-01/POST-03). Starts on POSTER_REQUESTS_PATH, the landing of an application notification (lib/services/notification-deep-links.ts). Needs the per-slot seeded applied-to bounty. Pool posters hold 500 test units, so this exercises the Confirm & hire variant only; Pay & hire cannot run on web (Stripe is stubbed).",
+      "navigationHint": "Notification taps cannot be simulated here, so reach the same screen yourself: the bottom-left \"My Bounties\" tab, then its \"My Bounties\" section, where applications to your own jobs are listed."
+    },
+    {
+      "id": "hunter-notification-return",
+      "title": "Behavioral audit 2026-10-15 -- hunter returns from a nearby-bounty notification",
+      "phase": 4,
+      "task": "You were not using this app. A notification on your phone said a new job was posted near you, and you tapped it, which opened this screen. You have about two minutes. Decide whether this job is worth your time and, if it is, apply for it. Establish using only what the app shows you: what the job is, what it pays you after any fees, where it is and how far from you, when it has to be done, who posted it and whether they look legitimate, and whether the payment is already secured. Then apply if it is worth it, and find out what happens next: when you will hear back, how long the poster has to respond, and what you will be told if they never answer. If the screen you landed on was wrong, blank, slow, or made you hunt for the job, report that first -- that is the most important thing to report. Finish by listing each question as ANSWERED (quote the on-screen text) or NOT ANSWERED. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs, treat them as real jobs. Your account is a disposable test account. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-hunter",
+        "bounty-impatient-mobile",
+        "careful-carl"
+      ],
+      "swarm": 3,
+      "maxSteps": 30,
+      "path": "/bounty/2166eae2-b668-49ef-bf65-ca1617d52c74?source=notification",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:browse",
+          "funnel:apply",
+          "funnel:trust"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux",
+          "area:web"
+        ]
+      },
+      "notes": "Behavioral audit 2026-10-15 (NOTIF-01/HUNT-01). Path is the bounty_nearby deep link (resolveNotificationDeepLink) to the open staging bounty 2166eae2 owned by the shared qa+shoal-poster account. If that bounty is closed, swap in another open [shoal] bounty that no hunter slot has applied to.",
+      "navigationHint": "A notification tap cannot be simulated here, so find the job yourself: it is titled \"[shoal] Help me move a couch 2026-09-04T13:43\" -- search for it or find it in the feed, then treat that screen as where the notification would have opened."
     }
   ]
 }
