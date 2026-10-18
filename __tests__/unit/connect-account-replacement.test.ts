@@ -55,7 +55,7 @@ function replacementHarness() {
   let saveFails = false;
   let operationActive = false;
   let walletRow: any = null;
-  let appUrl = 'https://bountyfinder.app';
+  let appUrl: string | undefined = 'https://bountyfinder.app';
   let handler: (request: Request) => Promise<Response>;
   const db: any = {
     auth: { getUser: jest.fn(async () => ({ data: { user: { id: 'user' } } })) },
@@ -147,7 +147,7 @@ function replacementHarness() {
   return {
     db, stripe, profile, replacement,
     failSave: (value: boolean) => { saveFails = value; },
-    setAppUrl: (value: string) => { appUrl = value; },
+    setAppUrl: (value: string | undefined) => { appUrl = value; },
     request: (body: unknown = { replacementId: replacement.id }, token = 'test-session', route = 'replace-account') =>
       handler(new Request('https://test.example/connect/' + route, {
         method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -552,5 +552,30 @@ describe('replacement blocker reasons', () => {
       expect(blockerMigration).toContain(`USING HINT = '${hint}'`);
     }
     expect(blockerMigration).toMatch(/REVOKE ALL ON FUNCTION public\.assert_connect_replacement_safe\(uuid, text\) FROM PUBLIC, anon, authenticated/);
+  });
+});
+
+describe('replacement account-link callback URLs', () => {
+  test.each([
+    ['a deep-link scheme', 'bountyexpo-workspace://'],
+    ['plain http', 'http://bountyfinder.app'],
+    ['unset', undefined],
+  ])('falls back to the HTTPS universal-link base when APP_URL is %s', async (_label, value) => {
+    const h = replacementHarness();
+    h.setAppUrl(value);
+    expect((await h.request()).status).toBe(200);
+    expect(h.stripe.accountLinks.create).toHaveBeenCalledWith(expect.objectContaining({
+      refresh_url: 'https://bountyfinder.app/wallet/connect/refresh?replacementId=replacement',
+      return_url: 'https://bountyfinder.app/wallet/connect/return',
+    }));
+  });
+
+  test('a trailing slash on an HTTPS APP_URL does not double the path separator', async () => {
+    const h = replacementHarness();
+    h.setAppUrl('https://staging.example/');
+    expect((await h.request()).status).toBe(200);
+    expect(h.stripe.accountLinks.create).toHaveBeenCalledWith(expect.objectContaining({
+      return_url: 'https://staging.example/wallet/connect/return',
+    }));
   });
 });

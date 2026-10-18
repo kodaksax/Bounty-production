@@ -689,6 +689,8 @@ async function rethrowIfAccountGone(stripe: Stripe, accountId: string, err: unkn
   throw err;
 }
 
+const CONNECT_LINK_BASE_URL = 'https://bountyfinder.app';
+
 /** User copy for assert_connect_replacement_safe refusals, keyed by its HINT. */
 const REPLACEMENT_BLOCKED_COPY: Record<string, string> = {
   operation_in_progress:
@@ -1582,12 +1584,16 @@ Deno.serve(async (req: Request) => {
   const userId = user.id;
 
   try {
-    const configuredAppUrl = Deno.env.get('APP_URL');
-    if (!configuredAppUrl && Deno.env.get('APP_ENV') === 'production') {
-      console.error('[connect] APP_URL is required in production');
-      return jsonResponse({ error: 'Connect return URLs are not configured' }, 500);
+    // Account-link callbacks must be HTTPS (Stripe rejects anything else in
+    // live mode) and must be the universal links the app handles, so default
+    // to the same base as CONNECT_RETURN_URL in lib/config/app.ts and only let
+    // an HTTPS APP_URL override it. A non-HTTPS APP_URL in prod broke every
+    // account replacement at link creation, after the swap had completed.
+    const configuredAppUrl = Deno.env.get('APP_URL')?.trim().replace(/\/+$/, '');
+    if (configuredAppUrl && !configuredAppUrl.startsWith('https://')) {
+      console.error('[connect] ignoring non-HTTPS APP_URL for Connect account links');
     }
-    const appUrl = configuredAppUrl ?? 'http://localhost:8081';
+    const appUrl = configuredAppUrl?.startsWith('https://') ? configuredAppUrl : CONNECT_LINK_BASE_URL;
 
     // Prepare freezes financial operations but does not unlink anything.
     // A lost prepare response is recovered by returning the pending row.
