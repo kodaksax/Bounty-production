@@ -46,8 +46,8 @@ export async function processTargetingOutbox(options: {
       .select('taxonomy_version, task_id, term_id, importance').eq('bounty_id', bountyId)
     if (requirementsError) throw new Error('Targeting requirements lookup failed')
     if (requirements?.length) {
-      const versions = new Set(requirements.map((term: any) => term.taxonomy_version))
-      const tasks = new Set(requirements.map((term: any) => term.task_id))
+      const versions = new Set<number>(requirements.map((term: any) => term.taxonomy_version))
+      const tasks = new Set<string>(requirements.map((term: any) => term.task_id))
       if (versions.size !== 1 || tasks.size !== 1) throw new Error('Targeting requirements are inconsistent')
       const { data: declarations, error: capabilitiesError } = recipients.length
         ? await admin.from('hunter_capabilities')

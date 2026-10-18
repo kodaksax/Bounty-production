@@ -1,4 +1,4 @@
-import type { BountyRequirementsInput, HunterCapability } from '../capabilities';
+import type { BountyRequirementsInput, HunterCapability } from '../capabilities.ts';
 
 export interface HunterQualification {
   eligible: boolean;
