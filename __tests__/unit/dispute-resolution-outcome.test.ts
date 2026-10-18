@@ -207,6 +207,24 @@ describe('resolveDisputeWithOutcome', () => {
     expect(outcome.settlement.status).toBe('already_settled');
   });
 
+  it('does not describe a canceled authorization as a refund', async () => {
+    mockTables(OPEN_DISPUTE);
+    bountyService.getById.mockResolvedValue(STRIPE_BOUNTY);
+    bountyPaymentsService.cancelBountyPayment.mockResolvedValue({
+      canceled: true,
+      status: 'canceled',
+    });
+
+    const outcome = await disputeService.resolveDisputeWithOutcome('19', 'Refund', 'poster');
+
+    expect(outcome.settlement.status).toBe('canceled');
+    expect(outcome.settlement.detail).toMatch(/before capture/i);
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'send_system_notification',
+      expect.objectContaining({ p_body: expect.stringContaining('Funds refunded') })
+    );
+  });
+
   it('directs uncertain Stripe errors to reconciliation rather than retry', async () => {
     mockTables(OPEN_DISPUTE);
     bountyService.getById.mockResolvedValue(STRIPE_BOUNTY);

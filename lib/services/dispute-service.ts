@@ -155,6 +155,7 @@ export type DisputeReasonCode =
  *  - released / refunded: money moved in this call
  *  - already_settled:     a release or refund was already on the ledger
  *  - pending_confirmation: Stripe accepted a transfer request, awaiting webhook confirmation
+ *  - canceled:            an uncaptured payment authorization was canceled
  *  - nothing_held:        no escrow record to move (check Transactions)
  *  - not_applicable:      no winner, or an honor / unpaid bounty
  *  - failed:              a confirmed rejection; no money moved
@@ -165,6 +166,7 @@ export type DisputeSettlementStatus =
   | 'refunded'
   | 'already_settled'
   | 'pending_confirmation'
+  | 'canceled'
   | 'nothing_held'
   | 'not_applicable'
   | 'unknown'
@@ -281,6 +283,19 @@ async function settleDisputeEscrow(
       }
       try {
         const result = await bountyPaymentsService.cancelBountyPayment(bountyId);
+        const status = result.status.toLowerCase();
+        if (status === 'canceled') {
+          return {
+            status: 'canceled',
+            detail: 'The payment authorization was canceled before capture; no refund was needed.',
+          };
+        }
+        if (status !== 'refunded') {
+          return {
+            status: 'unknown',
+            detail: `The payment service returned an unconfirmed cancellation status (${status || 'unknown'}). Contact support for reconciliation; do not retry.`,
+          };
+        }
         if (result.reused) return { status: 'already_settled' };
         await analyticsService.trackEvent('escrow_refunded', {
           bountyId,

@@ -309,7 +309,7 @@ Deno.serve(async (req: Request) => {
   // required `reason`, exactly like updateStatus.
   if (action === 'updateRole') {
     const { id, role, reason } = body;
-    if (!id) {
+    if (!id || typeof id !== 'string') {
       return jsonResponse({ error: 'id is required' }, 400);
     }
     if (role !== 'admin' && role !== 'user') {
@@ -318,7 +318,7 @@ Deno.serve(async (req: Request) => {
     if (!reason || !reason.trim()) {
       return jsonResponse({ error: 'reason is required' }, 400);
     }
-    if (id === adminUser.id) {
+    if (id.toLowerCase() === adminUser.id.toLowerCase()) {
       return jsonResponse({ error: 'You cannot change your own role' }, 400);
     }
 

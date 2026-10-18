@@ -48,6 +48,11 @@ function describeSettlement(
         title: 'Awaiting Stripe confirmation',
         message: settlement.detail ?? 'The transfer was requested but is not confirmed yet. Wait for Stripe confirmation before taking another action.',
       };
+    case 'canceled':
+      return {
+        title: 'Payment authorization canceled',
+        message: settlement.detail ?? 'The payment authorization was canceled before capture; no refund was needed.',
+      };
     case 'not_applicable':
       return { title: 'Resolved', message: 'There was no escrow to settle for this bounty.' };
     case 'nothing_held':
