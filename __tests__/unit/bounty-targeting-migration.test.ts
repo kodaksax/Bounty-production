@@ -17,6 +17,8 @@ describe('bounty targeting migration regressions', () => {
     }
     expect(sql).toContain('FROM PUBLIC, anon, authenticated')
     expect(sql).not.toContain('TO authenticated')
+    expect(sql).toContain("CHECK (path IN ('escalation', 'radius', 'zip', 'service_area', 'targeting'))")
+    expect(sql).toContain('CREATE TABLE public.bounty_targeting_outbox_attempts')
   })
 
   it('imports the latest queued bypass exposure into the rolling cap, including existing ledger pairs', () => {
@@ -54,6 +56,9 @@ describe('bounty targeting migration regressions', () => {
     const modeLock = dispatcher.indexOf("hashtextextended('bounty-targeting-mode:'")
     expect(globalLock).toBeGreaterThanOrEqual(0)
     expect(globalLock).toBeLessThan(scorer.indexOf("hashtextextended('bounty-targeting-score:'"))
+    expect(sql).toContain('RENAME TO fn_escalate_stale_bounty_liquidity_unlocked')
+    expect(sql).toContain('ORDER BY b.id\n  FOR UPDATE')
+    expect(sql).toContain("PERFORM pg_advisory_xact_lock(hashtextextended('bounty-targeting-global', 0))")
     expect(dispatcherGlobalLock).toBeGreaterThanOrEqual(0)
     expect(dispatcherGlobalLock).toBeLessThan(modeLock)
     expect(bountyLock).toBeGreaterThan(0)
@@ -106,11 +111,15 @@ describe('bounty targeting migration regressions', () => {
     expect(sql).toContain("AND state = 'processing' AND claim_id = p_claim_id")
     expect(sql).toContain("SET state = 'unknown'")
     expect(sql).toContain("IF v_status = 'sent' THEN RETURN true; END IF")
+    expect(sql).toContain('INSERT INTO public.bounty_targeting_outbox_attempts (outbox_id, attempt_id)')
+    expect(sql).toContain('ON CONFLICT DO NOTHING')
+    expect(sql).toContain('attempts = attempts + 1')
     const claimFunction = sql.slice(sql.indexOf('CREATE FUNCTION public.fn_claim_bounty_targeting_delivery'),
       sql.indexOf('CREATE FUNCTION public.fn_ack_bounty_targeting_delivery'))
     expect(claimFunction).toContain('FROM public.notifications_outbox')
     expect(claimFunction).toContain('FOR UPDATE')
     expect(claimFunction).toContain("IF NOT FOUND OR v_status = 'sent' THEN RETURN false; END IF")
+    expect(claimFunction).toContain('attempt_id = p_attempt_id')
   })
 
   // In-memory specification of the SQL contract above; these are not live SQL

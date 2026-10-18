@@ -54,8 +54,14 @@ function EnabledCapabilityEditor() {
       loadGenerationRef.current += 1;
     };
   }, []);
+  const activePairs = new Set(catalog?.links
+    .filter(link => catalog.tasks.some(task => task.id === link.task_id)
+      && catalog.terms.some(term => term.id === link.term_id))
+    .map(link => `${link.task_id}:${link.term_id}`) ?? []);
+  const retiredDeclarations = declarations.filter(item => !activePairs.has(`${item.task_id}:${item.term_id}`));
   const save = async () => {
-    if (!mountedRef.current || requiresReload || requiresReconfirmation || !catalog) return;
+    if (!mountedRef.current || requiresReload || requiresReconfirmation || !catalog
+      || retiredDeclarations.length > 0) return;
     setSaving(true);
     setMessage('');
     try {
@@ -87,6 +93,14 @@ function EnabledCapabilityEditor() {
           setRequiresReconfirmation(false);
           setMessage('Prior-version declarations will be replaced only when you save these reviewed selections.');
         })}
+        {retiredDeclarations.length > 0 && <View>
+          <Text style={{ color: theme.textSecondary }}>Remove inactive capabilities before saving:</Text>
+          {retiredDeclarations.map(item => button(
+            `Remove inactive capability: ${item.task_id} / ${item.term_id}`,
+            () => setDeclarations(current => current.filter(declaration =>
+              declaration.task_id !== item.task_id || declaration.term_id !== item.term_id)),
+          ))}
+        </View>}
         {catalog.tasks.map(task => <View key={task.id} style={{ marginTop: 12 }}>
           <Text style={{ color: theme.text }}>{task.label}</Text>
           {catalog.links.filter(link => link.task_id === task.id).map(link => {
@@ -111,7 +125,7 @@ function EnabledCapabilityEditor() {
           })}
         </View>)}
         {button(saving ? 'Saving capabilities…' : 'Save self-reported capabilities', () => { void save(); },
-          false, requiresReload || requiresReconfirmation)}
+          false, requiresReload || requiresReconfirmation || retiredDeclarations.length > 0)}
       </>}
     </View>
   );

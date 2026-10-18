@@ -24,6 +24,10 @@ function fixture() {
   const prune = jest.fn()
   const events: { event: string; distinct_id: string; properties: Record<string, unknown> }[] = []
   const errors: Record<string, any> = {}
+  const attemptIds = new Set<string>()
+  const finalizedAttempts = new Set<string>()
+  let outboxStatus = 'pending'
+  let finishCount = 0
   let allowed = true
   let quiet = false
   let qualificationMatchingEnabled = false
@@ -48,6 +52,7 @@ function fixture() {
       const key = `${args.p_hunter_id}:${args.p_channel}`
       const entry = states.get(key)!
       if (name === 'fn_claim_bounty_targeting_delivery') {
+        attemptIds.add(args.p_attempt_id)
         const claimed = ['pending', 'failed'].includes(entry.state)
         if (claimed) states.set(key, { state: 'processing', claim: args.p_claim_id })
         return { data: claimed, error: null }
@@ -58,7 +63,16 @@ function fixture() {
         return { data: owns, error: null }
       }
       if (name === 'fn_finish_bounty_targeting_outbox') {
-        return { data: [...states.values()].every(s => !['pending', 'failed', 'processing'].includes(s.state)), error: null }
+        if (outboxStatus === 'sent') return { data: true, error: null }
+        const retry = [...states.values()].some(s => ['pending', 'failed', 'processing'].includes(s.state))
+        if ([...states.values()].some(s => s.state === 'processing')) return { data: false, error: null }
+        const unfinalized = new Set([...attemptIds, args.p_attempt_id])
+        const newAttempts = [...unfinalized].filter(id => !finalizedAttempts.has(id))
+        if (newAttempts.length === 0) return { data: false, error: null }
+        newAttempts.forEach(id => finalizedAttempts.add(id))
+        finishCount += 1
+        outboxStatus = retry ? 'failed' : 'sent'
+        return { data: !retry, error: null }
       }
       throw new Error(`Unexpected RPC ${name}`)
     }),
@@ -76,7 +90,11 @@ function fixture() {
     invalidTokens: extractInvalidTokens,
     emitEvent: event => events.push(event),
   })
+  const finish = (attemptId: string) => admin.rpc('fn_finish_bounty_targeting_outbox', {
+    p_outbox_id: row.id, p_attempt_id: attemptId,
+  })
   return { run, states, tables, errors, fetcher, insert, admin, prune, events,
+    attemptIds, finish, getFinishCount: () => finishCount, getOutboxStatus: () => outboxStatus,
     setAllowed: (value: boolean) => { allowed = value },
     setQuiet: (value: boolean) => { quiet = value },
     setQualificationMatchingEnabled: (value: boolean) => { qualificationMatchingEnabled = value },
@@ -95,9 +113,34 @@ describe('new bounty-nearby durable delivery claims', () => {
     await Promise.all([f.run(), f.run()])
     expect(f.fetcher).toHaveBeenCalledTimes(2)
     expect(f.insert).toHaveBeenCalledTimes(2)
+    expect(f.getFinishCount()).toBe(1)
     await f.run()
     expect(f.fetcher).toHaveBeenCalledTimes(2)
     expect(f.insert).toHaveBeenCalledTimes(2)
+  })
+
+  it('counts concurrent finalizers for a failed outbox only once per attempt', async () => {
+    const f = fixture()
+    f.fetcher.mockResolvedValueOnce({
+      ok: false, status: 429, json: async () => ({ errors: [{ code: 'TOO_MANY_REQUESTS' }] }),
+    } as Response)
+    await f.run()
+    expect(f.states.get('hunter-a:push')?.state).toBe('failed')
+    const attemptId = [...f.attemptIds][0]
+    const count = f.getFinishCount()
+    await Promise.all([f.finish(attemptId), f.finish(attemptId)])
+    expect(f.getFinishCount()).toBe(count)
+    expect(f.getOutboxStatus()).toBe('failed')
+  })
+
+  it('keeps concurrent finalization of an already-sent outbox idempotent', async () => {
+    const f = fixture()
+    await f.run()
+    const attemptId = [...f.attemptIds][0]
+    const count = f.getFinishCount()
+    const results = await Promise.all([f.finish(attemptId), f.finish(attemptId)])
+    expect(results).toEqual([{ data: true, error: null }, { data: true, error: null }])
+    expect(f.getFinishCount()).toBe(count)
   })
 
   it('retries only explicitly rejected recipients, not accepted pushes or in-app entries', async () => {

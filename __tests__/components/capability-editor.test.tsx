@@ -124,6 +124,19 @@ it('does not silently reinterpret persisted declarations from an older taxonomy 
     { task_id: 'organize_items', term_id: 'organization' },
   ], 1));
 });
+it('shows inactive declarations and requires their explicit removal before saving', async () => {
+  (capabilityService.mine as jest.Mock).mockResolvedValue([{
+    taxonomy_version: 1, task_id: 'organize_items', term_id: 'retired_term', provenance: 'self_reported',
+  }]);
+  const view = render(<CapabilityEditor />);
+  const removeLabel = 'Remove inactive capability: organize_items / retired_term';
+  await waitFor(() => expect(view.getByText(removeLabel)).toBeTruthy());
+  await act(async () => fireEvent.press(view.getByText('Save self-reported capabilities')));
+  expect(capabilityService.save).not.toHaveBeenCalled();
+  fireEvent.press(view.getByText(removeLabel));
+  await act(async () => fireEvent.press(view.getByText('Save self-reported capabilities')));
+  await waitFor(() => expect(capabilityService.save).toHaveBeenCalledWith([], 1));
+});
 it('requires catalog reload after a stale-version rejection before retrying a write', async () => {
   (capabilityService.save as jest.Mock).mockRejectedValue(new Error('The task catalog changed. Reload capabilities and review your selections before saving.'));
   const view = render(<CapabilityEditor />);

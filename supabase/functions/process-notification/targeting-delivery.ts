@@ -25,6 +25,7 @@ export async function processTargetingOutbox(options: {
   serviceRoleKey: string
   fetcher: typeof fetch
   newClaimId: () => string
+  attemptId?: string
   isValidToken: (token: unknown) => boolean
   isQuiet: (start: number | null, end: number | null, timezone: string | null) => boolean
   invalidTokens: (tokens: string[], response: unknown) => string[]
@@ -103,6 +104,7 @@ export async function processTargetingOutbox(options: {
   const applicantIds = new Set((requests ?? []).map((r: any) => r.hunter_id))
   const prefMap = new Map<string, boolean>((preferences ?? []).map((p: any) => [`${p.user_id}:${p.channel}`, p.enabled]))
   let acceptedPushRecipients = 0
+  const attemptId = options.attemptId ?? options.newClaimId()
 
   for (const hunterId of recipients) {
     const qualification = qualificationResults.get(hunterId)
@@ -127,7 +129,10 @@ export async function processTargetingOutbox(options: {
     const eligible = candidateEligible && qualification?.eligible !== false
     for (const channel of ['in_app', 'push', 'email'] as Channel[]) {
       const claimId = options.newClaimId()
-      const args = { p_outbox_id: row.id, p_hunter_id: hunterId, p_channel: channel, p_claim_id: claimId }
+      const args = {
+        p_outbox_id: row.id, p_hunter_id: hunterId, p_channel: channel,
+        p_claim_id: claimId, p_attempt_id: attemptId,
+      }
       const { data: claimed, error: claimError } = await admin.rpc('fn_claim_bounty_targeting_delivery', args)
       if (claimError) throw new Error('Targeting channel claim failed')
       if (claimed !== true) continue
@@ -266,7 +271,9 @@ export async function processTargetingOutbox(options: {
       }
     }
   }
-  const { data: finished, error: finishError } = await admin.rpc('fn_finish_bounty_targeting_outbox', { p_outbox_id: row.id })
+  const { data: finished, error: finishError } = await admin.rpc('fn_finish_bounty_targeting_outbox', {
+    p_outbox_id: row.id, p_attempt_id: attemptId,
+  })
   if (finishError) throw new Error('Targeting outbox finalization failed')
   return { ok: finished === true, acceptedPushRecipients }
 }

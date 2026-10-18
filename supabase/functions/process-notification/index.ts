@@ -337,6 +337,7 @@ Deno.serve(async (req: Request) => {
   let outboxId: string | null = null
   let outboxAttempts = 0
   let targetingOutbox = false
+  let targetingAttemptId: string | null = null
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
@@ -405,10 +406,12 @@ Deno.serve(async (req: Request) => {
     targetingOutbox = isTargetingOutbox(rows)
     if (targetingOutbox) {
       const events: { event: string; distinct_id: string; properties: Record<string, unknown> }[] = []
+      targetingAttemptId = crypto.randomUUID()
       try {
         const result = await processTargetingOutbox({
           admin: supabaseAdmin, row: rows, recipients, supabaseUrl, serviceRoleKey,
           fetcher: fetch, newClaimId: () => crypto.randomUUID(),
+          attemptId: targetingAttemptId,
           isValidToken: isValidExpoPushToken, isQuiet: isInQuietHours,
           qualificationMatchingEnabled: Deno.env.get('QUALIFIED_BOUNTY_TARGETING_ENABLED') === 'true',
           invalidTokens: extractInvalidTokens, emitEvent: event => events.push(event),
@@ -990,7 +993,11 @@ Deno.serve(async (req: Request) => {
     if (supabaseAdmin && outboxId) {
       try {
         if (targetingOutbox) {
-          await supabaseAdmin.rpc('fn_finish_bounty_targeting_outbox', { p_outbox_id: outboxId })
+          if (targetingAttemptId) {
+            await supabaseAdmin.rpc('fn_finish_bounty_targeting_outbox', {
+              p_outbox_id: outboxId, p_attempt_id: targetingAttemptId,
+            })
+          }
           return jsonResponse({ error: String(error) }, 500)
         }
         const { error: markFailedErr } = await supabaseAdmin

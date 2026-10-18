@@ -1,5 +1,45 @@
 BEGIN;
 
+ALTER FUNCTION public.fn_escalate_stale_bounty_liquidity()
+  RENAME TO fn_escalate_stale_bounty_liquidity_unlocked;
+CREATE FUNCTION public.fn_escalate_stale_bounty_liquidity()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  PERFORM b.id
+  FROM public.bounties b
+  WHERE b.status = 'open'
+    AND b.liquidity_stage BETWEEN 1 AND 2
+    AND NOT COALESCE(b.is_test, false)
+    AND NOT EXISTS (SELECT 1 FROM public.bounty_requests br WHERE br.bounty_id = b.id)
+    AND (
+      (b.liquidity_stage = 1
+        AND b.created_at < now() - interval '2 hours'
+        AND (b.liquidity_last_escalated_at IS NULL
+          OR b.liquidity_last_escalated_at < now() - interval '2 hours'))
+      OR
+      (b.liquidity_stage = 2
+        AND b.liquidity_last_escalated_at IS NOT NULL
+        AND b.liquidity_last_escalated_at < now() - interval '12 hours')
+    )
+  ORDER BY b.id
+  FOR UPDATE;
+  PERFORM public.fn_escalate_stale_bounty_liquidity_unlocked();
+END;
+$$;
+REVOKE ALL ON FUNCTION public.fn_escalate_stale_bounty_liquidity_unlocked()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.fn_escalate_stale_bounty_liquidity()
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_escalate_stale_bounty_liquidity() TO service_role;
+
+ALTER TABLE public.bounty_distribution_decisions
+  DROP CONSTRAINT IF EXISTS bounty_distribution_decisions_path_check;
+ALTER TABLE public.bounty_distribution_decisions
+  ADD CONSTRAINT bounty_distribution_decisions_path_check
+  CHECK (path IN ('escalation', 'radius', 'zip', 'service_area', 'targeting'));
+
 -- Server-controlled opt-in. Legacy keeps source-specific geographic selection;
 -- both modes use the same safety ledger, scorer, reach limit and hourly cap.
 CREATE TABLE public.bounty_targeting_config (
@@ -30,18 +70,28 @@ CREATE TABLE public.bounty_targeting_deliveries (
   state text NOT NULL DEFAULT 'pending'
     CHECK (state IN ('pending', 'processing', 'accepted', 'suppressed', 'failed', 'unknown')),
   claim_id uuid,
+  attempt_id uuid,
   attempted_at timestamptz,
   last_error text,
   PRIMARY KEY (outbox_id, hunter_id, channel)
 );
 
+CREATE TABLE public.bounty_targeting_outbox_attempts (
+  outbox_id uuid NOT NULL REFERENCES public.notifications_outbox(id) ON DELETE CASCADE,
+  attempt_id uuid NOT NULL,
+  finished_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (outbox_id, attempt_id)
+);
+
 ALTER TABLE public.bounty_targeting_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bounty_targeting_dispatches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bounty_targeting_deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bounty_targeting_outbox_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.bounty_targeting_config, public.bounty_targeting_dispatches,
-  public.bounty_targeting_deliveries FROM PUBLIC, anon, authenticated;
+  public.bounty_targeting_deliveries, public.bounty_targeting_outbox_attempts
+  FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.bounty_targeting_config, public.bounty_targeting_dispatches,
-  public.bounty_targeting_deliveries TO service_role;
+  public.bounty_targeting_deliveries, public.bounty_targeting_outbox_attempts TO service_role;
 
 -- Import the old ZIP/service-area bypass into the dedup ledger. Never replay old
 -- outbox rows or manufacture delivery acknowledgements.
@@ -297,7 +347,7 @@ END;
 $$;
 
 CREATE FUNCTION public.fn_claim_bounty_targeting_delivery(
-  p_outbox_id uuid, p_hunter_id uuid, p_channel text, p_claim_id uuid
+  p_outbox_id uuid, p_hunter_id uuid, p_channel text, p_claim_id uuid, p_attempt_id uuid
 )
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
@@ -308,7 +358,9 @@ BEGIN
       AND data->>'targeting_version' = '1' FOR UPDATE;
   IF NOT FOUND OR v_status = 'sent' THEN RETURN false; END IF;
   UPDATE public.bounty_targeting_deliveries
-    SET state = 'processing', claim_id = p_claim_id, attempted_at = clock_timestamp(), last_error = NULL
+    SET state = 'processing', claim_id = p_claim_id, attempt_id = p_attempt_id,
+      attempted_at = clock_timestamp(),
+      last_error = NULL
     WHERE outbox_id = p_outbox_id AND hunter_id = p_hunter_id AND channel = p_channel
       AND state IN ('pending', 'failed');
   RETURN FOUND;
@@ -340,12 +392,14 @@ $$;
 
 -- No lease stealing: a crashed provider request has an UNKNOWN outcome. Retrying
 -- it could duplicate a push. Known rejections/pre-send failures may be retried.
-CREATE FUNCTION public.fn_finish_bounty_targeting_outbox(p_outbox_id uuid)
+CREATE FUNCTION public.fn_finish_bounty_targeting_outbox(p_outbox_id uuid, p_attempt_id uuid)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_retry boolean;
   v_status text;
+  v_attempts_recorded integer := 0;
 BEGIN
+  IF p_attempt_id IS NULL THEN RAISE EXCEPTION 'Targeting attempt ID is required'; END IF;
   SELECT status INTO v_status FROM public.notifications_outbox
     WHERE id = p_outbox_id AND data->>'type' = 'bounty_nearby'
       AND data->>'targeting_version' = '1' FOR UPDATE;
@@ -357,6 +411,14 @@ BEGIN
       AND attempted_at < clock_timestamp() - interval '5 minutes';
   IF EXISTS (SELECT 1 FROM public.bounty_targeting_deliveries
     WHERE outbox_id = p_outbox_id AND state = 'processing') THEN RETURN false; END IF;
+  INSERT INTO public.bounty_targeting_outbox_attempts (outbox_id, attempt_id)
+    SELECT p_outbox_id, p_attempt_id
+    UNION
+    SELECT outbox_id, attempt_id FROM public.bounty_targeting_deliveries
+      WHERE outbox_id = p_outbox_id AND attempt_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  GET DIAGNOSTICS v_attempts_recorded = ROW_COUNT;
+  IF v_attempts_recorded = 0 THEN RETURN false; END IF;
   SELECT EXISTS (SELECT 1 FROM public.bounty_targeting_deliveries
     WHERE outbox_id = p_outbox_id AND state IN ('pending', 'failed')) INTO v_retry;
   UPDATE public.notifications_outbox
@@ -375,13 +437,13 @@ REVOKE ALL ON FUNCTION public.fn_score_and_dispatch_bounty_notification(uuid, uu
   public.fn_dispatch_bounty_targeting(uuid, text),
   public.fn_notify_zip_matched_bounty(), public.fn_notify_radius_matched_bounty(),
   public.fn_notify_service_area_matched_bounty(),
-  public.fn_claim_bounty_targeting_delivery(uuid, uuid, text, uuid),
+  public.fn_claim_bounty_targeting_delivery(uuid, uuid, text, uuid, uuid),
   public.fn_ack_bounty_targeting_delivery(uuid, uuid, text, uuid, text, text),
-  public.fn_finish_bounty_targeting_outbox(uuid) FROM PUBLIC, anon, authenticated;
+  public.fn_finish_bounty_targeting_outbox(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_score_and_dispatch_bounty_notification(uuid, uuid[], smallint, text, text, jsonb),
   public.fn_dispatch_bounty_targeting(uuid, text),
-  public.fn_claim_bounty_targeting_delivery(uuid, uuid, text, uuid),
+  public.fn_claim_bounty_targeting_delivery(uuid, uuid, text, uuid, uuid),
   public.fn_ack_bounty_targeting_delivery(uuid, uuid, text, uuid, text, text),
-  public.fn_finish_bounty_targeting_outbox(uuid) TO service_role;
+  public.fn_finish_bounty_targeting_outbox(uuid, uuid) TO service_role;
 NOTIFY pgrst, 'reload schema';
 COMMIT;

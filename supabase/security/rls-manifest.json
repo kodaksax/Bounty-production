@@ -40,6 +40,10 @@
       "policies": [],
       "grants": { "anon": [], "authenticated": [] }
     },
+    "bounty_targeting_outbox_attempts": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] }
+    },
     "bounty_hunter_notifications": {
       "policies": [],
       "grants": { "anon": [], "authenticated": [] }
@@ -429,9 +433,9 @@
     { "signature": "fn_notify_zip_matched_bounty()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_notify_radius_matched_bounty()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_notify_service_area_matched_bounty()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
-    { "signature": "fn_claim_bounty_targeting_delivery(uuid,uuid,text,uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_claim_bounty_targeting_delivery(uuid,uuid,text,uuid,uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_ack_bounty_targeting_delivery(uuid,uuid,text,uuid,text,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
-    { "signature": "fn_finish_bounty_targeting_outbox(uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_finish_bounty_targeting_outbox(uuid,uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "get_my_hunter_capabilities()", "forbid_execute": ["anon", "PUBLIC"] },
     { "signature": "set_my_hunter_capabilities(jsonb,integer)", "forbid_execute": ["anon", "PUBLIC"] },
     { "signature": "validate_bounty_requirements()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },

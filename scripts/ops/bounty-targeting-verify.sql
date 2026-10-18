@@ -93,6 +93,9 @@ DECLARE
   v_outbox uuid := gen_random_uuid();
   v_claim uuid := gen_random_uuid();
   v_other uuid := gen_random_uuid();
+  v_attempt uuid := gen_random_uuid();
+  v_retry_attempt uuid := gen_random_uuid();
+  v_interrupted_attempt uuid := gen_random_uuid();
   v_function text;
   v_attempts integer;
 BEGIN
@@ -103,13 +106,14 @@ BEGIN
     SELECT 1 FROM pg_class WHERE oid IN (
       'public.bounty_targeting_config'::regclass,
       'public.bounty_targeting_dispatches'::regclass,
-      'public.bounty_targeting_deliveries'::regclass
+      'public.bounty_targeting_deliveries'::regclass,
+      'public.bounty_targeting_outbox_attempts'::regclass
     ) AND NOT relrowsecurity
   ) THEN RAISE EXCEPTION 'Internal targeting tables require RLS'; END IF;
   IF has_table_privilege('authenticated', 'public.bounty_targeting_config', 'UPDATE')
     OR has_table_privilege('anon', 'public.bounty_targeting_deliveries', 'SELECT')
     OR has_function_privilege('authenticated',
-      'public.fn_claim_bounty_targeting_delivery(uuid,uuid,text,uuid)', 'EXECUTE')
+      'public.fn_claim_bounty_targeting_delivery(uuid,uuid,text,uuid,uuid)', 'EXECUTE')
     OR has_function_privilege('anon',
       'public.fn_dispatch_bounty_targeting(uuid,text)', 'EXECUTE')
   THEN RAISE EXCEPTION 'Targeting control/claims must be service-only'; END IF;
@@ -149,26 +153,27 @@ BEGIN
     '{"type":"bounty_nearby","targeting_version":1}'::jsonb);
   INSERT INTO public.bounty_targeting_deliveries (outbox_id, hunter_id, channel)
     VALUES (v_outbox, v_hunter, 'push');
-  IF NOT public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_claim)
-    OR public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_other)
+  IF NOT public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_claim, v_attempt)
+    OR public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_other, v_attempt)
   THEN RAISE EXCEPTION 'Only one worker may hold a channel claim'; END IF;
   IF public.fn_ack_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_other, 'accepted')
   THEN RAISE EXCEPTION 'Acknowledgement requires the owning claim'; END IF;
   IF NOT public.fn_ack_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_claim, 'failed')
-    OR NOT public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_other)
+    OR NOT public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_other, v_retry_attempt)
     OR NOT public.fn_ack_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_other, 'accepted')
-    OR public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_claim)
+    OR public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_claim, v_retry_attempt)
   THEN RAISE EXCEPTION 'Only known failures may retry; accepted recipients never resend'; END IF;
 
   UPDATE public.bounty_targeting_deliveries
-    SET state = 'processing', claim_id = v_claim, attempted_at = now() - interval '6 minutes'
+    SET state = 'processing', claim_id = v_claim, attempt_id = v_interrupted_attempt,
+      attempted_at = now() - interval '6 minutes'
     WHERE outbox_id = v_outbox;
-  PERFORM public.fn_finish_bounty_targeting_outbox(v_outbox);
+  PERFORM public.fn_finish_bounty_targeting_outbox(v_outbox, v_interrupted_attempt);
   IF (SELECT state FROM public.bounty_targeting_deliveries WHERE outbox_id = v_outbox) <> 'unknown'
-    OR public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_other)
+    OR public.fn_claim_bounty_targeting_delivery(v_outbox, v_hunter, 'push', v_other, v_retry_attempt)
   THEN RAISE EXCEPTION 'Interrupted/unknown outcomes must never be automatically resent'; END IF;
   SELECT attempts INTO v_attempts FROM public.notifications_outbox WHERE id = v_outbox;
-  IF NOT public.fn_finish_bounty_targeting_outbox(v_outbox)
+  IF NOT public.fn_finish_bounty_targeting_outbox(v_outbox, v_interrupted_attempt)
     OR (SELECT attempts FROM public.notifications_outbox WHERE id = v_outbox) <> v_attempts
   THEN RAISE EXCEPTION 'Late concurrent finalizers must not increment a terminal outbox attempt count'; END IF;
   RAISE NOTICE 'PASS: targeting RLS, geography guards, claim ownership, retry and unknown outcomes';

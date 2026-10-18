@@ -81,9 +81,9 @@ describe('qualification security manifest', () => {
   it.each([
     'fn_score_and_dispatch_bounty_notification(uuid,uuid[],smallint,text,text,jsonb)',
     'fn_dispatch_bounty_targeting(uuid,text)',
-    'fn_claim_bounty_targeting_delivery(uuid,uuid,text,uuid)',
+    'fn_claim_bounty_targeting_delivery(uuid,uuid,text,uuid,uuid)',
     'fn_ack_bounty_targeting_delivery(uuid,uuid,text,uuid,text,text)',
-    'fn_finish_bounty_targeting_outbox(uuid)',
+    'fn_finish_bounty_targeting_outbox(uuid,uuid)',
     'validate_bounty_requirements()',
     'project_bounty_requirements()',
     'lock_bounty_requirements_for_application()',
