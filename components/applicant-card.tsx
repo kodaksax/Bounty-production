@@ -315,6 +315,29 @@ export const ApplicantCard = memo(function ApplicantCard({
           </View>
         )}
 
+        {request.qualification && (
+          <View style={s.skillsSection}>
+            <Text style={s.skillsLabel}>Structured task fit · self-reported</Text>
+            {request.qualification.matchedTerms.length > 0 && (
+              <View style={s.skillsRow}>
+                {request.qualification.matchedTerms.map(term => (
+                  <View key={`${term.importance}:${term.label}`} style={s.skillChip}>
+                    <Text style={s.skillChipText}>
+                      {term.label} · {term.importance}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {request.qualification.missingRequiredTerms.length > 0 && (
+              <Text style={s.qualificationNote}>
+                Required terms not declared: {request.qualification.missingRequiredTerms.join(', ')}
+              </Text>
+            )}
+            <Text style={s.qualificationNote}>Declarations are not independently verified credentials.</Text>
+          </View>
+        )}
+
         {/* Application pitch — the strongest pre-hire capability signal
             available, so it gets prominent placement rather than being
             buried under bounty details the poster already knows. */}
@@ -530,6 +553,12 @@ function makeStyles(t: AppTheme) {
       color: t.text,
       fontSize: 12,
       fontWeight: '500',
+    },
+    qualificationNote: {
+      color: t.textSecondary,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 5,
     },
     pitchSection: {
       flexDirection: 'row',

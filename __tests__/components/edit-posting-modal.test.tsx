@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { EditPostingModal } from '../../components/edit-posting-modal';
 import { Bounty } from '../../lib/services/database.types';
+jest.mock('../../hooks/useBountyExactLocation', () => ({ useBountyExactLocation: () => ({ exact: null }) }));
 
 // Mock dependencies
 jest.mock('react-native-safe-area-context', () => ({

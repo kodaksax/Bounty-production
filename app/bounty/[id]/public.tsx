@@ -44,6 +44,7 @@ import { IdRequirementModal } from '../../../components/id-requirement-modal';
 import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
 import { formatPostedAgo } from '../../../lib/utils/format-relative-date';
 import { BountyTrustSignals } from '../../../components/bounty-trust-signals';
+import { BountyRequirementsSummary } from '../../../components/bounty-requirements-summary';
 
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
@@ -536,6 +537,7 @@ export default function PublicBountyDetail() {
           <View style={s.detailsCard}>
             <Text style={s.sectionTitle}>Description</Text>
             <Text style={s.description}>{bounty.description}</Text>
+            <BountyRequirementsSummary value={bounty.requirements_payload} />
             
             <View style={s.infoGrid}>
               {formatPublicLocation(bounty) ? (

@@ -1,4 +1,5 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
+import { requirementsFingerprint, validateRequirements } from '../../lib/capabilities';
 import { analyticsService } from 'lib/services/analytics-service';
 import { bountyService as baseBountyService } from 'lib/services/bounty-service';
 import type { Bounty } from 'lib/services/database.types';
@@ -134,6 +135,7 @@ function computeDraftFingerprint(posterId: string, draft: BountyDraft): string {
     normalize(draft.timeline),
     normalize(draft.skills),
     normalize(draft.category),
+    requirementsFingerprint(draft.requirements),
     normalize(draft.scheduleType),
     normalize(draft.startDate),
     normalize(draft.endDate),
@@ -199,6 +201,7 @@ export const bountyService = {
     });
 
     try {
+      if (draft.requirements !== undefined) validateRequirements(draft.requirements);
       // Title validation guard — reject empty or too-short titles before any DB work
       const titleError = validateTitle(draft.title);
       if (titleError) {
@@ -235,6 +238,7 @@ export const bountyService = {
         neighborhood: draft.workType === 'in_person' ? draft.neighborhood || undefined : undefined,
         work_type: draft.workType,
         category: draft.category || undefined,
+        ...(draft.requirements !== undefined ? { requirements_payload: draft.requirements } : {}),
         trust_tier: draft.trustTier || 'standard',
         requires_id_verified: !!draft.requiresIdVerified,
         timeline: draft.timeline || '',
@@ -274,6 +278,7 @@ export const bountyService = {
           await analyticsService.trackEvent('bounty_queued', { hasAttachments: (draft.attachments?.length || 0) > 0 });
         } catch (e) {
           console.error('Failed to enqueue bounty for offline processing:', e);
+          if (draft.requirements !== undefined) throw e;
         }
 
         // Return optimistic temp bounty so UI can proceed
@@ -447,6 +452,7 @@ export const bountyService = {
       unit: isInPerson ? draft.unit || null : null,
       neighborhood: isInPerson ? draft.neighborhood || null : null,
       work_type: draft.workType,
+      ...(draft.requirements !== undefined ? { category: draft.category, requirements_payload: draft.requirements } : {}),
       timeline: draft.timeline || '',
       skills_required: draft.skills || '',
       schedule_type: draft.scheduleType ?? null,

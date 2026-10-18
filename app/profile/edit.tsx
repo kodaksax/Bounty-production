@@ -1,4 +1,5 @@
 import { sanitizeErrorMessage } from '../../lib/utils/error-messages';
+import { CapabilityEditor } from '../../components/capability-editor';
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuthProfile } from "hooks/useAuthProfile";
@@ -603,6 +604,7 @@ export default function EditProfileScreen() {
 
           <View style={styles.fieldGroup}>
             <Text style={styles.sectionTitle}>Skills & Expertise</Text>
+            <CapabilityEditor />
 
             <View style={[styles.fieldContainer, focusedField === 'skillsets' && styles.fieldContainerFocused]}>
               <Text style={styles.label}>Skillsets</Text>

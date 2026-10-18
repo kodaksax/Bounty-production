@@ -38,6 +38,11 @@ export type Bounty = {
   // 'design', 'writing', 'labor', 'delivery', 'other'). See
   // lib/constants/bounty-categories.ts for the canonical list.
   category?: string;
+  requirements_payload?: import('../capabilities').BountyRequirementsInput | null;
+  requirements_taxonomy_version?: number | null;
+  requirements_revision?: number;
+  requirements_confirmed_at?: string | null;
+  requirements_provenance?: 'poster_declared' | null;
   // Bounty-level trust requirement system — see lib/utils/trust-tier.ts and
   // supabase/migrations/*_bounty_trust_tier.sql. 'standard' means no elevated
   // risk was detected/declared; requires_id_verified is enforced server-side

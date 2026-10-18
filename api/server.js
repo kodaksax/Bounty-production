@@ -17,6 +17,7 @@ const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
+const { rejectUnsupportedRequirements } = require('./lib/ordinary-requirements');
 
 // Notification message helpers
 const { createMessages: createExpoMessages } = require('./lib/notificationMessage');
@@ -371,6 +372,24 @@ const authRateLimiter = rateLimit({
       message: 'Too many authentication attempts. Please try again in 15 minutes.',
       code: 'RATE_LIMIT_EXCEEDED',
       retryAfter: retryAfterSeconds
+    });
+  }
+});
+
+// Rate limiting for bounty create/update endpoints
+// Bounds write volume per IP without affecting normal posting/editing
+const bountyWriteRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60, // Limit each IP to 60 bounty writes per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`[RateLimit] Bounty write rate limit exceeded for IP: ${req.ip}`);
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Too many bounty updates. Please try again later.',
+      code: 'RATE_LIMIT_EXCEEDED',
+      retryAfter: 15 * 60
     });
   }
 });
@@ -737,7 +756,7 @@ app.get('/api/bounties/:id', async (req, res) => {
 });
 
 // Create new bounty
-app.post('/api/bounties', async (req, res) => {
+app.post('/api/bounties', bountyWriteRateLimiter, rejectUnsupportedRequirements, async (req, res) => {
   let conn;
   try {
     conn = await connect();
@@ -843,7 +862,7 @@ app.post('/api/bounties', async (req, res) => {
 });
 
 // Relay: Insert bounty into Supabase (service role)
-app.post('/api/supabase/bounties', async (req, res) => {
+app.post('/api/supabase/bounties', bountyWriteRateLimiter, rejectUnsupportedRequirements, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(500).json({ error: 'Supabase admin not configured' });
   }
@@ -940,7 +959,7 @@ app.post('/api/supabase/bounties', async (req, res) => {
 })
 
 // Update bounty
-app.patch('/api/bounties/:id', async (req, res) => {
+app.patch('/api/bounties/:id', bountyWriteRateLimiter, rejectUnsupportedRequirements, async (req, res) => {
   let conn;
   try {
     conn = await connect();

@@ -349,4 +349,24 @@ describe('bountyRequestService (unit)', () => {
       message: 'insufficient_funds_for_escrow',
     })
   })
+
+  test('getAll propagates lookup failures when requested', async () => {
+    const error = { code: '08006', message: 'database unavailable' }
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: jest.fn(), warning: jest.fn(), info: jest.fn() },
+    }))
+    jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow: jest.fn() } }))
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: makeRpcNotFoundMock(),
+        from: jest.fn(() => makeChainBuilder({ data: null, error })),
+      },
+    }))
+
+    const svc = require('../../lib/services/bounty-request-service').bountyRequestService
+
+    await expect(svc.getAll({ bountyId: 'b1', status: 'pending', throwOnError: true }))
+      .rejects.toMatchObject(error)
+  })
 })

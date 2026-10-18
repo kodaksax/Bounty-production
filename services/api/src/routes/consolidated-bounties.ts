@@ -28,6 +28,7 @@ import {
 } from '../services/idempotency-service';
 import redisService, { cacheInvalidation, CacheKeyPrefix } from '../services/redis-service';
 import { toJsonSchema } from '../utils/zod-json';
+import { rejectUnsupportedRequirements } from '../utils/ordinary-requirements';
 
 /**
  * Generate a normalized cache key for bounty list queries
@@ -447,6 +448,7 @@ export async function registerConsolidatedBountyRoutes(
   fastify.post(
     '/api/bounties',
     {
+      preValidation: rejectUnsupportedRequirements,
       preHandler: authMiddleware,
       schema: {
         tags: ['bounties'],
@@ -671,6 +673,7 @@ export async function registerConsolidatedBountyRoutes(
   fastify.patch(
     '/api/bounties/:id',
     {
+      preValidation: rejectUnsupportedRequirements,
       preHandler: authMiddleware,
       schema: {
         tags: ['bounties'],

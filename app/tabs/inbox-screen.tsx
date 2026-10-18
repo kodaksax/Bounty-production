@@ -1,6 +1,7 @@
 "use client"
 
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
+import { saveStructuredBountyEdit } from '../../lib/services/bounty-requirements-service';
 import { MaterialIcons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
@@ -350,6 +351,14 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   }, [bountiesWithPendingRequestsSet])
 
   const handleSaveEdit = async (updates: Partial<Bounty>) => {
+    if (updates.requirements_payload !== undefined) {
+      if (!editingBounty) throw new Error('No posting selected')
+      const updated = await saveStructuredBountyEdit(editingBounty.id, updates)
+      setMyBounties((prev) => prev.map((b) => (b.id === editingBounty.id ? updated : b)))
+      setShowEditModal(false)
+      setEditingBounty(null)
+      return
+    }
     if (!editingBounty) return
 
     try {

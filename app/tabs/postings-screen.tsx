@@ -1,6 +1,7 @@
 "use client"
 
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
+import { saveStructuredBountyEdit } from '../../lib/services/bounty-requirements-service';
 import { MaterialIcons } from "@expo/vector-icons"
 // DateTimePicker removed from inline usage; dedicated screen handles picking
 import { CreateBountyFlow } from "app/screens/CreateBounty"
@@ -578,6 +579,14 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   }, [bountiesWithPendingRequestsSet])
 
   const handleSaveEdit = async (updates: Partial<Bounty>) => {
+    if (updates.requirements_payload !== undefined) {
+      if (!editingBounty) throw new Error('No posting selected')
+      const updated = await saveStructuredBountyEdit(editingBounty.id, updates)
+      setMyBounties((prev) => prev.map((b) => (b.id === editingBounty.id ? updated : b)))
+      setShowEditModal(false)
+      setEditingBounty(null)
+      return
+    }
     if (!editingBounty) return
 
     try {

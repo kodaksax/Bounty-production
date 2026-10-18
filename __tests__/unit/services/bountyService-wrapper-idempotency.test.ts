@@ -90,6 +90,14 @@ const makeDraft = (overrides: Partial<BountyDraft> = {}): BountyDraft => ({
 });
 
 describe('bountyService.createBounty (wrapper idempotency)', () => {
+  it('includes requirements in the atomic creation payload and idempotency fingerprint', async () => {
+    baseBountyService.create.mockResolvedValue(makeBounty());
+    const requirements = { taxonomy_version: 1, task_id: 'spreadsheet_cleanup', terms: [{ term_id: 'spreadsheet_editing', importance: 'preferred' as const }] };
+    await bountyService.createBounty(makeDraft({ requirements }));
+    expect(baseBountyService.create.mock.calls[0][0].requirements_payload).toEqual(requirements);
+    await bountyService.createBounty(makeDraft({ requirements: { ...requirements, terms: [] } }));
+    expect(baseBountyService.create).toHaveBeenCalledTimes(2);
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     __resetIdempotencyCacheForTests();

@@ -76,3 +76,4 @@ describe('EditPostingModal posting policy', () => {
     );
   });
 });
+jest.mock('../../hooks/useBountyExactLocation', () => ({ useBountyExactLocation: () => ({ exact: null }) }));

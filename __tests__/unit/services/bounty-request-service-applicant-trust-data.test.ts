@@ -136,4 +136,62 @@ describe('bountyRequestService.getAllWithDetails — applicant trust data', () =
     expect(result[0].profile.hunterCompleted).toBe(0);
     expect(result[0].profile.averageRating).toBeNull();
   });
+
+  test('loads structured applicant explanations through the owner-scoped batch RPC', async () => {
+    mockCommonDeps();
+    jest.doMock('../../../lib/feature-flags', () => ({
+      ...jest.requireActual('../../../lib/feature-flags'),
+      HUNTER_CAPABILITIES_ENABLED: true,
+    }));
+
+    const requestsChain = makeChainBuilder({
+      data: [{ id: 'r1', bounty_id: 'b1', hunter_id: 'h1', status: 'pending' }],
+      error: null,
+    });
+    const bountiesChain = makeChainBuilder({
+      data: [{ id: 'b1', title: 'Organize household items', category: 'labor' }],
+      error: null,
+    });
+    const profilesChain = makeChainBuilder({
+      data: [{ id: 'h1', username: 'alice', skills: [] }],
+      error: null,
+    });
+    const rpcMock = jest.fn(async (name: string) => ({
+      data: name === 'get_bounty_applicant_qualification'
+        ? [{
+            bounty_id: 'b1', hunter_id: 'h1', eligible: true, score: 1,
+            matched_terms: [{ label: 'Organization', importance: 'required', provenance: 'self_reported' }],
+            missing_required_terms: [],
+          }]
+        : [],
+      error: null,
+    }));
+
+    jest.doMock('../../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: rpcMock,
+        from: jest.fn((table: string) => {
+          if (table === 'bounty_requests') return requestsChain;
+          if (table === 'bounties') return bountiesChain;
+          if (table === 'public_profiles') return profilesChain;
+          return makeChainBuilder({ data: [], error: null });
+        }),
+      },
+    }));
+
+    const { bountyRequestService } = require('../../../lib/services/bounty-request-service');
+    const result = await bountyRequestService.getAllWithDetailsBatch(['b1'], { status: 'pending' });
+
+    expect(rpcMock).toHaveBeenCalledWith('get_bounty_applicant_qualification', {
+      p_bounty_ids: ['b1'],
+      p_hunter_ids: ['h1'],
+    });
+    expect(result[0].qualification).toEqual({
+      eligible: true,
+      score: 1,
+      matchedTerms: [{ label: 'Organization', importance: 'required', provenance: 'self_reported' }],
+      missingRequiredTerms: [],
+    });
+  });
 });
