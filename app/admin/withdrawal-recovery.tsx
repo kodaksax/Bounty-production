@@ -14,7 +14,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import type { AppTheme } from '../../lib/themes/types';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +28,7 @@ import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { supabase } from '../../lib/supabase';
 import { KeyboardAwareScrollView } from '../../components/ui/keyboard-avoiding';
+import { v4 as uuidv4 } from 'uuid';
 
 interface AdminActionLogEntry {
   id: string;
@@ -69,6 +70,10 @@ export default function AdminWithdrawalRecoveryScreen() {
   const [adjustReason, setAdjustReason] = useState('');
   const [adjustRelatedTx, setAdjustRelatedTx] = useState('');
   const [adjusting, setAdjusting] = useState(false);
+  // One idempotency key per intended adjustment. Re-submitting the same
+  // user/amount/reason (e.g. after a timeout) reuses it, so the server replays
+  // instead of crediting twice; editing any field starts a new one.
+  const adjustmentKeyRef = useRef<{ fingerprint: string; key: string } | null>(null);
 
   const [settleTransactionId, setSettleTransactionId] = useState('');
   const [settleReason, setSettleReason] = useState('');
@@ -158,6 +163,10 @@ export default function AdminWithdrawalRecoveryScreen() {
           style: 'destructive',
           onPress: async () => {
             setAdjusting(true);
+            const fingerprint = [adjustUserId.trim(), amountNum, adjustReason.trim(), adjustRelatedTx.trim()].join('|');
+            if (adjustmentKeyRef.current?.fingerprint !== fingerprint) {
+              adjustmentKeyRef.current = { fingerprint, key: `admin-adj-${uuidv4()}` };
+            }
             try {
               const data = await callAdminWithdrawals({
                 action: 'manual_adjustment',
@@ -165,15 +174,27 @@ export default function AdminWithdrawalRecoveryScreen() {
                 amount: amountNum,
                 reason: adjustReason.trim(),
                 relatedTransactionId: adjustRelatedTx.trim() || undefined,
+                idempotencyKey: adjustmentKeyRef.current.key,
               });
-              Alert.alert('Adjustment applied', `New balance: $${Number(data.newBalance).toFixed(2)}`);
+              adjustmentKeyRef.current = null;
+              const balance = `$${Number(data.newBalance).toFixed(2)}`;
+              Alert.alert(
+                data.replayed ? 'Already applied' : 'Adjustment applied',
+                data.replayed
+                  ? `This adjustment was already recorded, so it was not applied again. Balance: ${balance}`
+                  : `New balance: ${balance}`
+              );
               setAdjustUserId('');
               setAdjustAmount('');
               setAdjustReason('');
               setAdjustRelatedTx('');
               loadLog();
             } catch (err) {
-              Alert.alert('Adjustment failed', err instanceof Error ? err.message : 'Unknown error');
+              // The key is kept on purpose: retrying this same adjustment is safe.
+              Alert.alert(
+                'Adjustment not applied',
+                `${err instanceof Error ? err.message : 'Unknown error'}\n\nIf the request timed out it may still have gone through. Retrying this same adjustment is safe: it will not be applied twice.`
+              );
             } finally {
               setAdjusting(false);
             }
