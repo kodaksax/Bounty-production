@@ -10,6 +10,8 @@ name: Shoal swarm QA
 # The runner itself refuses to start against production (qa/shoal/bin/lib/env.mjs): it
 # inspects the served bundle and rejects the production Supabase ref or a live Stripe key.
 # The secrets below must therefore only ever hold staging/development values.
+# SHOAL_STAGING_DATABASE_URL falls back to STAGING_DATABASE_URL (the same staging
+# database the RLS check reads) so the suite runs without a duplicate secret.
 
 on:
   workflow_dispatch:
@@ -100,7 +102,7 @@ jobs:
           node qa/shoal/bin/seed.mjs accounts --env staging
           node qa/shoal/bin/seed.mjs bounty --env staging
         env:
-          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL || secrets.STAGING_DATABASE_URL }}
           BOUNTY_SHOAL_SERVICE_ROLE_KEY: ${{ secrets.SHOAL_STAGING_SERVICE_ROLE_KEY }}
           BOUNTY_SHOAL_TEST_EMAIL: ${{ secrets.SHOAL_TEST_EMAIL }}
           BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
@@ -118,7 +120,7 @@ jobs:
           BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
           BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
           BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
-          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL || secrets.STAGING_DATABASE_URL }}
 
       - name: Upload artifacts
         if: always()
@@ -197,7 +199,7 @@ jobs:
       - name: Seed staging test accounts
         run: node qa/shoal/bin/seed.mjs accounts --env staging
         env:
-          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL || secrets.STAGING_DATABASE_URL }}
           BOUNTY_SHOAL_SERVICE_ROLE_KEY: ${{ secrets.SHOAL_STAGING_SERVICE_ROLE_KEY }}
           BOUNTY_SHOAL_TEST_EMAIL: ${{ secrets.SHOAL_TEST_EMAIL }}
           BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
@@ -212,7 +214,7 @@ jobs:
           BOUNTY_SHOAL_TEST_PASSWORD: ${{ secrets.SHOAL_TEST_PASSWORD }}
           BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
           BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
-          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL || secrets.STAGING_DATABASE_URL }}
 
       - name: Upload artifacts
         if: always()
@@ -249,7 +251,7 @@ jobs:
           node qa/shoal/bin/oracle.mjs seed-race --env staging \
             --out seed.json --poster-id "$BOUNTY_SHOAL_POSTER_ID"
         env:
-          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL || secrets.STAGING_DATABASE_URL }}
           BOUNTY_SHOAL_POSTER_ID: ${{ secrets.SHOAL_POSTER_ID }}
       - name: Race
         run: |
@@ -259,7 +261,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.SHOAL_ANTHROPIC_API_KEY }}
           BOUNTY_SHOAL_HUNTER_EMAIL: ${{ secrets.SHOAL_HUNTER_EMAIL }}
           BOUNTY_SHOAL_HUNTER_PASSWORD: ${{ secrets.SHOAL_HUNTER_PASSWORD }}
-          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL }}
+          BOUNTY_SHOAL_DATABASE_URL: ${{ secrets.SHOAL_STAGING_DATABASE_URL || secrets.STAGING_DATABASE_URL }}
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4

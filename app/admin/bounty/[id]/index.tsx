@@ -190,7 +190,13 @@ export default function AdminBountyDetailScreen() {
           );
           return;
         }
-        const updated = await adminDataClient.updateBountyStatus(bounty.id, next);
+        const label =
+          STATUS_TRANSITIONS[bounty.status]?.find((t) => t.status === next)?.label ?? next;
+        const updated = await adminDataClient.updateBountyStatus(
+          bounty.id,
+          next,
+          `Admin console: ${label} (${bounty.status} -> ${next})`
+        );
         setBounty(updated);
         Alert.alert('Status updated', `This bounty is now "${next.replace(/_/g, ' ')}".`);
       } catch (err) {
@@ -215,7 +221,7 @@ export default function AdminBountyDetailScreen() {
       if (!bounty) return;
       const escrowNote = transition.settlesEscrow
         ? "This cancels the bounty AND refunds the full escrowed amount to the poster's wallet. This moves real money and cannot be undone here."
-        : `This changes the bounty's lifecycle state to "${transition.status.replace(/_/g, ' ')}". It does not move any money — escrow, releases and refunds are handled on the Transactions and Disputes screens.`;
+        : `This changes the bounty's lifecycle state to "${transition.status.replace(/_/g, ' ')}". It does not move any money, so it is refused while the bounty still holds escrow: settle that first through the cancellation approval or the dispute.`;
       Alert.alert(
         transition.destructive ? `${transition.label}?` : 'Change status',
         transition.destructive

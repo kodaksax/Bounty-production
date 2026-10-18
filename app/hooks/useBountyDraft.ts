@@ -24,6 +24,7 @@ export async function clearBountyDraftForUser(userId?: string): Promise<void> {
 export interface BountyDraft {
   title: string;
   category?: string;
+  requirements?: import('../../lib/capabilities').BountyRequirementsInput | null;
   description: string;
   amount: number;
   isForHonor: boolean;

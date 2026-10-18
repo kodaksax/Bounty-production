@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { BountyRequirementsEditor } from '../../../../components/bounty-requirements-editor';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -154,6 +155,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
     onUpdate({
       title: template.title,
       category: template.category,
+      requirements: undefined,
       amount: template.amount,
       isForHonor: false,
     });
@@ -254,6 +256,8 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
         </View>
 
         {/* Templates */}
+        <BountyRequirementsEditor category={draft.category} value={draft.requirements}
+          onChange={(category, requirements) => onUpdate({ category, requirements })} />
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>Or start from a popular one</Text>
           <InfoTooltip

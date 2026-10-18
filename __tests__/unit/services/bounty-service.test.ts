@@ -36,6 +36,14 @@ const { wsAdapter } = require('../../../lib/services/websocket-adapter');
 const { logger } = require('../../../lib/utils/error-logger');
 
 describe('bountyService', () => {
+  it('does not select undeployed structured columns with the shared rollout flag off', () => {
+    const { FEED_SAFE_BOUNTY_COLUMNS } = require('../../../lib/services/bounty-service');
+    expect(FEED_SAFE_BOUNTY_COLUMNS).not.toContain('requirements_payload');
+    expect(FEED_SAFE_BOUNTY_COLUMNS).not.toContain('requirements_taxonomy_version');
+    expect(FEED_SAFE_BOUNTY_COLUMNS).not.toContain('requirements_revision');
+    expect(FEED_SAFE_BOUNTY_COLUMNS).not.toContain('requirements_confirmed_at');
+    expect(FEED_SAFE_BOUNTY_COLUMNS).not.toContain('requirements_provenance');
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     if (supabase && supabase.from && typeof supabase.from.mockReset === 'function') {
@@ -159,6 +167,41 @@ describe('bountyService', () => {
   it('create throws when title validation fails', async () => {
     (validateTitle as jest.Mock).mockReturnValue('Title too short');
     await expect(bountyService.create({ title: 'sh' })).rejects.toThrow('Title too short');
+  });
+  it('never strips requested requirements or uses relay on a missing column', async () => {
+    (validateTitle as jest.Mock).mockReturnValue(null);
+    (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: true });
+    const payload = { taxonomy_version: 1, task_id: 'organize_items', terms: [] };
+    const insert = jest.fn(() => ({
+      select: jest.fn(() => ({
+        single: jest.fn().mockResolvedValue({ data: null, error: { code: 'PGRST204', message: 'Could not find requirements_payload column in schema cache' } }),
+      })),
+    }));
+    supabase.from.mockReturnValue({ insert });
+    const fetchSpy = jest.spyOn(global, 'fetch');
+    try {
+      await expect(bountyService.create({ title: 'Organize household items', requirements_payload: payload })).rejects.toThrow('Task capabilities are unavailable');
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(insert.mock.calls[0][0].requirements_payload).toEqual(payload);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { fetchSpy.mockRestore(); }
+  });
+  it('surfaces frozen requirement edits instead of returning a false success', async () => {
+    const query: any = {
+      update: jest.fn(() => query), eq: jest.fn(() => query), select: jest.fn(() => query),
+      single: jest.fn().mockResolvedValue({ data: null, error: { message: 'requirements_frozen_after_application' } }),
+    };
+    supabase.from.mockReturnValue(query);
+    await expect(bountyService.update('bounty-1', { requirements_payload: null })).rejects.toThrow('Requirements cannot change');
+  });
+  it('queues the full structured payload, not a stripped ordinary bounty', async () => {
+    (validateTitle as jest.Mock).mockReturnValue(null);
+    (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: false });
+    const payload = { taxonomy_version: 1, task_id: 'organize_items', terms: [] };
+    await bountyService.create({ title: 'Organize household items', requirements_payload: payload });
+    expect(offlineQueueService.enqueue).toHaveBeenCalledWith('bounty', {
+      bounty: expect.objectContaining({ requirements_payload: payload }),
+    });
   });
 
   it('create queues bounty when offline', async () => {

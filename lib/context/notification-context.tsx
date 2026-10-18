@@ -194,14 +194,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Re-attempt token registration whenever the app comes to the foreground.
   // This covers two cases that the mount-time call misses:
   //   1. Session wasn't ready at mount → registerPushToken skipped silently
-  //   2. User enabled notifications in iOS Settings after denying at first prompt
+  //   2. User enabled notifications in Settings after denying at first prompt
+  // It only checks permission and never prompts: see requestPermissionsAndRegisterToken.
   useEffect(() => {
     let lastAppState = AppState.currentState;
 
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (lastAppState !== 'active' && nextState === 'active') {
         notificationService
-          .requestPermissionsAndRegisterToken()
+          .requestPermissionsAndRegisterToken({ prompt: false })
           .then(token => {
             if (__DEV__) {
               console.log(

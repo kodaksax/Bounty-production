@@ -19,7 +19,7 @@ import { BottomNav } from 'components/ui/bottom-nav'
 import { FloatingTabBar } from 'components/ui/floating-tab-bar'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ActivityIndicator, Animated, Keyboard, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, Animated, AppState, Keyboard, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -34,6 +34,7 @@ import { API_TIMEOUTS } from '../../lib/config/network'
 import { authProfileService } from '../../lib/services/auth-profile-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
+import { saveLastScreen } from '../../lib/storage/last-screen'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { useTopInsetOverlay } from '../../lib/context/TopInsetOverlayContext'
 
@@ -562,6 +563,25 @@ function BountyAppInner() {
       default: return null
     }
   }
+  // Remember the visible tab so a cold start can reopen it (see
+  // lib/storage/last-screen.ts and the root gate in app/index.tsx). Saved on
+  // every switch and again when the app leaves the foreground, so the
+  // restore window counts from when the user actually left.
+  const activeScreenRef = useRef(activeScreen)
+  activeScreenRef.current = activeScreen
+  useEffect(() => {
+    if (!currentUserId || activeScreen === 'admin') return
+    void saveLastScreen(currentUserId, activeScreen)
+  }, [activeScreen, currentUserId])
+  useEffect(() => {
+    if (!currentUserId) return
+    const sub = AppState.addEventListener('change', next => {
+      if ((next === 'background' || next === 'inactive') && activeScreenRef.current !== 'admin') {
+        void saveLastScreen(currentUserId, activeScreenRef.current)
+      }
+    })
+    return () => sub.remove()
+  }, [currentUserId])
 
   // Redirect unauthenticated users immediately — do not wait for AsyncStorage.
   if (!isLoading && !session) {

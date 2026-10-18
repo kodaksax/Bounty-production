@@ -1,4 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
+import { validateRequirements, requirementsFingerprint } from '../capabilities';
+import { CAPABILITY_UNAVAILABLE } from './capability-service';
+import { HUNTER_CAPABILITIES_ENABLED } from '../feature-flags';
 import type { Bounty, BountyStatus } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { validateContactInfo, validateTitle } from 'lib/utils/bounty-validation';
@@ -29,6 +32,8 @@ export const FEED_SAFE_BOUNTY_COLUMNS = [
   'schedule_type', 'start_date', 'end_date', 'latest_arrival_time', 'duration_minutes',
   'conditional_end_note', 'expiry_notified_at', 'zip_code', 'payment_architecture_version',
   'approx_latitude', 'approx_longitude', 'neighborhood', 'is_test',
+  ...(HUNTER_CAPABILITIES_ENABLED ? ['requirements_payload', 'requirements_taxonomy_version', 'requirements_provenance',
+    'requirements_revision', 'requirements_confirmed_at'] : []),
 ].join(', ');
 
 // Statuses a hunter can meaningfully browse. Used as the fallback when a search
@@ -826,6 +831,10 @@ export const bountyService = {
    */
   async create(bounty: Omit<Bounty, 'id' | 'created_at'>): Promise<Bounty | null> {
     try {
+      if (bounty.requirements_payload !== undefined) {
+        validateRequirements(bounty.requirements_payload);
+        if (!isSupabaseConfigured) throw new Error(CAPABILITY_UNAVAILABLE);
+      }
       // Title validation guard — reject empty or too-short titles before any DB work
       const titleError = validateTitle(bounty.title);
       if (titleError) {
@@ -974,6 +983,7 @@ export const bountyService = {
         if (!error) {
           return (data as unknown as Bounty) ?? null;
         }
+        if (bounty.requirements_payload !== undefined) throw requirementsError(error);
         // If direct insert failed, decide whether to fallback to relay or bubble up
         {
           const msg = typeof error.message === 'string' ? error.message : String(error);
@@ -1062,6 +1072,10 @@ export const bountyService = {
     updates: Partial<Omit<Bounty, 'id' | 'created_at'>>
   ): Promise<Bounty | null> {
     try {
+      if (updates.requirements_payload !== undefined) {
+        validateRequirements(updates.requirements_payload);
+        if (!isSupabaseConfigured) throw new Error(CAPABILITY_UNAVAILABLE);
+      }
       // Defensive: ensure id is present and not null/undefined/empty
       if (id === null || id === undefined || id === '') {
         const err = new Error('Invalid bounty id provided to bountyService.update');
@@ -1077,7 +1091,7 @@ export const bountyService = {
           .select('*')
           .single();
 
-        if (error) throw error;
+        if (error) throw updates.requirements_payload !== undefined ? requirementsError(error) : error;
         return (data as unknown as Bounty) ?? null;
       }
 
@@ -1126,6 +1140,7 @@ export const bountyService = {
         updates,
         error: richError,
       });
+      if (updates.requirements_payload !== undefined) throw err;
       return null;
     }
   },
@@ -1309,6 +1324,10 @@ export const bountyService = {
   async processQueuedBounty(bounty: Omit<Bounty, 'id' | 'created_at'>): Promise<Bounty | null> {
     // Use direct create logic without offline queueing
     try {
+      if (bounty.requirements_payload !== undefined) {
+        validateRequirements(bounty.requirements_payload);
+        if (!isSupabaseConfigured) throw new Error(CAPABILITY_UNAVAILABLE);
+      }
       if (isSupabaseConfigured) {
         const posterId = (bounty as any).poster_id || (bounty as any).user_id;
         const title = typeof (bounty as any).title === 'string' ? (bounty as any).title : undefined;
@@ -1324,7 +1343,8 @@ export const bountyService = {
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle();
-            if (existing) {
+            if (existing && requirementsFingerprint((existing as Bounty).requirements_payload) ===
+                requirementsFingerprint(bounty.requirements_payload)) {
               logger.warning('Skipped re-inserting queued bounty — an identical one from this poster was created within the last 10 minutes (likely a retry of an attempt whose response was lost)', {
                 posterId,
                 bountyId: (existing as any).id,
@@ -1347,6 +1367,7 @@ export const bountyService = {
         if (!error) {
           return (data as unknown as Bounty) ?? null;
         }
+        if (bounty.requirements_payload !== undefined) throw requirementsError(error);
 
         // Fallback to relay for RLS/permission errors
         const msg = typeof error.message === 'string' ? error.message : String(error);
@@ -1397,3 +1418,17 @@ export const bountyService = {
     }
   },
 };
+function requirementsError(error: { message?: string; code?: string }): Error {
+  const message = error.message || '';
+  if (message.includes('taxonomy_version_changed')) {
+    return new Error('The task catalog changed. Reload and review the task requirements before saving.');
+  }
+  if (message.includes('requirements_frozen_after_application')) {
+    return new Error('Requirements cannot change after an application or assignment.');
+  }
+  if (/schema cache|column .* does not exist|could not find.*column/i.test(message) ||
+      ['42703', 'PGRST204', '42P01'].includes(error.code || '')) {
+    return new Error(CAPABILITY_UNAVAILABLE);
+  }
+  return new Error(message || 'Unable to save ordinary task requirements');
+}

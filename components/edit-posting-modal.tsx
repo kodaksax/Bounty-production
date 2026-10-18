@@ -20,6 +20,8 @@ import { trustSafetyStrings } from "../lib/strings/trust-safety";
 import { validateContactInfo } from "../lib/utils/bounty-validation";
 import { detectOffPlatformRisk } from "../lib/utils/off-platform-risk";
 import { TrustSafetyNotice } from "./ui/trust-safety-notice";
+import { BountyRequirementsEditor } from './bounty-requirements-editor';
+import type { BountyRequirementsInput } from '../lib/capabilities';
 
 interface EditPostingModalProps {
   visible: boolean;
@@ -56,6 +58,9 @@ export function EditPostingModal({
     isForHonor: bounty.is_for_honor || false,
     location: initialLocation,
   });
+  const [requirements, setRequirements] = useState<BountyRequirementsInput | null | undefined>(bounty.requirements_payload);
+  const [category, setCategory] = useState(bounty.category || '');
+  const [requirementsChanged, setRequirementsChanged] = useState(false);
 
   // Sync state with props when bounty changes (e.g. when modal is reused)
   React.useEffect(() => {
@@ -68,6 +73,9 @@ export function EditPostingModal({
         location: initialLocation,
       });
       setError(null);
+      setRequirements(bounty.requirements_payload);
+      setCategory(bounty.category || '');
+      setRequirementsChanged(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on open/bounty change only
   }, [visible, bounty]);
@@ -116,6 +124,7 @@ export function EditPostingModal({
       setError(null);
 
       await onSave({
+        ...(requirementsChanged ? { category, requirements_payload: requirements } : {}),
         title: formData.title.trim(),
         description: formData.description.trim(),
         amount: formData.isForHonor ? 0 : formData.amount,
@@ -204,6 +213,10 @@ export function EditPostingModal({
               </View>
 
               {/* Description */}
+              <BountyRequirementsEditor category={category} value={requirements} disabled={isSubmitting}
+                onChange={(nextCategory, nextRequirements) => {
+                  setCategory(nextCategory); setRequirements(nextRequirements); setRequirementsChanged(true);
+                }} />
               <View style={styles.field}>
                 <Text style={styles.label}>Description *</Text>
                 <TextInput

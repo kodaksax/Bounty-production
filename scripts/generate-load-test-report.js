@@ -2,8 +2,10 @@
  * k6 Configuration - HTML Summary Reporter
  * 
  * This script generates an HTML summary report after load tests.
- * Can be used with any k6 test by adding: --out json=results.json
- * Then run: node scripts/generate-load-test-report.js results.json
+ * Run k6 with: --summary-export=summary.json
+ * Then run: node scripts/generate-load-test-report.js summary.json
+ * (`--out json=...` is a per-request NDJSON stream, not a summary, and is
+ * not accepted here.)
  */
 
 const fs = require('fs');
@@ -21,11 +23,19 @@ if (!fs.existsSync(resultFile)) {
   process.exit(1);
 }
 
-// Read the k6 JSON results
+// Read the k6 JSON summary
 const results = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
 
-// Extract metrics
-const metrics = results.metrics || {};
+// Accept both summary shapes: handleSummary data nests stats under `values`;
+// --summary-export puts them on the metric itself, names the median `med`,
+// and gives rate metrics a `value` instead of `rate`.
+const metrics = {};
+for (const [name, metric] of Object.entries(results.metrics || {})) {
+  const values = { ...(metric.values || metric) };
+  if (values.rate === undefined && 'passes' in values) values.rate = values.value;
+  if (values['p(50)'] === undefined && values.med !== undefined) values['p(50)'] = values.med;
+  metrics[name] = { values };
+}
 
 function formatDuration(ms) {
   if (ms < 1000) return `${ms.toFixed(2)}ms`;

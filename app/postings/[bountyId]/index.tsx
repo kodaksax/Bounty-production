@@ -23,6 +23,7 @@
  * redirected to the view that is actually theirs.
  */
 import { MaterialIcons } from '@expo/vector-icons';
+import { saveStructuredBountyEdit } from '../../../lib/services/bounty-requirements-service';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -169,6 +170,13 @@ export default function BountyDashboard() {
 
   const handleSaveEdit = useCallback(
     async (updates: Partial<Bounty>) => {
+      if (updates.requirements_payload !== undefined) {
+        if (!bounty) throw new Error('No posting selected');
+        await saveStructuredBountyEdit(bounty.id, updates);
+        setShowEditModal(false);
+        await refresh();
+        return;
+      }
       if (!bounty) return;
       // A hunter applying mid-edit must not have the terms changed underneath
       // them — the same guard the list screens apply, re-checked server-side

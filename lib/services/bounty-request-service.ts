@@ -1,6 +1,7 @@
 import { analyticsService } from 'lib/services/analytics-service';
 import { inferRoleFromFirstAction } from 'lib/services/role-inference-service';
 import type { Bounty, BountyRequest, Profile } from 'lib/services/database.types';
+import { HUNTER_CAPABILITIES_ENABLED } from '../feature-flags';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
 import { getApiBase } from 'lib/utils/dev-host';
@@ -9,7 +10,41 @@ import { logger } from 'lib/utils/error-logger';
 export type BountyRequestWithDetails = BountyRequest & {
   bounty: Bounty;
   profile: Profile;
+  qualification?: ApplicantQualificationSummary;
 };
+
+export interface ApplicantQualificationSummary {
+  eligible: boolean;
+  score: number;
+  matchedTerms: { label: string; importance: 'required' | 'preferred'; provenance: 'self_reported' }[];
+  missingRequiredTerms: string[];
+}
+
+async function fetchApplicantQualificationSummaries(
+  bountyIds: string[],
+  hunterIds: string[],
+): Promise<Map<string, ApplicantQualificationSummary>> {
+  const summaries = new Map<string, ApplicantQualificationSummary>();
+  if (!HUNTER_CAPABILITIES_ENABLED || !bountyIds.length || !hunterIds.length) return summaries;
+  try {
+    const { data, error } = await supabase.rpc('get_bounty_applicant_qualification', {
+      p_bounty_ids: bountyIds,
+      p_hunter_ids: hunterIds,
+    });
+    if (error) throw error;
+    for (const row of (data || []) as any[]) {
+      summaries.set(`${row.bounty_id}:${row.hunter_id}`, {
+        eligible: row.eligible === true,
+        score: Number(row.score) || 0,
+        matchedTerms: Array.isArray(row.matched_terms) ? row.matched_terms : [],
+        missingRequiredTerms: Array.isArray(row.missing_required_terms) ? row.missing_required_terms : [],
+      });
+    }
+  } catch (error) {
+    logger.warning('Failed to load applicant qualification summaries', { error });
+  }
+  return summaries;
+}
 
 // API Configuration
 // EXPO_PUBLIC_* vars are the only ones Metro inlines into the bundle. A bare
@@ -183,6 +218,7 @@ export const bountyRequestService = {
     status?: string;
     bountyId?: string | number;
     userId?: string;
+    throwOnError?: boolean;
   }): Promise<BountyRequest[]> {
     try {
       // Prefer Supabase when configured to keep UUID id types consistent with bounties
@@ -236,6 +272,7 @@ export const bountyRequestService = {
         error = { message: String(err) };
       }
       logger.error('Error fetching bounty requests', { options, error });
+      if (options?.throwOnError) throw err;
       return [];
     }
   },
@@ -298,7 +335,12 @@ export const bountyRequestService = {
           );
         }
 
-        const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }, profileStatsMap] =
+        const [
+          { data: bounties, error: bErr },
+          { data: profiles, error: pErr },
+          profileStatsMap,
+          qualificationMap,
+        ] =
           await Promise.all([
             bountyIds.length
               ? supabase.from('bounties').select('*').in('id', bountyIds)
@@ -326,6 +368,9 @@ export const bountyRequestService = {
                   .in('id', userIds)
               : Promise.resolve({ data: [], error: null } as any),
             fetchBatchedProfileStats(userIds),
+            options?.userId
+              ? Promise.resolve(new Map<string, ApplicantQualificationSummary>())
+              : fetchApplicantQualificationSummaries(bountyIds, userIds),
           ]);
         if (bErr) throw bErr;
         if (pErr) throw pErr;
@@ -340,9 +385,11 @@ export const bountyRequestService = {
         const result: BountyRequestWithDetails[] = requests.map(r => {
           const hunterId = String((r as any).hunter_id);
           const stats = profileStatsMap.get(hunterId);
+          const qualification = qualificationMap.get(`${String((r as any).bounty_id)}:${hunterId}`);
           return {
             ...(r as any),
             bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
+            ...(qualification ? { qualification } : {}),
             profile: {
               ...(profileMap.get(hunterId) as Profile),
               averageRating: stats?.averageRating ?? null,
@@ -441,7 +488,12 @@ export const bountyRequestService = {
           )
         );
 
-        const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }, profileStatsMap] =
+        const [
+          { data: bounties, error: bErr },
+          { data: profiles, error: pErr },
+          profileStatsMap,
+          qualificationMap,
+        ] =
           await Promise.all([
             bountyIdsSet.length
               ? supabase.from('bounties').select('*').in('id', bountyIdsSet)
@@ -462,6 +514,7 @@ export const bountyRequestService = {
                   .in('id', userIds)
               : Promise.resolve({ data: [], error: null } as any),
             fetchBatchedProfileStats(userIds),
+            fetchApplicantQualificationSummaries(bountyIdsSet, userIds),
           ]);
         if (bErr) throw bErr;
         if (pErr) throw pErr;
@@ -476,9 +529,11 @@ export const bountyRequestService = {
         const result: BountyRequestWithDetails[] = requests.map(r => {
           const hunterId = String((r as any).hunter_id);
           const stats = profileStatsMap.get(hunterId);
+          const qualification = qualificationMap.get(`${String((r as any).bounty_id)}:${hunterId}`);
           return {
             ...(r as any),
             bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
+            ...(qualification ? { qualification } : {}),
             profile: {
               ...(profileMap.get(hunterId) as Profile),
               averageRating: stats?.averageRating ?? null,

@@ -12,6 +12,7 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { webManageLink } from '../_shared/web-links.ts'
 import { createReplyContext, replyAddressFor, resolveReplyDomain } from '../_shared/reply-context.ts'
+import { isTargetingOutbox, processTargetingOutbox } from './targeting-delivery.ts'
 import {
   buildFallbackEmail,
   describeTicketError,
@@ -335,11 +336,18 @@ Deno.serve(async (req: Request) => {
   let supabaseAdmin: SupabaseClient | null = null
   let outboxId: string | null = null
   let outboxAttempts = 0
+  let targetingOutbox = false
+  let targetingAttemptId: string | null = null
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ error: 'Supabase Edge Function is not configured' }, 500)
+    // This worker sends on behalf of arbitrary recipients. Only the internal
+    // drain/webhook service credential may invoke processing (never user JWTs).
+    if (req.headers.get('authorization') !== ['Bearer', serviceRoleKey].join(' ')) {
+      return jsonResponse({ error: 'Unauthorized' }, 401)
+    }
 
     supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -395,6 +403,24 @@ Deno.serve(async (req: Request) => {
     if (rows.status === 'sent') return jsonResponse({ message: 'Already processed' })
 
     const recipients = normalizeRecipients(rows.recipients)
+    targetingOutbox = isTargetingOutbox(rows)
+    if (targetingOutbox) {
+      const events: { event: string; distinct_id: string; properties: Record<string, unknown> }[] = []
+      targetingAttemptId = crypto.randomUUID()
+      try {
+        const result = await processTargetingOutbox({
+          admin: supabaseAdmin, row: rows, recipients, supabaseUrl, serviceRoleKey,
+          fetcher: fetch, newClaimId: () => crypto.randomUUID(),
+          attemptId: targetingAttemptId,
+          isValidToken: isValidExpoPushToken, isQuiet: isInQuietHours,
+          qualificationMatchingEnabled: Deno.env.get('QUALIFIED_BOUNTY_TARGETING_ENABLED') === 'true',
+          invalidTokens: extractInvalidTokens, emitEvent: event => events.push(event),
+        })
+        return jsonResponse(result, result.ok ? 200 : 503)
+      } finally {
+        schedulePostHogCapture(events)
+      }
+    }
     if (recipients.length === 0) {
       // Mark as sent to avoid reprocessing
       await supabaseAdmin.from('notifications_outbox').update({ status: 'sent' }).eq('id', id)
@@ -966,6 +992,14 @@ Deno.serve(async (req: Request) => {
     // rather than leaving it stuck in 'pending' with no last_error.
     if (supabaseAdmin && outboxId) {
       try {
+        if (targetingOutbox) {
+          if (targetingAttemptId) {
+            await supabaseAdmin.rpc('fn_finish_bounty_targeting_outbox', {
+              p_outbox_id: outboxId, p_attempt_id: targetingAttemptId,
+            })
+          }
+          return jsonResponse({ error: String(error) }, 500)
+        }
         const { error: markFailedErr } = await supabaseAdmin
           .from('notifications_outbox')
           .update({ status: 'failed', last_error: String(error), attempts: outboxAttempts + 1 })
