@@ -42,6 +42,8 @@ import {
   hasNonzeroStripeBalance,
   isDefinitiveStripeRejection,
   isDefinitiveDatabaseRejection,
+  isConnectedAccountGoneError,
+  ConnectedAccountGoneError,
   AccountOperationBlockedError,
   withdrawalAccountMatches,
 } from '../_shared/connect-account-operations.ts';
@@ -616,6 +618,10 @@ function mapPlatformError(error: unknown): {
     error: 'Payout account is busy, has changed, or needs reconciliation. Resume or cancel pending replacement; if this persists, contact support before retrying.',
     code: error.code, status: 409, retryable: true,
   };
+  if (error instanceof ConnectedAccountGoneError) return {
+    error: RECOVERY_COPY_ACCOUNT_GONE,
+    code: 'connect_account_missing', status: 409, retryable: true,
+  };
   const type = (error as { type?: string })?.type ?? '';
 
   // Platform credential / permission problems. The hunter cannot fix these and
@@ -652,6 +658,39 @@ function mapPlatformError(error: unknown): {
     retryable: true,
   };
 }
+
+/**
+ * Retrieves a connected account, returning null when Stripe says it is gone.
+ * Stripe reports a deleted account with the same permission-error type as a
+ * broken platform key, so a platform-level call confirms the key still works
+ * before concluding the account itself is gone; if the key is broken that
+ * call throws and the original platform error path still applies.
+ */
+async function retrieveConnectedAccount(
+  stripe: Stripe,
+  accountId: string
+): Promise<Stripe.Account | null> {
+  try {
+    return await stripe.accounts.retrieve(accountId);
+  } catch (err) {
+    if (!isConnectedAccountGoneError(err, accountId)) throw err;
+    await stripe.balance.retrieve();
+    console.warn('[connect] stored connected account is no longer reachable', { accountId });
+    return null;
+  }
+}
+
+/** Rethrows a Stripe failure, as ConnectedAccountGoneError when the account is gone. */
+async function rethrowIfAccountGone(stripe: Stripe, accountId: string, err: unknown): Promise<never> {
+  if (isConnectedAccountGoneError(err, accountId)) {
+    await stripe.balance.retrieve();
+    throw new ConnectedAccountGoneError(`Connected account ${accountId} is no longer reachable`);
+  }
+  throw err;
+}
+
+const RECOVERY_COPY_ACCOUNT_GONE =
+  'Your previous Stripe payout account was closed. Tap "Replace Stripe Account" to set up a new one.';
 
 interface NativePayoutParams {
   stripe: Stripe;
@@ -1548,13 +1587,19 @@ Deno.serve(async (req: Request) => {
       if (profileError || !profile?.stripe_connect_account_id) {
         return jsonResponse({ error: 'Could not load your existing payout account.' }, 409);
       }
-      const oldAccount = await stripe.accounts.retrieve(profile.stripe_connect_account_id);
-      if (oldAccount.type !== 'express' || !oldAccount.country) {
+      const oldAccount = await retrieveConnectedAccount(stripe, profile.stripe_connect_account_id);
+      if (oldAccount && (oldAccount.type !== 'express' || !oldAccount.country)) {
         return jsonResponse({ error: 'Only an existing Express account can be replaced.' }, 409);
       }
+      // A closed account can no longer tell us its country; use the client's
+      // pick when given, else the same US default as create-account-session.
+      const requestedCountry =
+        typeof body.country === 'string' ? body.country.trim().toUpperCase() : '';
+      const country = oldAccount?.country ??
+        (/^[A-Z]{2}$/.test(requestedCountry) ? requestedCountry : 'US');
       const { data, error } = await supabase.rpc('begin_connect_account_replacement', {
-        p_user_id: userId, p_account_id: oldAccount.id,
-        p_country: oldAccount.country, p_manual_payouts: CONNECT_MANUAL_PAYOUTS,
+        p_user_id: userId, p_account_id: profile.stripe_connect_account_id,
+        p_country: country, p_manual_payouts: CONNECT_MANUAL_PAYOUTS,
       });
       if (error || !data?.id) return jsonResponse({
         error: 'Replacement is blocked by a financial operation, unresolved withdrawal, or funded bounty. Please finish it first or contact support.',
@@ -1579,19 +1624,24 @@ Deno.serve(async (req: Request) => {
       }
       let accountId = replacement.candidate_account_id as string | null;
       if (replacement.state === 'pending') {
-        const oldAccount = await stripe.accounts.retrieve(replacement.old_account_id);
-        if (oldAccount.type !== 'express') return jsonResponse({ error: 'Existing account is not Express.' }, 409);
-        const balance = await stripe.balance.retrieve({ stripeAccount: oldAccount.id });
-        if (hasNonzeroStripeBalance(balance)) return jsonResponse({
-          error: 'Your old Stripe account still has funds or a negative balance. Settle it before replacing. You can cancel this replacement and keep using the old account.',
-          code: 'old_account_has_balance',
-        }, 409);
-        // Scan all pages: pending and in_transit payouts must not be abandoned.
-        for await (const payout of stripe.payouts.list({ limit: 100 }, { stripeAccount: oldAccount.id })) {
-          if (payout.status === 'pending' || payout.status === 'in_transit') return jsonResponse({
-            error: 'A payout on your old Stripe account is still processing. Wait for settlement or cancel this replacement.',
-            code: 'old_account_has_pending_payout',
+        // A closed old account skips the Stripe-side checks: Stripe only lets
+        // a platform delete an Express account once its balances are zero,
+        // and the database safety checks in the RPCs below still apply.
+        const oldAccount = await retrieveConnectedAccount(stripe, replacement.old_account_id);
+        if (oldAccount) {
+          if (oldAccount.type !== 'express') return jsonResponse({ error: 'Existing account is not Express.' }, 409);
+          const balance = await stripe.balance.retrieve({ stripeAccount: oldAccount.id });
+          if (hasNonzeroStripeBalance(balance)) return jsonResponse({
+            error: 'Your old Stripe account still has funds or a negative balance. Settle it before replacing. You can cancel this replacement and keep using the old account.',
+            code: 'old_account_has_balance',
           }, 409);
+          // Scan all pages: pending and in_transit payouts must not be abandoned.
+          for await (const payout of stripe.payouts.list({ limit: 100 }, { stripeAccount: oldAccount.id })) {
+            if (payout.status === 'pending' || payout.status === 'in_transit') return jsonResponse({
+              error: 'A payout on your old Stripe account is still processing. Wait for settlement or cancel this replacement.',
+              code: 'old_account_has_pending_payout',
+            }, 409);
+          }
         }
         if (!accountId) {
           // Stripe keys expire after 24h. Never create a second account if the
@@ -1757,7 +1807,7 @@ Deno.serve(async (req: Request) => {
         refresh_url: refreshUrl ?? `${appUrl}/wallet/connect/refresh`,
         return_url: returnUrl ?? `${appUrl}/wallet/connect/return`,
         type: accountLinkType,
-      });
+      }).catch(err => rethrowIfAccountGone(stripe, accountId!, err));
 
       return jsonResponse({
         url: accountLink.url,
@@ -1944,7 +1994,7 @@ Deno.serve(async (req: Request) => {
       const accountSession = await stripe.accountSessions.create({
         account: accountId,
         components: componentsPayload as Stripe.AccountSessionCreateParams.Components,
-      });
+      }).catch(err => rethrowIfAccountGone(stripe, accountId!, err));
 
       return jsonResponse({
         clientSecret: accountSession.client_secret,

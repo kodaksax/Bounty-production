@@ -445,3 +445,72 @@ describe('durable reservation and migration contracts', () => {
     expect(onboarding).toContain("replacementId ? 'replace-account' : 'create-account-link'");
   });
 });
+
+describe('closed (deleted) old Stripe account', () => {
+  const goneError = (id: string) => ({
+    type: 'StripePermissionError',
+    message: `The provided key 'sk_live_***' does not have access to account '${id}' (or that account does not exist). Application access may have been revoked.`,
+  });
+
+  function closedAccountHarness() {
+    const h = replacementHarness();
+    const live = h.stripe.accounts.retrieve.getMockImplementation();
+    h.stripe.accounts.retrieve.mockImplementation(async (id: string) => {
+      if (id === 'acct_old') throw goneError(id);
+      return live(id);
+    });
+    return h;
+  }
+
+  test('recognises only a gone-account error for the named account', () => {
+    expect(operations.isConnectedAccountGoneError(goneError('acct_old'), 'acct_old')).toBe(true);
+    expect(operations.isConnectedAccountGoneError(goneError('acct_other'), 'acct_old')).toBe(false);
+    expect(operations.isConnectedAccountGoneError({ type: 'StripeAuthenticationError', message: 'Expired API Key provided' }, 'acct_old')).toBe(false);
+    expect(operations.isConnectedAccountGoneError({ type: 'StripePermissionError', message: 'restricted key lacks permission' }, 'acct_old')).toBe(false);
+  });
+
+  test('prepare starts a replacement for the closed account with a default country', async () => {
+    const h = closedAccountHarness();
+    const response = await h.request({ confirmed: true }, 'test-session', 'prepare-account-replacement');
+    expect(response.status).toBe(200);
+    expect(h.db.rpc).toHaveBeenCalledWith('begin_connect_account_replacement', expect.objectContaining({
+      p_user_id: 'user', p_account_id: 'acct_old', p_country: 'US',
+    }));
+  });
+
+  test('replace-account skips Stripe-side checks on the closed account and swaps to a new one', async () => {
+    const h = closedAccountHarness();
+    const response = await h.request();
+    expect(response.status).toBe(200);
+    expect(h.stripe.balance.retrieve).not.toHaveBeenCalledWith({ stripeAccount: 'acct_old' });
+    expect(h.stripe.payouts.list).not.toHaveBeenCalled();
+    expect(h.stripe.accounts.create).toHaveBeenCalledTimes(1);
+    expect(h.profile.stripe_connect_account_id).toBe('acct_new');
+    expect(h.profile.balance).toBe(123);
+  });
+
+  test('a broken platform key is still reported as a platform outage, not a closed account', async () => {
+    const h = closedAccountHarness();
+    h.stripe.balance.retrieve.mockRejectedValue({ type: 'StripeAuthenticationError', message: 'Expired API Key provided' });
+    const response = await h.request();
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe('platform_unavailable');
+    expect(h.stripe.accounts.create).not.toHaveBeenCalled();
+    expect(h.profile.stripe_connect_account_id).toBe('acct_old');
+  });
+
+  test.each(['create-account-link', 'create-account-session'])(
+    '/%s points the hunter to replacement instead of a platform outage',
+    async route => {
+      const h = closedAccountHarness();
+      h.stripe.accounts.update = jest.fn(async () => { throw goneError('acct_old'); });
+      h.stripe.accountLinks.create.mockRejectedValue(goneError('acct_old'));
+      h.stripe.accountSessions = { create: jest.fn(async () => { throw goneError('acct_old'); }) };
+      const response = await h.request({}, 'test-session', route);
+      const body = await response.json();
+      expect(response.status).toBe(409);
+      expect(body).toMatchObject({ code: 'connect_account_missing', retryable: true });
+      expect(body.error).toMatch(/Replace Stripe Account/);
+    }
+  );
+});
