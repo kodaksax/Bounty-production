@@ -12,7 +12,10 @@ const dispatcher = sql.slice(sql.indexOf('CREATE FUNCTION public.fn_dispatch_bou
 describe('bounty targeting migration regressions', () => {
   it('defaults consolidated rollout off and restricts server configuration/claims', () => {
     expect(sql).toContain('consolidated_enabled boolean NOT NULL DEFAULT false')
-    for (const table of ['bounty_targeting_config', 'bounty_targeting_dispatches', 'bounty_targeting_deliveries']) {
+    for (const table of [
+      'bounty_targeting_config', 'bounty_targeting_dispatches',
+      'bounty_targeting_deliveries', 'bounty_targeting_outbox_attempts',
+    ]) {
       expect(sql).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`)
     }
     expect(sql).toContain('FROM PUBLIC, anon, authenticated')

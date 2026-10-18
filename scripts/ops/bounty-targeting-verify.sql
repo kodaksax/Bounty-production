@@ -112,8 +112,12 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Internal targeting tables require RLS'; END IF;
   IF has_table_privilege('authenticated', 'public.bounty_targeting_config', 'UPDATE')
     OR has_table_privilege('anon', 'public.bounty_targeting_deliveries', 'SELECT')
+    OR has_table_privilege('authenticated', 'public.bounty_targeting_outbox_attempts', 'SELECT')
+    OR has_table_privilege('anon', 'public.bounty_targeting_outbox_attempts', 'SELECT')
     OR has_function_privilege('authenticated',
       'public.fn_claim_bounty_targeting_delivery(uuid,uuid,text,uuid,uuid)', 'EXECUTE')
+    OR has_function_privilege('authenticated',
+      'public.fn_finish_bounty_targeting_outbox(uuid,uuid)', 'EXECUTE')
     OR has_function_privilege('anon',
       'public.fn_dispatch_bounty_targeting(uuid,text)', 'EXECUTE')
   THEN RAISE EXCEPTION 'Targeting control/claims must be service-only'; END IF;
