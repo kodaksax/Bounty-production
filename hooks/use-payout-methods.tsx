@@ -73,7 +73,7 @@ export interface UsePayoutMethodsResult {
   refresh: () => Promise<void>;
   /** Opens the user's Stripe Express Dashboard (via a fresh Login Link) so they can add, remove, or set the default bank account/debit card. Refreshes the list on return. */
   openPayoutDashboard: () => Promise<{ ok: true } | { ok: false; error: string }>;
-  prepareAccountReplacement: () => Promise<{ ok: true; replacementId: string } | { ok: false; error: string }>;
+  prepareAccountReplacement: (country?: string) => Promise<{ ok: true; replacementId: string } | { ok: false; error: string }>;
   cancelAccountReplacement: () => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
@@ -178,11 +178,12 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
     }
   }, [authHeaders, refresh]);
 
-  const prepareAccountReplacement = useCallback(async () => {
+  const prepareAccountReplacement = useCallback(async (country?: string) => {
     if (!session?.access_token) return { ok: false as const, error: 'Sign in before replacing your payout account.' };
     try {
       const response = await fetch(`${API_BASE_URL}/connect/prepare-account-replacement`, {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify({ confirmed: true }),
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ confirmed: true, ...(country ? { country } : {}) }),
       });
       const data = await response.json();
       if (!response.ok || typeof data?.replacementId !== 'string') {

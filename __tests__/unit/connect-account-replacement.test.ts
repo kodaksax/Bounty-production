@@ -161,8 +161,9 @@ describe('replacement account safety', () => {
     expect(withdrawalScreen).toContain("eligibility.connectedAccountExists === null");
     expect(onboardingScreen).toContain("params.hasExistingAccount === 'true'");
     expect(onboardingScreen).toContain('canOfferAccountReplacement && !replacementId');
-    expect(onboardingScreen).toContain('prepareAccountReplacement()');
-    expect(onboardingScreen).toContain('params: { replacementId: result.replacementId, source: \'account_replacement\' }');
+    expect(onboardingScreen).toContain('prepareAccountReplacement(entryCountry)');
+    expect(onboardingScreen).toContain("...(entryCountry ? { country: entryCountry } : {})");
+    expect(onboardingScreen).toContain("source: 'account_replacement'");
     expect(onboardingScreen).toContain('if (replacingAccountRef.current) return;');
     expect(onboardingScreen).toContain("navigation.addListener('beforeRemove'");
     expect(onboardingScreen).toContain('if (!isScreenFocusedRef.current) return;');
@@ -448,8 +449,8 @@ describe('durable reservation and migration contracts', () => {
 
 describe('closed (deleted) old Stripe account', () => {
   const goneError = (id: string) => ({
-    type: 'StripePermissionError',
-    message: `The provided key 'sk_live_***' does not have access to account '${id}' (or that account does not exist). Application access may have been revoked.`,
+    type: 'StripeInvalidRequestError',
+    message: `No such account: '${id}'.`,
   });
 
   function closedAccountHarness() {
@@ -467,6 +468,10 @@ describe('closed (deleted) old Stripe account', () => {
     expect(operations.isConnectedAccountGoneError(goneError('acct_other'), 'acct_old')).toBe(false);
     expect(operations.isConnectedAccountGoneError({ type: 'StripeAuthenticationError', message: 'Expired API Key provided' }, 'acct_old')).toBe(false);
     expect(operations.isConnectedAccountGoneError({ type: 'StripePermissionError', message: 'restricted key lacks permission' }, 'acct_old')).toBe(false);
+    expect(operations.isConnectedAccountGoneError({
+      type: 'StripePermissionError',
+      message: "The provided key does not have access to account 'acct_old' (or that account does not exist). Application access may have been revoked.",
+    }, 'acct_old')).toBe(false);
   });
 
   test('prepare starts a replacement for the closed account with a default country', async () => {
@@ -475,6 +480,15 @@ describe('closed (deleted) old Stripe account', () => {
     expect(response.status).toBe(200);
     expect(h.db.rpc).toHaveBeenCalledWith('begin_connect_account_replacement', expect.objectContaining({
       p_user_id: 'user', p_account_id: 'acct_old', p_country: 'US',
+    }));
+  });
+
+  test('prepare preserves the selected country when the old account is closed', async () => {
+    const h = closedAccountHarness();
+    const response = await h.request({ confirmed: true, country: 'CA' }, 'test-session', 'prepare-account-replacement');
+    expect(response.status).toBe(200);
+    expect(h.db.rpc).toHaveBeenCalledWith('begin_connect_account_replacement', expect.objectContaining({
+      p_country: 'CA',
     }));
   });
 
@@ -495,6 +509,18 @@ describe('closed (deleted) old Stripe account', () => {
     const response = await h.request();
     expect(response.status).toBe(503);
     expect((await response.json()).code).toBe('platform_unavailable');
+    expect(h.stripe.accounts.create).not.toHaveBeenCalled();
+    expect(h.profile.stripe_connect_account_id).toBe('acct_old');
+  });
+
+  test('ambiguous permission errors fail closed without swapping the account', async () => {
+    const h = replacementHarness();
+    h.stripe.accounts.retrieve.mockRejectedValue({
+      type: 'StripePermissionError',
+      message: "The provided key does not have access to account 'acct_old' (or that account does not exist). Application access may have been revoked.",
+    });
+    const response = await h.request();
+    expect(response.status).not.toBe(200);
     expect(h.stripe.accounts.create).not.toHaveBeenCalled();
     expect(h.profile.stripe_connect_account_id).toBe('acct_old');
   });

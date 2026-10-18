@@ -449,7 +449,7 @@ export default function ConnectOnboardingScreen() {
             replacingAccountRef.current = true;
             setIsReplacingAccount(true);
             try {
-              const result = await prepareAccountReplacement();
+              const result = await prepareAccountReplacement(entryCountry);
               if (!result.ok) {
                 Alert.alert('Could not replace account', result.error);
                 return;
@@ -459,7 +459,11 @@ export default function ConnectOnboardingScreen() {
               replacementHandoffRef.current = true;
               router.replace({
                 pathname: '/wallet/connect/embedded-onboarding',
-                params: { replacementId: result.replacementId, source: 'account_replacement' },
+                params: {
+                  replacementId: result.replacementId,
+                  source: 'account_replacement',
+                  ...(entryCountry ? { country: entryCountry } : {}),
+                },
               } as Href);
             } finally {
               replacingAccountRef.current = false;
@@ -469,7 +473,7 @@ export default function ConnectOnboardingScreen() {
         },
       ]
     );
-  }, [prepareAccountReplacement, router]);
+  }, [entryCountry, prepareAccountReplacement, router]);
 
   const handleRetryVerify = useCallback(() => {
     verifyOnboardingStatus(lastBrowserResultRef.current);

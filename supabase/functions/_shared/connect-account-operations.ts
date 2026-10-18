@@ -70,17 +70,15 @@ export function isDefinitiveStripeRejection(error: unknown): boolean {
 
 /**
  * True when Stripe reports that the platform can no longer reach this specific
- * connected account — it was deleted or rejected in the Dashboard, or access
- * was revoked. Stripe raises this as a permission error, the same type as a
- * broken platform key, so callers must still confirm the platform key works
- * before treating the account as gone.
+ * connected account because Stripe explicitly reports that the account does
+ * not exist. Permission errors are ambiguous: application access may have
+ * been revoked while the account still exists, so they must fail closed.
  */
 export function isConnectedAccountGoneError(error: unknown, accountId: string): boolean {
   const e = error as { type?: string; message?: string; raw?: { message?: string } } | null;
-  if (e?.type !== 'StripePermissionError' && e?.type !== 'StripeInvalidRequestError') return false;
+  if (e?.type !== 'StripeInvalidRequestError') return false;
   const message = e?.message ?? e?.raw?.message ?? '';
-  return message.includes(accountId) &&
-    /does not have access to account|no such account|does not exist/i.test(message);
+  return message.includes(accountId) && /\bno such account\b/i.test(message);
 }
 
 export function isDefinitiveDatabaseRejection(error: unknown): boolean {

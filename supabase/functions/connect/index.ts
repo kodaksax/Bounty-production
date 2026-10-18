@@ -660,11 +660,9 @@ function mapPlatformError(error: unknown): {
 }
 
 /**
- * Retrieves a connected account, returning null when Stripe says it is gone.
- * Stripe reports a deleted account with the same permission-error type as a
- * broken platform key, so a platform-level call confirms the key still works
- * before concluding the account itself is gone; if the key is broken that
- * call throws and the original platform error path still applies.
+ * Retrieves a connected account, returning null only when Stripe explicitly
+ * reports that the account does not exist. Ambiguous permission errors fail
+ * closed because they may indicate revoked application access to a live account.
  */
 async function retrieveConnectedAccount(
   stripe: Stripe,

@@ -49,12 +49,12 @@ describe('usePayoutMethods', () => {
     const { result } = renderHook(() => usePayoutMethods());
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     let replacement;
-    await act(async () => { replacement = await result.current.prepareAccountReplacement(); });
+    await act(async () => { replacement = await result.current.prepareAccountReplacement('CA'); });
     expect(replacement).toEqual({ ok: true, replacementId: 'replacement' });
     expect(global.fetch).toHaveBeenLastCalledWith(
       'https://api.example.com/connect/prepare-account-replacement',
       expect.objectContaining({
-        method: 'POST', body: JSON.stringify({ confirmed: true }),
+        method: 'POST', body: JSON.stringify({ confirmed: true, country: 'CA' }),
         headers: expect.objectContaining({ Authorization: 'Bearer ' + 'test-token' }),
       })
     );
