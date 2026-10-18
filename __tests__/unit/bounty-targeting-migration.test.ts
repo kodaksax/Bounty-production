@@ -3,6 +3,7 @@ import path from 'path'
 
 const sql = fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261014230000_consolidate_bounty_targeting.sql'), 'utf8')
 const worker = fs.readFileSync(path.join(__dirname, '../../supabase/functions/process-notification/index.ts'), 'utf8')
+const verification = fs.readFileSync(path.join(__dirname, '../../scripts/ops/bounty-targeting-verify.sql'), 'utf8')
 const scorer = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.fn_score_and_dispatch_bounty_notification'),
   sql.indexOf('CREATE FUNCTION public.fn_dispatch_bounty_targeting'))
 const dispatcher = sql.slice(sql.indexOf('CREATE FUNCTION public.fn_dispatch_bounty_targeting'),
@@ -40,12 +41,21 @@ describe('bounty targeting migration regressions', () => {
     expect(sql).toContain("IF b.geom IS NULL AND COALESCE(btrim(b.zip_code), '') = '' THEN RETURN 0")
     expect(sql).toContain("p.deleted_at IS NULL AND p.account_status = 'active'")
     expect(sql).toContain('COALESCE(v_bounty.is_test, false)')
+    expect(verification).toContain("v_function ~* '(FROM|JOIN)[[:space:]]+(public[.])?bounty_private_locations([[:space:]]|$)'")
+    expect(verification).not.toContain("v_function LIKE '%bounty_private_locations%'")
   })
 
   it('locks all hunters in stable order before checking the rolling cap and preserves queue provenance', () => {
+    const globalLock = scorer.indexOf("hashtextextended('bounty-targeting-global'")
     const bountyLock = sql.indexOf("hashtextextended('bounty-targeting-score:'")
     const locking = sql.indexOf("hashtextextended('bounty-targeting:'")
     const hourlyCap = scorer.lastIndexOf("n.created_at > now() - interval '1 hour'")
+    const dispatcherGlobalLock = dispatcher.indexOf("hashtextextended('bounty-targeting-global'")
+    const modeLock = dispatcher.indexOf("hashtextextended('bounty-targeting-mode:'")
+    expect(globalLock).toBeGreaterThanOrEqual(0)
+    expect(globalLock).toBeLessThan(scorer.indexOf("hashtextextended('bounty-targeting-score:'"))
+    expect(dispatcherGlobalLock).toBeGreaterThanOrEqual(0)
+    expect(dispatcherGlobalLock).toBeLessThan(modeLock)
     expect(bountyLock).toBeGreaterThan(0)
     expect(locking).toBeGreaterThan(bountyLock)
     expect(locking).toBeGreaterThan(0)
@@ -96,6 +106,11 @@ describe('bounty targeting migration regressions', () => {
     expect(sql).toContain("AND state = 'processing' AND claim_id = p_claim_id")
     expect(sql).toContain("SET state = 'unknown'")
     expect(sql).toContain("IF v_status = 'sent' THEN RETURN true; END IF")
+    const claimFunction = sql.slice(sql.indexOf('CREATE FUNCTION public.fn_claim_bounty_targeting_delivery'),
+      sql.indexOf('CREATE FUNCTION public.fn_ack_bounty_targeting_delivery'))
+    expect(claimFunction).toContain('FROM public.notifications_outbox')
+    expect(claimFunction).toContain('FOR UPDATE')
+    expect(claimFunction).toContain("IF NOT FOUND OR v_status = 'sent' THEN RETURN false; END IF")
   })
 
   // In-memory specification of the SQL contract above; these are not live SQL

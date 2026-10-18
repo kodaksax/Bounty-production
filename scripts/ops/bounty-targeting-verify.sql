@@ -117,7 +117,7 @@ BEGIN
   SELECT pg_get_functiondef('public.fn_dispatch_bounty_targeting(uuid,text)'::regprocedure)
     INTO v_function;
   IF v_function NOT LIKE '%UNION ALL%' OR v_function NOT LIKE '%LIMIT 1000%'
-    OR v_function LIKE '%bounty_private_locations%'
+    OR v_function ~* '(FROM|JOIN)[[:space:]]+(public[.])?bounty_private_locations([[:space:]]|$)'
     OR v_function NOT LIKE '%fn_bounty_distribution_gate%'
     OR v_function NOT LIKE '%b.is_test%'
   THEN RAISE EXCEPTION 'Geographic union/gate/privacy/bounds regression'; END IF;

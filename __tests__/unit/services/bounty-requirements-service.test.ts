@@ -24,6 +24,9 @@ it('rejects blocked application checks rather than resolving a modal success', a
 it('rejects unverifiable application checks without saving', async () => {
   (bountyRequestService.getAll as jest.Mock).mockRejectedValue(new Error('Network unavailable'));
   await expect(saveStructuredBountyEdit('b1', updates)).rejects.toThrow('Network unavailable');
+  expect(bountyRequestService.getAll).toHaveBeenCalledWith({
+    bountyId: 'b1', status: 'pending', throwOnError: true,
+  });
   expect(bountyService.update).not.toHaveBeenCalled();
 });
 it.each([null, 'reject'])('rejects failed updates: %s', async failure => {

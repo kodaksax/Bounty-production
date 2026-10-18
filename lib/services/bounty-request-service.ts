@@ -218,6 +218,7 @@ export const bountyRequestService = {
     status?: string;
     bountyId?: string | number;
     userId?: string;
+    throwOnError?: boolean;
   }): Promise<BountyRequest[]> {
     try {
       // Prefer Supabase when configured to keep UUID id types consistent with bounties
@@ -271,6 +272,7 @@ export const bountyRequestService = {
         error = { message: String(err) };
       }
       logger.error('Error fetching bounty requests', { options, error });
+      if (options?.throwOnError) throw err;
       return [];
     }
   },

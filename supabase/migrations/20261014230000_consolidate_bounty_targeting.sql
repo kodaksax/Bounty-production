@@ -84,6 +84,7 @@ BEGIN
   IF NOT COALESCE((public.fn_bounty_distribution_gate(
     p_bounty_id, 'targeting', p_stage, p_stage > 1)->>'allowed')::boolean, false) THEN RETURN 0; END IF;
   IF p_candidates IS NULL OR cardinality(p_candidates) = 0 THEN RETURN 0; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('bounty-targeting-global', 0));
   PERFORM pg_advisory_xact_lock(hashtextextended('bounty-targeting-score:' || p_bounty_id::text, 0));
 
   v_cap := CASE WHEN v_bounty.is_for_honor THEN 15
@@ -195,6 +196,7 @@ BEGIN
   IF p_source IN ('radius', 'service_area') AND b.geom IS NULL THEN RETURN 0; END IF;
   IF NOT COALESCE((public.fn_bounty_distribution_gate(
     b.id, p_source, 1::smallint, false)->>'allowed')::boolean, false) THEN RETURN 0; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('bounty-targeting-global', 0));
   -- Freeze the rollout mode for this bounty: toggling cannot create a second blast.
   PERFORM pg_advisory_xact_lock(hashtextextended('bounty-targeting-mode:' || b.id::text, 0));
   SELECT mode INTO v_mode FROM public.bounty_targeting_dispatches WHERE bounty_id = b.id LIMIT 1;
@@ -298,7 +300,13 @@ CREATE FUNCTION public.fn_claim_bounty_targeting_delivery(
   p_outbox_id uuid, p_hunter_id uuid, p_channel text, p_claim_id uuid
 )
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_status text;
 BEGIN
+  SELECT status INTO v_status FROM public.notifications_outbox
+    WHERE id = p_outbox_id AND data->>'type' = 'bounty_nearby'
+      AND data->>'targeting_version' = '1' FOR UPDATE;
+  IF NOT FOUND OR v_status = 'sent' THEN RETURN false; END IF;
   UPDATE public.bounty_targeting_deliveries
     SET state = 'processing', claim_id = p_claim_id, attempted_at = clock_timestamp(), last_error = NULL
     WHERE outbox_id = p_outbox_id AND hunter_id = p_hunter_id AND channel = p_channel

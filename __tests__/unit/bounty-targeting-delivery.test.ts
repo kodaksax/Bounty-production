@@ -111,6 +111,26 @@ describe('new bounty-nearby durable delivery claims', () => {
     expect(f.insert).toHaveBeenCalledTimes(2)
   })
 
+  it.each(['40001', '40P01'])('retries an in-app insert rolled back with SQLSTATE %s', async code => {
+    const f = fixture()
+    f.insert.mockResolvedValueOnce({ error: { code } })
+    await f.run()
+    expect(f.states.get('hunter-a:in_app')?.state).toBe('failed')
+    expect(f.states.get('hunter-b:in_app')?.state).toBe('accepted')
+    await f.run()
+    expect(f.insert).toHaveBeenCalledTimes(3)
+    expect(f.states.get('hunter-a:in_app')?.state).toBe('accepted')
+  })
+
+  it('keeps ambiguous in-app insert errors terminal unknown', async () => {
+    const f = fixture()
+    f.insert.mockResolvedValueOnce({ error: { code: '08006' } })
+    await f.run()
+    expect(f.states.get('hunter-a:in_app')?.state).toBe('unknown')
+    await f.run()
+    expect(f.insert).toHaveBeenCalledTimes(2)
+  })
+
   it('retries an HTTP 429 rejection without resending already accepted recipients', async () => {
     const f = fixture()
     f.fetcher.mockResolvedValueOnce({

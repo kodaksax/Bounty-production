@@ -8,6 +8,11 @@ type Channel = 'push' | 'in_app' | 'email'
 type State = 'accepted' | 'suppressed' | 'failed' | 'unknown'
 type Admin = { from: (table: string) => any; rpc: (name: string, args: any) => any }
 
+function isDefiniteTransactionRollback(error: unknown): boolean {
+  return error !== null && typeof error === 'object'
+    && ['40001', '40P01'].includes(String((error as { code?: unknown }).code))
+}
+
 export function isTargetingOutbox(row: { data?: any }): boolean {
   return row.data?.type === 'bounty_nearby' && row.data?.targeting_version === 1
 }
@@ -150,11 +155,15 @@ export async function processTargetingOutbox(options: {
               user_id: hunterId, type: 'bounty_nearby', category: 'marketplace',
               title: row.title ?? '', body: row.body ?? '', data: row.data,
             })
-            state = error ? 'unknown' : 'accepted'
-            if (error) reason = 'In-app insert outcome could not be acknowledged'
-          } catch {
-            state = 'unknown'
-            reason = 'In-app insert outcome unknown'
+            state = error ? (isDefiniteTransactionRollback(error) ? 'failed' : 'unknown') : 'accepted'
+            if (error) reason = isDefiniteTransactionRollback(error)
+              ? 'In-app insert rolled back and may be retried'
+              : 'In-app insert outcome could not be acknowledged'
+          } catch (error) {
+            state = isDefiniteTransactionRollback(error) ? 'failed' : 'unknown'
+            reason = state === 'failed'
+              ? 'In-app insert rolled back and may be retried'
+              : 'In-app insert outcome unknown'
           }
         } else if (channel === 'push') {
           let tokens: string[] = []
