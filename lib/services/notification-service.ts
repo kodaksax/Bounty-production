@@ -262,9 +262,15 @@ export class NotificationService {
   }
 
   /**
-   * Request notification permissions and register for push notifications
+   * Request notification permissions and register for push notifications.
+   *
+   * Pass `prompt: false` from AppState listeners. On Android a permission
+   * request starts a system activity even when it auto-denies, which pauses
+   * and resumes the app; prompting on resume then loops every ~100ms.
    */
-  async requestPermissionsAndRegisterToken(): Promise<string | null> {
+  async requestPermissionsAndRegisterToken({
+    prompt = true,
+  }: { prompt?: boolean } = {}): Promise<string | null> {
     try {
       this.ensureNotificationsModule();
 
@@ -279,7 +285,7 @@ export class NotificationService {
         : { status: 'undetermined' };
       let finalStatus = existingStatus;
 
-      if (existingStatus !== 'granted') {
+      if (existingStatus !== 'granted' && prompt) {
         const { status } = Notifications
           ? await Notifications.requestPermissionsAsync()
           : { status: 'undetermined' };

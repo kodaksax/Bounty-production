@@ -339,6 +339,36 @@ describe('NotificationService', () => {
       );
     });
 
+    it('should not prompt when prompt is false and permission is not granted', async () => {
+      Notifications.getPermissionsAsync.mockResolvedValue({ status: 'denied' });
+      AsyncStorage.setItem.mockResolvedValue(undefined);
+      AsyncStorage.getItem.mockResolvedValue('denied');
+
+      const result = await notificationService.requestPermissionsAndRegisterToken({
+        prompt: false,
+      });
+
+      expect(result).toBeNull();
+      expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    });
+
+    it('should register the token when prompt is false and permission is granted', async () => {
+      Notifications.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+      Notifications.getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[def]' });
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: MOCK_SESSION },
+      });
+      AsyncStorage.setItem.mockResolvedValue(undefined);
+      AsyncStorage.getItem.mockResolvedValue(null);
+
+      const result = await notificationService.requestPermissionsAndRegisterToken({
+        prompt: false,
+      });
+
+      expect(result).toBe('ExponentPushToken[def]');
+      expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    });
+
     it('should return null on unexpected error', async () => {
       Notifications.getPermissionsAsync.mockRejectedValue(new Error('native crash'));
 
