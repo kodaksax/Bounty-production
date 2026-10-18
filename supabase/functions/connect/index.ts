@@ -689,6 +689,18 @@ async function rethrowIfAccountGone(stripe: Stripe, accountId: string, err: unkn
   throw err;
 }
 
+/** User copy for assert_connect_replacement_safe refusals, keyed by its HINT. */
+const REPLACEMENT_BLOCKED_COPY: Record<string, string> = {
+  operation_in_progress:
+    'A payout on your account is still being processed. Try again in a few minutes; if this persists, contact support.',
+  unsettled_withdrawal:
+    'You have a withdrawal that has not finished yet. Wait for it to arrive (or fail) before replacing your account.',
+  funded_bounty:
+    'You have a bounty payment that has not finished releasing to your current account. Replacing now could strand that money — wait for it to complete or contact support.',
+  reconciliation_finding:
+    'Our team is reviewing a payout discrepancy on your account. Contact support to finish replacing it.',
+};
+
 const RECOVERY_COPY_ACCOUNT_GONE =
   'Your previous Stripe payout account was closed. Tap "Replace Stripe Account" to set up a new one.';
 
@@ -1601,10 +1613,16 @@ Deno.serve(async (req: Request) => {
         p_user_id: userId, p_account_id: profile.stripe_connect_account_id,
         p_country: country, p_manual_payouts: CONNECT_MANUAL_PAYOUTS,
       });
-      if (error || !data?.id) return jsonResponse({
-        error: 'Replacement is blocked by a financial operation, unresolved withdrawal, or funded bounty. Please finish it first or contact support.',
-        code: 'replacement_blocked',
-      }, 409);
+      if (error || !data?.id) {
+        const reason = (error as { hint?: string } | null)?.hint ?? '';
+        console.warn('[connect/prepare-account-replacement] blocked', { userId, reason, error: error?.message });
+        return jsonResponse({
+          error: REPLACEMENT_BLOCKED_COPY[reason] ??
+            'Replacement is blocked by a financial operation, unresolved withdrawal, or funded bounty. Please finish it first or contact support.',
+          code: 'replacement_blocked',
+          ...(reason ? { reason } : {}),
+        }, 409);
+      }
       return jsonResponse({ replacementId: data.id });
     }
 

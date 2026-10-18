@@ -514,3 +514,43 @@ describe('closed (deleted) old Stripe account', () => {
     }
   );
 });
+
+describe('replacement blocker reasons', () => {
+  const blockerMigration = fs.readFileSync(
+    path.join(__dirname, '../../supabase/migrations/20261018220000_connect_replacement_blocker_reasons.sql'), 'utf8');
+
+  test.each([
+    ['funded_bounty', /bounty payment that has not finished releasing/],
+    ['unsettled_withdrawal', /withdrawal that has not finished/],
+    ['reconciliation_finding', /reviewing a payout discrepancy/],
+    ['operation_in_progress', /still being processed/],
+  ])('prepare explains a %s refusal', async (hint, copy) => {
+    const h = replacementHarness();
+    const rpc = h.db.rpc.getMockImplementation();
+    h.db.rpc.mockImplementation(async (name: string, args: any) => name === 'begin_connect_account_replacement'
+      ? { data: null, error: { message: 'blocked', hint } } : rpc(name, args));
+    const response = await h.request({ confirmed: true }, 'test-session', 'prepare-account-replacement');
+    const body = await response.json();
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({ code: 'replacement_blocked', reason: hint });
+    expect(body.error).toMatch(copy);
+  });
+
+  test('an unknown refusal keeps the generic copy', async () => {
+    const h = replacementHarness();
+    const rpc = h.db.rpc.getMockImplementation();
+    h.db.rpc.mockImplementation(async (name: string, args: any) => name === 'begin_connect_account_replacement'
+      ? { data: null, error: { message: 'No existing payout account to replace' } } : rpc(name, args));
+    const body = await (await h.request({ confirmed: true }, 'test-session', 'prepare-account-replacement')).json();
+    expect(body.error).toMatch(/Replacement is blocked by a financial operation/);
+    expect(body.reason).toBeUndefined();
+  });
+
+  test('bounty-matching findings no longer block replacement; every refusal is tagged', () => {
+    expect(blockerMigration).toMatch(/finding_type NOT IN \(\s*'bounty_liquidity_no_candidates', 'bounty_location_not_geocoded', 'bounty_geocode_result'/);
+    for (const hint of ['operation_in_progress', 'unsettled_withdrawal', 'funded_bounty', 'reconciliation_finding']) {
+      expect(blockerMigration).toContain(`USING HINT = '${hint}'`);
+    }
+    expect(blockerMigration).toMatch(/REVOKE ALL ON FUNCTION public\.assert_connect_replacement_safe\(uuid, text\) FROM PUBLIC, anon, authenticated/);
+  });
+});
