@@ -6,6 +6,7 @@ import 'react-native-get-random-values'; // must run before using tweetnacl
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useAppBootstrap } from '../hooks/useAppBootstrap';
 import { ROUTES } from '../lib/routes';
+import { getRestorableLastScreen } from '../lib/storage/last-screen';
 import { hasDeviceSignedInBefore } from '../lib/storage/onboarding';
 import { logAuthLifecycleEvent } from '../lib/utils/auth-diagnostics';
 import { generateCorrelationId } from '../lib/utils/auth-errors';
@@ -47,6 +48,7 @@ export default function Index() {
   const bootstrap = useAppBootstrap();
   const { redirect_to: redirectToParam } = useLocalSearchParams<{ redirect_to?: string }>();
   const {
+    session,
     isPasswordRecovery,
     accountBlockedReason,
     environmentError,
@@ -70,6 +72,11 @@ export default function Index() {
   // still be a first-timer who should see onboarding instead of the log-in
   // form, so we hold on the loading spinner rather than flashing sign-in.
   const [confirmedReturningUser, setConfirmedReturningUser] = useState(false);
+  // The tab to reopen for this user on a cold start (null = the feed), read
+  // once per user. Caching it keeps the destination stable: this effect
+  // re-runs on later state changes (stale/recovery flags), and re-reading the
+  // last tab then would yank the user off whatever tab they are on now.
+  const resumeScreenRef = useRef<{ userId: string; screen: string | null } | null>(null);
 
   // Debug logging on mount (development only)
   useEffect(() => {
@@ -239,30 +246,65 @@ export default function Index() {
     // Onboarding still takes precedence — an unfinished account has no
     // meaningful tab to land on.
     const redirectTarget = safeRedirectTarget(redirectToParam);
-    const dest = bootstrap.onboardingComplete
-      ? (redirectTarget ?? ROUTES.TABS.BOUNTY_APP)
-      : '/onboarding';
 
-    if (__DEV__) {
-      console.log('[index] Routing decision:', {
-        onboardingComplete: bootstrap.onboardingComplete,
-        dest,
+    const routeTo = (dest: string) => {
+      if (__DEV__) {
+        console.log('[index] Routing decision:', {
+          onboardingComplete: bootstrap.onboardingComplete,
+          dest,
+        });
+      }
+
+      if (!navigateTo(dest)) return;
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'root-auth-gate:navigation',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        outcome: dest,
+        metadata: {
+          onboardingComplete: bootstrap.onboardingComplete,
+        },
       });
+    };
+
+    if (!bootstrap.onboardingComplete) {
+      routeTo('/onboarding');
+      return;
+    }
+    if (redirectTarget) {
+      routeTo(redirectTarget);
+      return;
     }
 
-    if (!navigateTo(dest)) return;
-    logAuthLifecycleEvent({
-      correlationId,
-      stage: 'root-auth-gate:navigation',
-      status: 'success',
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      elapsedMs: Date.now() - startedAtMs,
-      outcome: dest,
-      metadata: {
-        onboardingComplete: bootstrap.onboardingComplete,
-      },
+    // Reopen the tab the user was on when the app was last closed (within
+    // LAST_SCREEN_TTL_MS), otherwise the feed. The read is bounded, so this
+    // only adds a few ms on the loading screen.
+    const feedOrResume = (screen: string | null) =>
+      screen
+        ? `${ROUTES.TABS.BOUNTY_APP}?screen=${encodeURIComponent(screen)}`
+        : ROUTES.TABS.BOUNTY_APP;
+    const userId = session?.user?.id;
+    if (!userId) {
+      routeTo(ROUTES.TABS.BOUNTY_APP);
+      return;
+    }
+    if (resumeScreenRef.current?.userId === userId) {
+      routeTo(feedOrResume(resumeScreenRef.current.screen));
+      return;
+    }
+
+    let cancelled = false;
+    void getRestorableLastScreen(userId).then(screen => {
+      if (cancelled) return;
+      resumeScreenRef.current = { userId, screen };
+      routeTo(feedOrResume(screen));
     });
+    return () => {
+      cancelled = true;
+    };
   }, [
     bootstrap,
     isPasswordRecovery,
@@ -272,6 +314,7 @@ export default function Index() {
     router,
     confirmedReturningUser,
     redirectToParam,
+    session?.user?.id,
   ]);
 
   if (isAuthStale) {

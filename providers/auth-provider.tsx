@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Session } from '@supabase/supabase-js';
+import { isAuthRetryableFetchError, type Session } from '@supabase/supabase-js';
 import { AuthContext } from 'hooks/use-auth-context';
 import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants';
 import { cachedDataService } from 'lib/services/cached-data-service';
@@ -59,6 +59,15 @@ const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
  * launch starts clean.
  */
 const STARTUP_TIMEOUT_PURGE_THRESHOLD = 2;
+
+/**
+ * Backoff between startup getSession() retries when refreshing an expired
+ * access token fails with a retryable network error (the radio is often not
+ * up yet on a cold start). gotrue keeps the session in storage on those
+ * errors, so a retry usually succeeds; only after these does startup fall
+ * back to the persisted session instead of treating the user as signed out.
+ */
+const RETRYABLE_RESTORE_BACKOFF_MS = [1_000, 2_000];
 
 export default function AuthProvider({ children }: PropsWithChildren) {
   const __DEV__flag = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -341,8 +350,60 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
         }
         setIsLoading(false);
+        isInitializingRef.current = false;
         return;
       }
+
+      // The gotrue round-trip failed (timed out or network error), but the
+      // session bytes live on this device. Read them directly so an offline /
+      // unreachable-backend cold start does not present as "you have been
+      // logged out." Returns true when it settled the auth state (or the
+      // provider unmounted), false when nothing usable is persisted.
+      const recoverFromPersistedSession = async (): Promise<boolean> => {
+        const persisted = await readPersistedSession(PROJECT_STORAGE_KEY).catch(() => null);
+        if (!isMountedRef.current) return true;
+        if (!persisted) return false;
+
+        const expiresAtMs = (persisted.expires_at ?? 0) * 1000;
+        const stillValid = expiresAtMs > Date.now();
+
+        if (stillValid) {
+          // Locally valid access token — restore the authenticated
+          // experience and let auto-refresh reconcile with the server
+          // once connectivity returns.
+          reportWarning('[AuthProvider] Restored session from local storage after startup failure');
+          sessionFound = true;
+          const localSession = persisted as unknown as Session;
+          setSession(localSession);
+          setIsAuthStale(false);
+          sessionIdRef.current = localSession.user?.id ?? null;
+          previousUserIdRef.current = sessionIdRef.current;
+          profileFetchCompletedRef.current = true;
+          setIsEmailVerified(
+            Boolean(
+              (localSession.user as any)?.email_confirmed_at ||
+              (localSession.user as any)?.confirmed_at
+            )
+          );
+          setIsLoading(false);
+          scheduleTokenRefresh(localSession);
+          void authProfileService.setSession(localSession).catch(() => {});
+          return true;
+        }
+
+        // Persisted but expired: the refresh token may still be good, so
+        // surface the retryable "connection interrupted" state instead of
+        // discarding a recoverable session. Arm gotrue's auto-refresh loop so
+        // the app recovers on its own once the network is back — the
+        // AppState listener only arms it on a foreground *change*, which a
+        // cold start never fires. Its TOKEN_REFRESHED clears the stale flag.
+        setIsAuthStale(true);
+        setIsLoading(false);
+        void Promise.resolve()
+          .then(() => supabase.auth.startAutoRefresh())
+          .catch(() => {});
+        return true;
+      };
 
       try {
         devLog('[AuthProvider] fetchSession START');
@@ -360,21 +421,43 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         } catch (e) {
           // ignore if Sentry not available
         }
+        const restoreSession = () =>
+          runAuthStageWithTimeout({
+            correlationId,
+            stage: 'auth-provider:getSession',
+            timeoutMs: AUTH_RETRY_CONFIG.AUTH_TIMEOUT,
+            run: () => supabase.auth.getSession(),
+            metadata: { surface: 'auth-provider', reason: 'startup-session-restore' },
+          });
+        let result = await restoreSession();
+        // An expired access token is refreshed inside getSession(). If that
+        // refresh hits a network error, gotrue returns { session: null, error }
+        // but keeps the session in storage — this is not a sign-out. Retry
+        // briefly while the loading screen is still up.
+        for (const delayMs of RETRYABLE_RESTORE_BACKOFF_MS) {
+          if (!result.error || !isAuthRetryableFetchError(result.error)) break;
+          if (!isMountedRef.current) return;
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          if (!isMountedRef.current) return;
+          result = await restoreSession();
+        }
         const {
           data: { session },
           error,
-        } = await runAuthStageWithTimeout({
-          correlationId,
-          stage: 'auth-provider:getSession',
-          timeoutMs: AUTH_RETRY_CONFIG.AUTH_TIMEOUT,
-          run: () => supabase.auth.getSession(),
-          metadata: { surface: 'auth-provider', reason: 'startup-session-restore' },
-        });
+        } = result;
 
         if (!isMountedRef.current) return;
 
         if (error) {
           reportError(error, '[AuthProvider] Error fetching session:');
+          // Still unreachable after the retries: fall back to the persisted
+          // session rather than showing the sign-in form. A real auth failure
+          // (revoked / invalid refresh token) is not retryable, and gotrue has
+          // already removed the session for it — that still signs the user out.
+          if (isAuthRetryableFetchError(error) && (await recoverFromPersistedSession())) {
+            return;
+          }
+          if (!isMountedRef.current) return;
           setSession(null);
           try {
             await authProfileService.setSession(null);
@@ -569,49 +652,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           if (!isMountedRef.current) return;
 
           // The gotrue round-trip stalled, but the session bytes live on this
-          // device. Read them directly so an offline / unreachable-backend
-          // cold start does not present as "you have been logged out."
-          if (!purged) {
-            const persisted = await readPersistedSession(PROJECT_STORAGE_KEY).catch(() => null);
-            if (!isMountedRef.current) return;
-
-            if (persisted) {
-              const expiresAtMs = (persisted.expires_at ?? 0) * 1000;
-              const stillValid = expiresAtMs > Date.now();
-
-              if (stillValid) {
-                // Locally valid access token — restore the authenticated
-                // experience and let auto-refresh reconcile with the server
-                // once connectivity returns.
-                reportWarning(
-                  '[AuthProvider] Restored session from local storage after startup timeout'
-                );
-                sessionFound = true;
-                const localSession = persisted as unknown as Session;
-                setSession(localSession);
-                setIsAuthStale(false);
-                sessionIdRef.current = localSession.user?.id ?? null;
-                previousUserIdRef.current = sessionIdRef.current;
-                profileFetchCompletedRef.current = true;
-                setIsEmailVerified(
-                  Boolean(
-                    (localSession.user as any)?.email_confirmed_at ||
-                    (localSession.user as any)?.confirmed_at
-                  )
-                );
-                setIsLoading(false);
-                scheduleTokenRefresh(localSession);
-                void authProfileService.setSession(localSession).catch(() => {});
-                return;
-              }
-
-              // Persisted but expired: the refresh token may still be good, so
-              // surface the retryable "connection interrupted" state instead of
-              // discarding a recoverable session.
-              setIsAuthStale(true);
-              setIsLoading(false);
-              return;
-            }
+          // device (see recoverFromPersistedSession).
+          if (!purged && (await recoverFromPersistedSession())) {
+            return;
           }
         }
         if (!isMountedRef.current) return;
@@ -681,6 +724,34 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // devLog('[AuthProvider] Auth state changed:', { event: _event, session: session ? 'present' : 'null' })
 
           if (!isMountedRef.current) return;
+
+          // gotrue emits INITIAL_SESSION with a null session not only when
+          // nobody is signed in but also when refreshing an expired token on
+          // startup fails on the network — the session is still in storage.
+          // fetchSession() owns the startup decision (retry, persisted-session
+          // fallback, or genuine signed-out), so a null INITIAL_SESSION must not
+          // clear the session or end the loading phase on its own. Doing so
+          // flashed the sign-in form before the restore reached the feed.
+          if (_event === 'INITIAL_SESSION' && !session) {
+            logAuthLifecycleEvent({
+              correlationId: eventCorrelationId,
+              stage: 'auth-provider:onAuthStateChange',
+              status: 'success',
+              startedAt: eventStartedAt,
+              finishedAt: new Date().toISOString(),
+              elapsedMs: Date.now() - eventStartedAtMs,
+              metadata: { event: _event },
+              outcome: 'initial_session_null_deferred_to_fetch_session',
+            });
+            return;
+          }
+
+          // Any delivered session means the backend is reachable again —
+          // leave the "connection interrupted" state (e.g. gotrue's
+          // auto-refresh succeeded after a stalled cold start).
+          if (session) {
+            setIsAuthStale(false);
+          }
 
           // Determine incoming/outgoing user IDs first. If this is a sign-in
           // that switches users, ensure we clear the previous user's persisted
@@ -1130,11 +1201,19 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         accountBlockHandledRef.current = false;
       }
 
-      // Only set isLoading to false if:
-      // 1. No session exists (immediate subscription callback with null), OR
+      // Only set isLoading to false once the startup session restore has
+      // finished (fetchSession clears isInitializingRef in its finally), and then if:
+      // 1. No session exists (e.g. after sign-out), OR
       // 2. Profile fetch has completed (after setSession finishes)
+      //
+      // subscribe() calls this listener synchronously with a null profile on
+      // mount, before getSession() has read the persisted session. Treating
+      // that as "no session" cleared isLoading with session still undefined,
+      // so useAppBootstrap resolved to unauthenticated and a signed-in user saw
+      // the sign-in form flash before the restore landed them on the feed.
       const currentSessionId = sessionIdRef.current;
-      const shouldSetLoadingFalse = !currentSessionId || profileFetchCompletedRef.current;
+      const shouldSetLoadingFalse =
+        !isInitializingRef.current && (!currentSessionId || profileFetchCompletedRef.current);
 
       // Only log profile updates in development and only when the username changes
       try {
@@ -1171,17 +1250,35 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     // Safety timeout: ensure isLoading is cleared after max 10 seconds
     // This prevents perpetual skeleton screens if profile fetch hangs
     // Use setState with callback to access current value, avoiding stale closure
-    const safetyTimeout = setTimeout(() => {
-      if (isMountedRef.current) {
-        setIsLoading(currentLoading => {
-          if (currentLoading) {
-            reportWarning('[AuthProvider] Safety timeout: forcing isLoading = false after 10s');
-            return false;
-          }
-          return currentLoading;
-        });
+    //
+    // While the startup session restore is still running, defer instead:
+    // getSession() is allowed AUTH_RETRY_CONFIG.AUTH_TIMEOUT (15s) and then
+    // falls back to the persisted session, so clearing at 10s would route a
+    // signed-in user to the sign-in form on a slow network, only for the
+    // fallback to land them on the feed moments later. fetchSession always
+    // clears isLoading itself; the hard ceiling only guards against a hang.
+    const SAFETY_TIMEOUT_MS = 10_000;
+    const SAFETY_TIMEOUT_HARD_CEILING_MS = 45_000;
+    const safetyStartedAt = Date.now();
+    let safetyTimeout: ReturnType<typeof setTimeout>;
+    const runSafetyCheck = () => {
+      if (!isMountedRef.current) return;
+      if (
+        isInitializingRef.current &&
+        Date.now() - safetyStartedAt < SAFETY_TIMEOUT_HARD_CEILING_MS
+      ) {
+        safetyTimeout = setTimeout(runSafetyCheck, 5_000);
+        return;
       }
-    }, 10000);
+      setIsLoading(currentLoading => {
+        if (currentLoading) {
+          reportWarning('[AuthProvider] Safety timeout: forcing isLoading = false');
+          return false;
+        }
+        return currentLoading;
+      });
+    };
+    safetyTimeout = setTimeout(runSafetyCheck, SAFETY_TIMEOUT_MS);
 
     return () => {
       unsubscribe();
