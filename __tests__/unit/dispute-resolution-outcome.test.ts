@@ -89,7 +89,7 @@ beforeEach(() => {
 });
 
 describe('resolveDisputeWithOutcome', () => {
-  it('reports failed settlement (not success) when the wallet release RPC errors', async () => {
+  it('reports an uncertain settlement when the wallet release RPC errors', async () => {
     mockTables(OPEN_DISPUTE);
     bountyService.getById.mockResolvedValue(WALLET_BOUNTY);
     mockRpc.mockImplementation((fn: string) =>
@@ -103,8 +103,8 @@ describe('resolveDisputeWithOutcome', () => {
     const outcome = await disputeService.resolveDisputeWithOutcome('19', 'Hunter did the work', 'hunter');
 
     expect(outcome.resolved).toBe(true);
-    expect(outcome.settlement.status).toBe('failed');
-    expect(outcome.settlement.detail).toMatch(/No money moved/);
+    expect(outcome.settlement.status).toBe('unknown');
+    expect(outcome.settlement.detail).toMatch(/do not retry/i);
   });
 
   it('explains the Phase 2 admin limitation instead of claiming funds were released', async () => {
@@ -157,6 +157,81 @@ describe('resolveDisputeWithOutcome', () => {
     const outcome = await disputeService.resolveDisputeWithOutcome('19', 'Refund', 'poster');
 
     expect(outcome.settlement.status).toBe('already_settled');
+  });
+
+  it('reports an unconfirmed Stripe transfer as pending instead of released', async () => {
+    mockTables(OPEN_DISPUTE);
+    bountyService.getById.mockResolvedValue(STRIPE_BOUNTY);
+    bountyPaymentsService.releaseBountyPayment.mockResolvedValue({
+      released: false,
+      transferId: 'tr-pending',
+      status: 'release_pending',
+    });
+
+    const outcome = await disputeService.resolveDisputeWithOutcome('19', 'Hunter did the work', 'hunter');
+
+    expect(outcome.settlement.status).toBe('pending_confirmation');
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'send_system_notification',
+      expect.objectContaining({ p_body: expect.stringContaining('Funds released') })
+    );
+  });
+
+  it('recognizes a repeated release request already waiting for Stripe confirmation', async () => {
+    mockTables(OPEN_DISPUTE);
+    bountyService.getById.mockResolvedValue(STRIPE_BOUNTY);
+    bountyPaymentsService.releaseBountyPayment.mockRejectedValue(
+      Object.assign(
+        new Error('Transfer requested. Waiting for Stripe confirmation.'),
+        { code: 'release_pending' }
+      )
+    );
+
+    const outcome = await disputeService.resolveDisputeWithOutcome('19', 'Hunter did the work', 'hunter');
+
+    expect(outcome.settlement.status).toBe('pending_confirmation');
+  });
+
+  it('reports a reused confirmed Stripe release as already settled', async () => {
+    mockTables(OPEN_DISPUTE);
+    bountyService.getById.mockResolvedValue(STRIPE_BOUNTY);
+    bountyPaymentsService.releaseBountyPayment.mockResolvedValue({
+      released: true,
+      transferId: 'tr-confirmed',
+      status: 'released',
+      reused: true,
+    });
+
+    const outcome = await disputeService.resolveDisputeWithOutcome('19', 'Hunter did the work', 'hunter');
+
+    expect(outcome.settlement.status).toBe('already_settled');
+  });
+
+  it('directs uncertain Stripe errors to reconciliation rather than retry', async () => {
+    mockTables(OPEN_DISPUTE);
+    bountyService.getById.mockResolvedValue(STRIPE_BOUNTY);
+    bountyPaymentsService.releaseBountyPayment.mockRejectedValue(
+      Object.assign(new Error('Stripe transfer record update failed'), { code: 'record_update_failed' })
+    );
+
+    const outcome = await disputeService.resolveDisputeWithOutcome('19', 'Hunter did the work', 'hunter');
+
+    expect(outcome.settlement.status).toBe('unknown');
+    expect(outcome.settlement.detail).toMatch(/reconciliation; do not retry/i);
+    expect(outcome.settlement.detail).not.toMatch(/No money moved/i);
+  });
+
+  it('does not resolve or settle when the bounty/payment lookup fails', async () => {
+    const { updates } = mockTables(OPEN_DISPUTE);
+    bountyService.getById.mockResolvedValue(null);
+
+    const outcome = await disputeService.resolveDisputeWithOutcome('19', 'Hunter did the work', 'hunter');
+
+    expect(outcome.resolved).toBe(false);
+    expect(outcome.settlement.status).toBe('failed');
+    expect(outcome.settlement.detail).toMatch(/Failed to load the bounty/i);
+    expect(updates).toHaveLength(0);
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it('reports nothing_held when there is no escrow row to move', async () => {
@@ -217,6 +292,17 @@ describe('retryDisputeSettlement', () => {
     expect(settlement.status).toBe('failed');
     expect(mockRpc).not.toHaveBeenCalledWith('fn_release_wallet_escrow_for_dispute', expect.anything());
     expect(mockRpc).not.toHaveBeenCalledWith('fn_refund_wallet_escrow_for_dispute', expect.anything());
+  });
+
+  it('does not treat a failed bounty lookup as an honor bounty during retry', async () => {
+    mockTables({ ...OPEN_DISPUTE, status: 'resolved_hunter_wins', winner: 'hunter' });
+    bountyService.getById.mockResolvedValue(null);
+
+    const settlement = await disputeService.retryDisputeSettlement('19');
+
+    expect(settlement.status).toBe('failed');
+    expect(settlement.detail).toMatch(/Failed to load the bounty/i);
+    expect(mockRpc).not.toHaveBeenCalledWith('fn_release_wallet_escrow_for_dispute', expect.anything());
   });
 });
 

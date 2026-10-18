@@ -212,6 +212,7 @@ DECLARE
   v_body         text := p_body;
   v_data         jsonb := p_data;
   v_bounty_id    uuid;
+  v_dispute_id   uuid;
   v_bounty_title text;
   v_parties      uuid[];
 BEGIN
@@ -268,6 +269,23 @@ BEGIN
 
     IF v_parties IS NULL OR NOT (v_uid = ANY (v_parties)) OR NOT (p_user_id = ANY (v_parties)) THEN
       RAISE EXCEPTION 'not a party to a disputed bounty' USING ERRCODE = '42501';
+    END IF;
+
+    IF p_type = 'dispute_resolved' THEN
+      BEGIN
+        v_dispute_id := NULLIF(p_data ->> 'disputeId', '')::uuid;
+      EXCEPTION WHEN invalid_text_representation THEN
+        v_dispute_id := NULL;
+      END;
+      IF v_dispute_id IS NULL OR NOT EXISTS (
+        SELECT 1
+          FROM public.bounty_disputes d
+         WHERE d.id = v_dispute_id
+           AND d.bounty_id = v_bounty_id
+           AND d.status IN ('closed', 'resolved', 'resolved_hunter_wins', 'resolved_poster_wins')
+      ) THEN
+        RAISE EXCEPTION 'a closed dispute for this bounty is required' USING ERRCODE = '42501';
+      END IF;
     END IF;
 
     -- Server-composed copy: a party can trigger the notification, never

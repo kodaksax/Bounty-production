@@ -202,7 +202,7 @@ Deno.serve(async (req: Request) => {
   // ─── getById ────────────────────────────────────────────────────────────
   if (action === 'getById') {
     const { id } = body;
-    if (!id) {
+    if (!id || typeof id !== 'string') {
       return jsonResponse({ error: 'id is required' }, 400);
     }
     const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
@@ -238,7 +238,7 @@ Deno.serve(async (req: Request) => {
     if (!reason || !reason.trim()) {
       return jsonResponse({ error: 'reason is required' }, 400);
     }
-    if (id === adminUser.id) {
+    if (id.toLowerCase() === adminUser.id.toLowerCase()) {
       // Mirrors updateRole: an admin restoring their own suspended account
       // (or suspending it by mistake) is exactly the case a second admin
       // should handle.

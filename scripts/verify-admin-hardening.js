@@ -279,7 +279,9 @@ async function main() {
     await scenario('send_system_notification caller rules', async () => {
       const B = await bounty({ amount: 20, status: 'in_progress', acceptedBy: U.H.id });
       const quiet = await bounty({ amount: 20, status: 'in_progress', acceptedBy: U.H.id });
-      await dispute(B);
+      const disputeId = await dispute(B);
+      const otherBountyDisputeId = await dispute(quiet);
+      await q(`UPDATE bounty_disputes SET status = 'resolved_hunter_wins' WHERE id = $1`, [otherBountyDisputeId]);
       const phish = await as(U.A, () => tryq(
         `SELECT send_system_notification($1, 'account_restricted', 'Bounty Security', 'Verify at evil.example', NULL)`, [U.H.id]));
       check('stranger: account_restricted refused', !phish.ok && phish.code === '42501', phish.err);
@@ -299,6 +301,22 @@ async function main() {
         `SELECT send_system_notification($1, 'dispute_created', 'URGENT: account locked', 'go to evil.example',
                 jsonb_build_object('bountyId', $2::text, 'disputeId', 1, 'link', 'https://evil.example'))`, [U.H.id, B]));
       check('party -> party dispute notification allowed', legit.ok, legit.err);
+      const fakeClosure = await as(U.P, () => tryq(
+        `SELECT send_system_notification($1, 'dispute_resolved', 'Dispute closed', 'closed',
+                jsonb_build_object('bountyId', $2::text, 'disputeId', $3::text))`,
+        [U.H.id, B, disputeId]));
+      check('open dispute cannot trigger a closure notification', !fakeClosure.ok && fakeClosure.code === '42501', fakeClosure.err);
+      const wrongDispute = await as(U.P, () => tryq(
+        `SELECT send_system_notification($1, 'dispute_resolved', 'Dispute closed', 'closed',
+                jsonb_build_object('bountyId', $2::text, 'disputeId', $3::text))`,
+        [U.H.id, B, otherBountyDisputeId]));
+      check('closure notification must reference a dispute on the same bounty', !wrongDispute.ok && wrongDispute.code === '42501', wrongDispute.err);
+      await q(`UPDATE bounty_disputes SET status = 'resolved_hunter_wins' WHERE id = $1`, [disputeId]);
+      const legitClosure = await as(U.P, () => tryq(
+        `SELECT send_system_notification($1, 'dispute_resolved', 'Dispute closed', 'closed',
+                jsonb_build_object('bountyId', $2::text, 'disputeId', $3::text))`,
+        [U.H.id, B, disputeId]));
+      check('closed dispute notification remains allowed', legitClosure.ok, legitClosure.err);
       const stored = await one(
         `SELECT title, body, data FROM notifications WHERE user_id = $1 AND type = 'dispute_created' ORDER BY created_at DESC LIMIT 1`, [U.H.id]);
       check('caller-supplied text replaced by server copy', stored && stored.title === 'Dispute opened' && !/evil/.test(stored.body), stored);
@@ -360,6 +378,31 @@ async function main() {
       await q(`UPDATE bounty_payments SET status = 'refunded' WHERE bounty_id = $1`, [stripe]);
       const s2 = await setStatus(U.D, stripe, 'cancelled', 'harness');
       check('refunded Stripe payment -> cancelled allowed', s2.ok, s2.err);
+
+      const pending = await bounty({ amount: 15 });
+      await q(`INSERT INTO bounty_payments (bounty_id, poster_id, amount, status) VALUES ($1, $2, 15, 'pending_payment')`, [pending, U.P.id]);
+      const pendingStatus = await setStatus(U.D, pending, 'cancelled', 'harness');
+      check('pending Stripe payment -> cancelled refused', !pendingStatus.ok && /stripe_payment_pending_payment/.test(pendingStatus.err), pendingStatus.err);
+
+      const failedCapture = await bounty({ amount: 15 });
+      await q(`INSERT INTO bounty_payments (bounty_id, poster_id, amount, status, stripe_charge_id)
+               VALUES ($1, $2, 15, 'failed', 'ch_harness')`, [failedCapture, U.P.id]);
+      const failedCaptureStatus = await setStatus(U.D, failedCapture, 'cancelled', 'harness');
+      check('failed Stripe payment with charge evidence -> cancelled refused', !failedCaptureStatus.ok && /stripe_payment_failed/.test(failedCaptureStatus.err), failedCaptureStatus.err);
+
+      const uncertainV3 = await bounty({ amount: 15 });
+      await q(`INSERT INTO bounty_v3_funding
+                 (bounty_id, state, amount_cents, last_error_code, stripe_charge_id)
+               VALUES ($1, 'capture_failed', 1500, 'transfer_failed_after_capture', 'ch_harness')`, [uncertainV3]);
+      const uncertainV3Status = await setStatus(U.D, uncertainV3, 'cancelled', 'harness');
+      check('v3 captured failure -> cancelled refused', !uncertainV3Status.ok && /v3_funding_held/.test(uncertainV3Status.err), uncertainV3Status.err);
+
+      const expiredV3 = await bounty({ amount: 15 });
+      await q(`INSERT INTO bounty_v3_funding
+                 (bounty_id, state, amount_cents, last_error_code, needs_reauthorization)
+               VALUES ($1, 'capture_failed', 1500, 'capture_failed_expired', true)`, [expiredV3]);
+      const expiredV3Status = await setStatus(U.D, expiredV3, 'cancelled', 'harness');
+      check('confirmed expired authorization -> cancelled allowed', expiredV3Status.ok, expiredV3Status.err);
 
       const idem = await setStatus(U.D, stripe, 'cancelled', null);
       check('same-status call stays an idempotent no-op (no reason needed)', idem.ok, idem.err);

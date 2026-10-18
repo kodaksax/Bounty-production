@@ -154,21 +154,25 @@ export type DisputeReasonCode =
  * What happened to the escrow when a dispute was decided.
  *  - released / refunded: money moved in this call
  *  - already_settled:     a release or refund was already on the ledger
+ *  - pending_confirmation: Stripe accepted a transfer request, awaiting webhook confirmation
  *  - nothing_held:        no escrow record to move (check Transactions)
  *  - not_applicable:      no winner, or an honor / unpaid bounty
- *  - failed:              the decision stands but NO money moved
+ *  - failed:              a confirmed rejection; no money moved
+ *  - unknown:             settlement may have occurred; reconcile before retrying
  */
 export type DisputeSettlementStatus =
   | 'released'
   | 'refunded'
   | 'already_settled'
+  | 'pending_confirmation'
   | 'nothing_held'
   | 'not_applicable'
+  | 'unknown'
   | 'failed';
 
 export interface DisputeSettlement {
   status: DisputeSettlementStatus;
-  /** Operator-facing explanation, set for 'failed' and 'nothing_held'. */
+  /** Operator-facing explanation, set when settlement needs attention. */
   detail?: string;
 }
 
@@ -180,7 +184,7 @@ export interface DisputeResolutionOutcome {
   error?: string;
 }
 
-function settlementErrorDetail(err: unknown): string {
+function settlementErrorOutcome(err: unknown): DisputeSettlement {
   const message =
     err instanceof Error
       ? err.message
@@ -191,10 +195,22 @@ function settlementErrorDetail(err: unknown): string {
     typeof err === 'object' && err !== null && 'code' in err
       ? String((err as { code: unknown }).code)
       : '';
-  if (code === 'not_poster' || /only the poster/i.test(message)) {
-    return 'The payment service only lets the poster release or cancel this Stripe payment, so it cannot be settled from the admin console yet. No money moved.';
+  if (code === 'release_pending' || /transfer requested\. waiting for stripe confirmation/i.test(message)) {
+    return {
+      status: 'pending_confirmation',
+      detail: 'Stripe has a transfer request pending confirmation. Wait for Stripe confirmation before taking another action.',
+    };
   }
-  return `${message || 'Unknown error'}. No money moved.`;
+  if (code === 'not_poster' || /only the poster/i.test(message)) {
+    return {
+      status: 'failed',
+      detail: 'The payment service only lets the poster release or cancel this Stripe payment, so it cannot be settled from the admin console yet. No money moved.',
+    };
+  }
+  return {
+    status: 'unknown',
+    detail: `${message || 'Unknown error'}. The settlement outcome could not be confirmed. Contact support for reconciliation; do not retry.`,
+  };
 }
 
 /**
@@ -204,10 +220,10 @@ function settlementErrorDetail(err: unknown): string {
 async function settleDisputeEscrow(
   disputeId: string,
   bountyId: string,
-  bounty: Bounty | null,
+  bounty: Bounty,
   winner: 'hunter' | 'poster'
 ): Promise<DisputeSettlement> {
-  const isHonorBounty = !bounty || bounty.is_for_honor || !bounty.amount || bounty.amount <= 0;
+  const isHonorBounty = bounty.is_for_honor || !bounty.amount || bounty.amount <= 0;
   if (isHonorBounty) return { status: 'not_applicable' };
   const isPhase2 = isPhase2Bounty(bounty);
   const architecture = isV3Bounty(bounty) ? 'v3' : 'v2';
@@ -228,13 +244,26 @@ async function settleDisputeEscrow(
       // lib/services/bounty-payments-service.ts.
       if (winner === 'hunter') {
         try {
-          await bountyPaymentsService.releaseBountyPayment(bountyId);
-          await analyticsService.trackEvent('escrow_released', {
-            bountyId,
-            architecture,
-            via: 'dispute_resolution',
-          });
-          return { status: 'released' };
+          const result = await bountyPaymentsService.releaseBountyPayment(bountyId);
+          if (result.released) {
+            if (result.reused) return { status: 'already_settled' };
+            await analyticsService.trackEvent('escrow_released', {
+              bountyId,
+              architecture,
+              via: 'dispute_resolution',
+            });
+            return { status: 'released' };
+          }
+          if (result.status === 'release_pending') {
+            return {
+              status: 'pending_confirmation',
+              detail: 'Stripe accepted the transfer request. Payment is pending Stripe confirmation; no funds-released notice was sent.',
+            };
+          }
+          return {
+            status: 'unknown',
+            detail: `The payment service returned an unconfirmed release status (${result.status || 'unknown'}). Contact support for reconciliation; do not retry.`,
+          };
         } catch (releaseErr) {
           logger.error('Failed to release Phase 2 escrow to hunter during dispute resolution', {
             disputeId,
@@ -247,11 +276,12 @@ async function settleDisputeEscrow(
             stage: 'dispute_release',
             ...failureEventProps(releaseErr),
           });
-          return { status: 'failed', detail: settlementErrorDetail(releaseErr) };
+          return settlementErrorOutcome(releaseErr);
         }
       }
       try {
-        await bountyPaymentsService.cancelBountyPayment(bountyId);
+        const result = await bountyPaymentsService.cancelBountyPayment(bountyId);
+        if (result.reused) return { status: 'already_settled' };
         await analyticsService.trackEvent('escrow_refunded', {
           bountyId,
           architecture,
@@ -270,7 +300,7 @@ async function settleDisputeEscrow(
           stage: 'dispute_cancel',
           ...failureEventProps(refundErr),
         });
-        return { status: 'failed', detail: settlementErrorDetail(refundErr) };
+        return settlementErrorOutcome(refundErr);
       }
     }
 
@@ -292,8 +322,7 @@ async function settleDisputeEscrow(
           }
         );
         return {
-          status: 'failed',
-          detail: settlementErrorDetail(result.error ?? 'Payment service refused'),
+          ...settlementErrorOutcome(result.error ?? 'Payment service refused'),
         };
       }
       return { status: winner === 'hunter' ? 'released' : 'refunded' };
@@ -317,7 +346,7 @@ async function settleDisputeEscrow(
           : 'Failed to release wallet escrow to hunter during dispute resolution',
         { disputeId, bountyId, error: rpcError }
       );
-      return { status: 'failed', detail: settlementErrorDetail(rpcError) };
+      return settlementErrorOutcome(rpcError);
     }
     const row = Array.isArray(data) ? data[0] : data;
     if (row?.applied) {
@@ -339,7 +368,7 @@ async function settleDisputeEscrow(
       winner,
       error: escrowError instanceof Error ? escrowError.message : String(escrowError),
     });
-    return { status: 'failed', detail: settlementErrorDetail(escrowError) };
+    return settlementErrorOutcome(escrowError);
   }
 }
 
@@ -838,6 +867,10 @@ export const disputeService = {
       // Fetch the bounty early — we need it both to choose the correct hold-release
       // strategy and for the Stripe escrow action further below.
       const bounty = prefetchedBounty || (await bountyService.getById(dispute.bountyId));
+      if (!bounty && winner) {
+        const detail = 'Failed to load the bounty and payment state. The dispute was not resolved; retry after the lookup succeeds.';
+        return { resolved: false, settlement: { status: 'failed', detail }, error: detail };
+      }
       const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
       const hasStripeEscrow = bounty && !isHonorBounty && !!bounty.payment_intent_id;
       const isPhase2 = !!bounty && !isHonorBounty && isPhase2Bounty(bounty);
@@ -909,7 +942,7 @@ export const disputeService = {
       }
 
       const settlement = winner
-        ? await settleDisputeEscrow(disputeId, String(dispute.bountyId), bounty ?? null, winner)
+        ? await settleDisputeEscrow(disputeId, String(dispute.bountyId), bounty!, winner)
         : ({ status: 'not_applicable' } as DisputeSettlement);
 
       await this.logAuditEvent(disputeId, 'resolved', resolvedBy, 'admin', {
@@ -1036,10 +1069,16 @@ export const disputeService = {
       };
     }
     const bounty = await bountyService.getById(dispute.bountyId);
+    if (!bounty) {
+      return {
+        status: 'failed',
+        detail: 'Failed to load the bounty and payment state. No settlement was attempted; retry after the lookup succeeds.',
+      };
+    }
     const settlement = await settleDisputeEscrow(
       disputeId,
       String(dispute.bountyId),
-      bounty ?? null,
+      bounty,
       winner
     );
     const {

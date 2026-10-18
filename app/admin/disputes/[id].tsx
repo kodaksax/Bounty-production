@@ -43,6 +43,11 @@ function describeSettlement(
         title: 'Already settled',
         message: 'A release or refund for this bounty was already recorded, so nothing moved again.',
       };
+    case 'pending_confirmation':
+      return {
+        title: 'Awaiting Stripe confirmation',
+        message: settlement.detail ?? 'The transfer was requested but is not confirmed yet. Wait for Stripe confirmation before taking another action.',
+      };
     case 'not_applicable':
       return { title: 'Resolved', message: 'There was no escrow to settle for this bounty.' };
     case 'nothing_held':
@@ -51,15 +56,20 @@ function describeSettlement(
         message: settlement.detail ?? 'No escrow record was found, so no money moved.',
       };
     case 'failed':
-    default:
       return {
         title: 'Decision saved, money NOT moved',
         message:
-          `The dispute is recorded as decided for the ${winner}, but the ${winner === 'hunter' ? 'release' : 'refund'} did not happen.
+          `The dispute is recorded as decided for the ${winner}, but the ${winner === 'hunter' ? 'release' : 'refund'} was rejected before money moved.
 
 ${settlement.detail ?? 'No money moved.'}
 
-Use "Settle money" on this dispute to retry. Retrying is safe.`,
+Resolve the reason for the rejection before trying settlement again.`,
+      };
+    case 'unknown':
+    default:
+      return {
+        title: 'Settlement needs reconciliation',
+        message: settlement.detail ?? 'The settlement outcome could not be confirmed. Contact support for reconciliation; do not retry.',
       };
   }
 }
@@ -233,7 +243,10 @@ export default function AdminDisputeDetailScreen() {
       loadDisputeDetails();
     } catch (error) {
       console.error('Error settling dispute:', error);
-      Alert.alert('Settlement failed', 'An unexpected error occurred. No money moved.');
+      Alert.alert(
+        'Settlement needs reconciliation',
+        'The settlement outcome could not be confirmed. Contact support for reconciliation; do not retry.'
+      );
     } finally {
       setSettling(false);
     }

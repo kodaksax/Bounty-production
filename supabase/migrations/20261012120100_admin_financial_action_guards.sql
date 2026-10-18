@@ -61,17 +61,33 @@ AS $$
     WHEN EXISTS (
            SELECT 1 FROM public.bounty_payments bp
             WHERE bp.bounty_id = p_bounty_id
-              AND bp.status IN ('authorized', 'captured', 'release_pending', 'refund_pending', 'disputed'))
+              AND (
+                bp.status IN ('pending_payment', 'authorized', 'captured', 'release_pending', 'refund_pending', 'disputed')
+                OR (bp.status = 'failed' AND bp.stripe_charge_id IS NOT NULL)
+              ))
       THEN 'stripe_payment_' || (
            SELECT bp.status FROM public.bounty_payments bp
             WHERE bp.bounty_id = p_bounty_id
-              AND bp.status IN ('authorized', 'captured', 'release_pending', 'refund_pending', 'disputed')
+              AND (
+                bp.status IN ('pending_payment', 'authorized', 'captured', 'release_pending', 'refund_pending', 'disputed')
+                OR (bp.status = 'failed' AND bp.stripe_charge_id IS NOT NULL)
+              )
             ORDER BY bp.created_at DESC
             LIMIT 1)
     WHEN EXISTS (
            SELECT 1 FROM public.bounty_v3_funding f
             WHERE f.bounty_id = p_bounty_id
-              AND f.state IN ('authorizing', 'authorized', 'awaiting_hunter_onboarding', 'capturing'))
+              AND (
+                f.state IN ('authorizing', 'authorized', 'awaiting_hunter_onboarding', 'capturing')
+                OR (
+                  f.state = 'capture_failed'
+                  AND (
+                    f.last_error_code IS DISTINCT FROM 'capture_failed_expired'
+                    OR f.captured_at IS NOT NULL
+                    OR f.stripe_charge_id IS NOT NULL
+                  )
+                )
+              ))
       THEN 'v3_funding_held'
     ELSE NULL
   END;

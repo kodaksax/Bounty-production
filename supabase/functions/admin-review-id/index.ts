@@ -75,7 +75,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: `decision must be one of: ${validDecisions.join(', ')}` }, 400)
   }
 
-  if (userId === adminUser.id) {
+  if (userId.toLowerCase() === adminUser.id.toLowerCase()) {
     return jsonResponse({ error: 'You cannot review your own verification' }, 403)
   }
 
