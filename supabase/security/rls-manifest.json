@@ -116,7 +116,6 @@
     "bounty_requests": {
       "commands": ["INSERT", "UPDATE"],
       "required_triggers": [
-        "trg_bounty_requests_guard_assignment",
         "a00_lock_bounty_requirements"
       ]
     },

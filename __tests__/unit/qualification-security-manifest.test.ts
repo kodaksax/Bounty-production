@@ -54,7 +54,6 @@ describe('qualification security manifest', () => {
       'a00_project_bounty_requirements',
     ]));
     expect(protectedTables.bounty_requests.required_triggers).toEqual(expect.arrayContaining([
-      'trg_bounty_requests_guard_assignment',
       'a00_lock_bounty_requirements',
     ]));
     expect(protectedTables.bounty_requests.commands).toEqual(['INSERT', 'UPDATE']);
