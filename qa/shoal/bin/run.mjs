@@ -251,10 +251,14 @@ if (scenario.id === 'race-claim' || scenario.strategy.includes('race')) {
 }
 
 if (postAuthRoute) {
+  // Shoal agents have no address bar (see the race branch above), so the route can only
+  // be reached through the app's own navigation. Telling them "the address bar works"
+  // sent hunter-notification-return agents hunting for one (2026-10-15 run).
   task +=
     ' Everything above happens on the screen reached from ' + postAuthRoute +
-    ' -- once you are signed in, navigate there first (the address bar works: ' +
-    new URL(postAuthRoute, target.url).toString() + ').';
+    ' -- once you are signed in, get there first using the app\'s own navigation. ' +
+    'This browser shows you no address bar, so do not try to type a URL.' +
+    (scenario.navigationHint ? ' ' + scenario.navigationHint : '');
 }
 
 const provider = opt('provider', process.env.BOUNTY_SHOAL_PROVIDER || config.defaults.provider);
