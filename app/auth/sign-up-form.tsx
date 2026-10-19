@@ -44,11 +44,9 @@ import { GoogleLogo } from '../../components/ui/google-logo';
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors';
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation';
 import {
-    calculatePasswordStrength,
-    getStrengthColor,
-    getStrengthWidth,
+    checkPasswordRequirements,
+    PASSWORD_REQUIREMENTS,
     validateNewPassword,
-    type PasswordStrengthResult,
 } from '../../lib/utils/password-validation';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
@@ -59,6 +57,19 @@ import { markInitialNavigationDone } from '../initial-navigation/initialNavigati
 // later rejected when the user resets it.
 const IOS_NEW_PASSWORD_RULES =
   'minlength: 8; required: lower; required: upper; required: digit; required: special;';
+
+// Short labels for the live password checklist under the field, keyed by
+// checkPasswordRequirements' ids. The validator's own labels are sentences
+// written for the reset screen's vertical list; these have to share a row or
+// two on a phone. The symbol item names the exact characters that count,
+// because "#" or "." look like special characters and don't satisfy the rule.
+const PASSWORD_CHECKLIST_LABELS: Record<string, string> = {
+  length: `${PASSWORD_REQUIREMENTS.minLength}+ characters`,
+  uppercase: 'Uppercase',
+  lowercase: 'Lowercase',
+  number: 'Number',
+  special: `Symbol ${PASSWORD_REQUIREMENTS.specialChars}`,
+};
 
 /**
  * Map a rejected `/auth/register` response to a low-cardinality reason so
@@ -244,13 +255,12 @@ export function SignUpForm() {
     }
   }, [authError, fieldErrors]);
 
-  // Password strength tracking — same rules/UI pattern as the reset-password
-  // flow (lib/utils/password-validation.ts), so sign-up and password reset
-  // never disagree about what makes a valid password.
-  const [passwordStrength, setPasswordStrength] = useState<PasswordStrengthResult | null>(null);
-  useEffect(() => {
-    setPasswordStrength(password ? calculatePasswordStrength(password) : null);
-  }, [password]);
+  // The full password rule, ticked off live — same requirements as the
+  // reset-password flow (lib/utils/password-validation.ts), so sign-up and
+  // password reset never disagree about what makes a valid password. Shown
+  // before the first keystroke (SBA-06): the field used to say only "At least
+  // 8 characters" and reveal the other four rules after a failed submit.
+  const passwordRequirements = useMemo(() => checkPasswordRequirements(password), [password]);
 
   // Live username availability — debounced so every keystroke doesn't hit
   // Supabase. isUsernameUnique already falls back to a local check when the
@@ -876,7 +886,7 @@ export function SignUpForm() {
                   setFieldErrors(prev => ({ ...prev, password: '' }));
                 }
               }}
-              placeholder="At least 8 characters"
+              placeholder="Create a password"
               secureTextEntry={!showPassword}
               autoComplete="password-new"
               textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
@@ -901,29 +911,35 @@ export function SignUpForm() {
             </TouchableOpacity>
           </View>
           {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
-          {/* Same reservation as the username hint: the meter fades in on the
-              first keystroke and must not change the form's height when it does. */}
-          <View style={styles.strengthRow}>
-            {passwordStrength ? (
-              <>
-                <View style={styles.strengthTrack}>
+          {/* Always rendered, so the rule is known before typing and the
+              form's height never changes as items tick. After a rejected
+              submit, whatever is still missing turns red. */}
+          <View style={styles.checklist} testID="password-checklist">
+            {passwordRequirements.map(req => {
+              const missedOnSubmit = !req.met && !!fieldErrors.password;
+              const color = req.met
+                ? theme.primaryLight
+                : missedOnSubmit
+                  ? theme.error
+                  : theme.textSecondary;
+              const label = PASSWORD_CHECKLIST_LABELS[req.id] ?? req.label;
+              return (
                 <View
-                  style={[
-                    styles.strengthFill,
-                    {
-                      width: `${getStrengthWidth(passwordStrength.score)}%`,
-                      backgroundColor: getStrengthColor(passwordStrength.level),
-                    },
-                    ]}
-                  />
-                </View>
-                <Text
-                  style={[styles.strengthLabel, { color: getStrengthColor(passwordStrength.level) }]}
+                  key={req.id}
+                  style={styles.checklistItem}
+                  accessible
+                  accessibilityLabel={`${req.label}: ${req.met ? 'done' : 'not yet'}`}
+                  testID={`password-rule-${req.id}`}
                 >
-                  {passwordStrength.level.replace('-', ' ')}
-                </Text>
-              </>
-            ) : null}
+                  <MaterialIcons
+                    name={req.met ? 'check-circle' : 'radio-button-unchecked'}
+                    size={icons.checklist}
+                    color={color}
+                  />
+                  <Text style={[styles.checklistText, { color }]}>{label}</Text>
+                </View>
+              );
+            })}
           </View>
 
           {/* Sits at the bottom of the form on a tall device and tightens up on
@@ -959,7 +975,7 @@ export function SignUpForm() {
         </ScrollView>
 
         {/* Only the action is docked. Anything that grows inside the form (the
-            strength meter, a username hint, a field error) used to push this
+            password checklist, a username hint, a field error) used to push this
             button below the fold; keeping it outside the ScrollView makes that
             structurally impossible. */}
         <View style={styles.footer}>
@@ -1069,7 +1085,7 @@ function makeLayout(
   const t = (n: number) => Math.round(n * tScale);
 
   return {
-    icons: { back: f(24), field: f(20), status: f(22) },
+    icons: { back: f(24), field: f(20), status: f(22), checklist: t(14) },
     styles: StyleSheet.create({
       flex: {
         flex: 1,
@@ -1231,30 +1247,22 @@ function makeLayout(
         minHeight: t(13) + v(6),
         justifyContent: 'center',
       },
-      strengthRow: {
+      // The password rule, as a wrapping row of ticks under the field.
+      checklist: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        columnGap: f(12),
+        rowGap: v(4),
+        marginTop: v(8),
+      },
+      checklistItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: f(10),
-        marginTop: v(6),
-        minHeight: t(14),
+        gap: f(4),
       },
-      strengthTrack: {
-        flex: 1,
-        height: v(6),
-        borderRadius: 999,
-        overflow: 'hidden',
-        backgroundColor: theme.overlay,
-      },
-      strengthFill: {
-        height: '100%',
-        borderRadius: 999,
-      },
-      strengthLabel: {
-        fontSize: t(12),
-        fontWeight: '600',
-        textTransform: 'capitalize',
-        minWidth: f(76),
-        textAlign: 'right',
+      checklistText: {
+        fontSize: t(12.5),
+        fontWeight: '500',
       },
       // Absorbs leftover height so the blurb below it sits at the foot of the
       // form on a tall device, and collapses to nothing on a short one.
