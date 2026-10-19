@@ -138,6 +138,8 @@ export function CreateBountyFlow({
   // optional details have since been persisted onto the real row.
   const [postedBountyId, setPostedBountyId] = useState<string | null>(null);
   const [postedDraft, setPostedDraft] = useState<BountyDraft | null>(null);
+  // Whether the reward was charged at publish, per the server's funding_mode.
+  const [postedFunded, setPostedFunded] = useState(false);
   // The congratulations moment shown once, right after publishing, over the
   // confirmation step it then fades into.
   const [celebrating, setCelebrating] = useState(false);
@@ -366,6 +368,7 @@ export function CreateBountyFlow({
       // still navigates to the feed, just one screen later.
       setPostedBountyId(bountyId);
       setPostedDraft(publishedDraftRef.current ?? draft);
+      setPostedFunded(meta.funded);
       setCelebrating(true);
     },
     // Compensation is the last pre-publish step. This was hard-coded to 2
@@ -863,6 +866,7 @@ export function CreateBountyFlow({
                 draft={postedDraft}
                 onAddDetail={handleAddDetail}
                 onContinue={handleFinish}
+                funded={postedFunded}
                 step={TOTAL_STEPS}
                 totalSteps={TOTAL_STEPS}
               />
