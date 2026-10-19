@@ -4,6 +4,7 @@ import type { Bounty, BountyRequest, Profile } from 'lib/services/database.types
 import { HUNTER_CAPABILITIES_ENABLED } from '../feature-flags';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
+import { sortApplicantsLocalFirst } from 'lib/utils/applicant-distance';
 import { getApiBase } from 'lib/utils/dev-host';
 import { logger } from 'lib/utils/error-logger';
 
@@ -542,7 +543,9 @@ export const bountyRequestService = {
             } as Profile,
           };
         });
-        return result;
+        // Fetched newest first (so a page cut keeps the latest), shown nearest
+        // first: a poster's applicant list leads with people who can come (SBA-02).
+        return sortApplicantsLocalFirst(result);
       }
 
       // Fallback to API: POST to batch endpoint with bounty_ids
@@ -564,7 +567,8 @@ export const bountyRequestService = {
         );
       }
 
-      return await response.json();
+      const batched = await response.json();
+      return Array.isArray(batched) ? sortApplicantsLocalFirst(batched) : batched;
     } catch (err) {
       let error: Record<string, any>;
       if (err instanceof Error) {

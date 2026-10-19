@@ -48,6 +48,11 @@ export interface FilterChipSelectProps<T> {
    * renders inactive and shows `label` instead of the option's label.
    */
   neutralValue?: T
+  /**
+   * Chip label while `value` equals `neutralValue`, for a default that still
+   * filters (e.g. the feed's local "25 mi" baseline). Defaults to `label`.
+   */
+  neutralLabel?: string
   /** Optional one-liner under the sheet title. */
   description?: string
   /** Optional caveat pinned to the bottom of the sheet (e.g. a permission warning). */
@@ -62,6 +67,7 @@ export function FilterChipSelect<T>({
   onChange,
   icon,
   neutralValue,
+  neutralLabel,
   description,
   hint,
   testID,
@@ -73,7 +79,7 @@ export function FilterChipSelect<T>({
 
   const selected = useMemo(() => options.find((o) => Object.is(o.value, value)), [options, value])
   const isActive = !Object.is(value, neutralValue)
-  const chipLabel = isActive ? selected?.chipLabel ?? selected?.label ?? label : label
+  const chipLabel = isActive ? selected?.chipLabel ?? selected?.label ?? label : neutralLabel ?? label
 
   // Subtle pop when the selection changes, so the chip visibly acknowledges a
   // choice made behind the sheet that's simultaneously dismissing. Skips the
@@ -114,7 +120,11 @@ export function FilterChipSelect<T>({
           expanded={open}
           onPress={() => setOpen(true)}
           accessibilityLabel={
-            isActive ? `${label} filter, ${selected?.label ?? chipLabel} selected` : `${label} filter, off`
+            isActive
+              ? `${label} filter, ${selected?.label ?? chipLabel} selected`
+              : neutralLabel
+                ? `${label} filter, ${selected?.label ?? neutralLabel} by default`
+                : `${label} filter, off`
           }
           accessibilityHint={`Opens the ${label.toLowerCase()} options`}
           testID={testID}

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { analyticsService } from 'lib/services/analytics-service'
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service'
+import { countNearbyApplicants } from 'lib/utils/applicant-distance'
 import { deriveCoarseVerificationStatus } from 'lib/utils/normalize-profile'
 
 /**
@@ -50,6 +51,9 @@ export function useApplicantListViewed(
           ) === 'verified'
       ).length
       const trustTier = (requests[0]?.bounty as any)?.trust_tier || 'standard'
+      // SBA-02: applicants with a known distance that isn't flagged far
+      // (<= 50 mi). Online jobs and unknown locations count as not nearby.
+      const nearbyApplicantCount = countNearbyApplicants(requests)
       const signature = `${applicantCount}:${verifiedCount}:${trustTier}`
 
       if (firedSignaturesRef.current.get(bountyId) === signature) continue
@@ -61,6 +65,7 @@ export function useApplicantListViewed(
           applicantCount,
           verifiedCount,
           trustTier,
+          nearbyApplicantCount,
         })
         .catch(() => {})
     }

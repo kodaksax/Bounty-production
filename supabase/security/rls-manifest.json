@@ -590,6 +590,12 @@
       ]
     },
     {
+      "signature": "search_bounties_nearby(double precision,double precision,double precision,text,integer,integer,boolean,boolean)",
+      "forbid_execute": [
+        "PUBLIC"
+      ]
+    },
+    {
       "signature": "bounty_requests_broadcast_changes()",
       "forbid_execute": [
         "anon",

@@ -34,6 +34,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
 import { ApplicantCard } from "../../components/applicant-card"
+import { NotNearbyToggle } from "../../components/not-nearby-toggle"
+import { buildApplicantListRows, type ApplicantListRow } from "../../lib/utils/applicant-distance"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { EditPostingModal } from "../../components/edit-posting-modal"
@@ -154,6 +156,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const [myBounties, setMyBounties] = useState<Bounty[]>([])
   const [inProgressBounties, setInProgressBounties] = useState<Bounty[]>([])
   const [bountyRequests, setBountyRequests] = useState<BountyRequestWithDetails[]>([])
+  // SBA-02: far (is_far) applications sit under "Not nearby (N)", closed by default.
+  const [showNotNearby, setShowNotNearby] = useState(false)
   const [isLoading, setIsLoading] = useState({
     myBounties: true,
     inProgress: true,
@@ -956,7 +960,16 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // Rows are either a section header or a bounty; toBountyListRows namespaces
   // header ids so they can never collide with a bounty id.
   const keyExtractorRow = React.useCallback((item: BountyListRow) => item.id, []);
-  const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
+  const keyExtractorRequest = React.useCallback(
+    (row: ApplicantListRow<BountyRequestWithDetails>) =>
+      row.kind === 'notNearby' ? '__not-nearby__' : row.item.id.toString(),
+    []
+  );
+  // Nearest applicants first, far ones collapsed (lib/utils/applicant-distance).
+  const requestRows = React.useMemo(
+    () => buildApplicantListRows(bountyRequests, showNotNearby),
+    [bountyRequests, showNotNearby]
+  );
 
   // NOTE: Do NOT provide getItemLayout for any of these lists. MyPostingExpandable
   // rows change height when expanded, and ApplicantCard height varies with the
@@ -1077,19 +1090,22 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     return 0
   }, [inProgressAttentionCount, myPostingsAttentionCount, pendingRequestCount])
 
-  const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
+  const toggleNotNearby = React.useCallback(() => setShowNotNearby((v) => !v), [])
+  const renderRequestItem = React.useCallback(({ item: row }: { item: ApplicantListRow<BountyRequestWithDetails> }) => row.kind === 'notNearby' ? (
+    <NotNearbyToggle count={row.count} expanded={row.expanded} onToggle={toggleNotNearby} />
+  ) : (
     <ApplicantCard
-      request={request}
+      request={row.item}
       onAccept={handleAcceptRequest}
       onReject={handleRejectRequest}
       onRequestMoreInfo={handleAskApplicant}
-      isAskingQuestion={askingRequestId === String(request.id)}
+      isAskingQuestion={askingRequestId === String(row.item.id)}
       isAskQuestionDisabled={isAskApplicantBusy}
       // Ensure returning from profile restores the Postings screen to the
       // Requests tab reliably by directing BountyApp to open postings + requests.
       referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?tab=postings&initialTab=requests`}
     />
-  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant, askingRequestId, isAskApplicantBusy]);
+  ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant, askingRequestId, isAskApplicantBusy, toggleNotNearby]);
 
   if (alternateScreen) {
     return alternateScreen
@@ -1398,7 +1414,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               ) : activeTab === "requests" ? (
                 <FlatList
                   {...keyboardAwareListProps}
-                  data={bountyRequests}
+                  data={requestRows}
                   keyExtractor={keyExtractorRequest}
                   renderItem={renderRequestItem}
                   ListHeaderComponent={<BountyWorkflowGuide variant="poster-requests" />}
