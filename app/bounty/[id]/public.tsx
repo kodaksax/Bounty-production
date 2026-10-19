@@ -43,6 +43,7 @@ import { ApplicationPitchModal } from '../../../components/application-pitch-mod
 import { IdRequirementModal } from '../../../components/id-requirement-modal';
 import { ZipLocationModal } from '../../../components/zip-location-modal';
 import { useApplyLocationGate } from '../../../hooks/useApplyLocationGate';
+import { useRequestExpiryPolicy } from '../../../hooks/useRequestExpiryPolicy';
 import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
 import { formatPostedAgo } from '../../../lib/utils/format-relative-date';
 import { BountyTrustSignals } from '../../../components/bounty-trust-signals';
@@ -67,6 +68,7 @@ export default function PublicBountyDetail() {
 
   const [hasApplied, setHasApplied] = useState(false);
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
+  const requestExpiryPolicy = useRequestExpiryPolicy();
   const [isApplying, setIsApplying] = useState(false);
   const [showPitchModal, setShowPitchModal] = useState(false);
   const [showIdRequirementModal, setShowIdRequirementModal] = useState(false);
@@ -207,8 +209,9 @@ export default function PublicBountyDetail() {
       role: viewerRole,
       viewerId: currentUserId,
       requestStatus,
+      requestExpiryPolicy,
     });
-  }, [bounty, viewerRole, requestStatus, currentUserId]);
+  }, [bounty, viewerRole, requestStatus, currentUserId, requestExpiryPolicy]);
 
   // Poster's public profile, for account age + earned ID on the trust block.
   const posterId = bounty ? String(bounty.poster_id || bounty.user_id || '') || undefined : undefined;

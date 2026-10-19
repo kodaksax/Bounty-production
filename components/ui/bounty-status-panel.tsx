@@ -117,7 +117,9 @@ export function BountyStatusPanel({
   return (
     <View
       style={[styles.card, { backgroundColor: tint, borderColor: withAlpha(accent, 0.35) }]}
-      accessibilityLabel={`${state.headline}. ${state.explanation} ${state.nextStep}`}
+      accessibilityLabel={`${state.headline}. ${state.explanation} ${state.nextStep}${
+        state.timingNote ? ` ${state.timingNote}` : ''
+      }`}
     >
       <View style={styles.headRow}>
         <View style={[styles.iconWrap, { backgroundColor: withAlpha(accent, 0.18) }]}>
@@ -147,6 +149,18 @@ export function BountyStatusPanel({
             accessibilityElementsHidden
           />
           <Text style={styles.nextText}>{state.nextStep}</Text>
+        </View>
+      )}
+
+      {!!state.timingNote && (
+        <View style={styles.nextRow} testID="bounty-status-timing">
+          <MaterialIcons
+            name="schedule"
+            size={14}
+            color={theme.textSecondary}
+            accessibilityElementsHidden
+          />
+          <Text style={styles.nextText}>{state.timingNote}</Text>
         </View>
       )}
 

@@ -54,11 +54,12 @@ export function describeApplicationWindow(
   policy: RequestExpiryPolicy = DEFAULT_REQUEST_EXPIRY_POLICY,
   posterInteracted?: boolean | null
 ): string {
+  const name = posterName.charAt(0).toUpperCase() + posterName.slice(1);
   const closes = "If they don't, your application closes automatically, and that doesn't count against you.";
   if (posterInteracted) {
-    return `${posterName} has been in touch, so they have up to ${formatExpiryWindow(
+    return `${name} has been in touch, so they have up to ${formatExpiryWindow(
       policy.interactedExpiryHours
     )} from then to decide. ${closes}`;
   }
-  return `${posterName} has ${formatExpiryWindow(policy.expiryHours)} to decide. ${closes}`;
+  return `${name} has ${formatExpiryWindow(policy.expiryHours)} to decide. ${closes}`;
 }

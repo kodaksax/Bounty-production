@@ -30,6 +30,7 @@
 import type { BountyDisplayStatus } from './bounty-display-status';
 import { getBountyDisplayStatus } from './bounty-display-status';
 import { getReviewDeadlineStatus, type ReviewDeadlineStatus } from './review-deadline';
+import { describeApplicationWindow, type RequestExpiryPolicy } from './request-expiry';
 import { trustSafetyStrings } from '../strings/trust-safety';
 
 /** Who is looking at the bounty. */
@@ -159,6 +160,17 @@ export interface BountyLifecycleInput {
    * must not say they were passed over.
    */
   requestRejectionSource?: string | null;
+  /**
+   * The live application-expiry window (hooks/useRequestExpiryPolicy). Left
+   * unset, the server's defaults are described.
+   */
+  requestExpiryPolicy?: RequestExpiryPolicy | null;
+  /**
+   * bounty_requests.poster_interacted_at is set on the viewer's pending
+   * application, which moves its expiry to the longer engaged window. Unknown
+   * (null) describes the base window.
+   */
+  requestPosterInteracted?: boolean | null;
   /** Status of the latest completion submission on this bounty. */
   submissionStatus?: string | null;
   /** True when the latest submission belongs to the viewing hunter. */
@@ -198,6 +210,11 @@ export interface BountyLifecycleState {
   explanation: string;
   /** One sentence on what happens next. Empty string when nothing follows. */
   nextStep: string;
+  /**
+   * The clock, when one is running that the viewer should know about: how long
+   * the other side has, and what happens if they never answer.
+   */
+  timingNote?: string | null;
   waitingOn: BountyWaitingOn;
   /** True when the viewer is blocking progress. Drives badges and grouping. */
   needsAttention: boolean;
@@ -334,6 +351,8 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
     role,
     requestStatus = null,
     requestRejectionSource = null,
+    requestExpiryPolicy = null,
+    requestPosterInteracted = null,
     submissionStatus = null,
     submissionIsMine = false,
     applicationCount = 0,
@@ -423,7 +442,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
 
   return isPoster
     ? resolvePoster({ status, bounty, applicationCount, hunter, reward, submissionStatus, paymentState, revisionRequested, submissionPending, review })
-    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState, review });
+    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, requestExpiryPolicy, requestPosterInteracted, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState, review });
 }
 
 function resolveVisitor(
@@ -718,6 +737,8 @@ function resolveHunter(args: {
   viewerId: string | null;
   requestStatus: string | null;
   requestRejectionSource: string | null;
+  requestExpiryPolicy: RequestExpiryPolicy | null;
+  requestPosterInteracted: boolean | null;
   poster: string;
   reward: string;
   revisionRequested: boolean;
@@ -726,7 +747,7 @@ function resolveHunter(args: {
   paymentState: BountyLifecycleInput['paymentState'];
   review: ReviewDeadlineStatus | null;
 }): BountyLifecycleState {
-  const { status, bounty, viewerId, requestStatus, requestRejectionSource, poster, reward, revisionRequested, paymentState, review } = args;
+  const { status, bounty, viewerId, requestStatus, requestRejectionSource, requestExpiryPolicy, requestPosterInteracted, poster, reward, revisionRequested, paymentState, review } = args;
 
   // A hunter whose application is still `pending` on a bounty that has already
   // moved on was passed over — the poster accepted someone else and the row was
@@ -777,6 +798,13 @@ function resolveHunter(args: {
         headline: 'Application sent',
         explanation: trustSafetyStrings.pendingApplication,
         nextStep: `Wait for ${poster} to officially accept you on Bounty. A chat message is not acceptance. Keep the agreement and any payment here.`,
+        // SBA-10: the hunter is told the poster's deadline and that a closure
+        // is not held against them (fn_expire_bounty_requests).
+        timingNote: describeApplicationWindow(
+          poster,
+          requestExpiryPolicy ?? undefined,
+          requestPosterInteracted
+        ),
         waitingOn: 'other',
         needsAttention: false,
         tone: 'progress',
