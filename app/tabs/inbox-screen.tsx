@@ -3,13 +3,10 @@
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { saveStructuredBountyEdit } from '../../lib/services/bounty-requirements-service';
 import { useFocusEffect, useRouter } from "expo-router"
-import { analyticsService } from "lib/services/analytics-service"
-import { failureEventProps } from "lib/utils/stripe-error"
 import { discardApplication, withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
-import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
 import type { Conversation } from "lib/types"
 import type { BountyLifecycleState } from "lib/utils/bounty-lifecycle"
@@ -22,7 +19,6 @@ import {
   hideBountyForHunter,
   loadHunterHiddenBountyIds,
 } from "lib/utils/hunter-hidden-bounties"
-import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -34,6 +30,7 @@ import Reanimated, { Easing, interpolateColor, runOnJS, useAnimatedStyle, useSha
 import type { SharedValue } from "react-native-reanimated"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useTabPager } from "../../components/ui/tab-pager"
+import { defaultInboxSegment, inboxSegmentForLink } from '../../lib/navigation/bounty-app-tab'
 import { BrandingLogo } from "../../components/ui/branding-logo"
 import { BountyConversationRow, type InboxPerson } from "../../components/bounty-inbox/thread-list-row"
 import { NotNearbyToggle } from "../../components/not-nearby-toggle"
@@ -57,7 +54,8 @@ import {
   MY_POSTINGS_FILTER_LABELS,
   useBountyStatusFilters,
 } from '../../hooks/useBountyStatusFilters'
-import { getBountyFundingRequirement } from '../../lib/services/bounty-funding-service'
+import { BountyRefundFailedError, cancelAndRefundBounty } from '../../lib/services/bounty-cancel-refund'
+import { describeBountyUpdateError, toBountyUpdateError } from '../../lib/services/bounty-update-error'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
@@ -85,10 +83,12 @@ interface InboxScreenProps {
  * reached from the header's chat icon.
  */
 // My Work / My Bounties. Old deep links still resolve: "requests" (the
-// retired Requests tab) opens My Bounties, where applications now live, and
-// anything unknown falls back to My Work.
+// retired Requests tab) opens My Bounties, where applications now live. With
+// no link (or an unknown value) the Inbox starts on My Work and, once the
+// poster's own bounties load, moves to My Bounties if any is open — see
+// defaultInboxSegment (SBA-10).
 function segmentForInitialTab(initialTab: string | undefined): InboxTab {
-  return initialTab === "myPostings" || initialTab === "requests" ? "myPostings" : "inProgress"
+  return inboxSegmentForLink(initialTab) ?? "inProgress"
 }
 
 export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyAccepted }: InboxScreenProps) {
@@ -97,6 +97,13 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const router = useRouter()
 
   const [activeTab, setActiveTab] = useState<InboxTab>(segmentForInitialTab(initialTab))
+  // Once anything has chosen the segment — a link, a tap, a swipe, or the
+  // default below — the default never moves it again.
+  const segmentDecidedRef = useRef(inboxSegmentForLink(initialTab) !== null)
+  // Which user's posted bounties `myBounties` holds. The default waits for
+  // this rather than for the loading flag, which the signed-out branch clears
+  // before the user id resolves.
+  const [myBountiesLoadedFor, setMyBountiesLoadedFor] = useState<string | null>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
   const [showShadow, setShowShadow] = useState(false)
 
@@ -188,6 +195,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       // cannot put them back when the screen remounts after a tab switch.
       const activeBounties = filterManagementBounties(mine)
       setMyBounties(activeBounties)
+      setMyBountiesLoadedFor(currentUserId)
       setIsLoading((prev) => ({ ...prev, myBounties: false }))
       // Load related requests
       await loadRequestsForMyBounties(activeBounties)
@@ -431,10 +439,10 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         console.error('Failed to re-check pending requests after save failure:', checkErr)
       }
 
-      // Fallback: show server-provided error message if available, else generic
-      const msg = (err && (err.message || String(err))) || 'Failed to save changes'
-      Alert.alert('Error', msg)
+      // Hand the server's reason, in plain words, back to the edit modal so
+      // it shows inline with the poster's edits intact (SBA-10).
       console.error('Error saving bounty edit:', err)
+      throw toBountyUpdateError(err)
     }
   }
 
@@ -455,78 +463,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             if (deletingBountyIdsRef.current.has(deleteKey)) return
             deletingBountyIdsRef.current.add(deleteKey)
             try {
-              // Process refund FIRST for paid bounties before any other operations.
-              //
-              // ...but only when there is actually something to refund. Under
-              // pay-at-accept an OPEN bounty has normally never been funded —
-              // the poster is charged when they select a hunter, not at post —
-              // so the old unconditional refund would fail on a bounty that was
-              // never debited and then hit the `return` below, making the
-              // posting undeletable. Before this flow existed, an open paid
-              // bounty always had escrow, so the situation could not arise.
-              //
-              // Asked of the SERVER rather than inferred from funding_mode: an
-              // escrow can exist on an open at_accept bounty (e.g. one created
-              // by an older build), and refusing to refund that would strand
-              // real money. getBountyFundingRequirement reports already_funded
-              // from the canonical wallet_transactions row, and its documented
-              // fallback when the RPC is unavailable is already_funded=true —
-              // i.e. attempt the refund exactly as this code always has.
-              const needsRefund =
-                bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open'
-                  ? (await getBountyFundingRequirement(bounty.id)).alreadyFunded
-                  : false
-
-              if (needsRefund) {
-                const useV2 = isPhase2Bounty(bounty)
-                const useV3 = isV3Bounty(bounty)
-                try {
-                  await analyticsService.trackEvent('payment_architecture_routed', {
-                    bountyId: String(bounty.id),
-                    version: useV3 ? 3 : useV2 ? 2 : 1,
-                    context: 'cancel',
-                  })
-                } catch {
-                  /* analytics is best-effort */
-                }
-                try {
-                  if (useV2 || useV3) {
-                    // Stripe-native escrow: cancels the PaymentIntent or v3 auth.
-                    // Only terminal states are safe to treat as a successful refund.
-                    const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
-                    if (cancelResult.status !== 'canceled' && cancelResult.status !== 'refunded') {
-                      throw new Error(`Escrow cancellation is still pending (${cancelResult.status})`)
-                    }
-                  } else {
-                    // refundEscrow signals failure by returning false, not by
-                    // throwing — so the boolean must be checked or a failed
-                    // refund would still delete the bounty and lose the money.
-                    const refunded = await refundEscrow(bounty.id, bounty.title, 100) // 100% refund for unaccepted bounties
-                    if (!refunded) {
-                      throw new Error('Escrow refund did not complete')
-                    }
-                  }
-                  try {
-                    await analyticsService.trackEvent('escrow_refunded', {
-                      bountyId: String(bounty.id),
-                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
-                      amount: bounty.amount,
-                    })
-                  } catch {
-                    /* analytics is best-effort */
-                  }
-                } catch (refundError) {
-                  console.error('Error refunding escrow:', refundError);
-                  try {
-                    await analyticsService.trackEvent('payment_failed', {
-                      bountyId: String(bounty.id),
-                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
-                      stage: 'cancel',
-                      ...failureEventProps(refundError),
-                    })
-                  } catch {
-                    /* analytics is best-effort */
-                  }
+              // Refund FIRST (when anything is held), then delete — the one
+              // path shared with the bounty screen's "Cancel and refund".
+              try {
+                await cancelAndRefundBounty(bounty, { refundEscrow })
+              } catch (cancelError) {
+                if (cancelError instanceof BountyRefundFailedError) {
                   Alert.alert(
                     'Refund Failed',
                     'Could not refund escrowed funds. Please contact support before deleting.',
@@ -534,13 +476,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                   );
                   return; // Don't proceed with deletion if refund fails
                 }
-              }
-
-              // Delete from API first (no optimistic update before API call)
-              const success = await bountyService.delete(bounty.id)
-
-              if (!success) {
-                throw new Error("Failed to delete bounty")
+                throw cancelError
               }
 
               // Update UI only after successful deletion. The registry mark
@@ -737,7 +673,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               await loadMyBounties()
             } catch (err) {
               console.error('Error archiving bounty:', err)
-              Alert.alert('Error', 'Failed to archive bounty. Please try again.')
+              Alert.alert('Error', describeBountyUpdateError(err))
             }
           },
         },
@@ -973,6 +909,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const [segmentWidth, setSegmentWidth] = useState(0)
 
   const selectSegment = React.useCallback((tab: InboxTab) => {
+    segmentDecidedRef.current = true
     setActiveTab(tab)
     segmentBase.value = tab === 'inProgress' ? 0 : 1
     segmentSettling.value = true
@@ -996,7 +933,21 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     if (initialTab !== undefined) selectSegment(segmentForInitialTab(initialTab))
   }, [initialTab, selectSegment])
 
+  // No link chose a segment: open on My Bounties for a poster with an open
+  // bounty, where its applications are (SBA-10). Decided once, as soon as
+  // this user's own bounties have loaded, and without a slide — it is where
+  // the Inbox starts, not a move the user made.
+  useEffect(() => {
+    if (segmentDecidedRef.current || !currentUserId || myBountiesLoadedFor !== currentUserId) return
+    segmentDecidedRef.current = true
+    if (defaultInboxSegment(myBounties) !== 'myPostings') return
+    setActiveTab('myPostings')
+    segmentBase.value = 1
+    segmentProgress.value = 1
+  }, [currentUserId, myBountiesLoadedFor, myBounties, segmentBase, segmentProgress])
+
   const commitSegment = React.useCallback((index: number) => {
+    segmentDecidedRef.current = true
     setActiveTab(index === 0 ? 'inProgress' : 'myPostings')
   }, [])
 

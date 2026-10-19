@@ -10,6 +10,7 @@ import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { escapeIlike, quotePostgrestValue } from 'lib/utils/postgrest-utils';
 import { analyticsService } from './analytics-service';
+import { BountyUpdateError, toBountyUpdateError } from './bounty-update-error';
 import { offlineQueueService } from './offline-queue-service';
 
 // UUID validation pattern used to guard PostgREST OR filter strings against injection.
@@ -1065,12 +1066,17 @@ export const bountyService = {
   },
 
   /**
-   * Update a bounty
+   * Update a bounty.
+   *
+   * Throws a BountyUpdateError on every failure, whose message is a plain
+   * sentence saying why (lib/services/bounty-update-error.ts) — never a raw
+   * PostgREST string, and never a silent null (SBA-10). Callers show
+   * `err.message`.
    */
   async update(
     id: any,
     updates: Partial<Omit<Bounty, 'id' | 'created_at'>>
-  ): Promise<Bounty | null> {
+  ): Promise<Bounty> {
     try {
       if (updates.requirements_payload !== undefined) {
         validateRequirements(updates.requirements_payload);
@@ -1078,10 +1084,12 @@ export const bountyService = {
       }
       // Defensive: ensure id is present and not null/undefined/empty
       if (id === null || id === undefined || id === '') {
-        const err = new Error('Invalid bounty id provided to bountyService.update');
         logger.error('bounties:update called with invalid id', { id, updates });
-        // Return null so callers can handle the failure gracefully without throwing
-        return null;
+        throw new BountyUpdateError(
+          "This bounty couldn't be identified. Go back and open it again.",
+          null,
+          'Invalid bounty id provided to bountyService.update'
+        );
       }
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
@@ -1091,8 +1099,9 @@ export const bountyService = {
           .select('*')
           .single();
 
-        if (error) throw updates.requirements_payload !== undefined ? requirementsError(error) : error;
-        return (data as unknown as Bounty) ?? null;
+        if (error) throw error;
+        if (!data) throw { code: 'PGRST116', message: 'update returned no row' };
+        return data as unknown as Bounty;
       }
 
       // If the code reaches here, we're in API mode and didn't use Supabase
@@ -1140,8 +1149,7 @@ export const bountyService = {
         updates,
         error: richError,
       });
-      if (updates.requirements_payload !== undefined) throw err;
-      return null;
+      throw toBountyUpdateError(err, { requirements: updates.requirements_payload !== undefined });
     }
   },
 

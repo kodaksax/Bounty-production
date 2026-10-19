@@ -30,6 +30,7 @@
 import type { BountyDisplayStatus } from './bounty-display-status';
 import { getBountyDisplayStatus } from './bounty-display-status';
 import { getReviewDeadlineStatus, type ReviewDeadlineStatus } from './review-deadline';
+import { describeApplicationWindow, type RequestExpiryPolicy } from './request-expiry';
 import { trustSafetyStrings } from '../strings/trust-safety';
 
 /** Who is looking at the bounty. */
@@ -159,6 +160,17 @@ export interface BountyLifecycleInput {
    * must not say they were passed over.
    */
   requestRejectionSource?: string | null;
+  /**
+   * The live application-expiry window (hooks/useRequestExpiryPolicy). Left
+   * unset, the server's defaults are described.
+   */
+  requestExpiryPolicy?: RequestExpiryPolicy | null;
+  /**
+   * bounty_requests.poster_interacted_at is set on the viewer's pending
+   * application, which moves its expiry to the longer engaged window. Unknown
+   * (null) describes the base window.
+   */
+  requestPosterInteracted?: boolean | null;
   /** Status of the latest completion submission on this bounty. */
   submissionStatus?: string | null;
   /** True when the latest submission belongs to the viewing hunter. */
@@ -198,6 +210,11 @@ export interface BountyLifecycleState {
   explanation: string;
   /** One sentence on what happens next. Empty string when nothing follows. */
   nextStep: string;
+  /**
+   * The clock, when one is running that the viewer should know about: how long
+   * the other side has, and what happens if they never answer.
+   */
+  timingNote?: string | null;
   waitingOn: BountyWaitingOn;
   /** True when the viewer is blocking progress. Drives badges and grouping. */
   needsAttention: boolean;
@@ -310,6 +327,17 @@ function action(key: BountyActionKey, label?: string): BountyLifecycleAction {
   return label ? { ...base, label } : base;
 }
 
+/**
+ * The poster's exit from an open bounty nobody has been hired for (SBA-10):
+ * delete it, refunding anything held. Wired to bounty-cancel-refund.ts, the
+ * same path as the Inbox row's trash icon. "Refund" is only in the label when
+ * the bounty carries a reward; the confirmation says how much, if any, and
+ * where it goes.
+ */
+function cancelOpenBounty(bounty: BountyLifecycleInput['bounty']): BountyLifecycleAction {
+  return action('delete', bounty.is_for_honor ? 'Cancel bounty' : 'Cancel and refund');
+}
+
 function partyName(name: string | null | undefined, fallback: string): string {
   const trimmed = (name ?? '').trim();
   return trimmed.length > 0 ? trimmed : fallback;
@@ -334,6 +362,8 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
     role,
     requestStatus = null,
     requestRejectionSource = null,
+    requestExpiryPolicy = null,
+    requestPosterInteracted = null,
     submissionStatus = null,
     submissionIsMine = false,
     applicationCount = 0,
@@ -423,7 +453,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
 
   return isPoster
     ? resolvePoster({ status, bounty, applicationCount, hunter, reward, submissionStatus, paymentState, revisionRequested, submissionPending, review })
-    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState, review });
+    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, requestExpiryPolicy, requestPosterInteracted, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState, review });
 }
 
 function resolveVisitor(
@@ -552,7 +582,7 @@ function resolvePoster(args: {
           tone: 'action',
           stageIndex: 0,
           primaryAction: action('review_applications'),
-          secondaryActions: [action('edit'), action('share'), action('delete')],
+          secondaryActions: [action('edit'), cancelOpenBounty(bounty), action('share')],
         });
       }
       return finalize({
@@ -565,7 +595,7 @@ function resolvePoster(args: {
         tone: 'progress',
         stageIndex: 0,
         primaryAction: action('share', 'Share to reach more hunters'),
-        secondaryActions: [action('edit'), action('delete')],
+        secondaryActions: [action('edit'), cancelOpenBounty(bounty)],
       });
 
     case 'in_progress':
@@ -623,7 +653,7 @@ function resolvePoster(args: {
           : action('repost'),
         secondaryActions: bounty.accepted_by
           ? [action('open_dispute', REPORT_PROBLEM)]
-          : [action('edit'), action('delete')],
+          : [action('edit'), cancelOpenBounty(bounty)],
       });
 
     case 'completed':
@@ -718,6 +748,8 @@ function resolveHunter(args: {
   viewerId: string | null;
   requestStatus: string | null;
   requestRejectionSource: string | null;
+  requestExpiryPolicy: RequestExpiryPolicy | null;
+  requestPosterInteracted: boolean | null;
   poster: string;
   reward: string;
   revisionRequested: boolean;
@@ -726,7 +758,7 @@ function resolveHunter(args: {
   paymentState: BountyLifecycleInput['paymentState'];
   review: ReviewDeadlineStatus | null;
 }): BountyLifecycleState {
-  const { status, bounty, viewerId, requestStatus, requestRejectionSource, poster, reward, revisionRequested, paymentState, review } = args;
+  const { status, bounty, viewerId, requestStatus, requestRejectionSource, requestExpiryPolicy, requestPosterInteracted, poster, reward, revisionRequested, paymentState, review } = args;
 
   // A hunter whose application is still `pending` on a bounty that has already
   // moved on was passed over — the poster accepted someone else and the row was
@@ -777,6 +809,13 @@ function resolveHunter(args: {
         headline: 'Application sent',
         explanation: trustSafetyStrings.pendingApplication,
         nextStep: `Wait for ${poster} to officially accept you on Bounty. A chat message is not acceptance. Keep the agreement and any payment here.`,
+        // SBA-10: the hunter is told the poster's deadline and that a closure
+        // is not held against them (fn_expire_bounty_requests).
+        timingNote: describeApplicationWindow(
+          poster,
+          requestExpiryPolicy ?? undefined,
+          requestPosterInteracted
+        ),
         waitingOn: 'other',
         needsAttention: false,
         tone: 'progress',

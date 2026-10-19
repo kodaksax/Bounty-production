@@ -25,6 +25,7 @@ import { userProfileService } from '../lib/services/userProfile';
 import { bountyHoldsUnreleasedEscrow } from '../lib/utils/payment-architecture';
 import type { BountyLifecycleState, BountyRole } from '../lib/utils/bounty-lifecycle';
 import { resolveBountyLifecycle } from '../lib/utils/bounty-lifecycle';
+import { useRequestExpiryPolicy } from './useRequestExpiryPolicy';
 
 export interface BountyLifecycleContext {
   bounty: Bounty | null;
@@ -67,6 +68,8 @@ export function useBountyLifecycle(
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
   const [requestRejectionSource, setRequestRejectionSource] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [requestPosterInteracted, setRequestPosterInteracted] = useState<boolean | null>(null);
+  const requestExpiryPolicy = useRequestExpiryPolicy();
   const [hasDispute, setHasDispute] = useState(false);
   const [disputeId, setDisputeId] = useState<string | null>(null);
   const [hasCancellationRequest, setHasCancellationRequest] = useState(false);
@@ -125,12 +128,15 @@ export function useBountyLifecycle(
       let myRequestStatus: string | null = null;
       let myRequestRejectionSource: string | null = null;
       let myRequestId: string | null = null;
+      let myRequestPosterInteracted: boolean | null = null;
       if (!viewerIsPoster && currentUserId) {
         try {
           const reqs = await bountyRequestService.getAll({ bountyId: id, userId: String(currentUserId) });
           if (Array.isArray(reqs) && reqs.length > 0) {
             myRequestStatus = reqs[0].status ?? null;
             myRequestRejectionSource = reqs[0].rejection_source ?? null;
+            myRequestPosterInteracted = !!(reqs[0] as { poster_interacted_at?: string | null })
+              .poster_interacted_at;
             myRequestId = reqs[0].id != null ? String(reqs[0].id) : null;
           }
         } catch {
@@ -144,6 +150,7 @@ export function useBountyLifecycle(
       if (isStale()) return;
       setRequestStatus(myRequestStatus);
       setRequestRejectionSource(myRequestRejectionSource);
+      setRequestPosterInteracted(myRequestPosterInteracted);
       setRequestId(myRequestId);
 
       const resolvedRole: BountyRole = viewerIsPoster
@@ -281,6 +288,8 @@ export function useBountyLifecycle(
         viewerId: currentUserId ?? null,
         requestStatus,
         requestRejectionSource,
+        requestExpiryPolicy,
+        requestPosterInteracted,
         submissionStatus: submission?.status ?? null,
         submittedAt: submission?.submitted_at ?? null,
         submissionIsMine:

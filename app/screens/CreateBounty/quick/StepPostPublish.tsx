@@ -4,6 +4,8 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
+import { useRequestExpiryPolicy } from '../../../../hooks/useRequestExpiryPolicy';
+import { formatExpiryWindow } from '../../../../lib/utils/request-expiry';
 import {
   describeMissingDetails,
   getDraftCompleteness,
@@ -21,6 +23,13 @@ interface StepPostPublishProps {
   onAddDetail: (target: DetailTarget) => void;
   /** Leaves the flow for the bounty feed. */
   onContinue: () => void;
+  /**
+   * True when the reward was charged and held at publish (fund-at-post). False
+   * for pay-at-accept, where nothing is charged until the poster hires. The
+   * server decides this (trg_bounties_normalize_funding_mode), so it comes
+   * from the publish result, not the draft.
+   */
+  funded?: boolean;
   step: number;
   totalSteps: number;
 }
@@ -69,11 +78,13 @@ export function StepPostPublish({
   draft,
   onAddDetail,
   onContinue,
+  funded = false,
   step,
   totalSteps,
 }: StepPostPublishProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const { expiryHours } = useRequestExpiryPolicy();
 
   const photoCount = draft.attachments?.length ?? 0;
   const locationValue =
@@ -129,6 +140,36 @@ export function StepPostPublish({
       icon: 'attach-money',
       label: 'Budget',
       value: draft.isForHonor ? 'For honor' : `$${draft.amount} flat rate`,
+    },
+  ];
+
+  // What the poster should expect from here (SBA-10). The payment line says
+  // the same thing StepPay said before publishing.
+  const amountLabel = `$${draft.amount || 0}`;
+  const nextSteps: { key: string; icon: keyof typeof MaterialIcons.glyphMap; text: string }[] = [
+    {
+      key: 'arrive',
+      icon: 'schedule',
+      text: "Hunters usually apply within a few hours. We'll let you know each time someone does.",
+    },
+    {
+      key: 'choose',
+      icon: 'how-to-reg',
+      text: 'You choose who to hire. Nobody starts until you accept them.',
+    },
+    {
+      key: 'pay',
+      icon: draft.isForHonor ? 'volunteer-activism' : 'verified-user',
+      text: draft.isForHonor
+        ? 'This is a for-honor bounty, so no payment is involved.'
+        : funded
+          ? `Your ${amountLabel} is already held. It's released only when you approve the work, and it comes back to you if you cancel before hiring.`
+          : `You're only charged when you hire. ${amountLabel} is held then, and released when you approve the work.`,
+    },
+    {
+      key: 'expire',
+      icon: 'timer',
+      text: `If you don't answer an application within ${formatExpiryWindow(expiryHours)}, it closes automatically.`,
     },
   ];
 
@@ -197,6 +238,18 @@ export function StepPostPublish({
           );
         })}
       </View>
+
+      <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]} accessibilityRole="header">
+        What happens next
+      </Text>
+      <View style={[styles.card, styles.nextCard]} testID="post-publish-what-next">
+        {nextSteps.map(item => (
+          <View key={item.key} style={styles.nextRow}>
+            <MaterialIcons name={item.icon} size={18} color={theme.primary} style={styles.nextIcon} />
+            <Text style={styles.nextText}>{item.text}</Text>
+          </View>
+        ))}
+      </View>
     </QuickStepLayout>
   );
 }
@@ -212,6 +265,11 @@ function makeStyles(theme: AppTheme) {
       color: theme.text,
     },
     sectionLabelAfterCallout: { marginTop: 22 },
+    sectionLabelSpaced: { marginTop: 24 },
+    nextCard: { paddingVertical: 8, paddingHorizontal: 18 },
+    nextRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 8 },
+    nextIcon: { marginTop: 1, marginRight: 12 },
+    nextText: { flex: 1, fontSize: 14, lineHeight: 20, color: theme.text },
     card: {
       borderRadius: 24,
       backgroundColor: theme.surface,

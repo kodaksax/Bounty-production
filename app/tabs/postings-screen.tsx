@@ -7,13 +7,10 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { CreateBountyFlow } from "app/screens/CreateBounty"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useLocalSearchParams, useRouter } from "expo-router"
-import { analyticsService } from "lib/services/analytics-service"
-import { failureEventProps } from "lib/utils/stripe-error"
 import { discardApplication, withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
-import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import {
@@ -25,7 +22,6 @@ import {
   hideBountyForHunter,
   loadHunterHiddenBountyIds,
 } from "lib/utils/hunter-hidden-bounties"
-import { isPhase2Bounty, isV3Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -54,7 +50,8 @@ import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
 import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
-import { getBountyFundingRequirement } from '../../lib/services/bounty-funding-service'
+import { BountyRefundFailedError, cancelAndRefundBounty } from '../../lib/services/bounty-cancel-refund'
+import { toBountyUpdateError } from '../../lib/services/bounty-update-error'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
@@ -658,10 +655,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         console.error('Failed to re-check pending requests after save failure:', checkErr)
       }
 
-      // Fallback: show server-provided error message if available, else generic
-      const msg = (err && (err.message || String(err))) || 'Failed to save changes'
-      Alert.alert('Error', msg)
+      // Hand the server's reason, in plain words, back to the edit modal so
+      // it shows inline with the poster's edits intact (SBA-10).
       console.error('Error saving bounty edit:', err)
+      throw toBountyUpdateError(err)
     }
   }
 
@@ -682,79 +679,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             if (deletingBountyIdsRef.current.has(deleteKey)) return
             deletingBountyIdsRef.current.add(deleteKey)
             try {
-              // Process refund FIRST for paid bounties before any other operations.
-              //
-              // ...but only when there is actually something to refund. Under
-              // pay-at-accept an OPEN bounty has normally never been funded —
-              // the poster is charged when they select a hunter, not at post —
-              // so the old unconditional refund would fail on a bounty that was
-              // never debited and then hit the `return` below, making the
-              // posting undeletable. Before this flow existed, an open paid
-              // bounty always had escrow, so the situation could not arise.
-              //
-              // Asked of the SERVER rather than inferred from funding_mode: an
-              // escrow can exist on an open at_accept bounty (e.g. one created
-              // by an older build), and refusing to refund that would strand
-              // real money. getBountyFundingRequirement reports already_funded
-              // from the canonical wallet_transactions row, and its documented
-              // fallback when the RPC is unavailable is already_funded=true —
-              // i.e. attempt the refund exactly as this code always has.
-              const needsRefund =
-                bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open'
-                  ? (await getBountyFundingRequirement(bounty.id)).alreadyFunded
-                  : false
-
-              if (needsRefund) {
-                const useV2 = isPhase2Bounty(bounty)
-                const useV3 = isV3Bounty(bounty)
-                try {
-                  await analyticsService.trackEvent('payment_architecture_routed', {
-                    bountyId: String(bounty.id),
-                    version: useV3 ? 3 : useV2 ? 2 : 1,
-                    context: 'cancel',
-                  })
-                } catch {
-                  /* analytics is best-effort */
-                }
-                try {
-                  if (useV2 || useV3) {
-                    // Stripe-native Phase 2 escrow: cancels the PaymentIntent
-                    // pre-capture, or issues a refund post-capture. Only a
-                    // terminal v2 status is safe to treat as a successful refund.
-                    const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
-                    if (cancelResult.status !== 'canceled' && cancelResult.status !== 'refunded') {
-                      throw new Error(`Escrow cancellation is still pending (${cancelResult.status})`)
-                    }
-                  } else {
-                    // refundEscrow signals failure by returning false, not by
-                    // throwing — so the boolean must be checked or a failed
-                    // refund would still delete the bounty and lose the money.
-                    const refunded = await refundEscrow(bounty.id, bounty.title, 100) // 100% refund for unaccepted bounties
-                    if (!refunded) {
-                      throw new Error('Escrow refund did not complete')
-                    }
-                  }
-                  try {
-                    await analyticsService.trackEvent('escrow_refunded', {
-                      bountyId: String(bounty.id),
-                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
-                      amount: bounty.amount,
-                    })
-                  } catch {
-                    /* analytics is best-effort */
-                  }
-                } catch (refundError) {
-                  console.error('Error refunding escrow:', refundError);
-                  try {
-                    await analyticsService.trackEvent('payment_failed', {
-                      bountyId: String(bounty.id),
-                      architecture: useV3 ? 'v3' : useV2 ? 'v2' : 'v1',
-                      stage: 'cancel',
-                      ...failureEventProps(refundError),
-                    })
-                  } catch {
-                    /* analytics is best-effort */
-                  }
+              // Refund FIRST (when anything is held), then delete — the one
+              // path shared with the Inbox and the bounty screen.
+              try {
+                await cancelAndRefundBounty(bounty, { refundEscrow })
+              } catch (cancelError) {
+                if (cancelError instanceof BountyRefundFailedError) {
                   Alert.alert(
                     'Refund Failed',
                     'Could not refund escrowed funds. Please contact support before deleting.',
@@ -762,13 +692,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   );
                   return; // Don't proceed with deletion if refund fails
                 }
-              }
-
-              // Delete from API first (no optimistic update before API call)
-              const success = await bountyService.delete(bounty.id)
-
-              if (!success) {
-                throw new Error("Failed to delete bounty")
+                throw cancelError
               }
 
               // Update UI only after successful deletion. The registry mark

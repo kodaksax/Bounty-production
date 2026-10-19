@@ -214,9 +214,27 @@ describe('bountyService', () => {
     expect(typeof queued.id).toBe('number');
   });
 
-  it('update returns null for invalid id', async () => {
-    const res = await bountyService.update(null, {});
-    expect(res).toBeNull();
+  it('update rejects an invalid id with a plain reason instead of returning null', async () => {
+    await expect(bountyService.update(null, {})).rejects.toThrow("This bounty couldn't be identified");
+  });
+
+  // SBA-10 (5): the server's reason reaches the caller, in plain words.
+  it.each([
+    [{ code: 'P0001', message: 'bounty_amount_locked_by_escrow' }, 'Your payment for this bounty is already held'],
+    [{ code: '23514', message: 'bounty amount 3 is below the 5 minimum' }, 'The reward must be at least $5.'],
+    [{ code: '42501', message: 'bounty_status_transition_not_allowed: open -> completed' }, 'This bounty has moved on'],
+    [{ code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' }, "isn't yours to change"],
+  ])('update throws the mapped reason for %o', async (serverError, expected) => {
+    const query: any = {
+      update: jest.fn(() => query), eq: jest.fn(() => query), select: jest.fn(() => query),
+      single: jest.fn().mockResolvedValue({ data: null, error: serverError }),
+    };
+    supabase.from.mockReturnValue(query);
+    const err = await bountyService.update('bounty-1', { amount: 80 }).catch((e: any) => e);
+    expect(err.name).toBe('BountyUpdateError');
+    expect(err.message).toContain(expected);
+    expect(err.code).toBe(serverError.code);
+    expect(err.serverMessage).toBe(serverError.message);
   });
 
   it('updateStatus notifies websocket when connected', async () => {

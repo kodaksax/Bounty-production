@@ -12,6 +12,8 @@
  * automatically. Do not promise automatic payment in this copy.
  */
 
+import { REVIEW_WINDOW_ENABLED } from '../feature-flags';
+
 export const REVIEW_WINDOW_HOURS = 72;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -62,13 +64,17 @@ export interface ReviewDeadlineStatus {
 
 /**
  * The deadline sentence for one viewer. Returns null when there is no pending
- * submission timestamp to measure from.
+ * submission timestamp to measure from, and always while REVIEW_WINDOW_ENABLED
+ * is off: the window's migrations are not live, so nobody would review
+ * overdue work and the sentence would be a promise the product doesn't keep.
+ * Callers already render nothing for null.
  */
 export function getReviewDeadlineStatus(
   submittedAt: string | Date | null | undefined,
   viewer: 'poster' | 'hunter',
   now: Date = new Date()
 ): ReviewDeadlineStatus | null {
+  if (!REVIEW_WINDOW_ENABLED) return null;
   const deadline = getReviewDeadline(submittedAt);
   if (!deadline) return null;
   const when = formatReviewDeadline(deadline, now);

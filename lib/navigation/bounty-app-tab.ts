@@ -90,3 +90,28 @@ export function isBountyAppTabPath(path: string): boolean {
     return false;
   }
 }
+
+/** The Inbox's two segments: My Work (hunter side) and My Bounties (poster side). */
+export type InboxSegment = 'inProgress' | 'myPostings';
+
+/**
+ * The segment a link explicitly asks for, or null when it names none (or a
+ * value the Inbox does not know). An explicit link always wins over the
+ * Inbox's own default (SBA-12).
+ */
+export function inboxSegmentForLink(initialTab: unknown): InboxSegment | null {
+  const v = asInboxTab(initialTab);
+  if (!v) return null;
+  return v === 'myPostings' || v === 'requests' ? 'myPostings' : 'inProgress';
+}
+
+/**
+ * Where the Inbox opens when no link chose a segment (SBA-10): My Bounties for
+ * anyone with an open bounty they posted, because that is where its
+ * applications arrive; otherwise My Work.
+ */
+export function defaultInboxSegment(
+  postedBounties: ReadonlyArray<{ status?: string | null } | null | undefined>
+): InboxSegment {
+  return postedBounties.some(b => b?.status === 'open') ? 'myPostings' : 'inProgress';
+}

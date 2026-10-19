@@ -897,10 +897,11 @@ export const completionService = {
 
       // Update bounty status
       // Note: bounty IDs may be UUID strings; do NOT coerce to Number() (causes NaN)
-      await bountyService.update(bountyId, {
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-      });
+      // Best-effort, as before update() threw (SBA-10): the submission is
+      // already approved, and failing the approval here would misreport it.
+      await bountyService
+        .update(bountyId, { status: 'completed', completed_at: new Date().toISOString() })
+        .catch(err => logger.error('approveSubmission: bounty status not updated', { bountyId, error: { message: err?.message } }));
 
       // Funnel: bounty marked complete via the poster approving submitted
       // work — the third real completion path, alongside payout.tsx's

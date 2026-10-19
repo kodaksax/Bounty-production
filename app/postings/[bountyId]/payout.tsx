@@ -25,6 +25,7 @@ import {
 } from '../../../lib/services/bounty-payments-service';
 import { getHoursSinceClaimed } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
+import { describeBountyUpdateError } from '../../../lib/services/bounty-update-error';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
@@ -330,7 +331,7 @@ export default function PayoutScreen() {
               }, 1500);
             } catch (err) {
               console.error('Error marking as complete:', err);
-              Alert.alert('Error', 'Failed to complete bounty. Please try again.');
+              Alert.alert('Error', describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }
@@ -389,7 +390,7 @@ export default function PayoutScreen() {
               );
             } catch (err) {
               console.error('Error deleting bounty:', err);
-              Alert.alert('Error', 'Failed to delete bounty. Please try again.');
+              Alert.alert('Error', describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }
@@ -432,7 +433,7 @@ export default function PayoutScreen() {
               ]);
             } catch (err) {
               console.error('Error archiving bounty:', err);
-              Alert.alert('Error', 'Failed to archive bounty. Please try again.');
+              Alert.alert('Error', describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }

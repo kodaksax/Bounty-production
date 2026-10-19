@@ -611,6 +611,22 @@
         "authenticated",
         "PUBLIC"
       ]
+    },
+    {
+      "signature": "trg_bounty_events_from_bounty_delete()",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "trg_bounty_events_from_bounties()",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
     }
   ],
   "baseline": {
