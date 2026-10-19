@@ -123,7 +123,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const { data: existingUser, error: usernameCheckError } = await supabase
           .from('profiles')
           .select('id')
-          .ilike('username', normalizedUsername.replace(/_/g, '\\_'))
+          .ilike(
+            'username',
+            normalizedUsername
+              .replace(/\\/g, '\\\\')
+              .replace(/_/g, '\\_')
+              .replace(/%/g, '\\%')
+          )
           .limit(1)
           .maybeSingle();
 
