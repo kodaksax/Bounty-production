@@ -1,7 +1,15 @@
 /**
  * The 72-hour review window both sides see (trust-spine audit T6).
  * Dates are built in device-local time so the assertions hold in any TZ.
+ *
+ * These describe the window as it reads once it is live, so the flag is on
+ * here. Its default-off state is covered in review-window-flag.test.ts.
  */
+jest.mock('../../../lib/feature-flags', () => ({
+  ...jest.requireActual('../../../lib/feature-flags'),
+  REVIEW_WINDOW_ENABLED: true,
+}));
+
 import {
   REVIEW_WINDOW_HOURS,
   formatReviewDeadline,

@@ -8,6 +8,7 @@
  * cancellation request only the hunter can file.
  */
 import type { DisputeReasonCode } from '../services/dispute-service';
+import { REVIEW_WINDOW_ENABLED } from '../feature-flags';
 
 export interface DisputeReasonOption {
   code: DisputeReasonCode;
@@ -54,7 +55,10 @@ export function getDisputeReasonOptions(
   }
 
   const options: DisputeReasonOption[] = [];
-  if (opts.workSubmitted) {
+  // The 72-hour promise is only true once the review window is live
+  // (REVIEW_WINDOW_ENABLED); until then the hunter gets the same honest
+  // line as before submitting.
+  if (opts.workSubmitted && REVIEW_WINDOW_ENABLED) {
     options.push({
       code: 'poster_unresponsive',
       label: "Poster hasn't responded",
