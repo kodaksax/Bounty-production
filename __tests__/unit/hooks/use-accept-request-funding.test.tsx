@@ -226,6 +226,24 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     expect(work).toMatchObject({ fundingMode: 'at_post', variant: 'control' });
   });
 
+  test.each([
+    ['a stamped distance', { distance_mi: 3 }, 3],
+    ['under 1 mile', { distance_mi: 0 }, 0],
+    ['no distance (online job or unknown location)', { distance_mi: null }, undefined],
+    ['a request fetched before the column existed', {}, undefined],
+  ])('application_accepted carries applicant_distance_mi for %s (SBA-02)', async (_label, overrides, expected) => {
+    mockAcceptRequest.mockResolvedValue({ id: 'req-1', hunter_id: 'hunter-1', bounty_id: 'b1' });
+    const result = setup({ ensureFunded: jest.fn().mockResolvedValue(true) }, makeRequest(overrides));
+
+    await act(async () => {
+      await result.current.handleAcceptRequest('req-1');
+    });
+
+    const accepted = mockTrackEvent.mock.calls.find(c => c[0] === 'application_accepted')?.[1];
+    expect(accepted).toBeDefined();
+    expect(accepted.applicant_distance_mi).toBe(expected);
+  });
+
   test('a funding failure retries exactly once after recovery', async () => {
     mockAcceptRequest
       .mockRejectedValueOnce(Object.assign(new Error('insufficient_funds_for_escrow'), { status: 402 }))

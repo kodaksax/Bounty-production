@@ -116,7 +116,8 @@
     "bounty_requests": {
       "commands": ["INSERT", "UPDATE"],
       "required_triggers": [
-        "a00_lock_bounty_requirements"
+        "a00_lock_bounty_requirements",
+        "zz_bounty_requests_applicant_distance"
       ]
     },
     "bounty_owner_refund_claims": {
@@ -569,6 +570,30 @@
       "signature": "fn_rating_transaction_role(uuid,uuid,uuid)",
       "forbid_execute": [
         "anon",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_bounty_request_distance(uuid,uuid)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_bounty_requests_stamp_distance()",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "bounty_requests_broadcast_changes()",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
         "PUBLIC"
       ]
     }
