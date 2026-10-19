@@ -91,7 +91,7 @@ const { SignUpForm } = require('../../app/auth/sign-up-form');
 function fillValidForm(utils: ReturnType<typeof render>) {
   fireEvent.changeText(utils.getByPlaceholderText('username'), 'tester');
   fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'new@user.test');
-  fireEvent.changeText(utils.getByPlaceholderText('At least 8 characters'), 'CorrectHorse1!');
+  fireEvent.changeText(utils.getByPlaceholderText('Create a password'), 'CorrectHorse1!');
   // No confirm-password field or age/terms checkboxes: pressing "Create
   // Account" is itself the consent (see the legal line in sign-up-form.tsx).
 }
@@ -144,5 +144,30 @@ describe('sign-up failure analytics', () => {
         expect.objectContaining({ method: 'email', status: 500, reason: 'server_error' })
       )
     );
+  });
+});
+
+// SBA-06: the field used to say only "At least 8 characters" and reveal the
+// other four rules after a failed submit (4 of 6 Shoal posters hit it).
+describe('sign-up password checklist', () => {
+  const RULES = ['length', 'uppercase', 'lowercase', 'number', 'special'];
+  const isMet = (utils: ReturnType<typeof render>, id: string) =>
+    /: done$/.test(utils.getByTestId(`password-rule-${id}`).props.accessibilityLabel);
+
+  it('states every rule before the first keystroke', () => {
+    const utils = render(<SignUpForm />);
+    for (const id of RULES) expect(isMet(utils, id)).toBe(false);
+    expect(utils.getByText('Symbol @$!%*?&')).toBeTruthy();
+  });
+
+  it('ticks each rule as the password satisfies it', () => {
+    const utils = render(<SignUpForm />);
+    const field = utils.getByPlaceholderText('Create a password');
+
+    fireEvent.changeText(field, 'correcthorse12');
+    expect(RULES.filter(id => isMet(utils, id))).toEqual(['length', 'lowercase', 'number']);
+
+    fireEvent.changeText(field, 'CorrectHorse1!');
+    expect(RULES.every(id => isMet(utils, id))).toBe(true);
   });
 });

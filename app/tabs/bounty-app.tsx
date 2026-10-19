@@ -660,7 +660,7 @@ function BountyAppInner() {
   }
 
   return (
-    <MomentsProvider activeScreen={activeScreen}>
+    <MomentsProvider activeScreen={activeScreen} targetScreen={barScreen} onContinueTo={setActiveScreen}>
       <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' }}>
         {/* Connection Status Banner - appears at top when offline */}
         <ConnectionStatus showQueueCount={true} />

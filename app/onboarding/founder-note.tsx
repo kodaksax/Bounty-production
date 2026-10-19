@@ -29,19 +29,22 @@
  * The staging is sequential and all of one piece: the quote types itself out,
  * then the signature types straight on in the same face at the same pace, with
  * the one caret moving from the end of the quote to the signature line as it
- * goes; the CTA follows. The signature was previously set in a handwriting
+ * goes. The signature was previously set in a handwriting
  * face and revealed by a sliding cover — it's deliberately the same typewriter
  * as the quote now, so the whole note reads as one hand at one keyboard.
  *
  * The moment the quote lands is the note's payoff: "need help" and "can help"
  * light up in the signature's green, and the bounty crosshair
  * (FounderNoteCrosshair) fades in softly, with a haptic tick and a soft
- * glow blooming behind the words, before the signature types. The CTA then
- * reads as a yes to that ("I'm in"), not as a next-step button.
+ * glow blooming behind the words, before the signature types.
  *
- * Under Reduce Motion the whole thing renders complete on mount — the point
- * is the words, and the CTA must never be gated behind an animation a user
- * has asked not to see.
+ * The CTA ("I'm in") is on screen and tappable from the first frame. It used
+ * to fade in only after the signature had typed — about 8 s with nothing to
+ * press — and 2 of 6 first-time posters in the 15 Oct Shoal run read that as
+ * a frozen app (SBA-06). The note is the payoff for someone who reads it, not
+ * a gate for someone who doesn't, so the animation plays around a button that
+ * is already there. Under Reduce Motion the note itself also renders complete
+ * on mount.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -79,16 +82,6 @@ import type { AppTheme } from '../../lib/themes/types';
 // between.
 const TYPE_MS_PER_CHAR = 35;
 const TYPE_START_DELAY_MS = 450;
-const REVEAL_MS = 700;
-// Beat in the post-typing reveal: a hold once the signature is fully in
-// before the CTA follows. Without it the two movements run back-to-back and
-// read as one rather than signature-then-way-out. The signature itself gets
-// no lead-in — it picks up on the quote's own per-character beat, so the two
-// lines are one unbroken run of typing.
-const CTA_DELAY_MS = 500;
-// Held after the signature's last character before the CTA fade starts, so the
-// name gets a beat on its own rather than being stepped on by the way out.
-const SIGNATURE_SETTLE_MS = 260;
 // The two sides of the quote turning green once it lands.
 const HIGHLIGHT_MS = 600;
 // The glow behind the quote, blooming in as the crosshair locks.
@@ -151,12 +144,6 @@ export default function FounderNoteScreen() {
   const [signatureTypedCount, setSignatureTypedCount] = useState(0);
   const signatureTypingDone = signatureTypedCount >= signatureLine.length;
 
-  // Tracks whether the CTA has finished fading in, not just whether typing is
-  // over: it's invisible for the length of the reveal after the last character
-  // lands, and an invisible button must not be tappable.
-  const [ctaReady, setCtaReady] = useState(false);
-
-  const ctaOpacity = useRef(new Animated.Value(0)).current;
   const caretOpacity = useRef(new Animated.Value(1)).current;
   // Colour, so JS-driven; 0 is the quote's own text colour, 1 the green.
   const highlight = useRef(new Animated.Value(0)).current;
@@ -287,29 +274,6 @@ export default function FounderNoteScreen() {
     }).start();
   }, [glowOpacity]);
 
-  // CTA last, once the signature has landed and had its beat.
-  useEffect(() => {
-    if (prefersReducedMotion) {
-      ctaOpacity.setValue(1);
-      setCtaReady(true);
-      return;
-    }
-    if (!signatureTypingDone) return;
-    const reveal = Animated.sequence([
-      Animated.delay(SIGNATURE_SETTLE_MS + CTA_DELAY_MS),
-      Animated.timing(ctaOpacity, {
-        toValue: 1,
-        duration: REVEAL_MS,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-    ]);
-    reveal.start(({ finished }) => {
-      if (finished) setCtaReady(true);
-    });
-    return () => reveal.stop();
-  }, [signatureTypingDone, ctaOpacity, prefersReducedMotion]);
-
   const accentColor = theme.isDark ? palette.green[300] : palette.green[700];
   const highlightColor = highlight.interpolate({
     inputRange: [0, 1],
@@ -439,20 +403,19 @@ export default function FounderNoteScreen() {
           </View>
         </View>
 
-        <Animated.View style={[styles.ctaBlock, { opacity: ctaOpacity }]}>
+        <View style={styles.ctaBlock}>
           <TouchableOpacity
             style={[styles.primaryButton, isCompleting ? styles.primaryButtonBusy : null]}
             onPress={handleContinue}
-            // Untappable until it has actually faded in, so a stray tap during
-            // the reveal can't fire an invisible button — and untappable again
-            // while completion is in flight, since it ends onboarding and
-            // writes the profile.
-            disabled={!ctaReady || isCompleting}
+            // Tappable from the first frame, whatever the typing is doing.
+            // Untappable only while completion is in flight, since it ends
+            // onboarding and writes the profile.
+            disabled={isCompleting}
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel={founderNoteStrings.primaryCta}
-            accessibilityElementsHidden={!ctaReady}
-            accessibilityState={{ disabled: !ctaReady || isCompleting, busy: isCompleting }}
+            accessibilityState={{ disabled: isCompleting, busy: isCompleting }}
+            testID="founder-note-cta"
           >
             {isCompleting ? (
               <ActivityIndicator color={palette.white} />
@@ -460,7 +423,7 @@ export default function FounderNoteScreen() {
               <Text style={styles.primaryButtonText}>{founderNoteStrings.primaryCta}</Text>
             )}
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       </View>
     </View>
   );

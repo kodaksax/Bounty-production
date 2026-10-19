@@ -9,7 +9,7 @@
  * screens.
  */
 
-import { MOMENT_REGISTRY } from './registry';
+import { MOMENT_REGISTRY, trustPromptsAllowed } from './registry';
 import type { MomentContext, MomentDefinition, MomentState, MomentType } from './types';
 import { MAX_MOMENT_SHOWS } from './types';
 
@@ -88,6 +88,7 @@ export function evaluateEligibleMoments(
 ): MomentDefinition[] {
   const eligible = registry.filter(def => {
     const state = states.get(def.type) ?? null;
+    if (def.category === 'trust' && !trustPromptsAllowed(ctx)) return false;
     if (isRetired(def, state)) return false;
     if (goalAlreadyMet(def, ctx)) return false;
     if (isOnCooldown(def, state)) return false;

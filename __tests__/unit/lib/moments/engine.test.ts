@@ -21,6 +21,7 @@ function makeContext(overrides: Partial<MomentContext> = {}): MomentContext {
     sessionCount: 1,
     activeScreen: null,
     hasEngaged: false,
+    hasPublishedBounty: false,
     profile: {
       hasAvatar: false,
       hasBio: false,

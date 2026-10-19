@@ -42,6 +42,42 @@ export async function incrementSessionCount(userId: string): Promise<number> {
   return next;
 }
 
+/**
+ * When this JS runtime last recorded a session for each user (ISO string).
+ *
+ * MomentsProvider decides "is this a new session?" from the signed-in
+ * profile's last_session_at, but it writes that column straight to Supabase
+ * and the in-memory profile is never re-read afterwards. For a brand-new user
+ * the value it holds stays null for the whole first sitting, so every later
+ * refresh() — every AppState 'active' (an OS permission dialog, the payment
+ * sheet, a quick app switch) and every provider remount — counted as another
+ * session. One extra count is enough to clear MIN_SESSIONS_FOR_ACTIVATION_PROMPT
+ * and surface the ID-verification prompt minutes after onboarding (SBA-06).
+ * Module-level rather than a ref so it survives provider remounts; a cold
+ * start or web reload re-reads the profile, which by then holds the write.
+ */
+const sessionRecordedAt = new Map<string, string>();
+
+/** The later of the profile's last_session_at and this runtime's own record of a session write. */
+export function effectiveLastSessionAt(userId: string, profileLastSessionAt: string | null): string | null {
+  const local = sessionRecordedAt.get(userId) ?? null;
+  if (!local) return profileLastSessionAt;
+  if (!profileLastSessionAt) return local;
+  return new Date(local).getTime() > new Date(profileLastSessionAt).getTime()
+    ? local
+    : profileLastSessionAt;
+}
+
+/** Call synchronously, before any await, when recording a session, so a concurrent refresh() sees it. */
+export function noteSessionRecorded(userId: string, at: string): void {
+  sessionRecordedAt.set(userId, at);
+}
+
+/** Test-only: forget every in-memory session record. */
+export function resetSessionRecordsForTests(): void {
+  sessionRecordedAt.clear();
+}
+
 /** Below this many days since last_session_at, a user isn't "returning" — just continuing a normal cadence. */
 export const INACTIVITY_THRESHOLD_DAYS = 14;
 

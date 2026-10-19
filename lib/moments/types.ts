@@ -103,6 +103,13 @@ export interface MomentContext {
    * is treated differently from a passive first look around the app.
    */
   hasEngaged: boolean;
+  /**
+   * True once the user has published at least one bounty (any `bounties`
+   * row they own — composer drafts live on the device, not in that table).
+   * The narrower half of hasEngaged: a poster sees no trust/ID prompt until
+   * this is true (see registry.ts's trustPromptsAllowed).
+   */
+  hasPublishedBounty: boolean;
   profile: {
     hasAvatar: boolean;
     hasBio: boolean;
