@@ -18,7 +18,10 @@
  * where the poster is. This checks what is inside the viewport and which Inbox segment
  * is selected. The segment buttons are role="tab", but react-native-web does not emit
  * aria-selected for them, so the selected one is the label drawn in the active colour
- * (white; the other is grey — see SegmentLabel in app/tabs/inbox-screen.tsx).
+ * (white; the other is grey — see SegmentLabel in app/tabs/inbox-screen.tsx). The active
+ * bottom-bar tab is the one under the sliding highlight pill (FloatingTabBar); label
+ * colour can't tell, because Home's label is always green. The Home tab no longer
+ * shows "For You", so that text can't identify the feed either.
  */
 import { chromium } from 'playwright';
 import { derivePassword, poolAccount } from '../bin/lib/accounts.mjs';
@@ -65,7 +68,27 @@ try {
   await page.waitForTimeout(4000);
 
   const url = new URL(page.url());
-  const onFeed = await anyOnScreen(page.getByText(/For You/i));
+  const barTab = await page.evaluate(() => {
+    // Bar labels only: the Inbox screen's own "Inbox" heading is not in a button.
+    const labels = [...document.querySelectorAll('*')].filter(
+      (n) =>
+        n.childElementCount === 0 &&
+        /^(Inbox|Wallet|Home|Post|Profile)$/.test((n.textContent || '').trim()) &&
+        n.closest('button,[role="button"]'),
+    );
+    const buttons = labels.map((n) => n.closest('button,[role="button"]'));
+    const row = buttons[0]?.parentElement;
+    const pill = row && [...row.children].find((c) => !buttons.includes(c));
+    if (!pill) return null;
+    const r = pill.getBoundingClientRect();
+    const cx = r.x + r.width / 2;
+    const i = buttons.findIndex((btn) => {
+      const br = btn?.getBoundingClientRect();
+      return br && cx >= br.x && cx < br.x + br.width;
+    });
+    return i === -1 ? null : labels[i].textContent.trim();
+  });
+  const onFeed = barTab === 'Home';
   const myBounties = page.getByRole('tab', { name: /^My Bounties/ });
   const inboxOnScreen = await anyOnScreen(myBounties);
   const labelColor = (tab) =>
@@ -86,13 +109,14 @@ try {
     JSON.stringify({
       url: url.pathname + url.search,
       tabParam: url.searchParams.get('tab'),
+      barTab,
       onFeed,
       inboxOnScreen,
       myBountiesSelected,
       onMyBounties,
     }),
   );
-  process.exitCode = onMyBounties && !onFeed ? 0 : 1;
+  process.exitCode = onMyBounties && barTab === 'Inbox' ? 0 : 1;
 } finally {
   await browser.close();
 }
