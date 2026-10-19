@@ -507,6 +507,14 @@
       ]
     },
     {
+      "signature": "fn_sweep_absent_posters(boolean,integer)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
       "signature": "request_dispute_escalation(integer)",
       "forbid_execute": [
         "anon",
