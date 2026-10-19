@@ -662,6 +662,8 @@ export type NotificationType =
   | 'application_expired'
   /** Hunter-facing: their pending application auto-closed because the bounty itself left status='open' (deleted, cancelled, filled by another hunter). Not a rejection -- the poster never decided on this request. */
   | 'application_bounty_closed'
+  /** Hunter-facing (SBA-09): one per hunter per local day, from 17:00, reporting every application_expired / application_bounty_closed since the last one. Those two types are then in-app only and stored already read (data.heldForDigest). data.items lists each closed application, data.alternatives up to three live bounties, and data.bountyId is the first alternative when there is one. */
+  | 'application_closure_digest'
   /** Poster-facing: they approved a hunter's work 24h ago and still haven't rated them. Fires once per completion_submissions row. */
   | 'rating_reminder'
   | 'account_warning'

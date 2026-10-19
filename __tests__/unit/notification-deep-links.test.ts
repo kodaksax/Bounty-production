@@ -9,7 +9,8 @@
  * bounty_quality_nudge branch was added as a special case ahead of the
  * general marketplace bountyId routing, so it must not shadow it.
  */
-import { resolveNotificationDeepLink, supportsActionSheet } from '../../lib/services/notification-deep-links';
+import { FIND_BOUNTIES_PATH, resolveNotificationDeepLink, supportsActionSheet } from '../../lib/services/notification-deep-links';
+import { categoryForNotificationType } from '../../lib/config/notification-taxonomy';
 
 describe('resolveNotificationDeepLink: bounty_quality_nudge', () => {
   test('routes to the poster bounty-management screen with the edit modal pre-opened', () => {
@@ -234,5 +235,34 @@ describe('payment notifications with direct destinations', () => {
       category: 'payments',
       data: { bountyId: 'abc-123' },
     })).toEqual({ kind: 'route', path: '/postings/abc-123' });
+  });
+});
+
+describe('application_closure_digest (SBA-09)', () => {
+  test('opens the first live alternative it names', () => {
+    expect(resolveNotificationDeepLink({
+      type: 'application_closure_digest',
+      data: { bountyId: 'alt-1', closedCount: 3, items: [], alternatives: [{ bountyId: 'alt-1' }] },
+    })).toEqual({ kind: 'route', path: '/bounty/alt-1?source=notification' });
+  });
+
+  test('with no alternative, goes to the feed instead of nowhere', () => {
+    expect(resolveNotificationDeepLink({
+      type: 'application_closure_digest',
+      data: { closedCount: 1, items: [], alternatives: [] },
+    })).toEqual({ kind: 'route', path: FIND_BOUNTIES_PATH });
+    expect(FIND_BOUNTIES_PATH).toContain('tab=bounty');
+  });
+
+  test('is a marketplace notification that opens the sheet (full text + one button)', () => {
+    expect(categoryForNotificationType('application_closure_digest')).toBe('marketplace');
+    expect(supportsActionSheet({ type: 'application_closure_digest' }, { count: 1 })).toBe(true);
+  });
+
+  test('held per-closure rows still open their bounty', () => {
+    expect(resolveNotificationDeepLink({
+      type: 'application_expired',
+      data: { bountyId: 'b1', applicationId: 'r1', heldForDigest: true },
+    })).toEqual({ kind: 'route', path: '/bounty/b1?source=notification' });
   });
 });

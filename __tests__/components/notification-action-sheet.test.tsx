@@ -243,4 +243,36 @@ describe('NotificationActionSheet', () => {
       jest.restoreAllMocks();
     });
   });
+
+  describe('hunter closure digest (SBA-09)', () => {
+    const digest: Notification = {
+      id: 'digest-id',
+      user_id: 'hunter-id',
+      type: 'application_closure_digest',
+      category: 'marketplace',
+      title: '3 of your applications closed',
+      body: `"Fix fence", "Mow lawn" and 1 more closed automatically — this wasn't a rejection.`,
+      data: { digestId: 'd1', closedCount: 3, items: [], alternatives: [] },
+      read: false,
+      created_at: '2026-10-20T22:07:00.000Z',
+    };
+
+    it('with no alternative, offers Find Bounties and opens the feed', () => {
+      const { getByText, queryByText } = render(
+        <NotificationActionSheet notification={digest} currentUserId="hunter-id" onClose={jest.fn()} />
+      );
+      expect(queryByText('Decline')).toBeNull();
+      fireEvent.press(getByText('Find Bounties'));
+      expect(push).toHaveBeenCalledWith('/tabs/bounty-app?tab=bounty');
+    });
+
+    it('with an alternative, opens it', () => {
+      const withAlt = { ...digest, data: { ...digest.data, bountyId: 'alt-1' } };
+      const { getByText } = render(
+        <NotificationActionSheet notification={withAlt} currentUserId="hunter-id" onClose={jest.fn()} />
+      );
+      fireEvent.press(getByText('View Bounty'));
+      expect(push).toHaveBeenCalledWith('/bounty/alt-1?source=notification');
+    });
+  });
 });

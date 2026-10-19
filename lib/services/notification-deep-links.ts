@@ -8,6 +8,9 @@ export const POSTER_REQUESTS_PATH = bountyAppTabPath('messages', 'requests');
 
 const WALLET_PATH = bountyAppTabPath('wallet');
 
+/** The Home feed, where a hunter finds bounties to apply to. */
+export const FIND_BOUNTIES_PATH = bountyAppTabPath('bounty');
+
 /**
  * Single source of truth for "where does tapping this notification go" and
  * "does tapping it open the rich-action sheet instead of navigating away".
@@ -96,6 +99,14 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       // happens (GitHub #809), even for bundled notifications with no bountyId.
       if (ctx.type === 'application') {
         return { kind: 'route', path: POSTER_REQUESTS_PATH };
+      }
+      // Hunter's daily closure digest (SBA-09): bountyId is the first live
+      // alternative it names. With none, the next step is still finding
+      // another bounty, so go to the feed rather than nowhere.
+      if (ctx.type === 'application_closure_digest') {
+        return bountyId
+          ? { kind: 'route', path: `/bounty/${bountyId}?source=notification` }
+          : { kind: 'route', path: FIND_BOUNTIES_PATH };
       }
       if (bountyId) return { kind: 'route', path: `/bounty/${bountyId}?source=notification` };
       return { kind: 'none' };
