@@ -29,6 +29,11 @@ export interface NearbyBounty {
   created_at: string;
   deadline: string | null;
   distance_miles: number | null;
+  /**
+   * 'online' | 'in_person'. Returned since 20261019210000; undefined from a
+   * server without it.
+   */
+  work_type?: string | null;
 }
 
 /**
@@ -80,9 +85,14 @@ export async function searchBountiesNearby(params: {
    * as a non-internal user is a no-op, not a leak.
    */
   includeTest?: boolean;
+  /**
+   * Keep online bounties (which have no map point) in a radius search, after
+   * the in-person rows (SBA-02). Needs 20261019210000 on the server.
+   */
+  includeOnline?: boolean;
 }): Promise<NearbyBounty[]> {
   try {
-    const { data, error } = await supabase.rpc('search_bounties_nearby', {
+    const args: Record<string, unknown> = {
       p_lat: params.latitude ?? null,
       p_lng: params.longitude ?? null,
       p_radius_miles: params.radiusMiles ?? null,
@@ -90,7 +100,17 @@ export async function searchBountiesNearby(params: {
       p_limit: params.limit ?? 50,
       p_offset: params.offset ?? 0,
       p_include_test: params.includeTest ?? false,
-    });
+    };
+    if (params.includeOnline) args.p_include_online = true;
+    let { data, error } = await supabase.rpc('search_bounties_nearby', args);
+    // PGRST202: no function with these argument names, i.e. a server without
+    // 20261019210000. Retry without the new argument so the feed still loads
+    // (in-person results only) instead of coming back empty.
+    if (error && (error as { code?: string }).code === 'PGRST202' && 'p_include_online' in args) {
+      logger.warning('search_bounties_nearby: p_include_online unsupported, retrying without it');
+      delete args.p_include_online;
+      ({ data, error } = await supabase.rpc('search_bounties_nearby', args));
+    }
     if (error) {
       logger.error('search_bounties_nearby rpc error', { error, params });
       return [];
@@ -173,6 +193,68 @@ export async function updateMyCoordinates(params: {
     return true;
   } catch (error) {
     logger.error('updateMyCoordinates threw', { error, userId: params.userId });
+    return false;
+  }
+}
+
+/**
+ * The signed-in user's saved point (profiles.latitude/longitude, readable only
+ * by its owner). This is the point the server measures applicant distance from
+ * (trg_profiles_sync_geom -> profiles.geom -> 20261019200000).
+ *
+ * `{ ok: false }` when the read failed, so a caller can tell "no saved
+ * location" from "couldn't check" and not prompt on a network blip.
+ */
+export async function getMyCoordinates(
+  userId: string
+): Promise<{ ok: true; coords: { latitude: number; longitude: number } | null } | { ok: false }> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('latitude, longitude')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) {
+      logger.error('getMyCoordinates failed', { error, userId });
+      return { ok: false };
+    }
+    const lat = (data as { latitude?: number | null } | null)?.latitude;
+    const lng = (data as { longitude?: number | null } | null)?.longitude;
+    return {
+      ok: true,
+      coords: typeof lat === 'number' && typeof lng === 'number' ? { latitude: lat, longitude: lng } : null,
+    };
+  } catch (error) {
+    logger.error('getMyCoordinates threw', { error, userId });
+    return { ok: false };
+  }
+}
+
+/**
+ * Saves a ZIP the user typed as their profile location: zip_code always, and
+ * the ZIP's point when the geocoder found one. Same columns the feed writes
+ * from GPS (updateMyCoordinates); profiles.location (shown publicly on the
+ * profile) is left alone.
+ */
+export async function saveMyZipLocation(params: {
+  userId: string;
+  zip: string;
+  coords: { latitude: number; longitude: number } | null;
+}): Promise<boolean> {
+  try {
+    const update: Record<string, unknown> = { zip_code: params.zip };
+    if (params.coords) {
+      update.latitude = params.coords.latitude;
+      update.longitude = params.coords.longitude;
+    }
+    const { error } = await supabase.from('profiles').update(update).eq('id', params.userId);
+    if (error) {
+      logger.error('saveMyZipLocation failed', { error, userId: params.userId });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error('saveMyZipLocation threw', { error, userId: params.userId });
     return false;
   }
 }

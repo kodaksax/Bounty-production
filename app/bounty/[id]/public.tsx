@@ -41,6 +41,8 @@ import { ROUTES } from '../../../lib/routes';
 import { getUserFriendlyError } from '../../../lib/utils/error-messages';
 import { ApplicationPitchModal } from '../../../components/application-pitch-modal';
 import { IdRequirementModal } from '../../../components/id-requirement-modal';
+import { ZipLocationModal } from '../../../components/zip-location-modal';
+import { useApplyLocationGate } from '../../../hooks/useApplyLocationGate';
 import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
 import { formatPostedAgo } from '../../../lib/utils/format-relative-date';
 import { BountyTrustSignals } from '../../../components/bounty-trust-signals';
@@ -68,6 +70,8 @@ export default function PublicBountyDetail() {
   const [isApplying, setIsApplying] = useState(false);
   const [showPitchModal, setShowPitchModal] = useState(false);
   const [showIdRequirementModal, setShowIdRequirementModal] = useState(false);
+  // SBA-02: ZIP before applying to in-person work with no saved location.
+  const applyLocationGate = useApplyLocationGate(currentUserId);
   const resendInFlightRef = useRef(false);
 
   const routeBountyId = React.useMemo(() => {
@@ -306,8 +310,12 @@ export default function PublicBountyDetail() {
     // The pitch modal (components/application-pitch-modal.tsx) replaces the
     // old bare confirm Alert — it shows the same money-line copy plus a
     // "why me?" pitch field whose prominence scales with the bounty amount,
-    // and calls submitApplication with the trimmed text on confirm.
-    setShowPitchModal(true);
+    // and calls submitApplication with the trimmed text on confirm. The ZIP
+    // prompt (if needed) comes first, before they write a pitch, so the saved
+    // point is on the profile when the insert measures distance from it.
+    void applyLocationGate.run({ bountyId: String(bounty.id), workType: bounty.work_type }, () =>
+      setShowPitchModal(true)
+    );
   };
 
   const submitApplication = async (pitch: string | null) => {
@@ -716,6 +724,14 @@ export default function PublicBountyDetail() {
               pitch_length: pitchLength,
             })
           }
+        />
+      )}
+      {bounty && currentUserId && (
+        <ZipLocationModal
+          visible={applyLocationGate.visible}
+          userId={currentUserId}
+          onCancel={applyLocationGate.onCancel}
+          onSaved={applyLocationGate.onSaved}
         />
       )}
       {bounty && (

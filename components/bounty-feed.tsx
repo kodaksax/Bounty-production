@@ -50,6 +50,7 @@ import {
 import { ScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveHunters } from '../hooks/useActiveHunters';
+import { useFeedLocation } from '../hooks/useFeedLocation';
 import { useForegroundRefresh } from '../hooks/useForegroundRefresh';
 import { useShowTestBounties } from '../hooks/useShowTestBounties';
 import { useValidUserId } from '../hooks/useValidUserId';
@@ -84,6 +85,17 @@ import {
     markBountyRemovedLocally,
 } from '../lib/utils/bounty-visibility';
 import { logger } from '../lib/utils/error-logger';
+import {
+  applyDistancePick,
+  DISTANCE_OFF,
+  DISTANCE_PREFERENCE_KEY,
+  includeOnlineFor,
+  LOCAL_DEFAULT_RADIUS_MILES,
+  parseDistancePreference,
+  resolveDefaultDistance,
+  type DistanceFilterValue,
+  type DistancePreference,
+} from '../lib/utils/feed-distance-default';
 import { formatPublicLocation } from '../lib/utils/public-location';
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
@@ -126,12 +138,11 @@ const MY_ACTIVE_BOUNTIES_MAX_PAGES = 10;
 const GRID_BANNER_GRADIENT_START = { x: 0, y: 0 };
 const GRID_BANNER_GRADIENT_END = { x: 1, y: 1 };
 
-// 'off' = no distance filter (existing behavior, unchanged). A number is a
-// radius in miles. `null` is the explicit "Anywhere" preset — still uses
-// search_bounties_nearby (so results get real distances/sort) but without a
-// radius cap.
-type DistanceFilterValue = 'off' | number | null;
-const DISTANCE_OFF: DistanceFilterValue = 'off';
+// 'off' = no distance filter. A number is a radius in miles, applied to
+// in-person work only: online jobs are always kept (SBA-02). `null` is the
+// explicit "Anywhere" preset — still uses search_bounties_nearby (so results
+// get real distances/sort) but without a radius cap. The default for a hunter
+// with a location is LOCAL_DEFAULT_RADIUS_MILES — see lib/utils/feed-distance-default.
 const DISTANCE_OPTIONS: FilterChipOption<DistanceFilterValue>[] = [
   { label: 'Any distance', value: DISTANCE_OFF, description: 'Browse every open bounty' },
   { label: 'Within 1 mile', value: 1, chipLabel: '1 mi' },
@@ -179,6 +190,7 @@ function nearbyToBounty(nb: NearbyBounty): Bounty {
     approx_latitude: nb.approx_latitude,
     approx_longitude: nb.approx_longitude,
     distance_miles: nb.distance_miles,
+    work_type: (nb.work_type ?? undefined) as Bounty['work_type'],
   };
 }
 
@@ -204,7 +216,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | 'all'>('all');
-  const [distanceFilter, setDistanceFilter] = useState<DistanceFilterValue>(DISTANCE_OFF);
+  // The distance in effect is `distanceOverride ?? defaultDistance` (below):
+  // undefined = the hunter hasn't picked one, so the default applies.
+  const [distanceOverride, setDistanceOverride] = useState<DistanceFilterValue | undefined>(
+    undefined
+  );
+  // Remembered "Any distance" choice (lib/utils/feed-distance-default).
+  const [distancePreference, setDistancePreference] = useState<DistancePreference>('local');
+  const [distancePreferenceLoaded, setDistancePreferenceLoaded] = useState(false);
   // Part of the filter bar's single selection group — see selectOnlyFilter.
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [sortByHighestPay, setSortByHighestPay] = useState(false);
@@ -270,6 +289,26 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const { location: userLocation, permission } = useLocation();
   const validUserId = useValidUserId();
+
+  // SBA-02: a hunter with a location (device fix or saved profile point) sees
+  // in-person work within LOCAL_DEFAULT_RADIUS_MILES plus every online job,
+  // unless they chose "Any distance". The first load waits for `ready` so it
+  // doesn't show everything and then snap to the local set.
+  const feedLocation = useFeedLocation({
+    userId: validUserId ?? currentUserId,
+    deviceLocation: userLocation,
+    permission,
+  });
+  const searchCoords = feedLocation.coords;
+  const hasFeedLocation = searchCoords != null;
+  const defaultDistance = resolveDefaultDistance({
+    hasLocation: hasFeedLocation,
+    preference: distancePreference,
+  });
+  const distanceFilter: DistanceFilterValue =
+    distanceOverride !== undefined ? distanceOverride : defaultDistance;
+  const isDefaultDistance = distanceOverride === undefined;
+  const feedFiltersReady = feedLocation.ready && distancePreferenceLoaded;
 
   // "N active hunters in your area" pill. Also publishes this viewer's own
   // coordinates, which is what makes the count non-zero for everyone else —
@@ -434,8 +473,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // hunter engages an explicit sort/filter chip (category, Online, Highest
   // pay, Distance), their intent overrides the experiment's default-order
   // formula — same principle "Highest pay" already applies over distance.
+  // The default distance (local for a hunter with a location) is part of the
+  // default view, not an engaged chip.
   const isDefaultUnfilteredView =
-    activeCategory === 'all' && !onlineOnly && !sortByHighestPay && distanceFilter === DISTANCE_OFF;
+    activeCategory === 'all' && !onlineOnly && !sortByHighestPay && isDefaultDistance;
 
   const [rankingResult, setRankingResult] = useState<RankingResponse | null>(null);
   const rankingRequestKeyRef = useRef<string | null>(null);
@@ -526,8 +567,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const listViewedKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (isLoadingBounties || !applicationsLoaded) return;
+    // The local default radius is still the home feed (radius_is_default
+    // below says it was filtered); only a picked radius is 'nearby'.
     const source =
-      distanceFilter !== 'off' ? 'nearby' : activeCategory !== 'all' ? 'category' : 'home_feed';
+      distanceFilter !== 'off' && !isDefaultDistance
+        ? 'nearby'
+        : activeCategory !== 'all'
+          ? 'category'
+          : 'home_feed';
     const filtersApplied: string[] = [];
     if (activeCategory !== 'all') filtersApplied.push(`category:${activeCategory}`);
     if (distanceFilter !== 'off')
@@ -542,6 +589,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       source,
       filters_applied: filtersApplied,
       radius_miles: typeof distanceFilter === 'number' ? distanceFilter : undefined,
+      // SBA-02: the radius came from the local default, not a chip pick.
+      radius_is_default: distanceFilter !== DISTANCE_OFF && isDefaultDistance,
+      has_feed_location: hasFeedLocation,
       has_location_permission: Boolean(permission?.granted),
       sort_order: sortByHighestPay ? 'amount_desc' : distanceFilter !== 'off' ? 'distance' : 'recent',
       is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
@@ -558,6 +608,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     filteredBounties,
     activeCategory,
     distanceFilter,
+    isDefaultDistance,
+    hasFeedLocation,
     onlineOnly,
     sortByHighestPay,
     permission?.granted,
@@ -705,6 +757,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // activation through here, which clears the other three lanes. All four
   // lanes update in the same synchronous batch so two chips never read as
   // active at once; only the network count query is debounced (countCategory).
+  //
+  // Leaving out `distance` returns it to the default rather than to "Any
+  // distance": for a hunter with a location the 25 mi radius is the baseline
+  // the other chips narrow, not a chip of its own (SBA-02).
   const selectOnlyFilter = useCallback(
     (next: {
       category?: string | 'all';
@@ -715,17 +771,32 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setActiveCategory(next.category ?? 'all');
       setOnlineOnly(next.onlineOnly ?? false);
       setSortByHighestPay(next.sortByHighestPay ?? false);
-      setDistanceFilter(next.distance ?? DISTANCE_OFF);
+      setDistanceOverride(next.distance);
     },
     []
   );
 
-  // "For You" is the no-filter state, so it's only active when nothing else is.
+  // A pick from the Distance sheet. "Any distance" is remembered and turns the
+  // local default off; any radius clears that. A pick equal to the resulting
+  // default is stored as "no override", so For You reads as active again.
+  const pickDistance = useCallback(
+    (value: DistanceFilterValue) => {
+      const pick = applyDistancePick({ value, hasLocation: hasFeedLocation });
+      setDistancePreference(pick.preference);
+      void (async () => {
+        try {
+          await storage.setItem(DISTANCE_PREFERENCE_KEY, pick.preference);
+        } catch {}
+      })();
+      selectOnlyFilter({ distance: pick.override });
+    },
+    [hasFeedLocation, selectOnlyFilter]
+  );
+
+  // "For You" is the default state (which includes the local radius for a
+  // hunter with a location), so it's only active when no chip is engaged.
   const isForYouActive =
-    activeCategory === 'all' &&
-    !onlineOnly &&
-    !sortByHighestPay &&
-    distanceFilter === DISTANCE_OFF;
+    activeCategory === 'all' && !onlineOnly && !sortByHighestPay && isDefaultDistance;
 
   // The grid list is shifted up by (insets.top + 8) and its content starts with
   // 8px of padding, so at scroll offset 0 the banner's top edge lands exactly at
@@ -813,12 +884,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           distanceFilter !== 'off'
             ? await withTimeout(
                 searchBountiesNearby({
-                  latitude: userLocation?.latitude,
-                  longitude: userLocation?.longitude,
+                  latitude: searchCoords?.latitude,
+                  longitude: searchCoords?.longitude,
                   radiusMiles: distanceFilter,
                   limit: PAGE_SIZE,
                   offset: pageOffset,
                   includeTest: includeTestBounties,
+                  // A radius limits in-person work only (SBA-02).
+                  includeOnline: includeOnlineFor(distanceFilter),
                 }).then(rows => rows.map(nearbyToBounty)),
                 API_TIMEOUTS.DEFAULT
               )
@@ -888,19 +961,20 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         setLoadingMore(false);
       }
     },
-    [distanceFilter, userLocation, includeTestBounties]
+    [distanceFilter, searchCoords, includeTestBounties]
   );
+
+  // Set once the first load has started (the effect after loadUserApplications,
+  // further down, gated on feedFiltersReady).
+  const initialLoadStartedRef = useRef(false);
 
   // Distance filter changes what's fetched from the server (unlike category,
   // which filters client-side over the already-loaded page), so it needs a
   // fresh reset load rather than just re-filtering `bounties` in place. Skips
-  // its first run — the separate mount effect below already does the initial load.
-  const isFirstDistanceFilterRun = useRef(true);
+  // until the initial load has started: that load already reads the current
+  // value, including the default resolving from "Any distance" to local.
   useEffect(() => {
-    if (isFirstDistanceFilterRun.current) {
-      isFirstDistanceFilterRun.current = false;
-      return;
-    }
+    if (!initialLoadStartedRef.current) return;
     offsetRef.current = 0;
     setHasMore(true);
     loadBounties({ reset: true });
@@ -1134,9 +1208,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   useEffect(() => {
     loadUserApplications();
   }, [loadUserApplications]);
+  // First load, once the default distance is known (useFeedLocation's `ready`
+  // always turns true within FEED_LOCATION_FIX_WAIT_MS). The skeleton shows
+  // until then: isLoadingBounties starts true.
   useEffect(() => {
+    if (!feedFiltersReady || initialLoadStartedRef.current) return;
+    initialLoadStartedRef.current = true;
     loadBounties({ reset: true });
-  }, []); // eslint-disable-line
+  }, [feedFiltersReady, loadBounties]);
   // On returning to the bounty tab, refresh only the applied-bounty set (cheap,
   // keeps the "already applied" filter current). Deliberately do NOT call
   // loadBounties here: this component stays mounted (hidden via display:none),
@@ -1187,6 +1266,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         const saved = await storage.getItem('BE:lastFilter');
         if (saved) setActiveCategory(saved as any);
       } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await storage.getItem(DISTANCE_PREFERENCE_KEY);
+        setDistancePreference(parseDistancePreference(saved));
+      } catch {
+      } finally {
+        setDistancePreferenceLoaded(true);
+      }
     })();
   }, []);
 
@@ -1293,6 +1384,32 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     const hasCategoryFilter = Boolean(activeCategory) && activeCategory !== 'all';
     const hasDistanceFilter = distanceFilter !== DISTANCE_OFF;
     const hasOnlineFilter = onlineOnly;
+    // Nothing nearby and no online work either, in the default view: the only
+    // way out is a wider search, which counts as picking "Any distance".
+    if (hasDistanceFilter && isDefaultDistance && !hasCategoryFilter && !hasOnlineFilter) {
+      return (
+        <View style={{ width: '100%', alignItems: 'center' }}>
+          <Text style={{ color: theme.textSecondary, marginBottom: 8, textAlign: 'center' }}>
+            No bounties within {LOCAL_DEFAULT_RADIUS_MILES} miles of you right now.
+          </Text>
+          <TouchableOpacity
+            onPress={() => pickDistance(DISTANCE_OFF)}
+            accessibilityRole="button"
+            accessibilityLabel="Show bounties at any distance"
+            style={{
+              backgroundColor: theme.surfaceSecondary,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: '700' }}>Show any distance</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     const activeFilterCount = [hasCategoryFilter, hasDistanceFilter, hasOnlineFilter].filter(
       Boolean
     ).length;
@@ -1304,7 +1421,16 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
             No bounties match {clearsMultiple ? 'these filters' : 'this filter'}.
           </Text>
           <TouchableOpacity
-            onPress={() => selectOnlyFilter({})}
+            // Back to For You. When only an explicit radius was set, For You
+            // could be the default radius again, so widen to "Any distance" for
+            // now (not remembered: only a pick from the sheet is).
+            onPress={() =>
+              hasDistanceFilter && !hasCategoryFilter && !hasOnlineFilter
+                ? selectOnlyFilter({
+                    distance: defaultDistance === DISTANCE_OFF ? undefined : DISTANCE_OFF,
+                  })
+                : selectOnlyFilter({})
+            }
             accessibilityRole="button"
             accessibilityLabel={clearsMultiple ? 'Clear filters' : 'Clear filter'}
             style={{
@@ -1342,8 +1468,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     loadBounties,
     activeCategory,
     distanceFilter,
+    isDefaultDistance,
+    defaultDistance,
     onlineOnly,
     selectOnlyFilter,
+    pickDistance,
     theme,
     setActiveScreen,
   ]);
@@ -1382,12 +1511,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 label="Distance"
                 icon="near-me"
                 value={distanceFilter}
-                neutralValue={DISTANCE_OFF}
+                // The default is the baseline For You stands for, so it reads as
+                // "off" here — but still names the radius when it's local.
+                neutralValue={isDefaultDistance ? distanceFilter : undefined}
+                neutralLabel={
+                  isDefaultDistance && distanceFilter !== DISTANCE_OFF
+                    ? `${LOCAL_DEFAULT_RADIUS_MILES} mi`
+                    : undefined
+                }
                 options={DISTANCE_OPTIONS}
-                onChange={value => selectOnlyFilter({ distance: value })}
-                description="Show bounties within a radius of you."
+                onChange={pickDistance}
+                description="In-person bounties within a radius of you. Online bounties are always shown."
                 hint={
-                  permission?.granted
+                  hasFeedLocation
                     ? undefined
                     : 'Location access is off, so distance filters may not match what’s actually near you.'
                 }

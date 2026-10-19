@@ -36,6 +36,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useTabPager } from "../../components/ui/tab-pager"
 import { BrandingLogo } from "../../components/ui/branding-logo"
 import { BountyConversationRow, type InboxPerson } from "../../components/bounty-inbox/thread-list-row"
+import { NotNearbyToggle } from "../../components/not-nearby-toggle"
+import { formatApplicantDistance, partitionApplicantsByDistance } from "lib/utils/applicant-distance"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { getBottomNavContentPadding } from "../../lib/constants/navigation"
 import { useConversations } from '../../hooks/useConversations'
@@ -812,26 +814,39 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   // One row per person, like a DM inbox: each pending applicant on an open
   // bounty is their own conversation; a hired bounty is the conversation with
   // its hunter; an open bounty nobody has applied to yet gets a single row.
-  const bountyRows: InboxRow[] = React.useMemo(() => {
+  //
+  // SBA-02: a bounty's applicants stay together, nearest first, placed by the
+  // bounty's latest applicant activity. Applications flagged is_far (over 50
+  // miles from an in-person job) go under "Not nearby (N)" at the bottom.
+  const { bountyRows, notNearbyRows } = React.useMemo(() => {
     const rows: InboxRow[] = []
+    const farRows: InboxRow[] = []
     for (const b of displayedMyPostings) {
       const lifecycle = getLifecycle(b, 'owner')
       const applicants = b.status === 'open' ? applicantsByBounty.get(String(b.id)) ?? [] : []
       if (applicants.length > 0) {
-        for (const a of applicants) {
-          const hunterId = String(a.hunter_id)
-          const conv = findPairConversation(conversations, currentUserId, hunterId, String(b.id))
-          rows.push({
-            key: `bounty:${b.id}:${hunterId}`,
-            bounty: b,
-            role: 'poster',
-            lifecycle,
-            person: { id: hunterId, name: a.profile?.username ?? null, avatar: a.profile?.avatar ?? null },
-            conversation: conv,
-            application: a,
-            activityAt: [conv?.updatedAt, a.created_at].filter(Boolean).sort().pop() ?? null,
+        const toRows = (list: BountyRequestWithDetails[]): InboxRow[] => {
+          const built = list.map((a, i): InboxRow => {
+            const hunterId = String(a.hunter_id)
+            const conv = findPairConversation(conversations, currentUserId, hunterId, String(b.id))
+            return {
+              key: `bounty:${b.id}:${hunterId}`,
+              bounty: b,
+              role: 'poster',
+              lifecycle,
+              person: { id: hunterId, name: a.profile?.username ?? null, avatar: a.profile?.avatar ?? null },
+              conversation: conv,
+              application: a,
+              activityAt: [conv?.updatedAt, a.created_at].filter(Boolean).sort().pop() ?? null,
+              sortIndex: i,
+            }
           })
+          const latest = built.map(r => r.activityAt).filter(Boolean).sort().pop() ?? null
+          return built.map(r => ({ ...r, sortAt: latest }))
         }
+        const { nearby, notNearby } = partitionApplicantsByDistance(applicants)
+        rows.push(...toRows(nearby))
+        farRows.push(...toRows(notNearby))
         continue
       }
       const hunterId = b.accepted_by ? String(b.accepted_by) : null
@@ -847,8 +862,21 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         activityAt: conv?.updatedAt ?? b.created_at,
       })
     }
-    return sortInboxRows(rows)
+    return { bountyRows: sortInboxRows(rows), notNearbyRows: sortInboxRows(farRows) }
   }, [displayedMyPostings, getLifecycle, applicantsByBounty, conversations, currentUserId])
+
+  const [showNotNearby, setShowNotNearby] = useState(false)
+  const toggleNotNearby = React.useCallback(() => setShowNotNearby(v => !v), [])
+  const myBountiesListData: InboxListItem[] = React.useMemo(() => {
+    if (notNearbyRows.length === 0) return bountyRows
+    const toggle: NotNearbyListItem = {
+      kind: 'notNearby',
+      key: '__not-nearby__',
+      count: notNearbyRows.length,
+      expanded: showNotNearby,
+    }
+    return [...bountyRows, toggle, ...(showNotNearby ? notNearbyRows : [])]
+  }, [bountyRows, notNearbyRows, showNotNearby])
 
   // Badges count everything actually blocked on this user — for a poster that
   // includes applications waiting on a decision.
@@ -888,7 +916,11 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   // Full-width line between conversations.
   const RowSeparator = React.useCallback(() => <View style={styles.rowSeparator} />, [styles])
 
-  const renderRow = React.useCallback(({ item: row }: { item: InboxRow }) => {
+  const renderRow = React.useCallback(({ item }: { item: InboxListItem }) => {
+    if (isNotNearbyItem(item)) {
+      return <NotNearbyToggle count={item.count} expanded={item.expanded} onToggle={toggleNotNearby} />
+    }
+    const row = item
     const b = row.bounty
     const conv = row.conversation
     const app = row.application
@@ -908,6 +940,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         // An application waiting on the poster is their move even though the
         // bounty-level lifecycle is shared by every applicant row.
         yourTurn={app ? true : row.lifecycle.needsAttention}
+        distanceLabel={app ? formatApplicantDistance(app.distance_mi) : null}
         onPress={() => openThread(b.id, row.role, row.role === 'poster' ? row.person?.id ?? null : null)}
         onLongPress={() => handleRowLongPress(row)}
         // Same rule as the long-press "Delete posting" option.
@@ -918,7 +951,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         }
       />
     )
-  }, [openThread, handleRowLongPress, handleDeleteBounty])
+  }, [openThread, handleRowLongPress, handleDeleteBounty, toggleNotNearby])
 
   const listContentPadding = useMemo(
     () => ({ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }),
@@ -1034,7 +1067,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   const renderList = (tab: InboxTab) => (
         <FlatList
-          data={tab === 'inProgress' ? workRows : bountyRows}
+          data={tab === 'inProgress' ? workRows : myBountiesListData}
           keyExtractor={keyExtractorRow}
           renderItem={renderRow}
           ItemSeparatorComponent={RowSeparator}
@@ -1312,6 +1345,24 @@ interface InboxRow {
   /** Poster side: the pending application this row is about. */
   application: BountyRequestWithDetails | null
   activityAt: string | null
+  /** Overrides activityAt for ordering: a bounty's applicants share their latest activity. */
+  sortAt?: string | null
+  /** Order within rows sharing sortAt (applicants: nearest first). */
+  sortIndex?: number
+}
+
+/** The "Not nearby (N)" divider at the bottom of My Bounties (SBA-02). */
+interface NotNearbyListItem {
+  kind: 'notNearby'
+  key: string
+  count: number
+  expanded: boolean
+}
+
+type InboxListItem = InboxRow | NotNearbyListItem
+
+function isNotNearbyItem(item: InboxListItem): item is NotNearbyListItem {
+  return (item as NotNearbyListItem).kind === 'notNearby'
 }
 
 const GROUP_RANK: Record<string, number> = { attention: 0, active: 1, waiting: 2, past: 3 }
@@ -1321,11 +1372,14 @@ function sortInboxRows(rows: InboxRow[]): InboxRow[] {
   return [...rows].sort((a, b) => {
     const g = (GROUP_RANK[a.lifecycle.group] ?? 9) - (GROUP_RANK[b.lifecycle.group] ?? 9)
     if (g !== 0) return g
-    return new Date(b.activityAt ?? 0).getTime() - new Date(a.activityAt ?? 0).getTime()
+    const t =
+      new Date(b.sortAt ?? b.activityAt ?? 0).getTime() - new Date(a.sortAt ?? a.activityAt ?? 0).getTime()
+    if (t !== 0) return t
+    return (a.sortIndex ?? 0) - (b.sortIndex ?? 0)
   })
 }
 
-const keyExtractorRow = (row: InboxRow) => row.key
+const keyExtractorRow = (row: InboxListItem) => row.key
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({

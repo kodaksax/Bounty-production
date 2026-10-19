@@ -8,6 +8,7 @@ import { trustSafetyStrings } from '../lib/strings/trust-safety';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { formatApplicantDistance } from '../lib/utils/applicant-distance';
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { deriveCoarseVerificationStatus } from '../lib/utils/normalize-profile';
 import { getRelevantSkills } from '../lib/utils/skill-match';
@@ -156,6 +157,10 @@ export const ApplicantCard = memo(function ApplicantCard({
   // signals they're weighing, whichever way it comes out.
   const isHighRiskBounty = isHighRiskTrustTier(request.bounty?.trust_tier);
 
+  // "About 4 mi away" / "Under 1 mi away", stamped by the server when they
+  // applied (SBA-02). Nothing when it isn't known (online job, no location).
+  const distanceLabel = formatApplicantDistance(request.distance_mi);
+
   const applicantName = request.profile?.username || 'this hunter';
   const isForHonor = !!request.bounty?.is_for_honor;
   const amount = typeof request.bounty?.amount === 'number' ? request.bounty.amount : 0;
@@ -283,6 +288,12 @@ export const ApplicantCard = memo(function ApplicantCard({
               )}
             </View>
             <Text style={s.trustSummary}>{trustSummary}</Text>
+            {distanceLabel && (
+              <View style={s.distanceRow} testID="applicant-distance">
+                <MaterialIcons name="place" size={13} color={theme.textSecondary} />
+                <Text style={s.distanceText}>{distanceLabel}</Text>
+              </View>
+            )}
             {isHighRiskBounty && !isIdentityVerified && (
               <View style={s.idStatusRow}>
                 <MaterialIcons name="gpp-maybe" size={13} color={theme.textSecondary} />
@@ -503,6 +514,16 @@ function makeStyles(t: AppTheme) {
     trustSummary: {
       color: t.textSecondary,
       fontSize: 13,
+    },
+    distanceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 2,
+    },
+    distanceText: {
+      color: t.textSecondary,
+      fontSize: 12,
     },
     idStatusRow: {
       flexDirection: 'row',

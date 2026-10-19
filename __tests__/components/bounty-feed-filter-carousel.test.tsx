@@ -152,6 +152,7 @@ jest.mock('../../lib/services/bounty-request-service', () => ({
 }));
 jest.mock('../../lib/services/bounty-location-service', () => ({
   searchBountiesNearby: jest.fn().mockResolvedValue([]),
+  getMyCoordinates: jest.fn().mockResolvedValue({ ok: true, coords: null }),
 }));
 jest.mock('../../lib/supabase', () => {
   const channel = {

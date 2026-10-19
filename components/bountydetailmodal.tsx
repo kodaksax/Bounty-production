@@ -38,6 +38,8 @@ import type { BountyScheduleType, Message } from '../lib/types'
 import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { BountyTrustSignals } from './bounty-trust-signals'
 import { ReportModal } from "./ReportModal"
+import { ZipLocationModal } from './zip-location-modal'
+import { useApplyLocationGate } from '../hooks/useApplyLocationGate'
 import { AppModal } from './ui/app-modal'
 import { useKeyboardInset } from './ui/keyboard-avoiding'
 import { TrustSafetyNotice } from './ui/trust-safety-notice'
@@ -125,6 +127,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [requestStatus, setRequestStatus] = useState<string | null>(null)
   const [showReportModal, setShowReportModal] = useState(false)
   const [applicationMessage, setApplicationMessage] = useState('')
+  // SBA-02: ZIP before applying to in-person work with no saved location.
+  const applyLocationGate = useApplyLocationGate(currentUserId)
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
   // Local state to hold a fuller bounty object if we need to fetch details
@@ -526,10 +530,14 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     }
 
     if (!confirmed) {
-      Alert.alert('Send application?', trustSafetyStrings.beforeAcceptance, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Apply', onPress: () => handleApplyForBounty(true) },
-      ])
+      // The ZIP prompt (if needed) comes first, so the saved point is on the
+      // profile before the insert measures distance from it.
+      void applyLocationGate.run({ bountyId: String(bounty.id), workType: bounty.work_type }, () => {
+        Alert.alert('Send application?', trustSafetyStrings.beforeAcceptance, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Apply', onPress: () => handleApplyForBounty(true) },
+        ])
+      })
       return
     }
 
@@ -1045,6 +1053,15 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         contentId={String(bounty.id)}
         contentTitle={bounty.title}
       />
+
+      {currentUserId && (
+        <ZipLocationModal
+          visible={applyLocationGate.visible}
+          userId={currentUserId}
+          onCancel={applyLocationGate.onCancel}
+          onSaved={applyLocationGate.onSaved}
+        />
+      )}
       </>
     </AppModal>
   )

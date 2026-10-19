@@ -651,6 +651,13 @@ export type AnalyticsEvent =
   | 'trust_requirement_set'
   | 'trust_requirement_blocked_apply'
   | 'verification_started_from_requirement'
+  // SBA-02: a hunter with no saved location is asked for a ZIP before
+  // applying to in-person work (hooks/useApplyLocationGate.ts). `geocoded`
+  // on apply_location_saved = the ZIP's point was saved too, so the
+  // application will carry a distance.
+  | 'apply_location_prompt_shown'
+  | 'apply_location_saved'
+  | 'apply_location_prompt_cancelled'
   // Sharing events (bounty + profile) — see lib/utils/share-utils.ts.
   // Funnel per share attempt: {bounty,profile}_shared (share sheet opened)
   // -> exactly one of share_completed/share_cancelled/share_link_copied.

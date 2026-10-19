@@ -77,6 +77,8 @@ interface BountyConversationRowProps {
   onLongPress?: () => void;
   /** Shows a trash button on the bounty line. Omit when the bounty can't be deleted. */
   onDelete?: () => void;
+  /** Poster side: "About 4 mi away" for an in-person applicant (SBA-02). Omit when unknown. */
+  distanceLabel?: string | null;
 }
 
 export function BountyConversationRow({
@@ -91,6 +93,7 @@ export function BountyConversationRow({
   onPress,
   onLongPress,
   onDelete,
+  distanceLabel,
 }: BountyConversationRowProps) {
   const { theme } = useAppThemeContext();
   const router = useRouter();
@@ -111,26 +114,37 @@ export function BountyConversationRow({
       onAvatarPress={person ? () => router.push(`/profile/${person.id}` as never) : undefined}
       accessibilityHint={`Opens the conversation about ${bountyTitle}`}
       meta={
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
-          <StatusBadge status={status} />
-          {yourTurn && (
-            <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, backgroundColor: '#d97706' }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>YOUR MOVE</Text>
-            </View>
-          )}
-          <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>
-            {bountyTitle}
-          </Text>
-          {onDelete && (
-            <TouchableOpacity
-              onPress={onDelete}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={`Delete ${bountyTitle}`}
+        <View>
+          {distanceLabel ? (
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}
+              testID="inbox-applicant-distance"
             >
-              <MaterialIcons name="delete-outline" size={18} color={theme.error} />
-            </TouchableOpacity>
-          )}
+              <MaterialIcons name="place" size={13} color={theme.textSecondary} />
+              <Text style={{ fontSize: 12, color: theme.textSecondary }}>{distanceLabel}</Text>
+            </View>
+          ) : null}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <StatusBadge status={status} />
+            {yourTurn && (
+              <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, backgroundColor: '#d97706' }}>
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>YOUR MOVE</Text>
+              </View>
+            )}
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>
+              {bountyTitle}
+            </Text>
+            {onDelete && (
+              <TouchableOpacity
+                onPress={onDelete}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete ${bountyTitle}`}
+              >
+                <MaterialIcons name="delete-outline" size={18} color={theme.error} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       }
     />
