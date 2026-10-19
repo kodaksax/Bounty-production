@@ -17,6 +17,7 @@ import {
   buildFallbackEmail,
   describeTicketError,
   fallbackDedupeKey,
+  fallbackNeedsBounty,
   isEmailFallbackType,
   isEmailSuppressedType,
   isLegacyOptedOut,
@@ -100,7 +101,8 @@ const TYPE_CATEGORY: Record<string, Category> = {
   bounty_quality_nudge: 'marketplace',
   bounty_location_nudge: 'marketplace',
   application_pending_reminder: 'marketplace', application_expired: 'marketplace',
-  application_bounty_closed: 'marketplace', rating_reminder: 'marketplace',
+  application_bounty_closed: 'marketplace', application_closure_digest: 'marketplace',
+  rating_reminder: 'marketplace',
   message: 'messages',
   payment: 'payments', payout_paid: 'payments', payout_failed: 'payments', payout_canceled: 'payments',
   withdrawal_reversed: 'payments', bank_disconnected: 'payments', payout_method_changed: 'payments',
@@ -549,10 +551,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Poster-facing application types, and the hunter's application_expired
-    // closure notice, get email ONLY as a fallback for a push that could not
-    // reach the recipient (see the fallback step below), capped at one email
-    // per application. Every other type keeps the blanket fan-out.
+    // Poster-facing application types, and the hunter's closure notices
+    // (application_expired, and since SBA-09 the daily
+    // application_closure_digest), get email ONLY as a fallback for a push
+    // that could not reach the recipient (see the fallback step below),
+    // capped at one email per application / per digest. Every other type
+    // keeps the blanket fan-out.
     const posterFallback = isPosterFallbackType(notificationType)
     const emailFallback = isEmailFallbackType(notificationType)
 
@@ -763,9 +767,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Email fallback ────────────────────────────────────────────────────
-    // For application (poster) and application_expired (hunter) only: when push could not reach the
-    // recipient (failed, no token, or push turned off), send ONE email per
-    // application, respecting both preference tables.
+    // For application (poster) and application_expired / application_closure_digest
+    // (hunter) only: when push could not reach the recipient (failed, no
+    // token, or push turned off), send ONE email per application (per digest
+    // for the digest), respecting both preference tables.
     type FallbackResult = 'sent' | 'already_emailed' | 'opted_out' | 'no_provider' | 'failed' | 'no_bounty'
     const fallbackResult = new Map<string, FallbackResult>()
     if (emailFallback) {
@@ -809,7 +814,7 @@ Deno.serve(async (req: Request) => {
             fallbackResult.set(userId, 'opted_out')
             continue
           }
-          if (!bountyId) {
+          if (!bountyId && fallbackNeedsBounty(notificationType)) {
             // No bounty to link to or count applicants for; nothing useful to send.
             fallbackResult.set(userId, 'no_bounty')
             continue
@@ -845,7 +850,7 @@ Deno.serve(async (req: Request) => {
           // this poster/bounty/applicant. Best-effort — if the context can't
           // be stored the email still goes out, saying replies reach support.
           let replyTo: string | null = null
-          if (posterFallback && REPLY_DOMAIN) {
+          if (posterFallback && REPLY_DOMAIN && bountyId) {
             const token = await createReplyContext(supabaseAdmin, {
               posterId: userId,
               bountyId,
