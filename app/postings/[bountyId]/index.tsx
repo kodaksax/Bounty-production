@@ -216,14 +216,12 @@ export default function BountyDashboard() {
         return;
       }
 
-      try {
-        const updated = await bountyService.update(bounty.id, updates);
-        if (!updated) throw new Error('update failed');
-        setShowEditModal(false);
-        await refresh();
-      } catch (err: any) {
-        Alert.alert('Changes not saved', err?.message || 'Please try again.');
-      }
+      // A refusal throws a BountyUpdateError whose message says why in plain
+      // words; letting it reach the edit modal shows it inline with the
+      // poster's edits intact, instead of closing on "update failed" (SBA-10).
+      await bountyService.update(bounty.id, updates);
+      setShowEditModal(false);
+      await refresh();
     },
     [bounty, refresh]
   );

@@ -33,7 +33,7 @@ type CancellableBounty = Pick<Bounty, 'id' | 'title' | 'amount' | 'is_for_honor'
 
 export interface CancelRefundDeps {
   /** WalletContext.refundEscrow — resolves false (never throws) on failure. */
-  refundEscrow: (bountyId: string | number, title: string, refundPercentage?: number) => Promise<boolean>;
+  refundEscrow: (bountyId: string | number, title: string, refundPercentage: number) => Promise<boolean>;
 }
 
 /** The refund could not be completed, so the bounty was NOT deleted. */

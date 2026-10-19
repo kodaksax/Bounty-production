@@ -51,6 +51,7 @@ import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { BountyRefundFailedError, cancelAndRefundBounty } from '../../lib/services/bounty-cancel-refund'
+import { toBountyUpdateError } from '../../lib/services/bounty-update-error'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
@@ -654,10 +655,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         console.error('Failed to re-check pending requests after save failure:', checkErr)
       }
 
-      // Fallback: show server-provided error message if available, else generic
-      const msg = (err && (err.message || String(err))) || 'Failed to save changes'
-      Alert.alert('Error', msg)
+      // Hand the server's reason, in plain words, back to the edit modal so
+      // it shows inline with the poster's edits intact (SBA-10).
       console.error('Error saving bounty edit:', err)
+      throw toBountyUpdateError(err)
     }
   }
 

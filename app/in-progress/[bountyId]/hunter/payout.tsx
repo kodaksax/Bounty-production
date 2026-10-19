@@ -20,6 +20,7 @@ import { bountyRequestService } from '../../../../lib/services/bounty-request-se
 import { bountyService } from '../../../../lib/services/bounty-service';
 import { completionService } from '../../../../lib/services/completion-service';
 import { getReviewDeadlineStatus } from '../../../../lib/utils/review-deadline';
+import { describeBountyUpdateError } from '../../../../lib/services/bounty-update-error';
 import { bountyHoldsUnreleasedEscrow } from '../../../../lib/utils/payment-architecture';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
@@ -170,7 +171,7 @@ export default function HunterPayoutScreen() {
               ]);
             } catch (err) {
               console.error('Error archiving bounty:', err);
-              Alert.alert('Error', 'Failed to archive bounty. Please try again.');
+              Alert.alert('Error', describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }
@@ -225,7 +226,7 @@ export default function HunterPayoutScreen() {
               ]);
             } catch (err) {
               console.error('Error deleting bounty:', err);
-              Alert.alert('Error', 'Failed to delete bounty. Please try again.');
+              Alert.alert('Error', describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }

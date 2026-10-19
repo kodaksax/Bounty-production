@@ -1,5 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import type { Bounty } from "lib/services/database.types";
+import { describeBountyUpdateError } from "lib/services/bounty-update-error";
 import React, { useState, useMemo } from 'react';
 import {
   ActivityIndicator,
@@ -139,7 +140,10 @@ export function EditPostingModal({
 
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update posting");
+      // Callers throw the server's reason as a plain sentence
+      // (BountyUpdateError); anything else is classified the same way so a
+      // raw PostgREST string never reaches the poster.
+      setError(describeBountyUpdateError(err));
     } finally {
       setIsSubmitting(false);
     }

@@ -55,6 +55,7 @@ import {
   useBountyStatusFilters,
 } from '../../hooks/useBountyStatusFilters'
 import { BountyRefundFailedError, cancelAndRefundBounty } from '../../lib/services/bounty-cancel-refund'
+import { describeBountyUpdateError, toBountyUpdateError } from '../../lib/services/bounty-update-error'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
@@ -438,10 +439,10 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         console.error('Failed to re-check pending requests after save failure:', checkErr)
       }
 
-      // Fallback: show server-provided error message if available, else generic
-      const msg = (err && (err.message || String(err))) || 'Failed to save changes'
-      Alert.alert('Error', msg)
+      // Hand the server's reason, in plain words, back to the edit modal so
+      // it shows inline with the poster's edits intact (SBA-10).
       console.error('Error saving bounty edit:', err)
+      throw toBountyUpdateError(err)
     }
   }
 
@@ -672,7 +673,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               await loadMyBounties()
             } catch (err) {
               console.error('Error archiving bounty:', err)
-              Alert.alert('Error', 'Failed to archive bounty. Please try again.')
+              Alert.alert('Error', describeBountyUpdateError(err))
             }
           },
         },

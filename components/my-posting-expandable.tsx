@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { bountyRequestService } from 'lib/services/bounty-request-service';
 import { bountyService } from 'lib/services/bounty-service';
+import { describeBountyUpdateError } from 'lib/services/bounty-update-error';
 import { cancellationService } from 'lib/services/cancellation-service';
 import { completionService } from 'lib/services/completion-service';
 import type { Bounty } from 'lib/services/database.types';
@@ -1898,10 +1899,7 @@ export function MyPostingExpandable({
                                     onRefresh?.();
                                   } catch (err) {
                                     console.error('Error archiving bounty:', err);
-                                    Alert.alert(
-                                      'Error',
-                                      'Failed to archive bounty. Please try again.'
-                                    );
+                                    Alert.alert('Error', describeBountyUpdateError(err));
                                   } finally {
                                     setIsProcessing(false);
                                   }

@@ -319,10 +319,12 @@ export const cancellationService = {
         throw updateError;
       }
 
-      // Cancel the bounty.
-      await bountyService.update(cancellation.bountyId, {
-        status: 'cancelled',
-      });
+      // Cancel the bounty. Best-effort, as it always was: the cancellation
+      // row is already accepted, so a status write refused here must not turn
+      // the response into a failure (update() now throws its reason, SBA-10).
+      await bountyService
+        .update(cancellation.bountyId, { status: 'cancelled' })
+        .catch(err => logger.error('acceptCancellation: bounty status not updated', { cancellationId, error: { message: err?.message } }));
 
       // Update requester's stats
       await this.updateUserStats(cancellation.requesterId, 
@@ -379,9 +381,11 @@ export const cancellationService = {
       const bounty = await bountyService.getById(cancellation.bountyId);
       const revertStatus = bounty?.accepted_by ? 'in_progress' : 'open';
       
-      await bountyService.update(cancellation.bountyId, {
-        status: revertStatus as any,
-      });
+      // Best-effort, as before update() threw (SBA-10): the rejection is
+      // already recorded.
+      await bountyService
+        .update(cancellation.bountyId, { status: revertStatus as any })
+        .catch(err => logger.error('rejectCancellation: bounty status not reverted', { cancellationId, error: { message: err?.message } }));
 
       return true;
     } catch (err) {
