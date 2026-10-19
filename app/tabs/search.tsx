@@ -226,11 +226,19 @@ export default function EnhancedSearchScreen() {
       }
     });
   }, [createTiming, bodyAnim, chromeAnim, router]);
+  // Test bounties appear only for an internal viewer who opted in. Trending,
+  // autocomplete and results all apply the same rule (SBA-11).
+  const isInternalViewer = !!authProfileService.getCurrentProfile()?.is_internal;
+  const { showTestBounties } = useShowTestBounties();
+  const includeTestBounties = isInternalViewer && showTestBounties;
+
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
     setIsLoadingTrending(true);
     try {
-      const trending = await searchService.getTrendingBounties(5);
+      const trending = await searchService.getTrendingBounties(5, {
+        includeTest: includeTestBounties,
+      });
       const unique = Array.from(new Map(trending.map(t => [String(t.id), t])).values());
       setTrendingBounties(unique);
     } catch (error) {
@@ -238,7 +246,7 @@ export default function EnhancedSearchScreen() {
     } finally {
       setIsLoadingTrending(false);
     }
-  }, []);
+  }, [includeTestBounties]);
   // Bounty filters
   const [filters, setFilters] = useState<BountySearchFilters>({
     sortBy: 'date_desc',
@@ -263,10 +271,11 @@ export default function EnhancedSearchScreen() {
     };
     loadSavedFilters();
   }, []);
+  // Re-runs only when includeTestBounties changes (an internal viewer's
+  // saved preference loading after mount).
   useEffect(() => {
     loadTrendingBounties();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadTrendingBounties]);
 
   // Persist filters when they change (debounced to reduce I/O overhead)
   useEffect(() => {
@@ -320,7 +329,9 @@ export default function EnhancedSearchScreen() {
     setIsLoadingSuggestions(true);
     autocompleteRef.current = setTimeout(async () => {
       try {
-        const results = await searchService.getAutocompleteSuggestions(query, 8);
+        const results = await searchService.getAutocompleteSuggestions(query, 8, {
+          includeTest: includeTestBounties,
+        });
         setSuggestions(results);
         setShowSuggestions(results.length > 0);
       } catch (error) {
@@ -335,7 +346,7 @@ export default function EnhancedSearchScreen() {
     return () => {
       if (autocompleteRef.current) clearTimeout(autocompleteRef.current);
     };
-  }, [query]);
+  }, [query, includeTestBounties]);
 
   const handleSuggestionPress = useCallback(
     (suggestion: AutocompleteSuggestion) => {
@@ -379,8 +390,6 @@ export default function EnhancedSearchScreen() {
     };
   }, []);
 
-  const isInternalViewer = !!authProfileService.getCurrentProfile()?.is_internal;
-  const { showTestBounties } = useShowTestBounties();
 
   const performBountySearch = useCallback(
     async (searchQuery: string, searchFilters: BountySearchFilters) => {
@@ -392,7 +401,7 @@ export default function EnhancedSearchScreen() {
           keywords: searchQuery.trim() || undefined,
           ...searchFilters,
           limit: 50,
-          includeTest: isInternalViewer && showTestBounties,
+          includeTest: includeTestBounties,
         });
         if (requestId !== searchRequestIdRef.current) return; // superseded by a newer search
         // Keep the server's sort order (date/amount), then move listings that
@@ -442,7 +451,7 @@ export default function EnhancedSearchScreen() {
         if (requestId === searchRequestIdRef.current) setIsSearching(false);
       }
     },
-    [mapBounty, isInternalViewer, showTestBounties]
+    [mapBounty, includeTestBounties]
   );
 
   const performUserSearch = useCallback(async (searchQuery: string) => {
