@@ -77,6 +77,8 @@ jest.mock('../../../../lib/moments/referral-service', () => ({
 }));
 
 jest.mock('../../../../lib/moments/sessionTracking', () => ({
+  effectiveLastSessionAt: (_userId: string, profileValue: string | null) => profileValue,
+  noteSessionRecorded: jest.fn(),
   evaluateReturningUser: () => ({ isReturning: false, daysSinceLastSession: null }),
   getSessionCount: jest.fn(() => Promise.resolve(1)),
   incrementSessionCount: jest.fn(() => Promise.resolve(1)),
@@ -107,7 +109,7 @@ jest.mock('../../../../lib/supabase', () => ({
       update: jest.fn(() => ({
         eq: jest.fn(() => Promise.resolve({ error: null })),
       })),
-      // Backs fetchHasEngaged's two head-count queries (bounties/
+      // Backs fetchEngagement's two head-count queries (bounties/
       // bounty_requests) — mocked as "never engaged" by default so it
       // doesn't interfere with the first-session-suppression gate.
       select: jest.fn(() => ({
