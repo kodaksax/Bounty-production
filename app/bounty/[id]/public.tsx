@@ -673,7 +673,7 @@ export default function PublicBountyDetail() {
               </View>
               <TouchableOpacity
                 style={s.actionButton}
-                onPress={() => router.replace(`${ROUTES.TABS.BOUNTY_APP}?screen=bounty` as never)}
+                onPress={() => router.replace(`${ROUTES.TABS.BOUNTY_APP}?tab=bounty` as never)}
                 accessibilityRole="button"
                 accessibilityLabel="Browse other bounties"
               >

@@ -223,7 +223,7 @@ describe('NotificationActionSheet', () => {
 
       expect(mockAcceptRequest).not.toHaveBeenCalled();
       expect(onClose).toHaveBeenCalledTimes(1);
-      expect(push).toHaveBeenCalledWith('/tabs/bounty-app?screen=messages&initialTab=requests');
+      expect(push).toHaveBeenCalledWith('/tabs/bounty-app?tab=messages&initialTab=requests');
     });
 
     it('tells the poster when a decline fails instead of failing silently', async () => {

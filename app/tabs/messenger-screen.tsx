@@ -562,7 +562,7 @@ const ConversationItem = React.memo(function ConversationItem({
 
   const handleAvatarPress = useCallback(() => {
     if (otherUserId) {
-      const referrer = encodeURIComponent("/tabs/bounty-app?screen=messages")
+      const referrer = encodeURIComponent("/tabs/bounty-app?tab=messages")
       router.push(`/profile/${otherUserId}?referrer=${referrer}`)
     }
   }, [otherUserId, router])

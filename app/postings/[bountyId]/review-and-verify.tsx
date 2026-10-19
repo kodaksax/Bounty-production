@@ -468,7 +468,7 @@ export default function ReviewAndVerifyScreen() {
           onPress={() =>
             router.push({
               pathname: ROUTES.TABS.BOUNTY_APP,
-              params: { screen: 'messages', initialTab: 'myPostings' },
+              params: { tab: 'messages', initialTab: 'myPostings' },
             } as any)
           }
         >
@@ -487,7 +487,7 @@ export default function ReviewAndVerifyScreen() {
           onPress={() =>
             router.push({
               pathname: ROUTES.TABS.BOUNTY_APP,
-              params: { screen: 'messages', initialTab: 'myPostings' },
+              params: { tab: 'messages', initialTab: 'myPostings' },
             } as any)
           }
         >

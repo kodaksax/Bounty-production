@@ -44,7 +44,7 @@ describe('resolveNotificationDeepLink: application', () => {
       type: 'application',
       data: { bountyId: 'abc-123' },
     });
-    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?screen=messages&initialTab=requests' });
+    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?tab=messages&initialTab=requests' });
   });
 
   test('routes the pending-application reminder to the same screen', () => {
@@ -65,7 +65,7 @@ describe('resolveNotificationDeepLink: application', () => {
 
   test('still routes when the payload is missing bountyId', () => {
     const action = resolveNotificationDeepLink({ type: 'application', data: {} });
-    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?screen=messages&initialTab=requests' });
+    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?tab=messages&initialTab=requests' });
   });
 });
 
@@ -152,7 +152,7 @@ describe('resolveNotificationDeepLink: application (GitHub #809)', () => {
     });
     expect(action).toEqual({
       kind: 'route',
-      path: '/tabs/bounty-app?screen=messages&initialTab=requests',
+      path: '/tabs/bounty-app?tab=messages&initialTab=requests',
     });
   });
 

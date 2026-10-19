@@ -14,6 +14,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { capture as posthogCapture } from '../posthog';
 import { categoryForNotificationType } from '../config/notification-taxonomy';
 import { getNotificationBountyId, resolveNotificationDeepLink } from '../services/notification-deep-links';
+import { openDeepLink } from '../navigation/deferred-deep-link';
 import { notificationService } from '../services/notification-service';
 import { isNotificationsChannelConnected, subscribeToNotifications } from '../services/notification-realtime';
 import { supabase } from '../supabase';
@@ -145,13 +146,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         surface,
       });
 
+      // On a cold start the root gate is still deciding where the launch
+      // lands; openDeepLink holds the destination until it has, so the gate's
+      // own navigation can't replace it (lib/navigation/deferred-deep-link.ts).
+      const push = (path: string) => router.push(path as any);
       if (action.kind === 'route') {
-        router.push(action.path as any);
+        openDeepLink(action.path, push);
       } else if (action.kind === 'conversation') {
-        router.push(`/tabs/messenger/${encodeURIComponent(action.conversationId)}` as any);
+        openDeepLink(`/tabs/messenger/${encodeURIComponent(action.conversationId)}`, push);
       } else if (data.senderId) {
         // Legacy fallback for payloads that predate the `type` field.
-        router.push(`/profile/${data.senderId}` as any);
+        openDeepLink(`/profile/${data.senderId}`, push);
       }
     },
     [router]

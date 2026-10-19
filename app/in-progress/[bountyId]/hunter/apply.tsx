@@ -22,7 +22,7 @@ export default function HunterApplyRedirect() {
   const id = raw && String(raw).trim().length > 0 ? String(raw) : null;
 
   if (!id) {
-    return <Redirect href="/tabs/bounty-app?screen=messages&initialTab=inProgress" />;
+    return <Redirect href="/tabs/bounty-app?tab=messages&initialTab=inProgress" />;
   }
 
   return (

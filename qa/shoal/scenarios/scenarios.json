@@ -862,7 +862,7 @@
       ],
       "swarm": 3,
       "maxSteps": 40,
-      "path": "/tabs/bounty-app?screen=messages&initialTab=requests",
+      "path": "/tabs/bounty-app?tab=messages&initialTab=requests",
       "requiresAuth": true,
       "tags": {
         "funnel": [

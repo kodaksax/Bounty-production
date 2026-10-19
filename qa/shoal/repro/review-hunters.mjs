@@ -12,6 +12,11 @@
  * <bountyId> must be an open bounty owned by pool poster <slot> (default 4) with at
  * least one pending application (seed.mjs status / the staging database).
  * Exit code 0 = landed on My Bounties, 1 = landed somewhere else.
+ *
+ * Since #921 every main tab stays mounted side by side in a horizontal pager, and both
+ * Inbox segment labels are always rendered, so "is the text in the DOM" no longer says
+ * where the poster is. This checks what is inside the viewport and which Inbox segment
+ * is selected (the segment buttons are role="tab" with aria-selected).
  */
 import { chromium } from 'playwright';
 import { derivePassword, poolAccount } from '../bin/lib/accounts.mjs';
@@ -33,9 +38,18 @@ if (!secret) {
 }
 
 const account = poolAccount('poster', Number(slotArg || 4));
+const VIEWPORT = { width: 390, height: 844 };
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-const isVisible = (re) => page.getByText(re).first().isVisible().catch(() => false);
+const page = await browser.newPage({ viewport: VIEWPORT });
+// On screen = laid out inside the viewport, not just present on an off-screen pager page.
+const onScreen = async (locator) => {
+  const box = await locator.boundingBox({ timeout: 2000 }).catch(() => null);
+  return !!box && box.width > 0 && box.x > -1 && box.x + box.width < VIEWPORT.width + 1;
+};
+const anyOnScreen = async (locator) => {
+  for (const l of await locator.all()) if (await onScreen(l)) return true;
+  return false;
+};
 
 try {
   await page.goto(BASE + '/auth/sign-in-form', { waitUntil: 'networkidle' });
@@ -48,9 +62,22 @@ try {
   await page.getByText(/Review hunters/).last().click({ timeout: 30000 });
   await page.waitForTimeout(4000);
 
-  const onFeed = await isVisible(/For You/i);
-  const onMyBounties = await isVisible(/MY BOUNTIES/);
-  console.log(JSON.stringify({ url: page.url(), onFeed, onMyBounties }));
+  const url = new URL(page.url());
+  const onFeed = await anyOnScreen(page.getByText(/For You/i));
+  const myBounties = page.getByRole('tab', { name: /^My Bounties/ });
+  const inboxOnScreen = await anyOnScreen(myBounties);
+  const myBountiesSelected = (await myBounties.first().getAttribute('aria-selected').catch(() => null)) === 'true';
+  const onMyBounties = inboxOnScreen && myBountiesSelected;
+  console.log(
+    JSON.stringify({
+      url: url.pathname + url.search,
+      tabParam: url.searchParams.get('tab'),
+      onFeed,
+      inboxOnScreen,
+      myBountiesSelected,
+      onMyBounties,
+    }),
+  );
   process.exitCode = onMyBounties && !onFeed ? 0 : 1;
 } finally {
   await browser.close();
