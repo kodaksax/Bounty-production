@@ -70,6 +70,8 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     ? 'Add Details'
     : notification?.type === 'bounty_location_nudge'
     ? 'Add Location'
+    : notification?.type === 'application_closure_digest'
+    ? (getNotificationBountyId(notification.data) ? 'View Bounty' : 'Find Bounties')
     : category === 'marketplace' ? 'View Bounty'
     : category === 'messages' ? 'View Conversation'
     : 'View';

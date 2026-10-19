@@ -1,9 +1,11 @@
 import {
   buildFallbackEmail,
   buildHunterClosedEmail,
+  buildHunterDigestEmail,
   buildPosterFallbackEmail,
   describeTicketError,
   fallbackDedupeKey,
+  fallbackNeedsBounty,
   isEmailFallbackType,
   isEmailSuppressedType,
   isLegacyOptedOut,
@@ -32,6 +34,11 @@ describe('isEmailFallbackType', () => {
     expect(isEmailFallbackType('application_expired')).toBe(true)
     expect(isEmailFallbackType('application_bounty_closed')).toBe(false)
     expect(isEmailFallbackType('bounty_nearby')).toBe(false)
+  })
+
+  test('SBA-09: the daily closure digest emails only as a fallback', () => {
+    expect(isEmailFallbackType('application_closure_digest')).toBe(true)
+    expect(isEmailSuppressedType('application_closure_digest')).toBe(false)
   })
 })
 
@@ -228,5 +235,65 @@ describe('buildPosterFallbackEmail', () => {
     const on = buildPosterFallbackEmail({ bountyTitle: 'X', applicantCount: 1, replyHandled: true }).body
     expect(on).toContain(replyExpectation(true))
     expect(on).toMatch(/never accepts anyone/)
+  })
+})
+
+describe('SBA-09 closure digest email', () => {
+  const items = [
+    { requestId: 'r1', bountyTitle: 'Fix fence' },
+    { requestId: 'r2', bountyTitle: 'Mow lawn' },
+    { requestId: 'r3', bountyTitle: '  ' },
+  ]
+
+  test('one email per digest, keyed on the digest id', () => {
+    expect(fallbackDedupeKey({ digestId: 'd1', items }, 'o1', 'application_closure_digest')).toBe('digest:d1')
+    expect(fallbackDedupeKey({}, 'o2', 'application_closure_digest')).toBe('outbox:o2')
+  })
+
+  test('sent without a bounty: a digest may have no live alternative to link to', () => {
+    expect(fallbackNeedsBounty('application_closure_digest')).toBe(false)
+    expect(fallbackNeedsBounty('application')).toBe(true)
+    expect(fallbackNeedsBounty('application_expired')).toBe(true)
+  })
+
+  test('hunters opt out of it with acceptances_enabled, like the single closure', () => {
+    const prefs = { applications_enabled: true, acceptances_enabled: false, reminders_enabled: true }
+    expect(isLegacyOptedOut('application_closure_digest', prefs)).toBe(true)
+  })
+
+  test('several closures: count, every title, the not-a-rejection line, alternatives', () => {
+    const email = buildHunterDigestEmail({
+      closedCount: 3,
+      items,
+      alternatives: [{ title: 'Paint shed' }, { title: 'Logo design' }],
+    })
+    expect(email.title).toBe('3 of your applications closed')
+    expect(email.body).toBe(
+      '3 of your applications closed automatically: "Fix fence", "Mow lawn" and "a bounty". ' +
+        "This wasn't a rejection. Still open for you: \"Paint shed\" and \"Logo design\"."
+    )
+  })
+
+  test('one closure, no alternatives: no alternatives line', () => {
+    const email = buildHunterDigestEmail({ closedCount: 1, items: [items[0]], alternatives: [] })
+    expect(email.title).toBe('Your application to "Fix fence" closed')
+    expect(email.body).toBe(`Your application to "Fix fence" closed automatically. This wasn't a rejection.`)
+    expect(email.body).not.toContain('Still open')
+  })
+
+  test('more than ten closures are summarised', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ bountyTitle: `B${i + 1}` }))
+    const email = buildHunterDigestEmail({ closedCount: 12, items: many, alternatives: [] })
+    expect(email.body).toContain('"B10" and 2 more.')
+    expect(email.body).not.toContain('"B11"')
+  })
+
+  test('buildFallbackEmail routes the digest type to the digest email', () => {
+    const email = buildFallbackEmail('application_closure_digest', {
+      bountyTitle: null,
+      applicantCount: 1,
+      data: { closedCount: 2, items: items.slice(0, 2), alternatives: [] },
+    })
+    expect(email.title).toBe('2 of your applications closed')
   })
 })

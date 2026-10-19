@@ -26,10 +26,27 @@ export function isPosterFallbackType(type: string): boolean {
 // poster decision (72h expiry, or the absent-poster sweep; data.reason says
 // which). Same rule as the poster types: email only when push can't reach
 // them, one email per application, never via the blanket fan-out.
-export const HUNTER_EMAIL_FALLBACK_TYPES = new Set(['application_expired'])
+//
+// Since SBA-09 (2026-10-20) closures are held in the database and reported in
+// one application_closure_digest per hunter per day
+// (fn_send_hunter_closure_digests), so application_expired only reaches this
+// function if the hold failed and let the row through. The digest follows the
+// same rule (product decision 2026-10-19): email only when push can't reach
+// the hunter, one email per digest.
+export const CLOSURE_DIGEST_TYPE = 'application_closure_digest'
+export const HUNTER_EMAIL_FALLBACK_TYPES = new Set(['application_expired', CLOSURE_DIGEST_TYPE])
 
 export function isEmailFallbackType(type: string): boolean {
   return POSTER_EMAIL_FALLBACK_TYPES.has(type) || HUNTER_EMAIL_FALLBACK_TYPES.has(type)
+}
+
+/**
+ * Whether a fallback email of `type` needs a bounty to be worth sending. The
+ * digest covers several bounties and may have no live alternative to link
+ * to, so it is sent without one.
+ */
+export function fallbackNeedsBounty(type: string): boolean {
+  return type !== CLOSURE_DIGEST_TYPE
 }
 
 // Push and in-app only: never emailed, neither as a fallback nor through the
@@ -71,6 +88,12 @@ export function describeTicketError(ticket: unknown): { code: string; message: s
  * makes outbox retries idempotent.
  */
 export function fallbackDedupeKey(data: Record<string, unknown>, outboxId: string, type?: string): string {
+  // One email per digest (hunter_closure_digests.id).
+  if (type === CLOSURE_DIGEST_TYPE) {
+    const digestId = data.digestId
+    if (typeof digestId === 'string' && digestId.trim()) return `digest:${digestId.trim()}`
+    return `outbox:${outboxId}`
+  }
   // The hunter's closure email is keyed separately from the poster's
   // application email for the same bounty_request: sharing `request:<id>`
   // would make whichever was sent first suppress the other forever.
@@ -151,6 +174,51 @@ export function buildHunterClosedEmail(params: {
   return { title, body }
 }
 
+function quoteTitle(value: unknown, fallback: string): string {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return `"${text || fallback}"`
+}
+
+/** "A", "A and B", "A, B and C". */
+function joinTitles(titles: string[]): string {
+  if (titles.length <= 1) return titles[0] ?? ''
+  return `${titles.slice(0, -1).join(', ')} and ${titles[titles.length - 1]}`
+}
+
+const DIGEST_EMAIL_MAX_TITLES = 10
+
+/**
+ * The daily closure digest, written from its outbox payload (data.items,
+ * data.alternatives, data.closedCount; see
+ * 20261020090000_hunter_closure_digest.sql). Same tone as the single-closure
+ * email: a closure, never a rejection. Unlike the push, which fits two
+ * titles, the email names up to ten.
+ */
+export function buildHunterDigestEmail(data: Record<string, unknown>): { title: string; body: string } {
+  const items = Array.isArray(data.items) ? (data.items as Record<string, unknown>[]) : []
+  const alternatives = Array.isArray(data.alternatives) ? (data.alternatives as Record<string, unknown>[]) : []
+  const count = Math.max(1, typeof data.closedCount === 'number' ? Math.floor(data.closedCount) : items.length)
+
+  const closed = items.slice(0, DIGEST_EMAIL_MAX_TITLES).map((i) => quoteTitle(i.bountyTitle, 'a bounty'))
+  const more = count - closed.length
+  const closedList = more > 0 ? `${closed.join(', ')} and ${more} more` : joinTitles(closed)
+
+  const title =
+    count === 1
+      ? `Your application to ${closed[0] ?? '"a bounty"'} closed`
+      : `${count} of your applications closed`
+  let body =
+    count === 1
+      ? `Your application to ${closed[0] ?? '"a bounty"'} closed automatically. This wasn't a rejection.`
+      : closed.length > 0
+        ? `${count} of your applications closed automatically: ${closedList}. This wasn't a rejection.`
+        : `${count} of your applications closed automatically. This wasn't a rejection.`
+  if (alternatives.length > 0) {
+    body += ` Still open for you: ${joinTitles(alternatives.map((a) => quoteTitle(a.title, 'a bounty')))}.`
+  }
+  return { title, body }
+}
+
 export type FallbackPushOutcome = { status: 'sent' } | { status: 'failed'; reason: string }
 
 /**
@@ -200,6 +268,9 @@ export function buildFallbackEmail(
       applicantCount: params.applicantCount,
       replyHandled: params.replyHandled,
     })
+  }
+  if (type === CLOSURE_DIGEST_TYPE) {
+    return buildHunterDigestEmail(params.data)
   }
   return buildHunterClosedEmail({
     bountyTitle: params.bountyTitle,
