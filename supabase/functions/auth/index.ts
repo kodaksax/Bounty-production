@@ -114,13 +114,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
           normalizedUsername = `${emailLocal}_${randomPart}`.slice(0, 24).toLowerCase();
         }
 
-        // Case-insensitive uniqueness check to match the LOWER(username) unique
-        // index on profiles. Without ilike, `Alice` and `alice` could both pass
-        // this check and only collide later at the DB write.
+        // Case-insensitive uniqueness check, the same rule as the client's live
+        // check (public.is_username_available). Without ilike, `Alice` and
+        // `alice` could both pass this check and only collide later at the DB
+        // write. `_` is a valid username character but an ilike wildcard, so
+        // it is escaped: unescaped, `jo_n` matched an existing `john` and was
+        // refused here after the live check had said it was free.
         const { data: existingUser, error: usernameCheckError } = await supabase
           .from('profiles')
           .select('id')
-          .ilike('username', normalizedUsername)
+          .ilike('username', normalizedUsername.replace(/_/g, '\\_'))
+          .limit(1)
           .maybeSingle();
 
         if (usernameCheckError) {

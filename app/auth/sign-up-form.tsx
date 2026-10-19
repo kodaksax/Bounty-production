@@ -451,6 +451,9 @@ export function SignUpForm() {
           }
           if (errLower.includes('username')) {
             setAuthError('This username is already taken. Please choose another.');
+            // The server is the final word: never leave the live hint saying
+            // "available" under a banner saying "taken".
+            setUsernameAvailability('taken');
             return;
           }
           setAuthError('Account already exists. Please sign in or choose different credentials.');
