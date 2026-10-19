@@ -101,6 +101,20 @@ describe('founder note signature typewriter', () => {
     expect(api.getAllByText(QUOTE)).toHaveLength(2);
   });
 
+  // SBA-06: the CTA used to fade in only after the signature finished, about
+  // 8 s with nothing to press; first-time posters read it as a frozen app.
+  it('offers Continue from the first frame, while the quote is still typing', async () => {
+    const api = render(<FounderNoteScreen />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(typedSignature(api)).toBe('');
+    const cta = api.getByLabelText(founderNoteStrings.primaryCta);
+    expect(cta.props.accessibilityState).toMatchObject({ disabled: false });
+    expect(cta.props.accessibilityElementsHidden).toBeFalsy();
+  });
+
   it('renders complete with Continue tappable under Reduce Motion', async () => {
     (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(true);
 
