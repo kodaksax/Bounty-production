@@ -269,6 +269,11 @@ WHERE b.status = 'open'
   Do not remove templates. They are a reasonable way to show range; they just shouldn't be a four-tap path to a live listing.
 - **Effort:** S.
 - **Done when:** the share of new genuine bounties with a non-empty description is about 100%, and applications per bounty that never gets a poster action falls (before/after cohort; no A/B at this volume).
+- **Status (2026-10-19): built; staging applied, production not applied; client needs the next native build.**
+  - **Client** (`StepTask.tsx`): a template tap fills title, category and price and stays on step 1, focusing a required "What exactly, and when?" field (saved as the description) with a placeholder that fits the template. Next is disabled until it has 20 trimmed characters, for typed titles too. Templates are unchanged and in the same order. The step-1 field cannot reach installed builds: OTA is blocked (`docs/deployment/RELEASE_READINESS_2.1.3_2026-10-13.md`).
+  - **Server** (`20261019230000_posting_quality_rules.sql`, BEFORE INSERT on `bounties`): (a) in-person bounties need 20+ characters of description, behind `posting_policy_config.require_in_person_description`, **off on deploy** (product decision 10-19). Installed builds have no pre-publish description field, so switching it on early would refuse 17 of 18 genuine app posts since 09-10. Turn it on once the new build has most active posters. (b) Accounts under 24 h old may have 2 open bounties. This is live on deploy. Exempt: `profiles.is_internal`, and the paid web intake (`fn_create_bounty_from_pending`, which runs after Stripe capture). All 8 web bounties to date already have 20+ character descriptions.
+  - **Also fixed:** `useBountyDraft.saveDraft` wrote `undefined` to storage when another state update was pending in the same event (a template tap). Drafts kept in memory but did not survive leaving the composer.
+  - **Baseline** (`scripts/ops/posting-quality-weekly.sql`, prod, weeks of 09-07 to 10-12): 21 genuine bounties, 3 with a 20+ character description, 18 with none, 9 template-title-only. 17 bounties had applications the poster never acted on (292 applications).
 
 ### SBA-04 · P1 · Poster reminders flood absent posters with no cap
 

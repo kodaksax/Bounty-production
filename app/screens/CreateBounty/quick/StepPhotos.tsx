@@ -30,8 +30,9 @@ interface StepPhotosProps {
  * Uses the same upload pipeline as the previous flow (bounty-attachments bucket
  * via useAttachmentUpload), so uploaded files land on the draft in the shape
  * bountyService.createBounty already expects. The details field is the bounty's
- * description; it is optional because nothing on the create path validates it,
- * and step 1's title already carries the essential ask.
+ * description, which step 1 already required ("What exactly, and when?");
+ * here it can be extended. The composer refuses to save it back below 20
+ * characters (CreateBounty/index.tsx handleSaveDetail).
  */
 export function StepPhotos({
   draft,

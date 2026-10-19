@@ -532,7 +532,10 @@ export function useBountyPublish(params: UseBountyPublishParams) {
         } else {
           Alert.alert(
             userError.title,
-            userError.message + '\n\nYour draft has been saved. Please try again.',
+            userError.message +
+              (userError.retryable
+                ? '\n\nYour draft has been saved. Please try again.'
+                : '\n\nYour draft has been saved.'),
             [{ text: 'OK' }]
           );
         }

@@ -83,7 +83,17 @@ const defaultDraft: BountyDraft = {
 
 export function useBountyDraft(userId?: string) {
   const draftKey = getDraftKey(userId);
-  const [draft, setDraft] = useState<BountyDraft>(defaultDraft);
+  const [draft, setDraftState] = useState<BountyDraft>(defaultDraft);
+  // The latest draft, updated synchronously. saveDraft merges against this
+  // rather than reading the value out of a setState updater: React defers an
+  // updater when another update is already pending in the same event (a
+  // template tap marks the composer started, then saves), so the value it
+  // captured was still undefined when written and storage got "undefined".
+  const draftRef = useRef<BountyDraft>(defaultDraft);
+  const setDraft = useCallback((next: BountyDraft) => {
+    draftRef.current = next;
+    setDraftState(next);
+  }, []);
   const [isLoading, setIsLoading] = useState(true);
   // Counter ref to sequence async loads and ignore stale results
   const loadRequestCounterRef = useRef(0);
@@ -124,26 +134,20 @@ export function useBountyDraft(userId?: string) {
     return () => {
       loadRequestCounterRef.current++;
     };
-  }, [draftKey]);
+  }, [draftKey, setDraft]);
 
   // Save draft to AsyncStorage
   const saveDraft = useCallback(async (draftData: Partial<BountyDraft>) => {
     try {
-      // Use a functional update so we always merge against the latest state
-      // even if multiple updates are queued. Capture the derived value and
-      // persist that exact snapshot to storage to avoid races.
-      let updatedValue: BountyDraft | undefined;
-      setDraft(prev => {
-        updatedValue = { ...prev, ...draftData };
-        return updatedValue;
-      });
-
-      // Persist the value derived from the same `prev` snapshot.
-      await storage.setItem(draftKey, JSON.stringify(updatedValue!));
+      // Merge against the latest draft (draftRef, not render-time state) so
+      // several saves in one tick all survive, and persist that same value.
+      const updatedValue: BountyDraft = { ...draftRef.current, ...draftData };
+      setDraft(updatedValue);
+      await storage.setItem(draftKey, JSON.stringify(updatedValue));
     } catch (error) {
       console.error('Failed to save bounty draft:', error);
     }
-  }, [draftKey]);
+  }, [draftKey, setDraft]);
 
   // Clear draft from AsyncStorage
   const clearDraft = useCallback(async () => {
@@ -153,7 +157,7 @@ export function useBountyDraft(userId?: string) {
     } catch (error) {
       console.error('Failed to clear bounty draft:', error);
     }
-  }, [draftKey]);
+  }, [draftKey, setDraft]);
 
   return {
     draft,

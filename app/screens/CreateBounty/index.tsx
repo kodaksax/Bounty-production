@@ -21,7 +21,7 @@ import { markPosterActivated } from 'lib/analytics/lifecycle';
 import { analyticsService } from 'lib/services/analytics-service';
 import { useStripe } from 'lib/stripe-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
-import { validateContactInfo } from 'lib/utils/bounty-validation';
+import { validateContactInfo, validateDescription } from 'lib/utils/bounty-validation';
 import { getBountyPublishError } from 'lib/utils/bounty-publish-error';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { createForegroundTimer, getMonotonicNow } from 'lib/utils/foreground-timer';
@@ -473,6 +473,12 @@ export function CreateBountyFlow({
       const contactError = validateContactInfo(pendingDraft.description);
       if (contactError) {
         setDetailValidationError(contactError);
+        return;
+      }
+      // Step 1 required these details (SBA-03); don't let this screen strip
+      // them from the live bounty. Older bounties without them stay editable.
+      if (!validateDescription(postedDraft?.description) && validateDescription(pendingDraft.description)) {
+        setDetailValidationError('Keep at least 20 characters about what needs doing, and when.');
         return;
       }
     }
