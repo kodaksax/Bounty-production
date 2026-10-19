@@ -66,7 +66,7 @@ What Cowork found and this audit confirms, with harder numbers:
 | Clients | Expo / React Native app (iOS, Android); `app.json` version **2.1.3**. 2.1.2 binaries crash the tabs screen, and 2.1.3 needs a new native build (see `docs/deployment/RELEASE_READINESS_2.1.3_2026-10-13.md`). The Expo **web** export is a test target only; nothing serves it to customers. |
 | Web poster intake | bountyfinder.net (landing page + `/manage/` dashboard, separate repo `Bounty-landing-page`), backed by Edge Functions `poster-web`, `web-account`, `email-inbound`, `geocode-bounties`. Pay-at-post via Stripe Checkout. `docs/runbooks/web-poster-journey.md`. |
 | Backend | Supabase Postgres + 38 Edge Functions in git (`supabase/functions/`). Notification fan-out: `notifications_outbox` → `drain_notifications_outbox` (cron, every minute) → `process-notification` (Expo push, Resend email fallback). |
-| Distribution | Insert-time triggers `fn_notify_radius_matched_bounty` (20 mi, scored), `fn_notify_zip_matched_bounty` and `fn_notify_service_area_matched_bounty` (**unscored**, see SBA-07), all behind `fn_bounty_distribution_gate`. Escalation cron `fn_escalate_stale_bounty_liquidity` (every 20 min, credibility required). |
+| Distribution | Insert-time triggers `fn_notify_radius_matched_bounty` (20 mi, scored), `fn_notify_zip_matched_bounty` and `fn_notify_service_area_matched_bounty` (**unscored** at audit time; scored since 2026-10-18, see SBA-07), all behind `fn_bounty_distribution_gate`. Escalation cron `fn_escalate_stale_bounty_liquidity` (every 20 min, credibility required). |
 | Request lifecycle | `fn_remind_posters_of_pending_requests` (1 h + 24 h per application), `expire-stale-bounty-requests` (72 h), `fn_sweep_absent_posters` (manual, never run). |
 | Payments | Pay-at-accept is the default for every paid app bounty (`payment_experiment_config.deferred_funding_enabled = true`, scope `all_bounties`, since 2026-09-02). Escrow is reserved inside the acceptance transaction (`fn_accept_bounty_request` → `fn_reserve_escrow_for_acceptance`). Gate UI: `hooks/useAcceptFunding.ts` + `components/accept-funding-gate.tsx`. |
 | Cron (prod) | 16 jobs, all succeeding over the last 7 days, including `geocode-bounties-15min` (live since about 10-13). **No absent-poster sweep job.** |
@@ -89,7 +89,7 @@ What Cowork found and this audit confirms, with harder numbers:
 | POST-03 | Applicant flood; ~55 pushes per poster | Confirmed and worse: reminders are per application, unbundled and uncapped, and continue to absent posters (SBA-04). `application` pushes *are* bundled per bounty in 10-minute windows. Applicants are sorted newest-first with no distance (SBA-02). | Confirmed |
 | POST-04 | Payment moment arrives late | Copy at post time **already says** "You're charged when you accept a hunter … held … released when you approve … hunter takes home $X" (`StepPay.tsx:320-330`). The gate is one sheet, one tap. What's missing is commitment, not clarity (SBA-05). | Copy shipped; decision open |
 | HUNT-01 | Hunters experience only rejection | Confirmed. Expiry copy **already says** "This wasn't a rejection" (`lib/utils/bounty-lifecycle.ts:796-804`). Still open: notices are not batched (up to 6 emails a day to one hunter), and dead listings keep collecting applications (SBA-01). | Copy shipped; batching + sweep open |
-| NOTIF-01 | Relevance pipeline near-silent for genuine bounties | Confirmed structurally: every candidate query needs `geom` or `zip_code`, so a bounty without location produces no candidates (it isn't scored low; there is simply no one to score). New posts now carry location. Most applicants have a location (224 of 329), so the radius path has a pool, but hunters are scattered. The zip/service-area paths are regressed (SBA-07). | Partly fixed; regression open |
+| NOTIF-01 | Relevance pipeline near-silent for genuine bounties | Confirmed structurally: every candidate query needs `geom` or `zip_code`, so a bounty without location produces no candidates (it isn't scored low; there is simply no one to score). New posts now carry location. Most applicants have a location (224 of 329), so the radius path has a pool, but hunters are scattered. The zip/service-area paths are regressed (SBA-07). | Partly fixed; SBA-07 regression fixed 10-18, delivery not yet observed |
 | LIQ-01 | Require location on in-person bounties | **Shipped** 2026-09-15 (`f554e045`, composer `TOTAL_STEPS = 3`). All 4 genuine bounties since 10-06 have a location. Remaining: 12 of 15 open in-person external listings have **no location at all** (legacy posts), and nothing limits who can apply (SBA-02). | Shipped for new posts |
 | POST-05 | Composer step 1 and pricing friction | Not reproduced in step 1 here; the Shoal posters ran out of steps in **onboarding** before reaching the composer (SBA-06). Template taps are the bigger step-1 issue (SBA-03). | Re-scoped |
 | POST-06 | Poster-intent users drift into hunting | Not re-measured (PostHog). The first screen's primary CTA now reads "Get it done today." (`lib/strings/firstScreen.ts`), replacing "Make today pay." | Partly addressed |
@@ -326,6 +326,36 @@ WHERE b.status = 'open'
 - **Fix:** one migration restoring the scored dispatch inside the gated bodies, plus a test that asserts all three triggers call the dispatcher.
 - **Effort:** S.
 - **Done when:** new `bounty_nearby` outbox rows with `match = 'service_area'` or a `zip_code` key each have a matching `bounty_hunter_notifications` row.
+- **Status (2026-10-19): fixed on production; delivery not yet observed.** Checked read-only on prod:
+  - **Code is live.** PR #914's `20261014230000_consolidate_bounty_targeting.sql` (applied 10-18) replaced all three trigger bodies with `PERFORM fn_dispatch_bounty_targeting(NEW.id, '<source>')`. Every caller now goes through `fn_score_and_dispatch_bounty_notification`. `pg_get_functiondef` confirms: none of the three bodies writes `notifications_outbox`, all six geographic triggers are enabled, and `consolidated_enabled = false`. The read-only half of `scripts/ops/bounty-targeting-verify.sql` passes: RLS, service-only grants, dispatcher guards (gate, `is_test`, `LIMIT 1000`, no private-location reads), scorer guards (locks, hourly cap, `deleted_at`, dedup, provenance) and the three location-added triggers. The script's first block writes fixtures and flips `consolidated_enabled`, so it was **not** run on prod. Its header says local only.
+  - **Worker is live.** Prod `process-notification` v77 (deployed 2026-10-18 23:10 UTC) ships the same `targeting-delivery.ts` as main and routes `bounty_nearby` rows with `targeting_version = 1` to it.
+  - **No evidence yet.** Since the migration, prod has 0 `bounty_targeting_dispatches`, 0 `bounty_targeting_deliveries` and 0 versioned `bounty_nearby` rows. The last `bounty_nearby` row (20:36 UTC, `match = 'radius'`) predates it. Nothing is stuck. But zip and service-area matches are rare: no zip or service-area `bounty_nearby` row in the 30 days before the fix, and only 2 of 30 genuine bounties in that window had any zip or service-area candidate (133 active profiles with a zip, 26 hunters with a service area). Expect the first data point in days to weeks.
+  - **Staging can't stand in.** Every staging outbox row since at least 10-09 is `pending` with 0 attempts, and staging `process-notification` (v24, about 10-09) predates `targeting-delivery.ts`. Its 2 versioned rows (liquidity escalation, 16 recipients) sit undelivered for that reason, not because of targeting.
+  - **Guard added.** `__tests__/unit/bounty-targeting-migration.test.ts` now reads the **latest** migration (in version order) that defines each of the three trigger functions. It fails if that body stops calling `fn_dispatch_bounty_targeting(NEW.id, '<source>')` or writes the outbox directly, which is the 09-13 failure mode. It also checks that the regressed 20260913010000 and 20261001140000 bodies are flagged.
+  - **Done-when, restated.** Zip rows now carry `match = 'zip'`, not a `zip_code` key. The original check would never match them. Run on prod read-only:
+
+    ```sql
+    -- Pass: no rows with versioned = false; ledger_rows = recipients;
+    -- delivery_rows = 3 × recipients; unresolved = 0 once the row is ~10 min old.
+    SELECT o.id, o.created_at, o.status,
+           COALESCE(o.data->>'match', '(none)') AS match,
+           o.data ? 'targeting_version' AS versioned,
+           jsonb_array_length(o.recipients) AS recipients,
+           (SELECT count(*) FROM public.bounty_hunter_notifications n WHERE n.outbox_id = o.id) AS ledger_rows,
+           (SELECT count(*) FROM public.bounty_targeting_deliveries d WHERE d.outbox_id = o.id) AS delivery_rows,
+           (SELECT count(*) FROM public.bounty_targeting_deliveries d WHERE d.outbox_id = o.id
+              AND d.state IN ('pending', 'processing', 'unknown')) AS unresolved,
+           (SELECT count(*) FROM public.bounty_targeting_deliveries d WHERE d.outbox_id = o.id
+              AND d.state = 'failed') AS failed
+    FROM public.notifications_outbox o
+    WHERE o.data->>'type' = 'bounty_nearby'
+      AND o.created_at > '2026-10-18 20:37+00'
+      AND (o.data->>'match' IN ('zip', 'service_area', 'consolidated')
+           OR NOT o.data ? 'targeting_version')
+    ORDER BY o.created_at;
+    ```
+
+    It returned 0 rows on 2026-10-19. Close SBA-07 once at least one zip or service-area row passes.
 
 ### SBA-08 · P2 · "Username available" is always true
 
@@ -421,7 +451,7 @@ Ordering rule: **server-side changes first**, because they reach every installed
 | 1 | Run `fn_sweep_absent_posters(false, 14)` once; schedule it daily | SBA-01 | Prod write + cron | **Your go** (closes 31 applications, notifies 25 hunters; re-run the dry run first) | `absent_poster_sweep_runs` rows; dead-listing count query → 0 |
 | 2 | Extend the sweep to dead listings with no pending requests | SBA-01 | Migration | Staging, then prod | Same query stays 0 a week later |
 | 3 | Per-bounty reminder digest, ≤ 2 per bounty, stop after 72 h of poster absence | SBA-04 | Migration | Staging verify, then prod | Max reminders per (user, bounty) ≤ 2 over 7 days |
-| 4 | Restore scored dispatch on the zip/service-area triggers | SBA-07 | Migration | Staging verify, then prod | New zip/service-area outbox rows have `bounty_hunter_notifications` rows |
+| 4 | Restore scored dispatch on the zip/service-area triggers (**live on prod 10-18 via PR #914; awaiting first zip/service-area row**) | SBA-07 | Migration | Staging verify, then prod | New zip/service-area outbox rows have `bounty_hunter_notifications` rows (query in SBA-07 status) |
 | 5 | Merge PR #913 | SBA-14 | Merge | Review | A nightly `shoal.yml` run uploads artifacts |
 | 6 | Concierge each new genuine poster from the Liquidity Board within 2 h of the first application | POST-02 | Ops | None | Cowork's `concierge_contacted` log; first poster decision rows |
 | 7 | Distance on applicant cards, local-first sort, in-person feed radius default, far-application flag | SBA-02 | Client + migration | Product decision: block vs flag | Share of in-person applications within 25 mi |

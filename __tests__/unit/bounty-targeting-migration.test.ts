@@ -1,7 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 
-const sql = fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261014230000_consolidate_bounty_targeting.sql'), 'utf8')
+const migrationsDir = path.join(__dirname, '../../supabase/migrations')
+const sql = fs.readFileSync(path.join(migrationsDir, '20261014230000_consolidate_bounty_targeting.sql'), 'utf8')
 const worker = fs.readFileSync(path.join(__dirname, '../../supabase/functions/process-notification/index.ts'), 'utf8')
 const verification = fs.readFileSync(path.join(__dirname, '../../scripts/ops/bounty-targeting-verify.sql'), 'utf8')
 const scorer = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.fn_score_and_dispatch_bounty_notification'),
@@ -123,6 +124,54 @@ describe('bounty targeting migration regressions', () => {
     expect(claimFunction).toContain('FOR UPDATE')
     expect(claimFunction).toContain("IF NOT FOUND OR v_status = 'sent' THEN RETURN false; END IF")
     expect(claimFunction).toContain('attempt_id = p_attempt_id')
+  })
+
+  // SBA-07: 20260913010000 re-created the zip and service-area triggers from an
+  // older body that inserted straight into notifications_outbox, skipping the
+  // scorer, reach cap, per-bounty dedup and hourly cap. Pinning one migration
+  // file can't catch that, so check the body from the LAST migration (in
+  // version order) that defines each trigger function.
+  describe('geographic triggers route through the dispatcher', () => {
+    const migrations = fs.readdirSync(migrationsDir).filter(f => /^\d.*\.sql$/.test(f)).sort()
+    const functionBody = (text: string, fn: string): string | null => {
+      const def = new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+(?:public\\.)?${fn}\\s*\\(`, 'gi')
+      let match: RegExpExecArray | null
+      let last: string | null = null
+      while ((match = def.exec(text))) {
+        const open = /AS\s+(\$[A-Za-z_]*\$)/.exec(text.slice(match.index))
+        if (!open) continue
+        const start = match.index + open.index + open[0].length
+        last = text.slice(start, text.indexOf(open[1], start))
+      }
+      return last
+    }
+    const latestBody = (fn: string) => {
+      for (const file of [...migrations].reverse()) {
+        const body = functionBody(fs.readFileSync(path.join(migrationsDir, file), 'utf8'), fn)
+        if (body !== null) return { file, body }
+      }
+      throw new Error(`No migration defines ${fn}`)
+    }
+    const dispatchesOnly = (body: string, source: string) =>
+      new RegExp(`fn_dispatch_bounty_targeting\\(\\s*NEW\\.id\\s*,\\s*'${source}'\\s*\\)`).test(body)
+      && !/INSERT\s+INTO\s+(?:public\.)?notifications_outbox/i.test(body)
+
+    it.each([
+      ['fn_notify_radius_matched_bounty', 'radius'],
+      ['fn_notify_zip_matched_bounty', 'zip'],
+      ['fn_notify_service_area_matched_bounty', 'service_area'],
+    ])('%s calls fn_dispatch_bounty_targeting(NEW.id, %p) and never writes the outbox itself', (fn, source) => {
+      const { file, body } = latestBody(fn)
+      expect({ file, dispatchesOnly: dispatchesOnly(body, source) }).toEqual({ file, dispatchesOnly: true })
+    })
+
+    it('flags the regressed bodies SBA-07 found', () => {
+      for (const file of ['20260913010000_bounty_test_flag_and_internal_profiles.sql', '20261001140000_anti_scam_distribution_gate.sql']) {
+        const text = fs.readFileSync(path.join(migrationsDir, file), 'utf8')
+        expect(dispatchesOnly(functionBody(text, 'fn_notify_zip_matched_bounty') ?? '', 'zip')).toBe(false)
+        expect(dispatchesOnly(functionBody(text, 'fn_notify_service_area_matched_bounty') ?? '', 'service_area')).toBe(false)
+      }
+    })
   })
 
   // In-memory specification of the SQL contract above; these are not live SQL
