@@ -106,6 +106,21 @@ const WALLET_RELEVANT_SCREENS = new Set(['wallet']);
  */
 const HIGH_VALUE_BALANCE_THRESHOLD = 100;
 
+/**
+ * Trust/ID prompts (every `category: 'trust'` moment — the engine applies
+ * this, so a new one can't forget it) wait until a poster has published a
+ * bounty. A poster's first job is to post; an ID-and-selfie ask before that
+ * interrupted the first Post tap in the 15 Oct Shoal run (SBA-06), and
+ * verifying unlocks nothing a poster needs to publish. "Poster" includes an
+ * unset role, since that's who arrives without picking one. Hunters (and
+ * 'both') keep the rules each moment defines, because verification gates
+ * applying to ID-required bounties, which is their first job.
+ */
+export function trustPromptsAllowed(ctx: MomentContext): boolean {
+  if (ctx.profile.primaryRole === 'hunter' || ctx.profile.primaryRole === 'both') return true;
+  return ctx.hasPublishedBounty;
+}
+
 export const MOMENT_REGISTRY: MomentDefinition[] = [
   // ---------------------------------------------------------------------
   // STATE-DERIVED — fully wired
@@ -186,7 +201,17 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'engagement',
     cooldownHours: 72,
     maxShownCount: 3,
-    isEligible: ctx => hasClearedFirstSession(ctx) && ctx.permissions.location === 'undetermined',
+    // Onboarding already asks for location (app/onboarding/location.tsx), so
+    // this is the second ask. Skip it once that one left an answer: an OS
+    // grant/denial (permission no longer 'undetermined'), or a location
+    // saved to the profile — which on web can exist while the browser still
+    // reports 'undetermined'. Only someone who skipped both gets asked again.
+    // Not added to checkCompleted: a saved location isn't a permission
+    // grant, and moment_completed for this type reports `granted`.
+    isEligible: ctx =>
+      hasClearedFirstSession(ctx) &&
+      ctx.permissions.location === 'undetermined' &&
+      !ctx.profile.hasLocation,
     checkCompleted: ctx => ctx.permissions.location !== 'undetermined',
     content: () => ({
       icon: 'location-on',
@@ -215,6 +240,8 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // shown to a brand-new user in their very first session. Absent a
     // strong reason, this waits for a later session like every other
     // passive activation prompt (MIN_SESSIONS_FOR_ACTIVATION_PROMPT).
+    // All of this sits behind trustPromptsAllowed (applied by the engine):
+    // a poster sees none of it before their first published bounty.
     // 'rejected' (legacy) / 'requires_input' (Stripe Identity) are included
     // alongside 'unverified'/null so a resubmission nudge follows the same
     // cooldown/suppression rules instead of nagging unboundedly — matching

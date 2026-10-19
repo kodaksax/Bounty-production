@@ -30,9 +30,11 @@ import { momentsService } from '../lib/moments/momentsService';
 import { referralService } from '../lib/moments/referral-service';
 import { MOMENT_REGISTRY } from '../lib/moments/registry';
 import {
+    effectiveLastSessionAt,
     evaluateReturningUser,
     getSessionCount,
     incrementSessionCount,
+    noteSessionRecorded,
     shouldRecordSession,
 } from '../lib/moments/sessionTracking';
 import {
@@ -58,14 +60,16 @@ interface MomentsContextValue {
 }
 
 /**
- * Has this user published a bounty or submitted an application (a
- * bounty_requests row), ever? Backs MomentContext.hasEngaged — see
- * registry.ts's hasClearedFirstSession for why this is the one thing that
- * lets a first-session user still see a passive activation prompt. Two
- * cheap head-count queries; safe to run on every refresh() alongside the
+ * Has this user published a bounty, and have they published a bounty or
+ * submitted an application (a bounty_requests row), ever? Backs
+ * MomentContext.hasPublishedBounty / hasEngaged — see registry.ts's
+ * trustPromptsAllowed and hasClearedFirstSession for what each one unlocks.
+ * Two cheap head-count queries; safe to run on every refresh() alongside the
  * permission checks it's batched with below.
  */
-async function fetchHasEngaged(userId: string): Promise<boolean> {
+async function fetchEngagement(
+  userId: string
+): Promise<{ hasPublishedBounty: boolean; hasEngaged: boolean }> {
   const [{ count: bountyCount }, { count: requestCount }] = await Promise.all([
     supabase.from('bounties').select('id', { count: 'exact', head: true }).eq('poster_id', userId),
     supabase
@@ -73,8 +77,11 @@ async function fetchHasEngaged(userId: string): Promise<boolean> {
       .select('id', { count: 'exact', head: true })
       .eq('hunter_id', userId),
   ]);
-  return !!bountyCount || !!requestCount;
+  return { hasPublishedBounty: !!bountyCount, hasEngaged: !!bountyCount || !!requestCount };
 }
+
+/** The tab-shell key for the Post tab (the bounty composer). */
+const POST_SCREEN = 'postings';
 
 const MomentsContext = createContext<MomentsContextValue | null>(null);
 
@@ -147,9 +154,27 @@ interface MomentsProviderProps {
    * be eligible in that case.
    */
   activeScreen?: string | null;
+  /**
+   * The tab the shell is heading to, which runs ahead of activeScreen while
+   * the pager scrolls (bounty-app.tsx's barScreen). Lets a prompt that opens
+   * mid-transition to Post count as triggered by Post.
+   */
+  targetScreen?: string | null;
+  /**
+   * Moves the tab shell to `screen`. Called with the Post tab when the user
+   * answers "Later" (dismiss or snooze) on a prompt that opened on, or on the
+   * way to, Post — so the prompt never costs them the composer they asked
+   * for (SBA-06).
+   */
+  onContinueTo?: (screen: string) => void;
 }
 
-export function MomentsProvider({ children, activeScreen = null }: MomentsProviderProps) {
+export function MomentsProvider({
+  children,
+  activeScreen = null,
+  targetScreen = null,
+  onContinueTo,
+}: MomentsProviderProps) {
   const router = useRouter();
   const { session } = useAuthContext();
   const { profile } = useAuthProfile();
@@ -180,9 +205,18 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   // in fact already granted.
   const [permissionsChecked, setPermissionsChecked] = useState(false);
   const [hasEngaged, setHasEngaged] = useState(false);
+  const [hasPublishedBounty, setHasPublishedBounty] = useState(false);
   const [activeMoment, setActiveMoment] = useState<MomentDefinition | null>(null);
   const [activeContent, setActiveContent] = useState<MomentContent | null>(null);
   const shownAtRef = useRef<number | null>(null);
+  // Whether the moment on screen opened while the user was on, or heading
+  // to, the Post tab — see onContinueTo. Latest screen values are read
+  // through refs so the presentation effect doesn't re-fire on navigation.
+  const triggeredByPostRef = useRef(false);
+  const screensRef = useRef({ activeScreen, targetScreen });
+  screensRef.current = { activeScreen, targetScreen };
+  const onContinueToRef = useRef(onContinueTo);
+  onContinueToRef.current = onContinueTo;
   // Dedupe guard for duplicate MomentsProvider mounts (see liveMomentsInstance
   // doc comment above). Claiming the slot happens in an effect — not during
   // render — so an interrupted/discarded render (concurrent React) can never
@@ -244,11 +278,11 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       setActiveContent(null);
       return;
     }
-    const [fetchedStates, notifStatus, locStatus, engaged] = await Promise.all([
+    const [fetchedStates, notifStatus, locStatus, engagement] = await Promise.all([
       momentsService.fetchStates(requestUserId),
       notificationService.getPermissionStatus(),
       locationService.getPermissionStatus(),
-      fetchHasEngaged(requestUserId),
+      fetchEngagement(requestUserId),
     ]);
     // The signed-in user can change while the fetch above is in flight
     // (sign-out/sign-in racing this request). Bail out rather than applying
@@ -258,7 +292,8 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     if (userIdRef.current !== requestUserId) return;
     setNotifPermission(notifStatus);
     setLocPermission(locStatus.status);
-    setHasEngaged(engaged);
+    setHasEngaged(engagement.hasEngaged);
+    setHasPublishedBounty(engagement.hasPublishedBounty);
 
     // Backfill event-triggered moments for users who onboarded before this
     // wiring existed (new users get these enqueued directly in
@@ -290,13 +325,18 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     // Session tracking for inactive_user_return + future lifecycle
     // campaigns (see lib/moments/sessionTracking.ts). Read-then-write against
     // profiles.last_session_at, throttled so foreground/background toggles
-    // within a session don't spam the DB.
-    const lastSessionAt = profile?.last_session_at ?? null;
+    // within a session don't spam the DB. The profile in memory is never
+    // re-read after the write below, so it's combined with this runtime's own
+    // record of that write — see effectiveLastSessionAt.
+    const lastSessionAt = effectiveLastSessionAt(requestUserId, profile?.last_session_at ?? null);
     const { isReturning, daysSinceLastSession } = evaluateReturningUser(lastSessionAt);
     if (isReturning) {
       momentsService.enqueue(requestUserId, 'inactive_user_return', { daysSinceLastSession });
     }
     if (shouldRecordSession(lastSessionAt)) {
+      const recordedAt = new Date().toISOString();
+      // Before any await, so an overlapping refresh() doesn't count it twice.
+      noteSessionRecorded(requestUserId, recordedAt);
       // Same throttle window doubles as this device's session-boundary
       // definition — see MomentContext.sessionCount doc comment.
       incrementSessionCount(requestUserId).then(count => {
@@ -304,7 +344,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       });
       supabase
         .from('profiles')
-        .update({ last_session_at: new Date().toISOString() })
+        .update({ last_session_at: recordedAt })
         .eq('id', requestUserId)
         .then(({ error }) => {
           if (error) console.error('[moments] failed to record last_session_at', error);
@@ -331,6 +371,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     setStates(new Map());
     setPermissionsChecked(false);
     setHasEngaged(false);
+    setHasPublishedBounty(false);
     setNotifPermission('undetermined');
     setLocPermission('undetermined');
     setActiveMoment(null);
@@ -401,6 +442,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       sessionCount,
       activeScreen,
       hasEngaged,
+      hasPublishedBounty,
       profile: {
         hasAvatar: !!profile.avatar,
         hasBio: !!profile.about,
@@ -427,6 +469,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     sessionCount,
     activeScreen,
     hasEngaged,
+    hasPublishedBounty,
   ]);
 
   // Auto-complete state-derived moments whose underlying goal was met after
@@ -545,6 +588,9 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   useEffect(() => {
     if (!activeMoment || !userId) return;
     shownAtRef.current = Date.now();
+    triggeredByPostRef.current =
+      screensRef.current.activeScreen === POST_SCREEN ||
+      screensRef.current.targetScreen === POST_SCREEN;
     const now = new Date().toISOString();
     patchState(activeMoment.type, existing => ({
       status: 'shown',
@@ -572,6 +618,13 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     return shownAt != null && Date.now() - shownAt < MIN_MOMENT_VISIBLE_MS;
   }, []);
 
+  // "Later" on a prompt the Post tap ran into carries on to the composer.
+  const continueIfTriggeredByPost = useCallback(() => {
+    if (!triggeredByPostRef.current) return;
+    triggeredByPostRef.current = false;
+    if (screensRef.current.activeScreen !== POST_SCREEN) onContinueToRef.current?.(POST_SCREEN);
+  }, []);
+
   const dismiss = useCallback(() => {
     if (!activeMoment || !userId) return;
     if (isPresentationTooRecent()) return;
@@ -585,7 +638,8 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     });
     setActiveMoment(null);
     setActiveContent(null);
-  }, [activeMoment, userId, patchState, isPresentationTooRecent]);
+    continueIfTriggeredByPost();
+  }, [activeMoment, userId, patchState, isPresentationTooRecent, continueIfTriggeredByPost]);
 
   const snooze = useCallback(
     (hours = 24) => {
@@ -596,8 +650,9 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       analyticsService.trackEvent('moment_snoozed', { momentType: activeMoment.type, hours });
       setActiveMoment(null);
       setActiveContent(null);
+      continueIfTriggeredByPost();
     },
-    [activeMoment, userId, patchState]
+    [activeMoment, userId, patchState, continueIfTriggeredByPost]
   );
 
   const accept = useCallback(async () => {
