@@ -656,7 +656,7 @@ export type NotificationType =
   | 'bounty_quality_nudge'
   /** Poster-facing: their in-person bounty has no location, so no hunter can ever be matched to it. Sent once by fn_escalate_stale_bounty_liquidity. */
   | 'bounty_location_nudge'
-  /** Poster-facing: a hunter's application has sat pending with no decision for 1h/24h (data.stage). Carries requestId so it can be actioned from NotificationActionSheet. */
+  /** Poster-facing: one digest per bounty once its oldest unanswered application is 1h/24h old (data.stage), at most 2 per bounty (SBA-04). data.applicantCount / data.bountyTitle describe the bounty; requestId is the oldest unanswered application, so a single-applicant reminder can be actioned from NotificationActionSheet (count > 1 navigates instead). Rows queued before SBA-04 were per application and lack applicantCount. */
   | 'application_pending_reminder'
   /** Hunter-facing: their application auto-closed after request_expiry_hours of poster silence. Not a rejection -- the poster never decided. */
   | 'application_expired'
@@ -755,6 +755,9 @@ export interface Notification {
     amount?: number;
     cancellationId?: string;
     requestId?: string;
+    /** application_pending_reminder digests: unanswered applications on the bounty, and its title. */
+    applicantCount?: number;
+    bountyTitle?: string;
     conversationId?: string;
     stripeDisputeId?: string;
     deepLinkPath?: string;

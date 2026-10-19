@@ -5,6 +5,7 @@ import {
   describeTicketError,
   fallbackDedupeKey,
   isEmailFallbackType,
+  isEmailSuppressedType,
   isLegacyOptedOut,
   isPosterFallbackType,
   replyExpectation,
@@ -14,9 +15,10 @@ import {
 } from '../../supabase/functions/process-notification/email-fallback'
 
 describe('isPosterFallbackType', () => {
-  test('only the two poster-facing application types fall back to email', () => {
+  test('only the new-application notice falls back to email for posters', () => {
     expect(isPosterFallbackType('application')).toBe(true)
-    expect(isPosterFallbackType('application_pending_reminder')).toBe(true)
+    // SBA-04: reminders are push/in-app only.
+    expect(isPosterFallbackType('application_pending_reminder')).toBe(false)
     expect(isPosterFallbackType('bounty_nearby')).toBe(false)
     expect(isPosterFallbackType('message')).toBe(false)
     expect(isPosterFallbackType('application_expired')).toBe(false)
@@ -24,12 +26,25 @@ describe('isPosterFallbackType', () => {
 })
 
 describe('isEmailFallbackType', () => {
-  test('covers the poster types plus the hunter closure notice', () => {
+  test('covers the poster type plus the hunter closure notice', () => {
     expect(isEmailFallbackType('application')).toBe(true)
-    expect(isEmailFallbackType('application_pending_reminder')).toBe(true)
+    expect(isEmailFallbackType('application_pending_reminder')).toBe(false)
     expect(isEmailFallbackType('application_expired')).toBe(true)
     expect(isEmailFallbackType('application_bounty_closed')).toBe(false)
     expect(isEmailFallbackType('bounty_nearby')).toBe(false)
+  })
+})
+
+describe('isEmailSuppressedType', () => {
+  test('pending-application reminders never reach email, by fallback or fan-out', () => {
+    expect(isEmailSuppressedType('application_pending_reminder')).toBe(true)
+  })
+
+  test('every other type keeps its email path', () => {
+    expect(isEmailSuppressedType('application')).toBe(false)
+    expect(isEmailSuppressedType('application_expired')).toBe(false)
+    expect(isEmailSuppressedType('bounty_nearby')).toBe(false)
+    expect(isEmailSuppressedType('payout_paid')).toBe(false)
   })
 })
 
@@ -105,11 +120,10 @@ describe('isLegacyOptedOut', () => {
     expect(isLegacyOptedOut('application_expired', { ...allOn, applications_enabled: false })).toBe(false)
   })
 
-  test('posters are gated by applications_enabled; reminders also by reminders_enabled', () => {
+  test('posters are gated by applications_enabled', () => {
     expect(isLegacyOptedOut('application', { ...allOn, applications_enabled: false })).toBe(true)
     expect(isLegacyOptedOut('application', { ...allOn, acceptances_enabled: false })).toBe(false)
     expect(isLegacyOptedOut('application', { ...allOn, reminders_enabled: false })).toBe(false)
-    expect(isLegacyOptedOut('application_pending_reminder', { ...allOn, reminders_enabled: false })).toBe(true)
   })
 
   test('types outside the fallback never opt out through this path', () => {
