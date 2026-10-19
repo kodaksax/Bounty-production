@@ -92,7 +92,8 @@ export const searchService = {
    */
   async getAutocompleteSuggestions(
     query: string,
-    limit: number = 8
+    limit: number = 8,
+    options?: { includeTest?: boolean }
   ): Promise<AutocompleteSuggestion[]> {
     if (!query.trim()) return [];
 
@@ -101,7 +102,12 @@ export const searchService = {
 
     try {
       // Search bounties
-      const bountyResults = await bountyService.search(q, { limit: 3 });
+      // Test bounties stay out unless an internal viewer opted in, so a
+      // suggestion never points at a bounty the results list hides (SBA-11).
+      const bountyResults = await bountyService.search(q, {
+        limit: 3,
+        includeTest: options?.includeTest,
+      });
       bountyResults.forEach((bounty: Bounty) => {
         suggestions.push({
           id: `bounty_${bounty.id}`,
@@ -149,7 +155,10 @@ export const searchService = {
   /**
    * Get trending bounties based on views and applications
    */
-  async getTrendingBounties(limit: number = 5): Promise<TrendingBounty[]> {
+  async getTrendingBounties(
+    limit: number = 5,
+    options?: { includeTest?: boolean }
+  ): Promise<TrendingBounty[]> {
     try {
       if (!isSupabaseConfigured) {
         return [];
@@ -162,21 +171,27 @@ export const searchService = {
       // No `profiles` embed — the base table's SELECT RLS is self-only, so the
       // embed yields a null poster for everyone but the caller. Poster display
       // data is enriched from `public_profiles` below.
-      const { data: bounties, error } = await supabase
+      // Test bounties only for an internal viewer who opted in, as in
+      // searchWithFilters (SBA-11).
+      let recent = supabase
         .from('bounties')
         .select(FEED_SAFE_BOUNTY_COLUMNS)
         .eq('status', 'open')
-        .gte('created_at', sevenDaysAgo.toISOString())
+        .gte('created_at', sevenDaysAgo.toISOString());
+      if (!options?.includeTest) recent = recent.eq('is_test', false);
+      const { data: bounties, error } = await recent
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (error) {
         // Fallback to query without join
-        const { data: bountiesNoJoin, error: noJoinError } = await supabase
+        let recentNoJoin = supabase
           .from('bounties')
           .select('*')
           .eq('status', 'open')
-          .gte('created_at', sevenDaysAgo.toISOString())
+          .gte('created_at', sevenDaysAgo.toISOString());
+        if (!options?.includeTest) recentNoJoin = recentNoJoin.eq('is_test', false);
+        const { data: bountiesNoJoin, error: noJoinError } = await recentNoJoin
           .order('created_at', { ascending: false })
           .limit(20);
 

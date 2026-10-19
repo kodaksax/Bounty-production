@@ -145,6 +145,11 @@
       "grants": { "anon": [], "authenticated": [] },
       "required_triggers": []
     },
+    "username_check_rate_limits": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
     "profiles": {
       "commands": [],
       "required_triggers": [

@@ -275,13 +275,18 @@ describe('bountyService', () => {
         return {
           select: jest.fn(() => ({
             eq: jest.fn(() => ({
-              or: jest.fn(() => ({
-                order: jest.fn(() => ({
-                  range: jest.fn(() =>
-                    Promise.resolve({ data: [{ id: 7, poster_id: 'u7' }], error: null })
-                  ),
-                })),
-              })),
+              or: jest.fn(() => {
+                // .eq('is_test', false) follows the text match (SBA-11).
+                const afterMatch: any = {
+                  eq: jest.fn(() => afterMatch),
+                  order: jest.fn(() => ({
+                    range: jest.fn(() =>
+                      Promise.resolve({ data: [{ id: 7, poster_id: 'u7' }], error: null })
+                    ),
+                  })),
+                };
+                return afterMatch;
+              }),
             })),
           })),
         };

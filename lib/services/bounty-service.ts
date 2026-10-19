@@ -354,7 +354,15 @@ export const bountyService = {
    * Search open bounties by text (title / description). Returns an empty list on failure instead of throwing.
    * Server-side filtered to reduce bandwidth; falls back progressively.
    */
-  async search(query: string, options?: { limit?: number; offset?: number }): Promise<Bounty[]> {
+  async search(
+    query: string,
+    options?: {
+      limit?: number;
+      offset?: number;
+      /** Internal accounts only, opt-in; same rule as searchWithFilters. */
+      includeTest?: boolean;
+    }
+  ): Promise<Bounty[]> {
     const q = query.trim();
     if (!q) return [];
     try {
@@ -377,11 +385,14 @@ export const bountyService = {
           .from('bounties')
           .select('*')
           .eq('status', 'open')
-          .or(`title.ilike.${qQuoted},description.ilike.${qQuoted}`)
+          .or(`title.ilike.${qQuoted},description.ilike.${qQuoted}`);
+        // Autocomplete runs on this; without the filter it suggested QA test
+        // bounties that the results list (searchWithFilters) then hid (SBA-11).
+        if (!options?.includeTest) sbQuery = sbQuery.eq('is_test', false);
+
+        const { data, error } = await sbQuery
           .order('created_at', { ascending: false })
           .range(offset, offset + limit - 1);
-
-        const { data, error } = await sbQuery;
         if (error) {
           const msg = (error as any)?.message ?? JSON.stringify(error);
           logger.error('Supabase search error', { error, query: q });

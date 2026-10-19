@@ -37,7 +37,7 @@ import type { AppTheme } from '../../lib/themes/types';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { hasLocalOnboardingFlag, markDeviceHasSignedIn } from '../../lib/storage/onboarding';
-import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
+import { checkUsernameAvailability, validateUsername } from '../../lib/services/userProfile';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { GoogleLogo } from '../../components/ui/google-logo';
@@ -198,7 +198,12 @@ export default function SignUpRoute() {
   return <SignUpForm />;
 }
 
-type UsernameAvailability = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
+// 'unknown': the server gave no answer (offline, rate-limited). Shown as
+// "Couldn't check right now", never as available; register still decides.
+type UsernameAvailability = 'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'unknown';
+
+// One server check per typing pause, not per keystroke.
+const USERNAME_CHECK_DEBOUNCE_MS = 400;
 
 export function SignUpForm() {
   // Follows the app's light/dark preference. This screen used to pin
@@ -262,10 +267,12 @@ export function SignUpForm() {
   // 8 characters" and reveal the other four rules after a failed submit.
   const passwordRequirements = useMemo(() => checkPasswordRequirements(password), [password]);
 
-  // Live username availability — debounced so every keystroke doesn't hit
-  // Supabase. isUsernameUnique already falls back to a local check when the
-  // query fails, but the final DB UNIQUE constraint at submit time is what
-  // actually decides this, never this indicator alone.
+  // Live username availability from is_username_available (SBA-08). Debounced
+  // so every keystroke doesn't hit the server, which rate-limits the check,
+  // and definite answers are remembered so backspacing to an earlier name
+  // doesn't ask again. No answer shows "Couldn't check right now", never
+  // "available". Register's 409 and the DB UNIQUE constraint still decide.
+  const usernameAnswers = useRef(new Map<string, 'available' | 'taken'>());
   useEffect(() => {
     if (!username) {
       setUsernameAvailability('idle');
@@ -276,17 +283,24 @@ export function SignUpForm() {
       setUsernameAvailability('invalid');
       return;
     }
+    const known = usernameAnswers.current.get(username);
+    if (known) {
+      setUsernameAvailability(known);
+      return;
+    }
 
     setUsernameAvailability('checking');
     let cancelled = false;
     const timer = setTimeout(async () => {
+      let result: 'available' | 'taken' | 'unknown' = 'unknown';
       try {
-        const unique = await isUsernameUnique(username);
-        if (!cancelled) setUsernameAvailability(unique ? 'available' : 'taken');
+        result = await checkUsernameAvailability(username);
       } catch {
-        if (!cancelled) setUsernameAvailability('idle');
+        // Treated as no answer.
       }
-    }, 400);
+      if (result !== 'unknown') usernameAnswers.current.set(username, result);
+      if (!cancelled) setUsernameAvailability(result);
+    }, USERNAME_CHECK_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
@@ -453,6 +467,7 @@ export function SignUpForm() {
             setAuthError('This username is already taken. Please choose another.');
             // The server is the final word: never leave the live hint saying
             // "available" under a banner saying "taken".
+            usernameAnswers.current.set(normalizedUsername, 'taken');
             setUsernameAvailability('taken');
             return;
           }
@@ -874,6 +889,8 @@ export function SignUpForm() {
               <Text style={styles.helperSuccess}>@{username} is available</Text>
             ) : usernameAvailability === 'taken' ? (
               <Text style={styles.helperError}>@{username} is already taken</Text>
+            ) : usernameAvailability === 'unknown' ? (
+              <Text style={styles.helperMuted}>{"Couldn't check right now"}</Text>
             ) : null}
           </View>
 
@@ -1235,6 +1252,10 @@ function makeLayout(
       helperError: {
         fontSize: t(12.5),
         color: theme.error,
+      },
+      helperMuted: {
+        fontSize: t(12.5),
+        color: theme.textSecondary,
       },
       helperWarning: {
         fontSize: t(12.5),

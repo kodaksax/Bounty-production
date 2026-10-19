@@ -35,7 +35,7 @@ jest.mock('lib/storage/onboarding', () => ({
   hasLocalOnboardingFlag: jest.fn().mockResolvedValue(false),
 }));
 jest.mock('lib/services/userProfile', () => ({
-  isUsernameUnique: jest.fn().mockResolvedValue(true),
+  checkUsernameAvailability: jest.fn().mockResolvedValue('available'),
   validateUsername: jest.fn(() => ({ valid: true })),
 }));
 
@@ -191,5 +191,74 @@ describe('sign-up password checklist', () => {
 
     fireEvent.changeText(field, 'CorrectHorse1!');
     expect(RULES.every(id => isMet(utils, id))).toBe(true);
+  });
+});
+
+// SBA-08: the live check asks is_username_available, so a taken name shows as
+// taken before submit; no answer shows "Couldn't check right now", never
+// "available"; and typing produces one check per pause.
+describe('sign-up live username check', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const check = require('lib/services/userProfile').checkUsernameAvailability as jest.Mock;
+
+  beforeEach(() => {
+    check.mockReset();
+    (global as any).fetch = jest.fn();
+  });
+  afterAll(() => {
+    check.mockReset();
+    check.mockResolvedValue('available');
+  });
+
+  it('shows an existing username as taken before submit', async () => {
+    check.mockResolvedValue('taken');
+    const utils = render(<SignUpForm />);
+    fireEvent.changeText(utils.getByPlaceholderText('username'), 'tester');
+
+    await waitFor(() => expect(utils.getByText('@tester is already taken')).toBeTruthy());
+    expect(utils.queryByText('@tester is available')).toBeNull();
+    expect((global as any).fetch).not.toHaveBeenCalled();
+  });
+
+  it("says it couldn't check, not available, when the server gives no answer", async () => {
+    check.mockResolvedValue('unknown');
+    const utils = render(<SignUpForm />);
+    fireEvent.changeText(utils.getByPlaceholderText('username'), 'tester');
+
+    await waitFor(() => expect(utils.getByText("Couldn't check right now")).toBeTruthy());
+    expect(utils.queryByText('@tester is available')).toBeNull();
+  });
+
+  it("says it couldn't check when the check itself throws", async () => {
+    check.mockRejectedValue(new Error('offline'));
+    const utils = render(<SignUpForm />);
+    fireEvent.changeText(utils.getByPlaceholderText('username'), 'tester');
+
+    await waitFor(() => expect(utils.getByText("Couldn't check right now")).toBeTruthy());
+  });
+
+  it('checks once per typing pause, with the final name', async () => {
+    check.mockResolvedValue('available');
+    const utils = render(<SignUpForm />);
+    const field = utils.getByPlaceholderText('username');
+    for (const partial of ['tes', 'test', 'teste', 'tester']) fireEvent.changeText(field, partial);
+
+    await waitFor(() => expect(utils.getByText('@tester is available')).toBeTruthy());
+    expect(check.mock.calls).toEqual([['tester']]);
+  });
+
+  it('remembers answers, so going back to a checked name does not ask again', async () => {
+    check.mockImplementation(async (name: string) => (name === 'tester' ? 'taken' : 'available'));
+    const utils = render(<SignUpForm />);
+    const field = utils.getByPlaceholderText('username');
+
+    fireEvent.changeText(field, 'tester');
+    await waitFor(() => expect(utils.getByText('@tester is already taken')).toBeTruthy());
+    fireEvent.changeText(field, 'tester2');
+    await waitFor(() => expect(utils.getByText('@tester2 is available')).toBeTruthy());
+    fireEvent.changeText(field, 'tester');
+
+    expect(utils.getByText('@tester is already taken')).toBeTruthy();
+    expect(check).toHaveBeenCalledTimes(2);
   });
 });
