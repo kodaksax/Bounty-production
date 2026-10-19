@@ -69,6 +69,52 @@ describe('resolveNotificationDeepLink: application', () => {
   });
 });
 
+describe('application_pending_reminder: per-bounty digest payload (SBA-04)', () => {
+  // What fn_remind_posters_of_pending_requests queues since 20261019120000:
+  // the old keys (bountyId/requestId/hunterId/stage) plus scope,
+  // applicantCount and bountyTitle; the outbox `count` becomes the in-app
+  // row's count.
+  const digestData = {
+    type: 'application_pending_reminder',
+    scope: 'bounty',
+    bountyId: 'abc-123',
+    bountyTitle: 'Walk my dog',
+    applicantCount: 3,
+    stage: 1,
+    requestId: 'req-oldest',
+    hunterId: 'hunter-oldest',
+  };
+
+  test('routes the digest to the poster bounty-management screen', () => {
+    const action = resolveNotificationDeepLink({ type: 'application_pending_reminder', data: digestData });
+    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123' });
+  });
+
+  test('routes a snake_case bounty_id payload the same way', () => {
+    const action = resolveNotificationDeepLink({ type: 'application_pending_reminder', data: { bounty_id: 'abc-123' } });
+    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123' });
+  });
+
+  test('a digest covering several applicants navigates instead of offering Accept/Decline for one of them', () => {
+    expect(supportsActionSheet({ type: 'application_pending_reminder', data: digestData }, { count: 3 })).toBe(false);
+  });
+
+  test('a single-applicant digest keeps the one-tap action sheet, as old reminders did', () => {
+    expect(
+      supportsActionSheet({ type: 'application_pending_reminder', data: { ...digestData, applicantCount: 1 } }, { count: 1 })
+    ).toBe(true);
+  });
+
+  test('legacy per-application reminders already in flight still route and keep the action sheet', () => {
+    const legacy = { type: 'application_pending_reminder', bountyId: 'abc-123', requestId: 'req-1', hunterId: 'h-1', stage: 2 };
+    expect(resolveNotificationDeepLink({ type: 'application_pending_reminder', data: legacy })).toEqual({
+      kind: 'route',
+      path: '/postings/abc-123',
+    });
+    expect(supportsActionSheet({ type: 'application_pending_reminder', data: legacy }, { count: 1 })).toBe(true);
+  });
+});
+
 describe('resolveNotificationDeepLink: bounty_nearby (regression guard)', () => {
   test('still routes to the public bounty view with the notification-source tag', () => {
     const action = resolveNotificationDeepLink({

@@ -16,7 +16,7 @@
 // Only these types get an email when push can't reach the poster. They are
 // excluded from the blanket email fan-out so the fallback is the ONLY email
 // path for them — capped at one email per application (bounty_request).
-export const POSTER_EMAIL_FALLBACK_TYPES = new Set(['application', 'application_pending_reminder'])
+export const POSTER_EMAIL_FALLBACK_TYPES = new Set(['application'])
 
 export function isPosterFallbackType(type: string): boolean {
   return POSTER_EMAIL_FALLBACK_TYPES.has(type)
@@ -30,6 +30,17 @@ export const HUNTER_EMAIL_FALLBACK_TYPES = new Set(['application_expired'])
 
 export function isEmailFallbackType(type: string): boolean {
   return POSTER_EMAIL_FALLBACK_TYPES.has(type) || HUNTER_EMAIL_FALLBACK_TYPES.has(type)
+}
+
+// Push and in-app only: never emailed, neither as a fallback nor through the
+// blanket fan-out. Pending-application reminders (SBA-04, 2026-10-19) are a
+// per-bounty digest capped at two per bounty; the poster already gets one
+// email per application through the `application` fallback, and a reminder
+// email used to be suppressed by sharing that application's dedupe key.
+export const NO_EMAIL_TYPES = new Set(['application_pending_reminder'])
+
+export function isEmailSuppressedType(type: string): boolean {
+  return NO_EMAIL_TYPES.has(type)
 }
 
 const MAX_ERROR_MESSAGE_LENGTH = 300
@@ -55,9 +66,9 @@ export function describeTicketError(ticket: unknown): { code: string; message: s
 
 /**
  * One email per application: the dedupe key is the bounty_request id, which
- * the `application` trigger writes as `request_id` and the reminder cron as
- * `requestId`. Rows with neither fall back to the outbox id, which still makes
- * outbox retries idempotent.
+ * the `application` trigger writes as `request_id` (normalized to
+ * `requestId`). Rows with neither fall back to the outbox id, which still
+ * makes outbox retries idempotent.
  */
 export function fallbackDedupeKey(data: Record<string, unknown>, outboxId: string, type?: string): string {
   // The hunter's closure email is keyed separately from the poster's
@@ -169,13 +180,12 @@ export interface LegacyNotificationPreferences {
  * Legacy per-type toggles (notification_preferences). A missing row or a NULL
  * column means allowed. Posters are gated by applications_enabled; hunters
  * (application_expired) by acceptances_enabled -- the toggle for outcomes of
- * their own applications; reminders additionally by reminders_enabled.
+ * their own applications.
  */
 export function isLegacyOptedOut(type: string, prefs: LegacyNotificationPreferences | null | undefined): boolean {
   if (!prefs) return false
   if (POSTER_EMAIL_FALLBACK_TYPES.has(type) && prefs.applications_enabled === false) return true
   if (HUNTER_EMAIL_FALLBACK_TYPES.has(type) && prefs.acceptances_enabled === false) return true
-  if (type === 'application_pending_reminder' && prefs.reminders_enabled === false) return true
   return false
 }
 

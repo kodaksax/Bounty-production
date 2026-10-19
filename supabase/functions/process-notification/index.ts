@@ -18,6 +18,7 @@ import {
   describeTicketError,
   fallbackDedupeKey,
   isEmailFallbackType,
+  isEmailSuppressedType,
   isLegacyOptedOut,
   isPosterFallbackType,
   selectFallbackCandidates,
@@ -478,6 +479,8 @@ Deno.serve(async (req: Request) => {
     // Push held back by quiet hours is a deliberate suppression, not a delivery
     // failure, so it does not trigger the poster email fallback.
     const quietHoursBlocked = new Set<string>()
+    // Push/in-app-only types never reach the email channel at all.
+    const emailSuppressed = isEmailSuppressedType(notificationType)
     for (const userId of recipients) {
       if (isChannelEnabled(prefMap, userId, 'in_app', category)) inAppRecipients.push(userId)
 
@@ -488,7 +491,7 @@ Deno.serve(async (req: Request) => {
         else pushRecipients.push(userId)
       }
 
-      if (isChannelEnabled(prefMap, userId, 'email', category)) emailRecipients.push(userId)
+      if (!emailSuppressed && isChannelEnabled(prefMap, userId, 'email', category)) emailRecipients.push(userId)
     }
 
     // Every PostHog event for this single invocation is queued here and
@@ -760,8 +763,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Email fallback ────────────────────────────────────────────────────
-    // For application / application_pending_reminder (poster) and
-    // application_expired (hunter) only: when push could not reach the
+    // For application (poster) and application_expired (hunter) only: when push could not reach the
     // recipient (failed, no token, or push turned off), send ONE email per
     // application, respecting both preference tables.
     type FallbackResult = 'sent' | 'already_emailed' | 'opted_out' | 'no_provider' | 'failed' | 'no_bounty'
