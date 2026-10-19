@@ -141,6 +141,11 @@ confirms the open → in_progress transition), now carrying 6 additional propert
   screens unmount when the tab loses focus (tracked separately as issue #779), and the
   profile screen is a full navigation away. A module-level flag is the same pattern
   already used for `bounty_list_viewed`'s "first of session" property.
+- `applicant_distance_mi` (added 2026-10-19, SBA-02) — `bounty_requests.distance_mi`,
+  stamped by the server when the hunter applied: whole miles from the hunter's
+  (grid-coarsened) profile location to the job's approximate point, `0` = under 1 mile.
+  Omitted for an online job, either location unknown, or a request fetched before the
+  column existed. Not precise location: it is the same rounded number the poster sees.
 
 ## Existing event conflicts found
 

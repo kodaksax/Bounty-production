@@ -193,6 +193,11 @@ export type BountyRequest = {
   // Who/what rejected it. Any system_* value means no poster decision was made.
   rejection_source?: "poster" | "system_expiry" | "system_bounty_closed" | "system_poster_absent" | null;
   message?: string | null;  // optional pitch/cover message from the hunter
+  // Server-stamped at application time (SBA-02). Whole miles from the hunter
+  // to the job's approximate point; 0 = under 1 mile; null = online job or a
+  // side had no location. Visible to the poster and the applicant only.
+  distance_mi?: number | null;
+  is_far?: boolean;  // distance_mi > 50; a flag, not a block
   created_at: string;
   updated_at?: string;
 }

@@ -416,6 +416,10 @@ export type AnalyticsEvent =
   // (lib/analytics/sessionFlags.ts) set when the poster opened this specific
   // hunter's profile from the applicant list for this bounty -- it is a
   // same-session signal, not a lifetime one.
+  //
+  // `applicant_distance_mi` (2026-10-19, SBA-02): the whole-mile distance the
+  // server stamped on the application (bounty_requests.distance_mi). 0 = under
+  // 1 mile; omitted for an online job, unknown location, or a pre-column fetch.
   | 'application_accepted'
   // The POSTER declined an applicant without accepting them
   // (hooks/useRejectRequest.ts). `reason` is OMITTED, never inferred: there is

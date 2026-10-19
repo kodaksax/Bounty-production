@@ -311,6 +311,9 @@ export function useAcceptRequest({
           hadMessage: !!request.message,
           trustTier: (request.bounty as any)?.trust_tier || 'standard',
           applicantCount: applicantCountForBounty,
+          // Server-stamped whole miles (SBA-02); omitted for online jobs, an
+          // unknown location, or a request fetched before the column existed.
+          applicant_distance_mi: request.distance_mi ?? undefined,
           profileViewedBeforeAccept:
             bountyIdStr != null && hunterIdStr != null
               ? wasApplicantProfileViewed(bountyIdStr, hunterIdStr)
