@@ -7,6 +7,8 @@
 
 import {
   bountyAppTabPath,
+  defaultInboxSegment,
+  inboxSegmentForLink,
   isBountyAppTabPath,
   parseBountyAppTabParams,
   parseBountyAppTabUrl,
@@ -118,5 +120,34 @@ describe('expo-router navigation payloads (root cause)', () => {
       state: { routes: [leaf({ screen: 'messages', initialTab: 'requests' })] },
     });
     expect(payload.params.params).toEqual({ initialTab: 'requests' });
+  });
+});
+
+// SBA-10 (3): the Inbox opens on My Bounties for a poster with an open bounty,
+// unless a link explicitly asked for a segment.
+describe('inboxSegmentForLink', () => {
+  it('maps each known link segment, and reports no choice otherwise', () => {
+    expect(inboxSegmentForLink('myPostings')).toBe('myPostings');
+    expect(inboxSegmentForLink('requests')).toBe('myPostings');
+    expect(inboxSegmentForLink('inProgress')).toBe('inProgress');
+    expect(inboxSegmentForLink('new')).toBe('inProgress');
+    expect(inboxSegmentForLink(undefined)).toBeNull();
+    expect(inboxSegmentForLink('')).toBeNull();
+    expect(inboxSegmentForLink('bogus')).toBeNull();
+    expect(inboxSegmentForLink(['requests'])).toBe('myPostings');
+  });
+});
+
+describe('defaultInboxSegment', () => {
+  it('opens My Bounties when the user has an open bounty they posted', () => {
+    expect(defaultInboxSegment([{ status: 'in_progress' }, { status: 'open' }])).toBe('myPostings');
+  });
+
+  it('keeps My Work for a hunter-only account or a poster with nothing open', () => {
+    expect(defaultInboxSegment([])).toBe('inProgress');
+    expect(
+      defaultInboxSegment([{ status: 'in_progress' }, { status: 'completed' }, { status: 'cancelled' }])
+    ).toBe('inProgress');
+    expect(defaultInboxSegment([null, undefined, {}])).toBe('inProgress');
   });
 });

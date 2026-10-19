@@ -34,6 +34,7 @@ import Reanimated, { Easing, interpolateColor, runOnJS, useAnimatedStyle, useSha
 import type { SharedValue } from "react-native-reanimated"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useTabPager } from "../../components/ui/tab-pager"
+import { defaultInboxSegment, inboxSegmentForLink } from '../../lib/navigation/bounty-app-tab'
 import { BrandingLogo } from "../../components/ui/branding-logo"
 import { BountyConversationRow, type InboxPerson } from "../../components/bounty-inbox/thread-list-row"
 import { NotNearbyToggle } from "../../components/not-nearby-toggle"
@@ -85,10 +86,12 @@ interface InboxScreenProps {
  * reached from the header's chat icon.
  */
 // My Work / My Bounties. Old deep links still resolve: "requests" (the
-// retired Requests tab) opens My Bounties, where applications now live, and
-// anything unknown falls back to My Work.
+// retired Requests tab) opens My Bounties, where applications now live. With
+// no link (or an unknown value) the Inbox starts on My Work and, once the
+// poster's own bounties load, moves to My Bounties if any is open — see
+// defaultInboxSegment (SBA-10).
 function segmentForInitialTab(initialTab: string | undefined): InboxTab {
-  return initialTab === "myPostings" || initialTab === "requests" ? "myPostings" : "inProgress"
+  return inboxSegmentForLink(initialTab) ?? "inProgress"
 }
 
 export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyAccepted }: InboxScreenProps) {
@@ -97,6 +100,13 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const router = useRouter()
 
   const [activeTab, setActiveTab] = useState<InboxTab>(segmentForInitialTab(initialTab))
+  // Once anything has chosen the segment — a link, a tap, a swipe, or the
+  // default below — the default never moves it again.
+  const segmentDecidedRef = useRef(inboxSegmentForLink(initialTab) !== null)
+  // Which user's posted bounties `myBounties` holds. The default waits for
+  // this rather than for the loading flag, which the signed-out branch clears
+  // before the user id resolves.
+  const [myBountiesLoadedFor, setMyBountiesLoadedFor] = useState<string | null>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
   const [showShadow, setShowShadow] = useState(false)
 
@@ -188,6 +198,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       // cannot put them back when the screen remounts after a tab switch.
       const activeBounties = filterManagementBounties(mine)
       setMyBounties(activeBounties)
+      setMyBountiesLoadedFor(currentUserId)
       setIsLoading((prev) => ({ ...prev, myBounties: false }))
       // Load related requests
       await loadRequestsForMyBounties(activeBounties)
@@ -973,6 +984,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const [segmentWidth, setSegmentWidth] = useState(0)
 
   const selectSegment = React.useCallback((tab: InboxTab) => {
+    segmentDecidedRef.current = true
     setActiveTab(tab)
     segmentBase.value = tab === 'inProgress' ? 0 : 1
     segmentSettling.value = true
@@ -996,7 +1008,21 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     if (initialTab !== undefined) selectSegment(segmentForInitialTab(initialTab))
   }, [initialTab, selectSegment])
 
+  // No link chose a segment: open on My Bounties for a poster with an open
+  // bounty, where its applications are (SBA-10). Decided once, as soon as
+  // this user's own bounties have loaded, and without a slide — it is where
+  // the Inbox starts, not a move the user made.
+  useEffect(() => {
+    if (segmentDecidedRef.current || !currentUserId || myBountiesLoadedFor !== currentUserId) return
+    segmentDecidedRef.current = true
+    if (defaultInboxSegment(myBounties) !== 'myPostings') return
+    setActiveTab('myPostings')
+    segmentBase.value = 1
+    segmentProgress.value = 1
+  }, [currentUserId, myBountiesLoadedFor, myBounties, segmentBase, segmentProgress])
+
   const commitSegment = React.useCallback((index: number) => {
+    segmentDecidedRef.current = true
     setActiveTab(index === 0 ? 'inProgress' : 'myPostings')
   }, [])
 
