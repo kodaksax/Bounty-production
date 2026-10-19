@@ -4,6 +4,15 @@ export class AccountOperationBlockedError extends Error {
   readonly code = 'account_operation_blocked';
 }
 
+/**
+ * The stored connected account no longer exists in Stripe (for example support
+ * deleted it from the Dashboard). The hunter can recover by replacing the
+ * account, so this must not surface as a platform outage.
+ */
+export class ConnectedAccountGoneError extends Error {
+  readonly code = 'connect_account_missing';
+}
+
 type AccountOperationKind = 'account_creation' | 'native_payout' | 'legacy_withdrawal' |
   'legacy_instant' | 'withdrawal_retry' | 'admin_retry' | 'bounty_release_v2' |
   'bounty_release_v3' | 'admin_reversal';
@@ -57,6 +66,19 @@ export function isDefinitiveStripeRejection(error: unknown): boolean {
   const type = (error as { type?: string } | null)?.type;
   return type === 'StripeInvalidRequestError' || type === 'StripePermissionError' ||
     type === 'StripeAuthenticationError' || type === 'StripeCardError';
+}
+
+/**
+ * True when Stripe reports that the platform can no longer reach this specific
+ * connected account because Stripe explicitly reports that the account does
+ * not exist. Permission errors are ambiguous: application access may have
+ * been revoked while the account still exists, so they must fail closed.
+ */
+export function isConnectedAccountGoneError(error: unknown, accountId: string): boolean {
+  const e = error as { type?: string; message?: string; raw?: { message?: string } } | null;
+  if (e?.type !== 'StripeInvalidRequestError') return false;
+  const message = e?.message ?? e?.raw?.message ?? '';
+  return message.includes(accountId) && /\bno such account\b/i.test(message);
 }
 
 export function isDefinitiveDatabaseRejection(error: unknown): boolean {

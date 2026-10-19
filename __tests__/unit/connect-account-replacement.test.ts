@@ -55,7 +55,7 @@ function replacementHarness() {
   let saveFails = false;
   let operationActive = false;
   let walletRow: any = null;
-  let appUrl = 'https://bountyfinder.app';
+  let appUrl: string | undefined = 'https://bountyfinder.app';
   let handler: (request: Request) => Promise<Response>;
   const db: any = {
     auth: { getUser: jest.fn(async () => ({ data: { user: { id: 'user' } } })) },
@@ -147,7 +147,7 @@ function replacementHarness() {
   return {
     db, stripe, profile, replacement,
     failSave: (value: boolean) => { saveFails = value; },
-    setAppUrl: (value: string) => { appUrl = value; },
+    setAppUrl: (value: string | undefined) => { appUrl = value; },
     request: (body: unknown = { replacementId: replacement.id }, token = 'test-session', route = 'replace-account') =>
       handler(new Request('https://test.example/connect/' + route, {
         method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -161,8 +161,9 @@ describe('replacement account safety', () => {
     expect(withdrawalScreen).toContain("eligibility.connectedAccountExists === null");
     expect(onboardingScreen).toContain("params.hasExistingAccount === 'true'");
     expect(onboardingScreen).toContain('canOfferAccountReplacement && !replacementId');
-    expect(onboardingScreen).toContain('prepareAccountReplacement()');
-    expect(onboardingScreen).toContain('params: { replacementId: result.replacementId, source: \'account_replacement\' }');
+    expect(onboardingScreen).toContain('prepareAccountReplacement(entryCountry)');
+    expect(onboardingScreen).toContain("...(entryCountry ? { country: entryCountry } : {})");
+    expect(onboardingScreen).toContain("source: 'account_replacement'");
     expect(onboardingScreen).toContain('if (replacingAccountRef.current) return;');
     expect(onboardingScreen).toContain("navigation.addListener('beforeRemove'");
     expect(onboardingScreen).toContain('if (!isScreenFocusedRef.current) return;');
@@ -443,5 +444,164 @@ describe('durable reservation and migration contracts', () => {
     expect(onboarding).toContain("result.type === 'locked' || result.type === 'opened'");
     expect(onboarding).toContain('if (!replacementId) await supabase');
     expect(onboarding).toContain("replacementId ? 'replace-account' : 'create-account-link'");
+  });
+});
+
+describe('closed (deleted) old Stripe account', () => {
+  const goneError = (id: string) => ({
+    type: 'StripeInvalidRequestError',
+    message: `No such account: '${id}'.`,
+  });
+
+  function closedAccountHarness() {
+    const h = replacementHarness();
+    const live = h.stripe.accounts.retrieve.getMockImplementation();
+    h.stripe.accounts.retrieve.mockImplementation(async (id: string) => {
+      if (id === 'acct_old') throw goneError(id);
+      return live(id);
+    });
+    return h;
+  }
+
+  test('recognises only a gone-account error for the named account', () => {
+    expect(operations.isConnectedAccountGoneError(goneError('acct_old'), 'acct_old')).toBe(true);
+    expect(operations.isConnectedAccountGoneError(goneError('acct_other'), 'acct_old')).toBe(false);
+    expect(operations.isConnectedAccountGoneError({ type: 'StripeAuthenticationError', message: 'Expired API Key provided' }, 'acct_old')).toBe(false);
+    expect(operations.isConnectedAccountGoneError({ type: 'StripePermissionError', message: 'restricted key lacks permission' }, 'acct_old')).toBe(false);
+    expect(operations.isConnectedAccountGoneError({
+      type: 'StripePermissionError',
+      message: "The provided key does not have access to account 'acct_old' (or that account does not exist). Application access may have been revoked.",
+    }, 'acct_old')).toBe(false);
+  });
+
+  test('prepare starts a replacement for the closed account with a default country', async () => {
+    const h = closedAccountHarness();
+    const response = await h.request({ confirmed: true }, 'test-session', 'prepare-account-replacement');
+    expect(response.status).toBe(200);
+    expect(h.db.rpc).toHaveBeenCalledWith('begin_connect_account_replacement', expect.objectContaining({
+      p_user_id: 'user', p_account_id: 'acct_old', p_country: 'US',
+    }));
+  });
+
+  test('prepare preserves the selected country when the old account is closed', async () => {
+    const h = closedAccountHarness();
+    const response = await h.request({ confirmed: true, country: 'CA' }, 'test-session', 'prepare-account-replacement');
+    expect(response.status).toBe(200);
+    expect(h.db.rpc).toHaveBeenCalledWith('begin_connect_account_replacement', expect.objectContaining({
+      p_country: 'CA',
+    }));
+  });
+
+  test('replace-account skips Stripe-side checks on the closed account and swaps to a new one', async () => {
+    const h = closedAccountHarness();
+    const response = await h.request();
+    expect(response.status).toBe(200);
+    expect(h.stripe.balance.retrieve).not.toHaveBeenCalledWith({ stripeAccount: 'acct_old' });
+    expect(h.stripe.payouts.list).not.toHaveBeenCalled();
+    expect(h.stripe.accounts.create).toHaveBeenCalledTimes(1);
+    expect(h.profile.stripe_connect_account_id).toBe('acct_new');
+    expect(h.profile.balance).toBe(123);
+  });
+
+  test('a broken platform key is still reported as a platform outage, not a closed account', async () => {
+    const h = closedAccountHarness();
+    h.stripe.balance.retrieve.mockRejectedValue({ type: 'StripeAuthenticationError', message: 'Expired API Key provided' });
+    const response = await h.request();
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe('platform_unavailable');
+    expect(h.stripe.accounts.create).not.toHaveBeenCalled();
+    expect(h.profile.stripe_connect_account_id).toBe('acct_old');
+  });
+
+  test('ambiguous permission errors fail closed without swapping the account', async () => {
+    const h = replacementHarness();
+    h.stripe.accounts.retrieve.mockRejectedValue({
+      type: 'StripePermissionError',
+      message: "The provided key does not have access to account 'acct_old' (or that account does not exist). Application access may have been revoked.",
+    });
+    const response = await h.request();
+    expect(response.status).not.toBe(200);
+    expect(h.stripe.accounts.create).not.toHaveBeenCalled();
+    expect(h.profile.stripe_connect_account_id).toBe('acct_old');
+  });
+
+  test.each(['create-account-link', 'create-account-session'])(
+    '/%s points the hunter to replacement instead of a platform outage',
+    async route => {
+      const h = closedAccountHarness();
+      h.stripe.accounts.update = jest.fn(async () => { throw goneError('acct_old'); });
+      h.stripe.accountLinks.create.mockRejectedValue(goneError('acct_old'));
+      h.stripe.accountSessions = { create: jest.fn(async () => { throw goneError('acct_old'); }) };
+      const response = await h.request({}, 'test-session', route);
+      const body = await response.json();
+      expect(response.status).toBe(409);
+      expect(body).toMatchObject({ code: 'connect_account_missing', retryable: true });
+      expect(body.error).toMatch(/Replace Stripe Account/);
+    }
+  );
+});
+
+describe('replacement blocker reasons', () => {
+  const blockerMigration = fs.readFileSync(
+    path.join(__dirname, '../../supabase/migrations/20261018220000_connect_replacement_blocker_reasons.sql'), 'utf8');
+
+  test.each([
+    ['funded_bounty', /bounty payment that has not finished releasing/],
+    ['unsettled_withdrawal', /withdrawal that has not finished/],
+    ['reconciliation_finding', /reviewing a payout discrepancy/],
+    ['operation_in_progress', /still being processed/],
+  ])('prepare explains a %s refusal', async (hint, copy) => {
+    const h = replacementHarness();
+    const rpc = h.db.rpc.getMockImplementation();
+    h.db.rpc.mockImplementation(async (name: string, args: any) => name === 'begin_connect_account_replacement'
+      ? { data: null, error: { message: 'blocked', hint } } : rpc(name, args));
+    const response = await h.request({ confirmed: true }, 'test-session', 'prepare-account-replacement');
+    const body = await response.json();
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({ code: 'replacement_blocked', reason: hint });
+    expect(body.error).toMatch(copy);
+  });
+
+  test('an unknown refusal keeps the generic copy', async () => {
+    const h = replacementHarness();
+    const rpc = h.db.rpc.getMockImplementation();
+    h.db.rpc.mockImplementation(async (name: string, args: any) => name === 'begin_connect_account_replacement'
+      ? { data: null, error: { message: 'No existing payout account to replace' } } : rpc(name, args));
+    const body = await (await h.request({ confirmed: true }, 'test-session', 'prepare-account-replacement')).json();
+    expect(body.error).toMatch(/Replacement is blocked by a financial operation/);
+    expect(body.reason).toBeUndefined();
+  });
+
+  test('bounty-matching findings no longer block replacement; every refusal is tagged', () => {
+    expect(blockerMigration).toMatch(/finding_type NOT IN \(\s*'bounty_liquidity_no_candidates', 'bounty_location_not_geocoded', 'bounty_geocode_result'/);
+    for (const hint of ['operation_in_progress', 'unsettled_withdrawal', 'funded_bounty', 'reconciliation_finding']) {
+      expect(blockerMigration).toContain(`USING HINT = '${hint}'`);
+    }
+    expect(blockerMigration).toMatch(/REVOKE ALL ON FUNCTION public\.assert_connect_replacement_safe\(uuid, text\) FROM PUBLIC, anon, authenticated/);
+  });
+});
+
+describe('replacement account-link callback URLs', () => {
+  test.each([
+    ['a deep-link scheme', 'bountyexpo-workspace://'],
+    ['plain http', 'http://bountyfinder.app'],
+    ['unset', undefined],
+  ])('falls back to the HTTPS universal-link base when APP_URL is %s', async (_label, value) => {
+    const h = replacementHarness();
+    h.setAppUrl(value);
+    expect((await h.request()).status).toBe(200);
+    expect(h.stripe.accountLinks.create).toHaveBeenCalledWith(expect.objectContaining({
+      refresh_url: 'https://bountyfinder.app/wallet/connect/refresh?replacementId=replacement',
+      return_url: 'https://bountyfinder.app/wallet/connect/return',
+    }));
+  });
+
+  test('a trailing slash on an HTTPS APP_URL does not double the path separator', async () => {
+    const h = replacementHarness();
+    h.setAppUrl('https://staging.example/');
+    expect((await h.request()).status).toBe(200);
+    expect(h.stripe.accountLinks.create).toHaveBeenCalledWith(expect.objectContaining({
+      return_url: 'https://staging.example/wallet/connect/return',
+    }));
   });
 });
