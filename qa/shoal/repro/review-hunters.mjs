@@ -16,7 +16,9 @@
  * Since #921 every main tab stays mounted side by side in a horizontal pager, and both
  * Inbox segment labels are always rendered, so "is the text in the DOM" no longer says
  * where the poster is. This checks what is inside the viewport and which Inbox segment
- * is selected (the segment buttons are role="tab" with aria-selected).
+ * is selected. The segment buttons are role="tab", but react-native-web does not emit
+ * aria-selected for them, so the selected one is the label drawn in the active colour
+ * (white; the other is grey — see SegmentLabel in app/tabs/inbox-screen.tsx).
  */
 import { chromium } from 'playwright';
 import { derivePassword, poolAccount } from '../bin/lib/accounts.mjs';
@@ -66,7 +68,19 @@ try {
   const onFeed = await anyOnScreen(page.getByText(/For You/i));
   const myBounties = page.getByRole('tab', { name: /^My Bounties/ });
   const inboxOnScreen = await anyOnScreen(myBounties);
-  const myBountiesSelected = (await myBounties.first().getAttribute('aria-selected').catch(() => null)) === 'true';
+  const labelColor = (tab) =>
+    tab
+      .first()
+      .evaluate((el) => {
+        if (el.getAttribute('aria-selected')) return el.getAttribute('aria-selected') === 'true' ? 'selected' : 'not';
+        const leaf = [...el.querySelectorAll('*')].find((n) => n.childElementCount === 0 && n.textContent);
+        return leaf ? getComputedStyle(leaf).color : null;
+      })
+      .catch(() => null);
+  const ACTIVE = new Set(['selected', 'rgb(255, 255, 255)']);
+  const myBountiesSelected =
+    ACTIVE.has(await labelColor(myBounties)) &&
+    !ACTIVE.has(await labelColor(page.getByRole('tab', { name: /^My Work/ })));
   const onMyBounties = inboxOnScreen && myBountiesSelected;
   console.log(
     JSON.stringify({
