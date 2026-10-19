@@ -212,6 +212,12 @@ function analyze(snapshot, manifest) {
     for (const role of fn.forbid_execute || []) {
       if (live.grantees.includes(role)) errors.push(`function ${fn.signature} is executable by ${role}`);
     }
+    // The other direction: a client-facing RPC that must stay callable, so a
+    // later "revoke from anon" hardening pass can't silently break its caller
+    // (is_username_available is the sign-up form's only view of taken names).
+    for (const role of fn.require_execute || []) {
+      if (!live.grantees.includes(role)) errors.push(`function ${fn.signature} is not executable by ${role}`);
+    }
   }
 
   // ── Tier 2: ratchet over every public table ─────────────────────────────

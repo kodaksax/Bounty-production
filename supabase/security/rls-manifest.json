@@ -627,6 +627,16 @@
         "authenticated",
         "PUBLIC"
       ]
+    },
+    {
+      "signature": "is_username_available(text)",
+      "forbid_execute": [
+        "PUBLIC"
+      ],
+      "require_execute": [
+        "anon",
+        "authenticated"
+      ]
     }
   ],
   "baseline": {

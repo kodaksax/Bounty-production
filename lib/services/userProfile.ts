@@ -49,22 +49,41 @@ export function validateUsername(username: string): { valid: boolean; error?: st
 /**
  * Check if a username is available (unique) for the given user.
  *
- * Uniqueness is authoritative against the Supabase `profiles` table so that a
- * username belongs to at most one auth user across the whole system. The
- * lookup is case-insensitive (Alice == alice) to match the case-insensitive
- * unique index on profiles.username.
+ * Asks the server first: `is_username_available` (a SECURITY DEFINER RPC,
+ * callable signed out) compares case-insensitively against every profile and
+ * ignores the caller's own row. A plain `profiles` SELECT can't answer this:
+ * profiles are readable own-row only, so signed out (sign-up) or signed in
+ * (onboarding) the query never saw anyone else's name and reported every
+ * username as available until /auth/register answered 409 "taken".
  *
- * When the Supabase check cannot run (offline, tests, RLS error), we fall
- * back to a best-effort local AsyncStorage check so onboarding remains usable.
- * The DB UNIQUE constraint is the final gate on writes, so a false negative
- * here can never cause two accounts to share a username — at worst the user
- * is asked to pick again at save time.
+ * If the RPC isn't there (a backend without its migration) the old direct
+ * query and then a best-effort local AsyncStorage check still run, so nothing
+ * gets worse than before. The DB UNIQUE constraint is the final gate on
+ * writes, so a false "available" can never let two accounts share a username
+ * — at worst the user is asked to pick again at save time.
  */
 export async function isUsernameUnique(username: string, currentUserId?: string): Promise<boolean> {
   const trimmed = (username || '').trim();
   if (!trimmed) return false;
 
-  // Authoritative check: Supabase profiles table (case-insensitive)
+  // Authoritative: the server-side check, which can see every profile.
+  try {
+    const { data, error } = await supabase.rpc('is_username_available', { p_username: trimmed });
+    // null = the server considers this malformed; let the format check below
+    // and the register endpoint deal with it rather than guess.
+    if (!error && typeof data === 'boolean') return data;
+    if (error) {
+      console.warn('[userProfile] is_username_available unavailable, falling back:', {
+        code: (error as { code?: string }).code,
+        message: error.message,
+      });
+    }
+  } catch (err) {
+    console.warn('[userProfile] is_username_available threw, falling back:', err);
+  }
+
+  // Fallback: direct profiles query (case-insensitive). Only reliable for rows
+  // the caller can read, i.e. their own — kept for backends without the RPC.
   try {
     // Escape ilike metacharacters (%, _) so usernames containing underscores
     // (a valid char) do not match wildcards. Backslash must be escaped first.

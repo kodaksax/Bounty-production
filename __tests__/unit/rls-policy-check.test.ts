@@ -122,6 +122,21 @@ describe('rls-policy-check rules', () => {
     expect(analyze(snap, manifest()).errors).toContain('function gate(uuid) is executable by authenticated');
   });
 
+  it('flags a client RPC that has lost a required EXECUTE grant', () => {
+    const snap = baseSnapshot();
+    snap.functions.push({ signature: 'is_username_available(text)', grantees: ['authenticated', 'service_role'] });
+    const m = manifest();
+    m.functions.push({
+      signature: 'is_username_available(text)',
+      forbid_execute: ['PUBLIC'],
+      require_execute: ['anon', 'authenticated'],
+    } as (typeof m.functions)[number]);
+    expect(analyze(snap, m).errors).toEqual(['function is_username_available(text) is not executable by anon']);
+
+    snap.functions[1].grantees.push('anon');
+    expect(analyze(snap, m).errors).toEqual([]);
+  });
+
   it('fails when row-level security is disabled on a protected table', () => {
     const snap = baseSnapshot();
     snap.tables[0].rls_enabled = false;

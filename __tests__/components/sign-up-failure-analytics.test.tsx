@@ -147,6 +147,28 @@ describe('sign-up failure analytics', () => {
   });
 });
 
+// Shoal 19 Oct: the live hint said "@x is available" under a red "already
+// taken" banner. The server's 409 is the final word, so the hint follows it.
+describe('sign-up username taken at submit', () => {
+  it('flips the live hint to taken when register answers 409 for the username', async () => {
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      text: async () => JSON.stringify({ error: 'Username already taken' }),
+    });
+
+    const utils = render(<SignUpForm />);
+    fillValidForm(utils);
+    await waitFor(() => expect(utils.getByText('@tester is available')).toBeTruthy());
+
+    fireEvent.press(utils.getByLabelText('Create account'));
+
+    await waitFor(() => expect(utils.getByText('@tester is already taken')).toBeTruthy());
+    expect(utils.queryByText('@tester is available')).toBeNull();
+  });
+});
+
 // SBA-06: the field used to say only "At least 8 characters" and reveal the
 // other four rules after a failed submit (4 of 6 Shoal posters hit it).
 describe('sign-up password checklist', () => {

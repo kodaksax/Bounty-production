@@ -36,6 +36,16 @@ type Row = { id: string; username: string };
 let remoteRows: Row[] = [];
 let remoteShouldError: null | { code?: string; message: string } = null;
 
+// is_username_available RPC. Default: a backend without the migration
+// (PostgREST "function not found"), so the tests below this block exercise the
+// fallback path exactly as before.
+const RPC_MISSING = { code: 'PGRST202', message: 'Could not find the function public.is_username_available' };
+let rpcResult: { data: unknown; error: null | { code?: string; message: string } } = {
+  data: null,
+  error: RPC_MISSING,
+};
+const rpcCalls: { fn: string; args: unknown }[] = [];
+
 jest.mock('../../lib/supabase', () => {
   const from = (table: string) => {
     if (table !== 'profiles') {
@@ -87,7 +97,11 @@ jest.mock('../../lib/supabase', () => {
     };
     return chain;
   };
-  return { supabase: { from } };
+  const rpc = async (fn: string, args: unknown) => {
+    rpcCalls.push({ fn, args });
+    return rpcResult;
+  };
+  return { supabase: { from, rpc } };
 });
 
 // Avoid pulling the real auth-profile-service (imports native deps)
@@ -101,7 +115,40 @@ jest.mock('../../lib/services/auth-profile-service', () => ({
 
 import { isUsernameUnique } from '../../lib/services/userProfile';
 
-describe('isUsernameUnique (Supabase-backed)', () => {
+describe('isUsernameUnique via is_username_available', () => {
+  beforeEach(() => {
+    remoteRows = [];
+    remoteShouldError = null;
+    rpcCalls.length = 0;
+    for (const k of Object.keys(asyncStore)) delete asyncStore[k];
+  });
+  afterEach(() => {
+    rpcResult = { data: null, error: RPC_MISSING };
+  });
+
+  // The production bug: profiles are readable own-row only, so the direct
+  // query sees no other user's row and says "free". The RPC can see them.
+  it('reports a taken name as taken even though the caller cannot read that profile', async () => {
+    remoteRows = []; // what own-row RLS shows a signed-out caller
+    rpcResult = { data: false, error: null };
+    await expect(isUsernameUnique('alice')).resolves.toBe(false);
+    expect(rpcCalls).toEqual([{ fn: 'is_username_available', args: { p_username: 'alice' } }]);
+  });
+
+  it('reports a free name as free', async () => {
+    rpcResult = { data: true, error: null };
+    await expect(isUsernameUnique('  fresh_name  ')).resolves.toBe(true);
+    expect(rpcCalls[0].args).toEqual({ p_username: 'fresh_name' });
+  });
+
+  it('falls back to the old checks when the server calls the input malformed (null)', async () => {
+    rpcResult = { data: null, error: null };
+    remoteRows = [{ id: 'user-a', username: 'bob' }];
+    await expect(isUsernameUnique('bob', 'user-b')).resolves.toBe(false);
+  });
+});
+
+describe('isUsernameUnique (fallback: backend without the RPC)', () => {
   beforeEach(() => {
     remoteRows = [];
     remoteShouldError = null;
