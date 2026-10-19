@@ -239,7 +239,8 @@
         "a00_validate_bounty_requirements",
         "a00_project_bounty_requirements",
         "zz_bounties_privatize_location",
-        "zz_bounties_store_private_location"
+        "zz_bounties_store_private_location",
+        "trg_bounties_enforce_posting_quality"
       ]
     },
     "bounty_disputes": {
@@ -597,6 +598,14 @@
     },
     {
       "signature": "bounty_requests_broadcast_changes()",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_bounties_enforce_posting_quality()",
       "forbid_execute": [
         "anon",
         "authenticated",

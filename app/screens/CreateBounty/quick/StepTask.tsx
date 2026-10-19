@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,7 +16,11 @@ import {
 import { DEFAULT_OVERLAY_KEY, useTopInsetOverlay } from '../../../../lib/context/TopInsetOverlayContext';
 import { pageTranslateX, useTabPager } from '../../../../components/ui/tab-pager';
 import { analyticsService } from '../../../../lib/services/analytics-service';
-import { validateTitle } from '../../../../lib/utils/bounty-validation';
+import {
+  validateContactInfo,
+  validateDescription,
+  validateTitle,
+} from '../../../../lib/utils/bounty-validation';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { InfoTooltip } from '../../../../components/ui/tooltip';
@@ -44,6 +49,9 @@ interface TaskTemplate {
   category: string;
   amount: number;
   icon: IconName;
+  /** Example answer to "What exactly, and when?" for this template. Shown as
+   * the details field's placeholder only — never written into the draft. */
+  detailExample: string;
 }
 
 // A curated set of one-tap starting points, chosen to signal the odd-jobs range
@@ -51,19 +59,26 @@ interface TaskTemplate {
 // rather than to cover every BOUNTY_CATEGORIES bucket. Prices are rough market
 // anchors, not quotes, and StepPay shows them as an editable, pre-filled amount.
 const TASK_TEMPLATES: TaskTemplate[] = [
-  { id: 'hold_merch_line', title: 'Hold my spot in the merch line', category: 'other', amount: 25, icon: 'confirmation-number' },
-  { id: 'lecture_notes', title: 'Take lecture notes for me', category: 'writing', amount: 20, icon: 'description' },
-  { id: 'home_haircut', title: 'Cut my hair at my place', category: 'other', amount: 65, icon: 'content-cut' },
-  { id: 'mount_tv', title: 'Mount my TV', category: 'labor', amount: 35, icon: 'tv' },
-  { id: 'explain_insurance', title: 'Explain my insurance policy', category: 'other', amount: 30, icon: 'shield' },
-  { id: 'hem_gown', title: 'Hem my gown', category: 'other', amount: 45, icon: 'checkroom' },
-  { id: 'tagalog_grocery_run', title: 'Tagalog language translator', category: 'other', amount: 55, icon: 'translate' },
-  { id: 'walk_dog', title: 'Walk my dog', category: 'other', amount: 20, icon: 'pets' },
-  { id: 'clean_closet', title: 'Clean out my closet', category: 'labor', amount: 60, icon: 'cleaning-services' },
-  { id: 'help_move_in', title: 'Help me move in', category: 'labor', amount: 90, icon: 'local-shipping' },
-  { id: 'design_artwork', title: 'Design an artwork', category: 'design', amount: 100, icon: 'brush' },
-  { id: 'assemble_furniture', title: 'Assemble my furniture', category: 'labor', amount: 40, icon: 'handyman' },
+  { id: 'hold_merch_line', title: 'Hold my spot in the merch line', category: 'other', amount: 25, icon: 'confirmation-number', detailExample: 'Saturday from 9am at the arena box office, until doors open at noon' },
+  { id: 'lecture_notes', title: 'Take lecture notes for me', category: 'writing', amount: 20, icon: 'description', detailExample: 'BIO 101 on Tuesday 10-11:15am, typed notes sent the same day' },
+  { id: 'home_haircut', title: 'Cut my hair at my place', category: 'other', amount: 65, icon: 'content-cut', detailExample: 'Short fade and beard trim, Sunday afternoon, I have clippers' },
+  { id: 'mount_tv', title: 'Mount my TV', category: 'labor', amount: 35, icon: 'tv', detailExample: '55-inch TV on drywall, mount included, any weekday after 5pm' },
+  { id: 'explain_insurance', title: 'Explain my insurance policy', category: 'other', amount: 30, icon: 'shield', detailExample: 'A 30-minute call to walk through my renters policy this week' },
+  { id: 'hem_gown', title: 'Hem my gown', category: 'other', amount: 45, icon: 'checkroom', detailExample: 'Take a floor-length gown up about 2 inches, needed by Friday' },
+  { id: 'tagalog_grocery_run', title: 'Tagalog language translator', category: 'other', amount: 55, icon: 'translate', detailExample: 'Translate at a 1-hour doctor visit, Monday at 10am' },
+  { id: 'walk_dog', title: 'Walk my dog', category: 'other', amount: 20, icon: 'pets', detailExample: 'One 30-minute walk for a friendly lab, Saturday morning' },
+  { id: 'clean_closet', title: 'Clean out my closet', category: 'labor', amount: 60, icon: 'cleaning-services', detailExample: 'Sort and bag one walk-in closet, about 2 hours, this weekend' },
+  { id: 'help_move_in', title: 'Help me move in', category: 'labor', amount: 90, icon: 'local-shipping', detailExample: 'Carry boxes and a couch up 2 flights, Saturday 10am to 1pm' },
+  { id: 'design_artwork', title: 'Design an artwork', category: 'design', amount: 100, icon: 'brush', detailExample: 'A square logo for my bakery, 2 drafts, final files by next Friday' },
+  { id: 'assemble_furniture', title: 'Assemble my furniture', category: 'labor', amount: 40, icon: 'handyman', detailExample: 'One IKEA dresser and a bed frame, Sunday after 2pm' },
 ];
+
+// Placeholder for a title the poster typed themselves.
+const CUSTOM_DETAIL_EXAMPLE = 'Two boxes from my car up to the 3rd floor, Sunday after 2pm';
+
+// Mirrors lib/utils/bounty-validation.ts validateDescription, which the server
+// also enforces for in-person bounties (20261019230000_posting_quality_rules).
+const MIN_DETAIL_LENGTH = 20;
 
 interface StepTaskProps {
   draft: BountyDraft;
@@ -91,9 +106,13 @@ const MAX_LENGTH = 120;
 
 /**
  * Step 1 — a green hero with the question, a raised card holding the title
- * field and its Next button, and a list of concrete task templates below.
- * Tapping a template prefills title, category and a suggested price and drops
- * the poster straight onto the next step.
+ * field, a required "What exactly, and when?" field (saved as the bounty's
+ * description) and the Next button, and a list of concrete task templates
+ * below. Tapping a template prefills title, category and a suggested price,
+ * then stays here and focuses the details field: a template alone used to be
+ * a four-tap path to a title-only listing (SBA-03). Next stays disabled until
+ * the details have at least 20 characters, for templates and typed titles
+ * alike.
  *
  * Unlike the later steps this doesn't use QuickStepLayout: the CTA lives in
  * the card next to the field instead of being pinned to the bottom.
@@ -107,6 +126,8 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const styles = useMemo(() => makeStyles(theme, scale), [theme, scale]);
   const entrance = useStepEntrance();
   const [touched, setTouched] = useState(false);
+  const [detailTouched, setDetailTouched] = useState(false);
+  const detailInputRef = useRef<TextInput>(null);
 
   // RootFrame (app/_layout.tsx) reserves the status-bar strip above all app
   // content in the screen colour. Hand it the hero's green, translated with
@@ -134,11 +155,41 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const error = validateTitle(draft.title);
   const length = (draft.title || '').length;
   const isEmpty = length === 0;
-  const canContinue = !error;
+  const detail = draft.description || '';
+  const detailLength = detail.trim().length;
+  const detailError = validateDescription(detail);
+  // Checked here rather than only at publish, where it surfaces as a generic
+  // failure after the poster has already picked a location and price.
+  const contactError = validateContactInfo(draft.title, detail);
+  const canContinue = !error && !detailError && !contactError;
+  // Follows the title: a template's own example, else a generic one. Derived
+  // from the title rather than remembered, so it survives drafts and Back.
+  const detailExample =
+    TASK_TEMPLATES.find((t) => t.title === (draft.title || '').trim())?.detailExample ??
+    CUSTOM_DETAIL_EXAMPLE;
 
   const handleChange = (value: string) => {
     onUpdate({ title: value });
   };
+
+  const handleDetailChange = (value: string) => {
+    onUpdate({ description: value });
+  };
+
+  // Templates sit below the card, so bring the card back into view first.
+  const scrollRef = useRef<ScrollView>(null);
+  const focusDetail = () => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    detailInputRef.current?.focus();
+  };
+
+  let cardHint = 'Location and reward come next';
+  if (length > 90) cardHint = `${length}/${MAX_LENGTH}`;
+  else if (detailLength === 0) cardHint = 'Add what and when to continue';
+  else if (detailLength < MIN_DETAIL_LENGTH) {
+    const remaining = MIN_DETAIL_LENGTH - detailLength;
+    cardHint = `${remaining} more character${remaining === 1 ? '' : 's'}`;
+  }
 
   // Records which marketplace term a poster looked up. Rides alongside the
   // shared post_step_viewed funnel rather than adding a step to it.
@@ -171,12 +222,15 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
       category: template.category,
       amount: template.amount,
     });
-    onNext();
+    // Stay on this step: the template names the job, the poster still has to
+    // say what exactly and when. Any details already typed are kept.
+    focusDetail();
   };
 
   return (
     <Animated.View style={[styles.root, entrance]}>
       <Animated.ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -210,7 +264,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
               onChangeText={handleChange}
               onFocus={() => onFieldFocus?.()}
               onBlur={() => setTouched(true)}
-              onSubmitEditing={canContinue ? onNext : undefined}
+              onSubmitEditing={focusDetail}
               multiline
               submitBehavior="blurAndSubmit"
               textAlignVertical="top"
@@ -230,10 +284,37 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
 
           {touched && error && !isEmpty ? <Text style={styles.error}>{error}</Text> : null}
 
-          <View style={styles.cardFooter}>
-            <Text style={styles.cardHint}>
-              {length > 90 ? `${length}/${MAX_LENGTH}` : 'Location and reward come next'}
+          {/* Required detail — becomes the bounty description. */}
+          <View style={styles.detailBlock}>
+            <Text style={styles.detailLabel}>
+              What exactly, and when?
             </Text>
+            <TextInput
+              ref={detailInputRef}
+              value={detail}
+              onChangeText={handleDetailChange}
+              onFocus={() => onFieldFocus?.()}
+              onBlur={() => setDetailTouched(true)}
+              onSubmitEditing={canContinue ? onNext : undefined}
+              placeholder={detailExample}
+              placeholderTextColor={theme.textDisabled}
+              multiline
+              submitBehavior="blurAndSubmit"
+              textAlignVertical="top"
+              style={styles.detailInput}
+              accessibilityLabel="What exactly, and when?"
+              accessibilityHint={`Required, at least ${MIN_DETAIL_LENGTH} characters. For example: ${detailExample}`}
+            />
+          </View>
+
+          {contactError ? (
+            <Text style={styles.error}>{contactError}</Text>
+          ) : detailTouched && detailError && detailLength > 0 ? (
+            <Text style={styles.error}>{detailError}</Text>
+          ) : null}
+
+          <View style={styles.cardFooter}>
+            <Text style={styles.cardHint}>{cardHint}</Text>
             <TouchableOpacity
               onPress={onNext}
               disabled={!canContinue}
@@ -278,7 +359,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
               style={[styles.row, index > 0 ? styles.rowDivider : null]}
               accessibilityRole="button"
               accessibilityLabel={`${template.title}, suggested $${template.amount}`}
-              accessibilityHint="Fills in the task, category, and price, then continues"
+              accessibilityHint="Fills in the task, category, and price"
             >
               <View style={styles.rowIcon}>
                 <MaterialIcons name={template.icon} size={18} color={theme.primaryLight} />
@@ -359,6 +440,25 @@ function makeStyles(theme: AppTheme, scale: number) {
       marginTop: 6,
       fontSize: 13,
       color: theme.error,
+    },
+    detailBlock: {
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+    },
+    detailLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.textSecondary,
+      marginBottom: 6,
+    },
+    detailInput: {
+      minHeight: 48,
+      padding: 0,
+      color: theme.text,
+      fontSize: 16,
+      lineHeight: 22,
     },
     cardFooter: {
       marginTop: 14,

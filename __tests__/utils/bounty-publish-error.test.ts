@@ -39,6 +39,28 @@ describe('getBountyPublishError', () => {
   it('keeps account-status copy', () => {
     expect(getBountyPublishError(new Error('account_suspended')).title).toBe('Account Suspended');
   });
+
+  // SBA-03: trg_bounties_enforce_posting_quality raises these verbatim; the
+  // relay wraps them, so they're matched by inclusion.
+  it.each([
+    'New accounts can have 2 open bounties on their first day. You can post more tomorrow.',
+    'Relay insert failed: {"error":"New accounts can have 2 open bounties on their first day. You can post more tomorrow."}',
+  ])('shows the new-account limit plainly, without a retry: %s', raw => {
+    const out = getBountyPublishError(new Error(raw));
+    expect(out.message).toBe(
+      'New accounts can have 2 open bounties on their first day. You can post more tomorrow.'
+    );
+    expect(out.retryable).toBe(false);
+  });
+
+  it('asks for details when the in-person description rule refuses a post', () => {
+    const out = getBountyPublishError(
+      new Error('In-person bounties need a description of at least 20 characters.')
+    );
+    expect(out.title).toBe('Add a Few Details');
+    expect(out.message).toBe('Say what exactly needs doing, and when, in at least 20 characters.');
+    expect(out.retryable).toBe(false);
+  });
 });
 
 describe('getUserFriendlyError sanitizing', () => {

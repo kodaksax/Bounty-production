@@ -240,6 +240,15 @@ jest.mock('app/screens/CreateBounty/quick/StepPhotos', () => ({
         >
           <Text>Continue with invalid details</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityLabel="stub-photos-shrink-continue"
+          onPress={() => {
+            props.onUpdate({ description: 'Sat AM' });
+            props.onNext();
+          }}
+        >
+          <Text>Continue with shortened details</Text>
+        </TouchableOpacity>
       </View>
     );
   },
@@ -376,5 +385,26 @@ describe('post-publish detail saves', () => {
     expect(mockedService.updateBountyDetails).not.toHaveBeenCalled();
     expect(screen.getByText(CONTACT_INFO_ERROR)).toBeTruthy();
     expect(screen.getByText('StepPhotos')).toBeTruthy();
+  });
+
+  // SBA-03: step 1 now requires "What exactly, and when?". The optional
+  // details screen must not strip it from the live bounty afterwards.
+  it('refuses to shorten step-1 details below 20 characters', async () => {
+    const original = mockDraft.description;
+    mockDraft.description = 'One 30-minute walk for a friendly lab, Saturday morning';
+    try {
+      await publishThenReachConfirmation();
+
+      fireEvent.press(screen.getByLabelText('stub-add-photos'));
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('stub-photos-shrink-continue'));
+      });
+
+      expect(mockedService.updateBountyDetails).not.toHaveBeenCalled();
+      expect(screen.getByText('Keep at least 20 characters about what needs doing, and when.')).toBeTruthy();
+      expect(screen.getByText('StepPhotos')).toBeTruthy();
+    } finally {
+      mockDraft.description = original;
+    }
   });
 });

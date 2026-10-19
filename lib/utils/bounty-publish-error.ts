@@ -12,6 +12,17 @@ const PASSTHROUGH_TYPES: ErrorType[] = ['network', 'authentication', 'rate_limit
 const TITLE_MESSAGES: string[] = Object.values(TITLE_VALIDATION_MESSAGES);
 
 /**
+ * Raised verbatim by trg_bounties_enforce_posting_quality
+ * (supabase/migrations/20261019230000_posting_quality_rules.sql). Matched by
+ * inclusion because the relay and API paths wrap the database message.
+ */
+export const POSTING_RULE_MESSAGES = {
+  newAccountOpenLimit:
+    'New accounts can have 2 open bounties on their first day. You can post more tomorrow.',
+  inPersonDescription: 'In-person bounties need a description of at least 20 characters.',
+} as const;
+
+/**
  * What a poster sees when publishing a bounty fails.
  *
  * Deliberately an allowlist rather than getUserFriendlyError's best-effort
@@ -32,6 +43,23 @@ export function getBountyPublishError(error: unknown): UserFriendlyError {
   }
   if (TITLE_MESSAGES.includes(message)) {
     return { type: 'validation', title: 'Check Your Title', message, retryable: true };
+  }
+  // Retrying can't help with either posting rule, so no "Try Again".
+  if (message.includes(POSTING_RULE_MESSAGES.newAccountOpenLimit)) {
+    return {
+      type: 'validation',
+      title: 'Daily Limit Reached',
+      message: POSTING_RULE_MESSAGES.newAccountOpenLimit,
+      retryable: false,
+    };
+  }
+  if (message.includes(POSTING_RULE_MESSAGES.inPersonDescription)) {
+    return {
+      type: 'validation',
+      title: 'Add a Few Details',
+      message: 'Say what exactly needs doing, and when, in at least 20 characters.',
+      retryable: false,
+    };
   }
 
   const friendly = getUserFriendlyError(error);
