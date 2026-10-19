@@ -35,6 +35,7 @@ import { authProfileService } from '../../lib/services/auth-profile-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
 import { saveLastScreen } from '../../lib/storage/last-screen'
+import { parseBountyAppTabParams, parseBountyAppTabUrl } from '../../lib/navigation/bounty-app-tab'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { useTopInsetOverlay } from '../../lib/context/TopInsetOverlayContext'
 
@@ -73,7 +74,9 @@ const PagerPage = memo(function PagerPage({
 function BountyAppInner() {
   const router = useRouter()
   const { theme } = useAppThemeContext()
-  const { screen, initialTab, source } = useLocalSearchParams<{ screen?: string, initialTab?: string, source?: string }>()
+  // `tab` picks the tab (legacy `screen` is read too, though expo-router
+  // usually strips it — see lib/navigation/bounty-app-tab.ts).
+  const { tab, screen, initialTab, source } = useLocalSearchParams<{ tab?: string, screen?: string, initialTab?: string, source?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
   // Get current user ID from auth context (reactive to auth state changes)
   const { session, isLoading, profile } = useAuthContext()
@@ -187,10 +190,9 @@ function BountyAppInner() {
 
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
-  const allowedScreens = new Set(['bounty', 'wallet', 'postings', 'profile', 'messages', 'admin'])
-  const paramScreen = typeof screen === 'string' && screen.length > 0 && allowedScreens.has(screen) ? screen : 'bounty'
-  const allowedInitialTabs = new Set(['new', 'inProgress', 'myPostings', 'requests'])
-  const paramInitialTab = typeof initialTab === 'string' && initialTab.length > 0 && allowedInitialTabs.has(initialTab) ? initialTab : undefined
+  const linkTarget = parseBountyAppTabParams({ tab, screen, initialTab })
+  const paramScreen: string = linkTarget.tab ?? 'bounty'
+  const paramInitialTab: string | undefined = linkTarget.initialTab
   const [activeScreen, setActiveScreenState] = useState(paramScreen)
 
   // Reports this tab shell's visible screen for analytics. Switching tabs
@@ -386,6 +388,16 @@ function BountyAppInner() {
   const onPagerLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout
     setPagerSize(prev => (prev.width === width && prev.height === height ? prev : { width, height }))
+    // The pager first lays out only after the loading screen, and its
+    // contentOffset is the tab from the first render. If a link moved the
+    // tab in between (its scrollTo hit no pager yet), put the pager on the
+    // current tab now so it doesn't show one tab while another is active.
+    if (draggingRef.current || width <= 0) return
+    const idx = swipeOrderRef.current.indexOf(activeRef.current)
+    if (idx === -1) return
+    const x = idx * width
+    lastOffsetXRef.current = x
+    pagerRef.current?.scrollTo?.({ x, y: 0, animated: false })
   }, [])
 
   const activeIdx = swipeOrder.indexOf(activeScreen)
@@ -441,16 +453,11 @@ function BountyAppInner() {
       try {
         const pending = await navigationIntent.getAndClearPendingNavigation()
         if (!pending || !mounted) return
-        // Parse the pending URL for `screen` and `initialTab` params.
-        try {
-          const u = new URL(pending, 'http://example.com') // base for parsing
-          const screen = u.searchParams.get('screen')
-          const initialTab = u.searchParams.get('initialTab')
-          if (screen) setActiveScreen(screen)
-          if (initialTab) setPendingInitialTab(initialTab)
-        } catch (err) {
-          // ignore parsing errors
-        }
+        // The pending path names the tab (`tab`, or legacy `screen`) and
+        // the Inbox segment (`initialTab`).
+        const target = parseBountyAppTabUrl(pending)
+        if (target.tab) setActiveScreen(target.tab)
+        if (target.initialTab) setPendingInitialTab(target.initialTab)
       } catch (err) {
         // ignore
       }
@@ -460,6 +467,21 @@ function BountyAppInner() {
     // swipe order (and so setActiveScreen's identity) changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // A link that reaches this shell while it is already mounted (expo-router
+  // reusing the route with new params, e.g. web history) moves it as well:
+  // the tab, and the Inbox segment. The first render's params are already
+  // applied by the initial state above.
+  const linkKey = `${linkTarget.tab ?? ''}|${linkTarget.initialTab ?? ''}`
+  const appliedLinkKeyRef = useRef(linkKey)
+  useEffect(() => {
+    if (appliedLinkKeyRef.current === linkKey) return
+    appliedLinkKeyRef.current = linkKey
+    if (linkTarget.tab) setActiveScreen(linkTarget.tab)
+    if (linkTarget.initialTab) setPendingInitialTab(linkTarget.initialTab)
+    // linkKey captures every field of linkTarget used here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkKey, setActiveScreen])
 
   // If the admin tab is selected, navigate to the admin route from an effect
   // to avoid triggering navigation/state updates during render (which causes

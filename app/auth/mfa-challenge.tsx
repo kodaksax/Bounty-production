@@ -56,7 +56,7 @@ export default function MfaChallengeScreen() {
 
     if (!isMfaChallengeRequired && isEnrolled) {
       // Already satisfied AAL2 – go to app
-      router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+      router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
       try { markInitialNavigationDone(); } catch { /* ignore */ }
     }
   // Only run when loading state changes to avoid redirect loops
@@ -83,7 +83,7 @@ export default function MfaChallengeScreen() {
       }
 
       // MFA verified — navigate to the main app
-      router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+      router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
       try { markInitialNavigationDone(); } catch { /* ignore */ }
     } finally {
       setIsVerifying(false);

@@ -12,6 +12,16 @@
  * <bountyId> must be an open bounty owned by pool poster <slot> (default 4) with at
  * least one pending application (seed.mjs status / the staging database).
  * Exit code 0 = landed on My Bounties, 1 = landed somewhere else.
+ *
+ * Since #921 every main tab stays mounted side by side in a horizontal pager, and both
+ * Inbox segment labels are always rendered, so "is the text in the DOM" no longer says
+ * where the poster is. This checks what is inside the viewport and which Inbox segment
+ * is selected. The segment buttons are role="tab", but react-native-web does not emit
+ * aria-selected for them, so the selected one is the label drawn in the active colour
+ * (white; the other is grey — see SegmentLabel in app/tabs/inbox-screen.tsx). The active
+ * bottom-bar tab is the one under the sliding highlight pill (FloatingTabBar); label
+ * colour can't tell, because Home's label is always green. The Home tab no longer
+ * shows "For You", so that text can't identify the feed either.
  */
 import { chromium } from 'playwright';
 import { derivePassword, poolAccount } from '../bin/lib/accounts.mjs';
@@ -33,9 +43,18 @@ if (!secret) {
 }
 
 const account = poolAccount('poster', Number(slotArg || 4));
+const VIEWPORT = { width: 390, height: 844 };
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-const isVisible = (re) => page.getByText(re).first().isVisible().catch(() => false);
+const page = await browser.newPage({ viewport: VIEWPORT });
+// On screen = laid out inside the viewport, not just present on an off-screen pager page.
+const onScreen = async (locator) => {
+  const box = await locator.boundingBox({ timeout: 2000 }).catch(() => null);
+  return !!box && box.width > 0 && box.x > -1 && box.x + box.width < VIEWPORT.width + 1;
+};
+const anyOnScreen = async (locator) => {
+  for (const l of await locator.all()) if (await onScreen(l)) return true;
+  return false;
+};
 
 try {
   await page.goto(BASE + '/auth/sign-in-form', { waitUntil: 'networkidle' });
@@ -48,10 +67,56 @@ try {
   await page.getByText(/Review hunters/).last().click({ timeout: 30000 });
   await page.waitForTimeout(4000);
 
-  const onFeed = await isVisible(/For You/i);
-  const onMyBounties = await isVisible(/MY BOUNTIES/);
-  console.log(JSON.stringify({ url: page.url(), onFeed, onMyBounties }));
-  process.exitCode = onMyBounties && !onFeed ? 0 : 1;
+  const url = new URL(page.url());
+  const barTab = await page.evaluate(() => {
+    // Bar labels only: the Inbox screen's own "Inbox" heading is not in a button.
+    const labels = [...document.querySelectorAll('*')].filter(
+      (n) =>
+        n.childElementCount === 0 &&
+        /^(Inbox|Wallet|Home|Post|Profile)$/.test((n.textContent || '').trim()) &&
+        n.closest('button,[role="button"]'),
+    );
+    const buttons = labels.map((n) => n.closest('button,[role="button"]'));
+    const row = buttons[0]?.parentElement;
+    const pill = row && [...row.children].find((c) => !buttons.includes(c));
+    if (!pill) return null;
+    const r = pill.getBoundingClientRect();
+    const cx = r.x + r.width / 2;
+    const i = buttons.findIndex((btn) => {
+      const br = btn?.getBoundingClientRect();
+      return br && cx >= br.x && cx < br.x + br.width;
+    });
+    return i === -1 ? null : labels[i].textContent.trim();
+  });
+  const onFeed = barTab === 'Home';
+  const myBounties = page.getByRole('tab', { name: /^My Bounties/ });
+  const inboxOnScreen = await anyOnScreen(myBounties);
+  const labelColor = (tab) =>
+    tab
+      .first()
+      .evaluate((el) => {
+        if (el.getAttribute('aria-selected')) return el.getAttribute('aria-selected') === 'true' ? 'selected' : 'not';
+        const leaf = [...el.querySelectorAll('*')].find((n) => n.childElementCount === 0 && n.textContent);
+        return leaf ? getComputedStyle(leaf).color : null;
+      })
+      .catch(() => null);
+  const ACTIVE = new Set(['selected', 'rgb(255, 255, 255)']);
+  const myBountiesSelected =
+    ACTIVE.has(await labelColor(myBounties)) &&
+    !ACTIVE.has(await labelColor(page.getByRole('tab', { name: /^My Work/ })));
+  const onMyBounties = inboxOnScreen && myBountiesSelected;
+  console.log(
+    JSON.stringify({
+      url: url.pathname + url.search,
+      tabParam: url.searchParams.get('tab'),
+      barTab,
+      onFeed,
+      inboxOnScreen,
+      myBountiesSelected,
+      onMyBounties,
+    }),
+  );
+  process.exitCode = onMyBounties && barTab === 'Inbox' ? 0 : 1;
 } finally {
   await browser.close();
 }

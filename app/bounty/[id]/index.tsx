@@ -30,7 +30,7 @@ import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { getBountyDetailSurface } from '../../../lib/utils/bounty-lifecycle';
 
-const FEED_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=bounty`;
+const FEED_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?tab=bounty`;
 
 export default function BountyDetailRouter() {
   const { id, source } = useLocalSearchParams<{ id?: string; source?: string }>();

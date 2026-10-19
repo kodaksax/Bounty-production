@@ -46,7 +46,6 @@ import { useAuthContext } from '../../../hooks/use-auth-context';
 import { formatExactAddress, useBountyExactLocation } from '../../../hooks/useBountyExactLocation';
 import { useBountyLifecycle } from '../../../hooks/useBountyLifecycle';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
-import { ROUTES } from '../../../lib/routes';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
@@ -60,11 +59,12 @@ import { bountyHoldsUnreleasedEscrow } from '../../../lib/utils/payment-architec
 import { formatPublicLocation } from '../../../lib/utils/public-location';
 import { getTrustTierLabel } from '../../../lib/utils/trust-tier';
 import { shareBounty } from '../../../lib/utils/share-utils';
+import { bountyAppTabPath } from '../../../lib/navigation/bounty-app-tab';
 
-/** Requests tab inside the Inbox shell — where applications are reviewed. */
-const REQUESTS_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=requests`;
+/** Inbox → My Bounties, where applications are reviewed. */
+const REQUESTS_ROUTE = bountyAppTabPath('messages', 'requests');
 /** The post-a-bounty flow. */
-const POST_BOUNTY_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=postings`;
+const POST_BOUNTY_ROUTE = bountyAppTabPath('postings');
 
 export default function BountyDashboard() {
   const { bountyId, openEdit } = useLocalSearchParams<{ bountyId?: string; openEdit?: string }>();
@@ -135,7 +135,7 @@ export default function BountyDashboard() {
 
   const goBack = useCallback(() => {
     if (router.canGoBack()) router.back();
-    else router.replace(`${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=myPostings` as never);
+    else router.replace(bountyAppTabPath('messages', 'myPostings') as never);
   }, [router]);
 
   // ── Actions ───────────────────────────────────────────────────────────────

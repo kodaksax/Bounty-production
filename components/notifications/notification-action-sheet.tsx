@@ -4,6 +4,7 @@ import { bountyRequestService } from 'lib/services/bounty-request-service';
 import { capture as posthogCapture } from 'lib/posthog';
 import { notificationService } from 'lib/services/notification-service';
 import { POSTER_REQUESTS_PATH, getNotificationBountyId, resolveNotificationDeepLink } from 'lib/services/notification-deep-links';
+import { bountyAppTabPath } from 'lib/navigation/bounty-app-tab';
 import { sendMessage } from 'lib/services/supabase-messaging';
 import { categoryForNotificationType, isBundled } from 'lib/config/notification-taxonomy';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
@@ -158,7 +159,7 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
 
   const handleWithdraw = () => {
     onClose();
-    router.push('/tabs/bounty-app?screen=wallet' as any);
+    router.push(bountyAppTabPath('wallet') as any);
   };
 
   return (

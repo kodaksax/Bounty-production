@@ -41,8 +41,8 @@ import type { AppTheme } from '../../../../lib/themes/types';
 import type { BountyActionKey } from '../../../../lib/utils/bounty-lifecycle';
 import { getBountyStages } from '../../../../lib/utils/bounty-lifecycle';
 
-const FEED_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=bounty`;
-const MY_WORK_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=inProgress`;
+const FEED_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?tab=bounty`;
+const MY_WORK_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?tab=messages&initialTab=inProgress`;
 
 export default function HunterFlowIndex() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();

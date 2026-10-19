@@ -82,17 +82,19 @@ interface InboxScreenProps {
  * The general messaging inbox still lives in `messenger-screen.tsx` and is
  * reached from the header's chat icon.
  */
+// My Work / My Bounties. Old deep links still resolve: "requests" (the
+// retired Requests tab) opens My Bounties, where applications now live, and
+// anything unknown falls back to My Work.
+function segmentForInitialTab(initialTab: string | undefined): InboxTab {
+  return initialTab === "myPostings" || initialTab === "requests" ? "myPostings" : "inProgress"
+}
+
 export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyAccepted }: InboxScreenProps) {
   const rawUserId = useValidUserId()
   const currentUserId = rawUserId ?? undefined
   const router = useRouter()
 
-  // My Work / My Bounties. Old deep links still resolve: "requests" (the
-  // retired Requests tab) opens My Bounties, where applications now live, and
-  // anything unknown falls back to My Work.
-  const [activeTab, setActiveTab] = useState<InboxTab>(
-    initialTab === "myPostings" || initialTab === "requests" ? "myPostings" : "inProgress"
-  )
+  const [activeTab, setActiveTab] = useState<InboxTab>(segmentForInitialTab(initialTab))
   const [headerHeight, setHeaderHeight] = useState(0)
   const [showShadow, setShowShadow] = useState(false)
 
@@ -950,6 +952,16 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       }
     )
   }, [segmentBase, segmentSettling, segmentProgress])
+
+  // A link that asks for a segment while the Inbox is already mounted (the
+  // tab shell keeps it mounted once visited, and preloads it beside Wallet)
+  // arrives as a new initialTab: slide to that segment.
+  const appliedInitialTabRef = useRef(initialTab)
+  useEffect(() => {
+    if (appliedInitialTabRef.current === initialTab) return
+    appliedInitialTabRef.current = initialTab
+    if (initialTab !== undefined) selectSegment(segmentForInitialTab(initialTab))
+  }, [initialTab, selectSegment])
 
   const commitSegment = React.useCallback((index: number) => {
     setActiveTab(index === 0 ? 'inProgress' : 'myPostings')

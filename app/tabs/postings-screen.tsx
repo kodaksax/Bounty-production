@@ -1087,7 +1087,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       isAskQuestionDisabled={isAskApplicantBusy}
       // Ensure returning from profile restores the Postings screen to the
       // Requests tab reliably by directing BountyApp to open postings + requests.
-      referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=requests`}
+      referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?tab=postings&initialTab=requests`}
     />
   ), [handleAcceptRequest, handleRejectRequest, handleAskApplicant, askingRequestId, isAskApplicantBusy]);
 

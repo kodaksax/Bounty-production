@@ -422,7 +422,7 @@ export function SignInForm() {
                 destination: ROUTES.TABS.BOUNTY_APP,
                 metadata: { reason: 'profile_error_fallback' },
               });
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
               return;
             }
 
@@ -456,7 +456,7 @@ export function SignInForm() {
                   destination: ROUTES.TABS.BOUNTY_APP,
                   metadata: { reason: 'local_onboarding_flag' },
                 });
-                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
                 try {
                   markInitialNavigationDone();
                 } catch {}
@@ -494,7 +494,7 @@ export function SignInForm() {
                 destination: ROUTES.TABS.BOUNTY_APP,
                 metadata: { reason: 'profile_complete' },
               });
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
               try {
                 markInitialNavigationDone();
               } catch {}
@@ -514,7 +514,7 @@ export function SignInForm() {
               destination: ROUTES.TABS.BOUNTY_APP,
               metadata: { reason: 'profile_check_exception_fallback' },
             });
-            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
           }
         } else {
           // Supabase reported no error but returned no session. The only
@@ -983,7 +983,7 @@ export function SignInForm() {
                   destination: ROUTES.TABS.BOUNTY_APP,
                   metadata: { reason: 'local_onboarding_flag' },
                 });
-                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
                 try {
                   markInitialNavigationDone();
                 } catch {}
@@ -1019,7 +1019,7 @@ export function SignInForm() {
                 destination: ROUTES.TABS.BOUNTY_APP,
                 metadata: { reason: 'profile_complete' },
               });
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
               try {
                 markInitialNavigationDone();
               } catch {}
@@ -1037,7 +1037,7 @@ export function SignInForm() {
               destination: ROUTES.TABS.BOUNTY_APP,
               metadata: { reason: 'profile_check_exception_fallback' },
             });
-            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
             try {
               markInitialNavigationDone();
             } catch {}
@@ -1359,7 +1359,7 @@ export function SignInForm() {
                                 });
                                 router.replace({
                                   pathname: ROUTES.TABS.BOUNTY_APP,
-                                  params: { screen: 'bounty' },
+                                  params: { tab: 'bounty' },
                                 });
                                 try {
                                   markInitialNavigationDone();
@@ -1396,7 +1396,7 @@ export function SignInForm() {
                               });
                               router.replace({
                                 pathname: ROUTES.TABS.BOUNTY_APP,
-                                params: { screen: 'bounty' },
+                                params: { tab: 'bounty' },
                               });
                               try {
                                 markInitialNavigationDone();
@@ -1417,7 +1417,7 @@ export function SignInForm() {
                             });
                             router.replace({
                               pathname: ROUTES.TABS.BOUNTY_APP,
-                              params: { screen: 'bounty' },
+                              params: { tab: 'bounty' },
                             });
                             try {
                               markInitialNavigationDone();

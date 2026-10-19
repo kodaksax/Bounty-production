@@ -1,10 +1,12 @@
 import type { Notification, NotificationCategory, NotificationType } from '../types';
 import { categoryForNotificationType } from '../config/notification-taxonomy';
 import { isBundled } from '../config/notification-taxonomy';
-import { ROUTES } from '../routes';
+import { bountyAppTabPath } from '../navigation/bounty-app-tab';
 
-/** Inbox → Requests tab, where a poster accepts or declines applications. */
-export const POSTER_REQUESTS_PATH = `${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=requests`;
+/** Inbox → My Bounties, where a poster accepts or declines applications. */
+export const POSTER_REQUESTS_PATH = bountyAppTabPath('messages', 'requests');
+
+const WALLET_PATH = bountyAppTabPath('wallet');
 
 /**
  * Single source of truth for "where does tapping this notification go" and
@@ -104,7 +106,7 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
     }
     case 'payments': {
       if (ctx.type === 'payout_method_changed' || ctx.type === 'bank_disconnected') {
-        return { kind: 'route', path: '/tabs/bounty-app?screen=wallet' };
+        return { kind: 'route', path: WALLET_PATH };
       }
       // The only thing a hunter can do about it is finish Connect onboarding.
       if (ctx.type === 'payout_setup_required') {
@@ -115,7 +117,7 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
         return { kind: 'route', path: `/postings/${bountyId}` };
       }
       if (bountyId) return { kind: 'route', path: `/bounty/${bountyId}?source=notification` };
-      return { kind: 'route', path: '/tabs/bounty-app?screen=wallet' };
+      return { kind: 'route', path: WALLET_PATH };
     }
     case 'security': {
       if (bountyId) return { kind: 'route', path: `/bounty/${bountyId}/dispute` };

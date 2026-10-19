@@ -5,6 +5,8 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import 'react-native-get-random-values'; // must run before using tweetnacl
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useAppBootstrap } from '../hooks/useAppBootstrap';
+import { bountyAppTabPath, type BountyAppTab } from '../lib/navigation/bounty-app-tab';
+import { holdDeepLinks, takeDeferredTabLink } from '../lib/navigation/deferred-deep-link';
 import { ROUTES } from '../lib/routes';
 import { getRestorableLastScreen } from '../lib/storage/last-screen';
 import { hasDeviceSignedInBefore } from '../lib/storage/onboarding';
@@ -72,11 +74,26 @@ export default function Index() {
   // still be a first-timer who should see onboarding instead of the log-in
   // form, so we hold on the loading spinner rather than flashing sign-in.
   const [confirmedReturningUser, setConfirmedReturningUser] = useState(false);
-  // The tab to reopen for this user on a cold start (null = the feed), read
-  // once per user. Caching it keeps the destination stable: this effect
-  // re-runs on later state changes (stale/recovery flags), and re-reading the
-  // last tab then would yank the user off whatever tab they are on now.
-  const resumeScreenRef = useRef<{ userId: string; screen: string | null } | null>(null);
+  // Where this user lands in the app on a cold start, decided once per user:
+  // a notification's tab (see below), else the tab they last left, else the
+  // feed. Caching it keeps the destination stable: this effect re-runs on
+  // later state changes (stale/recovery flags), and deciding again then would
+  // yank the user off whatever tab they are on now.
+  const landingRef = useRef<{ userId: string; dest: string } | null>(null);
+  // A notification opened during launch must not be replaced by this gate's
+  // own navigation: deep links wait until the gate has navigated, and a
+  // link into the tab shell becomes the gate's destination
+  // (lib/navigation/deferred-deep-link.ts). Released after the first
+  // navigation, or on unmount.
+  const releaseDeepLinksRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const release = holdDeepLinks();
+    releaseDeepLinksRef.current = release;
+    return () => {
+      releaseDeepLinksRef.current = null;
+      release();
+    };
+  }, []);
 
   // Debug logging on mount (development only)
   useEffect(() => {
@@ -119,6 +136,7 @@ export default function Index() {
       try {
         markInitialNavigationDone();
       } catch {}
+      releaseDeepLinksRef.current?.();
       return true;
     };
 
@@ -279,28 +297,37 @@ export default function Index() {
       return;
     }
 
-    // Reopen the tab the user was on when the app was last closed (within
-    // LAST_SCREEN_TTL_MS), otherwise the feed. The read is bounded, so this
-    // only adds a few ms on the loading screen.
+    // A notification that opened the app into a tab (e.g. a new application
+    // -> Inbox > My Bounties) wins. Otherwise reopen the tab the user was on
+    // when the app was last closed (within LAST_SCREEN_TTL_MS), otherwise the
+    // feed. The read is bounded, so this only adds a few ms on the loading
+    // screen.
     const feedOrResume = (screen: string | null) =>
-      screen
-        ? `${ROUTES.TABS.BOUNTY_APP}?screen=${encodeURIComponent(screen)}`
-        : ROUTES.TABS.BOUNTY_APP;
+      screen ? bountyAppTabPath(screen as BountyAppTab) : ROUTES.TABS.BOUNTY_APP;
     const userId = session?.user?.id;
     if (!userId) {
       routeTo(ROUTES.TABS.BOUNTY_APP);
       return;
     }
-    if (resumeScreenRef.current?.userId === userId) {
-      routeTo(feedOrResume(resumeScreenRef.current.screen));
+    if (landingRef.current?.userId === userId) {
+      routeTo(landingRef.current.dest);
+      return;
+    }
+    const land = (dest: string) => {
+      landingRef.current = { userId, dest };
+      routeTo(dest);
+    };
+    const notificationTab = takeDeferredTabLink();
+    if (notificationTab) {
+      land(notificationTab);
       return;
     }
 
     let cancelled = false;
     void getRestorableLastScreen(userId).then(screen => {
       if (cancelled) return;
-      resumeScreenRef.current = { userId, screen };
-      routeTo(feedOrResume(screen));
+      // The notification may have been read while the last tab was.
+      land(takeDeferredTabLink() ?? feedOrResume(screen));
     });
     return () => {
       cancelled = true;

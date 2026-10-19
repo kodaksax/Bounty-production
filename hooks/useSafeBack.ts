@@ -3,9 +3,9 @@ import { useRouter } from 'expo-router';
 import { useCallback, useRef } from 'react';
 
 /** The bounty feed tab — the neutral place to land when there is nowhere to go back to. */
-export const FEED_FALLBACK: Href = { pathname: '/tabs/bounty-app', params: { screen: 'bounty' } };
+export const FEED_FALLBACK: Href = { pathname: '/tabs/bounty-app', params: { tab: 'bounty' } };
 /** The profile tab — where verification and account screens are entered from. */
-export const PROFILE_FALLBACK: Href = { pathname: '/tabs/bounty-app', params: { screen: 'profile' } };
+export const PROFILE_FALLBACK: Href = { pathname: '/tabs/bounty-app', params: { tab: 'profile' } };
 
 /**
  * Back navigation that always goes somewhere.
