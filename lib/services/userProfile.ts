@@ -47,89 +47,52 @@ export function validateUsername(username: string): { valid: boolean; error?: st
 }
 
 /**
- * Check if a username is available (unique) for the given user.
- *
- * Asks the server first: `is_username_available` (a SECURITY DEFINER RPC,
- * callable signed out) compares case-insensitively against every profile and
- * ignores the caller's own row. A plain `profiles` SELECT can't answer this:
- * profiles are readable own-row only, so signed out (sign-up) or signed in
- * (onboarding) the query never saw anyone else's name and reported every
- * username as available until /auth/register answered 409 "taken".
- *
- * If the RPC isn't there (a backend without its migration) the old direct
- * query and then a best-effort local AsyncStorage check still run, so nothing
- * gets worse than before. The DB UNIQUE constraint is the final gate on
- * writes, so a false "available" can never let two accounts share a username
- * — at worst the user is asked to pick again at save time.
+ * What the server said about a username.
+ * - 'available' / 'taken': an answer from is_username_available.
+ * - 'unknown': no answer (network, rate limit, backend without the RPC, or
+ *   input the server calls malformed). Never shown as "available".
  */
-export async function isUsernameUnique(username: string, currentUserId?: string): Promise<boolean> {
-  const trimmed = (username || '').trim();
-  if (!trimmed) return false;
+export type UsernameAvailability = 'available' | 'taken' | 'unknown';
 
-  // Authoritative: the server-side check, which can see every profile.
+/**
+ * Ask the server whether a username is free for the caller.
+ *
+ * `is_username_available` is a SECURITY DEFINER RPC, callable signed out,
+ * that compares case-insensitively against every profile, ignores the
+ * caller's own row and is rate-limited per caller (SBA-08). A plain
+ * `profiles` SELECT can't answer this: profiles are readable own-row only, so
+ * it never saw anyone else's name and said "available" for every username
+ * until /auth/register answered 409. That is why there is no client-side
+ * fallback: anything other than a boolean from the RPC is 'unknown'.
+ */
+export async function checkUsernameAvailability(username: string): Promise<UsernameAvailability> {
+  const trimmed = (username || '').trim();
+  if (!trimmed) return 'unknown';
   try {
     const { data, error } = await supabase.rpc('is_username_available', { p_username: trimmed });
-    // null = the server considers this malformed; let the format check below
-    // and the register endpoint deal with it rather than guess.
-    if (!error && typeof data === 'boolean') return data;
+    if (!error && typeof data === 'boolean') return data ? 'available' : 'taken';
     if (error) {
-      console.warn('[userProfile] is_username_available unavailable, falling back:', {
+      console.warn('[userProfile] is_username_available failed:', {
         code: (error as { code?: string }).code,
         message: error.message,
       });
     }
   } catch (err) {
-    console.warn('[userProfile] is_username_available threw, falling back:', err);
+    console.warn('[userProfile] is_username_available threw:', err);
   }
+  return 'unknown';
+}
 
-  // Fallback: direct profiles query (case-insensitive). Only reliable for rows
-  // the caller can read, i.e. their own — kept for backends without the RPC.
-  try {
-    // Escape ilike metacharacters (%, _) so usernames containing underscores
-    // (a valid char) do not match wildcards. Backslash must be escaped first.
-    const escaped = trimmed.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id')
-      .ilike('username', escaped)
-      .limit(1)
-      .maybeSingle();
-
-    if (!error) {
-      // No row → username is free. Row belonging to currentUserId → still free for them.
-      if (!data) return true;
-      if (currentUserId && data.id === currentUserId) return true;
-      return false;
-    }
-
-    // Any error from the authoritative query (network, RLS, etc.) → log and
-    // fall through to the local AsyncStorage fallback below. The DB UNIQUE
-    // constraint is the ultimate gate on writes, so a false "available" here
-    // can never cause two accounts to share a username.
-    console.warn('[userProfile] Supabase username uniqueness check failed, falling back to local index:', {
-      code: (error as { code?: string }).code,
-      message: error.message,
-    });
-  } catch (err) {
-    console.warn('[userProfile] Supabase username uniqueness check threw, falling back to local index:', err);
-  }
-
-  // Local fallback (case-insensitive) for offline/test environments
-  try {
-    const profilesJson = await AsyncStorage.getItem(PROFILES_KEY);
-    const profiles: { [key: string]: ProfileData } = profilesJson ? JSON.parse(profilesJson) : {};
-
-    const lowered = trimmed.toLowerCase();
-    for (const [userId, profile] of Object.entries(profiles)) {
-      if (profile.username && profile.username.toLowerCase() === lowered && userId !== currentUserId) {
-        return false;
-      }
-    }
-    return true;
-  } catch (error) {
-    console.error('[userProfile] Error checking username uniqueness:', error);
-    return true; // Optimistic - allow if check fails; DB UNIQUE will still guard writes
-  }
+/**
+ * Boolean form for save paths: false only when the server says the name is
+ * taken. With no answer it returns true and lets the DB UNIQUE constraint
+ * decide at write time, so a failed check never blocks a save on its own.
+ * `currentUserId` is kept for callers; the RPC already ignores the caller's
+ * own row.
+ */
+export async function isUsernameUnique(username: string, _currentUserId?: string): Promise<boolean> {
+  if (!(username || '').trim()) return false;
+  return (await checkUsernameAvailability(username)) !== 'taken';
 }
 
 /**

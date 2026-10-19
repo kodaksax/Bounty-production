@@ -37,7 +37,7 @@ jest.mock('lib/storage/onboarding', () => ({
   hasLocalOnboardingFlag: jest.fn().mockResolvedValue(false),
 }));
 jest.mock('lib/services/userProfile', () => ({
-  isUsernameUnique: jest.fn().mockResolvedValue(true),
+  checkUsernameAvailability: jest.fn().mockResolvedValue('available'),
   validateUsername: jest.fn(() => ({ valid: true })),
 }));
 // sign-up-form.tsx now shares its OAuth entry points (useSocialAuth) with
