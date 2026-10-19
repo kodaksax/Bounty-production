@@ -60,6 +60,18 @@ import { formatPublicLocation } from '../../../lib/utils/public-location';
 import { getTrustTierLabel } from '../../../lib/utils/trust-tier';
 import { shareBounty } from '../../../lib/utils/share-utils';
 import { bountyAppTabPath } from '../../../lib/navigation/bounty-app-tab';
+import {
+  BountyRefundFailedError,
+  canPosterCancelBounty,
+  cancelAndRefundBounty,
+  describeCancelRefund,
+  describeCancelRefundDone,
+  planCancelRefund,
+  type CancelRefundPlan,
+} from '../../../lib/services/bounty-cancel-refund';
+import { markBountyRemovedLocally } from '../../../lib/utils/bounty-visibility';
+import { getUserFriendlyError } from '../../../lib/utils/error-messages';
+import { useWallet } from '../../../lib/wallet-context';
 
 /** Inbox → My Bounties, where applications are reviewed. */
 const REQUESTS_ROUTE = bountyAppTabPath('messages', 'requests');
@@ -106,6 +118,9 @@ export default function BountyDashboard() {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [busyAction, setBusyAction] = useState<BountyActionKey | null>(null);
+  const { refundEscrow } = useWallet();
+  // Blocks a second tap from re-entering the refund while one is in flight.
+  const cancellingRef = React.useRef(false);
   // "Add details"/"Improve bounty" notifications deep-link here with
   // ?openEdit=true so the poster lands directly in the edit modal instead of
   // having to find the edit action themselves. Guarded to fire once per
@@ -213,6 +228,63 @@ export default function BountyDashboard() {
     [bounty, refresh]
   );
 
+  // "Cancel and refund" (SBA-10): the same refund-then-delete path as the
+  // Inbox row's trash icon (lib/services/bounty-cancel-refund.ts), confirmed
+  // here with the amount coming back and where it goes.
+  const runCancel = useCallback(
+    async (target: Bounty, plan: CancelRefundPlan) => {
+      if (cancellingRef.current) return;
+      cancellingRef.current = true;
+      setBusyAction('delete');
+      try {
+        await cancelAndRefundBounty(target, { refundEscrow }, plan);
+        markBountyRemovedLocally(target.id);
+        Alert.alert('Bounty cancelled', describeCancelRefundDone(plan), [
+          { text: 'OK', onPress: goBack },
+        ]);
+      } catch (err) {
+        if (err instanceof BountyRefundFailedError) {
+          Alert.alert(
+            'Refund failed',
+            "We couldn't refund the money held for this bounty, so it is still live and nothing was lost. Try again, or contact support."
+          );
+        } else if (plan.destination) {
+          Alert.alert(
+            "Couldn't take the bounty down",
+            'Your refund went through, but the bounty is still listed. Pull to refresh and try again.'
+          );
+          void refresh();
+        } else {
+          const friendly = getUserFriendlyError(err);
+          Alert.alert(friendly.title, friendly.message);
+        }
+      } finally {
+        cancellingRef.current = false;
+        setBusyAction(null);
+      }
+    },
+    [refundEscrow, goBack, refresh]
+  );
+
+  const handleCancelAndRefund = useCallback(async () => {
+    if (!bounty || !canPosterCancelBounty(bounty) || cancellingRef.current) return;
+    setBusyAction('delete');
+    let plan: CancelRefundPlan;
+    try {
+      plan = await planCancelRefund(bounty);
+    } catch {
+      setBusyAction(null);
+      Alert.alert("Can't cancel right now", "We couldn't check what's held for this bounty. Check your connection and try again.");
+      return;
+    }
+    setBusyAction(null);
+    const copy = describeCancelRefund(bounty, plan);
+    Alert.alert(copy.title, copy.message, [
+      { text: 'Keep it', style: 'cancel' },
+      { text: copy.confirmLabel, style: 'destructive', onPress: () => void runCancel(bounty, plan) },
+    ]);
+  }, [bounty, runCancel]);
+
   const handlers = useMemo((): Partial<Record<BountyActionKey, () => void>> => {
     if (!bounty || !routeBountyId) return {};
     const map: Partial<Record<BountyActionKey, () => void>> = {
@@ -265,8 +337,12 @@ export default function BountyDashboard() {
     if (bounty.status === 'open' && !bounty.accepted_by && applicationCount === 0) {
       map.edit = () => setShowEditModal(true);
     }
+    // Open and nobody hired: the poster's own exit, refunding anything held.
+    if (canPosterCancelBounty(bounty)) {
+      map.delete = () => void handleCancelAndRefund();
+    }
     return map;
-  }, [bounty, routeBountyId, applicationCount, handleMessage, router]);
+  }, [bounty, routeBountyId, applicationCount, handleMessage, handleCancelAndRefund, router]);
 
   // ── Redirect rather than dead-end a non-poster ────────────────────────────
   React.useEffect(() => {

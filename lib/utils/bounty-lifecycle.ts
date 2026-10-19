@@ -327,6 +327,17 @@ function action(key: BountyActionKey, label?: string): BountyLifecycleAction {
   return label ? { ...base, label } : base;
 }
 
+/**
+ * The poster's exit from an open bounty nobody has been hired for (SBA-10):
+ * delete it, refunding anything held. Wired to bounty-cancel-refund.ts, the
+ * same path as the Inbox row's trash icon. "Refund" is only in the label when
+ * the bounty carries a reward; the confirmation says how much, if any, and
+ * where it goes.
+ */
+function cancelOpenBounty(bounty: BountyLifecycleInput['bounty']): BountyLifecycleAction {
+  return action('delete', bounty.is_for_honor ? 'Cancel bounty' : 'Cancel and refund');
+}
+
 function partyName(name: string | null | undefined, fallback: string): string {
   const trimmed = (name ?? '').trim();
   return trimmed.length > 0 ? trimmed : fallback;
@@ -571,7 +582,7 @@ function resolvePoster(args: {
           tone: 'action',
           stageIndex: 0,
           primaryAction: action('review_applications'),
-          secondaryActions: [action('edit'), action('share'), action('delete')],
+          secondaryActions: [action('edit'), cancelOpenBounty(bounty), action('share')],
         });
       }
       return finalize({
@@ -584,7 +595,7 @@ function resolvePoster(args: {
         tone: 'progress',
         stageIndex: 0,
         primaryAction: action('share', 'Share to reach more hunters'),
-        secondaryActions: [action('edit'), action('delete')],
+        secondaryActions: [action('edit'), cancelOpenBounty(bounty)],
       });
 
     case 'in_progress':
@@ -642,7 +653,7 @@ function resolvePoster(args: {
           : action('repost'),
         secondaryActions: bounty.accepted_by
           ? [action('open_dispute', REPORT_PROBLEM)]
-          : [action('edit'), action('delete')],
+          : [action('edit'), cancelOpenBounty(bounty)],
       });
 
     case 'completed':
