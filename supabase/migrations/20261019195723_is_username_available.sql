@@ -1,3 +1,6 @@
+-- Applied 2026-10-19: production as 20261019195723 (this file's version),
+-- staging as 20261019194109 (apply-time versions differ per project).
+--
 -- Live username availability for sign-up and onboarding.
 --
 -- The client checked availability with a plain `profiles` SELECT, but every
