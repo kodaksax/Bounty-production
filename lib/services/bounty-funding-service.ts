@@ -164,6 +164,49 @@ export async function canDeferBountyFunding(amount: number): Promise<boolean> {
 }
 
 /**
+ * Server half of SBA-05's "save a card when posting" rule, from
+ * fn_get_posting_card_requirement
+ * (supabase/migrations/20261020120000_first_time_poster_card_at_post.sql).
+ *
+ * `cardRequired` is true only when the switch is on, the caller is a
+ * first-time poster (fn_is_first_time_poster: never had a bounty accepted or
+ * completed), and this amount will be charged at hire. The composer still
+ * applies the exemptions the server can't see: a card already saved, a
+ * balance that covers it, Apple Pay ready, web.
+ */
+export interface PostingCardRequirement {
+  cardRequired: boolean;
+  firstTimePoster: boolean;
+  chargedAtHire: boolean;
+}
+
+/**
+ * Returns null whenever the server didn't answer: function not deployed,
+ * signed out, network. Callers treat null as "not required", so a failed
+ * read never stops someone posting. The rule is a nudge toward a one-tap
+ * hire, not a guard on money.
+ */
+export async function getPostingCardRequirement(amount: number): Promise<PostingCardRequirement | null> {
+  if (!isSupabaseConfigured) return null;
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  try {
+    const { data, error } = await supabase.rpc('fn_get_posting_card_requirement', {
+      p_amount: amount,
+    });
+    if (error || !data || typeof data !== 'object') return null;
+    const row = data as Record<string, unknown>;
+    return {
+      cardRequired: row.card_required === true,
+      firstTimePoster: row.first_time_poster === true,
+      chargedAtHire: row.charged_at_hire === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Hunter-facing funding state, from get_bounty_funding_status
  * (supabase/migrations/20261002180000_bounty_funding_status_read_model.sql):
  *   held               money is held for this bounty right now
