@@ -35,6 +35,7 @@ import {
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { authProfileService } from '../../lib/services/auth-profile-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { nextStepAfterRole } from '../../lib/onboarding/next-step-after-role';
@@ -85,6 +86,12 @@ export default function RoleSelectScreen() {
     setSelected(intent);
     analyticsService.trackEvent('role_selected', { role: intent, surface: 'onboarding' });
     updateData({ intent });
+    // Save the answer now (SBA-13). primary_role used to be written only at
+    // onboarding completion, so everyone who stopped between here and the
+    // founder note stayed NULL. Completion still writes it again
+    // (hooks/useCompleteOnboarding.ts). Not awaited: a slow write must not
+    // hold the tap, and a failed one is covered by that second write.
+    authProfileService.updateProfile({ primary_role: intent }).catch(() => {});
     // Hunters go to payout setup next; posters skip it, because nothing a
     // poster does needs a Stripe payout account until they withdraw — see
     // lib/onboarding/next-step-after-role.ts.

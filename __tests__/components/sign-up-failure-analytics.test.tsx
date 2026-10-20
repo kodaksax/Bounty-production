@@ -147,6 +147,40 @@ describe('sign-up failure analytics', () => {
   });
 });
 
+// SBA-13: `signup_completed` is sent by the server once per new profile, for
+// every sign-in method (20261020140000_server_signup_completed_event.sql). The
+// email form sending it as well would count email signups twice.
+describe('sign-up success analytics', () => {
+  beforeEach(() => {
+    trackEvent.mockClear();
+    mockReplace.mockClear();
+  });
+
+  it('does not send a client signup_completed after a successful registration', async () => {
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+      json: async () => ({ success: true }),
+    });
+    // No session and no error = confirmation required: the branch right after
+    // the point where the client event used to fire.
+    const { supabase } = jest.requireMock('lib/supabase');
+    supabase.auth.signInWithPassword.mockResolvedValueOnce({ data: { session: null }, error: null });
+
+    const utils = render(<SignUpForm />);
+    fillValidForm(utils);
+    fireEvent.press(utils.getByLabelText('Create account'));
+
+    await waitFor(() =>
+      expect(trackEvent).toHaveBeenCalledWith('auth_signup_requires_confirmation', {
+        method: 'email',
+      })
+    );
+    expect(trackEvent.mock.calls.map(([event]) => event)).not.toContain('signup_completed');
+  });
+});
+
 // Shoal 19 Oct: the live hint said "@x is available" under a red "already
 // taken" banner. The server's 409 is the final word, so the hint follows it.
 describe('sign-up username taken at submit', () => {

@@ -33,6 +33,11 @@ jest.mock('../../../lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: (...args: unknown[]) => mockTrackEvent(...args) },
 }));
 
+const mockUpdateProfile = jest.fn();
+jest.mock('../../../lib/services/auth-profile-service', () => ({
+  authProfileService: { updateProfile: (...args: unknown[]) => mockUpdateProfile(...args) },
+}));
+
 jest.mock('../../../lib/haptic-feedback', () => ({
   hapticFeedback: { light: jest.fn(), success: jest.fn(), error: jest.fn(), medium: jest.fn() },
 }));
@@ -49,6 +54,7 @@ const HUNTER = /^I'd rather earn/;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockUpdateProfile.mockResolvedValue({ id: 'user-1' });
   mockIntent = null;
   mockFocusEffect = null;
 });
@@ -94,5 +100,34 @@ describe('onboarding role step', () => {
     expect(queryByLabelText('Continue')).toBeNull();
     expect(mockUpdateData).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+    expect(mockUpdateProfile).not.toHaveBeenCalled();
+  });
+
+  // SBA-13: primary_role used to be written only at onboarding completion,
+  // so anyone who stopped after this step stayed NULL.
+  it('saves primary_role as soon as the role is chosen', () => {
+    const { getByLabelText } = render(<RoleSelectScreen />);
+    fireEvent.press(getByLabelText(HUNTER));
+    expect(mockUpdateProfile).toHaveBeenCalledWith({ primary_role: 'hunter' });
+  });
+
+  it('saves the changed answer when the user comes back and switches', () => {
+    const { getByLabelText } = render(<RoleSelectScreen />);
+    fireEvent.press(getByLabelText(POSTER));
+    mockFocusEffect?.();
+    fireEvent.press(getByLabelText(HUNTER));
+    expect(mockUpdateProfile.mock.calls).toEqual([
+      [{ primary_role: 'poster' }],
+      [{ primary_role: 'hunter' }],
+    ]);
+  });
+
+  it('still advances when the profile write fails', async () => {
+    mockUpdateProfile.mockRejectedValueOnce(new Error('offline'));
+    const { getByLabelText } = render(<RoleSelectScreen />);
+    fireEvent.press(getByLabelText(POSTER));
+    expect(mockPush).toHaveBeenCalledWith('/onboarding/poster-profile');
+    // Let the rejection settle: it must be handled, not thrown.
+    await Promise.resolve();
   });
 });

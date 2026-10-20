@@ -6,7 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
-import { syncInternalFlag } from '../posthog';
+import { syncAccountStatus, syncInternalFlag } from '../posthog';
 import { isSupabaseConfigured, supabase, supabaseEnv } from '../supabase';
 import { logger } from '../utils/error-logger';
 
@@ -1011,6 +1011,11 @@ export class AuthProfileService {
     // undefined and are skipped rather than reported as external.
     if (profile?.id && typeof profile.is_internal === 'boolean') {
       syncInternalFlag(profile.id, profile.is_internal);
+    }
+    // Same path for account_status, so bounty and application events say
+    // whether the account was suspended or banned when they happened (DQ-10).
+    if (profile?.id && profile.account_status) {
+      syncAccountStatus(profile.id, profile.account_status);
     }
 
     // If a notification cycle is already in progress, schedule the latest
