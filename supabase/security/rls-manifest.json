@@ -649,6 +649,32 @@
         "anon",
         "authenticated"
       ]
+    },
+    {
+      "signature": "fn_is_first_time_poster(uuid)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_can_defer_bounty_funding(uuid,numeric)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_get_posting_card_requirement(numeric)",
+      "forbid_execute": [
+        "anon",
+        "PUBLIC"
+      ],
+      "require_execute": [
+        "authenticated"
+      ]
     }
   ],
   "baseline": {

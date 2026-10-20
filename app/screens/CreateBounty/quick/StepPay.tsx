@@ -3,6 +3,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { type Href, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { usePostingCardGate } from '../../../../hooks/usePostingCardGate';
 import { usePostingPolicy } from '../../../../hooks/usePostingPolicy';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
@@ -14,6 +15,7 @@ import { useWallet } from '../../../../lib/wallet-context';
 import { QuickStepLayout } from './QuickStepLayout';
 import { trustSafetyStrings } from '../../../../lib/strings/trust-safety';
 import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
+import { PaymentMethodsModal } from '../../../../components/payment-methods-modal';
 
 interface StepPayProps {
   draft: BountyDraft;
@@ -74,6 +76,14 @@ export function StepPay({
   const { balance } = useWallet();
   const { honorPostsEnabled, minimumAmount } = usePostingPolicy();
   const [error, setError] = useState<string | null>(null);
+  // SBA-05: a first-time poster saves a card before posting (no charge), so
+  // hiring is one tap. Decides who is asked and runs the card sheet; posting
+  // itself is unchanged. See hooks/usePostingCardGate.ts.
+  const cardGate = usePostingCardGate({
+    amount: draft.amount,
+    isForHonor: draft.isForHonor,
+    surface: 'create_flow',
+  });
 
   // Mirror of the amount/honor the poster has committed on this screen, updated
   // synchronously by every change handler. The CTA press reads this instead of
@@ -188,7 +198,10 @@ export function StepPay({
       });
     }
 
-    onNext({ amount, isForHonor });
+    // Publishes at once unless this is a first-time poster with no card, no
+    // balance to cover it and no Apple Pay; then the card sheet opens first and
+    // publishing continues as soon as a card is saved.
+    cardGate.requestPublish({ amount, isForHonor }, onNext);
   };
 
   // Hidden for now: the "Posting is free — you'll be charged … when you
@@ -240,12 +253,14 @@ export function StepPay({
       totalSteps={totalSteps}
       onBack={onBack}
       title="How much will you pay?"
-      ctaLabel={isSubmitting ? 'Posting…' : ctaLabel}
+      ctaLabel={
+        isSubmitting ? 'Posting…' : cardGate.cardStepExpected ? 'Add card & post' : ctaLabel
+      }
       // The CTA stays pressable below $1 on purpose: disabling it swallows a tap
       // that lands in the same frame as the first digit. handleContinue shows
       // the amount validation error instead. `ctaBusy` still blocks a second
-      // tap while a publish is in flight.
-      ctaBusy={isSubmitting}
+      // tap while a publish, or the card check before it, is in flight.
+      ctaBusy={isSubmitting || cardGate.checking}
       onCta={handleContinue}
     >
       {/* Amount display / custom entry */}
@@ -329,6 +344,11 @@ export function StepPay({
                   draft.amount
                 ).net.toFixed(2)} — and they see that number before they apply.`}
           </Text>
+          {!draft.isForHonor && cardGate.cardStepExpected ? (
+            <Text style={styles.infoBody}>
+              Save a card to post. Nothing is charged now. It&apos;s ready when you hire, so hiring takes one tap.
+            </Text>
+          ) : null}
           {draft.isForHonor ? null : (
             <TouchableOpacity
               onPress={() => router.push('/legal/how-it-works' as Href)}
@@ -402,6 +422,20 @@ export function StepPay({
         </Text>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {!error && cardGate.dismissed ? (
+        <Text style={styles.error}>
+          Save a card to post this bounty. You won&apos;t be charged until you hire someone.
+        </Text>
+      ) : null}
+
+      {cardGate.showCardSheet ? (
+        <PaymentMethodsModal
+          isOpen
+          onClose={cardGate.onCardSheetClose}
+          onBackdropPress={cardGate.onCardSheetClose}
+          preferredType="card"
+        />
+      ) : null}
     </QuickStepLayout>
   );
 }

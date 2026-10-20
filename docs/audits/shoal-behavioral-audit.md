@@ -304,6 +304,11 @@ WHERE b.status = 'open'
 
   The undeployed `posting-service-fee` work (2026-09-21, fee + reward up front) is a variant of (a).
 - **Done when:** whichever option ships, `bounty_requests` shows the first `rejection_source = 'poster'` or `status = 'accepted'` rows on genuine bounties posted after the change.
+- **Status (2026-10-19): option B built; staging only.** Decision: keep charging at hire, and a first-time app poster saves a card when posting (no charge).
+  - **Server** (`20261020120000_first_time_poster_card_at_post.sql`): `fn_is_first_time_poster` is the one definition (no bounty that ever reached accepted or completed, read from the bounty columns, accepted requests and the `bounty_events` ledger). `payment_experiment_config.card_at_post_scope` is the switch, `'off'` on deploy. `fn_get_posting_card_requirement` answers for `auth.uid()` only. `fn_can_defer_bounty_funding`'s dormant `first_bounty` branch now uses the shared definition, and its client EXECUTE is revoked. No funding, acceptance or refund code changed.
+  - **Client** (`hooks/usePostingCardGate.ts`, `StepPay.tsx`): asks for a card only when the server says so and none of these apply: a saved card, a balance that covers the reward, Apple Pay ready on iOS, web. Product decisions 2026-10-19: no server refusal (installed builds can't save a card from the composer), the balance exemption, and the Apple Pay exemption.
+  - **Verified on staging:** `scripts/verify-card-at-post.js` 42/42 in a rolled-back transaction, plus 41/41 against the applied migration. `scripts/e2e-card-at-post-staging.mjs` 24/24 with pool accounts and Stripe test mode: save a card, post, decline one applicant, hire with the card saved at post, then cancel and refund after the hire, and cancel an unhired post.
+  - **Baseline** (`scripts/ops/card-at-post-done-when.sql`, prod, weeks of 09-07 to 10-12): 19 genuine paid at_accept bounties, all from first-time posters, 1 with a card on file, 18 with applications, **0 with a poster decision**.
 
 ### SBA-06 · P1 · A first-time poster spends their patience before reaching the composer
 
@@ -463,7 +468,7 @@ Ordering rule: **server-side changes first**, because they reach every installed
 | 8 | Template tap requires one line of detail; new accounts ≤ 2 open bounties in 24 h | SBA-03 | Client (+ policy trigger) | Product OK | Description coverage on new genuine posts ≈ 100% |
 | 9 | "What happens next" for both sides; Inbox defaults to My Bounties for posters; visible Cancel and refund; surface update errors; hide unbacked review-window copy | SBA-10 | Client | None | `applicant_list_viewed` within 24 h rises |
 | 10 | `is_username_available` RPC; autocomplete `is_test` filter; rename the `screen` param | SBA-08/11/12 | Migration + client | None (device-check SBA-12 first) | Repro script lands on My Bounties; jest pins |
-| 11 | Funding mode for first-time posters: option (a), (b) or (c) | SBA-05 | Product decision | **Yours** | First `poster` decision rows on genuine bounties posted after the change |
+| 11 | Funding mode for first-time posters: **(b) decided 10-19**, saved card at post, charge at hire | SBA-05 | Migration (switch off) + client (2.1.3) | Turn on `card_at_post_scope` | First `poster` decision rows on genuine bounties posted after the change (`scripts/ops/card-at-post-done-when.sql`) |
 | 12 | Onboarding: password hint, founder-note CTA without wait, single location ask; device-check the first-Post interception | SBA-06 | Client | None | Shoal `poster-conversion` publishes on staging |
 | 13 | Daily closure digest for hunters | SBA-09 | Server | Staging verify | ≤ 1 closure notice per hunter per day |
 | 14 | Analytics fixes (a)–(f) | SBA-13 | Client + PostHog config | None | `signup_completed` per new profile ≈ 1 (vs ~19% today [Cowork]) |

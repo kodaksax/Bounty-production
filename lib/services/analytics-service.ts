@@ -395,6 +395,12 @@ export type AnalyticsEvent =
   // balance and the UI refuses to apply it — a dead end with no in-flow way
   // to add funds. Sizes how often the amount step is unusable.
   | 'post_amount_blocked_by_balance'
+  // SBA-05: a first-time poster was asked to save a card before "Post Bounty"
+  // (hooks/usePostingCardGate.ts). One event; `outcome` is 'prompted' (the
+  // card sheet opened), 'saved' (a card appeared and publishing continued) or
+  // 'dismissed' (the sheet closed with no card, nothing published). New
+  // concept: no existing event means "asked for a card at post".
+  | 'posting_card_required'
   // Bounty events
   | 'bounty_created'
   | 'bounty_queued'

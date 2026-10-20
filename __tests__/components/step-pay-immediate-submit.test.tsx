@@ -47,6 +47,21 @@ jest.mock('../../hooks/usePostingPolicy', () => {
   return { __esModule: true, default: () => policy, usePostingPolicy: () => policy };
 });
 
+// SBA-05's card-at-post gate has its own suites (use-posting-card-gate,
+// step-pay-card-at-post). Here it is a pass-through so this suite keeps
+// testing what it was written for: the CTA publishes straight away.
+jest.mock('../../hooks/usePostingCardGate', () => ({
+  usePostingCardGate: () => ({
+    cardStepExpected: false,
+    checking: false,
+    showCardSheet: false,
+    dismissed: false,
+    onCardSheetClose: () => {},
+    requestPublish: (payment: unknown, proceed: (p: unknown) => void) => proceed(payment),
+  }),
+}));
+jest.mock('../../components/payment-methods-modal', () => ({ PaymentMethodsModal: () => null }));
+
 import { StepPay } from '../../app/screens/CreateBounty/quick/StepPay';
 
 function makeDraft(overrides: Partial<{ amount: number; isForHonor: boolean }> = {}) {
