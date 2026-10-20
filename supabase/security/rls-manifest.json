@@ -150,6 +150,11 @@
       "grants": { "anon": [], "authenticated": [] },
       "required_triggers": []
     },
+    "analytics_signup_events": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
     "bounty_geocode_attempts": {
       "policies": [],
       "grants": { "anon": [], "authenticated": [] },
@@ -541,6 +546,7 @@
     },
     { "signature": "fn_send_hunter_closure_digests(boolean,integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_hold_hunter_closure_notice()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "queue_signup_completed_event()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     {
       "signature": "request_dispute_escalation(integer)",
       "forbid_execute": [
