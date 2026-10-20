@@ -524,18 +524,11 @@ export function SignUpForm() {
       try {
         const session = await signInAfterRegister(normalizedEmail, password, correlationId);
 
-        // Track the signup funnel event as soon as registration + sign-in
-        // succeed. We track regardless of whether a session was returned
-        // (email-confirmation flow still counts as a signup conversion).
-        try {
-          await analyticsService.trackEvent('signup_completed', {
-            method: 'email',
-            has_session: !!session,
-            lifecycle_stage: 'signed_up',
-          });
-        } catch {
-          /* analytics is best-effort */
-        }
+        // No client `signup_completed` here. The server sends it once per new
+        // profile for every sign-in method (Apple and Google never reached
+        // this form, so the client event counted about one signup in five) —
+        // see 20261020140000_server_signup_completed_event.sql. Sending it
+        // here too would count email signups twice.
 
         // Clear the credential fields for security. `email` is deliberately
         // kept: if the session could not be established it is prefilled on the

@@ -89,8 +89,11 @@ export type AnalyticsEvent =
   | 'app_opened'
   // Auth events
   // `signup_completed` (renamed from `user_signed_up`) is the single signup
-  // conversion event. The `auth_signup_*` events below are diagnostic detail
-  // on how a registration attempt ended — keep them distinct.
+  // conversion event. Since SBA-13 the SERVER sends it, once per new profile
+  // for every sign-in method (process-analytics-person, `source:
+  // 'server_profile_insert'`); the app no longer does. Kept in this union for
+  // the taxonomy. The `auth_signup_*` events below are diagnostic detail on
+  // how a registration attempt ended — keep them distinct.
   | 'signup_completed'
   | 'user_logged_in'
   | 'user_logged_out'
@@ -101,12 +104,10 @@ export type AnalyticsEvent =
   // Deliberately NOT one event per auth stage — the per-stage traces stay
   // local (see lib/utils/auth-diagnostics.ts) to avoid drowning PostHog.
   //
-  // No `auth_signup_success`: it fired ~1:1 alongside `signup_completed` for
-  // the clean-registration branch (confirmed live in PostHog) and added no
-  // information `signup_completed`'s `has_session: true` doesn't already
-  // carry. Retired 2026-09-13; the branches below that `signup_completed`
-  // never fires for (session/confirmation failures) stay, since those are
-  // genuinely not covered elsewhere.
+  // No `auth_signup_success`: it fired ~1:1 alongside the old client
+  // `signup_completed` for the clean-registration branch (confirmed live in
+  // PostHog). Retired 2026-09-13. The session/confirmation outcomes below
+  // stay, since the server signup event cannot see them.
   | 'auth_signup_started'
   | 'auth_signup_failed'
   // Registration succeeded but the immediate sign-in that follows it did not,

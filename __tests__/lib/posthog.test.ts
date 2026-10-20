@@ -191,6 +191,28 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
     expect(mockCapture).toHaveBeenCalledTimes(2);
   });
 
+  // DQ-10: bounty / application events carry the status the account had when
+  // they happened. Event-level only: a person property would rewrite history
+  // once the account is banned.
+  test('syncAccountStatus stamps later events with account_status, once per value', () => {
+    posthogModule.syncAccountStatus('user-42', 'active');
+    posthogModule.syncAccountStatus('user-42', 'active');
+    expect(mockRegister).toHaveBeenCalledTimes(1);
+    expect(mockRegister).toHaveBeenCalledWith({ account_status: 'active' });
+
+    posthogModule.syncAccountStatus('user-42', 'suspended');
+    expect(mockRegister).toHaveBeenLastCalledWith({ account_status: 'suspended' });
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  test('syncAccountStatus registers again for the next user after logout', () => {
+    posthogModule.syncAccountStatus('user-42', 'active');
+    posthogModule.reset();
+    mockRegister.mockClear();
+    posthogModule.syncAccountStatus('user-42', 'active');
+    expect(mockRegister).toHaveBeenCalledWith({ account_status: 'active' });
+  });
+
   test('identify never aliases — the SDK merges anonymous to identified itself', () => {
     // Current id is still the anonymous id, the normal first sign-in case.
     posthogModule.identify('user-42', { email: 'test@example.com' });

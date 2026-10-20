@@ -313,6 +313,30 @@ export const syncInternalFlag = (userId: string, isInternal: boolean): void => {
   }
 };
 
+let _syncedAccountStatus: string | null = null;
+
+/**
+ * Stamp every later event with the account's `profiles.account_status`
+ * ('active' | 'suspended' | 'banned') as it is right now (DQ-10). A super
+ * property, not a person property, so a bounty or application event keeps the
+ * status the account had when it happened, even after a later ban. Called
+ * wherever syncInternalFlag is; deduped the same way.
+ */
+export const syncAccountStatus = (userId: string, accountStatus: string): void => {
+  try {
+    if (!_posthog) return;
+    const key = `${userId}:${accountStatus}`;
+    if (_syncedAccountStatus === key) return;
+    _syncedAccountStatus = key;
+    if (typeof _posthog.register === 'function') {
+      _posthog.register({ account_status: accountStatus });
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[posthog] syncAccountStatus failed', e);
+  }
+};
+
 /** Set immutable person properties without replacing values already stored by PostHog. */
 export const setPersonPropertiesOnce = (properties: Record<string, any>): void => {
   try {
@@ -352,6 +376,7 @@ export const screen = (name: string, properties?: Record<string, any>): void => 
 /** Reset the client identity (call on logout). */
 export const reset = (): void => {
   _syncedInternalFlag = null;
+  _syncedAccountStatus = null;
   try {
     if (!_posthog || typeof _posthog.reset !== 'function') return;
     resetKeepingDeviceProperties();
