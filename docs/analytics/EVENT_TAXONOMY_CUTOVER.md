@@ -99,8 +99,8 @@ the 2026-08-28 boundary.
 | _(new)_ | `work_started` | `hooks/useAcceptRequest.ts` (with `application_accepted`) |
 | _(new)_ | `completion_submitted` | `lib/services/completion-service.ts` `submitCompletion` |
 | `dispute_opened` | `dispute_started` | `lib/services/dispute-service.ts` `createDispute` **and** `createWorkflowDispute` (was silent) |
-| `onboarding_role_selected` | `role_selected` | `app/onboarding/welcome.tsx` |
-| `user_signed_up` | `signup_completed` | `app/auth/sign-up-form.tsx` |
+| `onboarding_role_selected` | `role_selected` | `app/onboarding/role-select.tsx` (was `welcome.tsx` until role selection moved after sign-up) |
+| `user_signed_up` | `signup_completed` | Server since SBA-13: `process-analytics-person`, one per new profile, every sign-in method (see below). Was `app/auth/sign-up-form.tsx`, email only. |
 | _(new)_ | `poster_activated` | `lib/analytics/lifecycle.ts` — first successful publish, once per device |
 | _(new)_ | `hunter_activated` | `lib/analytics/lifecycle.ts` — first submitted application, once per device |
 
@@ -197,3 +197,106 @@ Experiment 425016 (primary metric `bounty_published`; still a draft with a
 (retired names now read `retired`, not `DEAD`), and insights `ZM2Jd6bb`,
 `83SaO2EQ`, `ta2FLs4b`, `5mRPIVLX`, `ZRXRVayO`, `3tzSLtaj`. Not repointed:
 the three self-driving scouts named in the 08-28 section.
+
+---
+
+# Funnel analytics that misled — SBA-13, 2026-10-20
+
+From the Shoal behavioral audit (`docs/audits/shoal-behavioral-audit.md`,
+SBA-13; Cowork ANLT-01/02/03/06 and DQ-10).
+
+## `signup_completed` is sent by the server
+
+Before: only the email form sent it. Apple and Google sign-ins never did, and
+they were 431 of 526 new prod profiles in the 45 days to 2026-10-19 (apple
+226, google 205, email 94, phone 1), so PostHog counted about one signup in
+five.
+
+Now: one `signup_completed` per new profile, for every sign-in method.
+
+- A profiles INSERT trigger queues the event in
+  `public.analytics_signup_events`
+  (`supabase/migrations/20261020140000_server_signup_completed_event.sql`).
+  `process-analytics-person` sends it in the same PostHog batch as the person
+  `$set`. That function already runs for every new profile, through the
+  `drain-analytics-person-outbox` cron (every minute).
+- `distinct_id` is the user id (the same id the app identifies with), and the
+  timestamp is `auth.users.created_at`.
+- Properties: `method` (`email` | `apple` | `google` | `phone`, from the auth
+  provider), `lifecycle_stage: 'signed_up'`, `is_internal`, `app_env`, and
+  `source: 'server_profile_insert'`. `app_env` comes from the function's
+  `APP_ENV`, or from the project URL when that is unset. Staging builds share
+  this PostHog project (29 of 123 client signups in the 45 days to 10-19), so
+  filter `app_env = production`.
+- Each account has a fixed event uuid, so a retried send is deduplicated by
+  PostHog rather than counted twice.
+- The email form no longer sends it. Builds from before this change still send
+  the old email-only client event (no `source`) until they age out. **Filter
+  `signup_completed` on `source = server_profile_insert`** so email signups are
+  not counted twice. `has_session` no longer exists; a no-session email signup
+  is still visible as `auth_signup_requires_confirmation`.
+- Profiles backfilled for accounts more than a day old are not counted as
+  signups.
+
+## `primary_role` is saved at role select
+
+`app/onboarding/role-select.tsx` now writes `profiles.primary_role` when the
+role is tapped, as well as sending `role_selected`. Onboarding completion
+(`hooks/useCompleteOnboarding.ts`) still writes it again, and the first post or
+application can still infer it. Before, anyone who stopped between role select
+and the founder note stayed NULL. The write also re-queues the server person
+snapshot, so the PostHog person's `role` updates without waiting for
+completion.
+
+## Events carry `account_status` (DQ-10)
+
+Every event from the app now carries `account_status` (`active` |
+`suspended` | `banned`). It is a super property registered from
+`profiles.account_status` whenever the profile loads (`syncAccountStatus` in
+`lib/posthog.ts`), so a bounty or application event keeps the status the
+account had when it happened. Events from builds before this change do not
+have the property.
+
+What it does not cover:
+
+- **Flagged but still active.** Nothing on the profile marks an account as
+  flagged. `risk_level` is `low` and `account_restricted` is false on all 986
+  prod profiles (2026-10-19). Moderation signals are per bounty and admin-only,
+  and the 09-25 fraud ring was identified by hand from Stripe Radar, not by a
+  stored flag. Marking events "flagged at the time" needs a stored per-account
+  flag (for example a `profiles.fraud_flagged_at` set by moderation or a Radar
+  `early_fraud_warning` webhook) that is either readable by the owner or sent
+  server-side.
+- **Banned later.** For "exclude accounts that were banned afterwards", use a
+  person property instead. Adding `account_status` to
+  `enqueue_analytics_person_snapshot()` and its trigger column list would do
+  it server-side.
+- Suspended and banned accounts are signed out and blocked by RLS from posting
+  or applying (`20260726000000_enforce_account_status.sql`). On successful
+  bounty and application events the property will almost always be `active`;
+  it is most useful on attempts and failures.
+
+## What these mean (no code change)
+
+- **`accept_funding_started`** means the poster pressed "Confirm & hire" or
+  started the payment sheet (`hooks/useAcceptFunding.ts`). It does not fire for
+  opening the accept sheet. "Sheet shown, 0 started" means nobody pressed the
+  button. It is not a naming mismatch.
+- **`bounty_requests.poster_interacted_at`** does not count simply viewing the
+  applicant list in the app. Use `applicant_list_viewed`
+  (`hooks/useApplicantListViewed.ts`) for "the poster looked". It is stamped
+  when:
+  - the poster sends a message the applicant can see
+    (`trg_messages_stamp_poster_interaction` → `fn_stamp_poster_interaction_on_message`),
+  - the poster opens a question to an applicant in the app
+    (`hooks/useAskApplicant.ts` → `fn_mark_poster_interacted`). **That RPC is
+    not on prod as of 2026-10-19** (it is in
+    `20260913000000_bounty_request_expiry_and_poster_nudges.sql`), so this path
+    currently stamps nothing,
+  - **the exception:** a poster views their applicants on the web poster page
+    (`supabase/functions/poster-web`), which stamps every pending application
+    it shows. On web, viewing does count.
+- **`bounties.quality_score`** does not order anything: not the feed, search,
+  or dispatch. Its only use is gating the poster quality nudge (score below 70
+  in `fn_escalate_stale_bounty_liquidity_unlocked`). Do not read a rank effect
+  into it.
