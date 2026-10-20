@@ -364,7 +364,7 @@ export function InstantCashOutScreen({
               placeholderTextColor={theme.textDisabled}
               keyboardType="decimal-pad"
               accessibilityLabel="Cash out amount"
-              editable={isFullyEligible}
+              editable={isFullyEligible === true}
             />
           </View>
           {parsedAmount > 0 && (

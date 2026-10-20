@@ -57,6 +57,13 @@ jobs:
         run: npm run type-check --if-present
         # continue-on-error: true
 
+      # `type-check` above covers only the workspace packages. This checks the
+      # app itself (app/, components/, lib/, hooks/ ...), which had no CI type
+      # check at all — a TS2769 in components/instant-cash-out-screen.tsx
+      # reached main that way (2026-10-20).
+      - name: Type check the app
+        run: npx tsc --noEmit -p tsconfig.json
+
       - name: Run npm audit
         run: npm audit --audit-level=moderate
         continue-on-error: true # OK - This is for visibility only
