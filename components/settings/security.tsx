@@ -16,6 +16,7 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
+import { ScreenLoader } from '../ui/screen-loader';
 import { SettingsRow } from '../ui/settings-row';
 import { SettingsScreenHeader } from '../ui/settings-screen-header';
 import { SettingsSection } from '../ui/settings-section';
@@ -23,6 +24,7 @@ import { MfaCodeModal } from '../ui/mfa-code-modal';
 import { requestPasswordReset } from '../../lib/services/auth-service';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { switchColors } from '../../lib/themes/switch-colors';
 import type { AppTheme } from '../../lib/themes/types';
 
 interface SecuritySettingsProps {
@@ -248,11 +250,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   };
 
   if (loading) {
-    return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
-    );
+    return <ScreenLoader />;
   }
 
   const handleToggle2FA = twoFactorEnabled ? handleDisable2FA : handleEnable2FA;
@@ -337,8 +335,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               <Switch
                 value={twoFactorEnabled}
                 onValueChange={handleToggle2FA}
-                trackColor={{ false: theme.border, true: theme.primary }}
-                thumbColor={twoFactorEnabled ? theme.primary : theme.textDisabled}
+                {...switchColors(theme)}
               />
             )}
           </TouchableOpacity>

@@ -31,22 +31,72 @@
  * are taller than that remaining space must also cap their own height —
  * read it from `useModalContentHeight()` rather than from `Dimensions`.
  */
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useKeyboardInset } from './keyboard-avoiding';
 import Reanimated, {
-  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { duration, easeIn, easeOut } from '../../lib/motion';
 
-export const MODAL_OPEN_DURATION = 220;
-export const MODAL_CLOSE_DURATION = 180;
-export const MODAL_EASE_OUT = Easing.out(Easing.cubic);
+// From the app-wide motion tokens (lib/motion.ts): opens decelerate in,
+// closes accelerate out and finish sooner than they arrived.
+export const MODAL_OPEN_DURATION = duration.base;
+export const MODAL_CLOSE_DURATION = duration.exit;
+export const MODAL_EASE_OUT = easeOut;
+export const MODAL_EASE_IN = easeIn;
 
 export type AppModalVariant = 'dialog' | 'sheet';
+
+/** A window-coordinate rect, as returned by `measureInWindow`. */
+export type ModalOrigin = { x: number; y: number; width: number; height: number };
+
+type Measurable = {
+  measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+};
+
+/**
+ * Captures the `origin` for an AppModal opened from a tappable element.
+ * Attach `originRef` to the element and open through `openFrom(() => show())`:
+ * it measures the element first and opens in the same callback, so the
+ * dialog's first frame already knows where to grow from. Opens plainly when
+ * the element can't be measured.
+ */
+export function useModalOrigin<T = unknown>() {
+  const originRef = useRef<T | null>(null);
+  const [origin, setOrigin] = useState<ModalOrigin | null>(null);
+
+  const openFrom = useCallback((open: () => void) => {
+    const node = originRef.current as Measurable | null;
+    let opened = false;
+    const openOnce = () => {
+      if (opened) return;
+      opened = true;
+      open();
+    };
+    if (!node?.measureInWindow) {
+      setOrigin(null);
+      openOnce();
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => {
+      setOrigin(width > 0 && height > 0 ? { x, y, width, height } : null);
+      openOnce();
+    });
+    // measureInWindow answers within the frame; never let a dropped callback
+    // swallow the tap.
+    setTimeout(openOnce, 50);
+  }, []);
+
+  return { originRef, origin, openFrom };
+}
+
+/** Dialog scale at the start of a plain open, and when growing out of an origin. */
+const DIALOG_FROM_SCALE = 0.96;
+const ORIGIN_FROM_SCALE = 0.86;
 
 /**
  * Height actually available to modal content right now: the window minus the
@@ -91,6 +141,13 @@ export interface AppModalProps {
    * manages the keyboard itself.
    */
   avoidKeyboard?: boolean;
+  /**
+   * Window rect of whatever opened this dialog (the tapped card). The dialog
+   * then grows out of that spot and shrinks back into it on close, so it
+   * reads as the card opening rather than a page appearing from nowhere.
+   * Dialog variant only; ignored for sheets.
+   */
+  origin?: ModalOrigin | null;
 }
 
 export function AppModal({
@@ -105,13 +162,30 @@ export function AppModal({
   statusBarTranslucent = true,
   accessibilityViewIsModal = true,
   avoidKeyboard = true,
+  origin = null,
 }: AppModalProps) {
   // 'open': native <Modal> is presented (also covers the opening animation).
   // 'closing': native <Modal> is already gone; a plain, always-inert view is
   // finishing the fade-out in its place. 'closed': nothing rendered.
   const [phase, setPhase] = useState<'closed' | 'open' | 'closing'>(visible ? 'open' : 'closed');
-  const progress = useSharedValue(visible ? 1 : 0);
-  const { height: windowHeight } = useWindowDimensions();
+  // Always starts closed, even when mounted already visible (the usual
+  // `{show && <Modal visible />}` pattern). Starting at 1 there skipped the
+  // opening animation entirely — the bounty detail popped in with no motion.
+  const progress = useSharedValue(0);
+  // Where the dialog grows from, as an offset from the window centre, and the
+  // scale it starts at. Fixed at open, so the close returns to the same spot.
+  const fromX = useSharedValue(0);
+  const fromY = useSharedValue(0);
+  const fromScale = useSharedValue(DIALOG_FROM_SCALE);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const originRef = useRef(origin);
+  originRef.current = origin;
+  // Whether there is an open (or opening) modal to close. Without it, a modal
+  // mounted hidden ran the whole close sequence on mount — fade, fallback
+  // timer and an onClosed for a modal the user never saw.
+  const hasOpenedRef = useRef(false);
+  const windowRef = useRef({ width: windowWidth, height: windowHeight });
+  windowRef.current = { width: windowWidth, height: windowHeight };
   // Only listen while actually mounted — an unmounted modal shifting for a
   // keyboard belonging to the screen behind it would be a no-op at best.
   const { inset: keyboardInset, height: keyboardHeight } = useKeyboardInset({
@@ -125,10 +199,31 @@ export function AppModal({
 
   useEffect(() => {
     if (visible) {
+      hasOpenedRef.current = true;
       setPhase('open');
-      progress.value = withTiming(1, { duration: MODAL_OPEN_DURATION, easing: MODAL_EASE_OUT });
+      const from = variant === 'dialog' ? originRef.current : null;
+      if (from) {
+        const win = windowRef.current;
+        fromX.value = from.x + from.width / 2 - win.width / 2;
+        fromY.value = from.y + from.height / 2 - win.height / 2;
+        fromScale.value = ORIGIN_FROM_SCALE;
+      } else {
+        fromX.value = 0;
+        fromY.value = 0;
+        fromScale.value = DIALOG_FROM_SCALE;
+      }
+      progress.value = withTiming(1, {
+        // Growing out of a card travels further than a plain fade-up.
+        duration: from ? duration.screen : MODAL_OPEN_DURATION,
+        easing: MODAL_EASE_OUT,
+      });
       return;
     }
+
+    // Only a true open -> closed transition closes. The flag clears when the
+    // close settles rather than here, so a re-run of this effect that cancels
+    // an in-flight close (StrictMode's double invoke) still finishes it.
+    if (!hasOpenedRef.current) return;
 
     // Drop the native <Modal> immediately — see the header comment for why
     // this can't wait for the fade. The plain view left behind finishes the
@@ -143,11 +238,12 @@ export function AppModal({
       if (settled) return;
       settled = true;
       clearTimeout(fallback);
+      hasOpenedRef.current = false;
       setPhase('closed');
       onClosed?.();
     };
 
-    progress.value = withTiming(0, { duration: MODAL_CLOSE_DURATION, easing: MODAL_EASE_OUT }, (finished) => {
+    progress.value = withTiming(0, { duration: MODAL_CLOSE_DURATION, easing: MODAL_EASE_IN }, (finished) => {
       if (finished) runOnJS(settle)();
     });
 
@@ -181,9 +277,17 @@ export function AppModal({
         transform: [{ translateY: (1 - progress.value) * 32 }],
       };
     }
+    const p = progress.value;
+    const rest = 1 - p;
     return {
-      opacity: progress.value,
-      transform: [{ scale: 0.96 + progress.value * 0.04 }],
+      // From an origin the dialog is fully opaque well before it lands, so
+      // it reads as moving rather than fading in on the spot.
+      opacity: fromScale.value === ORIGIN_FROM_SCALE ? Math.min(1, p * 1.8) : p,
+      transform: [
+        { translateX: fromX.value * rest },
+        { translateY: fromY.value * rest },
+        { scale: fromScale.value + (1 - fromScale.value) * p },
+      ],
     };
   });
 

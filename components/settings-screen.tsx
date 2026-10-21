@@ -13,6 +13,7 @@ import { type BountyFormat, useBountyFormat } from '../lib/bounty-format-context
 import { BOUNTY_FORMAT_OPTIONS } from '../lib/bounty-format-options';
 import { analyticsService } from '../lib/services/analytics-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { switchColors } from '../lib/themes/switch-colors';
 import type { AppTheme, ThemeMode } from '../lib/themes/types';
 import { markIntentionalSignOut } from '../lib/utils/session-handler';
 import { SettingsRow } from './ui/settings-row';
@@ -316,9 +317,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
                 <Switch
                   value={isAdminTabEnabled}
                   onValueChange={handleAdminTabToggle}
-                  trackColor={{ false: theme.border, true: theme.primary }}
-                  thumbColor={theme.surface}
-                  ios_backgroundColor={theme.border}
+                  {...switchColors(theme)}
                   accessibilityLabel="Toggle admin tab visibility"
                 />
               }
@@ -340,9 +339,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
                 <Switch
                   value={showTestBounties}
                   onValueChange={setShowTestBounties}
-                  trackColor={{ false: theme.border, true: theme.primary }}
-                  thumbColor={theme.surface}
-                  ios_backgroundColor={theme.border}
+                  {...switchColors(theme)}
                   accessibilityLabel="Toggle test bounty visibility"
                 />
               }

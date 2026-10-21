@@ -16,10 +16,11 @@ import { MomentsProvider } from '../../providers/moments-provider'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BottomNav } from 'components/ui/bottom-nav'
+import { ScreenLoader } from 'components/ui/screen-loader'
 import { FloatingTabBar } from 'components/ui/floating-tab-bar'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ActivityIndicator, Animated, AppState, Keyboard, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { Animated, AppState, Keyboard, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native'
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -623,12 +624,7 @@ function BountyAppInner() {
     (storageOnboardingDone === true && profile == null && profileVerifiedForLocalFlag === null)
 
   if (isVerificationInProgress) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={{ color: theme.text, marginTop: 16, fontSize: 16 }}>Loading...</Text>
-      </View>
-    )
+    return <ScreenLoader label="Loading..." />
   }
 
   // Guard: redirect users who haven't completed onboarding to the onboarding flow.

@@ -294,6 +294,23 @@ jest.mock('react-native-reanimated', () => {
     runOnJS: fn => fn,
     runOnUI: fn => fn,
     cancelAnimation: jest.fn(),
+    // Read by the skeleton and the root route transition (lib/motion.ts
+    // consumers). Declared as plain functions so clearAllMocks can't strip them.
+    useReducedMotion: () => false,
+    ReduceMotion: { System: 'system', Always: 'always', Never: 'never' },
+  };
+});
+
+// Mock @react-navigation/native. It ships an ESM build this ts-jest-only
+// pipeline can't parse. App code reads its NavigationContext directly
+// (hooks/useRouteFocus.ts) so screens work outside a navigator; an empty
+// context gives exactly that here. Tests that need a navigator provide their
+// own value through NavigationContext.Provider, or override this mock.
+jest.mock('@react-navigation/native', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    NavigationContext: React.createContext(undefined),
   };
 });
 

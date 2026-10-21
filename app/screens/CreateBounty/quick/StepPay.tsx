@@ -8,6 +8,7 @@ import { usePostingPolicy } from '../../../../hooks/usePostingPolicy';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
+import { switchColors } from '../../../../lib/themes/switch-colors';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { detectTrustTier } from '../../../../lib/utils/trust-tier';
 import { validateAmount, validateBalance, validateContactInfo } from '../../../../lib/utils/bounty-validation';
@@ -399,8 +400,7 @@ export function StepPay({
             <Switch
               value={requiresIdVerified}
               onValueChange={(value) => onUpdate({ trustTier: detection.tier, requiresIdVerified: value })}
-              trackColor={{ false: theme.border, true: theme.primary }}
-              thumbColor={requiresIdVerified ? theme.primary : theme.textDisabled}
+              {...switchColors(theme)}
               accessibilityLabel="Require ID-verified hunters"
             />
           </View>

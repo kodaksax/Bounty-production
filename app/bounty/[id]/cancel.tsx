@@ -21,6 +21,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 import { withReplayMask } from '../../../components/replay-mask';
@@ -158,11 +159,7 @@ function CancellationRequestScreen() {
   };
 
   if (loading) {
-    return (
-      <View style={[s.screen, s.centered]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
-    );
+    return <ScreenLoader />;
   }
 
   if (!bounty) {

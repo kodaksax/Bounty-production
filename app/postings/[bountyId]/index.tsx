@@ -27,7 +27,6 @@ import { saveStructuredBountyEdit } from '../../../lib/services/bounty-requireme
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   RefreshControl,
   ScrollView,
@@ -40,6 +39,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditPostingModal } from '../../../components/edit-posting-modal';
 import { NotFoundScreen } from '../../../components/not-found-screen';
+import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
 import { Stepper } from '../../../components/ui/stepper';
 import { useAuthContext } from '../../../hooks/use-auth-context';
@@ -361,12 +361,7 @@ export default function BountyDashboard() {
 
   // ── States ────────────────────────────────────────────────────────────────
   if (isAuthLoading || (isLoading && !bounty)) {
-    return (
-      <SafeAreaView style={s.centered}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={s.centeredText}>Loading your bounty…</Text>
-      </SafeAreaView>
-    );
+    return <ScreenLoader label="Loading your bounty…" />;
   }
 
   if (notFound) {
@@ -401,12 +396,7 @@ export default function BountyDashboard() {
 
   // Redirect in flight for a non-poster — don't paint a poster's dashboard.
   if (role !== 'poster' || !state) {
-    return (
-      <SafeAreaView style={s.centered}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={s.centeredText}>Opening bounty…</Text>
-      </SafeAreaView>
-    );
+    return <ScreenLoader label="Opening bounty…" />;
   }
 
   const stages = getBountyStages('poster');

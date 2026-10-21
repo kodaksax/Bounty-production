@@ -400,7 +400,29 @@ function generateSecureRandom(length: number = 6): string {
  * Uses cryptographically secure random when available
  */
 export function generateCorrelationId(prefix: string = 'auth'): string {
-  // Try Node.js crypto first (prefer high-entropy UUID when available)
+  // Web Crypto first: browsers, Node 19+ (globalThis.crypto) and anything
+  // polyfilled. It must come before the Node branch below — inside a Metro
+  // bundle (Expo web's server render runs one in Node) `require('crypto')` is
+  // an unknown module, and Metro reports that as a fatal error even though
+  // the call sits in a try/catch, which took `expo start --web` down while
+  // rendering the root gate.
+  try {
+    const gw: any = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : undefined);
+    if (gw && gw.crypto) {
+      if (typeof gw.crypto.randomUUID === 'function') {
+        return `${prefix}_${gw.crypto.randomUUID()}`;
+      }
+      if (typeof gw.crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(8);
+        gw.crypto.getRandomValues(bytes);
+        return `${prefix}_${Array.from(bytes).map((b: number) => b.toString(16).padStart(2, '0')).join('')}`;
+      }
+    }
+  } catch (_) {
+    // ignore and try Node crypto / fallbacks
+  }
+
+  // Older Node without a global Web Crypto.
   try {
     if (typeof process !== 'undefined' && process?.versions?.node) {
       // Use a runtime require via eval to avoid Metro/RN bundler static
@@ -418,24 +440,7 @@ export function generateCorrelationId(prefix: string = 'auth'): string {
       }
     }
   } catch (_) {
-    // ignore and try web crypto / fallbacks
-  }
-
-  // Web Crypto (browser or Node webcrypto)
-  try {
-    const gw: any = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : undefined);
-    if (gw && gw.crypto) {
-      if (typeof gw.crypto.randomUUID === 'function') {
-        return `${prefix}_${gw.crypto.randomUUID()}`;
-      }
-      if (typeof gw.crypto.getRandomValues === 'function') {
-        const bytes = new Uint8Array(8);
-        gw.crypto.getRandomValues(bytes);
-        return `${prefix}_${Array.from(bytes).map((b: number) => b.toString(16).padStart(2, '0')).join('')}`;
-      }
-    }
-  } catch (_) {
-    // ignore
+    // ignore and fall back
   }
 
   // Final fallback: timestamp + random string

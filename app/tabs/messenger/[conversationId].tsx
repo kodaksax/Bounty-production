@@ -2,7 +2,8 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useConversations } from '../../../hooks/useConversations';
 import { ErrorBoundary } from '../../../lib/error-boundary';
 import { ChatDetailScreen } from '../chat-detail-screen';
@@ -68,11 +69,7 @@ function ConversationRouteContent() {
   }, [conversations, conversationId]);
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#008E2A" />
-      </View>
-    );
+    return <ScreenLoader />;
   }
 
   if (!conversation) {

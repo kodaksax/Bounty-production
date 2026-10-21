@@ -1,8 +1,11 @@
 import type { Href } from 'expo-router';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import 'react-native-get-random-values'; // must run before using tweetnacl
+import { ScreenLoader } from '../components/ui/screen-loader';
+import { press } from '../lib/motion';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useAppBootstrap } from '../hooks/useAppBootstrap';
 import { bountyAppTabPath, type BountyAppTab } from '../lib/navigation/bounty-app-tab';
@@ -345,17 +348,7 @@ export default function Index() {
   ]);
 
   if (isAuthStale) {
-    return (
-      <View style={indexStyles.loadingContainer}>
-        <Text style={indexStyles.offlineTitle}>Connection interrupted</Text>
-        <Text style={indexStyles.offlineText}>
-          We could not restore your session. Check your connection and try again.
-        </Text>
-        <TouchableOpacity style={indexStyles.retryButton} onPress={() => void attemptRefresh?.()}>
-          <Text style={indexStyles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    return <ConnectionInterrupted onRetry={() => void attemptRefresh?.()} />;
   }
 
   // Loading, authenticated (redirecting), or an unauthenticated visitor whose
@@ -372,12 +365,7 @@ export default function Index() {
       console.log('[index] Rendering loading/redirecting state:', bootstrap.status);
     }
     return (
-      <View style={indexStyles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008E2A" />
-        <Text style={indexStyles.loadingText}>
-          {bootstrap.status === 'authenticated' ? 'Redirecting...' : 'Loading...'}
-        </Text>
-      </View>
+      <ScreenLoader label={bootstrap.status === 'authenticated' ? 'Redirecting...' : 'Loading...'} />
     );
   }
 
@@ -388,25 +376,41 @@ export default function Index() {
   return <SignInForm />;
 }
 
+/**
+ * Session restore failed. Drawn in the app theme like the loader it replaces
+ * — it used to be hard-coded dark, so a light-mode user saw the page go dark
+ * just for this state. Its own component so only this branch reads the theme.
+ */
+function ConnectionInterrupted({ onRetry }: { onRetry: () => void }) {
+  const { theme } = useAppThemeContext();
+  return (
+    <View style={[indexStyles.loadingContainer, { backgroundColor: theme.background }]}>
+      <Text style={[indexStyles.offlineTitle, { color: theme.text }]}>Connection interrupted</Text>
+      <Text style={[indexStyles.offlineText, { color: theme.textSecondary }]}>
+        We could not restore your session. Check your connection and try again.
+      </Text>
+      <TouchableOpacity
+        style={[indexStyles.retryButton, { backgroundColor: theme.primary, borderBottomColor: theme.primaryShade }]}
+        activeOpacity={press.opacity}
+        onPress={onRetry}
+      >
+        <Text style={indexStyles.retryButtonText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 const indexStyles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1B1E24', // page background
-  },
-  loadingText: {
-    color: '#ffffff',
-    marginTop: 16,
-    fontSize: 16,
   },
   offlineTitle: {
-    color: '#ffffff',
     fontSize: 20,
     fontWeight: '700',
   },
   offlineText: {
-    color: '#D8D2C4',
     fontSize: 16,
     lineHeight: 22,
     marginTop: 12,
@@ -415,9 +419,7 @@ const indexStyles = StyleSheet.create({
   },
   retryButton: {
     alignItems: 'center',
-    backgroundColor: '#008E2A',
     borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
     borderRadius: 6,
     marginTop: 24,
     minWidth: 112,

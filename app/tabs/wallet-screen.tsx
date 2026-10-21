@@ -21,6 +21,7 @@ import { WithdrawWithBankScreen } from "../../components/withdraw-with-bank-scre
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useWalletBalanceDisplay } from '../../hooks/use-wallet-balance-display';
 import { useForegroundRefresh } from '../../hooks/useForegroundRefresh';
+import { useRefreshOnReturn } from '../../hooks/useRouteFocus';
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { StripePaymentMethod, stripeService } from '../../lib/services/stripe-service';
@@ -133,14 +134,20 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   // watches profiles, which Phase 2 transfers never touch, so it never fires
   // for Connect-held funds. Foreground + focus + pull-to-refresh are the real
   // refresh triggers there.
-  useForegroundRefresh(() => {
+  const resync = () => {
     if (hasValidSession) {
       refreshFromApi(accessToken, { silent: true });
       if (balanceDisplay.source === 'connect') {
         refreshBalance({ force: true });
       }
     }
-  });
+  };
+  useForegroundRefresh(resync);
+  // The same silent re-sync when coming back to the wallet from a screen
+  // opened over it (Stripe Connect onboarding, payment methods). The tab
+  // shell stays mounted under those now, so the mount refresh above no
+  // longer runs on return.
+  useRefreshOnReturn(resync);
 
   const onRefresh = useCallback(async () => {
     if (!hasValidSession) return;

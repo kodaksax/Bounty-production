@@ -40,7 +40,7 @@ import { BountyTrustSignals } from './bounty-trust-signals'
 import { ReportModal } from "./ReportModal"
 import { ZipLocationModal } from './zip-location-modal'
 import { useApplyLocationGate } from '../hooks/useApplyLocationGate'
-import { AppModal } from './ui/app-modal'
+import { AppModal, type ModalOrigin } from './ui/app-modal'
 import { useKeyboardInset } from './ui/keyboard-avoiding'
 import { TrustSafetyNotice } from './ui/trust-safety-notice'
 import { trustSafetyStrings } from '../lib/strings/trust-safety'
@@ -110,9 +110,11 @@ interface BountyDetailModalProps {
   }
   onClose: () => void
   onNavigateToChat?: (conversationId: string) => void
+  /** Window rect of the card that was tapped, so the detail grows out of it. */
+  origin?: ModalOrigin | null
 }
 
-export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateToChat }: BountyDetailModalProps) {
+export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateToChat, origin }: BountyDetailModalProps) {
   const router = useRouter()
   const { isEmailVerified, session } = useAuthContext()
   const currentUserId = session?.user?.id ?? null
@@ -719,6 +721,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       onRequestClose={handleClose}
       onClosed={onClose}
       variant="dialog"
+      origin={origin}
     >
       <>
         {/* Shadow wrapper (no overflow) */}

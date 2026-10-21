@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
+import { press } from 'lib/motion';
 import React, { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -83,7 +84,7 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({
       accessibilityLabel={accessibilityLabel || label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: isDisabled }}
-      activeOpacity={0.6}
+      activeOpacity={press.opacity}
     >
       {content}
     </TouchableOpacity>

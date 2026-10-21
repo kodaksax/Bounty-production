@@ -26,6 +26,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { AcceptFundingGate } from '../../../components/accept-funding-gate';
 import { InteractiveMessageCard } from '../../../components/bounty-inbox/interactive-message-card';
 import { StatusBadge } from '../../../components/bounty-inbox/status-badge';
@@ -385,11 +386,7 @@ function BountyThreadScreen() {
   }
 
   if (thread.loading && !bounty) {
-    return (
-      <View style={[s.center, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
-    );
+    return <ScreenLoader />;
   }
 
   if (!bounty) {

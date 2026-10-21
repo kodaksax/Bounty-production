@@ -10,6 +10,8 @@ import { useHapticFeedback } from '../lib/haptic-feedback'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { BountyDetailModal } from "./bountydetailmodal"
+import { press } from "../lib/motion"
+import { useModalOrigin } from "./ui/app-modal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
 
 export interface BountyCompactItemProps {
@@ -74,17 +76,21 @@ function BountyCompactItemComponent({
     if (user_id) router.push(`/profile/${user_id}`)
   }, [user_id, router, triggerHaptic])
 
+  // The detail dialog grows out of this row rather than appearing mid-screen.
+  const { originRef, origin, openFrom } = useModalOrigin<React.ComponentRef<typeof TouchableOpacity>>()
+
   const handleBountyPress = useCallback(() => {
     triggerHaptic('light')
-    setShowDetail(true)
-  }, [triggerHaptic])
+    openFrom(() => setShowDetail(true))
+  }, [triggerHaptic, openFrom])
 
   const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : location ? `, ${location}` : distance !== null ? `, ${distance} miles away` : ', location to be determined'}${incomplete ? `, limited details${missingSummary ? `, ${missingSummary}` : ''}` : ''}`
 
   return (
     <>
       <TouchableOpacity
-        activeOpacity={0.8}
+        ref={originRef}
+        activeOpacity={press.opacity}
         style={s.row}
         onPress={handleBountyPress}
         accessibilityRole="button"
@@ -159,6 +165,7 @@ function BountyCompactItemComponent({
 
       {showDetail && (
         <BountyDetailModal
+          origin={origin}
           bounty={{
             id, username: resolvedUsername, title, price, distance, location: location ?? undefined,
             description, user_id, work_type, poster_avatar: poster_avatar ?? undefined, is_for_honor: isForHonor,

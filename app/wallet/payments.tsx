@@ -9,7 +9,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScreenLoader } from '../../components/ui/screen-loader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ConnectEmbeddedWebView } from '../../components/connect-embedded-webview';
@@ -29,13 +30,7 @@ function PaymentsDashboardScreen() {
   }, [router]);
 
   if (authLoading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.primary} />
-        </View>
-      </SafeAreaView>
-    );
+    return <ScreenLoader />;
   }
 
   if (!session?.access_token) {

@@ -85,6 +85,23 @@ describe('AppModal close hardening', () => {
     expect(findGate(toJSON()).props.pointerEvents).toBe('none');
   });
 
+  it('does not run a close sequence or fire onClosed when mounted hidden', () => {
+    const onClosed = jest.fn();
+    const { toJSON } = render(
+      <AppModal visible={false} onRequestClose={jest.fn()} onClosed={onClosed}>
+        <Text>content</Text>
+      </AppModal>
+    );
+    act(() => {
+      jest.advanceTimersByTime(500);
+    });
+
+    // Never opened, so nothing to fade out and nothing to report closed.
+    expect((global as any).__reanimatedCloseCallback).toBeNull();
+    expect(onClosed).not.toHaveBeenCalled();
+    expect(toJSON()).toBeNull();
+  });
+
   it('settles and fires onClosed even when the close callback never arrives', () => {
     const onClosed = jest.fn();
     const { rerender, toJSON } = render(

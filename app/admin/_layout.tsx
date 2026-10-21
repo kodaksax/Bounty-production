@@ -14,7 +14,7 @@
 // product instead of being permanently dark green.
 import { Redirect, Stack } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ScreenLoader } from '../../components/ui/screen-loader';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdmin } from '../../lib/admin-context';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
@@ -29,14 +29,7 @@ function AdminLayout() {
 
   // Show loading while checking admin status
   if (isLoading) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-          Checking permissions…
-        </Text>
-      </View>
-    );
+    return <ScreenLoader label="Checking permissions…" />;
   }
 
   // Redirect if not admin.
@@ -62,17 +55,5 @@ function AdminLayout() {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 14,
-  },
-});
 
 export default withReplayMask(AdminLayout);

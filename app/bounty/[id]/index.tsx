@@ -18,9 +18,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
+import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { ROUTES } from '../../../lib/routes';
 import { analyticsService } from '../../../lib/services/analytics-service';
@@ -188,12 +189,7 @@ export default function BountyDetailRouter() {
     );
   }
 
-  return (
-    <SafeAreaView style={s.centered}>
-      <ActivityIndicator size="large" color={theme.primary} />
-      <Text style={s.body}>{isLoading ? 'Loading bounty…' : 'Opening bounty…'}</Text>
-    </SafeAreaView>
-  );
+  return <ScreenLoader label={isLoading ? 'Loading bounty…' : 'Opening bounty…'} />;
 }
 
 function makeStyles(t: AppTheme) {

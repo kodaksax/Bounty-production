@@ -31,6 +31,12 @@ function getExpoSplashModule(): typeof import('expo-splash-screen') | null {
 export async function showNativeSplash() {
 	try {
 		const ExpoSplash = getExpoSplashModule();
+		// Dissolve into the first screen instead of cutting to it. Android
+		// already fades (400ms by default); iOS cuts unless asked. JS-only,
+		// so it ships over the air. Expo Go ignores it with a warning.
+		if (ExpoSplash && typeof ExpoSplash.setOptions === 'function') {
+			ExpoSplash.setOptions({ fade: true, duration: 300 });
+		}
 		if (ExpoSplash && typeof ExpoSplash.preventAutoHideAsync === 'function') {
 			await ExpoSplash.preventAutoHideAsync();
 		}

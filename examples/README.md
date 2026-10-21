@@ -142,19 +142,25 @@ import { SkeletonCard } from 'components/ui/skeleton-card';
 {loading ? <SkeletonCard /> : <BountyCard data={bounty} />}
 ```
 
-**Accessible touchable:**
+**Pressable card** (see [docs/MOTION_SYSTEM.md](../docs/MOTION_SYSTEM.md)):
 ```tsx
-import { AccessibleTouchable } from 'components/ui/accessible-touchable';
+import { usePressAnimation } from 'hooks/use-accessible-animation';
+import { press } from 'lib/motion';
 
-<AccessibleTouchable 
-  onPress={handlePress}
-  haptic="light"
-  scaleOnPress={0.95}
->
-  <View style={styles.customButton}>
-    <Text>Custom Button</Text>
-  </View>
-</AccessibleTouchable>
+const { style, animatePressIn, animatePressOut } = usePressAnimation();
+
+<Animated.View style={style}>
+  <TouchableOpacity
+    activeOpacity={press.scaledOpacity}
+    onPress={handlePress}
+    onPressIn={animatePressIn}
+    onPressOut={animatePressOut}
+  >
+    <View style={styles.customButton}>
+      <Text>Custom Card</Text>
+    </View>
+  </TouchableOpacity>
+</Animated.View>
 ```
 
 ## See Also
