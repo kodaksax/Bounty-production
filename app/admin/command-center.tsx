@@ -20,6 +20,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminEventRow } from '../../components/admin/AdminEventRow';
 import { AdminHeader } from '../../components/admin/AdminHeader';
+import { OpsAlertsSection } from '../../components/admin/OpsAlertsSection';
 import {
   AdminBadge,
   AdminButton,
@@ -137,6 +138,12 @@ export default function CommandCenterScreen() {
 
   const go = useCallback((route: string) => router.push(route as never), [router]);
 
+  const [opsReloadKey, setOpsReloadKey] = useState(0);
+  const refresh = useCallback(() => {
+    setOpsReloadKey((k) => k + 1);
+    refetch();
+  }, [refetch]);
+
   const criticalAnomalies = useMemo(
     () => anomalies.filter((a) => a.severity === 'critical'),
     [anomalies]
@@ -170,7 +177,7 @@ export default function CommandCenterScreen() {
       <ScrollView
         contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: 64 }}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refetch} tintColor={theme.primary} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={theme.primary} />
         }
       >
         {isLoading && !overview ? (
@@ -178,6 +185,9 @@ export default function CommandCenterScreen() {
         ) : overview ? (
           <>
             <MoneyIntegrityBand overview={overview} onPress={() => go(ROUTES.ADMIN.ANOMALIES)} />
+
+            {/* ── Ops alerts: open until a person resolves them ───────── */}
+            <OpsAlertsSection reloadKey={opsReloadKey} />
 
             {/* ── Is anything broken? ─────────────────────────────────── */}
             <AdminSection

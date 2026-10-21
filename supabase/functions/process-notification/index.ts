@@ -117,6 +117,9 @@ const TYPE_CATEGORY: Record<string, Category> = {
   // user-disableable and suppressed overnight — a page that waits until 8am is
   // not a page. Only ever addressed to admin accounts.
   reconciliation_alert: 'security',
+  // Scam/abuse flags waiting on a human. Same reasoning as above: a removal
+  // that waits for quiet hours to end is hours of a scam listing staying live.
+  moderation_alert: 'security',
   // Daily informational digest of warning/info findings. 'payments' (non-security)
   // so delivery is not forced and quiet hours apply.
   reconciliation_digest: 'payments',
@@ -559,9 +562,12 @@ Deno.serve(async (req: Request) => {
     // keeps the blanket fan-out.
     const posterFallback = isPosterFallbackType(notificationType)
     const emailFallback = isEmailFallbackType(notificationType)
+    // Admin alerts at critical/high are emailed by public.fn_notify_admins
+    // itself, so the email never waits on this worker; don't send a second.
+    const emailDispatched = outboxData.emailDispatched === true
 
     // Fire email fan-out (best-effort, does not block push delivery below).
-    if (!emailFallback && emailRecipients.length > 0) {
+    if (!emailFallback && !emailDispatched && emailRecipients.length > 0) {
       try {
         await fetch(`${supabaseUrl}/functions/v1/send-notification-email`, {
           method: 'POST',
