@@ -11,6 +11,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useAuthProfile } from '../../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../../hooks/useNormalizedProfile';
@@ -405,12 +406,7 @@ export default function PublicBountyDetail() {
   };
 
   if (isLoading) {
-    return (
-      <SafeAreaView style={s.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={s.loadingText}>Loading bounty...</Text>
-      </SafeAreaView>
-    );
+    return <ScreenLoader label="Loading bounty..." />;
   }
 
   if (error || !bounty) {
@@ -761,18 +757,6 @@ function makeStyles(t: AppTheme) {
     container: {
       flex: 1,
       backgroundColor: t.background,
-    },
-    loadingContainer: {
-      flex: 1,
-      backgroundColor: t.background,
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: 16,
-    },
-    loadingText: {
-      color: t.textSecondary,
-      fontSize: 16,
-      fontWeight: '500',
     },
     errorContainer: {
       flex: 1,

@@ -52,6 +52,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveHunters } from '../hooks/useActiveHunters';
 import { useFeedLocation } from '../hooks/useFeedLocation';
 import { useForegroundRefresh } from '../hooks/useForegroundRefresh';
+import { useRefreshOnReturn } from '../hooks/useRouteFocus';
 import { useShowTestBounties } from '../hooks/useShowTestBounties';
 import { useValidUserId } from '../hooks/useValidUserId';
 import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags';
@@ -1039,6 +1040,22 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setRefreshing(false);
     }
   }, [loadBounties, loadUserApplications, refreshActiveCount, loadMyActiveBounties]);
+
+  // The tab shell stays mounted under anything opened over it (the root is a
+  // stack), so coming back from a bounty you just applied to — or one of your
+  // own — must refresh what otherwise only loads on mount: your applications
+  // (applied bounties drop out of the feed), your active bounties and the
+  // open count. The loaded rows stay live through realtime; keeping them
+  // rather than reloading page one is what preserves the scroll position.
+  // Silent: nothing flips back to a skeleton or a blank count.
+  useRefreshOnReturn(() => {
+    loadUserApplications().catch(err => console.error('Failed to refresh user applications:', err));
+    loadMyActiveBounties().catch(err => console.error('Failed to refresh active bounties:', err));
+    bountyService
+      .getOpenCount({ category: countCategory, includeTest: includeTestBounties })
+      .then(setActiveCount)
+      .catch(err => console.error('Failed to refresh active count:', err));
+  });
 
   // Per-mount id that makes the realtime topic unique to this instance.
   // supabase-js returns the same channel object for a topic that already exists

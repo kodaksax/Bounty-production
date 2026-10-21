@@ -26,7 +26,7 @@
 import type { Href } from 'expo-router';
 import { Redirect, Stack, usePathname } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ScreenLoader } from '../../components/ui/screen-loader';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
@@ -48,12 +48,7 @@ export default function TabsLayout() {
   // Still resolving the persisted session — hold on a spinner rather than
   // flashing either the shell or a redirect.
   if (isLoading) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading…</Text>
-      </View>
-    );
+    return <ScreenLoader label="Loading…" />;
   }
 
   // A recovery session or a blocked/misconfigured client must never render the
@@ -87,15 +82,3 @@ export default function TabsLayout() {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 14,
-  },
-});

@@ -30,6 +30,7 @@ import {
 import { useAccessibleAnimation } from '../../hooks/use-accessible-animation'
 import { A11Y, SIZING, SPACING } from '../../lib/constants/accessibility'
 import { hapticFeedback } from '../../lib/haptic-feedback'
+import { press } from '../../lib/motion'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
 
@@ -125,6 +126,7 @@ export function SearchBarRow({
       {onPress ? (
         <TouchableOpacity
           style={s.field}
+          activeOpacity={press.opacity}
           // The tap leaves the screen it was made on, so it gets a tick of
           // haptic feedback to land as a deliberate departure.
           onPress={() => {
@@ -176,6 +178,7 @@ export function SearchRowIconButton({
   return (
     <TouchableOpacity
       style={s.iconButton}
+      activeOpacity={press.opacity}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}

@@ -11,7 +11,7 @@ import {
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
 import { AppMetrics, AppMetricsRoot } from 'expo-observe';
-import { Slot, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
+import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -40,6 +40,7 @@ import AuthProvider from '../providers/auth-provider';
 import { NetworkProvider } from '../providers/network-provider';
 import { RuntimeReporters } from '../providers/runtime-reporters';
 import { WebSocketProvider } from '../providers/websocket-provider';
+import { routeTransitionLayout } from '../components/ui/route-transition';
 import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 import {
   isInitialNavigationDone,
@@ -226,6 +227,31 @@ const RootFrame = ({
   );
 };
 
+// The root navigator is a native stack. Opening a section (a bounty, a
+// profile, the wallet, …) slides it over the screen below, which stays
+// mounted: its scroll position and state survive the round trip, iOS gets the
+// edge swipe back, and leaving animates as well as arriving. It used to be a
+// <Slot />, which swapped screens in a single frame and remounted the one you
+// returned to; the screens that depended on that remount to refetch now do it
+// on refocus instead (useRefreshOnReturn in hooks/useRouteFocus.ts).
+//
+// The auth gate, onboarding and the tab shell are handed over to by
+// router.replace from the gate, so they crossfade instead of sliding in as if
+// pushed. `tabs` is also *pushed* to open something inside it from elsewhere
+// (a chat from a bounty's hunter hub), and that is a normal slide — so the
+// choice follows the nested screen being opened.
+//
+// The web stack doesn't animate, so on web each route gets its entrance from
+// components/ui/route-transition.tsx instead.
+const rootScreenLayout = Platform.OS === 'web' ? routeTransitionLayout : undefined;
+const handOverOptions = { animation: 'fade' } as const;
+const tabsScreenOptions = ({ route }: { route: { params?: object } }) => {
+  const screen = (route.params as { screen?: string } | undefined)?.screen;
+  return {
+    animation: !screen || screen === 'bounty-app' ? ('fade' as const) : ('slide_from_right' as const),
+  };
+};
+
 // Defined outside RootLayout so the component reference is stable across
 // RootLayout re-renders (e.g. when `phase` or `fontsLoaded` change).
 // If defined inline, React would see a new component type on every render and
@@ -233,6 +259,15 @@ const RootFrame = ({
 // that trigger a "Maximum update depth exceeded" error.
 const LayoutContent = () => {
   const { color } = useBackgroundColor();
+  const { theme } = useAppThemeContext();
+  const rootScreenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      animation: 'slide_from_right' as const,
+      contentStyle: { backgroundColor: theme.background },
+    }),
+    [theme.background]
+  );
 
   return (
     <RootFrame bgColor={color}>
@@ -272,7 +307,11 @@ const LayoutContent = () => {
                           <ThemeSyncer />
                           <ProfileImageViewerProvider>
                             <View style={styles.inner}>
-                              <Slot />
+                              <Stack screenOptions={rootScreenOptions} screenLayout={rootScreenLayout}>
+                                <Stack.Screen name="index" options={handOverOptions} />
+                                <Stack.Screen name="tabs" options={tabsScreenOptions} />
+                                <Stack.Screen name="onboarding" options={handOverOptions} />
+                              </Stack>
                             </View>
                           </ProfileImageViewerProvider>
                         </ThemeProvider>

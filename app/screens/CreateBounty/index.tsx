@@ -28,14 +28,13 @@ import { createForegroundTimer, getMonotonicNow } from 'lib/utils/foreground-tim
 import { useWallet } from 'lib/wallet-context';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   AppState,
   Dimensions,
-  Text,
   View,
 } from 'react-native';
+import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useKeyboardInset } from '../../../components/ui/keyboard-avoiding';
 import { useTabPager } from '../../../components/ui/tab-pager';
 
@@ -757,17 +756,7 @@ export function CreateBountyFlow({
   }, []);
 
   if (isLoading) {
-    return (
-      <View
-        className="flex-1 items-center justify-center"
-        style={{ backgroundColor: theme.background, paddingTop: topInset }}
-      >
-        <ActivityIndicator size="large" color={theme.text} />
-        <Text className="mt-4" style={{ color: theme.text }}>
-          Loading draft...
-        </Text>
-      </View>
-    );
+    return <ScreenLoader label="Loading draft..." />;
   }
 
   if (funding.showTopUp || funding.showInsufficientBalance) {

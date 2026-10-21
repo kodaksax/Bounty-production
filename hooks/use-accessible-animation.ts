@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing } from 'react-native';
 import { A11Y } from '../lib/constants/accessibility';
+import { duration, easeOut, press } from '../lib/motion';
 import { safeCleanup } from '../lib/utils/lifecycle';
 
 /**
@@ -99,21 +100,24 @@ export function useAccessibleAnimation() {
 }
 
 /**
- * Hook for press animations (scale on press in/out)
+ * Hook for press animations (scale on press in/out). Uses the app-wide press
+ * tokens in lib/motion.ts, so a card depresses exactly like a Button does.
+ * Under Reduce Motion the feedback stays and only the motion goes:
+ * createTiming collapses the duration to 0, so the scale changes instantly.
  */
 export function usePressAnimation(enabled: boolean = true) {
   const scaleValue = useRef(new Animated.Value(1)).current;
-  const { createSpring, prefersReducedMotion } = useAccessibleAnimation();
+  const { createTiming } = useAccessibleAnimation();
 
   const animatePressIn = useCallback(() => {
-    if (!enabled || prefersReducedMotion) return;
-    createSpring(scaleValue, 0.96).start();
-  }, [enabled, createSpring, scaleValue, prefersReducedMotion]);
+    if (!enabled) return;
+    createTiming(scaleValue, press.scale, duration.press, easeOut).start();
+  }, [enabled, createTiming, scaleValue]);
 
   const animatePressOut = useCallback(() => {
-    if (!enabled || prefersReducedMotion) return;
-    createSpring(scaleValue, 1).start();
-  }, [enabled, createSpring, scaleValue, prefersReducedMotion]);
+    if (!enabled) return;
+    createTiming(scaleValue, 1, duration.fast, easeOut).start();
+  }, [enabled, createTiming, scaleValue]);
 
   return {
     scaleValue,

@@ -1,11 +1,12 @@
 import { cva, type VariantProps } from "class-variance-authority"
 import { useAccessibleAnimation } from "hooks/use-accessible-animation"
 import { useHapticFeedback } from "lib/haptic-feedback"
+import { duration, easeOut, press } from "lib/motion"
 import { useAppThemeContext } from "lib/themes"
 import type { AppTheme } from "lib/themes/types"
 import { cn, withAlpha } from "lib/utils"
 import * as React from "react"
-import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
+import { ActivityIndicator, Animated, Platform, StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
 
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -60,14 +61,14 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
   ({ className, variant, size, disabled, loading, onPress, children, accessibilityLabel, accessibilityHint, style, ...props }, ref) => {
     const { theme } = useAppThemeContext();
     const { triggerHaptic } = useHapticFeedback();
-    const { createSpring, createTiming } = useAccessibleAnimation();
+    const { createTiming } = useAccessibleAnimation();
     const scaleAnim = React.useRef(new Animated.Value(1)).current;
     const loadingAnim = React.useRef(new Animated.Value(loading ? 1 : 0)).current;
     const [isFocused, setIsFocused] = React.useState(false);
     const isDisabled = disabled || loading;
 
     React.useEffect(() => {
-      createTiming(loadingAnim, loading ? 1 : 0, 150).start();
+      createTiming(loadingAnim, loading ? 1 : 0, duration.fast, easeOut).start();
     }, [loading, loadingAnim, createTiming]);
 
     // Clear the press state when the button becomes disabled mid-press.
@@ -75,14 +76,14 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
     // handlePressOut, handleBlur and handleFocus all early-return while
     // disabled, so a button that goes disabled between press-in and press-out
     // (e.g. Sign In flipping to `loading` the instant it is tapped) keeps
-    // isFocused true and scaleAnim at 0.95 — it is left visually pressed and
+    // isFocused true and scaleAnim pressed — it is left visually pressed and
     // ringed after the press ends. Reset both here so it returns to rest.
     React.useEffect(() => {
       if (isDisabled) {
         setIsFocused(false);
-        createSpring(scaleAnim, 1).start();
+        createTiming(scaleAnim, 1, duration.fast, easeOut).start();
       }
-    }, [isDisabled, scaleAnim, createSpring]);
+    }, [isDisabled, scaleAnim, createTiming]);
 
     const handlePress = React.useCallback((event: any) => {
       if (isDisabled) return;
@@ -97,21 +98,27 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
       onPress?.(event);
     }, [isDisabled, onPress, triggerHaptic, variant]);
 
+    // A touch only depresses the button. It used to also set isFocused, which
+    // painted the keyboard focus ring (3px border + glow) on every tap and
+    // nudged the label 2px as the border widened. The ring now belongs to
+    // real focus events alone (handleFocus/handleBlur below).
     const handlePressIn = React.useCallback(() => {
       if (isDisabled) return;
-      setIsFocused(true);
-      createSpring(scaleAnim, 0.95).start();
-    }, [isDisabled, scaleAnim, createSpring]);
+      createTiming(scaleAnim, press.scale, duration.press, easeOut).start();
+    }, [isDisabled, scaleAnim, createTiming]);
 
     const handlePressOut = React.useCallback(() => {
       if (isDisabled) return;
-      setIsFocused(false);
-      createSpring(scaleAnim, 1).start();
-    }, [isDisabled, scaleAnim, createSpring]);
+      createTiming(scaleAnim, 1, duration.fast, easeOut).start();
+    }, [isDisabled, scaleAnim, createTiming]);
 
     // Handle keyboard focus events for web/keyboard navigation
-    const handleFocus = React.useCallback(() => {
+    const handleFocus = React.useCallback((event?: { target?: unknown }) => {
       if (isDisabled) return;
+      // On web a mouse click focuses the button too. Only keyboard focus
+      // (:focus-visible) should draw the ring, same as a native touch.
+      const target = event?.target as { matches?: (selector: string) => boolean } | undefined;
+      if (Platform.OS === 'web' && target?.matches && !target.matches(':focus-visible')) return;
       setIsFocused(true);
     }, [isDisabled]);
 
@@ -159,6 +166,9 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         accessibilityLabel={accessibilityLabel || (typeof children === "string" ? children : undefined)}
         accessibilityHint={accessibilityHint}
         accessibilityState={{ disabled: isDisabled || false, busy: loading || undefined }}
+        // The scale already says "pressed"; TouchableOpacity's default 0.2
+        // dim on top of it made the button blink nearly transparent.
+        activeOpacity={press.scaledOpacity}
         {...props}
       >
         <Animated.View

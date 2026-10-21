@@ -23,6 +23,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
+import { ScreenLoader } from '../../components/ui/screen-loader'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { ROUTES } from '../../lib/routes'
@@ -185,12 +186,7 @@ export function UpdatePasswordScreen() {
 
   // Show loading while verifying token
   if (verifying) {
-    return (
-      <View className="flex-1 items-center justify-center" style={{ backgroundColor: theme.background }}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text className="mt-4" style={{ color: theme.text }}>Verifying reset link...</Text>
-      </View>
-    )
+    return <ScreenLoader label="Verifying reset link..." />
   }
 
   // Show error if token is invalid

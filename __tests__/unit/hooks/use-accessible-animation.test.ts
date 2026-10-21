@@ -3,10 +3,11 @@
  * tension/friction and stiffness/damping/mass. The floating tab bar passes
  * speed/bounciness, so the default tension/friction must not be added then.
  */
-import { renderHook } from '@testing-library/react-native';
-import { Animated } from 'react-native';
+import { act, renderHook } from '@testing-library/react-native';
+import { AccessibilityInfo, Animated } from 'react-native';
 
-import { useAccessibleAnimation } from '../../../hooks/use-accessible-animation';
+import { useAccessibleAnimation, usePressAnimation } from '../../../hooks/use-accessible-animation';
+import { press } from '../../../lib/motion';
 
 // Same check as React Native's SpringAnimation constructor.
 function assertSingleSpringFamily(config: Record<string, unknown>) {
@@ -77,5 +78,36 @@ describe('useAccessibleAnimation createSpring', () => {
     result.current.createSpring(new Animated.Value(0), 1.1, { tension: 40, friction: 3 });
 
     expect(lastSpringConfig()).toMatchObject({ tension: 40, friction: 3 });
+  });
+});
+
+describe('usePressAnimation', () => {
+  const timingMock = Animated.timing as unknown as jest.Mock;
+  beforeEach(() => timingMock.mockClear());
+
+  // Reduce Motion removes the movement, not the feedback: the press scale
+  // still applies, just instantly (createTiming collapses the duration).
+  it('still applies the press scale under Reduce Motion, with no duration', async () => {
+    (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValueOnce(true);
+    const { result } = renderHook(() => usePressAnimation());
+    await act(async () => {});
+
+    act(() => result.current.animatePressIn());
+    expect(timingMock).toHaveBeenLastCalledWith(
+      result.current.scaleValue,
+      expect.objectContaining({ toValue: press.scale, duration: 0 })
+    );
+
+    act(() => result.current.animatePressOut());
+    expect(timingMock).toHaveBeenLastCalledWith(
+      result.current.scaleValue,
+      expect.objectContaining({ toValue: 1, duration: 0 })
+    );
+  });
+
+  it('does nothing when disabled', () => {
+    const { result } = renderHook(() => usePressAnimation(false));
+    act(() => result.current.animatePressIn());
+    expect(timingMock).not.toHaveBeenCalled();
   });
 });

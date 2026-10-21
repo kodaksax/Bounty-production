@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useHapticFeedback } from "lib/haptic-feedback";
+import { settleSpring } from "lib/motion";
 import { useAccessibleAnimation } from "../../hooks/use-accessible-animation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, LayoutChangeEvent, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -79,11 +80,18 @@ export function FloatingTabBar({
     (e: LayoutChangeEvent) => setTabWidth(e.nativeEvent.layout.width / tabs.length),
     [tabs.length]
   );
+  // Slides between tabs and settles without overshoot. When the row is first
+  // measured (or resized) it jumps straight to the active tab — animating
+  // that from 0 swept the capsule across the bar at launch.
+  const measuredWidth = useRef(0);
   useEffect(() => {
-    createSpring(highlightX, activeIndex * tabWidth, {
-      speed: 18,
-      bounciness: 6,
-    }).start();
+    const target = activeIndex * tabWidth;
+    if (measuredWidth.current !== tabWidth) {
+      measuredWidth.current = tabWidth;
+      highlightX.setValue(target);
+      return;
+    }
+    createSpring(highlightX, target, settleSpring).start();
   }, [activeIndex, tabWidth, highlightX, createSpring]);
 
   const handlePress = useCallback(

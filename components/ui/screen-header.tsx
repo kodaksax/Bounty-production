@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { press } from '../../lib/motion';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -33,7 +34,16 @@ export function ScreenHeader({ title, showBack, onBack, rightNode, centerNode, t
         <View style={[styles.header, transparent && styles.transparent]}>
             <View style={styles.left}>
                 {showBack && (
-                    <TouchableOpacity onPress={handleBack} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Back">
+                    <TouchableOpacity
+                        onPress={handleBack}
+                        style={styles.iconButton}
+                        activeOpacity={press.opacity}
+                        // The visible button is 32pt; the slop brings the
+                        // touch area to 44pt without moving the layout.
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel="Back"
+                    >
                         <MaterialIcons name="arrow-back" size={24} color={theme.text} />
                     </TouchableOpacity>
                 )}

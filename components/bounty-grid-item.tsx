@@ -3,16 +3,19 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile';
 import { useCountdown } from '../hooks/useCountdown';
+import { usePressAnimation } from '../hooks/use-accessible-animation';
+import { press } from '../lib/motion';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import type { AttachmentMeta } from '../lib/services/database.types';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { getScheduleChip } from '../lib/utils/schedule-utils';
 import { BountyDetailModal } from './bountydetailmodal';
+import { useModalOrigin } from './ui/app-modal';
 import { CountdownBadge } from './ui/countdown-badge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -158,36 +161,25 @@ function BountyGridItemComponent({
   // Under 24h to the deadline, a live countdown takes the chip's place.
   const { isWithin24h: showCountdown } = useCountdown(end_date);
 
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  // Depresses under the finger like every other card and button (it used to
+  // grow 4% with a bounce, spilling into the next tile).
+  const { style: pressStyle, animatePressIn: handlePressIn, animatePressOut: handlePressOut } =
+    usePressAnimation();
 
-  const handlePressIn = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1.04,
-      useNativeDriver: true,
-      speed: 24,
-      bounciness: 5,
-    }).start();
-  }, [scaleAnim]);
-
-  const handlePressOut = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 24,
-      bounciness: 5,
-    }).start();
-  }, [scaleAnim]);
+  // The detail dialog grows out of this card rather than appearing mid-screen.
+  const { originRef, origin, openFrom } = useModalOrigin<React.ComponentRef<typeof TouchableOpacity>>();
 
   const handlePress = useCallback(() => {
     triggerHaptic('light');
-    setShowDetail(true);
-  }, [triggerHaptic]);
+    openFrom(() => setShowDetail(true));
+  }, [triggerHaptic, openFrom]);
 
   return (
     <>
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Animated.View style={pressStyle}>
         <TouchableOpacity
-          activeOpacity={0.8}
+          ref={originRef}
+          activeOpacity={press.scaledOpacity}
           style={s.card}
           onPress={handlePress}
           onPressIn={handlePressIn}
@@ -330,6 +322,7 @@ function BountyGridItemComponent({
 
       {showDetail && (
         <BountyDetailModal
+          origin={origin}
           bounty={{
             id,
             username: resolvedUsername,

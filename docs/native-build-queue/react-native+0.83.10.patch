@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native/Libraries/Components/Touchable/TouchableOpacity.js b/node_modules/react-native/Libraries/Components/Touchable/TouchableOpacity.js
+index 9733b42..c1076c4 100644
+--- a/node_modules/react-native/Libraries/Components/Touchable/TouchableOpacity.js
++++ b/node_modules/react-native/Libraries/Components/Touchable/TouchableOpacity.js
+@@ -244,7 +244,7 @@ class TouchableOpacity extends React.Component<
+   }
+ 
+   _opacityActive(duration: number): void {
+-    this._setOpacityTo(this.props.activeOpacity ?? 0.2, duration);
++    this._setOpacityTo(this.props.activeOpacity ?? 0.7, duration);
+   }
+ 
+   _opacityInactive(duration: number): void {

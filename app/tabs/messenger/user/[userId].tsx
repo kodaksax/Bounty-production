@@ -1,7 +1,8 @@
 'use client';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { ScreenLoader } from '../../../../components/ui/screen-loader';
 
 import FullChatDetailScreen from 'app/tabs/full-chat-detail-screen';
 import { withReplayMask } from 'components/replay-mask';
@@ -134,11 +135,7 @@ function UserConversationRoute() {
   }
 
   if (!conversation) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#008E2A" />
-      </View>
-    );
+    return <ScreenLoader />;
   }
 
   return <FullChatDetailScreen conversation={conversation} onBack={() => router.back()} />;

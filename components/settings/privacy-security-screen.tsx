@@ -7,6 +7,7 @@ import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
 import { SettingsSection } from 'components/ui/settings-section';
 import { TotpEnrollmentModal } from 'components/ui/totp-enrollment-modal';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import { switchColors } from 'lib/themes/switch-colors';
 import type { AppTheme } from 'lib/themes/types';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
@@ -343,9 +344,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     value,
     onValueChange: onChange,
     disabled,
-    trackColor: { false: theme.border, true: theme.primary },
-    thumbColor: theme.surface,
-    ios_backgroundColor: theme.border,
+    ...switchColors(theme),
     accessibilityLabel: label,
   });
 

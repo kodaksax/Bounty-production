@@ -9,6 +9,7 @@
 
 import React, { useState } from 'react';
 import {
+  Animated,
   View,
   Text,
   ScrollView,
@@ -20,9 +21,31 @@ import { Button } from '../components/ui/button';
 import { EmptyState } from '../components/ui/empty-state';
 import { SkeletonCard, SkeletonCardList } from '../components/ui/skeleton-card';
 import { SuccessAnimation, ConfettiAnimation } from '../components/ui/success-animation';
-import { AccessibleTouchable, AccessibleIconButton } from '../components/ui/accessible-touchable';
+import { usePressAnimation } from '../hooks/use-accessible-animation';
+import { press } from '../lib/motion';
 import { MaterialIcons } from '@expo/vector-icons';
 import { PostingsListSkeleton } from '../components/ui/skeleton-loaders';
+
+/** A custom surface with the app's press feedback (see docs/MOTION_SYSTEM.md). */
+function PressableCard({ onPress }: { onPress: () => void }) {
+  const { style, animatePressIn, animatePressOut } = usePressAnimation();
+  return (
+    <Animated.View style={style}>
+      <TouchableOpacity
+        activeOpacity={press.scaledOpacity}
+        onPress={onPress}
+        onPressIn={animatePressIn}
+        onPressOut={animatePressOut}
+        accessibilityRole="button"
+        accessibilityLabel="Custom card"
+      >
+        <View style={styles.customButton}>
+          <Text style={styles.customButtonText}>Custom Card</Text>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
 
 export default function AnimationShowcaseScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
@@ -156,41 +179,24 @@ export default function AnimationShowcaseScreen() {
           )}
         </View>
 
-        {/* Section 5: Accessible Touchables */}
+        {/* Section 5: Pressable surfaces */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>5. Accessible Touchables</Text>
+          <Text style={styles.sectionTitle}>5. Pressable Surfaces</Text>
           <Text style={styles.description}>
-            Custom touchables with built-in haptics and animations
+            Cards depress like buttons, using the shared press tokens in lib/motion.ts
           </Text>
-          
-          <View style={styles.buttonRow}>
-            <AccessibleTouchable
-              onPress={() => console.log('Custom touchable pressed!')}
-              haptic="medium"
-              accessibilityLabel="Custom button"
-            >
-              <View style={styles.customButton}>
-                <Text style={styles.customButtonText}>Custom Button</Text>
-              </View>
-            </AccessibleTouchable>
 
-            <AccessibleIconButton
-              size="md"
+          <View style={styles.buttonRow}>
+            <PressableCard onPress={() => console.log('Custom card pressed!')} />
+
+            <Button
+              variant="ghost"
+              size="icon"
               onPress={() => console.log('Icon button pressed!')}
-              haptic="light"
               accessibilityLabel="Settings"
             >
               <MaterialIcons name="settings" size={24} color="#10b981" />
-            </AccessibleIconButton>
-
-            <AccessibleIconButton
-              size="lg"
-              onPress={() => console.log('Large icon pressed!')}
-              haptic="heavy"
-              accessibilityLabel="Favorite"
-            >
-              <MaterialIcons name="favorite" size={32} color="#ef4444" />
-            </AccessibleIconButton>
+            </Button>
           </View>
         </View>
 

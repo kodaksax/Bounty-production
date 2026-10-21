@@ -1,4 +1,5 @@
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import { switchColors } from 'lib/themes/switch-colors';
 import type { AppTheme } from 'lib/themes/types';
 import {
   NOTIFICATION_CATEGORIES,
@@ -87,9 +88,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
     value,
     onValueChange: onChange,
     disabled,
-    trackColor: { false: theme.border, true: theme.primary },
-    thumbColor: theme.surface,
-    ios_backgroundColor: theme.border,
+    ...switchColors(theme),
     accessibilityLabel: label,
   });
 

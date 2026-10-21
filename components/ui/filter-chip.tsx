@@ -13,6 +13,7 @@ import { useMemo } from 'react'
 import { StyleSheet, Text, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native'
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
 import { hapticFeedback } from '../../lib/haptic-feedback'
+import { press } from '../../lib/motion'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
 
@@ -58,7 +59,7 @@ export function FilterChip({
         hapticFeedback.selection()
         onPress()
       }}
-      activeOpacity={0.75}
+      activeOpacity={press.opacity}
       style={[s.chip, active && s.chipActive, style]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}

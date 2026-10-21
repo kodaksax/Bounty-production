@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useIsScreenFocused } from '../../../../hooks/useRouteFocus';
 import { DEFAULT_OVERLAY_KEY, useTopInsetOverlay } from '../../../../lib/context/TopInsetOverlayContext';
 import { pageTranslateX, useTabPager } from '../../../../components/ui/tab-pager';
 import { analyticsService } from '../../../../lib/services/analytics-service';
@@ -140,8 +141,12 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const tabPager = useTabPager();
   const overlayTranslateX = useMemo(() => pageTranslateX(tabPager, 'postings'), [tabPager]);
   const overlayKey = overlayTranslateX ? 'postings' : DEFAULT_OVERLAY_KEY;
+  // The strip is painted above every route, so it comes down while another
+  // screen is open over the tab shell (which stays mounted underneath) —
+  // otherwise that screen inherits the composer's green strip.
+  const isScreenFocused = useIsScreenFocused();
   useEffect(() => {
-    if (!tintStatusBar || !setTopInsetOverlay) return;
+    if (!tintStatusBar || !isScreenFocused || !setTopInsetOverlay) return;
     setTopInsetOverlay({
       colors: [theme.primary, theme.primary],
       height: heroHeight,
@@ -150,7 +155,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
       barColor: theme.primary,
     }, overlayKey);
     return () => setTopInsetOverlay(null, overlayKey);
-  }, [tintStatusBar, setTopInsetOverlay, theme.primary, heroHeight, scrollY, overlayTranslateX, overlayKey]);
+  }, [tintStatusBar, isScreenFocused, setTopInsetOverlay, theme.primary, heroHeight, scrollY, overlayTranslateX, overlayKey]);
 
   const error = validateTitle(draft.title);
   const length = (draft.title || '').length;

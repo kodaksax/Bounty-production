@@ -1,5 +1,9 @@
 # Animation & Micro-interactions Usage Guide
 
+> **Superseded by [docs/MOTION_SYSTEM.md](../MOTION_SYSTEM.md)** (2026-10-21). Timings, press
+> scales and easing now come from `lib/motion.ts`, and `AccessibleTouchable` has been removed —
+> use the shared `Button`, or `usePressAnimation()` for pressable cards.
+
 This guide explains how to use the new animation components and micro-interactions added to BOUNTYExpo.
 
 ## Table of Contents

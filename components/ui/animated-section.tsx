@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
+import { duration, easeInOut } from '../../lib/motion';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -24,7 +25,8 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
   useEffect(() => {
     Animated.timing(rotateAnim, {
       toValue: expanded ? 1 : 0,
-      duration: 200,
+      duration: duration.base,
+      easing: easeInOut,
       useNativeDriver: true,
     }).start();
   }, [expanded, rotateAnim]);
@@ -36,8 +38,12 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
 
   const accentColor = theme.isDark ? '#1FAE49' : theme.primary;
 
+  // The body and the chevron share one duration so they land together (the
+  // preset ran the body for 300ms against a 200ms chevron).
   const handleToggle = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    LayoutAnimation.configureNext(
+      LayoutAnimation.create(duration.base, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity)
+    );
     onToggle();
   };
 

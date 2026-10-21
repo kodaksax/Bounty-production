@@ -20,10 +20,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { ScreenLoader } from "../../components/ui/screen-loader";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
 import { useAuthContext } from "../../hooks/use-auth-context";
 import { useBackHandler } from "../../hooks/useBackHandler";
+import { useSwipeBackEnabled } from "../../hooks/useRouteFocus";
 import { hapticFeedback } from "../../lib/haptic-feedback";
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
 import type { AppTheme } from "../../lib/themes/types";
@@ -252,6 +254,11 @@ export default function EditProfileScreen() {
     }
   }, [isDirty, initialData, profile, router]);
 
+  // The iOS edge swipe would leave without the discard prompt below, so it is
+  // off while there are unsaved changes; the back button and Android's back
+  // still ask first.
+  useSwipeBackEnabled(!isDirty);
+
   // Handle hardware back button on Android
   useBackHandler(() => {
     if (isDirty) {
@@ -345,12 +352,7 @@ export default function EditProfileScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
-      </View>
+      <ScreenLoader label="Loading profile..." />
     );
   }
 

@@ -6,6 +6,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScreenLoader } from '../../components/ui/screen-loader';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
@@ -177,11 +178,7 @@ export default function OnboardingIndex() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={theme.textSecondary} />
-    </View>
-  );
+  return <ScreenLoader />;
 }
 
 function makeStyles(theme: AppTheme) {

@@ -3,7 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { Image as ExpoImage } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useHapticFeedback } from '../lib/haptic-feedback'
@@ -11,8 +11,11 @@ import type { AttachmentMeta } from '../lib/services/database.types'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { useCountdown } from '../hooks/useCountdown'
+import { usePressAnimation } from '../hooks/use-accessible-animation'
+import { press } from '../lib/motion'
 import { getScheduleChip } from '../lib/utils/schedule-utils'
 import { BountyDetailModal } from "./bountydetailmodal"
+import { useModalOrigin } from "./ui/app-modal"
 import { CountdownBadge } from "./ui/countdown-badge"
 
 // Every slot in the card below the cover is a fixed height, and the price row
@@ -110,20 +113,16 @@ function BountyFeaturedItemComponent({
     setResolvedUsername(profileLoading ? 'Loading...' : 'Anonymous')
   }, [username, posterProfile?.username, profileLoading])
 
-  const scaleAnim = useRef(new Animated.Value(1)).current
+  const { style: pressStyle, animatePressIn: handlePressIn, animatePressOut: handlePressOut } =
+    usePressAnimation()
 
-  const handlePressIn = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 24, bounciness: 5 }).start()
-  }, [scaleAnim])
-
-  const handlePressOut = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 24, bounciness: 5 }).start()
-  }, [scaleAnim])
+  // The detail dialog grows out of this card rather than appearing mid-screen.
+  const { originRef, origin, openFrom } = useModalOrigin<React.ComponentRef<typeof TouchableOpacity>>()
 
   const handlePress = useCallback(() => {
     triggerHaptic('light')
-    setShowDetail(true)
-  }, [triggerHaptic])
+    openFrom(() => setShowDetail(true))
+  }, [triggerHaptic, openFrom])
 
   const firstImageUri = useMemo(() => {
     if (!attachments_json) return null
@@ -138,9 +137,10 @@ function BountyFeaturedItemComponent({
 
   return (
     <>
-      <Animated.View style={{ transform: [{ scale: scaleAnim }], flex: 1 }}>
+      <Animated.View style={[pressStyle, { flex: 1 }]}>
         <TouchableOpacity
-          activeOpacity={1}
+          ref={originRef}
+          activeOpacity={press.scaledOpacity}
           style={s.card}
           onPress={handlePress}
           onPressIn={handlePressIn}
@@ -251,6 +251,7 @@ function BountyFeaturedItemComponent({
 
       {showDetail && (
         <BountyDetailModal
+          origin={origin}
           bounty={{
             id, username: resolvedUsername, title, price, distance, location: location ?? undefined,
             description, user_id, work_type, poster_avatar, is_for_honor: isForHonor,

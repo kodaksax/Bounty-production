@@ -11,6 +11,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { getScheduleChip } from '../lib/utils/schedule-utils';
 import { BountyDetailModal } from './bountydetailmodal';
+import { useModalOrigin } from './ui/app-modal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -129,10 +130,13 @@ function BountyListItemComponent({
     [user_id, router, triggerHaptic]
   );
 
+  // The detail dialog grows out of the button that opened it.
+  const { originRef, origin, openFrom } = useModalOrigin<React.ComponentRef<typeof TouchableOpacity>>();
+
   const handleBountyPress = useCallback(() => {
     triggerHaptic('light');
-    setShowDetail(true);
-  }, [triggerHaptic]);
+    openFrom(() => setShowDetail(true));
+  }, [triggerHaptic, openFrom]);
 
   return (
     <>
@@ -255,6 +259,7 @@ function BountyListItemComponent({
             )}
           </View>
           <TouchableOpacity
+            ref={originRef}
             style={s.applyButton}
             onPress={handleBountyPress}
             activeOpacity={0.85}
@@ -269,6 +274,7 @@ function BountyListItemComponent({
 
       {showDetail && (
         <BountyDetailModal
+          origin={origin}
           bounty={{
             id,
             username: resolvedUsername,
