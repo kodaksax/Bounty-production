@@ -507,6 +507,17 @@ jest.mock('expo-application', () => ({
   getInstallReferrerAsync: jest.fn().mockResolvedValue(''),
 }));
 
+// Mock expo-clipboard. services/marketingAttribution.ts (imported by the root
+// layout) reads the iOS install handoff from it; an empty clipboard by default.
+// Suites that need specific behaviour still jest.mock it themselves.
+jest.mock('expo-clipboard', () => ({
+  hasUrlAsync: jest.fn().mockResolvedValue(false),
+  getUrlAsync: jest.fn().mockResolvedValue(null),
+  hasStringAsync: jest.fn().mockResolvedValue(false),
+  getStringAsync: jest.fn().mockResolvedValue(''),
+  setStringAsync: jest.fn().mockResolvedValue(true),
+}));
+
 // Mock expo-file-system (including legacy export)
 jest.mock('expo-file-system', () => ({
   documentDirectory: '/mock/documents/',

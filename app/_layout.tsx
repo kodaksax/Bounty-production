@@ -57,6 +57,7 @@ import posthog from '../lib/posthog';
 import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
+import { captureInstallHandoff } from '../services/marketingAttribution';
 
 // Route every <Text>/<TextInput> through the Inter app typeface.
 applyGlobalFont();
@@ -408,6 +409,10 @@ function RootLayout({ children }: { children: React.ReactNode }) {
           } catch {
             /* ignore */
           }
+          // Once per install: pins the click that installed the app (Play
+          // referrer / iOS clipboard handoff) before any account exists.
+          // Never awaited and never throws, so it cannot hold the splash.
+          void captureInstallHandoff();
         } catch (e) {
           // eslint-disable-next-line no-console
           console.error('[Analytics] startup init failed', e);
