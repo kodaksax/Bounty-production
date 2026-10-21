@@ -102,7 +102,7 @@ it('validation still runs first: an invalid amount never reaches the gate', () =
 
 it('no card step: unchanged copy and label', () => {
   const { getByText, queryByText } = renderStep();
-  expect(getByText("You're charged when you accept a hunter.")).toBeTruthy();
+  expect(getByText('You only pay when you hire. We hold the money until the job is done.')).toBeTruthy();
   expect(getByText('Post Bounty')).toBeTruthy();
   expect(queryByText(/Save a card to post/)).toBeNull();
 });
@@ -111,7 +111,7 @@ it('card step expected: says a card is needed and that nothing is charged now', 
   mockGate.cardStepExpected = true;
   const { getByText, queryByText } = renderStep();
   // Still true: the charge happens at hire.
-  expect(getByText("You're charged when you accept a hunter.")).toBeTruthy();
+  expect(getByText('You only pay when you hire. We hold the money until the job is done.')).toBeTruthy();
   expect(
     getByText("Save a card to post. Nothing is charged now. It's ready when you hire, so hiring takes one tap.")
   ).toBeTruthy();

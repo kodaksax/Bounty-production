@@ -309,6 +309,54 @@ describe('useAcceptFunding', () => {
       expect(propsFor('accept_funding_failed')).toMatchObject({ reason: 'payment_failed' });
     });
 
+    test('accept_funding_failed carries the same Stripe fields as payment_failed, and the sheet keeps them until the next try', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const probe = openGate(result, NEEDS_TOPUP, { hunterName: 'Ada' });
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      const failure = {
+        error_code: 'incorrect_zip',
+        code: 'incorrect_zip',
+        type: 'card_error',
+        error_type: 'card_error',
+        sdk_code: 'Failed',
+        payment_method_type: 'apple_pay' as const,
+        error_message: 'Your card could not be authorized using the postal code provided.',
+      };
+      act(() => result.current.gate.onPaymentStarted('applePay'));
+      act(() => result.current.gate.onPaymentFailed('failed', failure));
+
+      expect(propsFor('accept_funding_failed')).toMatchObject({
+        reason: 'payment_failed',
+        error_code: 'incorrect_zip',
+        code: 'incorrect_zip',
+        type: 'card_error',
+        payment_method_type: 'apple_pay',
+      });
+      // Still pending: hunter selected, nothing resolved, reason on screen.
+      expect(probe.settled).toBe(false);
+      expect(result.current.gate.hunterName).toBe('Ada');
+      expect(result.current.gate.paymentFailure).toEqual(failure);
+
+      // The next attempt clears the explanation.
+      act(() => result.current.gate.onPaymentStarted('paymentSheet'));
+      expect(result.current.gate.paymentFailure).toBeNull();
+    });
+
+    test('a cancelled payment records no failure fields and shows no failure', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      act(() => result.current.gate.onPaymentStarted('paymentSheet'));
+      act(() => result.current.gate.onPaymentFailed('cancelled'));
+
+      const props = propsFor('accept_funding_failed');
+      expect(props).toMatchObject({ reason: 'payment_cancelled' });
+      expect(props.error_code).toBeUndefined();
+      expect(result.current.gate.paymentFailure).toBeNull();
+    });
+
     test('cancel resolves false and emits abandoned from the pay sheet', async () => {
       const { result } = renderHook(() => useAcceptFunding(FAST));
       const probe = openGate(result, NEEDS_TOPUP);

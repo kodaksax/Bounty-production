@@ -7,7 +7,16 @@ import {
     stripeService,
 } from './services/stripe-service';
 import { logger } from './utils/error-logger';
+import { failureEventProps, type FailureEventProps } from './utils/stripe-error';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
+
+export interface ProcessPaymentResult {
+  success: boolean;
+  paymentIntentId?: string;
+  error?: string;
+  /** Structured reason when success is false; same shape as payment_failed. */
+  failure?: FailureEventProps;
+}
 
 interface StripeContextType {
   isInitialized: boolean;
@@ -23,14 +32,11 @@ interface StripeContextType {
   /**
    * @deprecated Use processPaymentSecure() to ensure idempotent payment intent creation.
    */
-  processPayment: (
-    amount: number,
-    paymentMethodId?: string
-  ) => Promise<{ success: boolean; paymentIntentId?: string; error?: string }>;
+  processPayment: (amount: number, paymentMethodId?: string) => Promise<ProcessPaymentResult>;
   processPaymentSecure: (
     amount: number,
     options?: { userId?: string; purpose?: string; paymentMethodId?: string }
-  ) => Promise<{ success: boolean; paymentIntentId?: string; error?: string }>;
+  ) => Promise<ProcessPaymentResult>;
   createSetupIntent: () => Promise<StripeSetupIntent | null>;
   clearError: () => void;
 }
@@ -238,7 +244,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   const processPayment = async (
     amount: number,
     paymentMethodId?: string
-  ): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> => {
+  ): Promise<ProcessPaymentResult> => {
     return processPaymentSecure(amount, {
       paymentMethodId,
       purpose: 'wallet_deposit',
@@ -249,7 +255,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   const processPaymentSecure = async (
     amount: number,
     options?: { userId?: string; purpose?: string; paymentMethodId?: string }
-  ): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> => {
+  ): Promise<ProcessPaymentResult> => {
     try {
       setLoadingSafe(true);
       clearError();
@@ -290,14 +296,21 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
         return {
           success: false,
           error: 'Payment was not completed. Please try again.',
+          failure: {
+            ...failureEventProps(undefined, `intent_${confirmedIntent.status}`, 'card'),
+            payment_intent_id: paymentIntent.id,
+          },
         };
       }
     } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : 'Payment processing failed';
-      setErrorSafe(errorMessage);
+      // Not written to the context-wide `error`: that field means "payment
+      // methods could not load", and screens render it with a reload action.
+      // A decline belongs to this one attempt and goes back to the caller.
       return {
         success: false,
         error: errorMessage,
+        failure: failureEventProps(err, 'unknown', 'card'),
       };
     } finally {
       setLoadingSafe(false);

@@ -336,12 +336,12 @@ export function StepPay({
           <Text style={styles.infoTitle}>
             {draft.isForHonor
               ? 'This is a for-honor bounty.'
-              : "You're charged when you accept a hunter."}
+              : trustSafetyStrings.payWhenYouHire}
           </Text>
           <Text style={styles.infoBody}>
             {draft.isForHonor
               ? 'No payment is involved. Someone helps out voluntarily.'
-              : `You pay $${draft.amount || 0}. It is held then, and released when you approve the work. Bounty takes a ${PLATFORM_FEE_DISPLAY} service fee out of it, so the hunter takes home $${calculateHunterEarnings(
+              : `You pay $${draft.amount || 0} when you hire, and it's released when you approve the work. Bounty takes a ${PLATFORM_FEE_DISPLAY} service fee out of it, so the hunter takes home $${calculateHunterEarnings(
                   draft.amount
                 ).net.toFixed(2)} — and they see that number before they apply.`}
           </Text>

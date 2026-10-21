@@ -72,7 +72,7 @@ describe('failureEventProps', () => {
     // What confirmPayment rethrows for a Radar block.
     expect(
       failureEventProps({ type: 'card_error', code: 'Failed', decline_code: 'fraudulent' })
-    ).toMatchObject({ error_code: 'fraudulent', decline_code: 'fraudulent', code: 'Failed' });
+    ).toMatchObject({ error_code: 'fraudulent', decline_code: 'fraudulent', sdk_code: 'Failed' });
   });
 
   test('reads the SDK camelCase declineCode too', () => {
@@ -81,8 +81,69 @@ describe('failureEventProps', () => {
     );
   });
 
-  test('keeps a generic code when it is all there is', () => {
-    expect(failureEventProps({ code: 'Timeout', message: 'timed out' }).error_code).toBe('Timeout');
+  test('never reports the SDK enum as `code`', () => {
+    const props = failureEventProps({ type: 'card_error', code: 'Failed', declineCode: 'fraudulent' });
+    expect(props.code).toBeUndefined();
+    expect(props.sdk_code).toBe('Failed');
+  });
+
+  test('reads stripeErrorCode when the SDK gives no declineCode (Apple Pay incorrect_zip, 2026-10-18)', () => {
+    // The exact shape confirmPlatformPayPayment returned for tahlanalevi's
+    // second attempt, which PostHog recorded as error_code "Failed".
+    const props = failureEventProps(
+      {
+        code: 'Failed',
+        type: 'card_error',
+        stripeErrorCode: 'incorrect_zip',
+        message: 'Your card could not be authorized using the postal code provided.',
+      },
+      'unknown',
+      'apple_pay'
+    );
+    expect(props).toMatchObject({
+      error_code: 'incorrect_zip',
+      code: 'incorrect_zip',
+      type: 'card_error',
+      error_type: 'card_error',
+      sdk_code: 'Failed',
+      payment_method_type: 'apple_pay',
+    });
+    expect(props.decline_code).toBeUndefined();
+  });
+
+  test('carries decline_code, code, type and payment_method_type together for a card decline', () => {
+    expect(
+      failureEventProps(
+        {
+          code: 'Failed',
+          type: 'card_error',
+          stripeErrorCode: 'card_declined',
+          declineCode: 'insufficient_funds',
+          message: 'Your card has insufficient funds.',
+        },
+        'unknown',
+        'card'
+      )
+    ).toMatchObject({
+      error_code: 'insufficient_funds',
+      decline_code: 'insufficient_funds',
+      code: 'card_declined',
+      type: 'card_error',
+      payment_method_type: 'card',
+    });
+  });
+
+  test('labels an SDK-only failure explicitly instead of a bare generic string', () => {
+    const props = failureEventProps({ code: 'Timeout', message: 'timed out' });
+    expect(props.error_code).toBe('sdk_timeout');
+    expect(props.code).toBeUndefined();
+  });
+
+  test('ignores a generic enum that leaked into decline_code', () => {
+    // handleStripeError used to copy code -> decline_code for card errors.
+    const props = failureEventProps({ type: 'card_error', code: 'Failed', decline_code: 'Failed' });
+    expect(props.decline_code).toBeUndefined();
+    expect(props.error_code).toBe('sdk_failed');
   });
 
   test('an Error instance without a code falls back to the fallback code', () => {

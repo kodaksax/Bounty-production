@@ -10,14 +10,17 @@
  *   * balance is short   -> "Pay $X & hire" charges EXACTLY the shortfall via
  *                           payWithCard / payWithApplePay, after telling the
  *                           gate a payment started
- *   * no card on file    -> the same button links one instead of charging;
- *                           nothing is sent to Stripe
+ *   * no card on file    -> the same button opens the Stripe Payment Sheet
+ *                           (Apple Pay / Google Pay / new card); on web, where
+ *                           there is no sheet, it links a card instead
+ *   * card on file       -> "Use another card" opens the Payment Sheet
  *   * Stripe still loading -> the button waits rather than charging with an
  *                           empty method list
  *   * success            -> gate.onPaymentSucceeded with the captured amount,
  *                           with NO success modal in the way
- *   * cancel / decline   -> gate.onPaymentFailed('cancelled' | 'failed'); the
- *                           sheet stays up
+ *   * cancel / decline   -> gate.onPaymentFailed('cancelled' | 'failed', failure);
+ *                           the sheet stays up, explains a decline in plain
+ *                           words and keeps the hunter selected
  *   * sub-minimum shortfall -> charged at Stripe's $0.50 floor, not refused
  */
 
@@ -28,6 +31,7 @@ import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 
 const mockPayWithCard = jest.fn();
 const mockPayWithApplePay = jest.fn();
+const mockPayWithPaymentSheet = jest.fn();
 const mockSetSuccessInfo = jest.fn();
 const mockSetError = jest.fn();
 const mockSetShowPaymentMethodsModal = jest.fn();
@@ -64,12 +68,15 @@ jest.mock('hooks/use-wallet-deposit', () => ({
     primaryCardPaymentMethod:
       depositState.paymentMethods.find((method: any) => method.type === 'card') ?? null,
     isApplePayAvailable: true,
+    isGooglePayAvailable: false,
+    walletName: 'Apple Pay',
     setError: mockSetError,
     setSuccessInfo: mockSetSuccessInfo,
     setShowPaymentMethodsModal: mockSetShowPaymentMethodsModal,
     loadPaymentMethods: mockLoadPaymentMethods,
     payWithCard: (...a: unknown[]) => mockPayWithCard(...a),
     payWithApplePay: (...a: unknown[]) => mockPayWithApplePay(...a),
+    payWithPaymentSheet: (...a: unknown[]) => mockPayWithPaymentSheet(...a),
   }),
 }));
 
@@ -121,6 +128,7 @@ function makeGate(overrides: Record<string, unknown> = {}) {
     hunterName: 'Ada',
     hunterAvatar: null,
     remainderAfterDeposit: false,
+    paymentFailure: null,
     onConfirm: jest.fn(),
     onPaymentStarted: jest.fn(),
     onPaymentSucceeded: jest.fn(),
@@ -137,6 +145,11 @@ describe('AcceptFundingGate', () => {
     jest.clearAllMocks();
     resetDepositState();
     Platform.OS = 'ios';
+    // A charge that never settles unless a test says otherwise.
+    const inFlight = () => new Promise(() => {});
+    mockPayWithCard.mockImplementation(inFlight);
+    mockPayWithApplePay.mockImplementation(inFlight);
+    mockPayWithPaymentSheet.mockImplementation(inFlight);
   });
 
   afterEach(() => {
@@ -151,7 +164,7 @@ describe('AcceptFundingGate', () => {
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
       expect(getByText('Ada')).toBeTruthy();
-      expect(getByText('Held for in-app completion or dispute review')).toBeTruthy();
+      expect(getByText(trustSafetyStrings.payWhenYouHire)).toBeTruthy();
       expect(getByText('from your wallet balance')).toBeTruthy();
       // No Apple Pay button when there is nothing to charge.
       expect(queryByText('Pay')).toBeNull();
@@ -179,7 +192,7 @@ describe('AcceptFundingGate', () => {
       const { getByText } = render(<AcceptFundingGate gate={gate} />);
 
       expect(getByText('charged to your card now')).toBeTruthy();
-      expect(getByText('Held for in-app completion or dispute review')).toBeTruthy();
+      expect(getByText(trustSafetyStrings.payWhenYouHire)).toBeTruthy();
 
       fireEvent.press(getByText('Pay $30.00 & hire'));
 
@@ -209,21 +222,49 @@ describe('AcceptFundingGate', () => {
       expect(getByText('Pay $30.00 & hire')).toBeTruthy();
     });
 
-    test('with no card on file the primary button links one instead of charging', () => {
+    test('with no card on file the primary button opens the Payment Sheet for exactly the shortfall', () => {
       resetDepositState({ paymentMethods: [] });
       const gate = makeGate();
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
+
+      fireEvent.press(getByText('Pay $30.00 & hire'));
+
+      expect(gate.onPaymentStarted).toHaveBeenCalledWith('paymentSheet');
+      expect(mockPayWithPaymentSheet).toHaveBeenCalledWith(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      expect(mockSetShowPaymentMethodsModal).not.toHaveBeenCalled();
+      // No "Paying with … Change" row to change a card that does not exist.
+      expect(queryByText('Paying with')).toBeNull();
+      // The sheet is already the primary path; no second link to it.
+      expect(queryByText('Use another card')).toBeNull();
+    });
+
+    test('with no card on file on web (no native sheet) the button links one instead of charging', () => {
+      Platform.OS = 'web';
+      resetDepositState({ paymentMethods: [] });
+      const gate = makeGate();
+      const { getByText } = render(<AcceptFundingGate gate={gate} />);
 
       fireEvent.press(getByText('Link a card to pay $30.00'));
 
       expect(mockSetShowPaymentMethodsModal).toHaveBeenCalledWith(true);
       expect(mockPayWithCard).not.toHaveBeenCalled();
+      expect(mockPayWithPaymentSheet).not.toHaveBeenCalled();
       expect(gate.onPaymentStarted).not.toHaveBeenCalled();
-      // No "Paying with … Change" row to change a card that does not exist.
-      expect(queryByText('Paying with')).toBeNull();
     });
 
-    test('a linked bank account alone still prompts for a card instead of trying to charge the bank as a card', () => {
+    test('with a saved card, "Use another card" opens the Payment Sheet', () => {
+      const gate = makeGate();
+      const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+      fireEvent.press(getByText('Use another card'));
+
+      expect(gate.onPaymentStarted).toHaveBeenCalledWith('paymentSheet');
+      expect(mockPayWithPaymentSheet).toHaveBeenCalledWith(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('a linked bank account alone opens the Payment Sheet instead of trying to charge the bank as a card', () => {
       resetDepositState({
         paymentMethods: [
           {
@@ -236,11 +277,10 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate();
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
-      fireEvent.press(getByText('Link a card to pay $30.00'));
+      fireEvent.press(getByText('Pay $30.00 & hire'));
 
-      expect(mockSetShowPaymentMethodsModal).toHaveBeenCalledWith(true);
+      expect(mockPayWithPaymentSheet).toHaveBeenCalledWith(30);
       expect(mockPayWithCard).not.toHaveBeenCalled();
-      expect(gate.onPaymentStarted).not.toHaveBeenCalled();
       expect(queryByText('Paying with')).toBeNull();
     });
 
@@ -271,7 +311,7 @@ describe('AcceptFundingGate', () => {
     });
 
     test('a captured deposit reaches the gate with the paid amount and no modal to dismiss', async () => {
-      mockPayWithCard.mockResolvedValue('succeeded');
+      mockPayWithCard.mockResolvedValue({ outcome: 'succeeded' });
       const gate = makeGate();
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
@@ -288,40 +328,92 @@ describe('AcceptFundingGate', () => {
     test('a dismissed Apple Pay sheet is reported as cancelled and the sheet stays up', async () => {
       // use-wallet-deposit sets no error/successInfo on a user cancel — the
       // outcome is carried entirely by the resolved value.
-      mockPayWithApplePay.mockResolvedValue('cancelled');
+      mockPayWithApplePay.mockResolvedValue({ outcome: 'cancelled' });
       const gate = makeGate();
       const { getByLabelText, getByText } = render(<AcceptFundingGate gate={gate} />);
 
       fireEvent.press(getByLabelText('Pay 30.00 dollars with Apple Pay and hire'));
 
-      await waitFor(() => expect(gate.onPaymentFailed).toHaveBeenCalledWith('cancelled'));
+      await waitFor(() =>
+        expect(gate.onPaymentFailed).toHaveBeenCalledWith('cancelled', undefined)
+      );
       expect(gate.onPaymentSucceeded).not.toHaveBeenCalled();
       expect(getByText('Pay $30.00 & hire')).toBeTruthy();
     });
 
-    test('a declined charge is reported as failed and shown in place', async () => {
-      mockPayWithCard.mockImplementation(async () => {
-        depositState = {
-          ...depositState,
-          error: { message: 'Your card was declined.', type: 'payment' },
-        };
-        return 'failed';
-      });
+    test('a declined charge is reported with its Stripe reason and the sheet stays up', async () => {
+      const failure = {
+        error_code: 'insufficient_funds',
+        decline_code: 'insufficient_funds',
+        code: 'card_declined',
+        type: 'card_error',
+        payment_method_type: 'card',
+        error_message: 'Your card has insufficient funds.',
+      };
+      mockPayWithCard.mockResolvedValue({ outcome: 'failed', failure });
       const gate = makeGate();
-      const { getByText, rerender } = render(<AcceptFundingGate gate={gate} />);
+      const { getByText } = render(<AcceptFundingGate gate={gate} />);
 
       fireEvent.press(getByText('Pay $30.00 & hire'));
 
-      await waitFor(() => expect(gate.onPaymentFailed).toHaveBeenCalledWith('failed'));
+      await waitFor(() => expect(gate.onPaymentFailed).toHaveBeenCalledWith('failed', failure));
       expect(gate.onPaymentSucceeded).not.toHaveBeenCalled();
+      // The plain-words notice replaces the hook's banner.
+      expect(mockSetError).toHaveBeenCalledWith(null);
+    });
 
-      // In the real hook, `setError` is React state on the same component and
-      // its own state change triggers this re-render; here the mock hook
-      // returns a plain snapshot of `depositState`, so the render that picks
-      // up the mutation above has to be asked for explicitly.
-      rerender(<AcceptFundingGate gate={gate} />);
-      expect(getByText('banner:Your card was declined.')).toBeTruthy();
+    test('after a decline the sheet says what happened, what to do next, and that the hunter is still selected', () => {
+      const gate = makeGate({
+        paymentFailure: {
+          error_code: 'fraudulent',
+          decline_code: 'fraudulent',
+          code: 'card_declined',
+          type: 'card_error',
+          payment_method_type: 'card',
+          error_message: 'Your card was declined.',
+        },
+      });
+      const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
+
+      // A Radar/fraud decline is shown as an ordinary bank decline.
+      expect(getByText('Your bank declined this card.')).toBeTruthy();
+      expect(getByText('Try another card or Apple Pay.')).toBeTruthy();
+      expect(getByText('Ada is still selected. Nothing has changed on this bounty.')).toBeTruthy();
+      expect(queryByText(/fraud/i)).toBeNull();
+      // Still on the sheet, with every way forward available.
       expect(getByText('Pay $30.00 & hire')).toBeTruthy();
+      expect(getByText('Use another card')).toBeTruthy();
+      expect(gate.onCancel).not.toHaveBeenCalled();
+    });
+
+    test('a decline never offers to retry the card that was just declined', () => {
+      resetDepositState({ error: { message: 'Your card was declined.', type: 'payment' } });
+      const gate = makeGate({
+        paymentFailure: {
+          error_code: 'generic_decline',
+          decline_code: 'generic_decline',
+          type: 'card_error',
+          error_message: 'Your card was declined.',
+        },
+      });
+      const { queryByText } = render(<AcceptFundingGate gate={gate} />);
+      // The old ErrorBanner's action re-ran payWithCard on the same card.
+      expect(queryByText(/^banner:/)).toBeNull();
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('a non-payment error (e.g. methods failed to load) still shows the banner', () => {
+      resetDepositState({ stripeError: { message: 'Could not load payment methods' } });
+      const gate = makeGate();
+      const { getByText } = render(<AcceptFundingGate gate={gate} />);
+      expect(getByText('banner:Could not load payment methods')).toBeTruthy();
+    });
+
+    test('a legacy at_post bounty keeps the original held-funds line', () => {
+      const gate = makeGate({ requirement: { ...REQ, fundingMode: 'at_post' } });
+      const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
+      expect(getByText('Held for in-app completion or dispute review')).toBeTruthy();
+      expect(queryByText(trustSafetyStrings.payWhenYouHire)).toBeNull();
     });
 
     test('nothing is reported when no charge was ever in flight', () => {
@@ -366,7 +458,7 @@ describe('AcceptFundingGate', () => {
         const gate = makeGate();
         const { getByText, queryByText, getByLabelText } = render(<AcceptFundingGate gate={gate} />);
 
-        expect(getByText('Held for in-app completion or dispute review')).toBeTruthy();
+        expect(getByText(trustSafetyStrings.payWhenYouHire)).toBeTruthy();
         expect(getByText(trustSafetyStrings.posterHire)).toBeTruthy();
         expect(getByText(/Refunds and releases depend/)).toBeTruthy();
         expect(getByText('Pay $30.00 & hire')).toBeTruthy();
