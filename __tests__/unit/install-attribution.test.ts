@@ -118,6 +118,14 @@ describe('resolveInstallMatch', () => {
     expect(resolveInstallMatch(input({ branch })).confidence).toBeLessThan(REPORTABLE_CONFIDENCE)
     expect(resolveInstallMatch(input({ branch: { ...branch, guaranteed: true } })).confidence).toBe(1)
   })
+
+  test('a validated Branch click id is returned for the attribution claim', () => {
+    expect(
+      resolveInstallMatch(
+        input({ branch: { utm: { source: 'reddit' }, guaranteed: true, clickId: CLICK } })
+      )
+    ).toMatchObject({ method: 'branch_deferred_link', confidence: 1, clickId: CLICK })
+  })
 })
 
 describe('fingerprintConfidence', () => {

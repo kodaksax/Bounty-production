@@ -94,6 +94,7 @@ export interface MarketingAttributionResponse {
   match_confidence?: number | null;
   /** False for inferred matches below 0.9: stored, but never reported or sent to PostHog. */
   reportable?: boolean | null;
+  retryable?: boolean;
   initial_utm_source?: string | null;
   initial_utm_medium?: string | null;
   initial_utm_campaign?: string | null;
@@ -113,7 +114,10 @@ type FirstTouchProperties = Pick<
   | 'initial_landing_page'
   | 'install_source'
   | 'install_campaign'
->;
+> & {
+  click_id?: string;
+  match_guaranteed?: boolean;
+};
 
 export interface PerformMarketingAttributionParams {
   /**
@@ -312,6 +316,7 @@ async function getDeferredDeepLink(): Promise<FirstTouchProperties | null> {
       '+url',
       '~referring_link'
     );
+    const clickId = branchString(params, 'click_id');
 
     return {
       initial_utm_source: initialUtmSource,
@@ -321,6 +326,8 @@ async function getDeferredDeepLink(): Promise<FirstTouchProperties | null> {
       initial_landing_page: initialLandingPage,
       install_source: branchString(params, 'install_source') ?? initialUtmSource ?? 'branch',
       install_campaign: branchString(params, 'install_campaign') ?? initialUtmCampaign,
+      ...(clickId ? { click_id: clickId } : {}),
+      match_guaranteed: params['+match_guaranteed'] === true,
     };
   } catch (e) {
     log('skipped', { reason: 'branch_params_unavailable', error: e });
@@ -334,7 +341,7 @@ async function getDeferredDeepLink(): Promise<FirstTouchProperties | null> {
 
 /** Persisted once per install by `captureInstallHandoff()`. */
 interface InstallHandoff {
-  v: 1;
+  v: 2;
   /** Click id recovered from the iOS clipboard handoff, if any. */
   clickId: string | null;
   /** Raw Play Install Referrer, if any (Android). */
@@ -362,14 +369,14 @@ async function readHandoff(): Promise<InstallHandoff | null> {
   try {
     const raw = await AsyncStorage.getItem(INSTALL_HANDOFF_STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as InstallHandoff) : null;
-    return parsed?.v === 1 ? parsed : null;
+    return parsed?.v === 2 ? parsed : null;
   } catch {
     return null;
   }
 }
 
 /** Anonymous pre-signup question: is there an unclaimed iPhone click from this IP? */
-async function probeForClick(): Promise<boolean> {
+async function probeForClick(): Promise<boolean | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -379,11 +386,11 @@ async function probeForClick(): Promise<boolean> {
       body: JSON.stringify({ action: 'probe', platform: 'ios' }),
       signal: controller.signal,
     });
-    if (!response.ok) return false;
+    if (!response.ok) return null;
     const body = JSON.parse((await response.text().catch(() => '')) || '{}');
-    return body?.candidate === true;
+    return typeof body?.candidate === 'boolean' ? body.candidate : null;
   } catch {
-    return false;
+    return null;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -412,7 +419,9 @@ async function runHandoffCapture(): Promise<InstallHandoff | null> {
 
   if (Platform.OS === 'ios') {
     if (handoffDelayMs > 0) await new Promise(resolve => setTimeout(resolve, handoffDelayMs));
-    if (await probeForClick()) clickId = await readClipboardClickId();
+    const hasCandidate = await probeForClick();
+    if (hasCandidate === null) return null;
+    if (hasCandidate) clickId = await readClipboardClickId();
   } else if (Platform.OS === 'android') {
     installReferrer = await getInstallReferrer();
   } else {
@@ -420,7 +429,7 @@ async function runHandoffCapture(): Promise<InstallHandoff | null> {
   }
 
   const handoff: InstallHandoff = {
-    v: 1,
+    v: 2,
     clickId,
     installReferrer,
     capturedAt: new Date().toISOString(),
@@ -446,9 +455,13 @@ async function runHandoffCapture(): Promise<InstallHandoff | null> {
  */
 export function captureInstallHandoff(): Promise<InstallHandoff | null> {
   if (!handoffInFlight) {
-    handoffInFlight = runHandoffCapture().catch(e => {
+    const capture = runHandoffCapture().catch(e => {
       log('failed', { reason: 'handoff_capture_failed', error: e }, 'warning');
       return null;
+    });
+    handoffInFlight = capture;
+    void capture.then(result => {
+      if (result === null && handoffInFlight === capture) handoffInFlight = null;
     });
   }
   return handoffInFlight;
@@ -478,6 +491,7 @@ async function buildPayload(): Promise<Record<string, unknown> | null> {
   }
 
   if (Platform.OS === 'ios') {
+    if (!handoff) return null;
     return {
       platform: 'ios',
       ...(handoff?.clickId ? { click_id: handoff.clickId } : {}),
@@ -557,6 +571,10 @@ async function postAttribution(
       body = text ? (JSON.parse(text) as MarketingAttributionResponse) : {};
     } catch {
       body = {};
+    }
+
+    if (!response.ok && response.status === 503 && body.retryable === true) {
+      return body;
     }
 
     if (!response.ok) {
@@ -720,6 +738,28 @@ async function attribute(
       },
       'warning'
     );
+    return 'failed';
+  }
+
+  if (body.retryable === true) {
+    await writeRecord(userId, {
+      v: 2,
+      state: 'pending',
+      attempts,
+      updatedAt: new Date().toISOString(),
+    });
+    log('failed', { userId, attempt, reason: 'retryable_server_response' }, 'warning');
+    return 'failed';
+  }
+
+  if (typeof body.reportable !== 'boolean') {
+    await writeRecord(userId, {
+      v: 2,
+      state: 'pending',
+      attempts,
+      updatedAt: new Date().toISOString(),
+    });
+    log('failed', { userId, attempt, reason: 'missing_reportable' }, 'warning');
     return 'failed';
   }
 

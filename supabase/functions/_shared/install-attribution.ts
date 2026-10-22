@@ -159,7 +159,7 @@ export interface MatchInput {
   /** The referrer's click id exists in marketing_clicks. */
   referrerClickExists: boolean;
   webUtm: Utm | null;
-  branch: { utm: Utm; guaranteed: boolean } | null;
+  branch: { utm: Utm; guaranteed: boolean; clickId?: string | null } | null;
   fingerprintCandidates: ClickCandidate[];
   now: Date;
 }
@@ -198,7 +198,7 @@ export function resolveInstallMatch(input: MatchInput): ResolvedMatch {
     return {
       method: 'branch_deferred_link',
       confidence: input.branch.guaranteed ? 1 : 0.6,
-      clickId: null,
+      clickId: input.branch.clickId ?? null,
       utm: input.branch.utm,
     };
   }

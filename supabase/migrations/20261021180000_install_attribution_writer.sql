@@ -65,6 +65,8 @@ declare
   v_click public.marketing_clicks;
   v_row public.marketing_attribution;
   v_utm jsonb := coalesce(p_utm, '{}'::jsonb);
+  v_match_method text := p_match_method;
+  v_match_confidence numeric := p_match_confidence;
 begin
   if p_user_id is null then
     raise exception 'p_user_id is required';
@@ -87,6 +89,22 @@ begin
 
   if p_click_id is not null then
     select * into v_click from public.marketing_clicks where click_id = p_click_id for update;
+    if v_click.click_id is not null
+       and v_click.matched_user_id is not null
+       and v_click.matched_user_id <> p_user_id
+       and not (p_match_confidence >= 0.9 and coalesce(v_click.match_confidence, 0) < 0.9) then
+      -- Never copy a click already deterministically claimed by another user.
+      -- A deterministic match may still take over a previous low-confidence
+      -- fingerprint claim.
+      v_click := null;
+      if p_match_method = 'branch_deferred_link' then
+        v_match_confidence := least(p_match_confidence, 0.6);
+      else
+        v_match_method := 'unattributed';
+        v_match_confidence := 0;
+        v_utm := '{}'::jsonb;
+      end if;
+    end if;
   end if;
 
   insert into public.marketing_attribution (
@@ -112,7 +130,7 @@ begin
     -- `platform` has always meant the marketing platform the click came
     -- through (linkedin, instagram, website), not the device OS.
     coalesce(v_click.platform, v_click.utm_source, nullif(v_utm->>'source', '')),
-    p_match_method, p_match_confidence, p_device_os,
+    v_match_method, v_match_confidence, p_device_os,
     coalesce(nullif(p_web_distinct_id, ''), v_click.posthog_distinct_id)
   )
   on conflict (user_id) do nothing
@@ -130,12 +148,12 @@ begin
     update public.marketing_clicks
        set matched_user_id = p_user_id,
            matched_at = now(),
-           match_method = p_match_method,
-           match_confidence = p_match_confidence
+           match_method = v_match_method,
+           match_confidence = v_match_confidence
      where click_id = v_click.click_id
        and (
          matched_user_id is null
-         or (p_match_confidence >= 0.9 and coalesce(match_confidence, 0) < 0.9)
+         or (v_match_confidence >= 0.9 and coalesce(match_confidence, 0) < 0.9)
        );
   end if;
 

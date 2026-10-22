@@ -96,16 +96,17 @@ async function clickExists(admin: Admin, clickId: string | null): Promise<boolea
   return Boolean(data);
 }
 
-function parseBranch(value: unknown): { utm: Utm; guaranteed: boolean } | null {
+function parseBranch(value: unknown): { utm: Utm; guaranteed: boolean; clickId: string | null } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
+  const clickId = asUuid(input.click_id);
   const utm: Utm = {
     source: cleanText(input.initial_utm_source ?? input.utm_source),
     medium: cleanText(input.initial_utm_medium ?? input.utm_medium),
     campaign: cleanText(input.initial_utm_campaign ?? input.utm_campaign),
   };
-  if (!utm.source && !utm.campaign) return null;
-  return { utm, guaranteed: input.match_guaranteed === true };
+  if (!utm.source && !utm.campaign && !clickId) return null;
+  return { utm, guaranteed: input.match_guaranteed === true, clickId };
 }
 
 function parseFirstTouch(value: unknown): Utm | null {
@@ -127,9 +128,10 @@ function parseFirstTouch(value: unknown): Utm | null {
  * deterministic match: a PostHog merge cannot be undone, so an inference is
  * never allowed to join two people.
  */
-async function mergeWebPerson(userId: string, webDistinctId: string): Promise<void> {
+async function mergeWebPerson(userId: string, webDistinctId: string): Promise<boolean> {
   const apiKey = Deno.env.get('POSTHOG_PROJECT_API_KEY');
-  if (!apiKey || webDistinctId === userId) return;
+  if (!apiKey) return false;
+  if (webDistinctId === userId) return true;
   const host = Deno.env.get('POSTHOG_HOST') ?? 'https://us.i.posthog.com';
   try {
     const response = await fetch(`${host}/capture/`, {
@@ -144,8 +146,10 @@ async function mergeWebPerson(userId: string, webDistinctId: string): Promise<vo
       }),
     });
     if (!response.ok) console.error('[marketing-attribute] PostHog merge failed', response.status);
+    return response.ok;
   } catch (error) {
     console.error('[marketing-attribute] PostHog merge failed', error);
+    return false;
   }
 }
 
@@ -199,18 +203,22 @@ Deno.serve(async request => {
 
   const referrer = os === 'android' ? parseInstallReferrer(body.install_referrer) : null;
   const handoffClickId = asUuid(body.click_id);
-  const [referrerClickExists, handoffClickExists] = await Promise.all([
+  const branch = parseBranch(body.deferred_deep_link);
+  const [referrerClickExists, handoffClickExists, branchClickExists] = await Promise.all([
     clickExists(admin, referrer?.clickId ?? null),
     clickExists(admin, handoffClickId),
+    clickExists(admin, branch?.clickId ?? null),
   ]);
-  const branch = parseBranch(body.deferred_deep_link);
+  const validatedBranch = branch
+    ? { ...branch, clickId: branchClickExists ? branch.clickId : null }
+    : null;
   const webUtm = os === 'web' ? parseFirstTouch(body.first_touch) : null;
 
   const needsInference =
     !(os === 'android' && referrer) &&
     !(handoffClickId && handoffClickExists) &&
     !webUtm &&
-    !branch;
+    !validatedBranch;
   const candidates = needsInference
     ? await fingerprintCandidates(admin, await ipHashes(request, now), os, now)
     : [];
@@ -222,7 +230,7 @@ Deno.serve(async request => {
     handoffClickExists,
     referrerClickExists,
     webUtm,
-    branch,
+    branch: validatedBranch,
     fingerprintCandidates: candidates,
     now,
   });
@@ -251,11 +259,13 @@ Deno.serve(async request => {
   const method = String(row.match_method ?? 'unattributed');
   const reportable = row.attribution_reportable === true;
 
-  // The web person is merged only on a deterministic match, and only the
-  // first time (a repeat claim already merged, or never qualified).
+  // Retry an unconfirmed identity merge when a previous claim committed but
+  // PostHog was unavailable.
   const mergeId = typeof row.web_distinct_id === 'string' ? row.web_distinct_id : null;
-  const mergeWeb = Boolean(!row.already_attributed && mergeId && confidence >= REPORTABLE_CONFIDENCE);
-  if (mergeWeb && mergeId) await mergeWebPerson(user.id, mergeId);
+  const mergeWeb = Boolean(mergeId && confidence >= REPORTABLE_CONFIDENCE);
+  if (mergeWeb && mergeId && !(await mergeWebPerson(user.id, mergeId))) {
+    return jsonResponse({ error: 'Web identity merge is pending', retryable: true }, 503);
+  }
 
   console.log(
     JSON.stringify({

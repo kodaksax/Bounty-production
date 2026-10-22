@@ -118,7 +118,7 @@ async function recordClick(
       os: device === 'ios' ? 'iOS' : device === 'android' ? 'Android' : device,
       country: request.headers.get('cf-ipcountry'),
       posthog_distinct_id: row.posthogDistinctId ?? null,
-    });
+    }).abortSignal(AbortSignal.timeout(3000));
     // 23505: the same click id re-sent (a double tap). The first row stands.
     if (error && error.code !== '23505') {
       console.error('[app-link] click log failed', error.message);
