@@ -17,9 +17,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminEventRow } from '../../components/admin/AdminEventRow';
 import { AdminHeader } from '../../components/admin/AdminHeader';
+import { OpsAlertsSection } from '../../components/admin/OpsAlertsSection';
+import { KeyboardAwareScrollView } from '../../components/ui/keyboard-avoiding';
 import {
   AdminBadge,
   AdminButton,
@@ -137,6 +139,12 @@ export default function CommandCenterScreen() {
 
   const go = useCallback((route: string) => router.push(route as never), [router]);
 
+  const [opsReloadKey, setOpsReloadKey] = useState(0);
+  const refresh = useCallback(() => {
+    setOpsReloadKey((k) => k + 1);
+    refetch();
+  }, [refetch]);
+
   const criticalAnomalies = useMemo(
     () => anomalies.filter((a) => a.severity === 'critical'),
     [anomalies]
@@ -167,10 +175,10 @@ export default function CommandCenterScreen() {
       />
       {error && overview ? <AdminErrorBanner message={error} onRetry={refetch} /> : null}
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: 64 }}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refetch} tintColor={theme.primary} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={theme.primary} />
         }
       >
         {isLoading && !overview ? (
@@ -178,6 +186,9 @@ export default function CommandCenterScreen() {
         ) : overview ? (
           <>
             <MoneyIntegrityBand overview={overview} onPress={() => go(ROUTES.ADMIN.ANOMALIES)} />
+
+            {/* ── Ops alerts: open until a person resolves them ───────── */}
+            <OpsAlertsSection reloadKey={opsReloadKey} />
 
             {/* ── Is anything broken? ─────────────────────────────────── */}
             <AdminSection
@@ -397,7 +408,7 @@ export default function CommandCenterScreen() {
             </AdminSection>
           </>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </AdminScreen>
   );
 }

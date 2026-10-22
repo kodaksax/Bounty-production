@@ -685,6 +685,8 @@ export type NotificationType =
   | 'marketing_promo'
   /** Operator-facing payment-integrity page. Admin recipients only. */
   | 'reconciliation_alert'
+  /** Scam/abuse flag from moderation-sweep. Admin recipients only. */
+  | 'moderation_alert'
   /** Daily roll-up of warning/info findings. Non-urgent; maps to 'payments' category. */
   | 'reconciliation_digest';
 

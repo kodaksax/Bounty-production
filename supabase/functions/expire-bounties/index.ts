@@ -2,8 +2,7 @@
 //
 // Finds all bounties whose end_date has passed and whose expiry notification
 // has not yet been sent, enqueues a "Bounty Expired" notification for each
-// poster, and then fans out to the process-notification function so push
-// tokens and in-app bells are updated immediately.
+// poster. The notifications_outbox insert trigger dispatches each row.
 //
 // Invocation:
 //   • Supabase scheduled function — configure a cron trigger in the
@@ -72,35 +71,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[expire-bounties] ${rows.length} expiry notification(s) enqueued`);
 
-    // Fan out to process-notification for each outbox row so push tokens and
-    // in-app bells are updated without waiting for the next polling interval.
-    const results = await Promise.allSettled(
-      rows.map(({ outbox_id }) =>
-        supabaseAdmin.functions.invoke('process-notification', {
-          body: { id: outbox_id },
-        })
-      )
-    );
-
-    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.filter((r) => r.status === 'rejected').length;
-
-    if (failed > 0) {
-      results.forEach((r, i) => {
-        if (r.status === 'rejected') {
-          console.error(
-            `[expire-bounties] process-notification failed for outbox ${rows[i].outbox_id}`,
-            r.reason
-          );
-        }
-      });
-    }
-
-    return jsonResponse({
-      processed: rows.length,
-      succeeded,
-      failed,
-    });
+    return jsonResponse({ processed: rows.length });
   } catch (err) {
     console.error('[expire-bounties] unexpected error', err);
     return jsonResponse({ error: 'Internal server error' }, 500);
