@@ -552,7 +552,8 @@ export type AnalyticsEvent =
   //                                              and the hire sheet opened
   //   accept_funding_started       (NEW)      — a payment sheet opened from it
   //                                              (paymentMethod: card | applePay |
-  //                                              linkCard = add-a-card sheet), or
+  //                                              paymentSheet | linkCard =
+  //                                              add-a-card sheet), or
   //                                              "Confirm & hire" when the balance
   //                                              covers it (paymentRequired: false).
   //                                              Once per sheet, so it can repeat.

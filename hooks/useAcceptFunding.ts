@@ -78,8 +78,12 @@ export type AcceptFundingPaymentOutcome =
   /** Stripe or the network refused the charge. */
   | 'failed';
 
-/** 'paymentSheet' = Stripe Payment Sheet (Apple Pay / Google Pay / saved or new card). */
-export type AcceptFundingPaymentMethod = 'card' | 'applePay' | 'paymentSheet';
+/**
+ * The payment UI that opened. 'paymentSheet' = Stripe Payment Sheet (Apple Pay /
+ * Google Pay / saved or new card). 'linkCard' is the add-a-card sheet the gate
+ * opens when no card is on file; it moves no money.
+ */
+export type AcceptFundingPaymentMethod = 'card' | 'applePay' | 'paymentSheet' | 'linkCard';
 
 export interface AcceptFundingContext {
   /** Shown in the confirmation copy. Falls back to "this hunter". */
@@ -446,7 +450,9 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     (method: AcceptFundingPaymentMethod) => {
       const pending = pendingRef.current;
       if (!pending) return;
-      paymentInFlightRef.current = true;
+      // Linking a card charges nothing and reports no outcome back, so it
+      // must not hold the background-abandonment check off.
+      if (method !== 'linkCard') paymentInFlightRef.current = true;
       setPaymentFailure(null);
       analyticsService.trackEvent('accept_funding_started', {
         ...eventProps(requirementRef.current, pending.context),

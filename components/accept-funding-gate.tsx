@@ -230,6 +230,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     if (busy) return;
     hapticFeedback.light();
     if (!sheetAvailable) {
+      gate.onPaymentStarted('linkCard');
       setShowPaymentMethodsModal(true);
       return;
     }

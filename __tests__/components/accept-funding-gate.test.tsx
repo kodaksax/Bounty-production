@@ -244,12 +244,13 @@ describe('AcceptFundingGate', () => {
       Platform.OS = 'web';
       resetDepositState({ paymentMethods: [] });
       const gate = makeGate();
-      const { getByText } = render(<AcceptFundingGate gate={gate} />);
+      const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
       fireEvent.press(getByText('Link a card to pay $30.00'));
 
       expect(mockSetShowPaymentMethodsModal).toHaveBeenCalledWith(true);
       expect(mockPayWithCard).not.toHaveBeenCalled();
+      expect(mockPayWithPaymentSheet).not.toHaveBeenCalled();
       // The add-a-card sheet is a payment sheet opening: accept_funding_started.
       expect(gate.onPaymentStarted).toHaveBeenCalledTimes(1);
       expect(gate.onPaymentStarted).toHaveBeenCalledWith('linkCard');
@@ -285,7 +286,7 @@ describe('AcceptFundingGate', () => {
 
       expect(mockPayWithPaymentSheet).toHaveBeenCalledWith(30);
       expect(mockPayWithCard).not.toHaveBeenCalled();
-      expect(gate.onPaymentStarted).toHaveBeenCalledWith('linkCard');
+      expect(gate.onPaymentStarted).toHaveBeenCalledWith('paymentSheet');
       expect(queryByText('Paying with')).toBeNull();
     });
 

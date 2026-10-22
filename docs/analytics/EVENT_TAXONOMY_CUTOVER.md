@@ -253,9 +253,9 @@ before it, per poster:
    charge is due, and the hire sheet opened. `balanceCovers` says whether the
    wallet already covers it.
 2. `accept_funding_started`: a payment sheet opened from the hire sheet.
-   `paymentMethod` is `card` (charging the saved card), `applePay`, or
-   `linkCard` (the add-a-card sheet, when no card is on file; it charges
-   nothing). When the balance covers the hire there is no payment sheet, and
+   `paymentMethod` is `card` (charging the saved card), `applePay`,
+   `paymentSheet` (Stripe's Payment Sheet), or `linkCard` (the add-a-card
+   sheet, when no card is on file; it charges nothing). When the balance covers the hire there is no payment sheet, and
    pressing "Confirm & hire" sends it with `paymentRequired: false`. It fires
    once per sheet opened, so a poster who links a card and then pays sends it
    twice. Count posters, not events.
