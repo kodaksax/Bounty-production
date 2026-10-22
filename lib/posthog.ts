@@ -110,6 +110,12 @@ try {
           // 2026-09-13 had kept both: two open events meant every dashboard
           // had to know which one to trust.
           if (!event || event.event === 'Application Opened') return null;
+          // Metro dev bundles throw on every Fast Refresh slip and on dev
+          // clients older than the JS they load. Each new fingerprint opened a
+          // GitHub issue through the error-tracking alert (#858-#869,
+          // #901, #902, #919), none of them reachable in a release build.
+          // The redbox already shows the developer the error.
+          if (__DEV__ && event.event === '$exception') return null;
           // `register({ app_env })` below runs after the constructor, but the
           // constructor already queues "Application Installed"/"Updated", so
           // those arrived untagged (503 installs in the 30 days to
