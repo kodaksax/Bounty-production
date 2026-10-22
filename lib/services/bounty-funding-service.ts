@@ -67,7 +67,13 @@ export type AcceptFundingFailureReason =
    */
   | 'payment_cancelled'
   | 'payment_failed'
-  | 'partial_deposit';
+  | 'partial_deposit'
+  /**
+   * The charge succeeded but the balance had not moved by the end of the
+   * settle poll (deposit call failed, webhook slow). The sheet closes rather
+   * than asking for the same money again.
+   */
+  | 'deposit_unconfirmed';
 
 const NO_FUNDING_REQUIRED: Omit<BountyFundingRequirement, 'bountyId'> = {
   fundingMode: 'at_post',

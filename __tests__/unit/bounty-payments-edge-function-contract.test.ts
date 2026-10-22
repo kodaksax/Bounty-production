@@ -79,6 +79,14 @@ describe('bounty-payments edge function request/error contract', () => {
     expect(cancelRoute).not.toContain('detail: refundErr?.message');
   });
 
+  it('reconciles partial refunds and refunds the remaining captured amount before cancellation', () => {
+    expect(cancelRoute).toContain('bp.status === \'refunded\'');
+    expect(cancelRoute).not.toContain("bp.status === 'refunded' || bp.status === 'refund_pending'");
+    expect(cancelRoute).toContain('listPaymentIntentRefunds(stripe, bp.stripe_payment_intent_id)');
+    expect(cancelRoute).toContain('amount: coverage.remainingCents');
+    expect(cancelRoute).toContain('if (!coverage.status)');
+  });
+
   it('v2 release pays only bounties.accepted_by, never a client-supplied hunterId', () => {
     // The v2 path used to pick `hunterIdInput || bp.hunter_id || accepted_by`,
     // so a poster could send the captured escrow to any payout-enabled account.
