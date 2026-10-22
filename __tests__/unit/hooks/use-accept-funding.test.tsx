@@ -434,6 +434,26 @@ describe('useAcceptFunding', () => {
       expect(eventNames()).not.toContain('accept_funding_abandoned');
     });
 
+    test('opening the add-a-card sheet is accept_funding_started, but not a charge in flight', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const listener = mockAppStateListen.mock.calls.find(c => c[0] === 'change')?.[1];
+
+      const probe = openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      act(() => result.current.gate.onPaymentStarted('linkCard'));
+      expect(propsFor('accept_funding_started')).toMatchObject({
+        paymentRequired: true,
+        paymentMethod: 'linkCard',
+      });
+      expect(probe.settled).toBe(false);
+
+      // Linking a card reports no outcome, so leaving the app afterwards is
+      // still an abandonment.
+      act(() => listener('background'));
+      expect(propsFor('accept_funding_abandoned')).toMatchObject({ stage: 'pay', trigger: 'background' });
+    });
+
     test('backgrounding with no gate open emits nothing', () => {
       renderHook(() => useAcceptFunding(FAST));
       const listener = mockAppStateListen.mock.calls.find(c => c[0] === 'change')?.[1];

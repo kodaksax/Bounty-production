@@ -267,24 +267,26 @@ describe('bountyService', () => {
 
   it('search enriches results with poster info from public_profiles', async () => {
     const fromCalls: string[] = [];
+    const eqCalls: unknown[][] = [];
 
     supabase.from
       // 1st call: plain bounty search (no `profiles` embed)
       .mockImplementationOnce((table: string) => {
         fromCalls.push(table);
-        return {
-          select: jest.fn(() => ({
-            eq: jest.fn(() => ({
-              or: jest.fn(() => ({
-                order: jest.fn(() => ({
-                  range: jest.fn(() =>
-                    Promise.resolve({ data: [{ id: 7, poster_id: 'u7' }], error: null })
-                  ),
-                })),
-              })),
+        const chain: any = {
+          eq: jest.fn((...args: unknown[]) => {
+            eqCalls.push(args);
+            return chain;
+          }),
+          or: jest.fn(() => ({
+            order: jest.fn(() => ({
+              range: jest.fn(() =>
+                Promise.resolve({ data: [{ id: 7, poster_id: 'u7' }], error: null })
+              ),
             })),
           })),
         };
+        return { select: jest.fn(() => chain) };
       })
       // 2nd call: poster enrichment from the public_profiles view
       .mockImplementationOnce((table: string) => {
@@ -306,6 +308,11 @@ describe('bountyService', () => {
     // Regression guard: search must read `public_profiles`, never the base
     // `profiles` table, which is self-only under RLS.
     expect(fromCalls).toEqual(['bounties', 'public_profiles']);
+    // Open, non-test bounties only: suggestions never surface a QA post.
+    expect(eqCalls).toEqual([
+      ['status', 'open'],
+      ['is_test', false],
+    ]);
   });
 
   it('addAttachmentToBounty falls back to API when Supabase update fails', async () => {

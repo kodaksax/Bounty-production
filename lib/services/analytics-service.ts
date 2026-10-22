@@ -549,9 +549,13 @@ export type AnalyticsEvent =
   //   bounty_viewed                (existing) — a hunter saw it
   //   first_submission_received    (existing) — a hunter applied
   //   accept_funding_required      (NEW)      — poster tapped Select; a charge is due
-  //   accept_funding_started       (NEW)      — poster tapped "Confirm & hire"
-  //                                              or "Pay $X & hire"
-  //                                              (paymentRequired: bool)
+  //                                              and the hire sheet opened
+  //   accept_funding_started       (NEW)      — a payment sheet opened from it
+  //                                              (paymentMethod: card | applePay |
+  //                                              linkCard = add-a-card sheet), or
+  //                                              "Confirm & hire" when the balance
+  //                                              covers it (paymentRequired: false).
+  //                                              Once per sheet, so it can repeat.
   //   payment_sca_required         (existing) — top-up needed 3DS/SCA
   //   payment_completed            (existing) — top-up deposit succeeded
   //   accept_funding_succeeded     (NEW)      — escrow reserved + hunter accepted

@@ -218,7 +218,9 @@ describe('AcceptFundingGate', () => {
 
       expect(mockSetShowPaymentMethodsModal).toHaveBeenCalledWith(true);
       expect(mockPayWithCard).not.toHaveBeenCalled();
-      expect(gate.onPaymentStarted).not.toHaveBeenCalled();
+      // The add-a-card sheet is a payment sheet opening: accept_funding_started.
+      expect(gate.onPaymentStarted).toHaveBeenCalledTimes(1);
+      expect(gate.onPaymentStarted).toHaveBeenCalledWith('linkCard');
       // No "Paying with … Change" row to change a card that does not exist.
       expect(queryByText('Paying with')).toBeNull();
     });
@@ -240,7 +242,7 @@ describe('AcceptFundingGate', () => {
 
       expect(mockSetShowPaymentMethodsModal).toHaveBeenCalledWith(true);
       expect(mockPayWithCard).not.toHaveBeenCalled();
-      expect(gate.onPaymentStarted).not.toHaveBeenCalled();
+      expect(gate.onPaymentStarted).toHaveBeenCalledWith('linkCard');
       expect(queryByText('Paying with')).toBeNull();
     });
 

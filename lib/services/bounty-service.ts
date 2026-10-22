@@ -377,6 +377,8 @@ export const bountyService = {
           .from('bounties')
           .select('*')
           .eq('status', 'open')
+          // Search suggestions are hunter-facing like the feed: never QA posts.
+          .eq('is_test', false)
           .or(`title.ilike.${qQuoted},description.ilike.${qQuoted}`)
           .order('created_at', { ascending: false })
           .range(offset, offset + limit - 1);

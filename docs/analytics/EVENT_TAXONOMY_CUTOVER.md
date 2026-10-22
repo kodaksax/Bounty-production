@@ -237,6 +237,52 @@ Now: one `signup_completed` per new profile, for every sign-in method.
   is still visible as `auth_signup_requires_confirmation`.
 - Profiles backfilled for accounts more than a day old are not counted as
   signups.
+- **Observed 2026-10-22:** every profile created since the trigger went live
+  (2026-10-20 04:51 UTC) has a row, sent within about a minute: 14 of 14, plus
+  one account deleted 2.5 minutes after signing up, which PostHog keeps and
+  Supabase does not. Weeks that started before 10-20 stay under-counted;
+  nothing was backfilled.
+
+## Hire funnel order
+
+The pay-at-accept gate (`hooks/useAcceptFunding.ts`,
+`components/accept-funding-gate.tsx`). Each step is a subset of the one
+before it, per poster:
+
+1. `accept_funding_required`: the poster tapped Select on an applicant, a
+   charge is due, and the hire sheet opened. `balanceCovers` says whether the
+   wallet already covers it.
+2. `accept_funding_started`: a payment sheet opened from the hire sheet.
+   `paymentMethod` is `card` (charging the saved card), `applePay`, or
+   `linkCard` (the add-a-card sheet, when no card is on file; it charges
+   nothing). When the balance covers the hire there is no payment sheet, and
+   pressing "Confirm & hire" sends it with `paymentRequired: false`. It fires
+   once per sheet opened, so a poster who links a card and then pays sends it
+   twice. Count posters, not events.
+3. `payment_completed`: the top-up captured (pay variant only).
+4. `accept_funding_succeeded`: escrow reserved and the hunter accepted.
+
+Exits: `accept_funding_failed` (`reason`), and `accept_funding_abandoned`
+(`stage`, `trigger`: cancel | background | unmount).
+
+Before 2026-10-22, opening the add-a-card sheet sent nothing, so a poster
+with no saved card went from `required` straight to `abandoned`. In the 60
+days to 10-22, 6 external posters reached step 1, all with
+`balanceCovers: false`. One reached step 2 (card, then Apple Pay, both
+declined, 10-18). Two backed out within 8 s without opening any payment
+sheet. Three used older versions of the gate (09-10 to 09-24): two had a
+separate top-up step, and one charged a card without sending `_started`.
+
+### `payment_completed` is not broken
+
+It fires when a wallet top-up succeeds in the app (`stripe-service`,
+`apple-pay-service`). It last fired 2026-09-19, because the last wallet
+deposit on prod was 2026-09-19 19:04 UTC: there have been none since
+(`wallet_transactions`, `type = 'deposit'`). The money that did come in
+after that went through v2 bounty payments (web checkout, card at post),
+which never sent `payment_completed`. Those are recorded in
+`bounty_events` as `payment.record_captured`. The server webhook's
+`payment_completed` goes to HeyCatch only, never to PostHog.
 
 ## `primary_role` is saved at role select
 
@@ -278,10 +324,9 @@ What it does not cover:
 
 ## What these mean (no code change)
 
-- **`accept_funding_started`** means the poster pressed "Confirm & hire" or
-  started the payment sheet (`hooks/useAcceptFunding.ts`). It does not fire for
-  opening the accept sheet. "Sheet shown, 0 started" means nobody pressed the
-  button. It is not a naming mismatch.
+- **`accept_funding_started`** means a payment sheet opened from the hire
+  sheet, or the poster pressed "Confirm & hire" when the balance already
+  covered it. See "Hire funnel order" below.
 - **`bounty_requests.poster_interacted_at`** does not count simply viewing the
   applicant list in the app. Use `applicant_list_viewed`
   (`hooks/useApplicantListViewed.ts`) for "the poster looked". It is stamped
