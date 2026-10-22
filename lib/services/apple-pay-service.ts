@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { API_BASE_URL } from 'lib/config/api';
 import { analyticsService } from 'lib/services/analytics-service';
-import { failureEventProps } from 'lib/utils/stripe-error';
+import { failureEventProps, type FailureEventProps } from 'lib/utils/stripe-error';
 import { stripeSdk } from 'lib/services/stripe-sdk';
 import { supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
@@ -32,6 +32,8 @@ export interface ApplePayResult {
   paymentIntentId?: string;
   error?: string;
   errorCode?: string;
+  /** Structured reason for a failed (not cancelled) payment; same shape as payment_failed. */
+  failure?: FailureEventProps;
 }
 
 /**
@@ -364,12 +366,15 @@ class ApplePayService {
           errorCode: failureCode,
           ...getDiagnosticContext(),
         });
+        const failure = {
+          ...failureEventProps(confirmError ?? failureMessage, 'backend_not_succeeded', 'apple_pay'),
+          payment_intent_id: paymentIntentId,
+        };
         try {
           await analyticsService.trackEvent('payment_failed', {
             method: 'apple_pay',
             stage: confirmError ? 'confirm' : 'backend_confirm',
-            payment_intent_id: paymentIntentId,
-            ...failureEventProps(confirmError ?? failureMessage, 'backend_not_succeeded'),
+            ...failure,
             ...getDiagnosticContext(),
           });
         } catch {
@@ -378,7 +383,8 @@ class ApplePayService {
         return {
           success: false,
           error: failureMessage || 'Payment confirmation failed',
-          errorCode: failureCode,
+          errorCode: failure.code ?? failureCode,
+          failure,
         };
       }
 
@@ -391,7 +397,7 @@ class ApplePayService {
         await analyticsService.trackEvent('payment_failed', {
           method: 'apple_pay',
           stage: 'unhandled',
-          ...failureEventProps(error),
+          ...failureEventProps(error, 'unknown', 'apple_pay'),
           ...getDiagnosticContext(),
         });
       } catch {
@@ -400,6 +406,7 @@ class ApplePayService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
+        failure: failureEventProps(error, 'unknown', 'apple_pay'),
       };
     }
   }

@@ -50,6 +50,7 @@ import {
   type BountyFundingRequirement,
 } from 'lib/services/bounty-funding-service';
 import { analyticsService } from 'lib/services/analytics-service';
+import type { FailureEventProps } from 'lib/utils/stripe-error';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState } from 'react-native';
 
@@ -66,7 +67,9 @@ export type AcceptFundingStage =
    * The deposit was captured; waiting for the server to reflect it. Lasts one
    * RPC in the common case, a short bounded poll if the webhook is slow.
    */
-  | 'settling';
+  | 'settling'
+  /** Stripe's result is indeterminate; block another charge until reconciled. */
+  | 'pending';
 
 /** How the deposit sheet ended when it did not end in a captured payment. */
 export type AcceptFundingPaymentOutcome =
@@ -75,7 +78,8 @@ export type AcceptFundingPaymentOutcome =
   /** Stripe or the network refused the charge. */
   | 'failed';
 
-export type AcceptFundingPaymentMethod = 'card' | 'applePay';
+/** 'paymentSheet' = Stripe Payment Sheet (Apple Pay / Google Pay / saved or new card). */
+export type AcceptFundingPaymentMethod = 'card' | 'applePay' | 'paymentSheet';
 
 export interface AcceptFundingContext {
   /** Shown in the confirmation copy. Falls back to "this hunter". */
@@ -100,6 +104,11 @@ export interface AcceptFundingGate {
    * sheet is showing the remainder, not the original amount.
    */
   remainderAfterDeposit: boolean;
+  /**
+   * Why the last payment attempt failed, while the sheet is still up. The
+   * sheet explains it in plain words; cleared when the next attempt starts.
+   */
+  paymentFailure: FailureEventProps | null;
   /** Balance covers it and the poster agreed. Resolves the gate `true`. */
   onConfirm: () => void;
   /** The sheet handed the shortfall to Stripe / Apple Pay. */
@@ -110,8 +119,13 @@ export interface AcceptFundingGate {
    * `true` on its own once the balance covers the requirement.
    */
   onPaymentSucceeded: (amount: number) => void;
-  /** No money moved. The sheet stays up; the bounty stays open. */
-  onPaymentFailed: (outcome: AcceptFundingPaymentOutcome) => void;
+  /** Stripe may have captured the payment but could not confirm its result. */
+  onPaymentPending: () => void;
+  /**
+   * No money moved. The sheet stays up with the hunter still selected; the
+   * bounty stays open. `failure` is the structured Stripe reason.
+   */
+  onPaymentFailed: (outcome: AcceptFundingPaymentOutcome, failure?: FailureEventProps) => void;
   /** Poster backed out entirely. Nothing is charged, nobody is assigned. */
   onCancel: () => void;
 }
@@ -171,6 +185,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   const [hunterName, setHunterName] = useState('this hunter');
   const [hunterAvatar, setHunterAvatar] = useState<string | null>(null);
   const [remainderAfterDeposit, setRemainderAfterDeposit] = useState(false);
+  const [paymentFailure, setPaymentFailure] = useState<FailureEventProps | null>(null);
   const pendingRef = useRef<PendingGate | null>(null);
   // Mirrors of state for the AppState listener and the unmount cleanup, which
   // are registered once and must not read a stale closure.
@@ -215,6 +230,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     setStage('idle');
     setRequirement(null);
     setRemainderAfterDeposit(false);
+    setPaymentFailure(null);
     pending?.resolve(proceed);
   }, []);
 
@@ -260,6 +276,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       setHunterName(context.hunterName?.trim() || 'this hunter');
       setHunterAvatar(context.hunterAvatar?.trim() || null);
       setRemainderAfterDeposit(false);
+      setPaymentFailure(null);
 
       const req = await getBountyFundingRequirement(id);
 
@@ -374,6 +391,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       const pending = pendingRef.current;
       if (!pending) return;
       paymentInFlightRef.current = true;
+      setPaymentFailure(null);
       analyticsService.trackEvent('accept_funding_started', {
         ...eventProps(requirementRef.current, pending.context),
         paymentRequired: true,
@@ -384,16 +402,21 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   );
 
   const onPaymentFailed = useCallback(
-    (outcome: AcceptFundingPaymentOutcome) => {
+    (outcome: AcceptFundingPaymentOutcome, failure?: FailureEventProps) => {
       const pending = pendingRef.current;
       paymentInFlightRef.current = false;
       if (!pending) return;
       analyticsService.trackEvent('accept_funding_failed', {
         ...eventProps(requirementRef.current, pending.context),
+        // Same decline_code / code / type / payment_method_type as the
+        // payment_failed it follows, so the two can be read together.
+        ...(outcome === 'failed' && failure ? failure : {}),
         reason: outcome === 'cancelled' ? 'payment_cancelled' : 'payment_failed',
       });
-      // Stay on the sheet. Nothing was charged; the poster can retry or back
-      // out, and the bounty is still open either way.
+      // Stay on the sheet with the hunter still selected. Nothing was charged;
+      // the poster can try another method or back out, and the bounty is
+      // still open either way.
+      setPaymentFailure(outcome === 'failed' ? (failure ?? null) : null);
       setStage('pay');
     },
     [eventProps]
@@ -449,7 +472,13 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     [close, eventProps, settlePollAttempts, settlePollDelayMs]
   );
 
+  const onPaymentPending = useCallback(() => {
+    paymentInFlightRef.current = false;
+    setStage('pending');
+  }, []);
+
   const onCancel = useCallback(() => {
+    if (stageRef.current === 'pending') return;
     const pending = pendingRef.current;
     if (pending) trackAbandoned(pending, 'cancel');
     close(false);
@@ -459,17 +488,19 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     // 'checking' is deliberately NOT active: it lasts one RPC, and flashing a
     // gate up for a bounty that turns out to need no funding at all would put
     // the experiment's UI in front of every existing poster.
-    active: stage === 'confirm' || stage === 'pay' || stage === 'settling',
+    active: stage === 'confirm' || stage === 'pay' || stage === 'settling' || stage === 'pending',
     stage,
     requirement,
     hunterName,
     hunterAvatar,
     remainderAfterDeposit,
+    paymentFailure,
     onConfirm,
     onPaymentStarted,
     onPaymentSucceeded: (amount: number) => {
       void onPaymentSucceeded(amount);
     },
+    onPaymentPending,
     onPaymentFailed,
     onCancel,
   };

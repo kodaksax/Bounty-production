@@ -12,5 +12,7 @@ export const trustSafetyStrings = {
   paymentProtection: 'Bounty’s payment protections apply only to payments handled through Bounty. Never pay or accept payment elsewhere.',
   posting: 'Keep this bounty on Bounty. Remove contact details or instructions to arrange payment elsewhere.',
   profile: 'Show your experience—not instructions to contact or pay you elsewhere. Keep bounty agreements on Bounty.',
-  escrowLimits: 'Keep work and payment on Bounty. Refunds and releases depend on the bounty’s state and any dispute review.',
+  /** Pay-at-accept promise. Shown at post time and on the hire sheet; true only for at_accept bounties. */
+  payWhenYouHire: 'You only pay when you hire. We hold the money until the job is done.',
+  escrowLimits:'Keep work and payment on Bounty. Refunds and releases depend on the bounty’s state and any dispute review.',
 } as const;

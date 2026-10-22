@@ -472,3 +472,234 @@ describe('stripeService: small utilities', () => {
     expect(sdkManager.getSDK).toHaveBeenCalled();
   });
 });
+
+describe('stripeService: confirmPayment error codes', () => {
+  beforeEach(() => {
+    clearSdk();
+    jest.clearAllMocks();
+  });
+
+  it("reports the Stripe code, not the SDK's 'Failed', on payment_failed", async () => {
+    const analytics = jest.requireMock('../../../lib/services/analytics-service').analyticsService;
+    mockSdk.confirmPayment = jest.fn().mockResolvedValue({
+      paymentIntent: null,
+      error: {
+        code: 'Failed',
+        type: 'card_error',
+        stripeErrorCode: 'expired_card',
+        message: 'Your card has expired.',
+      },
+    });
+
+    await expect(stripeService.confirmPayment('pi_e_secret_a', 'pm_1')).rejects.toMatchObject({
+      code: 'expired_card',
+    });
+
+    const failed = analytics.trackEvent.mock.calls.find((c: any[]) => c[0] === 'payment_failed');
+    expect(failed[1]).toMatchObject({
+      error_code: 'expired_card',
+      code: 'expired_card',
+      type: 'card_error',
+      sdk_code: 'Failed',
+      payment_method_type: 'card',
+      stage: 'confirm',
+    });
+  });
+});
+
+describe('stripeService: payWithPaymentSheet', () => {
+  const analytics = () =>
+    jest.requireMock('../../../lib/services/analytics-service').analyticsService;
+  const eventsNamed = (name: string) =>
+    analytics().trackEvent.mock.calls.filter((c: any[]) => c[0] === name).map((c: any[]) => c[1]);
+
+  const intentResponse = (body: Record<string, unknown>) => ({
+    ok: true,
+    text: async () => JSON.stringify(body),
+    headers: { get: () => null },
+  });
+
+  beforeEach(() => {
+    clearSdk();
+    (global as any).fetch = jest.fn();
+    jest.clearAllMocks();
+    payErr.checkDuplicatePayment.mockReturnValue(false);
+    payErr.withPaymentRetry.mockImplementation(async (fn: any) => fn());
+    mockSdk.initPaymentSheet = jest.fn().mockResolvedValue({ error: null });
+    mockSdk.presentPaymentSheet = jest.fn().mockResolvedValue({ error: null });
+    mockSdk.retrievePaymentIntent = jest
+      .fn()
+      .mockResolvedValue({
+        paymentIntent: { status: 'RequiresPaymentMethod', lastPaymentError: null },
+      });
+  });
+
+  it('asks for an ephemeral key and hands it to the sheet so saved cards are listed', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      intentResponse({
+        clientSecret: 'pi_s_secret_x',
+        paymentIntentId: 'pi_s',
+        customerId: 'cus_1',
+        ephemeralKey: 'ek_test_1',
+      })
+    );
+
+    const result = await stripeService.payWithPaymentSheet(30, { authToken: 'jwt', userId: 'u1' });
+
+    expect(result).toEqual({ outcome: 'succeeded', paymentIntentId: 'pi_s' });
+    const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(sentBody).toMatchObject({ amountCents: 3000, includeEphemeralKey: true });
+    expect(mockSdk.initPaymentSheet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentIntentClientSecret: 'pi_s_secret_x',
+        customerId: 'cus_1',
+        customerEphemeralKeySecret: 'ek_test_1',
+        allowsDelayedPaymentMethods: false,
+        applePay: expect.any(Object),
+        googlePay: expect.any(Object),
+      })
+    );
+    expect(eventsNamed('payment_initiated')[0]).toMatchObject({ payment_method_type: 'payment_sheet' });
+    expect(eventsNamed('payment_completed')[0]).toMatchObject({
+      paymentIntentId: 'pi_s',
+      payment_method_type: 'payment_sheet',
+    });
+  });
+
+  it('still works without an ephemeral key (older server): no customer config', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      intentResponse({ clientSecret: 'pi_o_secret_x', paymentIntentId: 'pi_o' })
+    );
+    const result = await stripeService.payWithPaymentSheet(30);
+    expect(result.outcome).toBe('succeeded');
+    const config = mockSdk.initPaymentSheet.mock.calls[0][0];
+    expect(config.customerId).toBeUndefined();
+    expect(config.customerEphemeralKeySecret).toBeUndefined();
+  });
+
+  it('a plain close with no decline is a cancel and emits no payment_failed', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      intentResponse({ clientSecret: 'pi_c_secret_x', paymentIntentId: 'pi_c' })
+    );
+    mockSdk.presentPaymentSheet.mockResolvedValue({ error: { code: 'Canceled', message: 'x' } });
+
+    const result = await stripeService.payWithPaymentSheet(30);
+
+    expect(result).toEqual({ outcome: 'cancelled', paymentIntentId: 'pi_c' });
+    expect(eventsNamed('payment_failed')).toHaveLength(0);
+  });
+
+  it('declined inside the sheet then closed = a failure with the real Stripe codes', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      intentResponse({ clientSecret: 'pi_d_secret_x', paymentIntentId: 'pi_d' })
+    );
+    mockSdk.presentPaymentSheet.mockResolvedValue({ error: { code: 'Canceled', message: 'x' } });
+    mockSdk.retrievePaymentIntent.mockResolvedValue({
+      paymentIntent: {
+        status: 'RequiresPaymentMethod',
+        lastPaymentError: {
+          code: 'card_declined',
+          declineCode: 'insufficient_funds',
+          type: 'card_error',
+          message: 'Your card has insufficient funds.',
+          paymentMethod: { paymentMethodType: 'Card' },
+        },
+      },
+    });
+
+    const result = await stripeService.payWithPaymentSheet(30);
+
+    expect(result.outcome).toBe('failed');
+    expect(result.failure).toMatchObject({
+      error_code: 'insufficient_funds',
+      decline_code: 'insufficient_funds',
+      code: 'card_declined',
+      type: 'card_error',
+      payment_method_type: 'payment_sheet',
+      payment_intent_id: 'pi_d',
+    });
+    expect(eventsNamed('payment_failed')[0]).toMatchObject({
+      error_code: 'insufficient_funds',
+      stage: 'confirm',
+      sheet_closed_after_decline: true,
+    });
+  });
+
+  it('treats a retrieved succeeded intent as success when the sheet response failed', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      intentResponse({ clientSecret: 'pi_lost_secret_x', paymentIntentId: 'pi_lost' })
+    );
+    mockSdk.presentPaymentSheet.mockResolvedValue({
+      error: { code: 'Failed', message: 'confirmation response lost' },
+    });
+    mockSdk.retrievePaymentIntent.mockResolvedValue({
+      paymentIntent: { status: 'Succeeded', lastPaymentError: null },
+    });
+
+    const result = await stripeService.payWithPaymentSheet(30);
+
+    expect(result).toEqual({ outcome: 'succeeded', paymentIntentId: 'pi_lost' });
+    expect(eventsNamed('payment_completed')).toHaveLength(1);
+    expect(eventsNamed('payment_failed')).toHaveLength(0);
+  });
+
+  it('keeps an indeterminate intent pending instead of reporting a retryable failure', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      intentResponse({ clientSecret: 'pi_pending_secret_x', paymentIntentId: 'pi_pending' })
+    );
+    mockSdk.presentPaymentSheet.mockResolvedValue({
+      error: { code: 'Failed', message: 'confirmation response lost' },
+    });
+    mockSdk.retrievePaymentIntent.mockResolvedValue({
+      paymentIntent: { status: 'Processing', lastPaymentError: null },
+    });
+
+    const result = await stripeService.payWithPaymentSheet(30);
+
+    expect(result).toEqual({ outcome: 'pending', paymentIntentId: 'pi_pending' });
+    expect(eventsNamed('payment_failed')).toHaveLength(0);
+  });
+
+  it('keeps the outcome pending when PaymentIntent retrieval fails', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      intentResponse({ clientSecret: 'pi_unreadable_secret_x', paymentIntentId: 'pi_unreadable' })
+    );
+    mockSdk.presentPaymentSheet.mockResolvedValue({
+      error: { code: 'Failed', message: 'confirmation response lost' },
+    });
+    mockSdk.retrievePaymentIntent.mockRejectedValue(new Error('network unavailable'));
+
+    const result = await stripeService.payWithPaymentSheet(30);
+
+    expect(result).toEqual({ outcome: 'pending', paymentIntentId: 'pi_unreadable' });
+    expect(eventsNamed('payment_failed')).toHaveLength(0);
+  });
+
+  it('a hard sheet failure reports its Stripe code', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      intentResponse({ clientSecret: 'pi_f_secret_x', paymentIntentId: 'pi_f' })
+    );
+    mockSdk.presentPaymentSheet.mockResolvedValue({
+      error: { code: 'Failed', stripeErrorCode: 'processing_error', type: 'card_error', message: 'x' },
+    });
+
+    const result = await stripeService.payWithPaymentSheet(30);
+
+    expect(result.failure).toMatchObject({ error_code: 'processing_error', sdk_code: 'Failed' });
+    expect(eventsNamed('payment_failed')[0]).toMatchObject({ sheet_closed_after_decline: false });
+  });
+
+  it('a failure to create the intent is a failure, without opening the sheet', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => JSON.stringify({ error: 'boom', code: 'customer_resolution_failed' }),
+      headers: { get: () => null },
+    });
+
+    const result = await stripeService.payWithPaymentSheet(30);
+
+    expect(result.outcome).toBe('failed');
+    expect(mockSdk.presentPaymentSheet).not.toHaveBeenCalled();
+  });
+});

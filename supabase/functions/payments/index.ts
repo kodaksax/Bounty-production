@@ -541,9 +541,30 @@ Deno.serve(async (req: Request) => {
       }
       const paymentIntent = await stripe.paymentIntents.create(piParams, stripeRequestOptions);
 
+      // The Payment Sheet lists the payer's saved cards only when it is given
+      // a short-lived key scoped to their Stripe customer. Optional by design:
+      // without it the sheet still offers Apple Pay / Google Pay / new card,
+      // so a failure to mint one must never fail the payment.
+      let ephemeralKey: string | undefined;
+      if (body.includeEphemeralKey === true) {
+        try {
+          const key = await stripe.ephemeralKeys.create(
+            { customer: customerId },
+            { apiVersion: '2023-10-16' }
+          );
+          ephemeralKey = key.secret ?? undefined;
+        } catch (keyErr) {
+          console.warn('[payments] ephemeral key creation failed', {
+            userId,
+            message: keyErr instanceof Error ? keyErr.message : String(keyErr),
+          });
+        }
+      }
+
       return reply({
         clientSecret: paymentIntent.client_secret,
         paymentIntentId: paymentIntent.id,
+        ...(ephemeralKey ? { customerId, ephemeralKey } : {}),
       });
     }
 
