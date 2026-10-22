@@ -116,3 +116,51 @@ describe('webhook event finalization', () => {
     );
   });
 });
+
+describe("case 'charge.refunded' (refunds are not embedded under apiVersion 2023-10-16)", () => {
+  const start = webhooksSource.indexOf("case 'charge.refunded':");
+  const end = webhooksSource.indexOf("case 'transfer.created':", start);
+  const body = webhooksSource.slice(start, end);
+
+  test('reads the refunds from Stripe instead of trusting the payload', () => {
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(body).toContain('resolveChargeRefunds(');
+    expect(body).toMatch(/stripe\.refunds\.list\(\{\s*charge:\s*chargeId/);
+    // The read that silently produced [] for every production event.
+    expect(body).not.toMatch(/charge\.refunds\?\.data\s*\?\?\s*\[\]/);
+  });
+
+  test('debits the v1 wallet only for live refunds, and routes v2 through the shared reflection', () => {
+    expect(body).toContain('liveRefunds(chargeRefunds)');
+    expect(body).toContain('reflectRefundIntoBountyPayment(supabase, paymentIntentId, chargeRefunds, charge.id)');
+  });
+});
+
+describe("case 'refund.created' / 'refund.updated'", () => {
+  test('advances a v2 payment once Stripe reports the refund succeeded', () => {
+    const start = webhooksSource.indexOf("case 'refund.created':");
+    const end = webhooksSource.indexOf("case 'refund.failed':", start);
+    expect(start).toBeGreaterThan(-1);
+    const body = webhooksSource.slice(start, end);
+    expect(body).toMatch(/refundObj\.status === 'succeeded'/);
+    expect(body).toContain('reflectRefundIntoBountyPayment(');
+    expect(body).toMatch(/stripe\.refunds\.list\(\{\s*payment_intent:\s*refundPI/);
+    // No wallet mutation here: charge.refunded owns apply_refund.
+    expect(body).not.toMatch(/rpc\(\s*'apply_refund'/);
+  });
+});
+
+describe('reflectRefundIntoBountyPayment', () => {
+  const body = extractFunctionBody(webhooksSource, 'reflectRefundIntoBountyPayment');
+
+  test('only ever advances captured / refund_pending rows, on read and on write', () => {
+    expect(body.match(/\.in\('status', \['captured', 'refund_pending'\]\)/g)).toHaveLength(2);
+    expect(body).toContain('bountyPaymentRefundUpdate(Number(row.amount), resolved)');
+  });
+
+  test('throws on DB errors so Stripe retries', () => {
+    expect(body).toContain('throw readErr');
+    expect(body).toContain('throw updErr');
+  });
+});

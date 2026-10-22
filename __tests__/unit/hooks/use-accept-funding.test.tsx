@@ -12,7 +12,8 @@
 //     sheet reported;
 //   * a cancelled or failed charge resolves nothing and leaves the sheet up:
 //     the bounty stays open, nothing is charged;
-//   * a partial deposit re-prompts for the remainder;
+//   * a partial deposit re-prompts for the remainder, but a deposit the server
+//     has not seen yet never does (that would charge the same money twice);
 //   * backing out — by tapping cancel, by unmounting, or by backgrounding —
 //     emits accept_funding_abandoned; cancel and unmount also resolve false so
 //     the caller never accepts anything;
@@ -256,9 +257,13 @@ describe('useAcceptFunding', () => {
       await waitFor(() => expect(probe.resolved).toBe(true));
     });
 
-    test('a deposit that never shows up on the server re-prompts after the bounded wait', async () => {
+    // The charge succeeded but the server's balance never moved within the
+    // bounded wait. This used to go back to 'pay' showing "Payment received.
+    // $X more is needed" beside "Pay $X & hire" — the same amount again, so a
+    // second tap was a second real charge.
+    test('a deposit the server has not seen after the bounded wait closes instead of asking to pay again', async () => {
       const { result } = renderHook(() => useAcceptFunding(FAST));
-      const probe = openGate(result, NEEDS_TOPUP);
+      const probe = openGate(result, NEEDS_TOPUP, { hunterName: 'Sam' });
       await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
 
       mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
@@ -266,11 +271,19 @@ describe('useAcceptFunding', () => {
         result.current.gate.onPaymentSucceeded(30);
       });
 
-      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+      await waitFor(() => expect(probe.resolved).toBe(false));
       // Open + first settle read + FAST.settlePollAttempts polls, then stop.
       expect(mockGetRequirement).toHaveBeenCalledTimes(2 + FAST.settlePollAttempts);
-      expect(probe.settled).toBe(false);
-      expect(result.current.gate.remainderAfterDeposit).toBe(true);
+      expect(result.current.gate.stage).toBe('idle');
+      expect(result.current.gate.remainderAfterDeposit).toBe(false);
+      expect(mockAlert).toHaveBeenCalledTimes(1);
+      const [title, message] = mockAlert.mock.calls[0];
+      expect(title).toBe('Your payment went through');
+      expect(message).toContain('$30.00');
+      expect(message).toContain('Nothing more will be charged');
+      expect(message).toContain('Sam');
+      expect(propsFor('accept_funding_failed')).toMatchObject({ reason: 'deposit_unconfirmed' });
+      expect(allPropsFor('accept_funding_failed').some(p => p.reason === 'partial_deposit')).toBe(false);
     });
 
     test('a cancelled payment leaves the sheet up and resolves nothing', async () => {

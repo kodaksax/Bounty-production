@@ -427,6 +427,28 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       }
       if (pendingRef.current !== pending) return;
 
+      if (!depositReflected(req)) {
+        // Stripe took the money but neither /wallet/deposit nor the webhook
+        // has landed it yet, so the server's shortfall has not moved. Going
+        // back to 'pay' here showed "Payment received. $20.00 more is needed"
+        // beside "Pay $20.00 & hire": a second tap was a second real charge.
+        // Close instead. The deposit lands on its own, and the next hire tap
+        // re-reads the balance and becomes a one-tap "Confirm & hire".
+        analyticsService.trackEvent('accept_funding_failed', {
+          ...eventProps(req, pending.context),
+          reason: 'deposit_unconfirmed',
+        });
+        close(false);
+        Alert.alert(
+          'Your payment went through',
+          `We're still confirming your $${paidAmount.toFixed(2)} payment. Nothing more will be charged. Try hiring ${
+            pending.context.hunterName?.trim() || 'this hunter'
+          } again in a minute.`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       setRequirement(req);
 
       if (!req.requiresFunding || req.shortfall <= 0) {

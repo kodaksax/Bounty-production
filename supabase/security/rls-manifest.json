@@ -681,6 +681,16 @@
       "require_execute": [
         "authenticated"
       ]
+    },
+    {
+      "signature": "fn_get_bounty_funding_requirement(uuid)",
+      "forbid_execute": [
+        "anon",
+        "PUBLIC"
+      ],
+      "require_execute": [
+        "authenticated"
+      ]
     }
   ],
   "baseline": {

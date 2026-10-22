@@ -17,6 +17,12 @@ import {
 import type { WalletTransaction } from '../_shared/types.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
 import {
+  bountyPaymentRefundUpdate,
+  liveRefunds,
+  resolveChargeRefunds,
+  type RefundLike,
+} from '../_shared/refund-reflection.ts';
+import {
     collectWebhookSecrets,
     verifyStripeSignature,
     WEBHOOK_SECRET_ENV_VARS,
@@ -157,6 +163,68 @@ async function completeBountyAfterConfirmedRelease(supabase: any, bountyId: stri
     .eq('id', bountyId)
     .eq('status', 'in_progress');
   if (error) throw error;
+}
+
+/**
+ * Reflects the refunds against a v2 bounty payment into its bounty_payments
+ * row: `refunded` once succeeded refunds cover the amount, `refund_pending`
+ * while they don't. Only captured / refund_pending rows move, so a replayed
+ * or out-of-order event can never regress a released, canceled or already
+ * refunded payment. `refunds` may be a loader so a caller with no matching row
+ * (any v1 deposit) never spends a Stripe call. Throws on a DB error so Stripe
+ * retries.
+ */
+async function reflectRefundIntoBountyPayment(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  paymentIntentId: string,
+  refunds: RefundLike[] | (() => Promise<RefundLike[]>),
+  chargeId: string | null
+): Promise<void> {
+  const { data: row, error: readErr } = await supabase
+    .from('bounty_payments')
+    .select('id, status, amount')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .in('status', ['captured', 'refund_pending'])
+    .maybeSingle();
+  if (readErr) {
+    console.error('[webhooks] Failed to read bounty_payments for refund — letting Stripe retry', {
+      paymentIntentId,
+      chargeId,
+      error: readErr,
+    });
+    throw readErr;
+  }
+  if (!row) return;
+
+  const resolved = typeof refunds === 'function' ? await refunds() : refunds;
+  const next = bountyPaymentRefundUpdate(Number(row.amount), resolved);
+  if (!next) return;
+
+  const { data: updated, error: updErr } = await supabase
+    .from('bounty_payments')
+    .update({
+      status: next.status,
+      stripe_refund_id: next.stripeRefundId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', row.id)
+    .in('status', ['captured', 'refund_pending'])
+    .select('id')
+    .maybeSingle();
+  if (updErr) {
+    console.error('[webhooks] Failed to reflect refund into bounty_payments — letting Stripe retry', {
+      paymentIntentId,
+      chargeId,
+      error: updErr,
+    });
+    throw updErr;
+  }
+  if (updated) {
+    console.log(
+      `[webhooks] bounty_payment ${row.id} ${row.status} → ${next.status} (refund=${next.stripeRefundId ?? 'n/a'}) for intent ${paymentIntentId}`
+    );
+  }
 }
 
 /**
@@ -2134,6 +2202,15 @@ Deno.serve(async (req: Request) => {
         const charge = event.data.object as Stripe.Charge;
         const paymentIntentId = charge.payment_intent as string;
 
+        // Pinned apiVersion 2023-10-16 never embeds charge.refunds in event
+        // payloads, so read them from Stripe. A failed lookup throws, and the
+        // 500 makes Stripe retry rather than record nothing.
+        const chargeRefunds = await resolveChargeRefunds(
+          charge as unknown as { id: string; refunds?: { data?: RefundLike[] | null } | null },
+          async chargeId =>
+            (await stripe.refunds.list({ charge: chargeId, limit: 100 })).data as unknown as RefundLike[]
+        );
+
         const { data: originalTx } = await supabase
           .from('wallet_transactions')
           .select('user_id, amount')
@@ -2142,11 +2219,11 @@ Deno.serve(async (req: Request) => {
 
         if (originalTx) {
           const origTx = originalTx as Pick<WalletTransaction, 'user_id' | 'amount'>;
-          const refunds = charge.refunds?.data ?? [];
+          const refunds = liveRefunds(chargeRefunds);
 
           if (refunds.length === 0) {
             console.warn(
-              `[webhooks] charge.refunded received but charge ${charge.id} has no refunds — skipping`
+              `[webhooks] charge.refunded received but charge ${charge.id} has no live refunds — skipping`
             );
           }
 
@@ -2275,36 +2352,7 @@ Deno.serve(async (req: Request) => {
           // Stripe Dashboard. Reflect it into bounty_payments. Idempotent and
           // non-regressing via the status guard (only captured/refund_pending
           // advance; released/refunded/canceled rows are left untouched).
-          const refunds = charge.refunds?.data ?? [];
-          const latestRefund = refunds.length > 0 ? refunds[refunds.length - 1] : null;
-          const refundStatus = latestRefund?.status === 'succeeded' ? 'refunded' : 'refund_pending';
-          const { data: refundedBp, error: bpRefundErr } = await supabase
-            .from('bounty_payments')
-            .update({
-              status: refundStatus,
-              stripe_refund_id: latestRefund?.id ?? null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('stripe_payment_intent_id', paymentIntentId)
-            .in('status', ['captured', 'refund_pending'])
-            .select('id')
-            .maybeSingle();
-          if (bpRefundErr) {
-            console.error(
-              '[webhooks] Failed to reflect refund into bounty_payments — letting Stripe retry',
-              {
-                paymentIntentId,
-                chargeId: charge.id,
-                error: bpRefundErr,
-              }
-            );
-            throw bpRefundErr;
-          }
-          if (refundedBp) {
-            console.log(
-              `[webhooks] bounty_payment ${(refundedBp as any).id} → ${refundStatus} (refund=${latestRefund?.id ?? 'n/a'}) for intent ${paymentIntentId}`
-            );
-          }
+          await reflectRefundIntoBountyPayment(supabase, paymentIntentId, chargeRefunds, charge.id);
         }
         break;
       }
@@ -3632,16 +3680,30 @@ Deno.serve(async (req: Request) => {
 
       case 'refund.created':
       case 'refund.updated': {
-        // The Refund-object events, distinct from the already-handled
-        // `charge.refunded` (which owns the actual apply_refund ledger
-        // mutation, keyed idempotently on stripe_refund_id). These fire for
-        // the same underlying refund and are handled here as observability-
-        // only — logging confirms Stripe's Refund object reached this state,
-        // with no duplicate ledger write.
+        // The Refund-object events, distinct from `charge.refunded` (which
+        // owns the v1 apply_refund ledger mutation, keyed idempotently on
+        // stripe_refund_id). No wallet write happens here. What they add is
+        // the v2 transition `charge.refunded` cannot make on its own: a refund
+        // still pending when that event fired is advanced to `refunded` here
+        // once Stripe reports it succeeded.
         const refundObj = event.data.object as Stripe.Refund;
         console.log(
           `[webhooks] ${event.type}: refund=${refundObj.id} status=${refundObj.status} amount=$${refundObj.amount / 100}`
         );
+        const refundPI =
+          typeof refundObj.payment_intent === 'string'
+            ? refundObj.payment_intent
+            : ((refundObj.payment_intent as Stripe.PaymentIntent | null)?.id ?? null);
+        if (refundObj.status === 'succeeded' && refundPI) {
+          await reflectRefundIntoBountyPayment(
+            supabase,
+            refundPI,
+            async () =>
+              (await stripe.refunds.list({ payment_intent: refundPI, limit: 100 }))
+                .data as unknown as RefundLike[],
+            null
+          );
+        }
         break;
       }
 

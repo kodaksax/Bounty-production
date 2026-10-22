@@ -59,6 +59,51 @@ export interface CancelBountyPaymentResult {
 
 const TERMINAL_CANCEL_STATUSES = new Set(['canceled', 'refunded']);
 
+/**
+ * Stripe has accepted the refund and it is on its way back to the card. Not
+ * terminal (refund.failed can still revert it to captured), but the money is
+ * no longer held for the bounty and /cancel will not refund it twice.
+ */
+export const REFUND_IN_FLIGHT_STATUS = 'refund_pending';
+
+export interface CancelBountyPaymentOptions {
+  /**
+   * Treat `refund_pending` as done instead of throwing `cancel_pending`. For
+   * a poster cancelling an open bounty: their refund was issued, and telling
+   * them it failed (while blocking the delete forever) is false.
+   */
+  allowRefundPending?: boolean;
+}
+
+/**
+ * Where a v2 bounty's money stands, read from the poster's own
+ * bounty_payments row (RLS: bounty_payments_select_participant).
+ *   held      – authorized or captured: cancelling must refund it
+ *   returning – refund_pending or refunded: already on its way back
+ *   none      – no row, never paid (pending_payment), voided (canceled)
+ *   unknown   – the read failed; callers must not conclude nothing is held
+ */
+export type BountyPaymentHoldState = 'held' | 'returning' | 'none' | 'unknown';
+
+export async function getBountyPaymentHoldState(bountyId: string): Promise<BountyPaymentHoldState> {
+  try {
+    const { data, error } = await supabase
+      .from('bounty_payments')
+      .select('status')
+      .eq('bounty_id', bountyId)
+      .maybeSingle();
+    if (error) return 'unknown';
+    const status = String((data as { status?: string } | null)?.status ?? '');
+    if (status === 'authorized' || status === 'captured') return 'held';
+    if (status === 'refund_pending' || status === 'refunded') return 'returning';
+    // No row, pending_payment, canceled. `released` belongs to the hunter and
+    // cannot exist on an open bounty, the only kind a poster can cancel.
+    return 'none';
+  } catch {
+    return 'unknown';
+  }
+}
+
 /** Error thrown when the edge function returns a non-2xx response. Carries the
  *  server's machine-readable `code` (e.g. 'hunter_not_onboarded') and message. */
 export class BountyPaymentError extends Error {
@@ -139,10 +184,16 @@ export async function releaseBountyPayment(
  * or issues a Stripe refund after capture. No-ops idempotently on terminal
  * states; rejects if funds were already released to the hunter.
  */
-export async function cancelBountyPayment(bountyId: string): Promise<CancelBountyPaymentResult> {
+export async function cancelBountyPayment(
+  bountyId: string,
+  options: CancelBountyPaymentOptions = {}
+): Promise<CancelBountyPaymentResult> {
   const result = await postBountyPayments<CancelBountyPaymentResult>('/cancel', { bountyId });
   const status = String(result?.status ?? '').toLowerCase();
 
+  if (options.allowRefundPending && status === REFUND_IN_FLIGHT_STATUS) {
+    return result;
+  }
   if (!TERMINAL_CANCEL_STATUSES.has(status)) {
     throw new BountyPaymentError(
       `Bounty payment cancellation is still pending (${status || 'unknown'}).`,
@@ -158,6 +209,7 @@ export const bountyPaymentsService = {
   createBountyPayment,
   releaseBountyPayment,
   cancelBountyPayment,
+  getBountyPaymentHoldState,
 };
 
 export default bountyPaymentsService;
