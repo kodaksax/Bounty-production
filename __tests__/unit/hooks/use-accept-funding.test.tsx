@@ -286,6 +286,32 @@ describe('useAcceptFunding', () => {
       expect(allPropsFor('accept_funding_failed').some(p => p.reason === 'partial_deposit')).toBe(false);
     });
 
+    test('reopening after an unconfirmed deposit reconciles it before another top-up', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const firstProbe = openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
+      await act(async () => {
+        result.current.gate.onPaymentSucceeded(30);
+      });
+      await waitFor(() => expect(firstProbe.resolved).toBe(false));
+
+      mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
+      const retryProbe = openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(retryProbe.resolved).toBe(false));
+      expect(result.current.gate.active).toBe(false);
+      expect(result.current.gate.stage).toBe('idle');
+      expect(mockAlert).toHaveBeenCalledTimes(2);
+
+      mockGetRequirement.mockResolvedValue(COVERED_AFTER_TOPUP);
+      const reconciledProbe = openGate(result, COVERED_AFTER_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('confirm'));
+      expect(reconciledProbe.settled).toBe(false);
+      act(() => result.current.gate.onConfirm());
+      await waitFor(() => expect(reconciledProbe.resolved).toBe(true));
+    });
+
     test('a cancelled payment leaves the sheet up and resolves nothing', async () => {
       const { result } = renderHook(() => useAcceptFunding(FAST));
       const probe = openGate(result, NEEDS_TOPUP);

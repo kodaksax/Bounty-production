@@ -84,6 +84,34 @@ export function succeededRefunds(refunds: RefundLike[]): RefundLike[] {
   return refunds.filter(r => r.status === 'succeeded').sort(byCreated);
 }
 
+export interface RefundCoverage {
+  status: 'refunded' | 'refund_pending' | null;
+  remainingCents: number;
+  stripeRefundId: string | null;
+}
+
+/** Current Stripe refunds that cover a bounty payment and any amount still due. */
+export function summarizeRefundCoverage(rowAmountDollars: number, refunds: RefundLike[]): RefundCoverage {
+  const live = liveRefunds(refunds).filter(r =>
+    ['succeeded', 'pending'].includes(String(r.status))
+  );
+  const succeeded = succeededRefunds(live);
+  const totalCents = Math.round(Number(rowAmountDollars) * 100);
+  const succeededCents = succeeded.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const liveCents = live.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  return {
+    status:
+      totalCents > 0 && succeededCents >= totalCents
+        ? 'refunded'
+        : totalCents > 0 && liveCents >= totalCents
+          ? 'refund_pending'
+          : null,
+    remainingCents: Math.max(0, totalCents - liveCents),
+    stripeRefundId: live[live.length - 1]?.id ?? null,
+  };
+}
+
 export interface BountyPaymentRefundUpdate {
   status: 'refunded' | 'refund_pending';
   stripeRefundId: string | null;

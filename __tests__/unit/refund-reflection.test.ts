@@ -19,6 +19,7 @@ import {
   liveRefunds,
   resolveChargeRefunds,
   succeededRefunds,
+  summarizeRefundCoverage,
   type RefundLike,
 } from '../../supabase/functions/_shared/refund-reflection';
 
@@ -82,6 +83,37 @@ describe('bountyPaymentRefundUpdate (v2 bounty_payments)', () => {
     expect(bountyPaymentRefundUpdate(15, [refund({ id: 're_p', status: 'pending' })])).toEqual({
       status: 'refund_pending',
       stripeRefundId: 're_p',
+    });
+  });
+
+  describe('summarizeRefundCoverage (bounty cancellation)', () => {
+    it('reports a partial succeeded refund as incomplete and returns the outstanding cents', () => {
+      expect(summarizeRefundCoverage(15, [refund({ amount: 500 })])).toEqual({
+        status: null,
+        remainingCents: 1000,
+        stripeRefundId: 're_1',
+      });
+    });
+
+    it('does not request another refund when succeeded and pending refunds cover the full amount', () => {
+      expect(
+        summarizeRefundCoverage(15, [
+          refund({ id: 're_succeeded', amount: 500, created: 1 }),
+          refund({ id: 're_pending', status: 'pending', amount: 1000, created: 2 }),
+        ])
+      ).toEqual({
+        status: 'refund_pending',
+        remainingCents: 0,
+        stripeRefundId: 're_pending',
+      });
+    });
+
+    it('does not count a refund requiring action as covered', () => {
+      expect(summarizeRefundCoverage(15, [refund({ status: 'requires_action' })])).toEqual({
+        status: null,
+        remainingCents: 1500,
+        stripeRefundId: null,
+      });
     });
   });
 

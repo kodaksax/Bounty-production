@@ -122,6 +122,11 @@ interface PendingGate {
   context: AcceptFundingContext;
 }
 
+interface UnresolvedDeposit {
+  balanceBefore: number;
+  paidAmount: number;
+}
+
 export interface UseAcceptFundingOptions {
   /**
    * How many times to re-read the requirement after a captured deposit before
@@ -172,6 +177,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   const [hunterAvatar, setHunterAvatar] = useState<string | null>(null);
   const [remainderAfterDeposit, setRemainderAfterDeposit] = useState(false);
   const pendingRef = useRef<PendingGate | null>(null);
+  const unresolvedDepositRef = useRef<UnresolvedDeposit | null>(null);
   // Mirrors of state for the AppState listener and the unmount cleanup, which
   // are registered once and must not read a stale closure.
   const stageRef = useRef<AcceptFundingStage>('idle');
@@ -218,6 +224,15 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     pending?.resolve(proceed);
   }, []);
 
+  const depositReflected = useCallback(
+    (req: BountyFundingRequirement | null, deposit: UnresolvedDeposit) =>
+      !!req &&
+      (!req.requiresFunding ||
+        req.shortfall <= 0 ||
+        req.posterBalance >= deposit.balanceBefore + deposit.paidAmount - 0.01),
+    []
+  );
+
   // Abandonment that never goes through onCancel: the screen unmounting with
   // the gate open (tab switch, sign-out, navigation reset) and the app being
   // backgrounded. Both are exactly the "never returned" exits the funnel was
@@ -261,7 +276,45 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       setHunterAvatar(context.hunterAvatar?.trim() || null);
       setRemainderAfterDeposit(false);
 
-      const req = await getBountyFundingRequirement(id);
+      const stopForUnresolvedDeposit = () => {
+        setStage('idle');
+        setRequirement(null);
+        Alert.alert(
+          'Your payment is still confirming',
+          'Nothing more will be charged. Try hiring again in a minute while we confirm your previous payment.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      };
+      let req: BountyFundingRequirement | null;
+      try {
+        req = await getBountyFundingRequirement(id);
+      } catch (error) {
+        if (unresolvedDepositRef.current) return stopForUnresolvedDeposit();
+        throw error;
+      }
+      const unresolvedDeposit = unresolvedDepositRef.current;
+      if (unresolvedDeposit) {
+        if (depositReflected(req, unresolvedDeposit)) {
+          unresolvedDepositRef.current = null;
+        } else {
+          for (let attempt = 0; attempt < settlePollAttempts; attempt++) {
+            await wait(settlePollDelayMs);
+            try {
+              req = await getBountyFundingRequirement(id);
+            } catch {
+              break;
+            }
+            if (depositReflected(req, unresolvedDeposit)) {
+              unresolvedDepositRef.current = null;
+              break;
+            }
+          }
+          if (unresolvedDepositRef.current === unresolvedDeposit) {
+            return stopForUnresolvedDeposit();
+          }
+        }
+      }
 
       // Nothing to charge: legacy bounty already escrowed at post time,
       // for-honor, or $0. Proceed with zero added friction.
@@ -297,7 +350,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
         pendingRef.current = { resolve, bountyId: id, context };
       });
     },
-    [eventProps]
+    [depositReflected, eventProps, settlePollAttempts, settlePollDelayMs]
   );
 
   const ensureFunded = useCallback(
@@ -414,12 +467,12 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       // that call failed the Stripe webhook is what lands the money, and we
       // give it a bounded wait before treating the balance as final.
       let req = await getBountyFundingRequirement(pending.bountyId);
-      const depositReflected = (r: BountyFundingRequirement) =>
-        !r.requiresFunding ||
-        r.shortfall <= 0 ||
-        r.posterBalance >= (before?.posterBalance ?? 0) + paidAmount - 0.01;
+      const unresolvedDeposit: UnresolvedDeposit = {
+        balanceBefore: before?.posterBalance ?? 0,
+        paidAmount,
+      };
 
-      for (let attempt = 0; attempt < settlePollAttempts && !depositReflected(req); attempt++) {
+      for (let attempt = 0; attempt < settlePollAttempts && !depositReflected(req, unresolvedDeposit); attempt++) {
         await wait(settlePollDelayMs);
         // Cancelled or unmounted while we waited; the gate is no longer ours.
         if (pendingRef.current !== pending) return;
@@ -427,17 +480,18 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       }
       if (pendingRef.current !== pending) return;
 
-      if (!depositReflected(req)) {
+      if (!depositReflected(req, unresolvedDeposit)) {
         // Stripe took the money but neither /wallet/deposit nor the webhook
         // has landed it yet, so the server's shortfall has not moved. Going
         // back to 'pay' here showed "Payment received. $20.00 more is needed"
         // beside "Pay $20.00 & hire": a second tap was a second real charge.
-        // Close instead. The deposit lands on its own, and the next hire tap
-        // re-reads the balance and becomes a one-tap "Confirm & hire".
+        // Close and retain the attempt. Reopened gates reconcile the balance
+        // before offering another top-up.
         analyticsService.trackEvent('accept_funding_failed', {
           ...eventProps(req, pending.context),
           reason: 'deposit_unconfirmed',
         });
+        unresolvedDepositRef.current = unresolvedDeposit;
         close(false);
         Alert.alert(
           'Your payment went through',
@@ -449,6 +503,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
         return;
       }
 
+      unresolvedDepositRef.current = null;
       setRequirement(req);
 
       if (!req.requiresFunding || req.shortfall <= 0) {
@@ -468,7 +523,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       setRemainderAfterDeposit(true);
       setStage('pay');
     },
-    [close, eventProps, settlePollAttempts, settlePollDelayMs]
+    [close, depositReflected, eventProps, settlePollAttempts, settlePollDelayMs]
   );
 
   const onCancel = useCallback(() => {

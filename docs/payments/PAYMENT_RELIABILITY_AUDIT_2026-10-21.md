@@ -142,20 +142,26 @@ being stranded.
   grants, the poster-only check and SECURITY DEFINER are unchanged.
 - `supabase/migrations/20261021120100_reconcile_stripe_refunded_bounty_payments.sql`:
   `admin_reconcile_stripe_refunded_bounty_payments(p_dry_run DEFAULT true)` and
-  `admin_revert_stripe_refund_reconciliation()`, service_role only, gated on a
-  stored `charge.refunded` with `refunded=true` covering the amount. No money
-  moves.
+  `admin_revert_stripe_refund_reconciliation()`, service_role only, gated on
+  latest stored refund lifecycle events proving succeeded refunds cover the
+  full amount. A historical `charge.refunded` snapshot alone is insufficient;
+  verify excluded rows against Stripe before any manual reconciliation. No
+  money moves.
 - `lib/services/bounty-cancel-refund.ts`: v2/v3 plans read the payment row
-  first (`held`/`returning` → refund to card). `refund_pending` counts as done.
-  `no_payment` (404) means nothing held. A voided authorization reports nothing
-  refunded. The card-refund confirmation says banks take 5–10 business days.
+  first (`held`/`returning` → refund to card). A `refund_pending` response counts
+  as done only after Stripe confirms the full amount is succeeded or in flight.
+  Cancellation issues any outstanding partial refund before permitting
+  deletion. `no_payment` (404) means nothing held. A voided authorization
+  reports nothing refunded. The card-refund confirmation says banks take 5–10
+  business days.
 - `lib/services/bounty-payments-service.ts`: `getBountyPaymentHoldState`
   (RLS `bounty_payments_select_participant`). `cancelBountyPayment(..., {
   allowRefundPending })` is opt-in, so dispute and publish-rollback callers are
   unchanged.
 - `hooks/useAcceptFunding.ts`: an unreflected deposit closes the sheet with
   "Your payment went through … Nothing more will be charged. Try hiring <name>
-  again in a minute." New reason `deposit_unconfirmed` on the existing
+  again in a minute." Reopened gates reconcile the balance before allowing a
+  second top-up. New reason `deposit_unconfirmed` on the existing
   `accept_funding_failed`.
 - `supabase/security/rls-manifest.json`: `fn_get_bounty_funding_requirement`
   must stay authenticated-only (passes on staging and production today).

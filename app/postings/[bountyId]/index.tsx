@@ -235,9 +235,9 @@ export default function BountyDashboard() {
       cancellingRef.current = true;
       setBusyAction('delete');
       try {
-        await cancelAndRefundBounty(target, { refundEscrow }, plan);
+        const resolvedPlan = await cancelAndRefundBounty(target, { refundEscrow }, plan);
         markBountyRemovedLocally(target.id);
-        Alert.alert('Bounty cancelled', describeCancelRefundDone(plan), [
+        Alert.alert('Bounty cancelled', describeCancelRefundDone(resolvedPlan), [
           { text: 'OK', onPress: goBack },
         ]);
       } catch (err) {

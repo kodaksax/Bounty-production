@@ -101,6 +101,7 @@ const B = {
   v2Authorized: '10000000-0000-0000-0000-000000000004',
   v2Refunded:   '10000000-0000-0000-0000-000000000005',
   v2Pending:    '10000000-0000-0000-0000-000000000006',
+  v2LaterFailed:'10000000-0000-0000-0000-000000000009',
   v2Canceled:   '10000000-0000-0000-0000-000000000007',
   honor:        '10000000-0000-0000-0000-000000000008',
 };
@@ -190,15 +191,19 @@ INSERT INTO public.bounty_payments (id, bounty_id, poster_id, status, amount, st
   ('${P(3)}', '${B.v2Refunded}',   '${POSTER}', 'refund_pending', 15, 'pi_partial',       NULL, NULL),
   ('${P(4)}', '${B.v2Pending}',    '${POSTER}', 'captured',       35, 'pi_no_refund',     NULL, NULL),
   ('${P(5)}', '${B.v2Canceled}',   '${POSTER}', 'released',       15, 'pi_released',      NULL, NULL),
-  ('${P(6)}', '${B.v1Unfunded}',   '${POSTER}', 'refund_pending', 16, 'pi_not_refunded',  're_old', NULL);
+  ('${P(6)}', '${B.v1Unfunded}',   '${POSTER}', 'refund_pending', 16, 'pi_not_refunded',  're_old', NULL),
+  ('${P(7)}', '${B.v2LaterFailed}','${POSTER}', 'captured',       20, 'pi_later_failed', NULL, NULL);
 INSERT INTO public.stripe_events (event_type, event_data, created_at) VALUES
   ('charge.refunded', '{"object":"charge","id":"ch_1","payment_intent":"pi_full_pending","refunded":true,"amount_refunded":1500}', now() - interval '2 min'),
-  ('refund.created',  '{"object":"refund","id":"re_full_1","payment_intent":"pi_full_pending","status":"succeeded"}', now() - interval '2 min'),
+  ('refund.created',  '{"object":"refund","id":"re_full_1","payment_intent":"pi_full_pending","amount":1500,"status":"succeeded"}', now() - interval '2 min'),
   ('charge.refunded', '{"object":"charge","id":"ch_2","payment_intent":"pi_full_captured","refunded":true,"amount_refunded":1000}', now()),
-  ('refund.updated',  '{"object":"refund","id":"pyr_2","payment_intent":"pi_full_captured","status":"succeeded"}', now()),
+  ('refund.updated',  '{"object":"refund","id":"pyr_2","payment_intent":"pi_full_captured","amount":1000,"status":"succeeded"}', now()),
   ('charge.refunded', '{"object":"charge","id":"ch_3","payment_intent":"pi_partial","refunded":false,"amount_refunded":500}', now()),
   ('charge.refunded', '{"object":"charge","id":"ch_5","payment_intent":"pi_released","refunded":true,"amount_refunded":1500}', now()),
-  ('charge.refunded', '{"object":"charge","id":"ch_6","payment_intent":"pi_not_refunded","refunded":false,"amount_refunded":0}', now());
+  ('charge.refunded', '{"object":"charge","id":"ch_6","payment_intent":"pi_not_refunded","refunded":false,"amount_refunded":0}', now()),
+  ('charge.refunded', '{"object":"charge","id":"ch_7","payment_intent":"pi_later_failed","refunded":true,"amount_refunded":2000}', now()),
+  ('refund.created', '{"object":"refund","id":"re_later_failed","payment_intent":"pi_later_failed","amount":2000,"status":"succeeded"}', now() - interval '1 min'),
+  ('refund.failed',  '{"object":"refund","id":"re_later_failed","payment_intent":"pi_later_failed","amount":2000,"status":"failed"}', now());
 `);
 await db.exec(RECONCILE);
 await db.exec(RECONCILE);
@@ -211,8 +216,8 @@ check('dry run lists exactly the two fully proven rows',
   dry.map(r => r.bounty_payment_id).sort().join(',') === `${P(1)},${P(2)}`, dry);
 check('dry run applies nothing', dry.every(r => r.applied === false));
 check('dry run writes nothing', JSON.stringify(await snapshot()) === JSON.stringify(before));
-check('partial refund, unrefunded charge, no evidence and released rows are never candidates',
-  !dry.some(r => [P(3), P(4), P(5), P(6)].includes(r.bounty_payment_id)));
+check('partial refund, unrefunded charge, no evidence, later failed refund and released rows are never candidates',
+  !dry.some(r => [P(3), P(4), P(5), P(6), P(7)].includes(r.bounty_payment_id)));
 
 const applied = (await q(`SELECT * FROM public.admin_reconcile_stripe_refunded_bounty_payments(false)`)).rows;
 check('apply marks both rows', applied.length === 2 && applied.every(r => r.applied === true), applied);
@@ -224,9 +229,9 @@ const r2 = await one(`SELECT * FROM public.bounty_payments WHERE id = $1`, [P(2)
 check('captured row Stripe refunded -> refunded', r2.status === 'refunded' && r2.stripe_refund_id === 'pyr_2', r2);
 const untouched = await one(
   `SELECT count(*)::int n FROM public.bounty_payments WHERE id = ANY($1::uuid[]) AND metadata IS NULL`,
-  [[P(3), P(4), P(5), P(6)]]
+  [[P(3), P(4), P(5), P(6), P(7)]]
 );
-check('every other row untouched', untouched.n === 4, untouched);
+check('every other row untouched', untouched.n === 5, untouched);
 const again = (await q(`SELECT * FROM public.admin_reconcile_stripe_refunded_bounty_payments(false)`)).rows;
 check('re-apply is a no-op', again.length === 0, again);
 

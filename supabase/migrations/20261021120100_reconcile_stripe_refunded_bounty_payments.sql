@@ -16,12 +16,11 @@
 --
 -- What this adds, and nothing runs by itself:
 --   admin_reconcile_stripe_refunded_bounty_payments(p_dry_run DEFAULT true)
---     Lists every captured / refund_pending row with Stripe proof of a full
---     refund and, only with p_dry_run => false, marks it `refunded`. Proof is a
---     stored charge.refunded event for the row's PaymentIntent with
---     refunded = true and amount_refunded >= the row's amount in cents. The
---     refund id comes from the latest succeeded refund.* event, falling back
---     to what the row already had.
+--     Lists every captured / refund_pending row with stored refund-event proof
+--     that currently succeeded refunds cover the full amount and, only with
+--     p_dry_run => false, marks it `refunded`. For each refund id, only its
+--     latest lifecycle event counts; a later failed/updated event invalidates
+--     earlier succeeded evidence. charge.refunded snapshots alone are not proof.
 --   admin_revert_stripe_refund_reconciliation()
 --     Puts every row this reconciled back exactly as it was (status and
 --     stripe_refund_id), using what the apply recorded in metadata.
@@ -32,7 +31,7 @@
 -- bounty_events ledger, thread-event touch, which posts nothing new).
 --
 -- Runbook:
---   SELECT * FROM public.admin_reconcile_stripe_refunded_bounty_payments();        -- dry run, expect 6 rows
+--   SELECT * FROM public.admin_reconcile_stripe_refunded_bounty_payments();        -- dry run; verify each row against Stripe
 --   SELECT * FROM public.admin_reconcile_stripe_refunded_bounty_payments(false);   -- apply (needs a go)
 --   SELECT public.admin_revert_stripe_refund_reconciliation();                     -- undo
 -- Rollback (drops both functions; revert first if applied):
@@ -57,33 +56,50 @@ AS $$
 #variable_conflict use_column
 BEGIN
   RETURN QUERY
-  WITH evidence AS (
+  WITH refund_lifecycle AS (
+    SELECT e.event_data->>'payment_intent' AS payment_intent_id,
+           e.event_data->>'id' AS refund_id,
+           e.event_data->>'amount' AS amount_cents,
+           e.created_at AS lifecycle_at,
+           CASE WHEN e.event_type = 'refund.failed' THEN 'failed'
+                ELSE e.event_data->>'status' END AS status,
+           row_number() OVER (
+             PARTITION BY e.event_data->>'payment_intent', e.event_data->>'id'
+             ORDER BY e.created_at DESC, e.id DESC
+           ) AS lifecycle_rank
+      FROM public.stripe_events e
+     WHERE e.event_type IN ('refund.created', 'refund.updated', 'refund.failed')
+       AND e.event_data->>'payment_intent' IS NOT NULL
+       AND e.event_data->>'id' IS NOT NULL
+  ),
+  succeeded_refunds AS (
+    SELECT payment_intent_id,
+           sum((amount_cents)::bigint)::bigint AS succeeded_cents,
+           (array_agg(refund_id ORDER BY lifecycle_at DESC, refund_id DESC))[1] AS proven_refund_id
+      FROM refund_lifecycle
+     WHERE lifecycle_rank = 1
+       AND status = 'succeeded'
+       AND amount_cents ~ '^[0-9]+$'
+     GROUP BY payment_intent_id
+  ),
+  evidence AS (
     SELECT bp.id,
            bp.bounty_id,
            bp.status AS from_status,
            bp.amount,
            bp.stripe_refund_id AS refund_id_was,
-           (SELECT max((e.event_data->>'amount_refunded')::bigint)
-              FROM public.stripe_events e
-             WHERE e.event_type = 'charge.refunded'
-               AND e.event_data->>'payment_intent' = bp.stripe_payment_intent_id
-               AND (e.event_data->>'refunded')::boolean IS TRUE) AS refunded_cents,
-           (SELECT e.event_data->>'id'
-              FROM public.stripe_events e
-             WHERE e.event_type IN ('refund.created', 'refund.updated')
-               AND e.event_data->>'payment_intent' = bp.stripe_payment_intent_id
-               AND e.event_data->>'status' = 'succeeded'
-             ORDER BY e.created_at DESC
-             LIMIT 1) AS proven_refund_id
+           sr.succeeded_cents,
+           sr.proven_refund_id
       FROM public.bounty_payments bp
+      JOIN succeeded_refunds sr
+        ON sr.payment_intent_id = bp.stripe_payment_intent_id
      WHERE bp.status IN ('captured', 'refund_pending')
        AND bp.stripe_payment_intent_id IS NOT NULL
   ),
   candidates AS (
     SELECT ev.*, COALESCE(ev.proven_refund_id, ev.refund_id_was) AS refund_id
       FROM evidence ev
-     WHERE ev.refunded_cents IS NOT NULL
-       AND ev.refunded_cents >= round(ev.amount * 100)
+     WHERE ev.succeeded_cents >= round(ev.amount * 100)
   ),
   upd AS (
     UPDATE public.bounty_payments bp
@@ -102,7 +118,7 @@ BEGIN
        AND bp.status = c.from_status
     RETURNING bp.id
   )
-  SELECT c.id, c.bounty_id, c.from_status, c.amount, c.refunded_cents, c.refund_id,
+  SELECT c.id, c.bounty_id, c.from_status, c.amount, c.succeeded_cents, c.refund_id,
          EXISTS (SELECT 1 FROM upd WHERE upd.id = c.id)
     FROM candidates c
    ORDER BY c.from_status, c.id;
@@ -110,7 +126,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.admin_reconcile_stripe_refunded_bounty_payments(boolean) IS
-  'Marks captured/refund_pending bounty_payments refunded where a stored charge.refunded event proves a full Stripe refund. p_dry_run=true (default) writes nothing. Undo: admin_revert_stripe_refund_reconciliation(). Service role only.';
+  'Marks captured/refund_pending bounty_payments refunded only when latest stored refund lifecycle events prove succeeded refunds cover the full amount. p_dry_run=true (default) writes nothing. Undo: admin_revert_stripe_refund_reconciliation(). Service role only.';
 
 CREATE OR REPLACE FUNCTION public.admin_revert_stripe_refund_reconciliation()
 RETURNS integer
