@@ -67,7 +67,9 @@ export type AcceptFundingStage =
    * The deposit was captured; waiting for the server to reflect it. Lasts one
    * RPC in the common case, a short bounded poll if the webhook is slow.
    */
-  | 'settling';
+  | 'settling'
+  /** Stripe's result is indeterminate; block another charge until reconciled. */
+  | 'pending';
 
 /** How the deposit sheet ended when it did not end in a captured payment. */
 export type AcceptFundingPaymentOutcome =
@@ -117,6 +119,8 @@ export interface AcceptFundingGate {
    * `true` on its own once the balance covers the requirement.
    */
   onPaymentSucceeded: (amount: number) => void;
+  /** Stripe may have captured the payment but could not confirm its result. */
+  onPaymentPending: () => void;
   /**
    * No money moved. The sheet stays up with the hunter still selected; the
    * bounty stays open. `failure` is the structured Stripe reason.
@@ -468,7 +472,13 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     [close, eventProps, settlePollAttempts, settlePollDelayMs]
   );
 
+  const onPaymentPending = useCallback(() => {
+    paymentInFlightRef.current = false;
+    setStage('pending');
+  }, []);
+
   const onCancel = useCallback(() => {
+    if (stageRef.current === 'pending') return;
     const pending = pendingRef.current;
     if (pending) trackAbandoned(pending, 'cancel');
     close(false);
@@ -478,7 +488,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     // 'checking' is deliberately NOT active: it lasts one RPC, and flashing a
     // gate up for a bounty that turns out to need no funding at all would put
     // the experiment's UI in front of every existing poster.
-    active: stage === 'confirm' || stage === 'pay' || stage === 'settling',
+    active: stage === 'confirm' || stage === 'pay' || stage === 'settling' || stage === 'pending',
     stage,
     requirement,
     hunterName,
@@ -490,6 +500,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     onPaymentSucceeded: (amount: number) => {
       void onPaymentSucceeded(amount);
     },
+    onPaymentPending,
     onPaymentFailed,
     onCancel,
   };

@@ -178,6 +178,20 @@ describe('useAcceptFunding', () => {
       await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
       expect(result.current.gate.active).toBe(true);
       expect(result.current.gate.requirement?.shortfall).toBe(30);
+    });
+
+    test('keeps an indeterminate payment pending and does not allow cancellation', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const probe = openGate(result, NEEDS_TOPUP);
+
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+      act(() => result.current.gate.onPaymentPending());
+
+      expect(result.current.gate.stage).toBe('pending');
+      expect(result.current.gate.active).toBe(true);
+      act(() => result.current.gate.onCancel());
+      expect(result.current.gate.stage).toBe('pending');
+      expect(probe.settled).toBe(false);
       expect(result.current.gate.remainderAfterDeposit).toBe(false);
       expect(propsFor('accept_funding_required')).toMatchObject({ balanceCovers: false });
     });

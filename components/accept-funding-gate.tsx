@@ -165,8 +165,9 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   const needsPayment = shortfall > 0;
   const chargeAmount = chargeAmountForShortfall(shortfall);
   const settling = gate.stage === 'settling';
+  const paymentPending = gate.stage === 'pending';
   const hasPaymentMethod = !!primaryCardPaymentMethod;
-  const busy = isProcessing || settling;
+  const busy = isProcessing || settling || paymentPending;
   // The native Payment Sheet; web stubs Stripe, so it keeps the card modal.
   const sheetAvailable = Platform.OS === 'ios' || Platform.OS === 'android';
 
@@ -182,6 +183,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     if (outcome === 'succeeded') {
       setSuccessInfo(null);
       gate.onPaymentSucceeded(paid);
+      return;
+    }
+    if (outcome === 'pending') {
+      gate.onPaymentPending();
       return;
     }
     // The sheet explains a failure itself (gate.paymentFailure), so the
@@ -241,7 +246,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   const handleCancel = () => {
     // Backing out under an in-flight charge would orphan its outcome; the
     // buttons are disabled then, this is belt-and-braces.
-    if (isProcessing) return;
+    if (isProcessing || paymentPending) return;
     hapticFeedback.light();
     gate.onCancel();
   };
@@ -252,7 +257,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
 
   let primaryLabel: string;
   let primaryA11y: string;
-  if (settling) {
+  if (paymentPending) {
+    primaryLabel = 'Payment pending…';
+    primaryA11y = 'Payment status is still being confirmed';
+  } else if (settling) {
     primaryLabel = 'Confirming payment…';
     primaryA11y = 'Confirming your payment';
   } else if (!needsPayment) {
@@ -272,10 +280,11 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     primaryA11y = `Pay ${chargeAmount.toFixed(2)} dollars and hire ${gate.hunterName}`;
   }
   const primaryDisabled = busy || (needsPayment && stripeLoading);
-  const showApplePay = Platform.OS === 'ios' && needsPayment && !settling;
+  const showApplePay = Platform.OS === 'ios' && needsPayment && !settling && !paymentPending;
   // With a saved card the primary button charges it; this is the way to
   // anything else. Without one, the primary button already opens the sheet.
-  const showOtherWays = needsPayment && !settling && sheetAvailable && hasPaymentMethod;
+  const showOtherWays =
+    needsPayment && !settling && !paymentPending && sheetAvailable && hasPaymentMethod;
   const otherWaysLabel = isGooglePayAvailable ? 'Use Google Pay or another card' : 'Use another card';
 
   const failureCopy = gate.paymentFailure
@@ -350,6 +359,16 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
               <MaterialIcons name="info-outline" size={18} color={theme.primary} />
               <Text style={styles.noticeText}>
                 Payment received. {money(chargeAmount)} more is needed to hire {gate.hunterName}.
+              </Text>
+            </View>
+          )}
+
+          {paymentPending && (
+            <View style={styles.notice} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              <MaterialIcons name="info-outline" size={18} color={theme.primary} />
+              <Text style={styles.noticeText}>
+                Your payment is still being confirmed. Don’t try again yet; we’ll reconcile it
+                before another charge.
               </Text>
             </View>
           )}
@@ -484,9 +503,9 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Not now, go back without hiring"
-            accessibilityState={{ disabled: isProcessing }}
+            accessibilityState={{ disabled: isProcessing || paymentPending }}
             style={styles.secondaryButton}
-            disabled={isProcessing}
+            disabled={isProcessing || paymentPending}
             onPress={handleCancel}
           >
             <Text style={styles.secondaryButtonText}>Not now</Text>

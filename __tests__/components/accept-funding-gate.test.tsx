@@ -132,6 +132,7 @@ function makeGate(overrides: Record<string, unknown> = {}) {
     onConfirm: jest.fn(),
     onPaymentStarted: jest.fn(),
     onPaymentSucceeded: jest.fn(),
+    onPaymentPending: jest.fn(),
     onPaymentFailed: jest.fn(),
     onCancel: jest.fn(),
     ...overrides,
@@ -325,6 +326,25 @@ describe('AcceptFundingGate', () => {
       expect(queryByText('Success!')).toBeNull();
     });
 
+    test('an indeterminate payment stays pending and blocks another charge', async () => {
+      mockPayWithPaymentSheet.mockResolvedValue({ outcome: 'pending' });
+      const gate = makeGate();
+      const { getByLabelText, getByText, queryByText, rerender } = render(
+        <AcceptFundingGate gate={gate} />
+      );
+
+      fireEvent.press(getByText('Use another card'));
+
+      await waitFor(() => expect(gate.onPaymentPending).toHaveBeenCalledTimes(1));
+      rerender(<AcceptFundingGate gate={makeGate({ stage: 'pending' })} />);
+      expect(getByText(/Your payment is still being confirmed/)).toBeTruthy();
+      expect(queryByText('Use another card')).toBeNull();
+      expect(getByLabelText('Payment status is still being confirmed').props.accessibilityState)
+        .toMatchObject({ disabled: true, busy: true });
+      fireEvent.press(getByLabelText('Not now, go back without hiring'));
+      expect(gate.onCancel).not.toHaveBeenCalled();
+    });
+
     test('a dismissed Apple Pay sheet is reported as cancelled and the sheet stays up', async () => {
       // use-wallet-deposit sets no error/successInfo on a user cancel — the
       // outcome is carried entirely by the resolved value.
@@ -384,6 +404,22 @@ describe('AcceptFundingGate', () => {
       expect(getByText('Pay $30.00 & hire')).toBeTruthy();
       expect(getByText('Use another card')).toBeTruthy();
       expect(gate.onCancel).not.toHaveBeenCalled();
+    });
+
+    test('an API authentication failure asks the poster to sign in again', () => {
+      const gate = makeGate({
+        paymentFailure: {
+          error_code: 'authentication_required',
+          code: 'authentication_required',
+          type: 'api_error',
+          error_type: 'api_error',
+          error_message: 'Authentication required',
+        },
+      });
+      const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+      expect(getByText('Your session needs attention.')).toBeTruthy();
+      expect(getByText('Please sign in again before trying this payment.')).toBeTruthy();
     });
 
     test('a decline never offers to retry the card that was just declined', () => {

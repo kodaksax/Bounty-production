@@ -56,6 +56,35 @@ describe('describePaymentFailure', () => {
     expect(copy.message).toContain('Nothing was charged');
   });
 
+  test('security-code instructions do not assume a three-digit code or card location', () => {
+    const copy = describePaymentFailure(
+      failureEventProps({
+        type: 'card_error',
+        code: 'incorrect_cvc',
+        message: 'Security code did not match',
+      })
+    );
+
+    expect(copy.message).toContain('security code on your card');
+    expect(copy.message).not.toMatch(/3-digit|back/i);
+  });
+
+  test('API authentication failures ask the payer to sign in again', () => {
+    const copy = describePaymentFailure(
+      failureEventProps({
+        type: 'api_error',
+        code: 'authentication_required',
+        message: 'Authentication required',
+      })
+    );
+
+    expect(copy).toMatchObject({
+      title: 'Your session needs attention.',
+      message: 'Please sign in again before trying this payment.',
+      action: 'retry',
+    });
+  });
+
   test('a transient network failure suggests waiting and retrying', () => {
     const copy = describePaymentFailure(
       failureEventProps({ type: 'api_connection_error', message: 'offline' })

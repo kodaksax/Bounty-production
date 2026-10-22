@@ -39,6 +39,7 @@ const AUTH = new Set([
   'authentication_failed',
   'payment_intent_authentication_failure',
 ]);
+const SESSION_AUTH = new Set(['authentication_required']);
 const LIMIT = new Set(['card_velocity_exceeded', 'withdrawal_count_limit_exceeded']);
 const TRANSIENT = new Set(['processing_error', 'try_again_later', 'rate_limit']);
 const TRANSIENT_TYPES = new Set(['api_connection_error', 'rate_limit_error']);
@@ -84,7 +85,7 @@ export function describePaymentFailure(
   if (has(CVC)) {
     return {
       title: "The card's security code didn't match.",
-      message: `Check the 3-digit code on the back and add the card again. ${tryAnother}`,
+      message: `Check the security code on your card and add the card again. ${tryAnother}`,
       action: 'another_method',
     };
   }
@@ -96,6 +97,13 @@ export function describePaymentFailure(
       title: "Your bank didn't recognise this card number.",
       message: tryAnother,
       action: 'another_method',
+    };
+  }
+  if (type === 'api_error' && has(SESSION_AUTH)) {
+    return {
+      title: 'Your session needs attention.',
+      message: 'Please sign in again before trying this payment.',
+      action: 'retry',
     };
   }
   if (has(AUTH)) {

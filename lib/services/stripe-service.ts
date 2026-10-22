@@ -91,7 +91,7 @@ export { paymentMethodsService } from './payment-methods-service';
 
 /** How a Payment Sheet charge ended. `failure` is set exactly when outcome is 'failed'. */
 export interface PaymentSheetPayResult {
-  outcome: 'succeeded' | 'cancelled' | 'failed';
+  outcome: 'succeeded' | 'cancelled' | 'failed' | 'pending';
   paymentIntentId?: string;
   failure?: FailureEventProps;
 }
@@ -640,7 +640,7 @@ class StripeService {
       ephemeralKey: intent.ephemeralKey,
     });
 
-    if (sheet.success) {
+    const completePayment = async (): Promise<PaymentSheetPayResult> => {
       await analyticsService.trackEvent('payment_completed', {
         paymentIntentId: intent.id,
         amount,
@@ -649,10 +649,29 @@ class StripeService {
       });
       await analyticsService.incrementUserProperty('payments_completed');
       return { outcome: 'succeeded', paymentIntentId: intent.id };
-    }
+    };
+
+    if (sheet.success) return completePayment();
 
     const closedByPayer = sheet.error?.code === 'canceled';
-    const recorded = await this.readLastPaymentFailure(intent.client_secret, intent.id);
+    const retrieved = await this.readLastPaymentFailure(intent.client_secret, intent.id);
+    if (retrieved?.status === 'succeeded') return completePayment();
+
+    // A failed SDK response is not proof that Stripe did not capture the
+    // payment. Leave anything other than a definite no-charge status pending
+    // reconciliation so the caller cannot offer another charge.
+    if (
+      !retrieved?.status ||
+      !['requires_payment_method', 'canceled'].includes(retrieved.status)
+    ) {
+      logger.warning('[StripeService] Payment Sheet outcome needs reconciliation', {
+        paymentIntentId: intent.id,
+        status: retrieved?.status,
+      });
+      return { outcome: 'pending', paymentIntentId: intent.id };
+    }
+
+    const recorded = retrieved.failure;
     if (closedByPayer && !recorded) {
       return { outcome: 'cancelled', paymentIntentId: intent.id };
     }
@@ -696,18 +715,40 @@ class StripeService {
   private async readLastPaymentFailure(
     clientSecret: string,
     paymentIntentId: string
-  ): Promise<FailureEventProps | null> {
+  ): Promise<{ status?: StripePaymentIntent['status']; failure: FailureEventProps | null } | null> {
     try {
       const sdk = stripeSdk.getSDK();
       if (!sdk?.retrievePaymentIntent) return null;
       const { paymentIntent } = await sdk.retrievePaymentIntent(clientSecret);
-      return failureFromLastPaymentError(
-        paymentIntent?.lastPaymentError,
-        paymentIntentId,
-        'payment_sheet'
-      );
+      const rawStatus = paymentIntent?.status;
+      const knownStatuses = [
+        'RequiresPaymentMethod',
+        'RequiresConfirmation',
+        'RequiresAction',
+        'Processing',
+        'RequiresCapture',
+        'Canceled',
+        'Succeeded',
+        'requires_payment_method',
+        'requires_confirmation',
+        'requires_action',
+        'processing',
+        'requires_capture',
+        'canceled',
+        'succeeded',
+      ];
+      return {
+        ...(typeof rawStatus === 'string' && knownStatuses.includes(rawStatus)
+          ? { status: mapPaymentIntentStatus(rawStatus) }
+          : {}),
+        failure: failureFromLastPaymentError(
+          paymentIntent?.lastPaymentError,
+          paymentIntentId,
+          'payment_sheet'
+        ),
+      };
     } catch (error) {
-      logger.warning('[StripeService] Could not read last payment error', { error });
+      logger.warning('[StripeService] Could not reconcile Payment Sheet result', { error });
       return null;
     }
   }

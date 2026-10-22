@@ -19,13 +19,12 @@ export interface DepositSuccessInfo {
 }
 
 /**
- * How a `payWithCard` / `payWithApplePay` attempt ended. Callers that need to
- * react to the outcome (e.g. the pay-at-accept gate) should use this return
- * value rather than inferring it from `isProcessing` transitioning — that
- * inference misses any exit that never sets `isProcessing` at all, such as a
- * validation failure or a preflight availability check.
+ * How a deposit attempt ended. Callers that need to react to the outcome
+ * (e.g. the pay-at-accept gate) should use this return value rather than
+ * inferring it from `isProcessing` transitioning — that inference misses exits
+ * that never set `isProcessing` and indeterminate payments that must not retry.
  */
-export type DepositOutcome = 'succeeded' | 'cancelled' | 'failed';
+export type DepositOutcome = 'succeeded' | 'cancelled' | 'failed' | 'pending';
 
 export interface DepositResult {
   outcome: DepositOutcome;
@@ -310,6 +309,7 @@ Platform.OS === 'ios'
         return { outcome: 'succeeded' };
       }
       if (result.outcome === 'cancelled') return { outcome: 'cancelled' };
+      if (result.outcome === 'pending') return { outcome: 'pending' };
       showFailure(result.failure);
       return { outcome: 'failed', failure: result.failure };
     } catch (err: any) {
