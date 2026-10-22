@@ -61,7 +61,7 @@ COMMENT ON TABLE public.admin_recipients IS
   'Who is paged for operator alerts (moderation, reconciliation, ops/job health, trust review). Independent of the admin role: add or disable rows here. Critical/high alerts go by email AND push.';
 
 ALTER TABLE public.admin_recipients ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.admin_recipients FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.admin_recipients FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.admin_recipients TO authenticated;
 DROP POLICY IF EXISTS admin_recipients_admin_read ON public.admin_recipients;
 CREATE POLICY admin_recipients_admin_read ON public.admin_recipients
@@ -181,9 +181,27 @@ CREATE TABLE IF NOT EXISTS public.admin_alert_deliveries (
 );
 CREATE INDEX IF NOT EXISTS admin_alert_deliveries_created_idx ON public.admin_alert_deliveries (created_at DESC);
 
+-- Each recipient has an independent outcome so a confirmed failure can be
+-- retried without resending to recipients whose email was accepted.
+CREATE TABLE IF NOT EXISTS public.admin_alert_email_attempts (
+  delivery_id  bigint      PRIMARY KEY REFERENCES public.admin_alert_deliveries (id) ON DELETE CASCADE,
+  user_id      uuid        NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  request_id   bigint      NOT NULL,
+  attempts     integer     NOT NULL DEFAULT 1,
+  outcome      text        NOT NULL DEFAULT 'pending'
+                           CHECK (outcome IN ('pending', 'retryable', 'delivered', 'failed', 'ambiguous')),
+  next_attempt_at timestamptz,
+  last_response jsonb,
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS admin_alert_email_attempts_retry_idx
+  ON public.admin_alert_email_attempts (outcome, next_attempt_at);
+
 ALTER TABLE public.ops_http_requests      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_alert_deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_alert_email_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.ops_http_requests, public.admin_alert_deliveries FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.admin_alert_email_attempts FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.admin_alert_deliveries TO authenticated;
 DROP POLICY IF EXISTS admin_alert_deliveries_admin_read ON public.admin_alert_deliveries;
 CREATE POLICY admin_alert_deliveries_admin_read ON public.admin_alert_deliveries
@@ -193,12 +211,10 @@ CREATE POLICY admin_alert_deliveries_admin_read ON public.admin_alert_deliveries
 -- 3. One way to page admins
 -- ---------------------------------------------------------------------------
 -- Writes one outbox row (push + in-app via process-notification) and, for
--- critical/high, emails directly. The email is a pg_net call to
--- send-notification-email with the vault service key: the same credential the
--- outbox drain uses, so if email is broken, notification delivery is broken
--- too and edge-auth-or-5xx says so. Without vault secrets the outbox row goes
--- out with emailDispatched=false and process-notification's normal email
--- fan-out covers it.
+-- critical/high, emails each recipient directly. Results are reconciled from
+-- pg_net before any confirmed failure is retried; missing responses are never
+-- blindly resent. Without vault secrets, process-notification's email fan-out
+-- remains the fallback.
 CREATE OR REPLACE FUNCTION public.fn_notify_admins(
   p_type      text,
   p_severity  text,
@@ -218,6 +234,9 @@ DECLARE
   v_key        text;
   v_request    bigint;
   v_outbox     uuid;
+  v_delivery   bigint;
+  v_recipient  uuid;
+  v_first_request bigint;
   v_skip       text;
   v_data       jsonb;
 BEGIN
@@ -238,16 +257,6 @@ BEGIN
     SELECT decrypted_secret INTO v_key FROM vault.decrypted_secrets WHERE name = 'SUPABASE_SERVICE_ROLE_KEY';
     IF v_url IS NULL OR v_key IS NULL THEN
       v_skip := 'vault_missing';
-    ELSE
-      v_request := net.http_post(
-        url     := v_url || '/functions/v1/send-notification-email',
-        headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || v_key),
-        body    := jsonb_build_object('userIds', to_jsonb(v_recipients), 'category', 'security',
-                                      'type', p_type, 'title', p_title, 'body', p_body, 'data', v_data),
-        timeout_milliseconds := 20000
-      );
-      INSERT INTO public.ops_http_requests (request_id, caller, target)
-      VALUES (v_request, 'fn_notify_admins', 'send-notification-email');
     END IF;
   ELSE
     v_skip := 'below_email_severity';
@@ -255,19 +264,141 @@ BEGIN
 
   INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
   VALUES (to_jsonb(v_recipients), p_title, p_body,
-          v_data || jsonb_build_object('emailDispatched', v_request IS NOT NULL), p_bounty_id)
+          v_data || jsonb_build_object('emailDispatched', false), p_bounty_id)
   RETURNING id INTO v_outbox;
 
   INSERT INTO public.admin_alert_deliveries
-    (alert_type, severity, title, recipients, outbox_id, email_request_id, email_skipped_reason)
-  VALUES (p_type, COALESCE(p_severity, 'unknown'), p_title, v_recipients, v_outbox, v_request, v_skip);
+    (alert_type, severity, title, recipients, outbox_id, email_skipped_reason)
+  VALUES (p_type, COALESCE(p_severity, 'unknown'), p_title, v_recipients, v_outbox, v_skip)
+  RETURNING id INTO v_delivery;
+
+  IF v_url IS NOT NULL AND v_key IS NOT NULL AND public.fn_alert_severity_rank(p_severity) >= 3 THEN
+    FOREACH v_recipient IN ARRAY v_recipients LOOP
+      v_request := net.http_post(
+        url     := v_url || '/functions/v1/send-notification-email',
+        headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || v_key),
+        body    := jsonb_build_object('userIds', jsonb_build_array(v_recipient), 'category', 'security',
+                                      'type', p_type, 'title', p_title, 'body', p_body, 'data', v_data),
+        timeout_milliseconds := 20000
+      );
+      INSERT INTO public.ops_http_requests (request_id, caller, target)
+      VALUES (v_request, 'fn_notify_admins', 'send-notification-email');
+      INSERT INTO public.admin_alert_email_attempts (delivery_id, user_id, request_id)
+      VALUES (v_delivery, v_recipient, v_request);
+      v_first_request := COALESCE(v_first_request, v_request);
+    END LOOP;
+
+    UPDATE public.admin_alert_deliveries SET email_request_id = v_first_request WHERE id = v_delivery;
+    UPDATE public.notifications_outbox
+       SET data = data || jsonb_build_object('emailDispatched', true)
+     WHERE id = v_outbox;
+  END IF;
 
   RETURN jsonb_build_object('recipients', array_length(v_recipients, 1),
-                            'outbox_id', v_outbox, 'email_request_id', v_request);
+                            'outbox_id', v_outbox, 'email_request_id', v_first_request);
 END;
 $$;
 REVOKE ALL ON FUNCTION public.fn_notify_admins(text, text, text, text, jsonb, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_notify_admins(text, text, text, text, jsonb, uuid) TO service_role;
+
+-- Reconcile only completed pg_net responses. A confirmed single-recipient
+-- failure is retryable; a timeout, non-2xx, or unreadable response is
+-- ambiguous and is deliberately not resent without an external reconciliation.
+CREATE OR REPLACE FUNCTION public.fn_reconcile_admin_alert_emails()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  r record;
+  v_response jsonb;
+  v_url text;
+  v_key text;
+  v_request bigint;
+BEGIN
+  FOR r IN
+    SELECT a.delivery_id, a.request_id, a.attempts, a.outcome, h.status_code, h.content,
+           h.error_msg, h.timed_out, h.created AS response_created, l.created_at AS request_created
+      FROM public.admin_alert_email_attempts a
+      JOIN public.ops_http_requests l ON l.request_id = a.request_id
+      LEFT JOIN net._http_response h ON h.id = a.request_id
+     WHERE a.outcome = 'pending'
+        OR (a.outcome = 'ambiguous' AND a.last_response IS NULL)
+     FOR UPDATE OF a SKIP LOCKED
+  LOOP
+    IF r.status_code IS NULL AND r.error_msg IS NULL AND NOT COALESCE(r.timed_out, false) THEN
+      IF r.request_created < now() - interval '3 minutes' THEN
+        UPDATE public.admin_alert_email_attempts
+           SET outcome = 'ambiguous', updated_at = now()
+         WHERE delivery_id = r.delivery_id;
+      END IF;
+      CONTINUE;
+    END IF;
+
+    BEGIN
+      v_response := r.content::jsonb;
+    EXCEPTION WHEN OTHERS THEN
+      v_response := NULL;
+    END;
+
+    IF r.status_code = 200
+       AND COALESCE((v_response ->> 'sent')::integer, 0) = 1
+       AND COALESCE((v_response ->> 'failed')::integer, 0) = 0
+       AND COALESCE((v_response ->> 'skipped')::integer, 0) = 0 THEN
+      UPDATE public.admin_alert_email_attempts
+         SET outcome = 'delivered', last_response = v_response, updated_at = now()
+       WHERE delivery_id = r.delivery_id;
+    ELSIF r.status_code = 200
+       AND COALESCE((v_response ->> 'sent')::integer, 0) = 0
+       AND (COALESCE((v_response ->> 'failed')::integer, 0) > 0
+            OR COALESCE((v_response ->> 'skipped')::integer, 0) > 0) THEN
+      UPDATE public.admin_alert_email_attempts
+         SET outcome = CASE WHEN attempts < 3 THEN 'retryable' ELSE 'failed' END,
+             next_attempt_at = CASE WHEN attempts < 3 THEN now() + interval '1 minute' ELSE NULL END,
+             last_response = v_response, updated_at = now()
+       WHERE delivery_id = r.delivery_id;
+    ELSE
+      UPDATE public.admin_alert_email_attempts
+         SET outcome = 'ambiguous', last_response = v_response, updated_at = now()
+       WHERE delivery_id = r.delivery_id;
+    END IF;
+  END LOOP;
+
+  SELECT decrypted_secret INTO v_url FROM vault.decrypted_secrets WHERE name = 'SUPABASE_URL';
+  SELECT decrypted_secret INTO v_key FROM vault.decrypted_secrets WHERE name = 'SUPABASE_SERVICE_ROLE_KEY';
+  IF v_url IS NULL OR v_key IS NULL THEN
+    RETURN;
+  END IF;
+
+  FOR r IN
+    SELECT a.delivery_id, a.user_id, a.attempts, d.alert_type, d.title, o.body, o.data
+      FROM public.admin_alert_email_attempts a
+      JOIN public.admin_alert_deliveries d ON d.id = a.delivery_id
+      JOIN public.notifications_outbox o ON o.id = d.outbox_id
+     WHERE a.outcome = 'retryable'
+       AND a.next_attempt_at <= now()
+     FOR UPDATE OF a SKIP LOCKED
+  LOOP
+    v_request := net.http_post(
+      url     := v_url || '/functions/v1/send-notification-email',
+      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || v_key),
+      body    := jsonb_build_object('userIds', jsonb_build_array(r.user_id), 'category', 'security',
+                                    'type', r.alert_type, 'title', r.title, 'body', r.body,
+                                    'data', COALESCE(r.data, '{}'::jsonb)),
+      timeout_milliseconds := 20000
+    );
+    INSERT INTO public.ops_http_requests (request_id, caller, target)
+    VALUES (v_request, 'admin_alert_email_reconciliation', 'send-notification-email');
+    UPDATE public.admin_alert_email_attempts
+       SET request_id = v_request, attempts = attempts + 1, outcome = 'pending',
+           next_attempt_at = NULL, updated_at = now()
+     WHERE delivery_id = r.delivery_id;
+  END LOOP;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.fn_reconcile_admin_alert_emails() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_reconcile_admin_alert_emails() TO service_role;
 
 -- Critical reconciliation findings: same coalescing as before, now through
 -- the list and with a guaranteed email.
@@ -389,7 +520,30 @@ CREATE TRIGGER notifications_outbox_dispatch
   AFTER INSERT ON public.notifications_outbox
   FOR EACH ROW EXECUTE FUNCTION public.fn_dispatch_notification_outbox();
 
--- The drain, unchanged except that its requests are labelled.
+-- Every worker path, including the insert trigger and drain, must atomically
+-- claim a non-targeting row before producing any notification side effects.
+CREATE OR REPLACE FUNCTION public.fn_claim_notification_outbox(p_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_claimed boolean := false;
+BEGIN
+  UPDATE public.notifications_outbox
+     SET status = 'processing'
+   WHERE id = p_id
+     AND (status = 'pending' OR (status = 'failed' AND attempts < 5))
+  RETURNING true INTO v_claimed;
+  RETURN COALESCE(v_claimed, false);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.fn_claim_notification_outbox(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_claim_notification_outbox(uuid) TO service_role;
+
+-- The drain also reconciles direct email outcomes. Confirmed failures are
+-- retried by the reconciler; missing/ambiguous results are never resent.
 CREATE OR REPLACE FUNCTION public.drain_notifications_outbox()
 RETURNS void
 LANGUAGE plpgsql
@@ -402,6 +556,8 @@ declare
   v_request bigint;
   r record;
 begin
+  perform public.fn_reconcile_admin_alert_emails();
+
   select decrypted_secret into v_url
     from vault.decrypted_secrets where name = 'SUPABASE_URL';
   select decrypted_secret into v_key

@@ -27,6 +27,8 @@ const migration = read('supabase/migrations/20261021230000_admin_alert_routing.s
 const migrationCode = stripSqlComments(migration);
 const processNotification = read('supabase/functions/process-notification/index.ts');
 const moderationSweep = read('supabase/functions/moderation-sweep/index.ts');
+const expireBounties = read('supabase/functions/expire-bounties/index.ts');
+const commandCenter = read('app/admin/command-center.tsx');
 
 describe('moderation alerts are delivered like a page', () => {
   test('security category: push and in-app cannot be switched off, quiet hours bypassed', () => {
@@ -46,8 +48,32 @@ describe('one email per alert', () => {
     expect(processNotification).toMatch(/if \(!emailFallback && !emailDispatched && emailRecipients\.length > 0\)/);
   });
 
-  test('fn_notify_admins sets the flag only when it queued the email', () => {
-    expect(migrationCode).toMatch(/'emailDispatched', v_request IS NOT NULL/);
+  test('direct email attempts are reconciled before confirmed failures are retried', () => {
+    expect(migrationCode).toMatch(/CREATE TABLE IF NOT EXISTS public\.admin_alert_email_attempts/);
+    expect(migrationCode).toMatch(/outcome = 'delivered'/);
+    expect(migrationCode).toMatch(/outcome = CASE WHEN attempts < 3 THEN 'retryable' ELSE 'failed' END/);
+    expect(migrationCode).toMatch(/outcome = 'ambiguous'/);
+    expect(migrationCode).toMatch(/'emailDispatched', true/);
+    expect(migrationCode).toMatch(/perform public\.fn_reconcile_admin_alert_emails\(\)/);
+  });
+
+  test('the paging list revokes service-role table grants', () => {
+    expect(migrationCode).toMatch(/REVOKE ALL ON public\.admin_recipients FROM PUBLIC, anon, authenticated, service_role;/);
+  });
+
+  test('ordinary notification workers atomically claim outbox rows', () => {
+    expect(processNotification).toMatch(/rpc\('fn_claim_notification_outbox'/);
+    expect(migrationCode).toMatch(/SET status = 'processing'\s+WHERE id = p_id/);
+  });
+
+  test('expiry notifications rely on the outbox trigger rather than a second invocation', () => {
+    expect(expireBounties).not.toMatch(/functions\.invoke\('process-notification'/);
+  });
+
+  test('the command center keeps resolution inputs visible above the keyboard', () => {
+    expect(commandCenter).toMatch(/import \{ KeyboardAwareScrollView \} from '\.\.\/\.\.\/components\/ui\/keyboard-avoiding'/);
+    expect(commandCenter).toMatch(/<KeyboardAwareScrollView/);
+    expect(commandCenter).not.toMatch(/<ScrollView/);
   });
 
   test('moderation-sweep pages through fn_notify_admins and nothing else', () => {
@@ -71,7 +97,7 @@ describe('paging is a list, not a role', () => {
   });
 
   test('the list is not writable through the API', () => {
-    expect(migrationCode).toMatch(/REVOKE ALL ON public\.admin_recipients FROM PUBLIC, anon, authenticated;/);
+    expect(migrationCode).toMatch(/REVOKE ALL ON public\.admin_recipients FROM PUBLIC, anon, authenticated, service_role;/);
     expect(migrationCode).toMatch(/GRANT SELECT ON public\.admin_recipients TO authenticated;/);
     expect(migrationCode).not.toMatch(/GRANT (INSERT|UPDATE|DELETE|ALL)[^;]*admin_recipients/);
   });

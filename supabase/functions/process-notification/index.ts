@@ -396,6 +396,7 @@ Deno.serve(async (req: Request) => {
         .from('notifications_outbox')
         .update({ status: 'failed', last_error: String(fetchErr), attempts: nextAttempts })
         .eq('id', id)
+        .in('status', ['pending', 'failed'])
       if (markFailedErr) {
         console.error('[process-notification] failed to mark outbox row failed after fetch error', markFailedErr)
       }
@@ -406,7 +407,9 @@ Deno.serve(async (req: Request) => {
 
     outboxAttempts = typeof rows.attempts === 'number' ? rows.attempts : 0
 
-    if (rows.status === 'sent') return jsonResponse({ message: 'Already processed' })
+    if (rows.status === 'sent' || rows.status === 'processing') {
+      return jsonResponse({ message: 'Already processed or claimed' })
+    }
 
     const recipients = normalizeRecipients(rows.recipients)
     targetingOutbox = isTargetingOutbox(rows)
@@ -427,9 +430,19 @@ Deno.serve(async (req: Request) => {
         schedulePostHogCapture(events)
       }
     }
+
+    const { data: claimed, error: claimErr } = await supabaseAdmin.rpc('fn_claim_notification_outbox', {
+      p_id: id,
+    })
+    if (claimErr) {
+      console.error('[process-notification] failed to claim outbox row', claimErr)
+      return jsonResponse({ error: 'Failed to claim outbox item' }, 503)
+    }
+    if (!claimed) return jsonResponse({ message: 'Already claimed or not ready' })
+
     if (recipients.length === 0) {
       // Mark as sent to avoid reprocessing
-      await supabaseAdmin.from('notifications_outbox').update({ status: 'sent' }).eq('id', id)
+      await supabaseAdmin.from('notifications_outbox').update({ status: 'sent' }).eq('id', id).eq('status', 'processing')
       return jsonResponse({ message: 'No recipients, marked sent' })
     }
 
@@ -628,7 +641,7 @@ Deno.serve(async (req: Request) => {
       if (tokenErr) {
         console.error('[process-notification] token lookup error', tokenErr)
         schedulePostHogCapture(posthogEvents)
-        await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: String(tokenErr), attempts: (rows.attempts || 0) + 1 }).eq('id', id)
+        await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: String(tokenErr), attempts: (rows.attempts || 0) + 1 }).eq('id', id).eq('status', 'processing')
         return jsonResponse({ error: 'Failed to lookup tokens' }, 500)
       }
 
@@ -984,11 +997,11 @@ Deno.serve(async (req: Request) => {
     const attempts = (rows.attempts || 0) + 1
     const deliveryErrorsValue = deliveryErrors.length > 0 ? deliveryErrors : null
     if (errors.length > 0) {
-      await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: JSON.stringify(errors), attempts, delivery_errors: deliveryErrorsValue }).eq('id', id)
+      await supabaseAdmin.from('notifications_outbox').update({ status: 'failed', last_error: JSON.stringify(errors), attempts, delivery_errors: deliveryErrorsValue }).eq('id', id).eq('status', 'processing')
       return jsonResponse({ ok: false, sent, errors, prunedTokens: invalidTokens.length }, 500)
     }
 
-    await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts, delivery_errors: deliveryErrorsValue }).eq('id', id)
+    await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts, delivery_errors: deliveryErrorsValue }).eq('id', id).eq('status', 'processing')
 
     return jsonResponse({
       ok: true,
@@ -1017,6 +1030,7 @@ Deno.serve(async (req: Request) => {
           .from('notifications_outbox')
           .update({ status: 'failed', last_error: String(error), attempts: outboxAttempts + 1 })
           .eq('id', outboxId)
+          .eq('status', 'processing')
         if (markFailedErr) {
           console.error('[process-notification] failed to record error on outbox row', markFailedErr)
         }

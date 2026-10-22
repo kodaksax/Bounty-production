@@ -54,7 +54,7 @@ const B = '00000000-0000-4000-8000-00000000000d'; // second recipient, critical 
 // ─── Supabase-ish base ──────────────────────────────────────────────────────
 await db.exec(`
 CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated;
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 
@@ -160,6 +160,10 @@ check('insert posts to process-notification', call?.url === 'https://ref.supabas
 check('with the vault key', call?.headers?.Authorization === 'Bearer sb_secret_test');
 check('body is the row id', call?.body?.id === ob.id);
 check('request labelled', (await one(`SELECT caller, target FROM public.ops_http_requests WHERE request_id = $1`, [call.id]))?.caller === 'notifications_outbox_dispatch');
+check('the first worker atomically claims the outbox row',
+  (await one(`SELECT public.fn_claim_notification_outbox($1) AS claimed`, [ob.id])).claimed === true);
+check('a concurrent worker cannot claim the same row',
+  (await one(`SELECT public.fn_claim_notification_outbox($1) AS claimed`, [ob.id])).claimed === false);
 
 await q(`UPDATE vault.decrypted_secrets SET name = 'X' WHERE name = 'SUPABASE_SERVICE_ROLE_KEY'`);
 const before = (await one(`SELECT count(*)::int AS n FROM net.calls`)).n;
@@ -181,6 +185,13 @@ check('high: email sent directly to the list', JSON.stringify(emailCall?.body?.u
 check('high: email uses the vault key', emailCall?.headers?.Authorization === 'Bearer sb_secret_test');
 const del = await one(`SELECT * FROM public.admin_alert_deliveries ORDER BY id DESC LIMIT 1`);
 check('high: delivery recorded with the email request id', del.email_request_id == emailCall.id && del.email_skipped_reason === null && del.outbox_id === hi.outbox_id, del);
+const highEmailAttempt = await one(`SELECT * FROM public.admin_alert_email_attempts WHERE delivery_id = $1`, [del.id]);
+check('high: email outcome starts pending for its recipient',
+  highEmailAttempt?.user_id === A && highEmailAttempt.outcome === 'pending' && highEmailAttempt.attempts === 1, highEmailAttempt);
+await q(`INSERT INTO net._http_response (id, status_code, content) VALUES ($1, 200, '{"sent":1,"failed":0,"skipped":0}')`, [emailCall.id]);
+await q(`SELECT public.fn_reconcile_admin_alert_emails()`);
+check('high: confirmed provider acceptance is recorded',
+  (await one(`SELECT outcome FROM public.admin_alert_email_attempts WHERE delivery_id = $1`, [del.id])).outcome === 'delivered');
 
 await q(`TRUNCATE net.calls`);
 const med = (await one(`SELECT public.fn_notify_admins('moderation_alert', 'medium', 'Flag', 'x') AS r`)).r;
@@ -195,6 +206,34 @@ check('vault missing: outbox still written, fan-out covers email',
   (await one(`SELECT data FROM public.notifications_outbox WHERE id = $1`, [nv.outbox_id])).data.emailDispatched === false &&
   (await one(`SELECT email_skipped_reason r FROM public.admin_alert_deliveries ORDER BY id DESC LIMIT 1`)).r === 'vault_missing');
 await q(`UPDATE vault.decrypted_secrets SET name = 'SUPABASE_URL' WHERE name = 'X'`);
+
+await q(`TRUNCATE net.calls`);
+const retryPage = (await one(`SELECT public.fn_notify_admins('moderation_alert', 'high', 'Retry', 'failure') AS r`)).r;
+const retryDelivery = await one(`SELECT * FROM public.admin_alert_deliveries WHERE outbox_id = $1`, [retryPage.outbox_id]);
+const failedEmailRequest = retryDelivery.email_request_id;
+await q(`INSERT INTO net._http_response (id, status_code, content) VALUES ($1, 200, '{"sent":0,"failed":1,"skipped":0}')`, [failedEmailRequest]);
+await q(`SELECT public.fn_reconcile_admin_alert_emails()`);
+check('confirmed email failure becomes retryable',
+  (await one(`SELECT outcome FROM public.admin_alert_email_attempts WHERE delivery_id = $1`, [retryDelivery.id])).outcome === 'retryable');
+await q(`UPDATE public.admin_alert_email_attempts SET next_attempt_at = now() WHERE delivery_id = $1`, [retryDelivery.id]);
+await q(`SELECT public.fn_reconcile_admin_alert_emails()`);
+const retryRequest = await one(`SELECT request_id, attempts, outcome FROM public.admin_alert_email_attempts WHERE delivery_id = $1`, [retryDelivery.id]);
+check('confirmed email failure is retried once without expanding recipients',
+  retryRequest.attempts === 2 && retryRequest.outcome === 'pending' &&
+    JSON.stringify((await one(`SELECT body->'userIds' user_ids FROM net.calls WHERE id = $1`, [retryRequest.request_id])).user_ids) === JSON.stringify([A]));
+await q(`INSERT INTO net._http_response (id, status_code, content) VALUES ($1, 200, '{"sent":1,"failed":0,"skipped":0}')`, [retryRequest.request_id]);
+await q(`SELECT public.fn_reconcile_admin_alert_emails()`);
+check('retried email is marked delivered',
+  (await one(`SELECT outcome FROM public.admin_alert_email_attempts WHERE delivery_id = $1`, [retryDelivery.id])).outcome === 'delivered');
+
+await q(`TRUNCATE net.calls`);
+const ambiguousPage = (await one(`SELECT public.fn_notify_admins('moderation_alert', 'high', 'Ambiguous', 'timeout') AS r`)).r;
+const ambiguousDelivery = await one(`SELECT * FROM public.admin_alert_deliveries WHERE outbox_id = $1`, [ambiguousPage.outbox_id]);
+await q(`UPDATE public.ops_http_requests SET created_at = now() - interval '4 minutes' WHERE request_id = $1`, [ambiguousDelivery.email_request_id]);
+await q(`SELECT public.fn_reconcile_admin_alert_emails()`);
+check('missing response becomes ambiguous and is not resent',
+  (await one(`SELECT outcome FROM public.admin_alert_email_attempts WHERE delivery_id = $1`, [ambiguousDelivery.id])).outcome === 'ambiguous' &&
+    (await one(`SELECT count(*)::int n FROM net.calls WHERE url LIKE '%send-notification-email'`)).n === 1);
 
 await q(`UPDATE public.admin_recipients SET enabled = false`);
 const outboxBefore = (await one(`SELECT count(*)::int n FROM public.notifications_outbox`)).n;
@@ -326,6 +365,12 @@ const authNotify = await asUser(N, null, () => fails(`SELECT public.fn_notify_ad
 check('signed-in user cannot page admins', authNotify && authNotify.includes('permission denied'), authNotify);
 const selfAdd = await asUser(K, 'admin', () => fails(`INSERT INTO public.admin_recipients (user_id) VALUES ($1)`, [K]));
 check('an admin cannot add themselves through the API', selfAdd && selfAdd.includes('permission denied'), selfAdd);
+const serviceWrite = await (async () => {
+  await q('SET ROLE service_role');
+  try { return await fails(`UPDATE public.admin_recipients SET enabled = false WHERE user_id = $1`, [A]); }
+  finally { await q('RESET ROLE'); }
+})();
+check('service_role cannot change the owner-managed paging list', serviceWrite && serviceWrite.includes('permission denied'), serviceWrite);
 const nRead = await asUser(N, null, () => rows(`SELECT * FROM public.admin_recipients`));
 check('non-admin reads no recipients', nRead.length === 0);
 const aRead = await asUser(A, 'admin', () => rows(`SELECT * FROM public.admin_recipients`));
