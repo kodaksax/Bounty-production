@@ -30,16 +30,16 @@
 --      (fn_bounties_default_is_test only runs on INSERT).
 --   5. One-time fix: seed the list (flags jordanmag11, hunterbnty158 and the
 --      two Maglalang family accounts the founder confirmed 2026-10-22,
---      tonkagisil_1167 and gisellemaglalang, through 3 and 4) and mark every
---      remaining internal poster's bounty is_test. On
---      prod that is 2a39dbf2 "Move a couch" (postgod), which the 09-13
---      backfill skipped: it then had accepted_by set while open, so its UPDATE
---      failed bounties_open_implies_unassigned and the error was swallowed.
---      Nothing here swallows errors.
+--      tonkagisil_1167 and gisellemaglalang, through 3 and 4) and mark internal
+--      posters' bounties is_test. Updates are isolated per bounty because
+--      2a39dbf2 is open with accepted_by set and violates the NOT VALID
+--      bounties_open_implies_unassigned check; that row is skipped with a
+--      warning rather than aborting the migration.
 --
 -- Expected on prod (read 2026-10-22): profiles.is_internal 13 -> 17;
--- bounties.is_test false -> true on 4 rows (2a39dbf2, 59879908, and
--- tonkagisil_1167's 9f5355f6 and d4f6c2ad).
+-- bounties.is_test false -> true on 3 rows (59879908 and tonkagisil_1167's
+-- 9f5355f6 and d4f6c2ad). The stale-listing write script marks 2a39dbf2 test
+-- content as it cancels it, after the migration's isolated update skips it.
 --
 -- Rollback: supabase/rollbacks/production/20261022120000_internal_accounts_flagged_at_creation.down.sql
 
@@ -178,11 +178,23 @@ INSERT INTO public.internal_account_emails (email, note) VALUES
   ('gisellemaglalang@gmail.com',   'family account (gisellemaglalang), confirmed 2026-10-22')
 ON CONFLICT (email) DO NOTHING;
 
-UPDATE public.bounties b
-SET is_test = true
-FROM public.profiles p
-WHERE p.id = COALESCE(b.poster_id, b.user_id)
-  AND p.is_internal
-  AND b.is_test IS NOT TRUE;
+DO $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT b.id
+    FROM public.bounties b
+    JOIN public.profiles p ON p.id = COALESCE(b.poster_id, b.user_id)
+    WHERE p.is_internal
+      AND b.is_test IS NOT TRUE
+  LOOP
+    BEGIN
+      UPDATE public.bounties SET is_test = true WHERE id = r.id;
+    EXCEPTION WHEN check_violation THEN
+      RAISE WARNING 'is_test backfill: skipping bounty % after check violation: %', r.id, SQLERRM;
+    END;
+  END LOOP;
+END $$;
 
 COMMIT;

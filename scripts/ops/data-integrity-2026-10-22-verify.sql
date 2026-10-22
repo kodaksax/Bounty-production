@@ -26,13 +26,13 @@ WHERE p.is_internal AND b.is_test IS NOT TRUE;
 -- 3. Fast accepts by internal hunters on external posters' bounties
 --    (the jordanmag11 signature). Expected: none.
 SELECT b.id, pp.username AS poster, hp.username AS hunter,
-       extract(epoch FROM (r.accepted_at AT TIME ZONE 'UTC') - r.created_at)::int AS seconds
+       extract(epoch FROM r.accepted_at - r.created_at)::int AS seconds
 FROM public.bounty_requests r
 JOIN public.bounties b ON b.id = r.bounty_id
 JOIN public.profiles hp ON hp.id = r.hunter_id AND hp.is_internal
 JOIN public.profiles pp ON pp.id = COALESCE(b.poster_id, b.user_id) AND NOT pp.is_internal
 WHERE r.accepted_at IS NOT NULL
-  AND (r.accepted_at AT TIME ZONE 'UTC') - r.created_at <= interval '60 seconds';
+  AND r.accepted_at - r.created_at <= interval '60 seconds';
 
 -- 4. ZIP: every profile whose label carries a ZIP has one. Expected 0;
 --    backfill_log = rows the backfill filled (191 expected on 2026-10-22).

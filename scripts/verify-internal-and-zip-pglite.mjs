@@ -81,7 +81,7 @@ CREATE TABLE public.profiles (
   updated_at timestamptz DEFAULT now());
 CREATE TABLE public.bounties (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), poster_id uuid, user_id uuid, title text,
-  status text NOT NULL DEFAULT 'open', is_test boolean NOT NULL DEFAULT false);
+  status text NOT NULL DEFAULT 'open', accepted_by uuid, is_test boolean NOT NULL DEFAULT false);
 GRANT ALL ON public.profiles, public.bounties TO service_role;
 `);
 
@@ -95,9 +95,14 @@ await q(`INSERT INTO public.profiles (id, username, is_internal) VALUES
   ($1, 'Robert Wright', true), ($2, 'postgod', true), ($3, 'jordanmag11', false),
   ($4, 'hunterbnty158', false), ($5, 'someone', false)`,
   [ID.lee, ID.postgod, ID.jordan, ID.hunter158, ID.external]);
-const couch = (await one(`INSERT INTO public.bounties (poster_id, title, is_test) VALUES ($1, 'Move a couch', false) RETURNING id`, [ID.postgod])).id;
+const couch = (await one(`INSERT INTO public.bounties (poster_id, title, accepted_by, is_test) VALUES ($1, 'Move a couch', $2, false) RETURNING id`, [ID.postgod, ID.external])).id;
 const brand = (await one(`INSERT INTO public.bounties (poster_id, title, status, is_test) VALUES ($1, 'Work a brand activation', 'in_progress', false) RETURNING id`, [ID.jordan])).id;
 const ext = (await one(`INSERT INTO public.bounties (user_id, title, is_test) VALUES ($1, 'Real job', false) RETURNING id`, [ID.external])).id;
+// Prod's NOT VALID constraint permits this legacy row to exist but rejects any
+// update to it while it remains open with an accepted_by value.
+await db.exec(`ALTER TABLE public.bounties
+  ADD CONSTRAINT bounties_open_implies_unassigned
+  CHECK (status <> 'open' OR accepted_by IS NULL) NOT VALID`);
 // Profiles that predate the ZIP migration (for the backfill).
 await q(`INSERT INTO public.profiles (id, username, location) VALUES
   ('10000000-0000-4000-8000-000000000001', 'chico', 'Native Oak Dr, Chico, CA, 95928'),
@@ -119,7 +124,7 @@ check('an unlisted account stays external', flags.someone === false, flags);
 check('18 addresses on the list after two applies', (await one(`SELECT count(*)::int n FROM public.internal_account_emails`)).n === 18);
 
 const tests = Object.fromEntries((await q(`SELECT id, is_test FROM public.bounties`)).rows.map(r => [r.id, r.is_test]));
-check("internal poster's old non-test bounty becomes test (2a39dbf2)", tests[couch] === true, tests);
+check('legacy check-violating bounty is isolated (2a39dbf2)', tests[couch] === false, tests);
 check("newly flagged account's bounty becomes test (59879908)", tests[brand] === true, tests);
 check("external poster's bounty is untouched", tests[ext] === false, tests);
 
