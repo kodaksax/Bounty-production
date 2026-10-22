@@ -1679,7 +1679,7 @@ Deno.serve(async (req: Request) => {
             bountyId,
             requestId,
             bpId: bp.id,
-            refundId: refund.id,
+            refundId: coverage.stripeRefundId,
             updErr,
           });
           return reply({
