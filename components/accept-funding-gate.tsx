@@ -210,6 +210,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
       // No card on file: linking one is the first half of the same tap, not a
       // separate screen. The sheet stays put and the button becomes "Pay" once
       // the modal closes with a method loaded.
+      gate.onPaymentStarted('linkCard');
       setShowPaymentMethodsModal(true);
       return;
     }
@@ -229,6 +230,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     if (busy) return;
     hapticFeedback.light();
     if (!sheetAvailable) {
+      gate.onPaymentStarted('linkCard');
       setShowPaymentMethodsModal(true);
       return;
     }

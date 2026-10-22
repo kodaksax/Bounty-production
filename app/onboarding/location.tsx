@@ -13,10 +13,13 @@
  *                              keep nothing finer than a city/region label.
  *
  * Neither answer blocks the flow: a denial or a skip records the outcome and
- * moves on. The hunter branch in details.tsx keeps its own location prompt
- * (it also drives nearby-bounty discovery and the ZIP fallback); once
- * permission is granted here, pressing "Use my location" there resolves
- * without a second OS dialog.
+ * moves on.
+ *
+ * This is the only onboarding step that captures a ZIP. The precise label
+ * ends in the geocoder's postal code, and the database fills
+ * profiles.zip_code from it (trg_profiles_zip_from_location), which the
+ * "posted in your ZIP" push matches on. Changing the label's shape changes
+ * that; approximate labels carry no ZIP on purpose.
  *
  * See app/onboarding/username.tsx's totalStepsFor for the step-count logic
  * this screen's dots participate in.

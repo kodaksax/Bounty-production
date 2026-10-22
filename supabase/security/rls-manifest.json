@@ -155,6 +155,16 @@
       "grants": { "anon": [], "authenticated": [] },
       "required_triggers": []
     },
+    "internal_account_emails": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": ["trg_internal_account_emails_flag_profile"]
+    },
+    "profile_zip_backfill_log": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": []
+    },
     "bounty_geocode_attempts": {
       "policies": [],
       "grants": { "anon": [], "authenticated": [] },
@@ -164,7 +174,8 @@
       "commands": [],
       "required_triggers": [
         "trg_prevent_client_writes_to_protected_profile_columns",
-        "guard_connect_account_identity"
+        "guard_connect_account_identity",
+        "trg_profiles_guard_is_internal"
       ]
     },
     "wallet_transactions": {
@@ -547,6 +558,11 @@
     { "signature": "fn_send_hunter_closure_digests(boolean,integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_hold_hunter_closure_notice()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "queue_signup_completed_event()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_profiles_guard_is_internal()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_profiles_internal_marks_bounties_test()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_internal_account_emails_flag_profile()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_profiles_zip_from_location()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_backfill_profile_zip_from_location(boolean)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     {
       "signature": "request_dispute_escalation(integer)",
       "forbid_execute": [
