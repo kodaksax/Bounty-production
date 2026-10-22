@@ -12,7 +12,7 @@
 import type { Bounty } from './database.types';
 import { analyticsService } from './analytics-service';
 import { getBountyFundingRequirement } from './bounty-funding-service';
-import { bountyPaymentsService } from './bounty-payments-service';
+import { BountyPaymentError, bountyPaymentsService } from './bounty-payments-service';
 import { bountyService } from './bounty-service';
 import { isPhase2Bounty, isV3Bounty } from '../utils/payment-architecture';
 import { failureEventProps } from '../utils/stripe-error';
@@ -53,19 +53,34 @@ export function canPosterCancelBounty(bounty: Pick<Bounty, 'status'> & { accepte
  * What cancelling would give back. Asked of the SERVER rather than inferred
  * from funding_mode: an escrow can exist on an open at_accept bounty (e.g. one
  * created by an older build), and refusing to refund that would strand real
- * money. getBountyFundingRequirement reports already_funded from the canonical
- * wallet_transactions row, and its documented fallback when the RPC is
- * unavailable is already_funded=true — i.e. attempt the refund.
+ * money.
+ *
+ * Stripe-native bounties (v2, the website's Checkout flow) hold their money in
+ * bounty_payments, which getBountyFundingRequirement did not look at before
+ * 20261021120000: it said "not funded" for every paid web bounty, so this
+ * returned nothing-to-refund, the poster was told they hadn't been charged,
+ * and the bounty was deleted with the charge still captured. So for those the
+ * payment row itself is read first. Both fallbacks lean toward attempting the
+ * refund: /bounty-payments/cancel is idempotent, and its "no payment" answer
+ * is handled as nothing held.
  */
 export async function planCancelRefund(bounty: CancellableBounty): Promise<CancelRefundPlan> {
   const paid = !bounty.is_for_honor && Number(bounty.amount) > 0 && bounty.status === 'open';
   if (!paid) return { refundAmount: 0, destination: null };
+  const refund: CancelRefundPlan = { refundAmount: Number(bounty.amount), destination: 'original_payment_method' };
+
+  if (isPhase2Bounty(bounty as any) || isV3Bounty(bounty as any)) {
+    const hold = await bountyPaymentsService.getBountyPaymentHoldState(String(bounty.id));
+    if (hold === 'held' || hold === 'returning') return refund;
+    if (hold === 'none') return { refundAmount: 0, destination: null };
+    // 'unknown': the read failed. Defer to the server's answer below.
+  }
+
   const { alreadyFunded } = await getBountyFundingRequirement(bounty.id);
   if (!alreadyFunded) return { refundAmount: 0, destination: null };
-  return {
-    refundAmount: Number(bounty.amount),
-    destination: isPhase2Bounty(bounty as any) || isV3Bounty(bounty as any) ? 'original_payment_method' : 'wallet',
-  };
+  return isPhase2Bounty(bounty as any) || isV3Bounty(bounty as any)
+    ? refund
+    : { refundAmount: Number(bounty.amount), destination: 'wallet' };
 }
 
 function dollars(amount: number): string {
@@ -97,9 +112,13 @@ export function describeCancelRefund(
 
 /** The line shown once the cancellation has gone through. */
 export function describeCancelRefundDone(plan: CancelRefundPlan): string {
-  if (plan.destination && plan.refundAmount > 0) {
-    const where = plan.destination === 'wallet' ? 'your Bounty balance' : 'your original payment method';
-    return `It's off the feed, and ${dollars(plan.refundAmount)} is on its way back to ${where}.`;
+  if (plan.destination === 'wallet' && plan.refundAmount > 0) {
+    return `It's off the feed, and ${dollars(plan.refundAmount)} is on its way back to your Bounty balance.`;
+  }
+  if (plan.destination === 'original_payment_method' && plan.refundAmount > 0) {
+    // A card refund is issued at once but takes the bank days to post; saying
+    // so stops "where's my money?" the next morning.
+    return `It's off the feed, and ${dollars(plan.refundAmount)} is on its way back to your original payment method. Banks usually take 5–10 business days to show it.`;
   }
   return "It's off the feed.";
 }
@@ -115,7 +134,7 @@ export async function cancelAndRefundBounty(
   deps: CancelRefundDeps,
   plan?: CancelRefundPlan
 ): Promise<CancelRefundPlan> {
-  const resolved = plan ?? (await planCancelRefund(bounty));
+  let resolved = plan ?? (await planCancelRefund(bounty));
 
   if (resolved.destination) {
     const useV2 = isPhase2Bounty(bounty as any);
@@ -132,11 +151,28 @@ export async function cancelAndRefundBounty(
     }
     try {
       if (useV2 || useV3) {
-        // Stripe-native escrow: cancels the PaymentIntent or v3 auth.
-        // Only terminal states are safe to treat as a successful refund.
-        const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bounty.id));
-        if (cancelResult.status !== 'canceled' && cancelResult.status !== 'refunded') {
-          throw new Error(`Escrow cancellation is still pending (${cancelResult.status})`);
+        // Stripe-native escrow: cancels the PaymentIntent or v3 auth, or
+        // refunds a captured charge. A refund Stripe has accepted
+        // (refund_pending) counts: the money is on its way back, and treating
+        // it as a failure told posters to contact support about a refund that
+        // was working, and blocked the delete forever.
+        let cancelStatus: string | null = null;
+        try {
+          const cancelResult = await bountyPaymentsService.cancelBountyPayment(String(bounty.id), {
+            allowRefundPending: true,
+          });
+          cancelStatus = cancelResult.status;
+        } catch (cancelErr) {
+          // 404 no_payment: no bounty_payments row, so nothing is held.
+          if (!(cancelErr instanceof BountyPaymentError && cancelErr.code === 'no_payment')) throw cancelErr;
+        }
+        if (cancelStatus === null) {
+          resolved = { refundAmount: 0, destination: null };
+        } else if (cancelStatus !== 'canceled' && cancelStatus !== 'refunded' && cancelStatus !== 'refund_pending') {
+          throw new Error(`Escrow cancellation is still pending (${cancelStatus})`);
+        } else if (cancelStatus === 'canceled') {
+          // An authorization voided before capture: nothing was ever taken.
+          resolved = { refundAmount: 0, destination: null };
         }
       } else {
         // refundEscrow signals failure by returning false, not by throwing —
@@ -147,14 +183,16 @@ export async function cancelAndRefundBounty(
           throw new Error('Escrow refund did not complete');
         }
       }
-      try {
-        await analyticsService.trackEvent('escrow_refunded', {
-          bountyId: String(bounty.id),
-          architecture,
-          amount: bounty.amount,
-        });
-      } catch {
-        /* analytics is best-effort */
+      if (resolved.destination) {
+        try {
+          await analyticsService.trackEvent('escrow_refunded', {
+            bountyId: String(bounty.id),
+            architecture,
+            amount: bounty.amount,
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
       }
     } catch (refundError) {
       console.error('Error refunding escrow:', refundError);

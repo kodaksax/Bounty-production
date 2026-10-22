@@ -4,26 +4,42 @@ import { config } from '../lib/config';
 import { API_BASE_URL } from '../lib/config/api';
 import { analyticsService } from '../lib/services/analytics-service';
 import { applePayService } from '../lib/services/apple-pay-service';
+import { stripeService } from '../lib/services/stripe-service';
 import { useStripe } from '../lib/stripe-context';
 import { logger } from '../lib/utils/error-logger';
-import { getPaymentErrorMessage } from '../lib/utils/error-messages';
+import { describePaymentFailure } from '../lib/utils/payment-failure-message';
+import { failureEventProps, type FailureEventProps } from '../lib/utils/stripe-error';
 import { useWallet } from '../lib/wallet-context';
 import { useAuthContext } from './use-auth-context';
 
 export interface DepositSuccessInfo {
   amount: number;
   persisted: boolean;
-  via: 'card' | 'applePay';
+  via: 'card' | 'applePay' | 'paymentSheet';
 }
 
 /**
- * How a `payWithCard` / `payWithApplePay` attempt ended. Callers that need to
- * react to the outcome (e.g. the pay-at-accept gate) should use this return
- * value rather than inferring it from `isProcessing` transitioning — that
- * inference misses any exit that never sets `isProcessing` at all, such as a
- * validation failure or a preflight availability check.
+ * How a deposit attempt ended. Callers that need to react to the outcome
+ * (e.g. the pay-at-accept gate) should use this return value rather than
+ * inferring it from `isProcessing` transitioning — that inference misses exits
+ * that never set `isProcessing` and indeterminate payments that must not retry.
  */
-export type DepositOutcome = 'succeeded' | 'cancelled' | 'failed';
+export type DepositOutcome = 'succeeded' | 'cancelled' | 'failed' | 'pending';
+
+export interface DepositResult {
+  outcome: DepositOutcome;
+  /**
+   * Why it failed, in the same shape as payment_failed (real Stripe
+   * decline_code / code / type / payment_method_type). Set when outcome is
+   * 'failed'.
+   */
+  failure?: FailureEventProps;
+}
+
+const failed = (code: string): DepositResult => ({
+  outcome: 'failed',
+  failure: failureEventProps(undefined, code),
+});
 
 /**
  * Shared wallet-deposit business logic behind both the general "Add Cash"
@@ -113,6 +129,7 @@ async function persistDeposit(
 export function useWalletDeposit() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false);
+  const [isGooglePayAvailable, setIsGooglePayAvailable] = useState(false);
   const [showPaymentMethodsModal, setShowPaymentMethodsModal] = useState(false);
   const [error, setError] = useState<any>(null);
   const [successInfo, setSuccessInfo] = useState<DepositSuccessInfo | null>(null);
@@ -128,7 +145,7 @@ export function useWalletDeposit() {
   const cardPaymentMethods = paymentMethods.filter(method => method.type === 'card');
   const primaryCardPaymentMethod = cardPaymentMethods[0] ?? null;
 
-  // Check Apple Pay availability on mount
+  // Check Apple Pay / Google Pay availability on mount
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -139,17 +156,72 @@ export function useWalletDeposit() {
         // ignore
       }
     })();
+    stripeService
+      .isGooglePayAvailable()
+      .then(available => {
+        if (mounted) setIsGooglePayAvailable(available);
+      })
+      .catch(() => {});
     return () => {
       mounted = false;
     };
   }, []);
 
-  const payWithCard = async (numAmount: number): Promise<DepositOutcome> => {
+  const walletName = isApplePayAvailable
+    ? ('Apple Pay' as const)
+    : isGooglePayAvailable
+      ? ('Google Pay' as const)
+      : null;
+
+  /** One place that turns a failure into the banner the deposit screens show. */
+  const showFailure = (failure: FailureEventProps | undefined) => {
+    const { title, message } = describePaymentFailure(failure, { walletName });
+    setError({ message: `${title} ${message}`, type: 'payment', failure });
+  };
+
+  /** Credits the wallet after Stripe captured the charge; shared by every method. */
+  const settleDeposit = async (
+    numAmount: number,
+    paymentIntentId: string | undefined,
+    via: DepositSuccessInfo['via']
+  ) => {
+    const viaApplePay = via === 'applePay';
+    // Optimistically update local wallet balance
+    await deposit(numAmount, {
+      method: viaApplePay ? 'Apple Pay' : 'Credit Card',
+      title: viaApplePay ? 'Added Money via Apple Pay' : 'Added Money via Stripe',
+      status: 'completed',
+    });
+
+    // Persist the deposit to the DB immediately (don't wait for the webhook).
+    // apply_deposit is idempotent on paymentIntentId, so a later webhook
+    // delivery is a safe no-op. This ensures profiles.balance is durable
+    // and survives sign-out / cold restart.
+    const persisted = await persistDeposit(
+      paymentIntentId,
+      numAmount,
+      session?.access_token,
+      viaApplePay ? 'Apple Pay' : via === 'paymentSheet' ? 'Payment Sheet' : 'Stripe'
+    );
+
+    // Sync balance from server so Supabase is the source of truth
+    try {
+      if (session?.access_token) {
+        await refreshFromApi(session.access_token);
+      }
+    } catch (syncErr) {
+      console.warn('[WalletDeposit] Failed to sync balance from server after deposit:', syncErr);
+    }
+
+    setSuccessInfo({ amount: numAmount, persisted, via });
+  };
+
+  const payWithCard = async (numAmount: number): Promise<DepositResult> => {
     if (isNaN(numAmount) || numAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount greater than $0.', [
         { text: 'OK' },
       ]);
-      return 'failed';
+      return failed('invalid_amount');
     }
 
     if (!primaryCardPaymentMethod) {
@@ -164,7 +236,7 @@ Platform.OS === 'ios'
             { text: 'Add Card', onPress: () => setShowPaymentMethodsModal(true) },
           ]
         );
-        return 'failed';
+        return failed('no_card');
       }
       Alert.alert(
         'No Payment Method',
@@ -174,7 +246,7 @@ Platform.OS === 'ios'
           { text: 'Add Payment Method', onPress: () => setShowPaymentMethodsModal(true) },
         ]
       );
-      return 'failed';
+      return failed('no_payment_method');
     }
 
     setIsProcessing(true);
@@ -193,61 +265,71 @@ Platform.OS === 'ios'
       });
 
       if (result.success) {
-        // Optimistically update local wallet balance
-        await deposit(numAmount, {
-          method: 'Credit Card',
-          title: 'Added Money via Stripe',
-          status: 'completed',
-        });
-
-        // Persist the deposit to the DB immediately (don't wait for the webhook).
-        // apply_deposit is idempotent on paymentIntentId, so a later webhook
-        // delivery is a safe no-op. This ensures profiles.balance is durable
-        // and survives sign-out / cold restart.
-        const persisted = await persistDeposit(
-          result.paymentIntentId,
-          numAmount,
-          session?.access_token,
-          'Stripe'
-        );
-
-        // Sync balance from server so Supabase is the source of truth
-        try {
-          if (session?.access_token) {
-            await refreshFromApi(session.access_token);
-          }
-        } catch (syncErr) {
-          console.warn(
-            '[WalletDeposit] Failed to sync balance from server after deposit:',
-            syncErr
-          );
-        }
-
-        setSuccessInfo({ amount: numAmount, persisted, via: 'card' });
-        return 'succeeded';
-      } else {
-        const errorMsg = getPaymentErrorMessage(result.error);
-        setError({ message: errorMsg, type: 'payment' });
-        return 'failed';
+        await settleDeposit(numAmount, result.paymentIntentId, 'card');
+        return { outcome: 'succeeded' };
       }
+      showFailure(result.failure);
+      return { outcome: 'failed', failure: result.failure };
     } catch (err: any) {
       console.error('Payment error:', err);
       setError(err);
-      return 'failed';
+      return { outcome: 'failed', failure: failureEventProps(err, 'unknown', 'card') };
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const payWithApplePay = async (numAmount: number): Promise<DepositOutcome> => {
+  /**
+   * Stripe Payment Sheet: Apple Pay / Google Pay, the payer's saved cards and
+   * new card entry in one native sheet. A decline inside the sheet lets the
+   * payer pick another method without leaving it.
+   */
+  const payWithPaymentSheet = async (numAmount: number): Promise<DepositResult> => {
+    if (isNaN(numAmount) || numAmount < 0.5) {
+      Alert.alert('Minimum Amount', 'Amount must be at least $0.50');
+      return failed('invalid_amount');
+    }
+
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      if (!session?.access_token) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+      const result = await stripeService.payWithPaymentSheet(numAmount, {
+        authToken: session.access_token,
+        userId: session.user?.id,
+        purpose: 'wallet_deposit',
+      });
+      if (result.outcome === 'succeeded') {
+        await settleDeposit(numAmount, result.paymentIntentId, 'paymentSheet');
+        // A card saved inside the sheet becomes the one-tap card next time.
+        loadPaymentMethods().catch(() => {});
+        return { outcome: 'succeeded' };
+      }
+      if (result.outcome === 'cancelled') return { outcome: 'cancelled' };
+      if (result.outcome === 'pending') return { outcome: 'pending' };
+      showFailure(result.failure);
+      return { outcome: 'failed', failure: result.failure };
+    } catch (err: any) {
+      console.error('Payment sheet error:', err);
+      setError(err);
+      return { outcome: 'failed', failure: failureEventProps(err, 'unknown', 'payment_sheet') };
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const payWithApplePay = async (numAmount: number): Promise<DepositResult> => {
     if (isNaN(numAmount) || numAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount');
-      return 'failed';
+      return failed('invalid_amount');
     }
 
     if (numAmount < 0.5) {
       Alert.alert('Minimum Amount', 'Amount must be at least $0.50');
-      return 'failed';
+      return failed('invalid_amount');
     }
 
     // Locked before the availability re-check below (which is async) so a
@@ -289,7 +371,7 @@ Platform.OS === 'ios'
           'Apple Pay isn’t set up on this device. Open the Wallet app and add a card to pay with Apple Pay, or use a linked card or bank account below.',
           [{ text: 'OK' }]
         );
-        return 'failed';
+        return failed('apple_pay_unavailable');
       }
 
       const result = await applePayService.processPayment(
@@ -301,46 +383,19 @@ Platform.OS === 'ios'
       );
 
       if (result.success) {
-        await deposit(numAmount, {
-          method: 'Apple Pay',
-          title: 'Added Money via Apple Pay',
-          status: 'completed',
-        });
-
-        const persisted = await persistDeposit(
-          result.paymentIntentId,
-          numAmount,
-          session?.access_token,
-          'Apple Pay'
-        );
-
-        try {
-          if (session?.access_token) {
-            await refreshFromApi(session.access_token);
-          }
-        } catch (syncErr) {
-          console.warn(
-            '[WalletDeposit] Failed to sync balance from server after Apple Pay deposit:',
-            syncErr
-          );
-        }
-
-        setSuccessInfo({ amount: numAmount, persisted, via: 'applePay' });
-        return 'succeeded';
+        await settleDeposit(numAmount, result.paymentIntentId, 'applePay');
+        return { outcome: 'succeeded' };
       } else if (result.errorCode === 'cancelled') {
         // user cancelled - no alert
-        return 'cancelled';
-      } else {
-        setError({
-          message: result.error || 'Unable to process Apple Pay payment.',
-          type: 'payment',
-        });
-        return 'failed';
+        return { outcome: 'cancelled' };
       }
+      const failure = result.failure ?? failureEventProps(result.error, 'unknown', 'apple_pay');
+      showFailure(failure);
+      return { outcome: 'failed', failure };
     } catch (err) {
       console.error('Apple Pay error:', err);
       setError(err);
-      return 'failed';
+      return { outcome: 'failed', failure: failureEventProps(err, 'unknown', 'apple_pay') };
     } finally {
       setIsProcessing(false);
     }
@@ -349,6 +404,9 @@ Platform.OS === 'ios'
   return {
     isProcessing,
     isApplePayAvailable,
+    isGooglePayAvailable,
+    /** The wallet to offer as the alternative in failure copy, if any. */
+    walletName,
     error,
     setError,
     successInfo,
@@ -363,6 +421,7 @@ Platform.OS === 'ios'
     loadPaymentMethods,
     payWithCard,
     payWithApplePay,
+    payWithPaymentSheet,
   };
 }
 

@@ -9,11 +9,22 @@
  *   balance is short    ->  "Pay $shortfall & hire" (1 tap + payment auth)
  *
  * The second variant runs the SAME deposit path the wallet uses
- * (hooks/use-wallet-deposit: Stripe card confirm / Apple Pay, then
- * /wallet/deposit) for exactly the shortfall, and hands the result straight
- * back to the gate — no keypad, no "add funds" detour, no success modal to
- * dismiss. When the server confirms the balance the gate resolves on its own
- * and useAcceptRequest calls acceptRequest.
+ * (hooks/use-wallet-deposit, then /wallet/deposit) for exactly the shortfall,
+ * and hands the result straight back to the gate — no keypad, no "add funds"
+ * detour, no success modal to dismiss. When the server confirms the balance
+ * the gate resolves on its own and useAcceptRequest calls acceptRequest.
+ *
+ * How the poster can pay:
+ *   - saved card        one tap ("Pay $X & hire")
+ *   - Apple Pay (iOS)   one tap, direct
+ *   - Payment Sheet     Apple Pay / Google Pay, saved cards and new card entry
+ *                       in one native sheet. The primary button when no card
+ *                       is saved, and "Use another card" otherwise.
+ *   - Link a card       the original card-entry modal; the fallback when the
+ *                       sheet is unavailable (web).
+ *
+ * A failed payment never closes the sheet: it says what happened in plain
+ * words, keeps the hunter selected, and offers the next thing to try.
  *
  * What replaced the old confirm -> insufficient -> top-up -> re-check chain
  * is deliberately smaller, not just shorter: the only decisions left on this
@@ -34,6 +45,8 @@ import { trustSafetyStrings } from 'lib/strings/trust-safety';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
+import { describePaymentFailure } from 'lib/utils/payment-failure-message';
+import type { DepositResult } from 'hooks/use-wallet-deposit';
 import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
@@ -141,6 +154,9 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     loadPaymentMethods,
     payWithCard,
     payWithApplePay,
+    payWithPaymentSheet,
+    isGooglePayAvailable,
+    walletName,
   } = useWalletDeposit();
 
   const amount = gate.requirement?.amountRequired ?? 0;
@@ -149,8 +165,11 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   const needsPayment = shortfall > 0;
   const chargeAmount = chargeAmountForShortfall(shortfall);
   const settling = gate.stage === 'settling';
+  const paymentPending = gate.stage === 'pending';
   const hasPaymentMethod = !!primaryCardPaymentMethod;
-  const busy = isProcessing || settling;
+  const busy = isProcessing || settling || paymentPending;
+  // The native Payment Sheet; web stubs Stripe, so it keeps the card modal.
+  const sheetAvailable = Platform.OS === 'ios' || Platform.OS === 'android';
 
   // --- Deposit outcome -> gate --------------------------------------------
   // payWithCard/payWithApplePay return a definitive outcome for every exit
@@ -160,13 +179,20 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   // way missed any exit that never set `isProcessing`, which left
   // `paymentInFlightRef` stuck and could race a background/cancel event
   // against a still-in-flight attempt.
-  const resolveOutcome = (outcome: 'succeeded' | 'cancelled' | 'failed', paid: number) => {
+  const resolveOutcome = ({ outcome, failure }: DepositResult, paid: number) => {
     if (outcome === 'succeeded') {
       setSuccessInfo(null);
       gate.onPaymentSucceeded(paid);
-    } else {
-      gate.onPaymentFailed(outcome);
+      return;
     }
+    if (outcome === 'pending') {
+      gate.onPaymentPending();
+      return;
+    }
+    // The sheet explains a failure itself (gate.paymentFailure), so the
+    // deposit hook's generic banner would only repeat it less clearly.
+    if (failure) setError(null);
+    gate.onPaymentFailed(outcome, failure);
   };
 
   // --- Actions --------------------------------------------------------------
@@ -189,22 +215,39 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
       return;
     }
     gate.onPaymentStarted('card');
-    const outcome = await payWithCard(chargeAmount);
-    resolveOutcome(outcome, chargeAmount);
+    resolveOutcome(await payWithCard(chargeAmount), chargeAmount);
   };
 
   const handleApplePay = async () => {
     if (busy) return;
     hapticFeedback.light();
     gate.onPaymentStarted('applePay');
-    const outcome = await payWithApplePay(chargeAmount);
-    resolveOutcome(outcome, chargeAmount);
+    resolveOutcome(await payWithApplePay(chargeAmount), chargeAmount);
+  };
+
+  /** Apple Pay / Google Pay / saved or new card, in Stripe's own sheet. */
+  const handlePaymentSheet = async () => {
+    if (busy) return;
+    hapticFeedback.light();
+    if (!sheetAvailable) {
+      setShowPaymentMethodsModal(true);
+      return;
+    }
+    gate.onPaymentStarted('paymentSheet');
+    resolveOutcome(await payWithPaymentSheet(chargeAmount), chargeAmount);
+  };
+
+  const handlePrimaryPay = () => {
+    // Until the saved-card list has loaded, "no card" is unknown, not false;
+    // choosing the sheet now would hide a one-tap card the poster has.
+    if (stripeLoading) return;
+    return hasPaymentMethod || !sheetAvailable ? handlePayWithCard() : handlePaymentSheet();
   };
 
   const handleCancel = () => {
     // Backing out under an in-flight charge would orphan its outcome; the
     // buttons are disabled then, this is belt-and-braces.
-    if (isProcessing) return;
+    if (isProcessing || paymentPending) return;
     hapticFeedback.light();
     gate.onCancel();
   };
@@ -215,7 +258,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
 
   let primaryLabel: string;
   let primaryA11y: string;
-  if (settling) {
+  if (paymentPending) {
+    primaryLabel = 'Payment pending…';
+    primaryA11y = 'Payment status is still being confirmed';
+  } else if (settling) {
     primaryLabel = 'Confirming payment…';
     primaryA11y = 'Confirming your payment';
   } else if (!needsPayment) {
@@ -224,7 +270,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   } else if (stripeLoading) {
     primaryLabel = 'Checking payment methods…';
     primaryA11y = 'Checking payment methods';
-  } else if (!hasPaymentMethod) {
+  } else if (!hasPaymentMethod && !sheetAvailable) {
     primaryLabel = `Link a card to pay ${money(chargeAmount)}`;
     primaryA11y = `Link a payment method to pay ${chargeAmount.toFixed(2)} dollars and hire`;
   } else if (isProcessing) {
@@ -235,7 +281,16 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     primaryA11y = `Pay ${chargeAmount.toFixed(2)} dollars and hire ${gate.hunterName}`;
   }
   const primaryDisabled = busy || (needsPayment && stripeLoading);
-  const showApplePay = Platform.OS === 'ios' && needsPayment && !settling;
+  const showApplePay = Platform.OS === 'ios' && needsPayment && !settling && !paymentPending;
+  // With a saved card the primary button charges it; this is the way to
+  // anything else. Without one, the primary button already opens the sheet.
+  const showOtherWays =
+    needsPayment && !settling && !paymentPending && sheetAvailable && hasPaymentMethod;
+  const otherWaysLabel = isGooglePayAvailable ? 'Use Google Pay or another card' : 'Use another card';
+
+  const failureCopy = gate.paymentFailure
+    ? describePaymentFailure(gate.paymentFailure, { walletName })
+    : null;
 
   // Apple's HIG calls for a black Apple Pay button on light backgrounds and a
   // white one on dark backgrounds, so the mark stays crisp in both themes.
@@ -292,7 +347,11 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             </Text>
             <View style={styles.heldRow}>
               <MaterialIcons name="lock-outline" size={16} color={theme.textSecondary} />
-              <Text style={styles.heldText}>Held for in-app completion or dispute review</Text>
+              <Text style={styles.heldText}>
+                {gate.requirement?.fundingMode === 'at_accept'
+                  ? trustSafetyStrings.payWhenYouHire
+                  : 'Held for in-app completion or dispute review'}
+              </Text>
             </View>
           </View>
 
@@ -305,25 +364,40 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             </View>
           )}
 
-          {(error || stripeError) && (
+          {paymentPending && (
+            <View style={styles.notice} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              <MaterialIcons name="info-outline" size={18} color={theme.primary} />
+              <Text style={styles.noticeText}>
+                Your payment is still being confirmed. Don’t try again yet; we’ll reconcile it
+                before another charge.
+              </Text>
+            </View>
+          )}
+
+          {failureCopy && !busy && (
+            <View style={styles.failure} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              <MaterialIcons name="error-outline" size={18} color={theme.error} />
+              <View style={styles.failureText}>
+                <Text style={styles.failureTitle}>{failureCopy.title}</Text>
+                <Text style={styles.failureBody}>{failureCopy.message}</Text>
+                <Text style={styles.failureBody}>
+                  {gate.hunterName} is still selected. Nothing has changed on this bounty.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Anything that is not a payment decline (session expired, payment
+              methods failed to load). A decline is explained above instead,
+              and is never "retried" onto the card that was just declined. */}
+          {!failureCopy && (error || stripeError) && (
             <ErrorBanner
               error={getUserFriendlyError(error || stripeError)}
               onDismiss={() => {
                 setError(null);
                 if (stripeError) loadPaymentMethods().catch(() => {});
               }}
-              onAction={
-                error?.type === 'payment'
-                  ? () => {
-                      gate.onPaymentStarted('card');
-                      void payWithCard(chargeAmount).then(outcome =>
-                        resolveOutcome(outcome, chargeAmount)
-                      );
-                    }
-                  : stripeError
-                  ? () => loadPaymentMethods()
-                  : undefined
-              }
+              onAction={stripeError ? () => loadPaymentMethods() : undefined}
             />
           )}
 
@@ -401,7 +475,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             accessibilityState={{ disabled: primaryDisabled, busy }}
             style={[styles.primaryButton, primaryDisabled && styles.muted]}
             disabled={primaryDisabled}
-            onPress={needsPayment ? handlePayWithCard : handleConfirm}
+            onPress={needsPayment ? handlePrimaryPay : handleConfirm}
             activeOpacity={0.85}
           >
             {busy || (needsPayment && stripeLoading) ? (
@@ -414,12 +488,25 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             <Text style={styles.primaryButtonText}>{primaryLabel}</Text>
           </TouchableOpacity>
 
+          {showOtherWays && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`${otherWaysLabel} to pay ${chargeAmount.toFixed(2)} dollars`}
+              accessibilityState={{ disabled: busy }}
+              style={styles.secondaryButton}
+              disabled={busy}
+              onPress={handlePaymentSheet}
+            >
+              <Text style={styles.otherWaysText}>{otherWaysLabel}</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Not now, go back without hiring"
-            accessibilityState={{ disabled: isProcessing }}
+            accessibilityState={{ disabled: isProcessing || paymentPending }}
             style={styles.secondaryButton}
-            disabled={isProcessing}
+            disabled={isProcessing || paymentPending}
             onPress={handleCancel}
           >
             <Text style={styles.secondaryButtonText}>Not now</Text>
@@ -521,6 +608,28 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       fontSize: metrics.bodyFontSize,
       lineHeight: metrics.bodyFontSize + 6,
     },
+    failure: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.error,
+      padding: metrics.compact ? 8 : 12,
+    },
+    failureText: { flex: 1, gap: 2 },
+    failureTitle: {
+      color: theme.text,
+      fontSize: metrics.bodyFontSize,
+      lineHeight: metrics.bodyFontSize + 6,
+      fontWeight: '700',
+    },
+    failureBody: {
+      color: theme.textSecondary,
+      fontSize: metrics.bodyFontSize,
+      lineHeight: metrics.bodyFontSize + 6,
+    },
     body: {
       color: theme.textSecondary,
       fontSize: metrics.bodyFontSize,
@@ -573,6 +682,11 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
     buttonSpinner: { marginRight: 8 },
     muted: { opacity: 0.45 },
     secondaryButton: { paddingVertical: metrics.secondaryPaddingVertical, alignItems: 'center' },
+    otherWaysText: {
+      color: theme.primary,
+      fontSize: metrics.buttonFontSize - 1,
+      fontWeight: '600',
+    },
     secondaryButtonText: {
       color: theme.textSecondary,
       fontSize: metrics.buttonFontSize - 1,

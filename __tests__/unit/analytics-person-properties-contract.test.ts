@@ -112,9 +112,13 @@ describe('PostHog person property contract', () => {
   it('carries instrumented web handoffs through Branch into first-touch storage', () => {
     expect(appLinkFunction).toContain("event: 'app_store_redirect_clicked'");
     expect(appLinkFunction).toContain("fetch('https://api2.branch.io/v1/url'");
-    expect(appLinkFunction).toContain('utm_campaign: campaign');
+    expect(appLinkFunction).toContain('utm_campaign: utm.campaign');
+    expect(appLinkFunction).toContain('click_id: clickId');
     expect(sharePageTemplate).toContain('handoffUrl || appDeepLink');
-    expect(attributionFunction).toContain("admin.rpc('claim_marketing_attribution'");
-    expect(attributionFunction).toContain("'branch_deferred_link'");
+    // claim_marketing_attribution (20260808000000) was never applied to
+    // production; calling it was the 2026-09-09 outage. The live writer is
+    // fn_claim_install_attribution (20261021180000).
+    expect(attributionFunction).toContain("admin.rpc('fn_claim_install_attribution'");
+    expect(attributionFunction).not.toContain('claim_marketing_attribution');
   });
 });

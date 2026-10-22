@@ -12,7 +12,8 @@
 //     sheet reported;
 //   * a cancelled or failed charge resolves nothing and leaves the sheet up:
 //     the bounty stays open, nothing is charged;
-//   * a partial deposit re-prompts for the remainder;
+//   * a partial deposit re-prompts for the remainder, but a deposit the server
+//     has not seen yet never does (that would charge the same money twice);
 //   * backing out — by tapping cancel, by unmounting, or by backgrounding —
 //     emits accept_funding_abandoned; cancel and unmount also resolve false so
 //     the caller never accepts anything;
@@ -178,6 +179,20 @@ describe('useAcceptFunding', () => {
       await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
       expect(result.current.gate.active).toBe(true);
       expect(result.current.gate.requirement?.shortfall).toBe(30);
+    });
+
+    test('keeps an indeterminate payment pending and does not allow cancellation', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const probe = openGate(result, NEEDS_TOPUP);
+
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+      act(() => result.current.gate.onPaymentPending());
+
+      expect(result.current.gate.stage).toBe('pending');
+      expect(result.current.gate.active).toBe(true);
+      act(() => result.current.gate.onCancel());
+      expect(result.current.gate.stage).toBe('pending');
+      expect(probe.settled).toBe(false);
       expect(result.current.gate.remainderAfterDeposit).toBe(false);
       expect(propsFor('accept_funding_required')).toMatchObject({ balanceCovers: false });
     });
@@ -256,9 +271,13 @@ describe('useAcceptFunding', () => {
       await waitFor(() => expect(probe.resolved).toBe(true));
     });
 
-    test('a deposit that never shows up on the server re-prompts after the bounded wait', async () => {
+    // The charge succeeded but the server's balance never moved within the
+    // bounded wait. This used to go back to 'pay' showing "Payment received.
+    // $X more is needed" beside "Pay $X & hire" — the same amount again, so a
+    // second tap was a second real charge.
+    test('a deposit the server has not seen after the bounded wait closes instead of asking to pay again', async () => {
       const { result } = renderHook(() => useAcceptFunding(FAST));
-      const probe = openGate(result, NEEDS_TOPUP);
+      const probe = openGate(result, NEEDS_TOPUP, { hunterName: 'Sam' });
       await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
 
       mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
@@ -266,11 +285,45 @@ describe('useAcceptFunding', () => {
         result.current.gate.onPaymentSucceeded(30);
       });
 
-      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+      await waitFor(() => expect(probe.resolved).toBe(false));
       // Open + first settle read + FAST.settlePollAttempts polls, then stop.
       expect(mockGetRequirement).toHaveBeenCalledTimes(2 + FAST.settlePollAttempts);
-      expect(probe.settled).toBe(false);
-      expect(result.current.gate.remainderAfterDeposit).toBe(true);
+      expect(result.current.gate.stage).toBe('idle');
+      expect(result.current.gate.remainderAfterDeposit).toBe(false);
+      expect(mockAlert).toHaveBeenCalledTimes(1);
+      const [title, message] = mockAlert.mock.calls[0];
+      expect(title).toBe('Your payment went through');
+      expect(message).toContain('$30.00');
+      expect(message).toContain('Nothing more will be charged');
+      expect(message).toContain('Sam');
+      expect(propsFor('accept_funding_failed')).toMatchObject({ reason: 'deposit_unconfirmed' });
+      expect(allPropsFor('accept_funding_failed').some(p => p.reason === 'partial_deposit')).toBe(false);
+    });
+
+    test('reopening after an unconfirmed deposit reconciles it before another top-up', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const firstProbe = openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
+      await act(async () => {
+        result.current.gate.onPaymentSucceeded(30);
+      });
+      await waitFor(() => expect(firstProbe.resolved).toBe(false));
+
+      mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
+      const retryProbe = openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(retryProbe.resolved).toBe(false));
+      expect(result.current.gate.active).toBe(false);
+      expect(result.current.gate.stage).toBe('idle');
+      expect(mockAlert).toHaveBeenCalledTimes(2);
+
+      mockGetRequirement.mockResolvedValue(COVERED_AFTER_TOPUP);
+      const reconciledProbe = openGate(result, COVERED_AFTER_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('confirm'));
+      expect(reconciledProbe.settled).toBe(false);
+      act(() => result.current.gate.onConfirm());
+      await waitFor(() => expect(reconciledProbe.resolved).toBe(true));
     });
 
     test('a cancelled payment leaves the sheet up and resolves nothing', async () => {
@@ -307,6 +360,54 @@ describe('useAcceptFunding', () => {
       expect(result.current.gate.stage).toBe('pay');
       expect(probe.settled).toBe(false);
       expect(propsFor('accept_funding_failed')).toMatchObject({ reason: 'payment_failed' });
+    });
+
+    test('accept_funding_failed carries the same Stripe fields as payment_failed, and the sheet keeps them until the next try', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const probe = openGate(result, NEEDS_TOPUP, { hunterName: 'Ada' });
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      const failure = {
+        error_code: 'incorrect_zip',
+        code: 'incorrect_zip',
+        type: 'card_error',
+        error_type: 'card_error',
+        sdk_code: 'Failed',
+        payment_method_type: 'apple_pay' as const,
+        error_message: 'Your card could not be authorized using the postal code provided.',
+      };
+      act(() => result.current.gate.onPaymentStarted('applePay'));
+      act(() => result.current.gate.onPaymentFailed('failed', failure));
+
+      expect(propsFor('accept_funding_failed')).toMatchObject({
+        reason: 'payment_failed',
+        error_code: 'incorrect_zip',
+        code: 'incorrect_zip',
+        type: 'card_error',
+        payment_method_type: 'apple_pay',
+      });
+      // Still pending: hunter selected, nothing resolved, reason on screen.
+      expect(probe.settled).toBe(false);
+      expect(result.current.gate.hunterName).toBe('Ada');
+      expect(result.current.gate.paymentFailure).toEqual(failure);
+
+      // The next attempt clears the explanation.
+      act(() => result.current.gate.onPaymentStarted('paymentSheet'));
+      expect(result.current.gate.paymentFailure).toBeNull();
+    });
+
+    test('a cancelled payment records no failure fields and shows no failure', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      act(() => result.current.gate.onPaymentStarted('paymentSheet'));
+      act(() => result.current.gate.onPaymentFailed('cancelled'));
+
+      const props = propsFor('accept_funding_failed');
+      expect(props).toMatchObject({ reason: 'payment_cancelled' });
+      expect(props.error_code).toBeUndefined();
+      expect(result.current.gate.paymentFailure).toBeNull();
     });
 
     test('cancel resolves false and emits abandoned from the pay sheet', async () => {

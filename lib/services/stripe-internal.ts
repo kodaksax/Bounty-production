@@ -455,6 +455,12 @@ export interface StripePaymentIntent {
     | 'requires_capture'
     | 'canceled'
     | 'succeeded';
+  /**
+   * Present only when the intent was created with `includeEphemeralKey` and
+   * the server could mint one. Lets the Payment Sheet list saved cards.
+   */
+  customerId?: string;
+  ephemeralKey?: string;
 }
 
 export interface StripeSetupIntent {
@@ -635,10 +641,14 @@ export function handleStripeError(
       type?: string;
       code?: string;
       decline_code?: string;
+      sdk_code?: string;
     };
     stripeError.type = 'card_error';
-    stripeError.code = declineCode;
-    stripeError.decline_code = declineCode;
+    // Keep the two fields distinct: copying `code` into `decline_code` made a
+    // generic SDK 'Failed' look like a bank decline reason downstream.
+    stripeError.code = error.code;
+    if (error.decline_code) stripeError.decline_code = error.decline_code;
+    if (error.sdk_code) stripeError.sdk_code = error.sdk_code;
     return stripeError;
   }
 

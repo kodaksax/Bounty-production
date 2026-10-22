@@ -7,12 +7,12 @@
 //      signal_score threshold (never further than FLAGGED), evaluates every
 //      enabled row in moderation_alert_thresholds, and returns the alerts it
 //      created this run.
-//   2. For each new alert: in-app notification for every admin, a push via the
-//      notifications_outbox + process-notification path, and an email via
-//      send-notification-email. Every delivery step is best-effort -- a failed
-//      channel is logged, never fatal. Since 20261001140000 the sweep returns
-//      every alert not yet fanned out, including report-driven reviews and
-//      escalation reviews raised outside the sweep.
+//   2. For each new alert: rpc('fn_notify_admins'), which pages the
+//      admin_recipients list (push + in-app bell via the outbox, and a direct
+//      email for critical/high). A failed alert is logged, never fatal. Since
+//      20261001140000 the sweep returns every alert not yet fanned out,
+//      including report-driven reviews and escalation reviews raised outside
+//      the sweep.
 //   3. Forwards uncaptured reports to PostHog as `report_submitted` (see
 //      _shared/report-submitted-events.ts). Best-effort; never fails the run.
 //
@@ -114,84 +114,34 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ ok: true, alerts_created: 0, notified: 0, report_events: reportEvents });
     }
 
-    // Resolve admin recipients once.
-    const { data: recipientRows, error: recipErr } = await supabaseAdmin.rpc(
-      'moderation_admin_recipients'
-    );
-    if (recipErr) {
-      console.error('[moderation-sweep] moderation_admin_recipients error', recipErr);
-    }
-    const recipients = (recipientRows as { user_id: string; email: string | null }[] | null) ?? [];
-    const adminIds = recipients.map((r) => r.user_id).filter(Boolean);
-
-    if (adminIds.length === 0) {
-      console.warn('[moderation-sweep] no admin recipients -- alerts recorded but not delivered');
-      return jsonResponse({ ok: true, alerts_created: alerts.length, notified: 0, report_events: reportEvents });
-    }
-
     let delivered = 0;
 
     for (const alert of alerts) {
-      const title = severityTitle(alert.severity);
-      const body = alert.summary;
-      const data = {
-        type: 'moderation_alert',
-        alert_id: alert.id,
-        threshold: alert.threshold_key,
-        bounty_id: alert.bounty_id,
-        severity: alert.severity,
-        ...alert.detail,
-      };
-
-      // (a) in-app bell for every admin
-      const { error: bellErr } = await supabaseAdmin.from('notifications').insert(
-        adminIds.map((uid) => ({
-          user_id: uid,
-          type: 'moderation_alert',
-          category: 'security',
-          title,
-          body,
-          data,
-          read: false,
-        }))
-      );
-      if (bellErr) console.error(`[moderation-sweep] bell insert failed for ${alert.id}`, bellErr);
-
-      // (b) push, via the outbox + process-notification path
-      const { data: outboxRow, error: outboxErr } = await supabaseAdmin
-        .from('notifications_outbox')
-        .insert({
+      // public.fn_notify_admins picks recipients from admin_recipients by
+      // severity, writes the outbox row (push + in-app bell via
+      // process-notification) and, for critical/high, sends the email itself
+      // so it never depends on a push token.
+      const { data: result, error: notifyErr } = await supabaseAdmin.rpc('fn_notify_admins', {
+        p_type: 'moderation_alert',
+        p_severity: alert.severity,
+        p_title: severityTitle(alert.severity),
+        p_body: alert.summary,
+        p_data: {
+          alert_id: alert.id,
+          threshold: alert.threshold_key,
           bounty_id: alert.bounty_id,
-          recipients: adminIds,
-          title,
-          body,
-          data,
-          status: 'pending',
-        })
-        .select('id')
-        .single();
-      if (outboxErr) {
-        console.error(`[moderation-sweep] outbox insert failed for ${alert.id}`, outboxErr);
-      } else if (outboxRow?.id) {
-        supabaseAdmin.functions
-          .invoke('process-notification', { body: { id: outboxRow.id } })
-          .catch((e) => console.error(`[moderation-sweep] process-notification failed`, e));
+          ...alert.detail,
+        },
+        p_bounty_id: alert.bounty_id,
+      });
+      if (notifyErr) {
+        console.error(`[moderation-sweep] fn_notify_admins failed for ${alert.id}`, notifyErr);
+        continue;
       }
-
-      // (c) email
-      supabaseAdmin.functions
-        .invoke('send-notification-email', {
-          body: {
-            userIds: adminIds,
-            category: 'security',
-            type: 'moderation_alert',
-            title,
-            body,
-            data,
-          },
-        })
-        .catch((e) => console.error(`[moderation-sweep] send-notification-email failed`, e));
-
+      if (((result as { recipients?: number } | null)?.recipients ?? 0) === 0) {
+        console.warn(`[moderation-sweep] no admin_recipients row accepts ${alert.severity}; ${alert.id} not delivered`);
+        continue;
+      }
       delivered += 1;
     }
 

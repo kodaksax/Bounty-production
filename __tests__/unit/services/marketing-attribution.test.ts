@@ -54,9 +54,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { Platform } from 'react-native';
 
+import * as Clipboard from 'expo-clipboard';
+
 import {
+    captureInstallHandoff,
+    INSTALL_HANDOFF_STORAGE_KEY,
     MARKETING_ATTRIBUTION_STORAGE_PREFIX,
+    parseHandoffUrl,
     performMarketingAttribution,
+    resetInstallHandoffForTests,
 } from '../../../services/marketingAttribution';
 
 const { identify, isPostHogReady, setPersonPropertiesOnce } = require('../../../lib/posthog');
@@ -88,6 +94,23 @@ function fetchBody(callIndex = 0): Record<string, unknown> {
   return JSON.parse(init.body);
 }
 
+/** A first-open handoff that already ran and found nothing: the default for suites below. */
+const CAPTURED_EMPTY_HANDOFF = JSON.stringify({
+  v: 2,
+  clickId: null,
+  installReferrer: null,
+  capturedAt: '2026-10-21T00:00:00.000Z',
+});
+
+/** Serves `record` for this user's attribution key and an already-captured handoff. */
+function storedRecord(record: Record<string, unknown> | null) {
+  getItem.mockImplementation(async (key: string) => {
+    if (key === INSTALL_HANDOFF_STORAGE_KEY) return CAPTURED_EMPTY_HANDOFF;
+    if (key === STORAGE_KEY && record) return JSON.stringify(record);
+    return null;
+  });
+}
+
 /** Returns the parsed record written by the Nth AsyncStorage.setItem call. */
 function writtenRecord(callIndex = 0): any {
   return JSON.parse(setItem.mock.calls[callIndex][1]);
@@ -104,12 +127,13 @@ describe('performMarketingAttribution', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     Platform.OS = 'ios';
-    getItem.mockResolvedValue(null);
+    resetInstallHandoffForTests();
+    storedRecord(null);
     setItem.mockResolvedValue(undefined);
     getInstallReferrerAsync.mockResolvedValue('');
     branch.getFirstReferringParams.mockResolvedValue({ '+clicked_branch_link': false });
     isPostHogReady.mockReturnValue(true);
-    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ status: 'unattributed' }));
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ status: 'unattributed', reportable: true }));
   });
 
   afterEach(() => {
@@ -126,7 +150,7 @@ describe('performMarketingAttribution', () => {
       const referrer = 'utm_source=facebook&utm_medium=cpc&click_id=abc-123';
       getInstallReferrerAsync.mockResolvedValue(referrer);
       (global.fetch as jest.Mock).mockResolvedValue(
-        jsonResponse({ status: 'attributed', campaign_id: 'camp-1' })
+        jsonResponse({ status: 'attributed', campaign_id: 'camp-1', reportable: true })
       );
 
       const outcome = await performMarketingAttribution({
@@ -191,6 +215,8 @@ describe('performMarketingAttribution', () => {
     it('sends immutable first-touch properties from a deferred Branch link', async () => {
       branch.getFirstReferringParams.mockResolvedValue({
         '+clicked_branch_link': true,
+        '+match_guaranteed': true,
+        click_id: '5f2b8a1e-3c4d-4e5f-8a9b-0c1d2e3f4a5b',
         '~channel': 'reddit',
         '~feature': 'guerilla',
         '~campaign': 'orangecounty',
@@ -210,6 +236,8 @@ describe('performMarketingAttribution', () => {
           initial_landing_page: 'https://bountyfinder.net/?utm_source=reddit',
           install_source: 'reddit',
           install_campaign: 'orangecounty',
+          click_id: '5f2b8a1e-3c4d-4e5f-8a9b-0c1d2e3f4a5b',
+          match_guaranteed: true,
         },
       });
     });
@@ -227,15 +255,13 @@ describe('performMarketingAttribution', () => {
   // ── Duplicate launches ──────────────────────────────────────────────────
   describe('duplicate launches', () => {
     it('does not call the server again once a verdict is recorded', async () => {
-      getItem.mockResolvedValue(
-        JSON.stringify({
-          v: 1,
-          state: 'completed',
-          status: 'attributed',
-          attempts: 1,
-          updatedAt: new Date().toISOString(),
-        })
-      );
+      storedRecord({
+        v: 2,
+        state: 'completed',
+        status: 'attributed',
+        attempts: 1,
+        updatedAt: new Date().toISOString(),
+      });
 
       const outcome = await performMarketingAttribution({
         userId: USER_ID,
@@ -249,16 +275,21 @@ describe('performMarketingAttribution', () => {
 
     it('records the attempt before the request and the verdict after it', async () => {
       (global.fetch as jest.Mock).mockResolvedValue(
-        jsonResponse({ status: 'attributed', campaign_id: 'camp-1', match_method: 'play_referrer' })
+        jsonResponse({
+          status: 'attributed',
+          campaign_id: 'camp-1',
+          match_method: 'play_referrer',
+          reportable: true,
+        })
       );
 
       await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
 
       expect(setItem).toHaveBeenCalledTimes(2);
       expect(setItem.mock.calls[0][0]).toBe(STORAGE_KEY);
-      expect(writtenRecord(0)).toMatchObject({ v: 1, state: 'pending', attempts: 1 });
+      expect(writtenRecord(0)).toMatchObject({ v: 2, state: 'pending', attempts: 1 });
       expect(writtenRecord(1)).toMatchObject({
-        v: 1,
+        v: 2,
         state: 'completed',
         status: 'attributed',
         attempts: 1,
@@ -277,14 +308,12 @@ describe('performMarketingAttribution', () => {
     });
 
     it('stops retrying after the attempt budget is exhausted', async () => {
-      getItem.mockResolvedValue(
-        JSON.stringify({
-          v: 1,
-          state: 'pending',
-          attempts: 3,
-          updatedAt: new Date().toISOString(),
-        })
-      );
+      storedRecord({
+        v: 2,
+        state: 'pending',
+        attempts: 3,
+        updatedAt: new Date().toISOString(),
+      });
 
       const outcome = await performMarketingAttribution({
         userId: USER_ID,
@@ -297,17 +326,14 @@ describe('performMarketingAttribution', () => {
     });
 
     it('attributes a different user on the same device independently', async () => {
-      getItem.mockImplementation(async (key: string) =>
-        key === STORAGE_KEY
-          ? JSON.stringify({
-              v: 1,
-              state: 'completed',
-              status: 'attributed',
-              attempts: 1,
-              updatedAt: '',
-            })
-          : null
-      );
+      // user-123 is done on this device; user-456 is not.
+      storedRecord({
+        v: 2,
+        state: 'completed',
+        status: 'attributed',
+        attempts: 1,
+        updatedAt: '',
+      });
 
       const outcome = await performMarketingAttribution({
         userId: 'user-456',
@@ -337,16 +363,29 @@ describe('performMarketingAttribution', () => {
       expect(identify).not.toHaveBeenCalled();
     });
 
+    it('keeps a legacy response retryable without consuming the attempt budget', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ status: 'unattributed' }));
+
+      const outcome = await performMarketingAttribution({
+        userId: USER_ID,
+        accessToken: TOKEN,
+      });
+
+      expect(outcome).toBe('failed');
+      expect(writtenRecord(0)).toMatchObject({ state: 'pending', attempts: 1 });
+      expect(writtenRecord(1)).toMatchObject({ state: 'pending', attempts: 0 });
+    });
+
     it('retries on the next launch, incrementing the attempt counter', async () => {
-      getItem.mockResolvedValue(
-        JSON.stringify({
-          v: 1,
-          state: 'pending',
-          attempts: 1,
-          updatedAt: new Date().toISOString(),
-        })
+      storedRecord({
+        v: 2,
+        state: 'pending',
+        attempts: 1,
+        updatedAt: new Date().toISOString(),
+      });
+      (global.fetch as jest.Mock).mockResolvedValue(
+        jsonResponse({ status: 'attributed', reportable: true })
       );
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ status: 'attributed' }));
 
       const outcome = await performMarketingAttribution({
         userId: USER_ID,
@@ -375,6 +414,21 @@ describe('performMarketingAttribution', () => {
       expect(loggedMessages()).toContain('[Marketing Attribution] failed');
     });
 
+    it('does not consume attempts for a retryable identity merge failure', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        jsonResponse({ error: 'Web identity merge is pending', retryable: true }, 503)
+      );
+
+      const outcome = await performMarketingAttribution({
+        userId: USER_ID,
+        accessToken: TOKEN,
+      });
+
+      expect(outcome).toBe('failed');
+      expect(writtenRecord(0)).toMatchObject({ state: 'pending', attempts: 1 });
+      expect(writtenRecord(1)).toMatchObject({ state: 'pending', attempts: 0 });
+    });
+
     it('treats a 401 as a retryable failure without recording a verdict', async () => {
       (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ error: 'unauthorized' }, 401));
 
@@ -388,7 +442,9 @@ describe('performMarketingAttribution', () => {
     });
 
     it('treats a 200 with an unrecognised body as a failure', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ status: 'who_knows' }));
+      (global.fetch as jest.Mock).mockResolvedValue(
+        jsonResponse({ status: 'who_knows', reportable: true })
+      );
 
       const outcome = await performMarketingAttribution({
         userId: USER_ID,
@@ -409,6 +465,7 @@ describe('performMarketingAttribution', () => {
           status: 'already_attributed',
           campaign_id: 'camp-9',
           match_method: 'deep_link',
+          reportable: true,
         })
       );
 
@@ -427,7 +484,7 @@ describe('performMarketingAttribution', () => {
 
     it('is not re-sent on the following launch', async () => {
       (global.fetch as jest.Mock).mockResolvedValue(
-        jsonResponse({ status: 'already_attributed', campaign_id: 'camp-9' })
+        jsonResponse({ status: 'already_attributed', campaign_id: 'camp-9', reportable: true })
       );
       await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
 
@@ -456,6 +513,7 @@ describe('performMarketingAttribution', () => {
           utm_source: 'facebook',
           match_method: 'play_referrer',
           match_confidence: 1,
+          reportable: true,
         })
       );
 
@@ -481,6 +539,7 @@ describe('performMarketingAttribution', () => {
           initial_landing_page: 'https://bountyfinder.net/',
           install_source: 'reddit',
           install_campaign: 'orangecounty',
+          reportable: true,
         })
       );
 
@@ -503,8 +562,9 @@ describe('performMarketingAttribution', () => {
           status: 'attributed',
           campaign_id: 'camp-1',
           creative_id: null,
-          match_method: 'fingerprint',
-          match_confidence: 0.7,
+          match_method: 'play_referrer',
+          match_confidence: 1,
+          reportable: true,
         })
       );
 
@@ -512,15 +572,15 @@ describe('performMarketingAttribution', () => {
 
       expect(identify).toHaveBeenCalledWith(USER_ID, {
         campaign_id: 'camp-1',
-        match_method: 'fingerprint',
-        match_confidence: 0.7,
+        match_method: 'play_referrer',
+        match_confidence: 1,
       });
     });
 
     it('does not identify when PostHog is not initialized', async () => {
       isPostHogReady.mockReturnValue(false);
       (global.fetch as jest.Mock).mockResolvedValue(
-        jsonResponse({ status: 'attributed', campaign_id: 'camp-1' })
+        jsonResponse({ status: 'attributed', campaign_id: 'camp-1', reportable: true })
       );
 
       const outcome = await performMarketingAttribution({
@@ -533,7 +593,9 @@ describe('performMarketingAttribution', () => {
     });
 
     it('does not identify on an unattributed verdict', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ status: 'unattributed' }));
+      (global.fetch as jest.Mock).mockResolvedValue(
+        jsonResponse({ status: 'unattributed', reportable: true })
+      );
 
       const outcome = await performMarketingAttribution({
         userId: USER_ID,
@@ -549,7 +611,7 @@ describe('performMarketingAttribution', () => {
         throw new Error('posthog exploded');
       });
       (global.fetch as jest.Mock).mockResolvedValue(
-        jsonResponse({ status: 'attributed', campaign_id: 'camp-1' })
+        jsonResponse({ status: 'attributed', campaign_id: 'camp-1', reportable: true })
       );
 
       await expect(
@@ -597,7 +659,7 @@ describe('performMarketingAttribution', () => {
       Platform.OS = 'android';
       getInstallReferrerAsync.mockResolvedValue('utm_source=facebook');
       (global.fetch as jest.Mock).mockResolvedValue(
-        jsonResponse({ status: 'attributed', campaign_id: 'camp-1' })
+        jsonResponse({ status: 'attributed', campaign_id: 'camp-1', reportable: true })
       );
 
       await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
@@ -629,10 +691,139 @@ describe('performMarketingAttribution', () => {
     });
   });
 
+  // ── First-open install handoff ──────────────────────────────────────────
+  describe('install handoff', () => {
+    const CLICK = '5f2b8a1e-3c4d-4e5f-8a9b-0c1d2e3f4a5b';
+    const hasUrlAsync = Clipboard.hasUrlAsync as jest.Mock;
+    const getUrlAsync = Clipboard.getUrlAsync as jest.Mock;
+    const setStringAsync = Clipboard.setStringAsync as jest.Mock;
+
+    beforeEach(() => {
+      // Nothing captured yet: this is the first open.
+      getItem.mockResolvedValue(null);
+      hasUrlAsync.mockResolvedValue(true);
+      getUrlAsync.mockResolvedValue(`https://www.bountyfinder.net/?install=${CLICK}`);
+    });
+
+    it('iOS: reads the clipboard only after the server reports a candidate click', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(jsonResponse({ candidate: true }))
+        .mockResolvedValue(jsonResponse({ status: 'attributed', reportable: true }));
+
+      await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
+
+      const [, probe] = (global.fetch as jest.Mock).mock.calls[0];
+      expect(JSON.parse(probe.body)).toEqual({ action: 'probe', platform: 'ios' });
+      expect(probe.headers.Authorization).toBeUndefined();
+      expect(fetchBody(1)).toEqual({ platform: 'ios', click_id: CLICK });
+      // Our own token, so it is cleared rather than left to be pasted somewhere.
+      expect(setStringAsync).toHaveBeenCalledWith('');
+    });
+
+    it('iOS: an organic install never triggers the paste prompt', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(jsonResponse({ candidate: false }))
+        .mockResolvedValue(jsonResponse({ status: 'unattributed', reportable: true }));
+
+      await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
+
+      expect(hasUrlAsync).not.toHaveBeenCalled();
+      expect(getUrlAsync).not.toHaveBeenCalled();
+      expect(fetchBody(1)).toEqual({ platform: 'ios' });
+    });
+
+    it('iOS: a URL that is not the handoff is neither used nor cleared', async () => {
+      getUrlAsync.mockResolvedValue('https://example.com/some-article');
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(jsonResponse({ candidate: true }))
+        .mockResolvedValue(jsonResponse({ status: 'unattributed', reportable: true }));
+
+      await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
+
+      expect(fetchBody(1)).toEqual({ platform: 'ios' });
+      expect(setStringAsync).not.toHaveBeenCalled();
+    });
+
+    it('iOS: a failed probe stays retryable and defers the immutable claim', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(jsonResponse({ error: 'not ready' }, 401))
+        .mockResolvedValueOnce(jsonResponse({ candidate: true }))
+        .mockResolvedValue(jsonResponse({ status: 'attributed', reportable: true }));
+
+      const firstOutcome = await performMarketingAttribution({
+        userId: USER_ID,
+        accessToken: TOKEN,
+      });
+
+      expect(firstOutcome).toBe('skipped');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(setItem).not.toHaveBeenCalled();
+      expect(hasUrlAsync).not.toHaveBeenCalled();
+
+      const secondOutcome = await performMarketingAttribution({
+        userId: USER_ID,
+        accessToken: TOKEN,
+      });
+
+      expect(secondOutcome).toBe('completed');
+      expect(fetchBody(2)).toEqual({ platform: 'ios', click_id: CLICK });
+      expect(setItem).toHaveBeenCalledWith(
+        INSTALL_HANDOFF_STORAGE_KEY,
+        expect.stringContaining(CLICK)
+      );
+      expect(setStringAsync).toHaveBeenCalledWith('');
+    });
+
+    it('Android: pins the referrer on first open and reuses it at signup', async () => {
+      Platform.OS = 'android';
+      const referrer = `utm_source=website&utm_medium=web&click_id=${CLICK}`;
+      getInstallReferrerAsync.mockResolvedValue(referrer);
+
+      await captureInstallHandoff();
+      expect(setItem).toHaveBeenCalledWith(
+        INSTALL_HANDOFF_STORAGE_KEY,
+        expect.stringContaining(CLICK)
+      );
+
+      await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
+      expect(getInstallReferrerAsync).toHaveBeenCalledTimes(1);
+      expect(fetchBody()).toEqual({ platform: 'android', install_referrer: referrer });
+    });
+
+    it('parses only the website handoff URL', () => {
+      expect(parseHandoffUrl(`https://bountyfinder.net/?install=${CLICK.toUpperCase()}`)).toBe(CLICK);
+      expect(parseHandoffUrl(`https://bountyfinder.net.evil.example/?install=${CLICK}`)).toBeNull();
+      expect(parseHandoffUrl('not a url')).toBeNull();
+      expect(parseHandoffUrl(null)).toBeNull();
+    });
+  });
+
+  it('does not put a sub-0.9 inferred match on the PostHog person', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        status: 'attributed',
+        utm_source: 'linkedin',
+        initial_utm_source: 'linkedin',
+        match_method: 'fingerprint',
+        match_confidence: 0.5,
+        reportable: false,
+      })
+    );
+
+    await expect(
+      performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN })
+    ).resolves.toBe('completed');
+    expect(identify).not.toHaveBeenCalled();
+    expect(setPersonPropertiesOnce).not.toHaveBeenCalled();
+  });
+
   // ── Never blocks / never throws ─────────────────────────────────────────
   it('never rejects, even when AsyncStorage is broken', async () => {
     getItem.mockRejectedValue(new Error('storage unavailable'));
     setItem.mockRejectedValue(new Error('storage unavailable'));
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(jsonResponse({ candidate: false }))
+      .mockResolvedValue(jsonResponse({ status: 'unattributed', reportable: true }));
 
     await expect(
       performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN })

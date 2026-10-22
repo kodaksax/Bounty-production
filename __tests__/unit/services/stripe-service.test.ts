@@ -178,6 +178,7 @@ describe('Stripe Service', () => {
         amount: 50,
         currency: 'usd',
         paymentIntentId: 'pi_mock_67890',
+        payment_method_type: 'card',
       });
     });
 

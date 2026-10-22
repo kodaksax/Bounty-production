@@ -30,6 +30,7 @@ import {
 } from '../_shared/owner-refund-gate.ts';
 import { authorizeRelease } from '../_shared/release-authorization.ts';
 import { reserveAccountOperation, finishAccountOperation, isDefinitiveStripeRejection } from '../_shared/connect-account-operations.ts';
+import { summarizeRefundCoverage } from '../_shared/refund-reflection.ts';
 
 declare const Deno: any;
 
@@ -90,6 +91,22 @@ function isValidEmail(email: string): boolean {
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function listPaymentIntentRefunds(stripe: any, paymentIntentId: string): Promise<any[]> {
+  const refunds: any[] = [];
+  let startingAfter: string | undefined;
+  do {
+    const page = await stripe.refunds.list({
+      payment_intent: paymentIntentId,
+      limit: 100,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+    refunds.push(...page.data);
+    if (!page.has_more || page.data.length === 0) break;
+    startingAfter = page.data[page.data.length - 1].id;
+  } while (startingAfter);
+  return refunds;
 }
 
 // Resolve (or lazily create) the poster's Stripe Customer. Mirrors the exact
@@ -1504,7 +1521,7 @@ Deno.serve(async (req: Request) => {
       if (bp.status === 'canceled') {
         return reply({ canceled: true, status: 'canceled', reused: true });
       }
-      if (bp.status === 'refunded' || bp.status === 'refund_pending') {
+      if (bp.status === 'refunded') {
         return reply({
           refunded: true,
           status: bp.status,
@@ -1570,7 +1587,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // Post-capture: issue a real refund.
-      if (bp.status === 'captured') {
+      if (bp.status === 'captured' || bp.status === 'refund_pending') {
         if (!bp.stripe_payment_intent_id) {
           await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
           return reply(
@@ -1578,29 +1595,68 @@ Deno.serve(async (req: Request) => {
             500
           );
         }
-        let refund: any;
+        let refunds: any[];
         try {
-          refund = await stripe.refunds.create(
-            {
-              payment_intent: bp.stripe_payment_intent_id,
-              reason: 'requested_by_customer',
-              metadata: { bounty_id: bountyId, request_id: requestId },
-            },
-            { idempotencyKey: `bounty_refund_${bp.id}` }
-          );
+          refunds = await listPaymentIntentRefunds(stripe, bp.stripe_payment_intent_id);
         } catch (refundErr: any) {
-          console.error('[bounty-payments] Refund failed', {
+          console.error('[bounty-payments] Could not reconcile existing refunds', {
             bountyId,
             requestId,
             bpId: bp.id,
             refundErr,
           });
-          if (isDefinitiveStripeRejection(refundErr)) {
-            await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
-          }
+          await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
           return reply(
             {
-              error: 'Refund could not be processed. Please try again.',
+              error: 'Could not verify the existing refund. Please try again.',
+              code: 'refund_lookup_failed',
+              retryable: true,
+            },
+            502
+          );
+        }
+
+        let coverage = summarizeRefundCoverage(Number(bp.amount), refunds);
+        if (coverage.remainingCents > 0) {
+          let refund: any;
+          try {
+            refund = await stripe.refunds.create(
+              {
+                payment_intent: bp.stripe_payment_intent_id,
+                amount: coverage.remainingCents,
+                reason: 'requested_by_customer',
+                metadata: { bounty_id: bountyId, request_id: requestId },
+              },
+              { idempotencyKey: `bounty_refund_${bp.id}_${requestId}` }
+            );
+          } catch (refundErr: any) {
+            console.error('[bounty-payments] Refund failed', {
+              bountyId,
+              requestId,
+              bpId: bp.id,
+              refundErr,
+            });
+            if (isDefinitiveStripeRejection(refundErr)) {
+              await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
+            }
+            return reply(
+              {
+                error: 'Refund could not be processed. Please try again.',
+                code: 'refund_failed',
+                retryable: true,
+              },
+              502
+            );
+          }
+          refunds = [...refunds, refund];
+          coverage = summarizeRefundCoverage(Number(bp.amount), refunds);
+        }
+
+        if (!coverage.status) {
+          await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);
+          return reply(
+            {
+              error: 'The full refund has not been accepted. Please try again.',
               code: 'refund_failed',
               retryable: true,
             },
@@ -1608,13 +1664,12 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        const newStatus = refund.status === 'succeeded' ? 'refunded' : 'refund_pending';
         const { error: updErr } = (await withDbTimeout(
           supabaseAdmin
             .from('bounty_payments')
             .update({
-              status: newStatus,
-              stripe_refund_id: refund.id,
+              status: coverage.status,
+              stripe_refund_id: coverage.stripeRefundId,
               updated_at: new Date().toISOString(),
             })
             .eq('id', bp.id)
@@ -1624,17 +1679,17 @@ Deno.serve(async (req: Request) => {
             bountyId,
             requestId,
             bpId: bp.id,
-            refundId: refund.id,
+            refundId: coverage.stripeRefundId,
             updErr,
           });
           return reply({
             refunded: true,
-            status: newStatus,
-            refundId: refund.id,
+            status: coverage.status,
+            refundId: coverage.stripeRefundId,
             warning: 'record_update_failed',
           });
         }
-        return reply({ refunded: true, status: newStatus, refundId: refund.id });
+        return reply({ refunded: true, status: coverage.status, refundId: coverage.stripeRefundId });
       }
 
       await releaseOwnerRefundClaim(supabaseAdmin, bountyId, userId);

@@ -24,7 +24,13 @@
  */
 import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
-import { failureEventProps, getPaymentIntentIdFromClientSecret } from '../utils/stripe-error';
+import {
+  failureEventProps,
+  failureFromLastPaymentError,
+  getPaymentIntentIdFromClientSecret,
+  type FailureEventProps,
+  type PaymentMethodTypeTag,
+} from '../utils/stripe-error';
 import { connectService } from './connect-service';
 import { escrowService } from './escrow-service';
 import {
@@ -82,6 +88,13 @@ export type {
 export { connectService } from './connect-service';
 export { escrowService } from './escrow-service';
 export { paymentMethodsService } from './payment-methods-service';
+
+/** How a Payment Sheet charge ended. `failure` is set exactly when outcome is 'failed'. */
+export interface PaymentSheetPayResult {
+  outcome: 'succeeded' | 'cancelled' | 'failed' | 'pending';
+  paymentIntentId?: string;
+  failure?: FailureEventProps;
+}
 
 /**
  * Legacy facade for existing callers. Methods delegate to the focused
@@ -234,8 +247,15 @@ class StripeService {
     amount: number,
     currency: string = 'usd',
     authToken?: string,
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    options?: {
+      /** Ask the server for a customer ephemeral key (Payment Sheet saved cards). */
+      includeEphemeralKey?: boolean;
+      /** How this intent will be paid; tags payment_initiated/payment_failed. */
+      paymentMethodType?: PaymentMethodTypeTag;
+    }
   ): Promise<StripePaymentIntent> {
+    const paymentMethodType = options?.paymentMethodType ?? 'card';
     performanceService.startMeasurement('payment_initiate', 'payment_process', {
       amount,
       currency,
@@ -253,15 +273,18 @@ class StripeService {
         };
       }
 
-      const { clientSecret, paymentIntentId } = await invokePayments<{
+      const { clientSecret, paymentIntentId, customerId, ephemeralKey } = await invokePayments<{
         clientSecret: string;
         paymentIntentId: string;
+        customerId?: string;
+        ephemeralKey?: string;
       }>('payments/create-payment-intent', {
         body: {
           amountCents: Math.round(amount * 100),
           currency,
           metadata: { purpose: 'wallet_deposit' },
           ...(idempotencyKey ? { idempotencyKey } : {}),
+          ...(options?.includeEphemeralKey ? { includeEphemeralKey: true } : {}),
         },
         ...(authToken ? { accessToken: authToken } : {}),
       });
@@ -272,6 +295,9 @@ class StripeService {
         amount: Math.round(amount * 100),
         currency,
         status: 'requires_payment_method',
+        // An older server simply omits these; the sheet then works without
+        // listing saved cards.
+        ...(customerId && ephemeralKey ? { customerId, ephemeralKey } : {}),
       };
 
       // Track payment initiated
@@ -279,6 +305,7 @@ class StripeService {
         amount,
         currency,
         paymentIntentId: paymentIntent.id,
+        payment_method_type: paymentMethodType,
       });
 
       await performanceService.endMeasurement('payment_initiate', {
@@ -293,7 +320,7 @@ class StripeService {
       await analyticsService.trackEvent('payment_failed', {
         amount,
         currency,
-        ...failureEventProps(error),
+        ...failureEventProps(error, 'unknown', paymentMethodType),
         stage: 'initiate',
       });
 
@@ -346,9 +373,13 @@ class StripeService {
               message: 'Payment was cancelled',
             };
           }
+          // `error.code` is the SDK's enum ('Failed'); the Stripe code is
+          // `stripeErrorCode`. Rethrowing only `code` is what made
+          // payment_failed say "Failed" whenever there was no decline code.
           throw {
             type: error.type || 'card_error',
-            code: error.code,
+            code: error.stripeErrorCode || error.code,
+            sdk_code: error.code,
             decline_code: error.declineCode,
             message: error.message || 'Payment confirmation failed',
           };
@@ -458,7 +489,7 @@ class StripeService {
       await analyticsService.trackEvent('payment_failed', {
         paymentMethodId,
         payment_intent_id: getPaymentIntentIdFromClientSecret(paymentIntentClientSecret),
-        ...failureEventProps(error),
+        ...failureEventProps(error, 'unknown', 'card'),
         stage: 'confirm',
       });
 
@@ -474,9 +505,12 @@ class StripeService {
   /**
    * Present the Stripe Payment Sheet for a streamlined checkout experience.
    */
-  async presentPaymentSheet(clientSecret: string): Promise<{
+  async presentPaymentSheet(
+    clientSecret: string,
+    customer?: { customerId?: string; ephemeralKey?: string }
+  ): Promise<{
     success: boolean;
-    error?: StripeError;
+    error?: StripeError & { decline_code?: string; sdk_code?: string };
   }> {
     try {
       await stripeSdk.initialize();
@@ -498,7 +532,18 @@ class StripeService {
       const { DEEP_LINK_SCHEME } = await import('../config/app');
       const { error: initError } = await sdk.initPaymentSheet({
         paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'BountyExpo',
+        merchantDisplayName: 'Bounty',
+        // With the customer's ephemeral key the sheet lists their saved cards
+        // first, so a returning payer is one tap from paying.
+        ...(customer?.customerId && customer.ephemeralKey
+          ? {
+              customerId: customer.customerId,
+              customerEphemeralKeySecret: customer.ephemeralKey,
+            }
+          : {}),
+        // Cards and wallets only: a delayed method such as a bank debit would
+        // "succeed" here while the money is still days away.
+        allowsDelayedPaymentMethods: false,
         style: 'automatic',
         googlePay: {
           merchantCountryCode: 'US',
@@ -542,7 +587,9 @@ class StripeService {
           success: false,
           error: {
             type: presentError.type || 'card_error',
-            code: presentError.code,
+            code: presentError.stripeErrorCode || presentError.code,
+            ...(presentError.declineCode ? { decline_code: presentError.declineCode } : {}),
+            ...(presentError.stripeErrorCode ? { sdk_code: presentError.code } : {}),
             message: presentError.message,
           },
         };
@@ -555,6 +602,154 @@ class StripeService {
         success: false,
         error: handleStripeError(error) as StripeError,
       };
+    }
+  }
+
+  /**
+   * Charge `amount` through the Stripe Payment Sheet: Apple Pay / Google Pay
+   * where the device supports them, the payer's saved cards, and new card
+   * entry, in one native sheet. Creates its own PaymentIntent through the
+   * same server route and wallet_deposit purpose as the saved-card path, so
+   * the deposit is persisted and reconciled exactly the same way.
+   *
+   * Emits payment_initiated / payment_completed / payment_failed itself.
+   * A decline shown *inside* the sheet is recorded on the intent rather than
+   * returned to us, so when the sheet ends without success the intent's
+   * last_payment_error is read back: a payer who was declined and then
+   * closed the sheet is a failure with the real Stripe codes, not a cancel.
+   */
+  async payWithPaymentSheet(
+    amount: number,
+    options: { authToken?: string; userId?: string; purpose?: string } = {}
+  ): Promise<PaymentSheetPayResult> {
+    let intent: StripePaymentIntent;
+    try {
+      intent = await this.createPaymentIntentSecure(amount, 'usd', options.authToken, {
+        userId: options.userId,
+        purpose: options.purpose ?? 'wallet_deposit',
+        includeEphemeralKey: true,
+        paymentMethodType: 'payment_sheet',
+      });
+    } catch (error) {
+      // createPaymentIntent has already emitted payment_failed (stage initiate).
+      return { outcome: 'failed', failure: failureEventProps(error, 'unknown', 'payment_sheet') };
+    }
+
+    const sheet = await this.presentPaymentSheet(intent.client_secret, {
+      customerId: intent.customerId,
+      ephemeralKey: intent.ephemeralKey,
+    });
+
+    const completePayment = async (): Promise<PaymentSheetPayResult> => {
+      await analyticsService.trackEvent('payment_completed', {
+        paymentIntentId: intent.id,
+        amount,
+        currency: 'usd',
+        payment_method_type: 'payment_sheet',
+      });
+      await analyticsService.incrementUserProperty('payments_completed');
+      return { outcome: 'succeeded', paymentIntentId: intent.id };
+    };
+
+    if (sheet.success) return completePayment();
+
+    const closedByPayer = sheet.error?.code === 'canceled';
+    const retrieved = await this.readLastPaymentFailure(intent.client_secret, intent.id);
+    if (retrieved?.status === 'succeeded') return completePayment();
+
+    // A failed SDK response is not proof that Stripe did not capture the
+    // payment. Leave anything other than a definite no-charge status pending
+    // reconciliation so the caller cannot offer another charge.
+    if (
+      !retrieved?.status ||
+      !['requires_payment_method', 'canceled'].includes(retrieved.status)
+    ) {
+      logger.warning('[StripeService] Payment Sheet outcome needs reconciliation', {
+        paymentIntentId: intent.id,
+        status: retrieved?.status,
+      });
+      return { outcome: 'pending', paymentIntentId: intent.id };
+    }
+
+    const recorded = retrieved.failure;
+    if (closedByPayer && !recorded) {
+      return { outcome: 'cancelled', paymentIntentId: intent.id };
+    }
+
+    const failure: FailureEventProps = recorded ?? {
+      ...failureEventProps(sheet.error, 'unknown', 'payment_sheet'),
+      payment_intent_id: intent.id,
+    };
+    await analyticsService.trackEvent('payment_failed', {
+      amount,
+      currency: 'usd',
+      ...failure,
+      stage: 'confirm',
+      // true: declined inside the sheet, then the payer closed it.
+      sheet_closed_after_decline: closedByPayer,
+    });
+    return { outcome: 'failed', paymentIntentId: intent.id, failure };
+  }
+
+  /**
+   * Whether the Payment Sheet will offer Google Pay on this device. False on
+   * every Android binary built without the plugin's `enableGooglePay` flag
+   * (the manifest meta-data it adds is what Google Pay checks), and on iOS.
+   */
+  async isGooglePayAvailable(): Promise<boolean> {
+    const { Platform } = await import('react-native');
+    if (Platform.OS !== 'android') return false;
+    try {
+      await stripeSdk.initialize();
+      const sdk = stripeSdk.getSDK();
+      if (!sdk?.isPlatformPaySupported) return false;
+      return !!(await sdk.isPlatformPaySupported({
+        googlePay: { testEnv: stripeSdk.getPublishableKeyMode() !== 'live' },
+      }));
+    } catch {
+      return false;
+    }
+  }
+
+  /** The intent's last_payment_error as failure props, or null when none / unreadable. */
+  private async readLastPaymentFailure(
+    clientSecret: string,
+    paymentIntentId: string
+  ): Promise<{ status?: StripePaymentIntent['status']; failure: FailureEventProps | null } | null> {
+    try {
+      const sdk = stripeSdk.getSDK();
+      if (!sdk?.retrievePaymentIntent) return null;
+      const { paymentIntent } = await sdk.retrievePaymentIntent(clientSecret);
+      const rawStatus = paymentIntent?.status;
+      const knownStatuses = [
+        'RequiresPaymentMethod',
+        'RequiresConfirmation',
+        'RequiresAction',
+        'Processing',
+        'RequiresCapture',
+        'Canceled',
+        'Succeeded',
+        'requires_payment_method',
+        'requires_confirmation',
+        'requires_action',
+        'processing',
+        'requires_capture',
+        'canceled',
+        'succeeded',
+      ];
+      return {
+        ...(typeof rawStatus === 'string' && knownStatuses.includes(rawStatus)
+          ? { status: mapPaymentIntentStatus(rawStatus) }
+          : {}),
+        failure: failureFromLastPaymentError(
+          paymentIntent?.lastPaymentError,
+          paymentIntentId,
+          'payment_sheet'
+        ),
+      };
+    } catch (error) {
+      logger.warning('[StripeService] Could not reconcile Payment Sheet result', { error });
+      return null;
     }
   }
 
@@ -645,6 +840,8 @@ class StripeService {
       userId?: string;
       purpose?: string;
       metadata?: Record<string, string>;
+      includeEphemeralKey?: boolean;
+      paymentMethodType?: PaymentMethodTypeTag;
     }
   ): Promise<StripePaymentIntent> {
     const { userId = 'anonymous', purpose = 'payment' } = options || {};
@@ -677,7 +874,10 @@ class StripeService {
       // Use retry wrapper for transient errors
       const result = await withPaymentRetry(
         async () => {
-          return await this.createPaymentIntent(amount, currency, authToken, stripeIdempotencyKey);
+          return await this.createPaymentIntent(amount, currency, authToken, stripeIdempotencyKey, {
+            includeEphemeralKey: options?.includeEphemeralKey,
+            paymentMethodType: options?.paymentMethodType,
+          });
         },
         {
           maxRetries: 3,
