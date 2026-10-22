@@ -10,13 +10,24 @@
  *   POST /functions/v1/marketing-attribute
  *   Authorization: Bearer <user jwt>
  *   Android -> { platform: 'android', install_referrer: '<raw referrer string>' }
- *   iOS     -> { platform: 'ios' }
+ *   iOS     -> { platform: 'ios', click_id?: '<uuid from the clipboard handoff>' }
  *
  *   200 { status: 'attributed', campaign_id, creative_id, platform,
- *         match_method, match_confidence }
+ *         match_method, match_confidence, reportable }
  *   200 { status: 'already_attributed', campaign_id, match_method }
  *   200 { status: 'unattributed' }
  *   401/500 { error: ... }
+ *
+ * The click id reaches the app two ways, both captured on first app open by
+ * `captureInstallHandoff()` and sent with the first authenticated call:
+ *
+ *  - **Android:** app-link puts `click_id` in the Play Install Referrer, which
+ *    Google returns verbatim to the installed app.
+ *  - **iOS:** there is no referrer. On an iPhone App Store tap the website
+ *    copies `https://www.bountyfinder.net/?install=<click id>`. On first open
+ *    the app asks the server whether an unclaimed iPhone click came from this
+ *    IP in the last day (`probe`), and only then reads the clipboard, so an
+ *    organic install never sees iOS's paste prompt.
  *
  * Design constraints (all enforced here, not by the caller):
  *
@@ -44,6 +55,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
+import * as Clipboard from 'expo-clipboard';
 import { Platform } from 'react-native';
 import type { BranchParams } from 'react-native-branch';
 
@@ -80,6 +92,9 @@ export interface MarketingAttributionResponse {
   platform?: string | null;
   match_method?: string | null;
   match_confidence?: number | null;
+  /** False for inferred matches below 0.9: stored, but never reported or sent to PostHog. */
+  reportable?: boolean | null;
+  retryable?: boolean;
   initial_utm_source?: string | null;
   initial_utm_medium?: string | null;
   initial_utm_campaign?: string | null;
@@ -99,7 +114,10 @@ type FirstTouchProperties = Pick<
   | 'initial_landing_page'
   | 'install_source'
   | 'install_campaign'
->;
+> & {
+  click_id?: string;
+  match_guaranteed?: boolean;
+};
 
 export interface PerformMarketingAttributionParams {
   /**
@@ -119,7 +137,7 @@ export interface PerformMarketingAttributionParams {
 /** Persisted per-user attempt record. */
 interface AttributionRecord {
   /** Schema version, so a future shape change can be detected and reset. */
-  v: 1;
+  v: 2;
   state: 'pending' | 'completed';
   /** Server verdict, present once `state === 'completed'`. */
   status?: MarketingAttributionStatus | string;
@@ -135,8 +153,25 @@ const LOG_PREFIX = '[Marketing Attribution]';
 
 const FUNCTION_SLUG = 'marketing-attribute';
 
-/** AsyncStorage key prefix. Per-user so account switching still attributes the new user. */
-export const MARKETING_ATTRIBUTION_STORAGE_PREFIX = 'marketing_attribution:v1:';
+/**
+ * AsyncStorage key prefix. Per-user so account switching still attributes the new user.
+ *
+ * v2 (2026-10-21): every call between 2026-09-09 and the fix was recorded
+ * locally as done while the server wrote nothing. Bumping the version re-sends
+ * each user once; the server keeps first touch, so users with a row are a
+ * no-op, and Android referrers (kept by Play for 90 days) still resolve.
+ */
+export const MARKETING_ATTRIBUTION_STORAGE_PREFIX = 'marketing_attribution:v2:';
+
+/** Once per install: what the device itself knew about the click that installed it. */
+export const INSTALL_HANDOFF_STORAGE_KEY = 'marketing_attribution:install_handoff:v1';
+
+/** What the website copies on an iPhone App Store tap (Bounty-landing-page assets/app.js). */
+const HANDOFF_HOST_RE = /(^|\.)bountyfinder\.net$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Lets the splash finish before iOS can show its paste prompt. */
+const HANDOFF_DELAY_MS = 1_500;
 
 /** Max transport attempts before a user is abandoned permanently. */
 const MAX_ATTEMPTS = 3;
@@ -187,7 +222,7 @@ async function readRecord(userId: string): Promise<AttributionRecord | null> {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AttributionRecord;
     // Unknown/legacy shape — treat as "never attempted" rather than trusting it.
-    if (!parsed || parsed.v !== 1) return null;
+    if (!parsed || parsed.v !== 2) return null;
     return parsed;
   } catch {
     // Unreadable storage must not block the attempt; worst case we send once more.
@@ -281,6 +316,7 @@ async function getDeferredDeepLink(): Promise<FirstTouchProperties | null> {
       '+url',
       '~referring_link'
     );
+    const clickId = branchString(params, 'click_id');
 
     return {
       initial_utm_source: initialUtmSource,
@@ -290,6 +326,8 @@ async function getDeferredDeepLink(): Promise<FirstTouchProperties | null> {
       initial_landing_page: initialLandingPage,
       install_source: branchString(params, 'install_source') ?? initialUtmSource ?? 'branch',
       install_campaign: branchString(params, 'install_campaign') ?? initialUtmCampaign,
+      ...(clickId ? { click_id: clickId } : {}),
+      match_guaranteed: params['+match_guaranteed'] === true,
     };
   } catch (e) {
     log('skipped', { reason: 'branch_params_unavailable', error: e });
@@ -297,11 +335,152 @@ async function getDeferredDeepLink(): Promise<FirstTouchProperties | null> {
   }
 }
 
+// ────────────────────────────────────────────────────────────
+// First-open handoff
+// ────────────────────────────────────────────────────────────
+
+/** Persisted once per install by `captureInstallHandoff()`. */
+interface InstallHandoff {
+  v: 2;
+  /** Click id recovered from the iOS clipboard handoff, if any. */
+  clickId: string | null;
+  /** Raw Play Install Referrer, if any (Android). */
+  installReferrer: string | null;
+  capturedAt: string;
+}
+
+let handoffInFlight: Promise<InstallHandoff | null> | null = null;
+let handoffDelayMs = HANDOFF_DELAY_MS;
+
+/** Exported for tests: the click id in the website's handoff URL, or null. */
+export function parseHandoffUrl(text: string | null | undefined): string | null {
+  if (!text) return null;
+  try {
+    const url = new URL(text.trim());
+    if (!HANDOFF_HOST_RE.test(url.hostname)) return null;
+    const id = url.searchParams.get('install');
+    return id && UUID_RE.test(id) ? id.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readHandoff(): Promise<InstallHandoff | null> {
+  try {
+    const raw = await AsyncStorage.getItem(INSTALL_HANDOFF_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as InstallHandoff) : null;
+    return parsed?.v === 2 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Anonymous pre-signup question: is there an unclaimed iPhone click from this IP? */
+async function probeForClick(): Promise<boolean | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${API_BASE_URL}/${FUNCTION_SLUG}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: config.supabase.anonKey },
+      body: JSON.stringify({ action: 'probe', platform: 'ios' }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const body = JSON.parse((await response.text().catch(() => '')) || '{}');
+    return typeof body?.candidate === 'boolean' ? body.candidate : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function readClipboardClickId(): Promise<string | null> {
+  try {
+    // hasUrlAsync does not trigger iOS's paste prompt; getUrlAsync does.
+    if (!(await Clipboard.hasUrlAsync())) return null;
+    const clickId = parseHandoffUrl(await Clipboard.getUrlAsync());
+    // It was ours, put there seconds ago by the website: clear it so it is
+    // never pasted somewhere by accident.
+    if (clickId) await Clipboard.setStringAsync('').catch(() => {});
+    return clickId;
+  } catch {
+    return null;
+  }
+}
+
+async function runHandoffCapture(): Promise<InstallHandoff | null> {
+  const existing = await readHandoff();
+  if (existing) return existing;
+
+  let clickId: string | null = null;
+  let installReferrer: string | null = null;
+
+  if (Platform.OS === 'ios') {
+    if (handoffDelayMs > 0) await new Promise(resolve => setTimeout(resolve, handoffDelayMs));
+    const hasCandidate = await probeForClick();
+    if (hasCandidate === null) return null;
+    if (hasCandidate) clickId = await readClipboardClickId();
+  } else if (Platform.OS === 'android') {
+    installReferrer = await getInstallReferrer();
+  } else {
+    return null;
+  }
+
+  const handoff: InstallHandoff = {
+    v: 2,
+    clickId,
+    installReferrer,
+    capturedAt: new Date().toISOString(),
+  };
+  try {
+    await AsyncStorage.setItem(INSTALL_HANDOFF_STORAGE_KEY, JSON.stringify(handoff));
+  } catch (e) {
+    log('failed', { reason: 'handoff_persist_failed', error: e }, 'warning');
+  }
+  log('attempted', {
+    reason: 'install_handoff_captured',
+    platform: Platform.OS,
+    hasClickId: Boolean(clickId),
+    hasInstallReferrer: Boolean(installReferrer),
+  });
+  return handoff;
+}
+
+/**
+ * Runs once per install, on first app open, before any account exists. Never
+ * throws and never blocks startup: callers `void` it. The attribution call
+ * after signup awaits the same promise, so it always sees the result.
+ */
+export function captureInstallHandoff(): Promise<InstallHandoff | null> {
+  if (!handoffInFlight) {
+    const capture = runHandoffCapture().catch(e => {
+      log('failed', { reason: 'handoff_capture_failed', error: e }, 'warning');
+      return null;
+    });
+    handoffInFlight = capture;
+    void capture.then(result => {
+      if (result === null && handoffInFlight === capture) handoffInFlight = null;
+    });
+  }
+  return handoffInFlight;
+}
+
+/** Test-only: forget the in-memory handoff so a test can capture again, without the delay. */
+export function resetInstallHandoffForTests(): void {
+  handoffInFlight = null;
+  handoffDelayMs = 0;
+}
+
 async function buildPayload(): Promise<Record<string, unknown> | null> {
   const deferredDeepLink = await getDeferredDeepLink();
+  const handoff = await captureInstallHandoff();
 
   if (Platform.OS === 'android') {
-    const installReferrer = await getInstallReferrer();
+    // Prefer the first-open read; the referrer is re-readable for 90 days, so
+    // fall back to reading it now (e.g. an install from before this shipped).
+    const installReferrer = handoff?.installReferrer ?? (await getInstallReferrer());
     // Omit rather than send an empty string — the server falls back to
     // IP/device fingerprinting when no referrer is present.
     return {
@@ -312,8 +491,10 @@ async function buildPayload(): Promise<Record<string, unknown> | null> {
   }
 
   if (Platform.OS === 'ios') {
+    if (!handoff) return null;
     return {
       platform: 'ios',
+      ...(handoff?.clickId ? { click_id: handoff.clickId } : {}),
       ...(deferredDeepLink ? { deferred_deep_link: deferredDeepLink } : {}),
     };
   }
@@ -392,6 +573,10 @@ async function postAttribution(
       body = {};
     }
 
+    if (!response.ok && response.status === 503 && body.retryable === true) {
+      return body;
+    }
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}${body.error ? ` (${body.error})` : ''}`);
     }
@@ -409,6 +594,10 @@ async function postAttribution(
 function identifyWithAttribution(userId: string, body: MarketingAttributionResponse): void {
   try {
     if (!isPostHogReady()) return;
+
+    // An inferred match below 0.9 is kept server-side as a lead, but must not
+    // become anyone's acquisition source in PostHog.
+    if (body.reportable === false) return;
 
     // Only forward properties the server actually resolved — sending nulls
     // would overwrite an existing person property with an empty value.
@@ -519,7 +708,7 @@ async function attribute(
   // Persist the attempt BEFORE the request so a crash mid-flight still counts
   // and cannot produce an unbounded retry loop across launches.
   await writeRecord(userId, {
-    v: 1,
+    v: 2,
     state: 'pending',
     attempts: attempt,
     updatedAt: new Date().toISOString(),
@@ -530,6 +719,7 @@ async function attribute(
     attempt,
     platform: payload.platform,
     hasInstallReferrer: 'install_referrer' in payload,
+    hasClickId: 'click_id' in payload,
   });
 
   let body: MarketingAttributionResponse;
@@ -551,6 +741,28 @@ async function attribute(
     return 'failed';
   }
 
+  if (body.retryable === true) {
+    await writeRecord(userId, {
+      v: 2,
+      state: 'pending',
+      attempts,
+      updatedAt: new Date().toISOString(),
+    });
+    log('failed', { userId, attempt, reason: 'retryable_server_response' }, 'warning');
+    return 'failed';
+  }
+
+  if (typeof body.reportable !== 'boolean') {
+    await writeRecord(userId, {
+      v: 2,
+      state: 'pending',
+      attempts,
+      updatedAt: new Date().toISOString(),
+    });
+    log('failed', { userId, attempt, reason: 'missing_reportable' }, 'warning');
+    return 'failed';
+  }
+
   const status = body.status;
 
   if (status !== 'attributed' && status !== 'already_attributed' && status !== 'unattributed') {
@@ -562,7 +774,7 @@ async function attribute(
 
   // Any server verdict is terminal.
   await writeRecord(userId, {
-    v: 1,
+    v: 2,
     state: 'completed',
     status,
     attempts: attempt,
