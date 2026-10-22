@@ -528,6 +528,27 @@ describe('lib/posthog — session replay configuration', () => {
     const event = { event: 'app_opened', properties: { app_env: 'production' } };
     expect(options.before_send(event).properties.app_env).toBe('production');
   });
+
+  describe('$exception events', () => {
+    const globalDev = global as unknown as { __DEV__: boolean };
+    const originalDev = globalDev.__DEV__;
+    afterEach(() => {
+      globalDev.__DEV__ = originalDev;
+    });
+
+    test('are dropped from dev bundles', () => {
+      globalDev.__DEV__ = true;
+      expect(options.before_send({ event: '$exception', properties: {} })).toBeNull();
+      expect(options.before_send({ event: 'app_opened', properties: {} })).not.toBeNull();
+    });
+
+    test('are kept in release builds', () => {
+      globalDev.__DEV__ = false;
+      expect(options.before_send({ event: '$exception', properties: {} })).toEqual(
+        expect.objectContaining({ event: '$exception' })
+      );
+    });
+  });
 });
 
 describe('lib/posthog — exception autocapture', () => {
