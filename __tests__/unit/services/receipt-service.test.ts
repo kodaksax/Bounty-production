@@ -13,14 +13,15 @@ jest.mock('expo-sharing', () => ({
 }));
 
 // Mock react-native Share
-const mockReactNativeShare = {
-  share: jest.fn().mockResolvedValue({ action: 'sharedAction' }),
-};
 jest.mock('react-native', () => ({
-  Share: mockReactNativeShare,
+  Share: {
+    share: jest.fn().mockResolvedValue({ action: 'sharedAction' }),
+  },
 }));
 
 import * as Sharing from 'expo-sharing';
+
+const mockReactNativeShare = jest.requireMock('react-native').Share;
 
 describe('ReceiptService', () => {
   let receiptService: ReceiptService;
