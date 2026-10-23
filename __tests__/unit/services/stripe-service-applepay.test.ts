@@ -116,7 +116,6 @@ describe('stripeService.isGooglePayAvailable', () => {
   });
 
   it('returns false on iOS', async () => {
-    RN.Platform.OS = 'ios';
     await expect(stripeService.isGooglePayAvailable()).resolves.toBe(false);
   });
 
