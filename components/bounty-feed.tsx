@@ -69,7 +69,7 @@ import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { bountyService } from '../lib/services/bounty-service';
 import { completionService } from '../lib/services/completion-service';
 import type { Bounty } from '../lib/services/database.types';
-import { locationService } from '../lib/services/location-service';
+import { bountyDistanceMiles } from '../lib/utils/bounty-distance';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
@@ -357,42 +357,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     return items;
   }, [categories]);
 
+  // Viewer -> bounty miles: the server's distance when the radius search ran,
+  // otherwise from the bounty's public approximate point. Only for a viewer
+  // whose location is on; otherwise null and the card shows the neighborhood.
   const calculateDistance = useCallback(
-    (bountyLocation: string) => {
-      if (!bountyLocation) return null;
-      if (userLocation && permission?.granted) {
-        const coordMatch = bountyLocation.match(/^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/);
-        if (coordMatch) {
-          const lat = parseFloat(coordMatch[1]);
-          const lng = parseFloat(coordMatch[2]);
-          if (!isNaN(lat) && !isNaN(lng)) {
-            return locationService.calculateDistance(
-              userLocation,
-              { latitude: lat, longitude: lng },
-              'miles'
-            );
-          }
-        }
-      }
-      // No real coordinates to compare against — don't fabricate a number.
-      // Callers fall back to showing the bounty's actual location text instead.
-      return null;
-    },
+    (bounty: Bounty) => bountyDistanceMiles(bounty, permission?.granted ? userLocation : null),
     [userLocation, permission]
   );
 
   const bountyDistances = useMemo(() => {
     const distances = new Map<string, number | null>();
     bounties.forEach(bounty => {
-      // search_bounties_nearby already computed a real distance server-side —
-      // prefer it over the legacy "parse lat,lng out of the location string"
-      // fallback, which only ever matches the rare bounty whose free-text
-      // location literally is a "lat, lng" pair.
-      const known = bounty.distance_miles;
-      distances.set(
-        String(bounty.id),
-        known != null ? known : calculateDistance(bounty.location || '')
-      );
+      distances.set(String(bounty.id), calculateDistance(bounty));
     });
     return distances;
   }, [bounties, calculateDistance]);
@@ -1321,7 +1297,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const renderBountyItem = useCallback(
     ({ item, index }: { item: Bounty; index: number }) => {
       const distance =
-        bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '');
+        bountyDistances.get(String(item.id)) ?? calculateDistance(item);
       const completeness = bountyCompleteness.get(String(item.id));
       const incomplete = completeness?.isComplete === false;
       const idStr = String(item.id);

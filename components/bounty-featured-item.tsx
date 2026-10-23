@@ -13,6 +13,7 @@ import type { AppTheme } from '../lib/themes/types'
 import { useCountdown } from '../hooks/useCountdown'
 import { usePressAnimation } from '../hooks/use-accessible-animation'
 import { press } from '../lib/motion'
+import { formatBountyWhere } from '../lib/utils/bounty-distance'
 import { getScheduleChip } from '../lib/utils/schedule-utils'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { useModalOrigin } from "./ui/app-modal"
@@ -226,7 +227,7 @@ function BountyFeaturedItemComponent({
               numberOfLines={1}
               maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
             >
-              {work_type === 'online' ? 'Remote' : location || 'In Person'}
+              {work_type === 'online' ? 'Remote' : formatBountyWhere(distance, location) ?? 'In Person'}
             </Text>
             <View style={s.metaRow}>
               {isForHonor ? (
@@ -268,6 +269,7 @@ export const BountyFeaturedItem = React.memo(BountyFeaturedItemComponent, (prev,
   prev.title === next.title &&
   prev.price === next.price &&
   prev.location === next.location &&
+  prev.distance === next.distance &&
   prev.user_id === next.user_id &&
   prev.categoryColor === next.categoryColor &&
   prev.attachments_json === next.attachments_json &&

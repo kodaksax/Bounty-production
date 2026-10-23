@@ -175,7 +175,7 @@ class LocationService {
    */
   async reverseGeocodeDetailed(
     coords: LocationCoordinates
-  ): Promise<{ formattedAddress: string; neighborhood?: string } | null> {
+  ): Promise<{ formattedAddress: string; neighborhood?: string; postalCode?: string } | null> {
     try {
       const results = await Location.reverseGeocodeAsync(coords);
 
@@ -188,6 +188,7 @@ class LocationService {
         return {
           formattedAddress: parts.join(', '),
           neighborhood: location.district || location.city || undefined,
+          postalCode: location.postalCode || undefined,
         };
       }
 

@@ -6,56 +6,34 @@ import type { Bounty } from 'lib/services/database.types';
 import { performanceService } from 'lib/services/performance-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { inferRoleFromFirstAction } from 'lib/services/role-inference-service';
-import { isSupabaseConfigured, supabaseEnv, supabase } from 'lib/supabase';
+import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
 import { validateTitle } from 'lib/utils/bounty-validation';
 import { getCurrentUserId } from 'lib/utils/data-utils';
 import { coarseRegionFromLocationText } from 'lib/utils/serviceable-region';
-import { extractZipFromText, isValidUsZip } from 'lib/utils/geo';
+import { extractZipFromText } from 'lib/utils/geo';
 
 /**
- * Resolves the ZIP to store on a bounty, in priority order:
- *  1. An explicit `draft.zipCode`, if some future UI sets one directly.
- *  2. Extracted from the bounty's own in-person `location` text — this is
- *     where a raw ZIP typed into the address field, or the ZIP embedded in a
- *     reverse-geocoded "<street>, <city>, <region>, <zip>" string, actually
- *     lives today. Online bounties carry no address, so this is skipped for
- *     them.
- *  3. The poster's own profile ZIP (profiles.zip_code) — same capture path
- *     onboarding/details.tsx already writes via handleSubmitZip.
+ * Resolves the ZIP to store on an in-person bounty, from the bounty's own
+ * address only:
+ *  1. `draft.zipCode` — the postal code of the place StepWhere resolved
+ *     (Places details, or the device geocoder for current location / a typed
+ *     address).
+ *  2. Extracted from the `location` text — covers drafts saved before
+ *     StepWhere set zipCode, and a raw ZIP typed into the address field.
  *
- * Best-effort throughout: a failed profile lookup (e.g. offline) just means
- * the bounty posts with no ZIP, exactly as it does today.
+ * Never the poster's profile ZIP: the exact-ZIP "New Bounty Near You" push
+ * goes to whoever lives in this ZIP, so a job in one city stamped with the
+ * poster's home ZIP notified the wrong neighbourhood. No ZIP is fine — the
+ * radius match runs on the coordinates. Online bounties have no address and
+ * get no ZIP.
  */
-async function deriveBountyZipCode(
-  draft: Pick<BountyDraft, 'zipCode' | 'workType' | 'location'>,
-  posterId: string
-): Promise<string | undefined> {
-  const explicit = draft.zipCode?.trim();
-  if (explicit && isValidUsZip(explicit)) {
-    return explicit;
-  }
-
-  if (draft.workType === 'in_person') {
-    const fromLocation = extractZipFromText(draft.location);
-    if (fromLocation) {
-      return fromLocation;
-    }
-  }
-
-  if (!posterId) {
+export function deriveBountyZipCode(
+  draft: Pick<BountyDraft, 'zipCode' | 'workType' | 'location'>
+): string | undefined {
+  if (draft.workType !== 'in_person') {
     return undefined;
   }
-
-  try {
-    const { data } = await supabase
-      .from('profiles')
-      .select('zip_code')
-      .eq('id', posterId)
-      .single();
-    return data?.zip_code || undefined;
-  } catch {
-    return undefined;
-  }
+  return extractZipFromText(draft.zipCode) ?? extractZipFromText(draft.location) ?? undefined;
 }
 
 export interface CreateBountyPayload {
@@ -223,7 +201,7 @@ export const bountyService = {
       }
 
       const posterId = getCurrentUserId();
-      const zipCode = await deriveBountyZipCode(draft, posterId);
+      const zipCode = deriveBountyZipCode(draft);
 
       const payload: Omit<Bounty, 'id' | 'created_at'> & { attachments?: any[]; category?: string } = {
         title: draft.title,
@@ -436,7 +414,7 @@ export const bountyService = {
     }
 
     const isInPerson = draft.workType === 'in_person';
-    const zipCode = isInPerson ? await deriveBountyZipCode(draft, getCurrentUserId()) : undefined;
+    const zipCode = deriveBountyZipCode(draft);
 
     const updates: Partial<Omit<Bounty, 'id' | 'created_at'>> = {
       title: draft.title,

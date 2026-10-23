@@ -9,6 +9,7 @@ import { SPACING } from '../lib/constants/accessibility';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { formatBountyWhere } from '../lib/utils/bounty-distance';
 import { getScheduleChip } from '../lib/utils/schedule-utils';
 import { BountyDetailModal } from './bountydetailmodal';
 import { useModalOrigin } from './ui/app-modal';
@@ -220,11 +221,7 @@ function BountyListItemComponent({
             <Text style={s.locationText} numberOfLines={1}>
               {work_type === 'online'
                 ? 'Remote work'
-                : location
-                  ? location
-                  : distance !== null
-                    ? `${distance} miles away`
-                    : 'Location TBD'}
+                : formatBountyWhere(distance, location) ?? 'Location TBD'}
             </Text>
             {scheduleChip && (
               <View
