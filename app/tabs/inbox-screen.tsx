@@ -2,6 +2,7 @@
 
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { saveStructuredBountyEdit } from '../../lib/services/bounty-requirements-service';
+import { MaterialIcons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { discardApplication, withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
@@ -40,6 +41,7 @@ import { getBottomNavContentPadding } from "../../lib/constants/navigation"
 import { useConversations } from '../../hooks/useConversations'
 import { findPairConversation } from '../../hooks/useBountyThread'
 import { useValidUserId } from '../../hooks/useValidUserId'
+import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
 import { uniqueRealtimeTopic } from '../../lib/utils/realtime-topic'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
@@ -127,7 +129,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   const insets = useSafeAreaInsets()
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
-  const { conversations, refresh: refreshConversations } = useConversations()
+  const { totalUnreadCount: unreadMessageCount, conversations, refresh: refreshConversations } = useConversations()
   const { refundEscrow } = useWallet()
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
@@ -1092,6 +1094,23 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       >
         <View style={styles.headerRow}>
           <BrandingLogo size="medium" />
+          {/* All conversations, including ones not tied to a bounty. */}
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => router.push(ROUTES.TABS.MESSENGER as never)}
+            accessibilityRole="button"
+            accessibilityLabel={unreadMessageCount > 0 ? `Messages, ${unreadMessageCount} unread` : 'Messages'}
+            accessibilityHint="Opens all of your conversations"
+          >
+            <View>
+              <MaterialIcons name="chat-bubble-outline" size={20} color={theme.text} />
+              {unreadMessageCount > 0 && (
+                <View style={styles.headerBadge}>
+                  <Text style={styles.headerBadgeText}>{unreadMessageCount > 99 ? '99+' : unreadMessageCount}</Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View style={{ paddingHorizontal: 16 }}>
@@ -1354,6 +1373,31 @@ function makeStyles(theme: AppTheme) {
       justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 16,
+    },
+    headerIconBtn: {
+      padding: 8,
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -8,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      paddingHorizontal: 3,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.error,
+    },
+    headerBadgeText: {
+      color: '#fff',
+      fontSize: 9,
+      fontWeight: '700',
+      lineHeight: 12,
     },
     // The centred, letter-spaced uppercase title every Bounty tab uses.
     bigTitle: {

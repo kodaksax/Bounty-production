@@ -1,12 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-// The Inbox header no longer links to the all-conversations messenger list
-// (removed along with the balance and archive buttons). The messenger screen
-// itself still has to work standalone — individual chats open from
-// notifications, postings and profiles.
 describe('My Bounties messenger entry point', () => {
-  it('is not linked from the Inbox, and the messenger still works standalone', () => {
+  it('uses the canonical themed messenger route', () => {
     const inboxSource = fs.readFileSync(
       path.join(process.cwd(), 'app/tabs/inbox-screen.tsx'),
       'utf8',
@@ -16,7 +12,7 @@ describe('My Bounties messenger entry point', () => {
       'utf8',
     )
 
-    expect(inboxSource).not.toContain('ROUTES.TABS.MESSENGER')
+    expect(inboxSource).toContain('router.push(ROUTES.TABS.MESSENGER as never)')
     expect(inboxSource).not.toContain("router.push('/tabs/messenger' as never)")
     expect(messengerSource).toContain('const isStandalone = !onNavigate')
     expect(messengerSource).toContain('onPress={() => router.back()}')
