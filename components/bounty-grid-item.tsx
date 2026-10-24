@@ -13,6 +13,7 @@ import { useHapticFeedback } from '../lib/haptic-feedback';
 import type { AttachmentMeta } from '../lib/services/database.types';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { formatBountyWhere } from '../lib/utils/bounty-distance';
 import { getScheduleChip } from '../lib/utils/schedule-utils';
 import { BountyDetailModal } from './bountydetailmodal';
 import { useModalOrigin } from './ui/app-modal';
@@ -293,7 +294,7 @@ function BountyGridItemComponent({
             >
               {work_type === 'online'
                 ? 'Remote'
-                : location || (distance !== null ? `${distance} mi` : 'In Person')}
+                : formatBountyWhere(distance, location) ?? 'In Person'}
             </Text>
             <View style={s.metaRow}>
               {isForHonor ? (

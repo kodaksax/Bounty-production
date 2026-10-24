@@ -13,6 +13,7 @@ import { BountyDetailModal } from "./bountydetailmodal"
 import { press } from "../lib/motion"
 import { useModalOrigin } from "./ui/app-modal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
+import { formatBountyWhere } from '../lib/utils/bounty-distance'
 
 export interface BountyCompactItemProps {
   id: string | number
@@ -84,7 +85,7 @@ function BountyCompactItemComponent({
     openFrom(() => setShowDetail(true))
   }, [triggerHaptic, openFrom])
 
-  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : location ? `, ${location}` : distance !== null ? `, ${distance} miles away` : ', location to be determined'}${incomplete ? `, limited details${missingSummary ? `, ${missingSummary}` : ''}` : ''}`
+  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : `, ${formatBountyWhere(distance, location) ?? 'location to be determined'}`}${incomplete ? `, limited details${missingSummary ? `, ${missingSummary}` : ''}` : ''}`
 
   return (
     <>
@@ -131,12 +132,10 @@ function BountyCompactItemComponent({
                 <MaterialIcons name="wifi" size={10} color={theme.primary} />
                 <Text style={s.onlineText}>Online</Text>
               </View>
-            ) : location ? (
-              <Text style={s.distance} numberOfLines={1}>{location}</Text>
-            ) : distance === null ? (
-              <Text style={s.distance}>Location TBD</Text>
             ) : (
-              <Text style={s.distance}>{distance} mi</Text>
+              <Text style={s.distance} numberOfLines={1}>
+                {formatBountyWhere(distance, location) ?? 'Location TBD'}
+              </Text>
             )}
           </View>
           {incomplete && (

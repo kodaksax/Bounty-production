@@ -29,8 +29,9 @@ export interface BountyDraft {
   amount: number;
   isForHonor: boolean;
   location: string;
-  // Optional ZIP code, saved as metadata so users in the same ZIP can be
-  // matched to this bounty later (e.g. for a future notification feature).
+  // ZIP of the bounty's own address, from the picked place or the geocoder
+  // (StepWhere). Drives the exact-ZIP "New Bounty Near You" match, so it
+  // must never come from anywhere but this address.
   zipCode?: string;
   // Exact-precision coordinates + unit, set by the map location picker.
   // Privacy-sensitive: only ever shown to the poster and the accepted

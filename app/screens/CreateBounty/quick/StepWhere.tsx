@@ -175,6 +175,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
         longitude: coords.longitude,
         location,
         neighborhood: detail?.neighborhood,
+        zipCode: detail?.postalCode,
       });
       setUsedCurrentLocation(true);
     } catch {
@@ -193,9 +194,9 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
     setError(null);
     setUsedCurrentLocation(false);
     setSuggestions([]);
-    // Coordinates belong to the previous address — drop them so the geocode
-    // below runs against what the poster actually typed.
-    onUpdate({ workType: 'in_person', location: value, latitude: undefined, longitude: undefined, neighborhood: undefined });
+    // Coordinates and ZIP belong to the previous address — drop them so the
+    // geocode below runs against what the poster actually typed.
+    onUpdate({ workType: 'in_person', location: value, latitude: undefined, longitude: undefined, neighborhood: undefined, zipCode: undefined });
 
     if (!placesEnabled) return;
     if (value.trim().length < 2) {
@@ -214,7 +215,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
     setUsedCurrentLocation(false);
     Keyboard.dismiss();
     currentAddress.current = suggestion.description;
-    onUpdate({ workType: 'in_person', location: suggestion.description, latitude: undefined, longitude: undefined, neighborhood: undefined });
+    onUpdate({ workType: 'in_person', location: suggestion.description, latitude: undefined, longitude: undefined, neighborhood: undefined, zipCode: undefined });
 
     setIsSelecting(true);
     try {
@@ -227,6 +228,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
           latitude: details.latitude,
           longitude: details.longitude,
           neighborhood: details.components?.neighborhood || details.components?.city || undefined,
+          zipCode: details.components?.postalCode || undefined,
         });
         return;
       }
@@ -240,7 +242,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       }
       const detail = await locationService.reverseGeocodeDetailed(coords).catch(() => null);
       if (actionSeq !== addressActionSeq.current) return;
-      onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood: detail?.neighborhood });
+      onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood: detail?.neighborhood, zipCode: detail?.postalCode });
     } catch {
       if (actionSeq === addressActionSeq.current) {
         setError('Could not verify that address right now. Check your connection and try again.');
@@ -265,6 +267,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       latitude: undefined,
       longitude: undefined,
       neighborhood: undefined,
+      zipCode: undefined,
     });
   };
 
@@ -305,16 +308,19 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       }
       // geocodeAddress only returns coordinates; reverse-geocode to also capture
       // the coarse locality used by the "New Bounty Near You in <city>"
-      // notification. Non-fatal — coordinates are what matter.
+      // notification, and the ZIP for the exact-ZIP match. Non-fatal —
+      // coordinates are what matter.
       let neighborhood: string | undefined;
+      let zipCode: string | undefined;
       try {
         const detail = await locationService.reverseGeocodeDetailed(coords);
         neighborhood = detail?.neighborhood || undefined;
+        zipCode = detail?.postalCode || undefined;
       } catch {
         // ignore — locality is a nice-to-have
       }
       if (actionSeq !== addressActionSeq.current || currentAddress.current !== address) return;
-      onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood });
+      onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood, zipCode });
       onNext();
     } catch {
       if (actionSeq === addressActionSeq.current) {
