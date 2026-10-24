@@ -177,7 +177,7 @@ GRANT EXECUTE ON FUNCTION public.fn_dispatch_bounty_targeting(uuid, text) TO ser
 -- the client sent. NEW.geom covers an UPDATE that only touches zip_code
 -- (latitude/longitude are already privatized to NULL on the stored row).
 CREATE OR REPLACE FUNCTION public.fn_bounties_check_zip_matches_point()
-RETURNS trigger LANGUAGE plpgsql
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
