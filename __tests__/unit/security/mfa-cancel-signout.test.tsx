@@ -37,6 +37,7 @@ jest.mock('lib/auth-session-storage', () => ({
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace }),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('hooks/use-two-factor-auth', () => ({
