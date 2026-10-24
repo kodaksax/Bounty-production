@@ -105,6 +105,28 @@ describe('stripeService.isApplePaySupported', () => {
   });
 });
 
+describe('stripeService.isGooglePayAvailable', () => {
+  beforeEach(() => {
+    clearSdk();
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    RN.Platform.OS = 'ios';
+  });
+
+  it('returns false on iOS', async () => {
+    await expect(stripeService.isGooglePayAvailable()).resolves.toBe(false);
+  });
+
+  it('returns the SDK result on Android', async () => {
+    RN.Platform.OS = 'android';
+    mockSdk.isPlatformPaySupported = jest.fn().mockResolvedValue(true);
+    await expect(stripeService.isGooglePayAvailable()).resolves.toBe(true);
+    expect(mockSdk.isPlatformPaySupported).toHaveBeenCalledWith({ googlePay: { testEnv: true } });
+  });
+});
+
 describe('stripeService.presentApplePay', () => {
   beforeEach(() => {
     clearSdk();

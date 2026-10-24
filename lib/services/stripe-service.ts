@@ -22,6 +22,7 @@
  * Prefer importing `escrowService`, `paymentMethodsService`, or
  * `connectService` directly in new code.
  */
+import { Platform } from 'react-native';
 import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
 import {
@@ -697,7 +698,6 @@ class StripeService {
    * (the manifest meta-data it adds is what Google Pay checks), and on iOS.
    */
   async isGooglePayAvailable(): Promise<boolean> {
-    const { Platform } = await import('react-native');
     if (Platform.OS !== 'android') return false;
     try {
       await stripeSdk.initialize();
@@ -954,7 +954,6 @@ class StripeService {
   async isApplePaySupported(): Promise<boolean> {
     try {
       // Apple Pay is only available on iOS
-      const { Platform } = await import('react-native');
       if (Platform.OS !== 'ios') {
         return false;
       }
@@ -997,7 +996,6 @@ class StripeService {
   }> {
     try {
       // Check platform first - Apple Pay is iOS only
-      const { Platform } = await import('react-native');
       if (Platform.OS !== 'ios') {
         return {
           success: false,

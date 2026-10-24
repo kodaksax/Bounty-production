@@ -1,4 +1,5 @@
 import * as Sharing from 'expo-sharing';
+import { Share } from 'react-native';
 import type { WalletTransactionRecord } from '../wallet-context';
 
 /**
@@ -84,7 +85,6 @@ ${transaction.details.title ? `Description: ${transaction.details.title}\n` : ''
       if (isAvailable) {
         // For now, we'll use a simple text share
         // In production, this could generate a PDF or image
-        const { Share } = await import('react-native');
         await Share.share({
           message: receiptText,
           title: 'Transaction Receipt',
