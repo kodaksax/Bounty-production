@@ -33,6 +33,7 @@
 // `ok` deliberately stays true in that state — see the response comment below.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { webBountyCta } from '../_shared/web-links.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,35 +50,11 @@ type EmailContent = { subject: string; html: string; text: string }
 // Per-category templates. Kept intentionally simple/inline (no external
 // template engine) — this bundler doesn't support local imports, and the
 // notification payload's title/body already carry the human-readable copy.
-// Only these schemes may be rendered as a button: the app's own custom scheme
-// and https. Anything else in data.ctaUrl is ignored rather than linked.
-const ALLOWED_CTA_PREFIXES = ['https://', 'bountyexpo-workspace://']
-
-// Every email about a bounty links to its page on the website, where the
-// recipient signs in with an emailed link (no app, no password). The link
-// carries no sign-in token on purpose: a forwarded email must not grant
-// access to someone's account.
-//
-// Off until WEB_BOUNTY_URL_BASE is set: there is no default, so emails never
-// link to a page that is not live yet. Set it (e.g.
-// https://www.bountyfinder.net/bounty) once the page ships.
-const WEB_BOUNTY_URL_BASE = (Deno.env.get('WEB_BOUNTY_URL_BASE') ?? '').trim()
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-function webBountyCta(data: Record<string, unknown>): { url: string; label: string } | null {
-  if (!WEB_BOUNTY_URL_BASE.startsWith('https://')) return null
-  const bountyId = data.bountyId ?? data.bounty_id
-  if (typeof bountyId !== 'string' || !UUID_PATTERN.test(bountyId)) return null
-  return {
-    url: `${WEB_BOUNTY_URL_BASE.replace(/\/+$/, '')}?id=${encodeURIComponent(bountyId)}`,
-    label: data.type === 'message' ? 'Reply on bountyfinder.net' : 'Open on bountyfinder.net',
-  }
-}
+const WEB_MANAGE_BASE = Deno.env.get('WEB_MANAGE_BASE')
 
 function ctaFrom(data: Record<string, unknown>): { url: string; label: string } | null {
   const url = typeof data.ctaUrl === 'string' ? data.ctaUrl.trim() : ''
-  if (!url) return webBountyCta(data)
-  if (!ALLOWED_CTA_PREFIXES.some((p) => url.startsWith(p))) return null
+  if (!url || !url.startsWith('https://')) return webBountyCta(WEB_MANAGE_BASE, data)
   const label = typeof data.ctaLabel === 'string' && data.ctaLabel.trim() ? data.ctaLabel.trim() : 'Open Bounty'
   return { url, label }
 }
@@ -243,7 +220,7 @@ function buildTemplateSend(type: string, data: Record<string, unknown>): Templat
   if (!id) return null
 
   if (type === 'bounty_posted') {
-    const cta = ctaFrom(data) // https:// or the app scheme only
+    const cta = ctaFrom(data)
     const prefsUrl = Deno.env.get('NOTIFICATION_PREFERENCES_URL') || ''
     const postal = Deno.env.get('NOTIFICATION_POSTAL_ADDRESS') || ''
     const bountyId = str(data.bountyId)
@@ -258,6 +235,12 @@ function buildTemplateSend(type: string, data: Record<string, unknown>): Templat
           : "We're letting people who do this kind of work know about it.",
       // Trailing space is intentional: the template butts it against the next sentence.
       PAY_LINE: data.payAtHire === true ? "That's when you pay. " : '',
+      HELP_LINE: data.has_app === true
+        ? 'Open the Bounty app to view your bounty and take action.'
+        : 'Use the button above to manage your bounty on the web.',
+      FOOTER_LINE: data.has_app === true
+        ? 'You can manage this bounty in the Bounty app.'
+        : 'You can manage this bounty on bountyfinder.net.',
       CTA_URL: cta ? escapeHtml(cta.url) : '',
       PREFERENCES_URL: escapeHtml(prefsUrl),
       POSTAL_LINE: postal ? `Bounty &middot; ${escapeHtml(postal)}` : '',
@@ -365,8 +348,19 @@ Deno.serve(async (req: Request) => {
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
   const content = buildEmail(category, title, body, data)
   const replyTo = replyToFrom(data) ?? replyToEmail
-  // Non-null only for types that render through a published Resend template.
-  const templateSend = buildTemplateSend(type, data)
+  const { data: appRows, error: appRowsError } = await supabaseAdmin
+    .from('push_tokens')
+    .select('profile_id')
+    .in('profile_id', targetIds)
+    .eq('enabled', true)
+  if (appRowsError) {
+    console.warn('[send-notification-email] app-presence lookup failed; using web copy')
+  }
+  const usersWithApp = new Set(
+    ((appRows ?? []) as Array<{ profile_id: string | null }>)
+      .map((row) => row.profile_id)
+      .filter((id): id is string => typeof id === 'string')
+  )
 
   let sent = 0
   let failed = 0
@@ -380,6 +374,13 @@ Deno.serve(async (req: Request) => {
         failed++
         return
       }
+      // The published template copy uses app/web-specific instructions. A
+      // registered push token is the app-presence signal available to this
+      // function; absence must always fall back to a working web CTA.
+      const templateSend = buildTemplateSend(type, {
+        ...data,
+        has_app: usersWithApp.has(userId),
+      })
       if (PROVIDER.name === 'resend' && PROVIDER.key) {
         const ok = templateSend
           ? await sendTemplateViaResend(PROVIDER.key, email, templateSend, replyTo)

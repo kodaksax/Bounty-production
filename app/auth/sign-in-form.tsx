@@ -5,7 +5,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { ResponseType } from 'expo-auth-session';
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -27,6 +27,7 @@ import { useFormSubmission } from '../../hooks/useFormSubmission';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { capture as posthogCapture, identify as posthogIdentify } from '../../lib/posthog';
 import { ROUTES } from '../../lib/routes';
+import { safeManageRedirect } from '../../lib/navigation/manage-route';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { storage } from '../../lib/storage';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
@@ -102,8 +103,28 @@ export function SignInForm() {
   // set status/safe-area color to match screen background
   useScreenBackground(theme.background);
   const router = useRouter();
+  const { redirect_to: redirectToParam } = useLocalSearchParams<{ redirect_to?: string | string[] }>();
+  const postLoginTarget = safeManageRedirect(redirectToParam);
+  const navigateToApp = () => {
+    if (postLoginTarget) {
+      router.replace(postLoginTarget as Href);
+    } else {
+      router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+    }
+  };
+  const navigateToMfa = () => {
+    router.replace(
+      (postLoginTarget
+        ? { pathname: ROUTES.AUTH.MFA_CHALLENGE, params: { redirect_to: postLoginTarget } }
+        : ROUTES.AUTH.MFA_CHALLENGE) as Href
+    );
+  };
   const [identifier, setIdentifier] = useState(''); // email or username
   const [password, setPassword] = useState('');
+  const [emailCodeMode, setEmailCodeMode] = useState(false);
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [emailCode, setEmailCode] = useState('');
+  const [emailCodeLoading, setEmailCodeLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
   const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -345,7 +366,7 @@ export function SignInForm() {
               console.log('[sign-in] MFA challenge required, redirecting to MFA screen', {
                 correlationId,
               });
-              router.replace(ROUTES.AUTH.MFA_CHALLENGE as unknown as any);
+              navigateToMfa();
               try {
                 markInitialNavigationDone();
               } catch {}
@@ -422,7 +443,7 @@ export function SignInForm() {
                 destination: ROUTES.TABS.BOUNTY_APP,
                 metadata: { reason: 'profile_error_fallback' },
               });
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+              navigateToApp();
               return;
             }
 
@@ -456,7 +477,7 @@ export function SignInForm() {
                   destination: ROUTES.TABS.BOUNTY_APP,
                   metadata: { reason: 'local_onboarding_flag' },
                 });
-                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+                navigateToApp();
                 try {
                   markInitialNavigationDone();
                 } catch {}
@@ -494,7 +515,7 @@ export function SignInForm() {
                 destination: ROUTES.TABS.BOUNTY_APP,
                 metadata: { reason: 'profile_complete' },
               });
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+              navigateToApp();
               try {
                 markInitialNavigationDone();
               } catch {}
@@ -514,7 +535,7 @@ export function SignInForm() {
               destination: ROUTES.TABS.BOUNTY_APP,
               metadata: { reason: 'profile_check_exception_fallback' },
             });
-            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+            navigateToApp();
           }
         } else {
           // Supabase reported no error but returned no session. The only
@@ -838,6 +859,64 @@ export function SignInForm() {
     return Object.keys(errors).length === 0;
   };
 
+  const sendEmailCode = async () => {
+    const email = identifier.trim().toLowerCase();
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setFieldErrors((prev) => ({ ...prev, identifier: emailError }));
+      return;
+    }
+    setEmailCodeLoading(true);
+    setSocialAuthError(null);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false },
+      });
+      if (error) throw error;
+      setEmailCodeSent(true);
+    } catch (error) {
+      setSocialAuthError(getUserFriendlyError(error).message);
+    } finally {
+      setEmailCodeLoading(false);
+    }
+  };
+
+  const verifyEmailCode = async () => {
+    const email = identifier.trim().toLowerCase();
+    if (!/^\d{6}$/.test(emailCode.trim())) {
+      setSocialAuthError('Enter the 6-digit code from your email.');
+      return;
+    }
+    setEmailCodeLoading(true);
+    setSocialAuthError(null);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: emailCode.trim(),
+        type: 'email',
+      });
+      if (error) throw error;
+      if (!data.session) throw new Error('No session was returned. Request a new code and try again.');
+
+      const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalError) throw aalError;
+      if (aal?.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+        navigateToMfa();
+        return;
+      }
+      router.replace(
+        (postLoginTarget
+          ? { pathname: '/', params: { redirect_to: postLoginTarget } }
+          : '/') as Href
+      );
+    } catch (error) {
+      setSocialAuthError(getUserFriendlyError(error).message);
+    } finally {
+      setEmailCodeLoading(false);
+    }
+  };
+
   // Handle Google auth completion -> exchange id_token with Supabase
   useEffect(() => {
     const run = async () => {
@@ -983,7 +1062,7 @@ export function SignInForm() {
                   destination: ROUTES.TABS.BOUNTY_APP,
                   metadata: { reason: 'local_onboarding_flag' },
                 });
-                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+                navigateToApp();
                 try {
                   markInitialNavigationDone();
                 } catch {}
@@ -1019,7 +1098,7 @@ export function SignInForm() {
                 destination: ROUTES.TABS.BOUNTY_APP,
                 metadata: { reason: 'profile_complete' },
               });
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+              navigateToApp();
               try {
                 markInitialNavigationDone();
               } catch {}
@@ -1037,7 +1116,7 @@ export function SignInForm() {
               destination: ROUTES.TABS.BOUNTY_APP,
               metadata: { reason: 'profile_check_exception_fallback' },
             });
-            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+            navigateToApp();
             try {
               markInitialNavigationDone();
             } catch {}
@@ -1126,6 +1205,8 @@ export function SignInForm() {
                   value={identifier}
                   onChangeText={text => {
                     setIdentifier(text);
+                    setEmailCodeSent(false);
+                    setEmailCode('');
                     if (fieldErrors.identifier) {
                       setFieldErrors(prev => ({ ...prev, identifier: '' }));
                     }
@@ -1146,7 +1227,10 @@ export function SignInForm() {
                   placeholderTextColor={theme.textDisabled}
                   returnKeyType="next"
                   blurOnSubmit={false}
-                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  onSubmitEditing={() => {
+                    if (emailCodeMode) void sendEmailCode();
+                    else passwordRef.current?.focus();
+                  }}
                 />
                 {getFieldError('identifier') ? (
                   <ValidationMessage message={getFieldError('identifier')} />
@@ -1168,65 +1252,67 @@ export function SignInForm() {
                 ) : null}
               </View>
 
-              <View>
-                <View className="flex-row items-center justify-between mb-1">
-                  <Text className="text-sm" style={{ color: theme.text }}>
-                    Password
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => router.push('/auth/reset-password')}
-                    accessibilityRole="link"
-                    accessibilityLabel="Forgot password"
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
-                      Forgot?
+              {!emailCodeMode && (
+                <View>
+                  <View className="flex-row items-center justify-between mb-1">
+                    <Text className="text-sm" style={{ color: theme.text }}>
+                      Password
                     </Text>
-                  </TouchableOpacity>
-                </View>
-                <View className="relative">
-                  <TextInput
-                    ref={passwordRef}
-                    nativeID="password"
-                    value={password}
-                    onChangeText={text => {
-                      setPassword(text);
-                      if (fieldErrors.password) {
-                        setFieldErrors(prev => ({ ...prev, password: '' }));
-                      }
-                      if (authError) resetError();
-                    }}
-                    placeholder="Password"
-                    secureTextEntry={!showPassword}
-                    autoComplete="password"
-                    editable={!isSubmitting}
-                    className={`w-full rounded px-3 py-3 pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
-                    style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
-                    textContentType={Platform.OS === 'ios' ? 'password' : undefined}
-                    placeholderTextColor={theme.textDisabled}
-                    returnKeyType="done"
-                    onSubmitEditing={handleSubmit}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(s => !s)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    accessibilityRole="button"
-                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <MaterialIcons
-                      name={showPassword ? 'visibility-off' : 'visibility'}
-                      size={20}
-                      color={theme.text}
+                    <TouchableOpacity
+                      onPress={() => router.push('/auth/reset-password')}
+                      accessibilityRole="link"
+                      accessibilityLabel="Forgot password"
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                        Forgot?
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View className="relative">
+                    <TextInput
+                      ref={passwordRef}
+                      nativeID="password"
+                      value={password}
+                      onChangeText={text => {
+                        setPassword(text);
+                        if (fieldErrors.password) {
+                          setFieldErrors(prev => ({ ...prev, password: '' }));
+                        }
+                        if (authError) resetError();
+                      }}
+                      placeholder="Password"
+                      secureTextEntry={!showPassword}
+                      autoComplete="password"
+                      editable={!isSubmitting}
+                      className={`w-full rounded px-3 py-3 pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                      style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
+                      textContentType={Platform.OS === 'ios' ? 'password' : undefined}
+                      placeholderTextColor={theme.textDisabled}
+                      returnKeyType="done"
+                      onSubmitEditing={handleSubmit}
                     />
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(s => !s)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2"
+                      accessibilityRole="button"
+                      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <MaterialIcons
+                        name={showPassword ? 'visibility-off' : 'visibility'}
+                        size={20}
+                        color={theme.text}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  {getFieldError('password') ? (
+                    <ValidationMessage message={getFieldError('password')} />
+                  ) : null}
                 </View>
-                {getFieldError('password') ? (
-                  <ValidationMessage message={getFieldError('password')} />
-                ) : null}
-              </View>
+              )}
 
-              {captchaRequired && (
+              {!emailCodeMode && captchaRequired && (
                 <View ref={captchaRef} className="mt-4">
                   <Text className="text-xs mb-2" style={{ color: theme.text }}>
                     Please complete the security check below to continue signing in.
@@ -1246,20 +1332,67 @@ export function SignInForm() {
                 </View>
               )}
 
-              <Button
-                onPress={onSignInPress}
-                loading={isSubmitting}
-                accessibilityLabel="Sign in"
-                accessibilityHint={
-                  isLockoutActive
-                    ? `Sign-in is paused. Try again in ${lockoutSecondsRemaining} seconds.`
-                    : captchaRequired && !captchaVerified
-                      ? 'Complete the security check below first, then sign in.'
-                      : undefined
-                }
+              {emailCodeMode && emailCodeSent && (
+                <View>
+                  <TextInput
+                    value={emailCode}
+                    onChangeText={(value) => setEmailCode(value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="6-digit email code"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    editable={!emailCodeLoading}
+                    autoComplete="one-time-code"
+                    accessibilityLabel="Email sign-in code"
+                    className="w-full rounded px-3 py-3"
+                    style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
+                    placeholderTextColor={theme.textDisabled}
+                  />
+                  <TouchableOpacity onPress={() => void sendEmailCode()} disabled={emailCodeLoading} className="mt-2 self-end">
+                    <Text style={{ color: theme.textSecondary }}>Send a new code</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {emailCodeMode ? (
+                <Button
+                  onPress={emailCodeSent ? verifyEmailCode : sendEmailCode}
+                  loading={emailCodeLoading}
+                  accessibilityLabel={emailCodeSent ? 'Verify email code' : 'Send email code'}
+                >
+                  {emailCodeSent ? 'Verify code' : 'Email me a sign-in code'}
+                </Button>
+              ) : (
+                <Button
+                  onPress={onSignInPress}
+                  loading={isSubmitting}
+                  accessibilityLabel="Sign in"
+                  accessibilityHint={
+                    isLockoutActive
+                      ? `Sign-in is paused. Try again in ${lockoutSecondsRemaining} seconds.`
+                      : captchaRequired && !captchaVerified
+                        ? 'Complete the security check below first, then sign in.'
+                        : undefined
+                  }
+                >
+                  {signInLabel}
+                </Button>
+              )}
+
+              <TouchableOpacity
+                onPress={() => {
+                  setEmailCodeMode((mode) => !mode);
+                  setEmailCodeSent(false);
+                  setEmailCode('');
+                  setSocialAuthError(null);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={emailCodeMode ? 'Use password instead' : 'Use email code'}
+                className="items-center py-2"
               >
-                {signInLabel}
-              </Button>
+                <Text style={{ color: theme.textSecondary }}>
+                  {emailCodeMode ? 'Use password instead' : 'Sign in with an email code'}
+                </Text>
+              </TouchableOpacity>
 
               {Platform.OS === 'ios' && (
                 <View style={{ marginTop: 12 }}>

@@ -21,7 +21,12 @@
         "NSMicrophoneUsageDescription": "BOUNTY needs microphone access for voice messages.",
         "NSContactsUsageDescription": "BOUNTY needs access to your contacts to help you invite friends."
       },
-      "associatedDomains": ["applinks:bountyfinder.app", "applinks:*.bountyfinder.app"],
+      "associatedDomains": [
+        "applinks:bountyfinder.app",
+        "applinks:*.bountyfinder.app",
+        "applinks:www.bountyfinder.net",
+        "applinks:bountyfinder.net"
+      ],
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -82,6 +87,33 @@
               "scheme": "https",
               "host": "bountyfinder.app",
               "pathPrefix": "/profile"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.bountyfinder.net",
+              "path": "/manage"
+            },
+            {
+              "scheme": "https",
+              "host": "bountyfinder.net",
+              "path": "/manage"
+            },
+            {
+              "scheme": "https",
+              "host": "www.bountyfinder.net",
+              "pathPrefix": "/manage/"
+            },
+            {
+              "scheme": "https",
+              "host": "bountyfinder.net",
+              "pathPrefix": "/manage/"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
