@@ -252,12 +252,15 @@ function extractInvalidTokens(chunkTokens: string[], expoResponseBody: unknown):
 // incident. It is now always an HTTPS page on the website that works in any
 // browser; WEB_MANAGE_BASE overrides the host (https only, see web-links.ts).
 const WEB_MANAGE_BASE = Deno.env.get('WEB_MANAGE_BASE')
-// Hunter-facing closure email: "find other bounties" is an app action, so it
-// keeps the app scheme unless an https handoff is configured.
-const APP_LINK_BASE = Deno.env.get('NOTIFICATION_APP_LINK_BASE') || 'bountyexpo-workspace://'
 // Set only once the reply subdomain's MX points at Resend inbound and
 // email-inbound is deployed; until then replies keep going to support.
 const REPLY_DOMAIN = resolveReplyDomain(Deno.env.get('EMAIL_REPLY_DOMAIN'))
+
+function emailDataWithoutAppLinks(data: Record<string, unknown>): Record<string, unknown> {
+  const safe = { ...data }
+  if (typeof safe.ctaUrl !== 'string' || !safe.ctaUrl.startsWith('https://')) delete safe.ctaUrl
+  return safe
+}
 
 // PostHog delivery-funnel instrumentation (notification_generated/sent/failed).
 // Same HTTP capture pattern as process-analytics-person/index.ts. Every event
@@ -593,7 +596,7 @@ Deno.serve(async (req: Request) => {
             body: rows.body || '',
             // Message notifications carry the bounty only on the outbox row;
             // send-notification-email links the email to the bounty's web page.
-            data: { ...outboxData, bountyId: outboxData.bountyId ?? rows.bounty_id ?? undefined },
+            data: { ...emailDataWithoutAppLinks(outboxData), bountyId: outboxData.bountyId ?? rows.bounty_id ?? undefined },
           }),
         })
       } catch (e) {
@@ -898,7 +901,7 @@ Deno.serve(async (req: Request) => {
                 title: emailTitle,
                 body: emailBody,
                 data: {
-                  ...outboxData,
+                  ...emailDataWithoutAppLinks(outboxData),
                   ...(posterFallback
                     ? {
                         ctaUrl: webManageLink(WEB_MANAGE_BASE, {
@@ -911,7 +914,7 @@ Deno.serve(async (req: Request) => {
                         helpUrl: webManageLink(WEB_MANAGE_BASE, { bountyId, view: 'help', campaign: 'applicant_review' }),
                         ...(replyTo ? { replyTo } : {}),
                       }
-                    : { ctaUrl: APP_LINK_BASE, ctaLabel: 'Find other bounties' }),
+                    : {}),
                 },
               }),
             })

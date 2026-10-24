@@ -8,7 +8,7 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -26,6 +26,7 @@ import { useTwoFactorAuth } from '../../hooks/use-two-factor-auth';
 import { clearAllSessionData } from '../../lib/auth-session-storage';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { ROUTES } from '../../lib/routes';
+import { safeManageRedirect } from '../../lib/navigation/manage-route';
 import { PROJECT_STORAGE_KEY, supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
@@ -33,6 +34,15 @@ import { markInitialNavigationDone } from '../initial-navigation/initialNavigati
 export default function MfaChallengeScreen() {
   useScreenBackground('#097959ff');
   const router = useRouter();
+  const { redirect_to: redirectToParam } = useLocalSearchParams<{ redirect_to?: string | string[] }>();
+  const postLoginTarget = safeManageRedirect(redirectToParam);
+  const navigateToApp = () => {
+    router.replace(
+      (postLoginTarget
+        ? { pathname: '/', params: { redirect_to: postLoginTarget } }
+        : { pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } }) as Href
+    );
+  };
   const insets = useSafeAreaInsets();
   const { challengeAndVerify, isLoading: authLoading, isMfaChallengeRequired, isEnrolled } = useTwoFactorAuth();
   const { theme } = useAppThemeContext();
@@ -56,7 +66,7 @@ export default function MfaChallengeScreen() {
 
     if (!isMfaChallengeRequired && isEnrolled) {
       // Already satisfied AAL2 – go to app
-      router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+      navigateToApp();
       try { markInitialNavigationDone(); } catch { /* ignore */ }
     }
   // Only run when loading state changes to avoid redirect loops
@@ -83,7 +93,7 @@ export default function MfaChallengeScreen() {
       }
 
       // MFA verified — navigate to the main app
-      router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'bounty' } });
+      navigateToApp();
       try { markInitialNavigationDone(); } catch { /* ignore */ }
     } finally {
       setIsVerifying(false);

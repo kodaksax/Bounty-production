@@ -21,6 +21,8 @@ import React from 'react';
 import { Platform } from 'react-native';
 
 const signInWithPassword = jest.fn();
+const signInWithOtp = jest.fn();
+const verifyOtp = jest.fn();
 const mfaLevel = jest.fn().mockResolvedValue({
   data: { currentLevel: 'aal1', nextLevel: 'aal1' },
 });
@@ -34,6 +36,8 @@ jest.mock('lib/supabase', () => ({
   supabase: {
     auth: {
       signInWithPassword: (...a: unknown[]) => signInWithPassword(...a),
+      signInWithOtp: (...a: unknown[]) => signInWithOtp(...a),
+      verifyOtp: (...a: unknown[]) => verifyOtp(...a),
       signInWithIdToken: jest.fn(),
       mfa: { getAuthenticatorAssuranceLevel: () => mfaLevel() },
     },
@@ -61,6 +65,7 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockCanGoBack = jest.fn(() => true);
 jest.mock('expo-router', () => ({
+  useLocalSearchParams: () => ({}),
   useRouter: () => ({
     replace: mockReplace,
     push: mockPush,
@@ -135,6 +140,8 @@ describe('sign-in recovery after a failed attempt', () => {
   beforeEach(() => {
     store.clear();
     signInWithPassword.mockReset();
+    signInWithOtp.mockReset();
+    verifyOtp.mockReset();
     mockReplace.mockClear();
     mockPush.mockClear();
     mockBack.mockClear();
@@ -150,6 +157,53 @@ describe('sign-in recovery after a failed attempt', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/auth/sign-up-form');
     expect(mockPush).not.toHaveBeenCalledWith('/onboarding/welcome');
+  });
+
+  it('supports email-code sign-in for existing accounts', async () => {
+    signInWithOtp.mockResolvedValue({ error: null });
+    verifyOtp.mockResolvedValue({ data: { session: GOOD_SESSION.session }, error: null });
+    mfaLevel.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null });
+
+    const utils = render(<SignInForm />);
+    fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
+    fireEvent.press(utils.getByLabelText('Use email code'));
+    fireEvent.press(utils.getByLabelText('Send email code'));
+
+    await waitFor(() =>
+      expect(signInWithOtp).toHaveBeenCalledWith({
+        email: 'a@b.test',
+        options: { shouldCreateUser: false },
+      })
+    );
+
+    fireEvent.changeText(utils.getByLabelText('Email sign-in code'), '123456');
+    fireEvent.press(utils.getByLabelText('Verify email code'));
+    await waitFor(() =>
+      expect(verifyOtp).toHaveBeenCalledWith({
+        email: 'a@b.test',
+        token: '123456',
+        type: 'email',
+      })
+    );
+    expect(mockReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('requires the enrolled MFA challenge after email-code sign-in', async () => {
+    signInWithOtp.mockResolvedValue({ error: null });
+    verifyOtp.mockResolvedValue({ data: { session: GOOD_SESSION.session }, error: null });
+    mfaLevel.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null });
+
+    const utils = render(<SignInForm />);
+    fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
+    fireEvent.press(utils.getByLabelText('Use email code'));
+    fireEvent.press(utils.getByLabelText('Send email code'));
+    await waitFor(() => expect(utils.getByLabelText('Email sign-in code')).toBeTruthy());
+
+    fireEvent.changeText(utils.getByLabelText('Email sign-in code'), '123456');
+    fireEvent.press(utils.getByLabelText('Verify email code'));
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith('/auth/mfa-challenge')
+    );
   });
 
   it('gives a back control that leaves the auth flow', () => {

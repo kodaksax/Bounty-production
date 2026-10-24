@@ -58,3 +58,35 @@ export function webManageLink(base: string | null | undefined, params: ManageLin
   url.searchParams.set('utm_campaign', (params.campaign ?? 'bounty_update').replace(/[^a-z0-9_]/gi, '').slice(0, 60) || 'bounty_update')
   return url.toString()
 }
+
+export function webBountyCta(
+  base: string | null | undefined,
+  data: Record<string, unknown>
+): { url: string; label: string } | null {
+  const bountyId = data.bountyId ?? data.bounty_id
+  if (!isUuid(bountyId)) return null
+
+  const requestId = data.requestId ?? data.request_id
+  const hasRequest = isUuid(requestId)
+  return {
+    url: webManageLink(base, {
+      bountyId,
+      requestId: hasRequest ? requestId : undefined,
+      view: hasRequest ? 'applicant' : 'bounty',
+      campaign: typeof data.type === 'string' ? data.type : 'bounty_update',
+    }),
+    label: data.type === 'message' ? 'Reply on bountyfinder.net' : 'Open on bountyfinder.net',
+  }
+}
+
+export function emailBountyCta(
+  base: string | null | undefined,
+  data: Record<string, unknown>
+): { url: string; label: string } | null {
+  const generated = webBountyCta(base, data)
+  const label = typeof data.ctaLabel === 'string' && data.ctaLabel.trim() ? data.ctaLabel.trim() : undefined
+  if (generated) return { ...generated, label: label ?? generated.label }
+
+  const url = typeof data.ctaUrl === 'string' ? data.ctaUrl.trim() : ''
+  return url.startsWith('https://') ? { url, label: label ?? 'Open Bounty' } : null
+}

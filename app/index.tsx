@@ -9,6 +9,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useAppBootstrap } from '../hooks/useAppBootstrap';
 import { bountyAppTabPath, type BountyAppTab } from '../lib/navigation/bounty-app-tab';
+import { safeManageRedirect } from '../lib/navigation/manage-route';
 import { holdDeepLinks, takeDeferredTabLink } from '../lib/navigation/deferred-deep-link';
 import { ROUTES } from '../lib/routes';
 import { getRestorableLastScreen } from '../lib/storage/last-screen';
@@ -44,6 +45,8 @@ import { markInitialNavigationDone } from './initial-navigation/initialNavigatio
 function safeRedirectTarget(raw: unknown): string | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (typeof value !== 'string' || !value) return null;
+  const manageTarget = safeManageRedirect(value);
+  if (manageTarget) return manageTarget;
   if (!value.startsWith('/tabs/')) return null;
   if (value.includes('//') || value.includes('\\') || value.includes(':')) return null;
   return value;

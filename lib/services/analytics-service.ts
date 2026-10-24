@@ -682,6 +682,7 @@ export type AnalyticsEvent =
   | 'share_cancelled'
   | 'share_link_copied'
   | 'deep_link_opened'
+  | 'email_link_opened'
   // Dispute events. Canonical `dispute_started` (was `dispute_opened`) covers
   // BOTH the cancellation-derived dispute and the workflow-stage dispute
   // (createWorkflowDispute previously emitted nothing). `stage` disambiguates.
