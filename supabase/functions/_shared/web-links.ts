@@ -78,3 +78,15 @@ export function webBountyCta(
     label: data.type === 'message' ? 'Reply on bountyfinder.net' : 'Open on bountyfinder.net',
   }
 }
+
+export function emailBountyCta(
+  base: string | null | undefined,
+  data: Record<string, unknown>
+): { url: string; label: string } | null {
+  const generated = webBountyCta(base, data)
+  const label = typeof data.ctaLabel === 'string' && data.ctaLabel.trim() ? data.ctaLabel.trim() : undefined
+  if (generated) return { ...generated, label: label ?? generated.label }
+
+  const url = typeof data.ctaUrl === 'string' ? data.ctaUrl.trim() : ''
+  return url.startsWith('https://') ? { url, label: label ?? 'Open Bounty' } : null
+}

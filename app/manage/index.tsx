@@ -2,8 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useRef } from 'react'
 import { ScreenLoader } from '../../components/ui/screen-loader'
 import { useAuthContext } from '../../hooks/use-auth-context'
-import { buildManageRoutePath } from '../../lib/navigation/manage-route'
-import { bountyAppTabPath } from '../../lib/navigation/bounty-app-tab'
+import { buildManageRoutePath, manageDestinationPath } from '../../lib/navigation/manage-route'
 import { analyticsService } from '../../lib/services/analytics-service'
 
 export default function ManageHandoffRoute() {
@@ -17,6 +16,7 @@ export default function ManageHandoffRoute() {
   const tracked = useRef(false)
   const returnTo = buildManageRoutePath(params)
   const bountyId = new URLSearchParams(returnTo.split('?')[1] ?? '').get('bounty')
+  const destination = manageDestinationPath(params)
 
   useEffect(() => {
     if (tracked.current) return
@@ -34,12 +34,8 @@ export default function ManageHandoffRoute() {
       router.replace({ pathname: '/', params: { redirect_to: returnTo } })
       return
     }
-    if (bountyId) {
-      router.replace({ pathname: '/postings/[bountyId]', params: { bountyId } })
-      return
-    }
-    router.replace(bountyAppTabPath('postings') as never)
-  }, [bountyId, isLoading, returnTo, router, session])
+    router.replace(destination as never)
+  }, [bountyId, destination, isLoading, returnTo, router, session])
 
   return <ScreenLoader label={isLoading ? 'Loading...' : 'Opening your bounties...'} />
 }

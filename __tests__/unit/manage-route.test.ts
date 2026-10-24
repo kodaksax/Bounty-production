@@ -1,4 +1,4 @@
-import { buildManageRoutePath, safeManageRedirect } from '../../lib/navigation/manage-route'
+import { buildManageRoutePath, manageDestinationPath, safeManageRedirect } from '../../lib/navigation/manage-route'
 
 const BOUNTY = '5e96aaed-93bd-4ade-ae39-93b073d9daff'
 const APPLICANT = '0b1c2d3e-4f50-4617-8899-aabbccddeeff'
@@ -18,5 +18,23 @@ describe('manage app handoff route', () => {
     expect(safeManageRedirect('/manage?bounty=not-a-uuid')).toBeNull()
     expect(safeManageRedirect('/manage?next=https://example.com')).toBeNull()
     expect(safeManageRedirect('//example.com/manage')).toBeNull()
+  })
+
+  test('routes applicant links to the poster activity list', () => {
+    expect(manageDestinationPath({ bounty: BOUNTY, applicant: APPLICANT, view: 'applicant' })).toBe(
+      '/tabs/bounty-app?tab=messages&initialTab=myPostings'
+    )
+  })
+
+  test('routes help and completion links to their matching app surfaces', () => {
+    expect(manageDestinationPath({ bounty: BOUNTY, view: 'help' })).toBe('/legal/how-it-works')
+    expect(manageDestinationPath({ bounty: BOUNTY, view: 'complete' })).toBe(
+      `/postings/${BOUNTY}/review-and-verify`
+    )
+  })
+
+  test('falls back to the bounty dashboard or postings tab for generic links', () => {
+    expect(manageDestinationPath({ bounty: BOUNTY, view: 'bounty' })).toBe(`/postings/${BOUNTY}`)
+    expect(manageDestinationPath({})).toBe('/tabs/bounty-app?tab=postings')
   })
 })

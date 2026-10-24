@@ -1,4 +1,6 @@
 import { isUuid } from '../../supabase/functions/_shared/web-links'
+import { bountyAppTabPath } from './bounty-app-tab'
+import { ROUTES } from '../routes'
 
 type ManageRouteParams = {
   bounty?: unknown
@@ -27,6 +29,19 @@ export function buildManageRoutePath(params: ManageRouteParams): string {
 
   const query = search.toString()
   return `/manage/${query ? `?${query}` : ''}`
+}
+
+export function manageDestinationPath(params: ManageRouteParams): string {
+  const normalized = buildManageRoutePath(params)
+  const search = new URLSearchParams(normalized.split('?')[1] ?? '')
+  const bountyId = search.get('bounty')
+  const view = search.get('view')
+
+  if (view === 'help') return '/legal/how-it-works'
+  if (view === 'applicant') return bountyAppTabPath('messages', 'myPostings')
+  if (view === 'complete' && bountyId) return ROUTES.BOUNTY.REVIEW_AND_VERIFY(bountyId)
+  if (bountyId) return ROUTES.BOUNTY.DASHBOARD(bountyId)
+  return bountyAppTabPath('postings')
 }
 
 export function safeManageRedirect(value: unknown): string | null {

@@ -1,5 +1,6 @@
 import {
   DEFAULT_WEB_MANAGE_BASE,
+  emailBountyCta,
   isUuid,
   resolveManageBase,
   webBountyCta,
@@ -36,6 +37,28 @@ describe('webManageLink — bounty emails open the website, not the app', () => 
       expect(url.searchParams.get('bounty')).toBe(BOUNTY)
       expect(url.searchParams.get('applicant')).toBe(REQUEST)
       expect(url.searchParams.get('view')).toBe('applicant')
+    })
+
+    describe('emailBountyCta', () => {
+      test('uses the shared manage URL for valid bounty payloads and retains the supplied label', () => {
+        const cta = emailBountyCta(undefined, {
+          bountyId: BOUNTY,
+          ctaUrl: `https://www.bountyfinder.net/bounty?id=${BOUNTY}`,
+          ctaLabel: 'Review applicant',
+        })
+        expect(cta).toEqual({
+          url: expect.stringContaining(`/manage/?bounty=${BOUNTY}`),
+          label: 'Review applicant',
+        })
+      })
+
+      test('preserves an explicit HTTPS URL only when no shared bounty CTA can be generated', () => {
+        expect(emailBountyCta(undefined, { ctaUrl: 'https://example.com/help', ctaLabel: 'Help' })).toEqual({
+          url: 'https://example.com/help',
+          label: 'Help',
+        })
+        expect(emailBountyCta(undefined, { ctaUrl: 'bountyexpo://help' })).toBeNull()
+      })
     })
 
     test('drops invalid bounty identifiers instead of creating a CTA', () => {

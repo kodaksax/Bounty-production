@@ -33,7 +33,7 @@
 // `ok` deliberately stays true in that state — see the response comment below.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { webBountyCta } from '../_shared/web-links.ts'
+import { emailBountyCta } from '../_shared/web-links.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,10 +53,7 @@ type EmailContent = { subject: string; html: string; text: string }
 const WEB_MANAGE_BASE = Deno.env.get('WEB_MANAGE_BASE')
 
 function ctaFrom(data: Record<string, unknown>): { url: string; label: string } | null {
-  const url = typeof data.ctaUrl === 'string' ? data.ctaUrl.trim() : ''
-  if (!url || !url.startsWith('https://')) return webBountyCta(WEB_MANAGE_BASE, data)
-  const label = typeof data.ctaLabel === 'string' && data.ctaLabel.trim() ? data.ctaLabel.trim() : 'Open Bounty'
-  return { url, label }
+  return emailBountyCta(WEB_MANAGE_BASE, data)
 }
 
 // "Talk to a person" link under the main button. https only, and only to the
