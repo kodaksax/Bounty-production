@@ -14,8 +14,13 @@
 //
 // Uses the same RESEND_API_KEY / NOTIFICATION_FROM_EMAIL secrets as
 // send-notification-email, so no new secrets are needed.
+//
+// Rendered with the "Bounty v2 · Team alert (internal)" Resend template.
+// EMAIL_DESIGN_V2=off, or Resend rejecting the template outright, sends the
+// plain inline layout below instead — same recipient, subject and reply-to.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { buildTeamAlertSend, isDesignV2Enabled } from '../_shared/email-design-v2.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,6 +38,10 @@ function escapeHtml(s: string): string {
 
 const SUPPORT_TO_EMAIL = Deno.env.get('SUPPORT_TO_EMAIL') || 'support@bountyfinder.app'
 const fromEmail = Deno.env.get('NOTIFICATION_FROM_EMAIL') || 'Bounty <notifications@bountyfinder.app>'
+
+const DESIGN_V2 = isDesignV2Enabled(Deno.env.get('EMAIL_DESIGN_V2'))
+// 409 / 429 / 5xx are not "rejected": the message may exist, so no second send.
+const TEMPLATE_REJECTED = new Set([400, 403, 404, 422])
 
 const MAX_SUBJECT_LENGTH = 200
 const MAX_MESSAGE_LENGTH = 5000
@@ -144,7 +153,7 @@ Deno.serve(async (req: Request) => {
     </div>`
   const text = `${subject}\n\n${message}\n\n${meta.map(([k, v]) => `${k}: ${v}`).join('\n')}`
 
-  const resp = await fetch('https://api.resend.com/emails', {
+  const sendInline = () => fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -157,6 +166,36 @@ Deno.serve(async (req: Request) => {
       ...(userEmail ? { reply_to: userEmail } : {}),
     }),
   })
+
+  let resp: Response
+  if (DESIGN_V2) {
+    const alert = buildTeamAlertSend({
+      kind: 'contact',
+      title: subject,
+      body: message,
+      source: `${platform} ${appVersion}`,
+      details: meta as Array<[string, string]>,
+      subjectPrefix: '[Support] ',
+    })
+    resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [SUPPORT_TO_EMAIL],
+        subject: alert.subject,
+        template: { id: alert.id, variables: alert.variables },
+        ...(userEmail ? { reply_to: userEmail } : {}),
+      }),
+    })
+    if (!resp.ok && TEMPLATE_REJECTED.has(resp.status)) {
+      const errBody = await resp.text().catch(() => '')
+      console.warn('[contact-support] template rejected; sending the inline layout instead', resp.status, errBody.slice(0, 300))
+      resp = await sendInline()
+    }
+  } else {
+    resp = await sendInline()
+  }
 
   if (!resp.ok) {
     const errBody = await resp.text().catch(() => '')

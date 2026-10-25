@@ -1,0 +1,13 @@
+Confirm it's you.
+
+Enter this code in Bounty to continue:
+
+{{ .Token }}
+
+The code works once and expires soon.
+
+Didn't ask for this? Don't share this code with anyone. If you think someone else has your password, reset it from the sign-in screen.
+
+—
+Bounty · Got a task? Drop a bounty.
+Get help: support@bountyfinder.app

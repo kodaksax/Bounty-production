@@ -1,6 +1,6 @@
-{{{HEADLINE}}}
+{{{HEADLINE_TEXT}}}
 
-{{{BODY}}}
+{{{BODY_TEXT}}}
 
 Questions? Talk to a real person: {{{HELP_URL}}}
 

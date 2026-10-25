@@ -6,7 +6,7 @@
     "resendId": "6e95fb9b-14d2-4079-9e57-d4bffd657f93",
     "audience": "poster",
     "kind": "transactional",
-    "status": "wired today (current template); v2 is a drop-in ID swap",
+    "status": "live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)",
     "trigger": "notification type bounty_posted (send-notification-email RESEND_TEMPLATE_BY_TYPE)",
     "replaces": [
       "386c9e82-f564-40e0-ae4c-83dac4db318d",
@@ -16,10 +16,16 @@
     "preheader": "We'll email you as people apply. You choose who does it.",
     "replyTo": null,
     "stamp": "Live",
-    "bytes": 13545,
+    "bytes": 13564,
     "variables": [
       {
         "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_TITLE_TEXT",
         "type": "string",
         "fallbackValue": "Your bounty",
         "html": false
@@ -1017,7 +1023,7 @@
     "resendId": "21d52deb-990c-4512-b6b2-67a3d14036aa",
     "audience": "poster + hunter",
     "kind": "transactional",
-    "status": "new; wire via EMAIL_DESIGN_V2 flag (see PR)",
+    "status": "live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)",
     "trigger": "Every notification email that is not routed to a dedicated template and has a CTA (messages, applications, acceptance, completion, disputes, verification, payouts…)",
     "replaces": [
       "generic inline buildEmail() layout in send-notification-email"
@@ -1026,7 +1032,7 @@
     "preheader": "{{{PREHEADER}}}",
     "replyTo": null,
     "stamp": "{{{STAMP_LABEL}}}",
-    "bytes": 9300,
+    "bytes": 9326,
     "variables": [
       {
         "key": "STAMP_LABEL",
@@ -1066,6 +1072,18 @@
       },
       {
         "key": "BODY",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "HEADLINE_TEXT",
+        "type": "string",
+        "fallbackValue": "There’s an update on Bounty",
+        "html": false
+      },
+      {
+        "key": "BODY_TEXT",
         "type": "string",
         "fallbackValue": " ",
         "html": false
@@ -1114,7 +1132,7 @@
     "resendId": "5dc750c9-93a8-43b3-82e2-0b748b3195de",
     "audience": "poster + hunter",
     "kind": "transactional",
-    "status": "new; wire via EMAIL_DESIGN_V2 flag (see PR)",
+    "status": "live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)",
     "trigger": "Notification emails with no linkable destination (e.g. identity verification submitted/verified, payout paid, followers)",
     "replaces": [
       "generic inline buildEmail() layout (no CTA case)"
@@ -1123,7 +1141,7 @@
     "preheader": "{{{PREHEADER}}}",
     "replyTo": null,
     "stamp": "{{{STAMP_LABEL}}}",
-    "bytes": 8757,
+    "bytes": 8783,
     "variables": [
       {
         "key": "STAMP_LABEL",
@@ -1168,6 +1186,18 @@
         "html": false
       },
       {
+        "key": "HEADLINE_TEXT",
+        "type": "string",
+        "fallbackValue": "There’s an update on Bounty",
+        "html": false
+      },
+      {
+        "key": "BODY_TEXT",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
         "key": "HELP_URL",
         "type": "string",
         "fallbackValue": "mailto:support@bountyfinder.app",
@@ -1193,14 +1223,120 @@
     ]
   },
   {
+    "key": "team-alert",
+    "alias": "bounty-v2-team-alert",
+    "name": "Bounty v2 · Team alert (internal)",
+    "resendId": "6835c482-23d8-42b5-8f8f-7366d0d0874f",
+    "audience": "Bounty team",
+    "kind": "internal",
+    "status": "live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)",
+    "trigger": "Internal only: support cases opened by poster-web / email-inbound / geocode-bounties, admin alerts of severity high or above, and in-app Contact support messages",
+    "replaces": [
+      "inline support-alert layout in send-notification-email (supportAlert)",
+      "inline layout for admin alerts from fn_notify_admins (data.adminAlert)",
+      "inline HTML in contact-support"
+    ],
+    "subject": "Bounty team alert",
+    "preheader": "{{{PREHEADER}}}",
+    "replyTo": null,
+    "stamp": "{{{STAMP_LABEL}}}",
+    "bytes": 8514,
+    "variables": [
+      {
+        "key": "STAMP_LABEL",
+        "type": "string",
+        "fallbackValue": "Team alert",
+        "html": false
+      },
+      {
+        "key": "TONE_ACCENT",
+        "type": "string",
+        "fallbackValue": "#E39B2D",
+        "html": false
+      },
+      {
+        "key": "TONE_INK",
+        "type": "string",
+        "fallbackValue": "#7F4300",
+        "html": false
+      },
+      {
+        "key": "TONE_TINT",
+        "type": "string",
+        "fallbackValue": "#FFF1DC",
+        "html": false
+      },
+      {
+        "key": "PREHEADER",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "KICKER",
+        "type": "string",
+        "fallbackValue": "Internal",
+        "html": false
+      },
+      {
+        "key": "HEADLINE",
+        "type": "string",
+        "fallbackValue": "Bounty team alert",
+        "html": false
+      },
+      {
+        "key": "HEADLINE_TEXT",
+        "type": "string",
+        "fallbackValue": "Bounty team alert",
+        "html": false
+      },
+      {
+        "key": "BODY",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "BODY_TEXT",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "DETAILS",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": true
+      },
+      {
+        "key": "DETAILS_TEXT",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "REASON_LINE",
+        "type": "string",
+        "fallbackValue": "Sent to the Bounty team. Customers never get this email.",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "admin",
+      "contact",
+      "edge"
+    ]
+  },
+  {
     "key": "auth-confirm-signup",
     "alias": "auth-confirm-signup",
     "name": "Supabase Auth · Confirm signup",
     "resendId": null,
     "audience": "everyone",
     "kind": "auth",
-    "status": "new; paste into Supabase dashboard (replaces default \"Confirm Your Signup\")",
-    "trigger": "Supabase Auth: email confirmation on signup",
+    "status": "paste into Supabase → Authentication → Emails → Confirm signup",
+    "trigger": "Supabase Auth \"Confirm signup\". Rare today: app and checkout accounts are created already confirmed, so this goes out only on a signup confirmation resend.",
     "subject": "Confirm your email to start using Bounty",
     "preheader": "One tap and your account is ready.",
     "replyTo": null,
@@ -1214,17 +1350,17 @@
   {
     "key": "auth-magic-link",
     "alias": "auth-magic-link",
-    "name": "Supabase Auth · Sign-in link",
+    "name": "Supabase Auth · Sign-in code and link",
     "resendId": null,
     "audience": "everyone",
     "kind": "auth",
-    "status": "new; paste into Supabase dashboard (current subject \"Your sign-in link\" kept)",
-    "trigger": "Supabase Auth: magic link / OTP sign-in (web poster sign-in)",
-    "subject": "Your sign-in link",
-    "preheader": "Tap to sign in to Bounty. No password needed.",
+    "status": "paste into Supabase → Authentication → Emails → Magic link",
+    "trigger": "Supabase Auth \"Magic link\": signInWithOtp. The app asks for the 6-digit code (sign-in form, verifyOtp type \"email\"); a browser can use the link.",
+    "subject": "Your Bounty sign-in code",
+    "preheader": "Enter it in Bounty to sign in, or use the button.",
     "replyTo": null,
     "stamp": "Sign in",
-    "bytes": 10444,
+    "bytes": 11499,
     "variables": [],
     "samples": [
       "realistic"
@@ -1233,17 +1369,74 @@
   {
     "key": "auth-reset-password",
     "alias": "auth-reset-password",
-    "name": "Supabase Auth · Reset password",
+    "name": "Supabase Auth · Reset password / account access",
     "resendId": null,
     "audience": "everyone",
     "kind": "auth",
-    "status": "new; paste into Supabase dashboard",
-    "trigger": "Supabase Auth: password recovery",
-    "subject": "Reset your Bounty password",
-    "preheader": "Choose a new password. This link works once.",
+    "status": "paste into Supabase → Authentication → Emails → Reset password",
+    "trigger": "Supabase Auth \"Reset password\": the app's forgot-password flow AND the account-access email the Stripe webhook sends to people who paid for a bounty on bountyfinder.net (resetPasswordForEmail, landing on /manage/).",
+    "subject": "Your link to get into Bounty",
+    "preheader": "Sign in to your account. If you asked to reset your password, you’ll choose a new one next.",
     "replyTo": null,
-    "stamp": "Password reset",
-    "bytes": 10387,
+    "stamp": "Account access",
+    "bytes": 11219,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  },
+  {
+    "key": "auth-change-email",
+    "alias": "auth-change-email",
+    "name": "Supabase Auth · Change email address",
+    "resendId": null,
+    "audience": "everyone",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Change email address",
+    "trigger": "Supabase Auth \"Change email address\". No app screen changes email today; covers support or future use. With \"secure email change\" on, both addresses get this.",
+    "subject": "Confirm your new email for Bounty",
+    "preheader": "One tap to confirm the change.",
+    "replyTo": null,
+    "stamp": "Email change",
+    "bytes": 10449,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  },
+  {
+    "key": "auth-reauthentication",
+    "alias": "auth-reauthentication",
+    "name": "Supabase Auth · Reauthentication code",
+    "resendId": null,
+    "audience": "everyone",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Reauthentication",
+    "trigger": "Supabase Auth \"Reauthentication\": a 6-digit code before a sensitive change. Not called by the app today; covers future use.",
+    "subject": "Your Bounty confirmation code",
+    "preheader": "Enter it to confirm it’s you.",
+    "replyTo": null,
+    "stamp": "Confirm it’s you",
+    "bytes": 10293,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  },
+  {
+    "key": "auth-invite",
+    "alias": "auth-invite",
+    "name": "Supabase Auth · Invite user",
+    "resendId": null,
+    "audience": "invited people",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Invite user",
+    "trigger": "Supabase Auth \"Invite user\": sent when someone is invited from the Supabase dashboard (team accounts).",
+    "subject": "You're invited to Bounty",
+    "preheader": "Accept to set up your account.",
+    "replyTo": null,
+    "stamp": "Invite",
+    "bytes": 10135,
     "variables": [],
     "samples": [
       "realistic"

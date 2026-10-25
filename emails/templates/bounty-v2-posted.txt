@@ -3,7 +3,7 @@ You're live.
 {{{AUDIENCE_LINE}}}
 
 LIVE NOW
-{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+{{{BOUNTY_TITLE_TEXT}}} · {{{BOUNTY_REWARD}}}
 
 What happens next
 01 People apply. We'll email you as they come in.

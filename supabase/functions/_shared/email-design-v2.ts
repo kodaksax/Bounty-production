@@ -7,8 +7,10 @@
 // status stamp, card, footer) while keeping the producer's title/body copy
 // and the existing CTA/help/reply-to logic exactly as they are.
 //
-// Off unless EMAIL_DESIGN_V2=on, so deploying this changes nothing until the
-// flag is set; unsetting it is the rollback.
+// On by default: Bounty sends only the v2 templates (the old Resend templates
+// were deleted 2026-10-25). EMAIL_DESIGN_V2=off is the kill switch: every email
+// falls back to the inline buildEmail() layout, which needs no Resend template
+// at all, with no redeploy.
 //
 // Pure and dependency-free so it is unit-tested directly
 // (__tests__/unit/email-design-v2.test.ts) and importable from any function.
@@ -22,10 +24,13 @@ export const V2_TEMPLATES = {
   noticeAction: '21d52deb-990c-4512-b6b2-67a3d14036aa',
   /** "Bounty v2 · Notification (no button)". */
   noticeInfo: '5dc750c9-93a8-43b3-82e2-0b748b3195de',
+  /** "Bounty v2 · Team alert (internal)": support cases, admin alerts, contact-support. */
+  teamAlert: '6835c482-23d8-42b5-8f8f-7366d0d0874f',
 } as const
 
+/** v2 unless the kill switch says otherwise ("off", "false" or "0"). */
 export function isDesignV2Enabled(flag: string | null | undefined): boolean {
-  return (flag ?? '').trim().toLowerCase() === 'on'
+  return !['off', 'false', '0'].includes((flag ?? '').trim().toLowerCase())
 }
 
 export type Tone = 'success' | 'action' | 'alert' | 'neutral'
@@ -168,6 +173,7 @@ export function buildNoticeSend(input: NoticeInput): NoticeSend {
   const tone = TONES[stamp.tone]
   const label = CATEGORY_LABEL[category]
   const subject = clip(title || FALLBACK_SUBJECT[category] || 'Bounty', 120)
+  const headline = clip(title || FALLBACK_SUBJECT[category] || 'There’s an update on Bounty', 90)
 
   const raw: Record<string, string> = {
     STAMP_LABEL: escapeHtml(stamp.label),
@@ -175,18 +181,119 @@ export function buildNoticeSend(input: NoticeInput): NoticeSend {
     TONE_INK: tone.ink,
     TONE_TINT: tone.tint,
     PREHEADER: escapeHtml(preheaderFrom(body)),
-    HEADLINE: escapeHtml(clip(title || FALLBACK_SUBJECT[category] || 'There’s an update on Bounty', 90)),
+    HEADLINE: escapeHtml(headline),
     BODY: escapeHtml(body),
+    // Plain-text part: the same copy unescaped (entities would show literally).
+    HEADLINE_TEXT: headline,
+    BODY_TEXT: String(body ?? '').trim(),
     HELP_URL: helpUrl && helpUrl.startsWith('https://') ? escapeHtml(helpUrl) : '',
     REASON_LINE: label
-      ? `You're getting this because of your ${label} notification settings in Bounty. Change them anytime under Settings &rsaquo; Notifications.`
+      ? `You're getting this because of your ${label} notification settings in Bounty. Change them anytime under Settings › Notifications.`
       : '',
-    POSTAL_LINE: postal ? `Bounty &middot; ${escapeHtml(postal)}` : '',
+    // Plain characters (not entities) so the plain-text part reads cleanly too.
+    POSTAL_LINE: postal ? `Bounty · ${escapeHtml(postal)}` : '',
   }
   if (cta) {
     raw.CTA_LABEL = escapeHtml(cta.label)
     raw.CTA_URL = escapeHtml(cta.url)
   }
-  const variables = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== ''))
-  return { id: cta ? V2_TEMPLATES.noticeAction : V2_TEMPLATES.noticeInfo, subject, variables }
+  return { id: cta ? V2_TEMPLATES.noticeAction : V2_TEMPLATES.noticeInfo, subject, variables: compact(raw) }
+}
+
+/** Drop empty values so the template's declared fallback applies instead. */
+function compact(raw: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(raw).filter(([, v]) => v.trim() !== ''))
+}
+
+// ---------------------------------------------------------------- team alert
+// Internal email to the Bounty team. Three producers:
+//   support  — send-notification-email { supportAlert: true } (support cases)
+//   admin    — fn_notify_admins via send-notification-email (data.adminAlert)
+//   contact  — contact-support (a user's in-app message; reply-to is the user)
+
+export type TeamAlertKind = 'support' | 'admin' | 'contact'
+
+const FONT = "Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+
+/**
+ * Label/value rows for the DETAILS variable. Mirrors detailRows() in
+ * scripts/emails/templates.mjs. Every key and value is escaped here.
+ */
+export function detailRowsHtml(rows: Array<[string, string]>): string {
+  const tr = rows
+    .filter(([, v]) => String(v ?? '').trim() !== '')
+    .map(([k, v]) =>
+      `<tr><td valign="top" width="128" class="c-line c-muted" style="padding:10px 12px 10px 0;border-bottom:1px solid #E6DCCF;font-family:${FONT};font-size:13px;line-height:19px;color:#5C615A;">${escapeHtml(k)}</td>` +
+      `<td valign="top" class="c-line c-ink" style="padding:10px 0;border-bottom:1px solid #E6DCCF;font-family:${FONT};font-size:13px;line-height:19px;color:#121A15;font-weight:600;word-break:break-all;">${escapeHtml(v)}</td></tr>`
+    )
+    .join('')
+  return tr
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="c-line" style="margin:0 0 22px;border-top:1px solid #E6DCCF;">${tr}</table>`
+    : ''
+}
+
+/** Severity → tone. Unknown severities read as "action", never as all-clear. */
+function severityTone(severity: string): Tone {
+  const s = severity.trim().toLowerCase()
+  if (s === 'critical' || s === 'high') return 'alert'
+  if (s === 'low' || s === 'info') return 'neutral'
+  return 'action'
+}
+
+export interface TeamAlertInput {
+  kind: TeamAlertKind
+  title: string
+  body: string
+  /** admin alerts: data.severity / data.type */
+  severity?: string
+  alertType?: string
+  /** contact-support: platform + app version, shown in the kicker */
+  source?: string
+  /** Extra label/value rows (ids, versions). Escaped here. */
+  details?: Array<[string, string]>
+  /** Prefix kept from the existing subject, e.g. "[Support] ". */
+  subjectPrefix?: string
+}
+
+export function buildTeamAlertSend(input: TeamAlertInput): NoticeSend {
+  const { kind, title, body, severity = '', alertType = '', source = '', details = [], subjectPrefix = '' } = input
+  const sev = String(severity ?? '').trim().toLowerCase()
+  const tone: Tone = kind === 'admin' ? severityTone(sev) : 'action'
+  const t = TONES[tone]
+  const stamp = kind === 'admin' ? (sev ? `Admin alert · ${sev}` : 'Admin alert') : kind === 'contact' ? 'Contact support' : 'Support case'
+  const kicker =
+    kind === 'admin'
+      ? `Admin alert${sev ? ` · severity ${sev}` : ''}`
+      : kind === 'contact'
+        ? `In-app message${source ? ` · ${source}` : ''}`
+        : 'Support case'
+  const headline = clip(title || (kind === 'contact' ? 'Contact support message' : 'Bounty team alert'), 90)
+  const bodyText = String(body ?? '').trim()
+  const rows: Array<[string, string]> = [
+    ...(kind === 'admin' && alertType ? [['Alert type', alertType] as [string, string]] : []),
+    ...(kind === 'admin' && sev ? [['Severity', sev] as [string, string]] : []),
+    ...details,
+  ].filter(([, v]) => String(v ?? '').trim() !== '')
+
+  const raw: Record<string, string> = {
+    STAMP_LABEL: escapeHtml(stamp),
+    TONE_ACCENT: t.accent,
+    TONE_INK: t.ink,
+    TONE_TINT: t.tint,
+    PREHEADER: escapeHtml(preheaderFrom(bodyText)),
+    KICKER: escapeHtml(kicker),
+    HEADLINE: escapeHtml(headline),
+    HEADLINE_TEXT: headline,
+    // Line breaks are meaningful in alert bodies (case summaries, lists).
+    BODY: escapeHtml(bodyText).replace(/\r?\n/g, '<br>'),
+    BODY_TEXT: bodyText,
+    DETAILS: detailRowsHtml(rows),
+    DETAILS_TEXT: rows.map(([k, v]) => `${k}: ${v}`).join('\n'),
+  }
+  return {
+    id: V2_TEMPLATES.teamAlert,
+    // Long enough for contact-support's 200-character subjects plus the prefix.
+    subject: clip(`${subjectPrefix}${title || 'Bounty team alert'}`, 220),
+    variables: compact(raw),
+  }
 }

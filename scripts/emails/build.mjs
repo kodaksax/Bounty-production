@@ -21,6 +21,16 @@ const VAR_RE = /\{\{\{([A-Z0-9_]+)\}\}\}/g
 const used = (s) => new Set([...s.matchAll(VAR_RE)].map((m) => m[1]))
 const fill = (s, values) => s.replace(VAR_RE, (_, k) => (k in values ? values[k] : `{{{${k}}}}`))
 
+// Supabase Auth Go-template placeholders → sample values, so previews are
+// realistic and clickable.
+const GO_SAMPLES = {
+  '{{ .ConfirmationURL }}': 'https://www.bountyfinder.net/',
+  '{{ .Token }}': '482913',
+  '{{ .Email }}': 'old@example.com',
+  '{{ .NewEmail }}': 'new@example.com',
+}
+const goSample = (s) => Object.entries(GO_SAMPLES).reduce((acc, [k, v]) => acc.replaceAll(k, v), s)
+
 // Collapse inter-tag whitespace; keeps conditional comments and text intact.
 const minify = (h) => h.replace(/>\s*\n\s*</g, '><').replace(/\n{2,}/g, '\n')
 
@@ -64,11 +74,11 @@ for (const t of [...TEMPLATES, ...AUTH_TEMPLATES]) {
   for (const [name, sample] of Object.entries(t.samples)) {
     const values = { ...fallbacks, ...sample }
     // Supabase Auth placeholder → a sample link so previews are clickable.
-    const rendered = fill(html, values).replaceAll('{{ .ConfirmationURL }}', 'https://www.bountyfinder.net/')
+    const rendered = goSample(fill(html, values))
     const left = used(rendered)
     if (left.size) problems.push(`${t.alias}--${name}: unfilled ${[...left].join(', ')}`)
     writeFileSync(join(out, 'previews', `${t.alias}--${name}.html`), rendered)
-    writeFileSync(join(out, 'previews', `${t.alias}--${name}.txt`), fill(text, values).replaceAll('{{ .ConfirmationURL }}', 'https://www.bountyfinder.net/'))
+    writeFileSync(join(out, 'previews', `${t.alias}--${name}.txt`), goSample(fill(text, values)))
   }
 
   manifest.push({

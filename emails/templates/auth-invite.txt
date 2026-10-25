@@ -1,0 +1,10 @@
+You're invited.
+
+The Bounty team invited you to create an account. Accept to set it up:
+{{ .ConfirmationURL }}
+
+Weren't expecting this? You can ignore this email. No account is set up unless you accept.
+
+—
+Bounty · Got a task? Drop a bounty.
+Get help: support@bountyfinder.app

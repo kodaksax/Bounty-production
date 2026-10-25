@@ -34,7 +34,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { emailBountyCta } from '../_shared/web-links.ts'
-import { V2_TEMPLATES, buildNoticeSend, isDesignV2Enabled } from '../_shared/email-design-v2.ts'
+import { V2_TEMPLATES, buildNoticeSend, buildTeamAlertSend, isDesignV2Enabled } from '../_shared/email-design-v2.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -199,19 +199,24 @@ async function sendViaResend(apiKey: string, toEmail: string, content: EmailCont
 // 2026-10-02 and never committed). Without this port, deploying this file
 // would silently drop the "You're live" template.
 // ---------------------------------------------------------------------------
-// Email design v2 (see _shared/email-design-v2.ts). Off unless
-// EMAIL_DESIGN_V2=on; unsetting it is the rollback, no redeploy needed.
-// When on, bounty_posted renders "Bounty v2 · Bounty posted" (same variables,
-// plus the HELP_LINE / FOOTER_LINE this file already sends) and every other
-// Resend notification renders a universal v2 notice template instead of
-// buildEmail(). SendGrid and support alerts are untouched either way.
+// Email design v2 (see _shared/email-design-v2.ts) is the default. Bounty
+// sends only v2 templates; the pre-v2 Resend templates (including
+// 386c9e82 "Bounty Posted (Final Copy)") were deleted on 2026-10-25.
+//   bounty_posted          → "Bounty v2 · Bounty posted"
+//   data.adminAlert        → "Bounty v2 · Team alert (internal)"
+//   supportAlert payloads  → "Bounty v2 · Team alert (internal)"
+//   every other type       → "Bounty v2 · Notification" (with / without button)
+// EMAIL_DESIGN_V2=off is the kill switch: every email goes out in the inline
+// buildEmail() layout, which depends on no Resend template. If Resend rejects
+// a template send outright (4xx: template missing, unpublished, bad
+// variables), the same email is sent in the inline layout instead, so a
+// template problem degrades the design, never the delivery. SendGrid always
+// uses the inline layout.
 const DESIGN_V2 = isDesignV2Enabled(Deno.env.get('EMAIL_DESIGN_V2'))
 
-const RESEND_TEMPLATE_BY_TYPE: Record<string, string> = {
-  bounty_posted: DESIGN_V2
-    ? V2_TEMPLATES.bountyPosted // "Bounty v2 · Bounty posted"
-    : '386c9e82-f564-40e0-ae4c-83dac4db318d', // "Bounty Posted (Final Copy)"
-}
+const RESEND_TEMPLATE_BY_TYPE: Record<string, string> = DESIGN_V2
+  ? { bounty_posted: V2_TEMPLATES.bountyPosted } // "Bounty v2 · Bounty posted"
+  : {}
 
 // `subject` overrides the template's default subject (Resend: payload
 // from/subject/reply_to take precedence over template defaults).
@@ -237,6 +242,8 @@ function buildTemplateSend(type: string, data: Record<string, unknown>): Templat
 
     const raw: Record<string, string> = {
       BOUNTY_TITLE: escapeHtml(str(data.bountyTitle)),
+      // Plain-text part gets the title unescaped (entities would show literally).
+      BOUNTY_TITLE_TEXT: str(data.bountyTitle),
       // Pre-formatted by the producer, e.g. "$40" or "For honor".
       BOUNTY_REWARD: escapeHtml(str(data.rewardDisplay)),
       AUDIENCE_LINE:
@@ -253,7 +260,7 @@ function buildTemplateSend(type: string, data: Record<string, unknown>): Templat
         : 'You can manage this bounty on bountyfinder.net.',
       CTA_URL: cta ? escapeHtml(cta.url) : '',
       PREFERENCES_URL: escapeHtml(prefsUrl),
-      POSTAL_LINE: postal ? `Bounty &middot; ${escapeHtml(postal)}` : '',
+      POSTAL_LINE: postal ? `Bounty · ${escapeHtml(postal)}` : '',
     }
     const variables = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== ''))
     return { id, variables, idempotencyKey: bountyId ? `bounty-posted/${bountyId}` : null }
@@ -277,11 +284,36 @@ function buildNoticeTemplateSend(category: string, type: string, title: string, 
   return { id: notice.id, variables: notice.variables, idempotencyKey: null, subject: notice.subject }
 }
 
-// `from` is intentionally omitted: the template carries its own verified sender
-// (Bounty <bounty@notifications.bountyfinder.app>). Resend does not allow
+// Admin alerts (fn_notify_admins sets data.adminAlert) and support alerts go
+// to the team, not to users: the internal v2 template, never the user-facing
+// notice with its "your notification settings" footer.
+function buildTeamTemplateSend(kind: 'admin' | 'support', title: string, body: string, data: Record<string, unknown>): TemplateSend | null {
+  if (!DESIGN_V2) return null
+  const alert = buildTeamAlertSend({
+    kind,
+    title,
+    body,
+    severity: str(data.severity),
+    alertType: str(data.type),
+    details: [['Bounty', str(data.bountyId)]],
+  })
+  return { id: alert.id, variables: alert.variables, idempotencyKey: null, subject: alert.subject }
+}
+
+// `from` is intentionally omitted: each v2 template carries its own verified
+// sender (Bounty <notifications@bountyfinder.app>). Resend does not allow
 // html/text alongside `template`. The idempotency key makes a repeated call for
 // the same bounty a no-op instead of a second email.
-async function sendTemplateViaResend(apiKey: string, toEmail: string, tpl: TemplateSend, replyTo: string = replyToEmail): Promise<boolean> {
+//
+// 'rejected' means Resend refused the request outright (400/403/404/422:
+// template missing or unpublished, bad variables), so nothing was sent and the
+// caller may safely send the inline layout instead. 409 (idempotency conflict)
+// and 429/5xx are 'failed': the email may already exist or the retry belongs
+// to the outbox, so no fallback is sent.
+type TemplateResult = 'sent' | 'rejected' | 'failed'
+const REJECTED_STATUSES = new Set([400, 403, 404, 422])
+
+async function sendTemplateViaResend(apiKey: string, toEmail: string, tpl: TemplateSend, replyTo: string = replyToEmail): Promise<TemplateResult> {
   const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -296,8 +328,20 @@ async function sendTemplateViaResend(apiKey: string, toEmail: string, tpl: Templ
       ...(replyTo ? { reply_to: replyTo } : {}),
     }),
   })
-  if (!resp.ok) return providerError('Resend template', resp)
-  return true
+  if (!resp.ok) {
+    await providerError('Resend template', resp)
+    return REJECTED_STATUSES.has(resp.status) ? 'rejected' : 'failed'
+  }
+  return 'sent'
+}
+
+/** Template first; on an outright rejection, the same email in the inline layout. */
+async function sendTemplateOrInline(apiKey: string, toEmail: string, tpl: TemplateSend, content: EmailContent, replyTo: string): Promise<boolean> {
+  const result = await sendTemplateViaResend(apiKey, toEmail, tpl, replyTo)
+  if (result === 'sent') return true
+  if (result === 'failed') return false
+  console.warn('[send-notification-email] template rejected; sending the inline layout instead', { template: tpl.id })
+  return sendViaResend(apiKey, toEmail, content, fromEmail, replyTo)
 }
 
 async function sendViaSendGrid(apiKey: string, toEmail: string, content: EmailContent, fromEmail: string, replyTo: string = replyToEmail): Promise<boolean> {
@@ -357,8 +401,11 @@ Deno.serve(async (req: Request) => {
       console.warn('[send-notification-email] support alert NOT SENT — no email provider configured')
       return jsonResponse({ ok: true, delivered: false, providerConfigured: false, sent: 0, failed: 0, skipped: 1, provider: PROVIDER.name })
     }
+    const teamSend = buildTeamTemplateSend('support', title || 'Bounty: support case opened', body, data)
     const ok = PROVIDER.name === 'resend'
-      ? await sendViaResend(PROVIDER.key, bareAddress(to), content, fromEmail, '')
+      ? teamSend
+        ? await sendTemplateOrInline(PROVIDER.key, bareAddress(to), teamSend, content, '')
+        : await sendViaResend(PROVIDER.key, bareAddress(to), content, fromEmail, '')
       : await sendViaSendGrid(PROVIDER.key, bareAddress(to), content, fromEmail, '')
     return jsonResponse({ ok, delivered: ok, providerConfigured: true, sent: ok ? 1 : 0, failed: ok ? 0 : 1, skipped: 0, provider: PROVIDER.name })
   }
@@ -404,13 +451,15 @@ Deno.serve(async (req: Request) => {
       // The published template copy uses app/web-specific instructions. A
       // registered push token is the app-presence signal available to this
       // function; absence must always fall back to a working web CTA.
-      const templateSend = buildTemplateSend(type, {
-        ...data,
-        has_app: usersWithApp.has(userId),
-      }) ?? buildNoticeTemplateSend(category, type, title, body, data)
+      const templateSend = data.adminAlert === true
+        ? buildTeamTemplateSend('admin', title, body, data)
+        : buildTemplateSend(type, {
+          ...data,
+          has_app: usersWithApp.has(userId),
+        }) ?? buildNoticeTemplateSend(category, type, title, body, data)
       if (PROVIDER.name === 'resend' && PROVIDER.key) {
         const ok = templateSend
-          ? await sendTemplateViaResend(PROVIDER.key, email, templateSend, replyTo)
+          ? await sendTemplateOrInline(PROVIDER.key, email, templateSend, content, replyTo)
           : await sendViaResend(PROVIDER.key, email, content, fromEmail, replyTo)
         if (ok) sent++; else failed++
       } else if (PROVIDER.name === 'sendgrid' && PROVIDER.key) {

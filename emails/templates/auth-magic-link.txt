@@ -1,11 +1,15 @@
-Here's your sign-in link.
+Here's your sign-in code.
 
-Tap to sign in to Bounty. No password needed:
+Enter this code in Bounty to sign in. No password needed:
+
+{{ .Token }}
+
+On a computer instead? Sign in with this link:
 {{ .ConfirmationURL }}
 
-This link works once and expires soon. If it has expired, request a new one from the sign-in page.
+The code and the link work once and expire soon. If they have expired, ask for a new one on the sign-in screen.
 
-Didn't ask for this? Ignore this email and your account stays as it is.
+Didn't ask for this? Ignore this email and your account stays as it is. Never share this code with anyone.
 
 —
 Bounty · Got a task? Drop a bounty.

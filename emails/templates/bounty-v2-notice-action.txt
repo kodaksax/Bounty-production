@@ -1,6 +1,6 @@
-{{{HEADLINE}}}
+{{{HEADLINE_TEXT}}}
 
-{{{BODY}}}
+{{{BODY_TEXT}}}
 
 {{{CTA_LABEL}}}: {{{CTA_URL}}}
 

@@ -8,7 +8,7 @@
 
 import {
   ASSETS, h1, h2, lead, p, small, strong, link, label, button, ticket, steps, tips,
-  callout, statusRows, twoUp, stat, chips, forwardBox, signoff, footer, C,
+  callout, statusRows, twoUp, stat, chips, forwardBox, signoff, footer, C, F,
 } from './design-system.mjs'
 
 const MANAGE = ASSETS.manage
@@ -54,7 +54,17 @@ ${pitch ? `<p class="c-body" style="margin:6px 0 0;font-family:Arial,sans-serif;
 </tr></table></td></tr>`
 }
 
+// Markup a sender builds for DETAILS (team alert). Mirrors detailRowsHtml() in
+// supabase/functions/_shared/email-design-v2.ts; values must be HTML-escaped.
+export function detailRows(rows) {
+  const tr = rows
+    .map(([k, v]) => `<tr><td valign="top" width="128" class="c-line c-muted" style="padding:10px 12px 10px 0;border-bottom:1px solid ${C.line};font-family:${F.text};font-size:13px;line-height:19px;color:${C.muted};">${k}</td><td valign="top" class="c-line c-ink" style="padding:10px 0;border-bottom:1px solid ${C.line};font-family:${F.text};font-size:13px;line-height:19px;color:${C.ink};font-weight:600;word-break:break-all;">${v}</td></tr>`)
+    .join('')
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="c-line" style="margin:0 0 22px;border-top:1px solid ${C.line};">${tr}</table>`
+}
+
 const LONG_TITLE = 'Help me move a 3-seat sectional &amp; two &quot;IKEA-proof&quot; bookcases up 4 flights (no elevator) &lt;urgent&gt; — Columbia Heights → Silver Spring'
+const LONG_TITLE_TEXT = 'Help me move a 3-seat sectional & two "IKEA-proof" bookcases up 4 flights (no elevator) <urgent> — Columbia Heights → Silver Spring'
 
 export const TEMPLATES = [
   // ------------------------------------------------------------------ e10
@@ -66,12 +76,15 @@ export const TEMPLATES = [
     trigger: 'notification type bounty_posted (send-notification-email RESEND_TEMPLATE_BY_TYPE)',
     audience: 'poster',
     kind: 'transactional',
-    status: 'wired today (current template); v2 is a drop-in ID swap',
+    status: 'live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)',
     subject: "You're live. People can apply now.",
     preheader: "We'll email you as people apply. You choose who does it.",
     stamp: { label: 'Live', tone: 'success' },
     vars: {
       BOUNTY_TITLE: 'Your bounty',
+      // Unescaped copy of the title for the plain-text part (HTML entities
+      // would show literally there).
+      BOUNTY_TITLE_TEXT: 'Your bounty',
       BOUNTY_REWARD: '—',
       AUDIENCE_LINE: "We're letting people who do this kind of work know about it.",
       PAY_LINE: '',
@@ -101,7 +114,7 @@ export const TEMPLATES = [
 {{{AUDIENCE_LINE}}}
 
 LIVE NOW
-{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+{{{BOUNTY_TITLE_TEXT}}} · {{{BOUNTY_REWARD}}}
 
 What happens next
 01 People apply. We'll email you as they come in.
@@ -115,8 +128,8 @@ View your bounty: {{{CTA_URL}}}
 
 ${POSTER_TXT_FOOTER}`,
     samples: {
-      realistic: { BOUNTY_TITLE: 'Assemble an IKEA dresser', BOUNTY_REWARD: '$45', AUDIENCE_LINE: "We're letting people nearby know about it.", PAY_LINE: "That's when you pay. ", HELP_LINE: 'Use the button above to manage your bounty on the web.', CTA_URL: MANAGE + '?bounty=00000000-0000-4000-8000-000000000000', POSTAL_LINE: 'Bounty Inc. &middot; Postal address on file' },
-      edge: { BOUNTY_TITLE: LONG_TITLE, BOUNTY_REWARD: '$10,000.00' },
+      realistic: { BOUNTY_TITLE: 'Assemble an IKEA dresser', BOUNTY_TITLE_TEXT: 'Assemble an IKEA dresser', BOUNTY_REWARD: '$45', AUDIENCE_LINE: "We're letting people nearby know about it.", PAY_LINE: "That's when you pay. ", HELP_LINE: 'Use the button above to manage your bounty on the web.', CTA_URL: MANAGE + '?bounty=00000000-0000-4000-8000-000000000000', POSTAL_LINE: 'Bounty Inc. &middot; Postal address on file' },
+      edge: { BOUNTY_TITLE: LONG_TITLE, BOUNTY_TITLE_TEXT: LONG_TITLE_TEXT, BOUNTY_REWARD: '$10,000.00' },
     },
   },
 
@@ -833,7 +846,7 @@ ${LIFECYCLE_TXT_FOOTER}`,
     trigger: 'Every notification email that is not routed to a dedicated template and has a CTA (messages, applications, acceptance, completion, disputes, verification, payouts…)',
     audience: 'poster + hunter',
     kind: 'transactional',
-    status: 'new; wire via EMAIL_DESIGN_V2 flag (see PR)',
+    status: 'live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)',
     subject: 'There’s an update on Bounty',
     preheader: '{{{PREHEADER}}}',
     stamp: { label: '{{{STAMP_LABEL}}}', vars: true },
@@ -845,6 +858,9 @@ ${LIFECYCLE_TXT_FOOTER}`,
       PREHEADER: '',
       HEADLINE: 'There’s an update on Bounty',
       BODY: '',
+      // Unescaped copies for the plain-text part.
+      HEADLINE_TEXT: 'There’s an update on Bounty',
+      BODY_TEXT: '',
       CTA_LABEL: 'Open Bounty',
       CTA_URL: SITE,
       HELP_URL: 'mailto:support@bountyfinder.app',
@@ -857,9 +873,9 @@ ${LIFECYCLE_TXT_FOOTER}`,
       button('{{{CTA_LABEL}}}', '{{{CTA_URL}}}') +
       small(`Need a hand? ${link('{{{HELP_URL}}}', 'Talk to a real person')}`, 18),
     footer: () => footer({ reason: '{{{REASON_LINE}}}', tagline: 'bountyfinder.net' }),
-    text: `{{{HEADLINE}}}
+    text: `{{{HEADLINE_TEXT}}}
 
-{{{BODY}}}
+{{{BODY_TEXT}}}
 
 {{{CTA_LABEL}}}: {{{CTA_URL}}}
 
@@ -896,7 +912,7 @@ Bounty · bountyfinder.net
     trigger: 'Notification emails with no linkable destination (e.g. identity verification submitted/verified, payout paid, followers)',
     audience: 'poster + hunter',
     kind: 'transactional',
-    status: 'new; wire via EMAIL_DESIGN_V2 flag (see PR)',
+    status: 'live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)',
     subject: 'There’s an update on Bounty',
     preheader: '{{{PREHEADER}}}',
     stamp: { label: '{{{STAMP_LABEL}}}', vars: true },
@@ -908,6 +924,9 @@ Bounty · bountyfinder.net
       PREHEADER: '',
       HEADLINE: 'There’s an update on Bounty',
       BODY: '',
+      // Unescaped copies for the plain-text part.
+      HEADLINE_TEXT: 'There’s an update on Bounty',
+      BODY_TEXT: '',
       HELP_URL: 'mailto:support@bountyfinder.app',
       REASON_LINE: "You're getting this because of your notification settings in Bounty. Change them anytime under Settings › Notifications.",
       POSTAL_LINE: '',
@@ -917,9 +936,9 @@ Bounty · bountyfinder.net
       lead('{{{BODY}}}') +
       small(`Questions? ${link('{{{HELP_URL}}}', 'Talk to a real person')}`, 18),
     footer: () => footer({ reason: '{{{REASON_LINE}}}', tagline: 'bountyfinder.net' }),
-    text: `{{{HEADLINE}}}
+    text: `{{{HEADLINE_TEXT}}}
 
-{{{BODY}}}
+{{{BODY_TEXT}}}
 
 Questions? Talk to a real person: {{{HELP_URL}}}
 
@@ -933,25 +952,125 @@ Bounty · bountyfinder.net
       edge: { HEADLINE: LONG_TITLE, BODY: LONG_TITLE },
     },
   },
+
+  // ------------------------------------------------------- internal (team)
+  {
+    key: 'team-alert',
+    alias: 'bounty-v2-team-alert',
+    name: 'Bounty v2 · Team alert (internal)',
+    replaces: [
+      'inline support-alert layout in send-notification-email (supportAlert)',
+      'inline layout for admin alerts from fn_notify_admins (data.adminAlert)',
+      'inline HTML in contact-support',
+    ],
+    trigger: 'Internal only: support cases opened by poster-web / email-inbound / geocode-bounties, admin alerts of severity high or above, and in-app Contact support messages',
+    audience: 'Bounty team',
+    kind: 'internal',
+    status: 'live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)',
+    subject: 'Bounty team alert',
+    preheader: '{{{PREHEADER}}}',
+    stamp: { label: '{{{STAMP_LABEL}}}', vars: true },
+    vars: {
+      STAMP_LABEL: 'Team alert',
+      TONE_ACCENT: '#E39B2D',
+      TONE_INK: '#7F4300',
+      TONE_TINT: '#FFF1DC',
+      PREHEADER: '',
+      KICKER: 'Internal',
+      HEADLINE: 'Bounty team alert',
+      HEADLINE_TEXT: 'Bounty team alert',
+      BODY: '',
+      BODY_TEXT: '',
+      DETAILS: { fallback: '', html: true },
+      DETAILS_TEXT: '',
+      REASON_LINE: 'Sent to the Bounty team. Customers never get this email.',
+    },
+    body: () =>
+      label('{{{KICKER}}}') +
+      h1('{{{HEADLINE}}}') +
+      p('{{{BODY}}}', 20) +
+      '{{{DETAILS}}}',
+    footer: () => footer({ reason: '{{{REASON_LINE}}}', tagline: 'Internal', postal: '' }),
+    text: `{{{KICKER}}}
+{{{HEADLINE_TEXT}}}
+
+{{{BODY_TEXT}}}
+
+{{{DETAILS_TEXT}}}
+
+—
+Bounty · Internal
+{{{REASON_LINE}}}`,
+    samples: {
+      realistic: {
+        STAMP_LABEL: 'Support case', PREHEADER: 'A poster asked for help with a bounty from the web dashboard.',
+        KICKER: 'Support case · web',
+        HEADLINE: 'Support case: poster needs help',
+        BODY: 'A poster asked for help with a bounty from the web dashboard.<br><br>Open the case in the admin dashboard to reply.',
+        BODY_TEXT: 'A poster asked for help with a bounty from the web dashboard.\n\nOpen the case in the admin dashboard to reply.',
+        DETAILS: detailRows([['Case', '00000000-0000-4000-8000-000000000001'], ['Bounty', '00000000-0000-4000-8000-000000000002'], ['Channel', 'web']]),
+        DETAILS_TEXT: 'Case: 00000000-0000-4000-8000-000000000001\nBounty: 00000000-0000-4000-8000-000000000002\nChannel: web',
+      },
+      admin: {
+        STAMP_LABEL: 'Admin alert · high', TONE_ACCENT: '#D9473B', TONE_INK: '#9E2219', TONE_TINT: '#FCEAE8',
+        KICKER: 'Admin alert · severity high', PREHEADER: '3 payouts failed in the last hour.',
+        HEADLINE: 'Payout failures spiking', BODY: '3 payouts failed in the last hour. Check Stripe Connect status before the next payout run.',
+        DETAILS: detailRows([['Alert type', 'payout_failure_spike'], ['Severity', 'high']]),
+        DETAILS_TEXT: 'Alert type: payout_failure_spike\nSeverity: high',
+      },
+      contact: {
+        STAMP_LABEL: 'Contact support', KICKER: 'In-app message · ios 2.4.0',
+        HEADLINE: 'Can&#39;t withdraw my balance', PREHEADER: 'I tapped withdraw twice and nothing happened.',
+        BODY: 'I tapped withdraw twice and nothing happened. Is my bank connected?',
+        DETAILS: detailRows([['User ID', '00000000-0000-4000-8000-000000000003'], ['Username', 'sample_user'], ['Account email', 'person@example.com'], ['App version', '2.4.0'], ['Platform', 'ios']]),
+        DETAILS_TEXT: 'User ID: 00000000-0000-4000-8000-000000000003\nUsername: sample_user\nAccount email: person@example.com\nApp version: 2.4.0\nPlatform: ios',
+      },
+      edge: { HEADLINE: LONG_TITLE, BODY: LONG_TITLE + '<br>' + LONG_TITLE },
+    },
+  },
 ]
 
+// Preview samples: derive the plain-text copies (…_TEXT) from the HTML ones so
+// each sample only states its values once.
+const ENTITY = { '#39': "'", quot: '"', amp: '&', lt: '<', gt: '>', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', middot: '·', rsaquo: '›', nbsp: ' ' }
+const toText = (s) => String(s).replace(/<br>/g, '\n').replace(/&(#39|quot|amp|lt|gt|ldquo|rdquo|lsquo|rsquo|middot|rsaquo|nbsp);/g, (_, e) => ENTITY[e])
+for (const t of TEMPLATES) {
+  for (const sample of Object.values(t.samples)) {
+    for (const k of ['HEADLINE', 'BODY', 'BOUNTY_TITLE']) {
+      if (`${k}_TEXT` in t.vars && k in sample && !(`${k}_TEXT` in sample)) sample[`${k}_TEXT`] = toText(sample[k])
+    }
+  }
+}
+
 // ------------------------------------------------------------ Supabase Auth
-// Sent by Supabase Auth (not Resend templates). Go-template placeholder:
-// {{ .ConfirmationURL }}. Paste into Supabase → Authentication → Email
-// Templates, or reference from supabase/config.toml for local dev.
+// Sent by Supabase Auth (not Resend templates). Go-template placeholders:
+// {{ .ConfirmationURL }}, {{ .Token }} (6-digit code), {{ .Email }},
+// {{ .NewEmail }}. Paste into Supabase → Authentication → Emails; see
+// emails/supabase-auth.md for the template-by-template list and subjects.
 const CONFIRM = '{{ .ConfirmationURL }}'
+const TOKEN = '{{ .Token }}'
 const authFooter = (reason) => footer({ reason, links: [['Get help', ASSETS.support]], postal: '' })
 const linkFallback = small(`Button not working? Copy this link into your browser:<br><a href="${CONFIRM}" class="c-link" style="color:${C.greenInk};word-break:break-all;">${CONFIRM}</a>`, 18)
+const AUTH_TXT_FOOTER = `—
+Bounty · Got a task? Drop a bounty.
+Get help: support@bountyfinder.app`
+
+// The one-time code, big enough to read across a room and easy to select.
+const codeBox = (code) =>
+  `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="c-soft" style="margin:4px 0 22px;background-color:${C.soft};border:1px solid ${C.line};border-radius:14px;"><tr><td align="center" style="padding:18px 16px 20px;text-align:center;">` +
+  `<p class="c-muted" style="margin:0 0 6px;text-align:center;font-family:${F.text};font-size:11px;line-height:16px;color:${C.muted};font-weight:700;letter-spacing:1.4px;text-transform:uppercase;">Your code</p>` +
+  `<p class="c-ink" style="margin:0;text-align:center;font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,'Courier New',monospace;font-size:34px;line-height:42px;font-weight:700;letter-spacing:8px;color:${C.ink};">${code}</p>` +
+  `</td></tr></table>`
 
 export const AUTH_TEMPLATES = [
   {
     key: 'auth-confirm-signup',
     alias: 'auth-confirm-signup',
     name: 'Supabase Auth · Confirm signup',
-    trigger: 'Supabase Auth: email confirmation on signup',
+    trigger: 'Supabase Auth "Confirm signup". Rare today: app and checkout accounts are created already confirmed, so this goes out only on a signup confirmation resend.',
     audience: 'everyone',
     kind: 'auth',
-    status: 'new; paste into Supabase dashboard (replaces default "Confirm Your Signup")',
+    status: 'paste into Supabase → Authentication → Emails → Confirm signup',
     subject: 'Confirm your email to start using Bounty',
     preheader: 'One tap and your account is ready.',
     stamp: { label: 'One quick step', tone: 'success' },
@@ -970,77 +1089,170 @@ ${CONFIRM}
 
 Didn't sign up for Bounty? You can safely ignore this email.
 
-—
-Bounty · Got a task? Drop a bounty.
-Get help: support@bountyfinder.app`,
+${AUTH_TXT_FOOTER}`,
     samples: { realistic: {} },
   },
   {
     key: 'auth-magic-link',
     alias: 'auth-magic-link',
-    name: 'Supabase Auth · Sign-in link',
-    trigger: 'Supabase Auth: magic link / OTP sign-in (web poster sign-in)',
+    name: 'Supabase Auth · Sign-in code and link',
+    trigger: 'Supabase Auth "Magic link": signInWithOtp. The app asks for the 6-digit code (sign-in form, verifyOtp type "email"); a browser can use the link.',
     audience: 'everyone',
     kind: 'auth',
-    status: 'new; paste into Supabase dashboard (current subject "Your sign-in link" kept)',
-    subject: 'Your sign-in link',
-    preheader: 'Tap to sign in to Bounty. No password needed.',
+    status: 'paste into Supabase → Authentication → Emails → Magic link',
+    subject: 'Your Bounty sign-in code',
+    preheader: 'Enter it in Bounty to sign in, or use the button.',
     stamp: { label: 'Sign in', tone: 'neutral' },
     vars: {},
     body: () =>
-      h1("Here's your sign-in link.") +
-      lead('Tap below to sign in to Bounty. No password needed.') +
+      h1("Here's your sign-in code.") +
+      lead('Enter this code in Bounty to sign in. No password needed.') +
+      codeBox(TOKEN) +
+      small('On a computer instead? Use the button to sign in.', 10) +
       button('Sign in to Bounty', CONFIRM) +
-      small('This link works once and expires soon. If it has expired, request a new one from the sign-in page.', 16) +
+      small('The code and the link work once and expire soon. If they have expired, ask for a new one on the sign-in screen.', 16) +
       linkFallback +
-      callout("Didn't ask for this? Someone may have typed your email by mistake. Ignore this email and your account stays as it is.", 'Not you?', 'neutral'),
-    footer: () => authFooter("You're getting this because a sign-in link was requested for this address."),
-    text: `Here's your sign-in link.
+      callout("Didn't ask for this? Someone may have typed your email by mistake. Ignore this email and your account stays as it is. Never share this code with anyone.", 'Not you?', 'neutral'),
+    footer: () => authFooter("You're getting this because a sign-in code was requested for this address."),
+    text: `Here's your sign-in code.
 
-Tap to sign in to Bounty. No password needed:
+Enter this code in Bounty to sign in. No password needed:
+
+${TOKEN}
+
+On a computer instead? Sign in with this link:
 ${CONFIRM}
 
-This link works once and expires soon. If it has expired, request a new one from the sign-in page.
+The code and the link work once and expire soon. If they have expired, ask for a new one on the sign-in screen.
 
-Didn't ask for this? Ignore this email and your account stays as it is.
+Didn't ask for this? Ignore this email and your account stays as it is. Never share this code with anyone.
 
-—
-Bounty · Got a task? Drop a bounty.
-Get help: support@bountyfinder.app`,
+${AUTH_TXT_FOOTER}`,
     samples: { realistic: {} },
   },
   {
     key: 'auth-reset-password',
     alias: 'auth-reset-password',
-    name: 'Supabase Auth · Reset password',
-    trigger: 'Supabase Auth: password recovery',
+    name: 'Supabase Auth · Reset password / account access',
+    trigger: 'Supabase Auth "Reset password": the app\'s forgot-password flow AND the account-access email the Stripe webhook sends to people who paid for a bounty on bountyfinder.net (resetPasswordForEmail, landing on /manage/).',
     audience: 'everyone',
     kind: 'auth',
-    status: 'new; paste into Supabase dashboard',
-    subject: 'Reset your Bounty password',
-    preheader: 'Choose a new password. This link works once.',
-    stamp: { label: 'Password reset', tone: 'neutral' },
+    status: 'paste into Supabase → Authentication → Emails → Reset password',
+    subject: 'Your link to get into Bounty',
+    preheader: 'Sign in to your account. If you asked to reset your password, you’ll choose a new one next.',
+    stamp: { label: 'Account access', tone: 'neutral' },
     vars: {},
     body: () =>
-      h1('Reset your password.') +
-      lead('Tap below to choose a new password for your Bounty account.') +
-      button('Choose a new password', CONFIRM) +
+      h1("Here's your way in.") +
+      lead('Use the button to get into your Bounty account. If you asked to reset your password, you’ll choose a new one next.') +
+      button('Continue to Bounty', CONFIRM) +
+      callout('This is how you sign in to manage your bounty. Use the button above.', 'Just posted on bountyfinder.net?', 'success') +
       small('This link works once and expires soon.', 16) +
       linkFallback +
-      callout("Didn't request this? Ignore this email. Your password won't change unless you use this link.", 'Not you?', 'neutral'),
-    footer: () => authFooter("You're getting this because a password reset was requested for this address."),
-    text: `Reset your password.
+      callout("Didn't ask for this? Ignore this email. Nothing changes unless you use the link.", 'Not you?', 'neutral'),
+    footer: () => authFooter("You're getting this because a sign-in or password reset link was requested for this address."),
+    text: `Here's your way in.
 
-Choose a new password for your Bounty account:
+Use this link to get into your Bounty account. If you asked to reset your password, you'll choose a new one next:
 ${CONFIRM}
+
+Just posted on bountyfinder.net? This is how you sign in to manage your bounty.
 
 This link works once and expires soon.
 
-Didn't request this? Ignore this email. Your password won't change unless you use this link.
+Didn't ask for this? Ignore this email. Nothing changes unless you use the link.
 
-—
-Bounty · Got a task? Drop a bounty.
-Get help: support@bountyfinder.app`,
+${AUTH_TXT_FOOTER}`,
+    samples: { realistic: {} },
+  },
+  {
+    key: 'auth-change-email',
+    alias: 'auth-change-email',
+    name: 'Supabase Auth · Change email address',
+    trigger: 'Supabase Auth "Change email address". No app screen changes email today; covers support or future use. With "secure email change" on, both addresses get this.',
+    audience: 'everyone',
+    kind: 'auth',
+    status: 'paste into Supabase → Authentication → Emails → Change email address',
+    subject: 'Confirm your new email for Bounty',
+    preheader: 'One tap to confirm the change.',
+    stamp: { label: 'Email change', tone: 'neutral' },
+    vars: {},
+    body: () =>
+      h1('Confirm your email change.') +
+      lead(`Someone asked to change the email on a Bounty account from ${strong('{{ .Email }}')} to ${strong('{{ .NewEmail }}')}. Tap below to confirm.`) +
+      button('Confirm the change', CONFIRM) +
+      linkFallback +
+      callout("Didn't ask for this? Don't tap the button, and your email stays the same. If you think someone else has your password, reset it from the sign-in screen.", 'Not you?', 'alert'),
+    footer: () => authFooter("You're getting this because an email change was requested on a Bounty account that uses this address."),
+    text: `Confirm your email change.
+
+Someone asked to change the email on a Bounty account from {{ .Email }} to {{ .NewEmail }}. Use this link to confirm:
+${CONFIRM}
+
+Didn't ask for this? Don't use the link, and your email stays the same. If you think someone else has your password, reset it from the sign-in screen.
+
+${AUTH_TXT_FOOTER}`,
+    samples: { realistic: {} },
+  },
+  {
+    key: 'auth-reauthentication',
+    alias: 'auth-reauthentication',
+    name: 'Supabase Auth · Reauthentication code',
+    trigger: 'Supabase Auth "Reauthentication": a 6-digit code before a sensitive change. Not called by the app today; covers future use.',
+    audience: 'everyone',
+    kind: 'auth',
+    status: 'paste into Supabase → Authentication → Emails → Reauthentication',
+    subject: 'Your Bounty confirmation code',
+    preheader: 'Enter it to confirm it’s you.',
+    stamp: { label: 'Confirm it’s you', tone: 'neutral' },
+    vars: {},
+    body: () =>
+      h1("Confirm it's you.") +
+      lead('Enter this code in Bounty to continue.') +
+      codeBox(TOKEN) +
+      small('The code works once and expires soon.', 16) +
+      callout("Didn't ask for this? Don't share this code with anyone. If you think someone else has your password, reset it from the sign-in screen.", 'Not you?', 'alert'),
+    footer: () => authFooter("You're getting this because a confirmation code was requested for this address."),
+    text: `Confirm it's you.
+
+Enter this code in Bounty to continue:
+
+${TOKEN}
+
+The code works once and expires soon.
+
+Didn't ask for this? Don't share this code with anyone. If you think someone else has your password, reset it from the sign-in screen.
+
+${AUTH_TXT_FOOTER}`,
+    samples: { realistic: {} },
+  },
+  {
+    key: 'auth-invite',
+    alias: 'auth-invite',
+    name: 'Supabase Auth · Invite user',
+    trigger: 'Supabase Auth "Invite user": sent when someone is invited from the Supabase dashboard (team accounts).',
+    audience: 'invited people',
+    kind: 'auth',
+    status: 'paste into Supabase → Authentication → Emails → Invite user',
+    subject: "You're invited to Bounty",
+    preheader: 'Accept to set up your account.',
+    stamp: { label: 'Invite', tone: 'success' },
+    vars: {},
+    body: () =>
+      h1("You're invited.") +
+      lead('The Bounty team invited you to create an account. Accept to set it up.') +
+      button('Accept the invite', CONFIRM) +
+      linkFallback +
+      callout("Weren't expecting this? You can ignore this email. No account is set up unless you accept.", 'Not you?', 'neutral'),
+    footer: () => authFooter("You're getting this because the Bounty team invited this address."),
+    text: `You're invited.
+
+The Bounty team invited you to create an account. Accept to set it up:
+${CONFIRM}
+
+Weren't expecting this? You can ignore this email. No account is set up unless you accept.
+
+${AUTH_TXT_FOOTER}`,
     samples: { realistic: {} },
   },
 ]
