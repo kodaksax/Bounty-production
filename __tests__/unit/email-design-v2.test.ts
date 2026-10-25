@@ -52,7 +52,9 @@ describe('buildNoticeSend', () => {
 
   test('escapes user-controlled text (Resend inserts variables unescaped)', () => {
     const s = buildNoticeSend({ type: 'application', category: 'marketplace', title: 'Someone applied to "<b>Move & lift</b>"', body: "<script>alert('x')</script>", cta: CTA, helpUrl: null })
-    expect(s.variables.HEADLINE).not.toMatch(/<b>|<script>/)
+    // No raw markup survives: every < is escaped.
+    expect(s.variables.HEADLINE).not.toContain('<')
+    expect(s.variables.BODY).not.toContain('<')
     expect(s.variables.HEADLINE).toContain('&lt;b&gt;')
     expect(s.variables.BODY).toBe('&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;')
     // The plain-text part gets the same copy unescaped.
