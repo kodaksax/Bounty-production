@@ -34,6 +34,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { emailBountyCta } from '../_shared/web-links.ts'
+import { V2_TEMPLATES, buildNoticeSend, isDesignV2Enabled } from '../_shared/email-design-v2.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -198,11 +199,23 @@ async function sendViaResend(apiKey: string, toEmail: string, content: EmailCont
 // 2026-10-02 and never committed). Without this port, deploying this file
 // would silently drop the "You're live" template.
 // ---------------------------------------------------------------------------
+// Email design v2 (see _shared/email-design-v2.ts). Off unless
+// EMAIL_DESIGN_V2=on; unsetting it is the rollback, no redeploy needed.
+// When on, bounty_posted renders "Bounty v2 · Bounty posted" (same variables,
+// plus the HELP_LINE / FOOTER_LINE this file already sends) and every other
+// Resend notification renders a universal v2 notice template instead of
+// buildEmail(). SendGrid and support alerts are untouched either way.
+const DESIGN_V2 = isDesignV2Enabled(Deno.env.get('EMAIL_DESIGN_V2'))
+
 const RESEND_TEMPLATE_BY_TYPE: Record<string, string> = {
-  bounty_posted: '386c9e82-f564-40e0-ae4c-83dac4db318d', // "Bounty Posted (Final Copy)"
+  bounty_posted: DESIGN_V2
+    ? V2_TEMPLATES.bountyPosted // "Bounty v2 · Bounty posted"
+    : '386c9e82-f564-40e0-ae4c-83dac4db318d', // "Bounty Posted (Final Copy)"
 }
 
-type TemplateSend = { id: string; variables: Record<string, string>; idempotencyKey: string | null }
+// `subject` overrides the template's default subject (Resend: payload
+// from/subject/reply_to take precedence over template defaults).
+type TemplateSend = { id: string; variables: Record<string, string>; idempotencyKey: string | null; subject?: string }
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : ''
@@ -248,6 +261,22 @@ function buildTemplateSend(type: string, data: Record<string, unknown>): Templat
   return null
 }
 
+// Universal v2 notice for every type without its own template. Same title,
+// body, CTA and help link that buildEmail() would have rendered.
+function buildNoticeTemplateSend(category: string, type: string, title: string, body: string, data: Record<string, unknown>): TemplateSend | null {
+  if (!DESIGN_V2) return null
+  const notice = buildNoticeSend({
+    type,
+    category,
+    title,
+    body,
+    cta: ctaFrom(data),
+    helpUrl: helpFrom(data),
+    postal: Deno.env.get('NOTIFICATION_POSTAL_ADDRESS') || '',
+  })
+  return { id: notice.id, variables: notice.variables, idempotencyKey: null, subject: notice.subject }
+}
+
 // `from` is intentionally omitted: the template carries its own verified sender
 // (Bounty <bounty@notifications.bountyfinder.app>). Resend does not allow
 // html/text alongside `template`. The idempotency key makes a repeated call for
@@ -263,6 +292,7 @@ async function sendTemplateViaResend(apiKey: string, toEmail: string, tpl: Templ
     body: JSON.stringify({
       to: [toEmail],
       template: { id: tpl.id, variables: tpl.variables },
+      ...(tpl.subject ? { subject: tpl.subject } : {}),
       ...(replyTo ? { reply_to: replyTo } : {}),
     }),
   })
@@ -377,7 +407,7 @@ Deno.serve(async (req: Request) => {
       const templateSend = buildTemplateSend(type, {
         ...data,
         has_app: usersWithApp.has(userId),
-      })
+      }) ?? buildNoticeTemplateSend(category, type, title, body, data)
       if (PROVIDER.name === 'resend' && PROVIDER.key) {
         const ok = templateSend
           ? await sendTemplateViaResend(PROVIDER.key, email, templateSend, replyTo)

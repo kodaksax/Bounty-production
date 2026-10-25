@@ -1,0 +1,12 @@
+Here's your sign-in link.
+
+Tap to sign in to Bounty. No password needed:
+{{ .ConfirmationURL }}
+
+This link works once and expires soon. If it has expired, request a new one from the sign-in page.
+
+Didn't ask for this? Ignore this email and your account stays as it is.
+
+—
+Bounty · Got a task? Drop a bounty.
+Get help: support@bountyfinder.app

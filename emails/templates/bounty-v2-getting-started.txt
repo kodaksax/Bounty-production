@@ -1,0 +1,18 @@
+Name the thing you keep putting off.
+
+{{{OPENER}}} joined Bounty to get something done. Here's the whole thing:
+
+01 Say what you need and what you'll pay. Anything from $5 up.
+02 People nearby apply. You see how many jobs they've done and whether they're ID-verified.
+03 Pick one. {{{PAY_LINE}}}Bounty holds the money until you approve the work.
+
+Small jobs are fair game: moving a couch, assembling furniture, yard cleanup, a pickup across town, waiting in line.
+
+Post a task: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have a Bounty account.
+Unsubscribe from emails like this: {{{UNSUBSCRIBE_URL}}}
+Email settings: {{{PREFERENCES_URL}}}
+{{{POSTAL_LINE}}}

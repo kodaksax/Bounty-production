@@ -1,0 +1,16 @@
+Got another one?
+
+Last time you posted: {{{LAST_BOUNTY_TITLE}}} {{{COMPLETED_NOTE}}}
+
+{{{SEASONAL_LINE}}}
+
+Same as before: say what, set the price, pick someone nearby.
+
+Post a task: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have a Bounty account.
+Unsubscribe from emails like this: {{{UNSUBSCRIBE_URL}}}
+Email settings: {{{PREFERENCES_URL}}}
+{{{POSTAL_LINE}}}

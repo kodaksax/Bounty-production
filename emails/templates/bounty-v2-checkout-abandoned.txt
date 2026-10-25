@@ -1,0 +1,18 @@
+You're one step from posted.
+
+{{{OPENER}}} got as far as payment, but checkout wasn't finished.
+Live: not yet
+Charged: nothing
+
+YOUR BOUNTY
+{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+
+Finish checkout and it goes up right away. Bounty holds the payment until you approve the finished work.
+
+Finish posting: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you started a bounty at Bounty with this address.
+Don't email me about this: {{{UNSUBSCRIBE_URL}}}
+{{{POSTAL_LINE}}}

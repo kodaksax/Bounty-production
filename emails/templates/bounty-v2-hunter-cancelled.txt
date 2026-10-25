@@ -1,0 +1,17 @@
+{{{HUNTER_NAME}}} can't do this one.
+
+YOUR BOUNTY
+{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+
+Your money: {{{MONEY_LINE}}}
+
+{{{REOPEN_LINE}}}
+
+Find someone else: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have an active bounty on Bounty.
+Email settings: {{{PREFERENCES_URL}}}
+Get help: support@bountyfinder.app
+{{{POSTAL_LINE}}}

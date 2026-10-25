@@ -1,0 +1,18 @@
+Let's get this one moving.
+
+YOUR BOUNTY
+{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+
+It's been up for a day without an applicant.{{{WIDENED_NOTE}}} When a post sits, it's usually one of these:
+→ The price. At {{{BOUNTY_REWARD}}}, it may read as low for the effort. Raising it is the quickest fix.
+→ The details. What, where, and roughly how long. People skip jobs they can't size up.
+→ A photo, if there's something to see.
+
+Edit your bounty: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have an active bounty on Bounty.
+Email settings: {{{PREFERENCES_URL}}}
+Get help: support@bountyfinder.app
+{{{POSTAL_LINE}}}

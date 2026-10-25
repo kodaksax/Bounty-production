@@ -1,0 +1,16 @@
+One thing off the list.
+
+DONE: {{{BOUNTY_TITLE}}}
+
+It's finished, and your payment was released to {{{HUNTER_NAME}}}. You posted it, picked someone and approved the work. That's the whole loop.
+
+Most lists have more than one thing on them. The next post takes a minute, and now you know exactly how it goes.
+
+Post the next one: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have a Bounty account.
+Unsubscribe from emails like this: {{{UNSUBSCRIBE_URL}}}
+Email settings: {{{PREFERENCES_URL}}}
+{{{POSTAL_LINE}}}
