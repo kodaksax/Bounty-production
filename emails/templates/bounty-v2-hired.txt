@@ -1,0 +1,20 @@
+Done deal. Here's what happens now.
+
+HIRED
+{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+With {{{HUNTER_NAME}}}
+
+01 Say hi and confirm the details. Time, place, anything they should know.{{{ADDRESS_NOTE}}}
+02 They do the work. When it's finished, {{{HUNTER_NAME}}} marks it done in Bounty.
+03 You check it and approve. That's when your {{{BOUNTY_REWARD}}} is released. Not before.
+
+Keep chat and payment in Bounty. Your money stays held until you approve, and if something goes wrong, we can only step in on what happened here.
+
+{{{CTA_LABEL}}}: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have an active bounty on Bounty.
+Email settings: {{{PREFERENCES_URL}}}
+Get help: support@bountyfinder.app
+{{{POSTAL_LINE}}}

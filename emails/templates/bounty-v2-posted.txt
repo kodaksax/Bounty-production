@@ -1,0 +1,23 @@
+You're live.
+
+{{{AUDIENCE_LINE}}}
+
+LIVE NOW
+{{{BOUNTY_TITLE_TEXT}}} · {{{BOUNTY_REWARD}}}
+
+What happens next
+01 People apply. We'll email you as they come in.
+02 Size them up. Jobs done, ID verification and their pitch. Ask questions before you decide.
+03 Choose one. {{{PAY_LINE}}}Bounty holds the money until you approve the finished work.
+
+View your bounty: {{{CTA_URL}}}
+
+{{{HELP_LINE}}}
+{{{FOOTER_LINE}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have an active bounty on Bounty.
+Email settings: {{{PREFERENCES_URL}}}
+Get help: support@bountyfinder.app
+{{{POSTAL_LINE}}}

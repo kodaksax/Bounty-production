@@ -1,0 +1,21 @@
+{
+  "_comment": "Resend template IDs for the v2 set (created as drafts 2026-10-25). Reference by ID, not alias: aliases can be renamed.",
+  "bounty-v2-posted": "6e95fb9b-14d2-4079-9e57-d4bffd657f93",
+  "bounty-v2-new-applicants": "f1d31fce-5d33-4f37-92cf-7429b0634f0c",
+  "bounty-v2-closing-soon": "eba8f207-fc79-4c09-8101-ee3a3d45a170",
+  "bounty-v2-ready-for-review": "03c6e506-ce5d-4dd8-bc93-e4400ff00d48",
+  "bounty-v2-hired": "0633991c-8612-4a1d-991f-00769a766720",
+  "bounty-v2-payment-failed": "e41bb312-9a6e-4f47-b60e-ba8189ad2c45",
+  "bounty-v2-no-applicants": "7ba7759e-54e6-4cca-af6c-188484381b43",
+  "bounty-v2-getting-started": "24ad95af-1962-462d-89a7-b3d78621cc79",
+  "bounty-v2-concierge": "48f16637-4c0d-42bb-b7de-46c1195104cb",
+  "bounty-v2-first-done": "b81265e0-7d7b-43a5-8d9d-93a1642193a0",
+  "bounty-v2-dormant-poster": "aa22d845-ec4a-4fd5-943b-0286de74717e",
+  "bounty-v2-checkout-abandoned": "8e5e3170-765a-4d69-bfcd-71a28e579e1a",
+  "bounty-v2-hunter-cancelled": "23e2f5e7-b5f8-4f0a-9754-6219a90f7ecb",
+  "bounty-v2-pass-it-on": "9c5dcc1c-ea95-40c9-bdc4-ea4860599f25",
+  "bounty-v2-unfinished-post": "0fa9b4e2-3664-4661-90ac-55e29d3c7f21",
+  "bounty-v2-notice-action": "21d52deb-990c-4512-b6b2-67a3d14036aa",
+  "bounty-v2-notice-info": "5dc750c9-93a8-43b3-82e2-0b748b3195de",
+  "bounty-v2-team-alert": "6835c482-23d8-42b5-8f8f-7366d0d0874f"
+}

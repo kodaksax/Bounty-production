@@ -1,0 +1,1445 @@
+[
+  {
+    "key": "e10-bounty-live",
+    "alias": "bounty-v2-posted",
+    "name": "Bounty v2 · Bounty posted",
+    "resendId": "6e95fb9b-14d2-4079-9e57-d4bffd657f93",
+    "audience": "poster",
+    "kind": "transactional",
+    "status": "live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)",
+    "trigger": "notification type bounty_posted (send-notification-email RESEND_TEMPLATE_BY_TYPE)",
+    "replaces": [
+      "386c9e82-f564-40e0-ae4c-83dac4db318d",
+      "c1e64756-edb3-43e8-b8d2-35fa363935a3"
+    ],
+    "subject": "You're live. People can apply now.",
+    "preheader": "We'll email you as people apply. You choose who does it.",
+    "replyTo": null,
+    "stamp": "Live",
+    "bytes": 13564,
+    "variables": [
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_TITLE_TEXT",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "—",
+        "html": false
+      },
+      {
+        "key": "AUDIENCE_LINE",
+        "type": "string",
+        "fallbackValue": "We're letting people who do this kind of work know about it.",
+        "html": false
+      },
+      {
+        "key": "PAY_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "HELP_LINE",
+        "type": "string",
+        "fallbackValue": "Manage it on bountyfinder.net or in the Bounty app.",
+        "html": false
+      },
+      {
+        "key": "FOOTER_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e01-new-applicants",
+    "alias": "bounty-v2-new-applicants",
+    "name": "Bounty v2 · New applicants",
+    "resendId": "f1d31fce-5d33-4f37-92cf-7429b0634f0c",
+    "audience": "poster",
+    "kind": "transactional",
+    "status": "not wired (no sender computes APPLICANT_ROWS yet)",
+    "trigger": "type 'application' (poster). Today sent by the generic layout via the email fallback; this template needs APPLICANT_ROWS from the sender.",
+    "replaces": [
+      "8ea157bb-a4ed-4838-ad30-18d147211add",
+      "97d63c1e-15fa-4cb6-b909-a77a8e1e9da3"
+    ],
+    "subject": "You've got applicants",
+    "preheader": "Pick one and it's handled.{{{PREHEADER_PAY_NOTE}}}",
+    "replyTo": null,
+    "stamp": "Your move",
+    "bytes": 12456,
+    "variables": [
+      {
+        "key": "HEADLINE",
+        "type": "string",
+        "fallbackValue": "People want this job.",
+        "html": false
+      },
+      {
+        "key": "PREHEADER_PAY_NOTE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "—",
+        "html": false
+      },
+      {
+        "key": "COUNT_NOTE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "APPLICANT_ROWS",
+        "type": "string",
+        "fallbackValue": "<tr><td style=\"padding:14px 0;border-bottom:1px solid #E6DCCF;font-family:Arial,sans-serif;font-size:15px;line-height:22px;color:#3A403B;\">See everyone who applied on your bounty page.</td></tr>",
+        "html": true
+      },
+      {
+        "key": "MONEY_NOTE",
+        "type": "string",
+        "fallbackValue": "Bounty holds the money until you approve the finished work.",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e02-applicants-closing",
+    "alias": "bounty-v2-closing-soon",
+    "name": "Bounty v2 · Applications closing soon",
+    "resendId": "eba8f207-fc79-4c09-8101-ee3a3d45a170",
+    "audience": "poster",
+    "kind": "transactional",
+    "status": "not wired",
+    "trigger": "Pending applications approaching request expiry (72h / 168h if interacted, posting_policy_config). No producer emits this yet.",
+    "replaces": [
+      "7f48ae5b-5a7f-42c0-aade-3399f0853245",
+      "99ffa33e-c98c-4ecc-a3ad-0ac1704834a0"
+    ],
+    "subject": "Your applicants close soon",
+    "preheader": "{{{APPLICANT_LABEL}}} waiting. After {{{CLOSES_AT_LABEL}}}, they move on.",
+    "replyTo": null,
+    "stamp": "Closing soon",
+    "bytes": 12660,
+    "variables": [
+      {
+        "key": "APPLICANT_LABEL",
+        "type": "string",
+        "fallbackValue": "Applicants",
+        "html": false
+      },
+      {
+        "key": "CLOSES_AT_LABEL",
+        "type": "string",
+        "fallbackValue": "the deadline",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "—",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e03-work-submitted",
+    "alias": "bounty-v2-ready-for-review",
+    "name": "Bounty v2 · Work ready for review",
+    "resendId": "03c6e506-ce5d-4dd8-bc93-e4400ff00d48",
+    "audience": "poster",
+    "kind": "transactional",
+    "status": "not wired (completion emails use the generic layout)",
+    "trigger": "type 'completion' (completion submitted; handle_completion_submission_notification)",
+    "replaces": [
+      "a33f5f57-b748-4689-90ef-11dc5eb6f325",
+      "1ff688b6-2302-4b14-9b3f-3ff273d5a759"
+    ],
+    "subject": "Marked done. Your turn to review.",
+    "preheader": "{{{PREHEADER}}}",
+    "replyTo": null,
+    "stamp": "Ready to review",
+    "bytes": 12860,
+    "variables": [
+      {
+        "key": "PREHEADER",
+        "type": "string",
+        "fallbackValue": "Check the work, then release payment.",
+        "html": false
+      },
+      {
+        "key": "HEADLINE",
+        "type": "string",
+        "fallbackValue": "Your task is marked done.",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "HUNTER_NAME",
+        "type": "string",
+        "fallbackValue": "your hunter",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "—",
+        "html": false
+      },
+      {
+        "key": "INTRO_HTML",
+        "type": "string",
+        "fallbackValue": "Your hunter finished the job and sent it over for your review.",
+        "html": true
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e05-hired-next-steps",
+    "alias": "bounty-v2-hired",
+    "name": "Bounty v2 · Hired, next steps",
+    "resendId": "0633991c-8612-4a1d-991f-00769a766720",
+    "audience": "poster",
+    "kind": "transactional",
+    "status": "not wired",
+    "trigger": "Poster confirms a hire (type 'acceptance' recipient side is the hunter; this is the poster's confirmation)",
+    "replaces": [
+      "31e736fe-190e-43a0-904e-f66c8a8055a7",
+      "cce76f31-c6a6-49d9-ac26-9895daed5ddf"
+    ],
+    "subject": "It's a deal. Here's what happens next.",
+    "preheader": "Your {{{BOUNTY_REWARD}}} is held by Bounty until you approve the work.",
+    "replyTo": null,
+    "stamp": "Hired",
+    "bytes": 13977,
+    "variables": [
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "payment",
+        "html": false
+      },
+      {
+        "key": "HUNTER_NAME",
+        "type": "string",
+        "fallbackValue": "your hunter",
+        "html": false
+      },
+      {
+        "key": "VERIFIED_BADGE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": true
+      },
+      {
+        "key": "ADDRESS_NOTE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "CTA_LABEL",
+        "type": "string",
+        "fallbackValue": "View your bounty",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e06-payment-failed-at-hire",
+    "alias": "bounty-v2-payment-failed",
+    "name": "Bounty v2 · Payment failed at hire",
+    "resendId": "e41bb312-9a6e-4f47-b60e-ba8189ad2c45",
+    "audience": "poster",
+    "kind": "transactional",
+    "status": "not wired",
+    "trigger": "Pay-at-hire card payment fails when a poster picks a hunter (web poster flow)",
+    "replaces": [
+      "4d930f7e-0863-43d6-8678-f466b374cf0c",
+      "f1fb0958-4c85-418e-a37a-cdc9b13fa8ee"
+    ],
+    "subject": "Your payment didn't go through",
+    "preheader": "You weren't charged, and {{{HUNTER_NAME}}} isn't hired yet.",
+    "replyTo": null,
+    "stamp": "Action needed",
+    "bytes": 13733,
+    "variables": [
+      {
+        "key": "HUNTER_NAME",
+        "type": "string",
+        "fallbackValue": "your hunter",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "—",
+        "html": false
+      },
+      {
+        "key": "CLOSES_AT_NOTE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e07-no-applicants-24h",
+    "alias": "bounty-v2-no-applicants",
+    "name": "Bounty v2 · No applicants yet",
+    "resendId": "7ba7759e-54e6-4cca-af6c-188484381b43",
+    "audience": "poster",
+    "kind": "transactional",
+    "status": "not wired",
+    "trigger": "Bounty open ~24h with zero applications (overlaps today’s bounty_quality_nudge / liquidity escalation push copy)",
+    "replaces": [
+      "9e4b6d2a-7ef8-4b44-9118-98a7339d87df",
+      "0f587928-3b27-4805-acf7-5c401eda6e4e"
+    ],
+    "subject": "No applicants yet. One change usually fixes it.",
+    "preheader": "Here's where to start. It takes a minute.",
+    "replyTo": null,
+    "stamp": "Needs a nudge",
+    "bytes": 12955,
+    "variables": [
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "the current price",
+        "html": false
+      },
+      {
+        "key": "WIDENED_NOTE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e08a-poster-intent-no-post",
+    "alias": "bounty-v2-getting-started",
+    "name": "Bounty v2 · Getting started",
+    "resendId": "24ad95af-1962-462d-89a7-b3d78621cc79",
+    "audience": "poster",
+    "kind": "lifecycle",
+    "status": "not wired",
+    "trigger": "Signed up with poster intent, has not posted (lifecycle)",
+    "replaces": [
+      "4568e110-cbae-4f8e-8fa5-9605d59d38e9",
+      "5ed7bb92-7862-4f98-aa88-02a85f567d79"
+    ],
+    "subject": "Got a task? Drop a bounty.",
+    "preheader": "Post it in a minute. People nearby apply to do it.",
+    "replyTo": null,
+    "stamp": "Getting started",
+    "bytes": 13267,
+    "variables": [
+      {
+        "key": "OPENER",
+        "type": "string",
+        "fallbackValue": "You",
+        "html": false
+      },
+      {
+        "key": "PAY_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "UNSUBSCRIBE_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e08b-concierge-reply",
+    "alias": "bounty-v2-concierge",
+    "name": "Bounty v2 · Concierge: tell us the task",
+    "resendId": "48f16637-4c0d-42bb-b7de-46c1195104cb",
+    "audience": "poster",
+    "kind": "lifecycle",
+    "status": "not wired",
+    "trigger": "Poster intent, still no post after Getting started (lifecycle). Replies go to support@.",
+    "replaces": [
+      "e0870e43-97a2-4561-b04e-612cb211b0f4",
+      "b947ed52-f8c9-4023-bd70-8bde554cbdda"
+    ],
+    "subject": "Not sure how to post it? Tell us.",
+    "preheader": "Tell us the job. We'll tell you how to post it and what to offer.",
+    "replyTo": "support@bountyfinder.app",
+    "stamp": "A person, not a bot",
+    "bytes": 10629,
+    "variables": [
+      {
+        "key": "REPLY_MAILTO",
+        "type": "string",
+        "fallbackValue": "mailto:support@bountyfinder.app?subject=Help%20me%20post%20a%20task",
+        "html": false
+      },
+      {
+        "key": "UNSUBSCRIBE_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e09-first-done-next",
+    "alias": "bounty-v2-first-done",
+    "name": "Bounty v2 · First bounty done",
+    "resendId": "b81265e0-7d7b-43a5-8d9d-93a1642193a0",
+    "audience": "poster",
+    "kind": "lifecycle",
+    "status": "not wired",
+    "trigger": "Poster approved their first completed bounty (lifecycle follow-up after release)",
+    "replaces": [
+      "25bce0fb-0059-4184-aeae-f8f9ecf94e2f",
+      "e9526aac-81e4-4676-9196-f242c892ba03"
+    ],
+    "subject": "It's off the list.",
+    "preheader": "“{{{BOUNTY_TITLE}}}” is done. The next one works the same way.",
+    "replyTo": null,
+    "stamp": "Done",
+    "bytes": 11682,
+    "variables": [
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "your bounty",
+        "html": false
+      },
+      {
+        "key": "HUNTER_NAME",
+        "type": "string",
+        "fallbackValue": "your hunter",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "UNSUBSCRIBE_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e11-dormant-poster",
+    "alias": "bounty-v2-dormant-poster",
+    "name": "Bounty v2 · Got another one?",
+    "resendId": "aa22d845-ec4a-4fd5-943b-0286de74717e",
+    "audience": "poster",
+    "kind": "lifecycle",
+    "status": "not wired",
+    "trigger": "Poster with a past bounty, inactive for a while (lifecycle)",
+    "replaces": [
+      "d62fcefe-fa57-478f-ae23-83f507340f6f",
+      "ba9eee99-7b47-4f37-8427-c48d845e9d66"
+    ],
+    "subject": "Got another one?",
+    "preheader": "Last time: “{{{LAST_BOUNTY_TITLE}}}.” What’s next?",
+    "replyTo": null,
+    "stamp": "Been a minute",
+    "bytes": 10492,
+    "variables": [
+      {
+        "key": "LAST_BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "a task",
+        "html": false
+      },
+      {
+        "key": "COMPLETED_NOTE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "SEASONAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "UNSUBSCRIBE_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e12-web-checkout-abandoned",
+    "alias": "bounty-v2-checkout-abandoned",
+    "name": "Bounty v2 · Checkout not finished",
+    "resendId": "8e5e3170-765a-4d69-bfcd-71a28e579e1a",
+    "audience": "poster",
+    "kind": "lifecycle",
+    "status": "not wired",
+    "trigger": "Web poster started checkout (poster-web) but did not complete payment",
+    "replaces": [
+      "d7fe3e5b-3d66-430c-83eb-c6e015cf150c",
+      "328fb44e-a4dd-47c1-ad5b-15641adf2873"
+    ],
+    "subject": "You're one step from posted",
+    "preheader": "Checkout wasn't finished, so you weren't charged. Pick up where you left off.",
+    "replyTo": null,
+    "stamp": "Not posted yet",
+    "bytes": 12539,
+    "variables": [
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "—",
+        "html": false
+      },
+      {
+        "key": "OPENER",
+        "type": "string",
+        "fallbackValue": "You",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "UNSUBSCRIBE_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e13-hunter-cancelled",
+    "alias": "bounty-v2-hunter-cancelled",
+    "name": "Bounty v2 · Hunter cancelled",
+    "resendId": "23e2f5e7-b5f8-4f0a-9754-6219a90f7ecb",
+    "audience": "poster",
+    "kind": "transactional",
+    "status": "not wired",
+    "trigger": "Hired hunter cancels (cancellation_* types). MONEY_LINE must come from the real cancellation/refund state.",
+    "replaces": [
+      "6c339d8d-81cc-4469-af1f-cee1b996e8b0",
+      "8d04710d-549e-42ae-9d6c-1fb3d552d9f2"
+    ],
+    "subject": "Change of plans on your bounty",
+    "preheader": "{{{MONEY_LINE}}}",
+    "replyTo": null,
+    "stamp": "Change of plans",
+    "bytes": 11713,
+    "variables": [
+      {
+        "key": "MONEY_LINE",
+        "type": "string",
+        "fallbackValue": "Check your bounty page for where your payment stands.",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "Your bounty",
+        "html": false
+      },
+      {
+        "key": "BOUNTY_REWARD",
+        "type": "string",
+        "fallbackValue": "—",
+        "html": false
+      },
+      {
+        "key": "HUNTER_NAME",
+        "type": "string",
+        "fallbackValue": "Your hunter",
+        "html": false
+      },
+      {
+        "key": "REOPEN_LINE",
+        "type": "string",
+        "fallbackValue": "You can reopen it or post it again from your bounty page.",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "e14-forward-to-a-friend",
+    "alias": "bounty-v2-pass-it-on",
+    "name": "Bounty v2 · Pass it on",
+    "resendId": "9c5dcc1c-ea95-40c9-bdc4-ea4860599f25",
+    "audience": "poster",
+    "kind": "lifecycle",
+    "status": "not wired",
+    "trigger": "After a completed bounty (lifecycle, forward-to-a-friend)",
+    "replaces": [
+      "69c36213-d9b6-47ff-9a57-7becaba0613c",
+      "f18086c0-3f76-4058-94a7-bf4c2219231e"
+    ],
+    "subject": "You got it done. Know someone who hasn’t?",
+    "preheader": "Forward this. It has everything they need.",
+    "replyTo": null,
+    "stamp": "Pass it on",
+    "bytes": 11089,
+    "variables": [
+      {
+        "key": "BOUNTY_TITLE",
+        "type": "string",
+        "fallbackValue": "your bounty",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "UNSUBSCRIBE_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "unfinished-post",
+    "alias": "bounty-v2-unfinished-post",
+    "name": "Bounty v2 · Unfinished post",
+    "resendId": "0fa9b4e2-3664-4661-90ac-55e29d3c7f21",
+    "audience": "poster",
+    "kind": "lifecycle",
+    "status": "not wired",
+    "trigger": "Started a post, did not publish (lifecycle)",
+    "replaces": [
+      "8e73f6a2-f80c-400b-9eed-c6d8b606c985",
+      "fd67f605-c21c-4d76-8b2a-5f68f3654838"
+    ],
+    "subject": "Still need that done?",
+    "preheader": "Your post is a minute from live.{{{PREHEADER_PAY_NOTE}}}",
+    "replyTo": null,
+    "stamp": "Unfinished post",
+    "bytes": 12268,
+    "variables": [
+      {
+        "key": "PREHEADER_PAY_NOTE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "OPENER",
+        "type": "string",
+        "fallbackValue": "You",
+        "html": false
+      },
+      {
+        "key": "MONEY_NOTE",
+        "type": "string",
+        "fallbackValue": "Bounty holds your money until you approve the finished work.",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net/manage/",
+        "html": false
+      },
+      {
+        "key": "UNSUBSCRIBE_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "PREFERENCES_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "edge"
+    ]
+  },
+  {
+    "key": "notice-action",
+    "alias": "bounty-v2-notice-action",
+    "name": "Bounty v2 · Notification (with button)",
+    "resendId": "21d52deb-990c-4512-b6b2-67a3d14036aa",
+    "audience": "poster + hunter",
+    "kind": "transactional",
+    "status": "live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)",
+    "trigger": "Every notification email that is not routed to a dedicated template and has a CTA (messages, applications, acceptance, completion, disputes, verification, payouts…)",
+    "replaces": [
+      "generic inline buildEmail() layout in send-notification-email"
+    ],
+    "subject": "There’s an update on Bounty",
+    "preheader": "{{{PREHEADER}}}",
+    "replyTo": null,
+    "stamp": "{{{STAMP_LABEL}}}",
+    "bytes": 9326,
+    "variables": [
+      {
+        "key": "STAMP_LABEL",
+        "type": "string",
+        "fallbackValue": "Update",
+        "html": false
+      },
+      {
+        "key": "TONE_ACCENT",
+        "type": "string",
+        "fallbackValue": "#18A772",
+        "html": false
+      },
+      {
+        "key": "TONE_INK",
+        "type": "string",
+        "fallbackValue": "#0B6A31",
+        "html": false
+      },
+      {
+        "key": "TONE_TINT",
+        "type": "string",
+        "fallbackValue": "#E7F5EC",
+        "html": false
+      },
+      {
+        "key": "PREHEADER",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "HEADLINE",
+        "type": "string",
+        "fallbackValue": "There’s an update on Bounty",
+        "html": false
+      },
+      {
+        "key": "BODY",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "HEADLINE_TEXT",
+        "type": "string",
+        "fallbackValue": "There’s an update on Bounty",
+        "html": false
+      },
+      {
+        "key": "BODY_TEXT",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "CTA_LABEL",
+        "type": "string",
+        "fallbackValue": "Open Bounty",
+        "html": false
+      },
+      {
+        "key": "CTA_URL",
+        "type": "string",
+        "fallbackValue": "https://www.bountyfinder.net",
+        "html": false
+      },
+      {
+        "key": "HELP_URL",
+        "type": "string",
+        "fallbackValue": "mailto:support@bountyfinder.app",
+        "html": false
+      },
+      {
+        "key": "REASON_LINE",
+        "type": "string",
+        "fallbackValue": "You're getting this because of your notification settings in Bounty. Change them anytime under Settings › Notifications.",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "applicant",
+      "edge"
+    ]
+  },
+  {
+    "key": "notice-info",
+    "alias": "bounty-v2-notice-info",
+    "name": "Bounty v2 · Notification (no button)",
+    "resendId": "5dc750c9-93a8-43b3-82e2-0b748b3195de",
+    "audience": "poster + hunter",
+    "kind": "transactional",
+    "status": "live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)",
+    "trigger": "Notification emails with no linkable destination (e.g. identity verification submitted/verified, payout paid, followers)",
+    "replaces": [
+      "generic inline buildEmail() layout (no CTA case)"
+    ],
+    "subject": "There’s an update on Bounty",
+    "preheader": "{{{PREHEADER}}}",
+    "replyTo": null,
+    "stamp": "{{{STAMP_LABEL}}}",
+    "bytes": 8783,
+    "variables": [
+      {
+        "key": "STAMP_LABEL",
+        "type": "string",
+        "fallbackValue": "Update",
+        "html": false
+      },
+      {
+        "key": "TONE_ACCENT",
+        "type": "string",
+        "fallbackValue": "#18A772",
+        "html": false
+      },
+      {
+        "key": "TONE_INK",
+        "type": "string",
+        "fallbackValue": "#0B6A31",
+        "html": false
+      },
+      {
+        "key": "TONE_TINT",
+        "type": "string",
+        "fallbackValue": "#E7F5EC",
+        "html": false
+      },
+      {
+        "key": "PREHEADER",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "HEADLINE",
+        "type": "string",
+        "fallbackValue": "There’s an update on Bounty",
+        "html": false
+      },
+      {
+        "key": "BODY",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "HEADLINE_TEXT",
+        "type": "string",
+        "fallbackValue": "There’s an update on Bounty",
+        "html": false
+      },
+      {
+        "key": "BODY_TEXT",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "HELP_URL",
+        "type": "string",
+        "fallbackValue": "mailto:support@bountyfinder.app",
+        "html": false
+      },
+      {
+        "key": "REASON_LINE",
+        "type": "string",
+        "fallbackValue": "You're getting this because of your notification settings in Bounty. Change them anytime under Settings › Notifications.",
+        "html": false
+      },
+      {
+        "key": "POSTAL_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "payout_failed",
+      "edge"
+    ]
+  },
+  {
+    "key": "team-alert",
+    "alias": "bounty-v2-team-alert",
+    "name": "Bounty v2 · Team alert (internal)",
+    "resendId": "6835c482-23d8-42b5-8f8f-7366d0d0874f",
+    "audience": "Bounty team",
+    "kind": "internal",
+    "status": "live after deploy (default on; EMAIL_DESIGN_V2=off falls back to the inline layout)",
+    "trigger": "Internal only: support cases opened by poster-web / email-inbound / geocode-bounties, admin alerts of severity high or above, and in-app Contact support messages",
+    "replaces": [
+      "inline support-alert layout in send-notification-email (supportAlert)",
+      "inline layout for admin alerts from fn_notify_admins (data.adminAlert)",
+      "inline HTML in contact-support"
+    ],
+    "subject": "Bounty team alert",
+    "preheader": "{{{PREHEADER}}}",
+    "replyTo": null,
+    "stamp": "{{{STAMP_LABEL}}}",
+    "bytes": 8514,
+    "variables": [
+      {
+        "key": "STAMP_LABEL",
+        "type": "string",
+        "fallbackValue": "Team alert",
+        "html": false
+      },
+      {
+        "key": "TONE_ACCENT",
+        "type": "string",
+        "fallbackValue": "#E39B2D",
+        "html": false
+      },
+      {
+        "key": "TONE_INK",
+        "type": "string",
+        "fallbackValue": "#7F4300",
+        "html": false
+      },
+      {
+        "key": "TONE_TINT",
+        "type": "string",
+        "fallbackValue": "#FFF1DC",
+        "html": false
+      },
+      {
+        "key": "PREHEADER",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "KICKER",
+        "type": "string",
+        "fallbackValue": "Internal",
+        "html": false
+      },
+      {
+        "key": "HEADLINE",
+        "type": "string",
+        "fallbackValue": "Bounty team alert",
+        "html": false
+      },
+      {
+        "key": "HEADLINE_TEXT",
+        "type": "string",
+        "fallbackValue": "Bounty team alert",
+        "html": false
+      },
+      {
+        "key": "BODY",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "BODY_TEXT",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "DETAILS",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": true
+      },
+      {
+        "key": "DETAILS_TEXT",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "REASON_LINE",
+        "type": "string",
+        "fallbackValue": "Sent to the Bounty team. Customers never get this email.",
+        "html": false
+      }
+    ],
+    "samples": [
+      "realistic",
+      "admin",
+      "contact",
+      "edge"
+    ]
+  },
+  {
+    "key": "auth-confirm-signup",
+    "alias": "auth-confirm-signup",
+    "name": "Supabase Auth · Confirm signup",
+    "resendId": null,
+    "audience": "everyone",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Confirm signup",
+    "trigger": "Supabase Auth \"Confirm signup\". Rare today: app and checkout accounts are created already confirmed, so this goes out only on a signup confirmation resend.",
+    "subject": "Confirm your email to start using Bounty",
+    "preheader": "One tap and your account is ready.",
+    "replyTo": null,
+    "stamp": "One quick step",
+    "bytes": 10161,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  },
+  {
+    "key": "auth-magic-link",
+    "alias": "auth-magic-link",
+    "name": "Supabase Auth · Sign-in code and link",
+    "resendId": null,
+    "audience": "everyone",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Magic link",
+    "trigger": "Supabase Auth \"Magic link\": signInWithOtp. The app asks for the 6-digit code (sign-in form, verifyOtp type \"email\"); a browser can use the link.",
+    "subject": "Your Bounty sign-in code",
+    "preheader": "Enter it in Bounty to sign in, or use the button.",
+    "replyTo": null,
+    "stamp": "Sign in",
+    "bytes": 11499,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  },
+  {
+    "key": "auth-reset-password",
+    "alias": "auth-reset-password",
+    "name": "Supabase Auth · Reset password / account access",
+    "resendId": null,
+    "audience": "everyone",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Reset password",
+    "trigger": "Supabase Auth \"Reset password\": the app's forgot-password flow AND the account-access email the Stripe webhook sends to people who paid for a bounty on bountyfinder.net (resetPasswordForEmail, landing on /manage/).",
+    "subject": "Your link to get into Bounty",
+    "preheader": "Sign in to your account. If you asked to reset your password, you’ll choose a new one next.",
+    "replyTo": null,
+    "stamp": "Account access",
+    "bytes": 11219,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  },
+  {
+    "key": "auth-change-email",
+    "alias": "auth-change-email",
+    "name": "Supabase Auth · Change email address",
+    "resendId": null,
+    "audience": "everyone",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Change email address",
+    "trigger": "Supabase Auth \"Change email address\". No app screen changes email today; covers support or future use. With \"secure email change\" on, both addresses get this.",
+    "subject": "Confirm your new email for Bounty",
+    "preheader": "One tap to confirm the change.",
+    "replyTo": null,
+    "stamp": "Email change",
+    "bytes": 10449,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  },
+  {
+    "key": "auth-reauthentication",
+    "alias": "auth-reauthentication",
+    "name": "Supabase Auth · Reauthentication code",
+    "resendId": null,
+    "audience": "everyone",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Reauthentication",
+    "trigger": "Supabase Auth \"Reauthentication\": a 6-digit code before a sensitive change. Not called by the app today; covers future use.",
+    "subject": "Your Bounty confirmation code",
+    "preheader": "Enter it to confirm it’s you.",
+    "replyTo": null,
+    "stamp": "Confirm it’s you",
+    "bytes": 10293,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  },
+  {
+    "key": "auth-invite",
+    "alias": "auth-invite",
+    "name": "Supabase Auth · Invite user",
+    "resendId": null,
+    "audience": "invited people",
+    "kind": "auth",
+    "status": "paste into Supabase → Authentication → Emails → Invite user",
+    "trigger": "Supabase Auth \"Invite user\": sent when someone is invited from the Supabase dashboard (team accounts).",
+    "subject": "You're invited to Bounty",
+    "preheader": "Accept to set up your account.",
+    "replyTo": null,
+    "stamp": "Invite",
+    "bytes": 10135,
+    "variables": [],
+    "samples": [
+      "realistic"
+    ]
+  }
+]

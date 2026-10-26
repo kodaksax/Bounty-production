@@ -1,0 +1,10 @@
+{{{HEADLINE_TEXT}}}
+
+{{{BODY_TEXT}}}
+
+Questions? Talk to a real person: {{{HELP_URL}}}
+
+—
+Bounty · bountyfinder.net
+{{{REASON_LINE}}}
+{{{POSTAL_LINE}}}

@@ -1,0 +1,10 @@
+Confirm your email change.
+
+Someone asked to change the email on a Bounty account from {{ .Email }} to {{ .NewEmail }}. Use this link to confirm:
+{{ .ConfirmationURL }}
+
+Didn't ask for this? Don't use the link, and your email stays the same. If you think someone else has your password, reset it from the sign-in screen.
+
+—
+Bounty · Got a task? Drop a bounty.
+Get help: support@bountyfinder.app

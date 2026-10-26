@@ -1,0 +1,17 @@
+You got it done. Know someone who hasn't?
+
+You got {{{BOUNTY_TITLE}}} handled through Bounty. Somebody you know is putting off something just like it.
+
+Forward this email to them. Everything below is for them. There's no referral bonus. It's just a good thing to pass on.
+
+— For whoever this was forwarded to —
+Got a task? Drop a bounty.
+Bounty is how people get small jobs done by someone nearby. Post the task and your price, choose from the people who apply, and the money is released only after you approve the work.
+Get Bounty: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have a Bounty account.
+Unsubscribe from emails like this: {{{UNSUBSCRIBE_URL}}}
+Email settings: {{{PREFERENCES_URL}}}
+{{{POSTAL_LINE}}}

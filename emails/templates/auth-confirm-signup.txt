@@ -1,0 +1,10 @@
+Confirm it's you.
+
+Tap the link to confirm your email and finish setting up your Bounty account:
+{{ .ConfirmationURL }}
+
+Didn't sign up for Bounty? You can safely ignore this email.
+
+—
+Bounty · Got a task? Drop a bounty.
+Get help: support@bountyfinder.app

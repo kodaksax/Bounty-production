@@ -1,0 +1,17 @@
+{{{HEADLINE}}}
+
+YOUR BOUNTY
+{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+Done by {{{HUNTER_NAME}}}
+
+Looks right? Approve it and we release your payment to {{{HUNTER_NAME}}}.
+Something's off? Request changes. The money stays held until you approve.
+
+Review the work: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have an active bounty on Bounty.
+Email settings: {{{PREFERENCES_URL}}}
+Get help: support@bountyfinder.app
+{{{POSTAL_LINE}}}

@@ -1,0 +1,19 @@
+{{{HEADLINE}}}
+
+YOUR BOUNTY
+{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+
+People have applied{{{COUNT_NOTE}}}. Open the list for full profiles, or ask anyone a question before you decide.
+
+{{{MONEY_NOTE}}}
+
+Choose your hunter: {{{CTA_URL}}}
+
+Unanswered applications close automatically.
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have an active bounty on Bounty.
+Email settings: {{{PREFERENCES_URL}}}
+Get help: support@bountyfinder.app
+{{{POSTAL_LINE}}}

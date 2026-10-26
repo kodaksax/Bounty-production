@@ -1,0 +1,22 @@
+One step left to hire {{{HUNTER_NAME}}}.
+
+You picked them, but the payment didn't go through.
+
+Payment: didn't go through
+Charged: nothing
+Hired: not yet
+Their application: still open{{{CLOSES_AT_NOTE}}}
+
+YOUR BOUNTY
+{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+
+Try a different card and you're set: {{{CTA_URL}}}
+
+Keeps failing? Reply to this email and a person on our team will help.
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have an active bounty on Bounty.
+Email settings: {{{PREFERENCES_URL}}}
+Get help: support@bountyfinder.app
+{{{POSTAL_LINE}}}

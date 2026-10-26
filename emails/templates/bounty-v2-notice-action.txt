@@ -1,0 +1,12 @@
+{{{HEADLINE_TEXT}}}
+
+{{{BODY_TEXT}}}
+
+{{{CTA_LABEL}}}: {{{CTA_URL}}}
+
+Need a hand? Talk to a real person: {{{HELP_URL}}}
+
+—
+Bounty · bountyfinder.net
+{{{REASON_LINE}}}
+{{{POSTAL_LINE}}}

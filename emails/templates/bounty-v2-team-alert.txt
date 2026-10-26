@@ -1,0 +1,10 @@
+{{{KICKER}}}
+{{{HEADLINE_TEXT}}}
+
+{{{BODY_TEXT}}}
+
+{{{DETAILS_TEXT}}}
+
+—
+Bounty · Internal
+{{{REASON_LINE}}}

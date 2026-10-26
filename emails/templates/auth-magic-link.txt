@@ -1,0 +1,16 @@
+Here's your sign-in code.
+
+Enter this code in Bounty to sign in. No password needed:
+
+{{ .Token }}
+
+On a computer instead? Sign in with this link:
+{{ .ConfirmationURL }}
+
+The code and the link work once and expire soon. If they have expired, ask for a new one on the sign-in screen.
+
+Didn't ask for this? Ignore this email and your account stays as it is. Never share this code with anyone.
+
+—
+Bounty · Got a task? Drop a bounty.
+Get help: support@bountyfinder.app

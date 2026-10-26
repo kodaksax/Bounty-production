@@ -1,0 +1,19 @@
+Don't let this one slip.
+
+{{{APPLICANT_LABEL}}} waiting on your answer. Decide by {{{CLOSES_AT_LABEL}}}.
+
+YOUR BOUNTY
+{{{BOUNTY_TITLE}}} · {{{BOUNTY_REWARD}}}
+
+If nobody's chosen by then, their applications close automatically and they move on to other work.
+
+Not feeling any of them? Decline from the same screen. It frees them up, and your bounty stays open for new people.
+
+Review applicants: {{{CTA_URL}}}
+
+—
+Bounty · Got a task? Drop a bounty.
+You're getting this because you have an active bounty on Bounty.
+Email settings: {{{PREFERENCES_URL}}}
+Get help: support@bountyfinder.app
+{{{POSTAL_LINE}}}
