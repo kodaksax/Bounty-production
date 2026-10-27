@@ -26,6 +26,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useTabBackToFeed } from '../../hooks/useTabBackToFeed'
 import { useConversations } from '../../hooks/useConversations'
+import { useBountyDraftInProgress } from '../hooks/useBountyDraft'
 import { useAdmin } from '../../lib/admin-context'
 import { ROUTES } from '../../lib/routes'
 import { screenNameForBountyAppTab } from '../../lib/analytics/screen-name'
@@ -438,6 +439,9 @@ function BountyAppInner() {
 
   // Track total unread message count for the bottom nav badge
   const { totalUnreadCount: unreadMessageCount } = useConversations()
+  // Same per-user draft the composer autosaves to — drives the Post tab's
+  // "unfinished post" dot (the composer itself offers the resume).
+  const postDraftPending = useBountyDraftInProgress(currentUserId)
 
   // Ref to the BountyFeed component — used for scroll-to-top and refresh on tab repress
   const bountyFeedRef = useRef<BountyFeedHandle>(null)
@@ -708,7 +712,7 @@ function BountyAppInner() {
         )}
 
         {showBottomNav && (
-          <MainTabBar activeScreen={barScreen} onNavigate={handleNavigate} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />
+          <MainTabBar activeScreen={barScreen} onNavigate={handleNavigate} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} postDraftPending={postDraftPending} />
         )}
 
         {/* Moments Queue host — global, so a contextual activation prompt

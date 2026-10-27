@@ -26,6 +26,9 @@ interface FloatingTabBarProps {
   showAdmin?: boolean;
   onBountyTabRepress?: () => void;
   unreadMessageCount?: number;
+  /** A saved, unfinished post exists — dots the Post tab while it isn't the
+   * active tab, so a poster who wandered off mid-post has a way back. */
+  postDraftPending?: boolean;
 }
 
 const BAR_HEIGHT = 64;
@@ -44,6 +47,7 @@ export function FloatingTabBar({
   showAdmin = false,
   onBountyTabRepress,
   unreadMessageCount = 0,
+  postDraftPending = false,
 }: FloatingTabBarProps) {
   const { theme } = useAppThemeContext();
   const { triggerHaptic } = useHapticFeedback();
@@ -64,12 +68,17 @@ export function FloatingTabBar({
       },
       { key: "wallet", icon: "account-balance-wallet", title: "Wallet", label: "View wallet and transactions" },
       { key: "bounty", icon: "gps-fixed", title: "Home", label: "View bounty dashboard - Main screen" },
-      { key: "postings", icon: "post-add", title: "Post", label: "Post a new bounty" },
+      {
+        key: "postings",
+        icon: "post-add",
+        title: "Post",
+        label: postDraftPending ? "Post a bounty, unfinished post saved" : "Post a new bounty",
+      },
       showAdmin
         ? { key: "admin", icon: "admin-panel-settings", title: "Admin", label: "Admin panel" }
         : { key: "profile", icon: "person", title: "Profile", label: "View and edit profile" },
     ],
-    [showAdmin, unreadMessageCount]
+    [showAdmin, unreadMessageCount, postDraftPending]
   );
 
   // Sliding highlight behind the active tab.
@@ -150,6 +159,9 @@ export function FloatingTabBar({
                         {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
                       </Text>
                     </View>
+                  )}
+                  {tab.key === "postings" && postDraftPending && !active && (
+                    <View style={s.draftDot} testID="post-draft-dot" />
                   )}
                 </View>
                 <Text
@@ -234,6 +246,19 @@ function makeStyles(t: AppTheme) {
       color: "#FFFFFF",
       fontSize: 10,
       fontWeight: "700",
+    },
+    // Brand green, not the unread badge's red: it marks saved work to come
+    // back to, not something that needs attention.
+    draftDot: {
+      position: "absolute",
+      top: -2,
+      right: -3,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: t.primary,
+      borderWidth: 1.5,
+      borderColor: t.isDark ? "#1B1E24" : "#FFFFFF",
     },
   });
 }

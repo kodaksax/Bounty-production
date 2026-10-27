@@ -84,3 +84,19 @@ export function incompleteFieldsForStep(stepName: string | undefined, draft: Bou
   }
   return missing;
 }
+
+/**
+ * The step a saved draft should reopen on: the first one the poster still has
+ * to finish. Task uses the same gate as incompleteFieldsForStep. Location is
+ * stricter than its Next button: an in-person draft counts only once it
+ * carries coordinates, because StepWhere geocodes a typed address when
+ * Continue is pressed — a draft left mid-typing has the text but no pin, and
+ * skipping past Location would publish it unmatchable. Compensation is the
+ * last step, so a finished draft reopens there.
+ */
+export function resumeStepForDraft(draft: BountyDraft): 1 | 2 | 3 {
+  if (incompleteFieldsForStep('Task', draft).length > 0) return 1;
+  const pinned = draft.latitude != null && draft.longitude != null;
+  if (draft.workType !== 'online' && !pinned) return 2;
+  return 3;
+}

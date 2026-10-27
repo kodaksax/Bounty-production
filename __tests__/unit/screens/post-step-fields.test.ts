@@ -3,7 +3,11 @@
  */
 
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import { fieldForPatch, incompleteFieldsForStep } from 'app/screens/CreateBounty/postStepFields';
+import {
+  fieldForPatch,
+  incompleteFieldsForStep,
+  resumeStepForDraft,
+} from 'app/screens/CreateBounty/postStepFields';
 
 const draft = (overrides: Partial<BountyDraft> = {}): BountyDraft => ({
   title: 'Walk my dog',
@@ -66,5 +70,29 @@ describe('incompleteFieldsForStep', () => {
 
   it('returns nothing for an unknown step', () => {
     expect(incompleteFieldsForStep(undefined, draft({ title: '' }))).toEqual([]);
+  });
+});
+
+describe('resumeStepForDraft', () => {
+  const pinned = { latitude: 40.7, longitude: -74 };
+
+  it('stays on Task while the task is unfinished', () => {
+    expect(resumeStepForDraft(draft({ description: 'too short' }))).toBe(1);
+    expect(resumeStepForDraft(draft({ title: '' }))).toBe(1);
+  });
+
+  it('reopens on Location for an in-person draft with an address but no pin', () => {
+    // StepWhere only geocodes on Continue, so typed text alone must not skip it.
+    expect(resumeStepForDraft(draft())).toBe(2);
+    expect(resumeStepForDraft(draft({ location: '' }))).toBe(2);
+  });
+
+  it('reopens on Compensation once the location is pinned or online', () => {
+    expect(resumeStepForDraft(draft(pinned))).toBe(3);
+    expect(resumeStepForDraft(draft({ workType: 'online', location: '' }))).toBe(3);
+  });
+
+  it('still reopens on Compensation for a draft that only lacks an amount', () => {
+    expect(resumeStepForDraft(draft({ ...pinned, amount: 0 }))).toBe(3);
   });
 });

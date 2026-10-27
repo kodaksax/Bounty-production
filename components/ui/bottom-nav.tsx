@@ -25,6 +25,8 @@ interface BottomNavProps {
   showAdmin?: boolean;
   onBountyTabRepress?: () => void; // Called when bounty tab is pressed while already active
   unreadMessageCount?: number; // Total unread message count badge for the chat icon
+  /** A saved, unfinished post exists — shows a dot on the Post tab while it isn't the active tab. */
+  postDraftPending?: boolean;
 }
 
 // Navigation icon size constants for visual hierarchy
@@ -35,7 +37,7 @@ const CENTER_ICON_SIZE = 32;     // Larger center GPS icon for emphasis
 // the largest accessibility sizes is the other way these buttons collide.
 const NAV_LABEL_MAX_FONT_SCALE = 1.2;
 
-export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBountyTabRepress, unreadMessageCount = 0 }: BottomNavProps) {
+export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBountyTabRepress, unreadMessageCount = 0, postDraftPending = false }: BottomNavProps) {
   const centerButtonScale = useRef(new Animated.Value(1)).current;
   const centerButtonRotation = useRef(new Animated.Value(0)).current;
   const { triggerHaptic } = useHapticFeedback();
@@ -50,6 +52,8 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
     () => makeStyles(theme, centerButtonSize, centerSectionWidth, insets.bottom),
     [theme, centerButtonSize, centerSectionWidth, insets.bottom]
   );
+
+  const showPostDraftDot = postDraftPending && activeScreen !== "postings";
 
   const handleNavigate = React.useCallback((screen: ScreenKey) => {
     // If tapping the bounty button while already on bounty screen, trigger scroll-to-top + refresh
@@ -207,14 +211,17 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel="Post a new bounty"
+            accessibilityLabel={showPostDraftDot ? "Post a bounty, unfinished post saved" : "Post a new bounty"}
             accessibilityState={{ selected: activeScreen === "postings" }}
           >
-            <MaterialIcons
-              name="post-add"
-              color={activeScreen === "postings" ? theme.text : theme.textSecondary}
-              size={NAV_ICON_SIZE}
-            />
+            <View style={styles.iconWrapper}>
+              <MaterialIcons
+                name="post-add"
+                color={activeScreen === "postings" ? theme.text : theme.textSecondary}
+                size={NAV_ICON_SIZE}
+              />
+              {showPostDraftDot && <View style={styles.draftDot} testID="post-draft-dot" />}
+            </View>
             <Text
               numberOfLines={1}
               maxFontSizeMultiplier={NAV_LABEL_MAX_FONT_SCALE}
@@ -373,6 +380,17 @@ function makeStyles(
       fontSize: 10,
       fontWeight: '700',
       lineHeight: 13,
+    },
+    draftDot: {
+      position: 'absolute',
+      top: -2,
+      right: -3,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: theme.primary,
+      borderWidth: 1.5,
+      borderColor: theme.background,
     },
     centerButton: {
       height: centerButtonSize,

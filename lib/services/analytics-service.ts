@@ -388,6 +388,13 @@ export type AnalyticsEvent =
   // `step_index`, and `term` so help engagement can be paired with the shared
   // `post_step_viewed` step funnel WITHOUT adding a step to it.
   | 'post_help_opened'
+  // The "Continue your post" prompt (app/screens/CreateBounty/ResumeDraftBanner)
+  // shown when a poster comes back to the composer with a saved draft that is
+  // past step 1. One event; `action` is 'shown', 'continued' (jumped to
+  // `to_step`) or 'dismissed'. A prompt that disappears because the poster
+  // started editing step 1 instead sends nothing further, so
+  // shown − continued − dismissed is the "ignored" bucket.
+  | 'post_resume_prompt'
   | 'post_step_completed'
   | 'post_step_abandoned'
   | 'post_title_typed'
