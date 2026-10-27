@@ -206,6 +206,21 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     expect(escrow).toMatchObject({ timing: 'at_accept', architecture: 'v1' });
   });
 
+  test("an at_accept bounty is reported as 'deferred', from its funding_mode and not a flag", async () => {
+    mockAcceptRequest.mockResolvedValue({ id: 'req-1', hunter_id: 'hunter-1', bounty_id: 'b1' });
+    const ensureFunded = jest.fn().mockResolvedValue(true);
+    const result = setup({ ensureFunded });
+
+    await act(async () => {
+      await result.current.handleAcceptRequest('req-1');
+    });
+
+    // The gate's accept_funding_* events take `variant` from this context.
+    expect(ensureFunded).toHaveBeenCalledWith('b1', expect.objectContaining({ variant: 'deferred' }));
+    const work = mockTrackEvent.mock.calls.find(c => c[0] === 'work_started')?.[1];
+    expect(work).toMatchObject({ fundingMode: 'at_accept', variant: 'deferred' });
+  });
+
   test('a legacy at_post bounty emits no deferred-funding events', async () => {
     mockAcceptRequest.mockResolvedValue({ id: 'req-1', hunter_id: 'hunter-1', bounty_id: 'b1' });
     const result = setup(

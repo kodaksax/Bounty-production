@@ -1,7 +1,6 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { bountyService } from 'app/services/bountyService';
 import { useFormSubmission } from 'hooks/useFormSubmission';
-import { useDeferredFundingVariant } from 'lib/experiments/deferred-funding-variant';
 import { analyticsService } from 'lib/services/analytics-service';
 import { failureEventProps } from 'lib/utils/stripe-error';
 import { amountBucket, canDeferBountyFunding } from 'lib/services/bounty-funding-service';
@@ -119,15 +118,17 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   const publishedRef = useRef(false);
 
   // --- "Post first, pay at accept" ----------------------------------------
-  // `variant` is this device's PostHog arm; it decides whether we ASK. The
-  // server decides whether we GET it, which is what deferredGrantRef records.
+  // The server decides whether a bounty is deferred, which is what
+  // deferredGrantRef records. The 'post-first-pay-at-accept' PostHog flag is
+  // no longer read: it was never created, so it resolved 'control' on every
+  // device and stamped that onto events for bounties that were in fact
+  // deferred.
   //
   // A ref rather than state on purpose: submit() is created once by
   // useFormSubmission and closes over this hook's scope, so a state value read
   // inside it could be a render behind the publish() call that set it. The
   // consequence of reading a stale value here would be posting a bounty with
   // the wrong funding expectation, so it has to be the ref.
-  const { variant: fundingVariant } = useDeferredFundingVariant();
   const deferredGrantRef = useRef(false);
   const publishDraftRef = useRef(draft);
 
@@ -460,7 +461,9 @@ export function useBountyPublish(params: UseBountyPublishParams) {
             bountyId: String(createdBounty.id),
             amountBucket: amountBucket(publishDraft.amount),
             fundingMode: 'at_accept',
-            variant: fundingVariant,
+            // The funding path this bounty actually took, the same derivation
+            // as useAcceptRequest ('deferred' iff funding_mode is at_accept).
+            variant: 'deferred',
             firstBounty: true,
             category: publishDraft.category || 'none',
             workType: publishDraft.workType,

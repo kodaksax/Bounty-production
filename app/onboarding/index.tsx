@@ -10,7 +10,6 @@ import { ScreenLoader } from '../../components/ui/screen-loader';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
-import { analyticsService } from '../../lib/services/analytics-service';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { logger } from '../../lib/utils/error-logger';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -118,11 +117,12 @@ export default function OnboardingIndex() {
       // stays optional for the rest of the flow either way —
       // totalStepsFor(null) in username.tsx already covers the no-intent
       // variant.
+      //
+      // No onboarding_started/resumed here: the onboarding layout emits them
+      // once the user reaches a step (components/onboarding/OnboardingEntryTracker.tsx).
+      // This gate is skipped by most entry paths and re-runs on every profile
+      // change, so it both missed starts and repeated them.
       if (isAuthenticated) {
-        analyticsService.trackEvent(
-          onboardingData.intent ? 'onboarding_resumed' : 'onboarding_started',
-          { intent: onboardingData.intent ?? 'none', authenticated: true }
-        );
         router.replace(isOnboardingRole(onboardingData.intent) ? nextStepAfterRole(onboardingData.intent) : '/onboarding/style');
         return;
       }
@@ -136,7 +136,6 @@ export default function OnboardingIndex() {
       }
 
       // Otherwise this is a genuinely fresh onboarding — start at welcome.
-      analyticsService.trackEvent('onboarding_started', { intent: 'none', authenticated: false });
       router.replace('/onboarding/welcome');
     } catch (error) {
       logger.error('[onboarding] checkOnboardingStatus threw', { error });

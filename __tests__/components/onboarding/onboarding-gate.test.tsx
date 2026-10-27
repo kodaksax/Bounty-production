@@ -237,6 +237,31 @@ describe('onboarding gate (app/onboarding/index.tsx)', () => {
     });
   });
 
+  describe('analytics', () => {
+    // onboarding_started/resumed belong to the onboarding layout
+    // (components/onboarding/OnboardingEntryTracker.tsx). The gate re-runs on
+    // every profile change and most entry paths skip it, so emitting here
+    // again would double-count the paths that do pass through.
+    it.each([
+      ['signed in, no intent', SIGNED_IN, null],
+      ['signed in, poster draft', SIGNED_IN, 'poster' as const],
+      ['signed out', null, null],
+    ])('emits no onboarding entry event itself (%s)', async (_label, session, intent) => {
+      const { analyticsService } = require('lib/services/analytics-service');
+      (analyticsService.trackEvent as jest.Mock).mockClear();
+      mockAuthContext.session = session;
+      mockAuthProfile.profile = session ? { username: 'newuser', onboarding_completed: false } : null;
+      mockOnboarding.data.intent = intent;
+
+      render(<OnboardingIndex />);
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+      const events = (analyticsService.trackEvent as jest.Mock).mock.calls.map(call => call[0]);
+      expect(events).not.toContain('onboarding_started');
+      expect(events).not.toContain('onboarding_resumed');
+    });
+  });
+
   describe('profile fetch failure', () => {
     it('retries rather than guessing, and never routes to Welcome for a signed-in user', async () => {
       mockAuthContext.session = SIGNED_IN;

@@ -70,10 +70,17 @@ const heycatch = (): HeyCatchApi | null => {
 //   bounty_completed       (unchanged)
 //   dispute_started        (was dispute_opened; now also covers workflow disputes)
 //   signup_completed       (was user_signed_up)
-//   onboarding_completed   (unchanged)
+//   onboarding_completed   (unchanged; NOT an activation gate, see below)
 //   role_selected          (was onboarding_role_selected)
 //   poster_activated       (new — first successful publish, see lib/analytics/lifecycle.ts)
 //   hunter_activated       (new — first accepted application)
+//
+// Activation (2026-10-26, docs/analytics/POSTER_ACTIVATION_FUNNEL.md): the
+// poster funnel is signup_completed -> role_selected {role: poster} ->
+// bounty_started -> bounty_published, and `poster_activated` is the single
+// activation KPI. `onboarding_completed` means the onboarding screens ended,
+// which is neither necessary nor sufficient for posting. Don't gate funnels,
+// cohorts or "activated" counts on it.
 //
 // Every canonical event SHOULD carry, where known: bounty_id, amount,
 // application_id, role ('poster' | 'hunter'), surface, and source/referrer.
@@ -125,11 +132,13 @@ export type AnalyticsEvent =
   // -> style_step_viewed -> (style_selected)* -> profile_step_viewed ->
   // (profile_submitted | step_skipped)* -> completed
   | 'onboarding_welcome_viewed'
-  // Fired by the onboarding gate (app/onboarding/index.tsx) each time it
-  // resolves a destination: `onboarding_started` for a fresh entry,
-  // `onboarding_resumed` when an in-progress draft is picked back up. Both
-  // carry `authenticated`, which is what distinguishes "new user continuing
-  // straight from registration" from "logged-out visitor browsing the intro".
+  // Exactly one of these per visit to the onboarding route group, from its
+  // layout (lib/analytics/onboarding-entry.ts): `onboarding_started` the first
+  // time a journey reaches a step, `onboarding_resumed` on a later visit in a
+  // new app process. Both carry `entry_point` (the step reached),
+  // `authenticated` and `intent`. Before 2026-10-26 the onboarding gate fired
+  // them, which the welcome and sign-up entry paths skip, so earlier counts
+  // cover ~13% of entrants and are mostly re-entries: split on that date.
   | 'onboarding_started'
   | 'onboarding_resumed'
   // Canonical: the user picked poster / hunter intent (was `onboarding_role_selected`).
@@ -362,6 +371,15 @@ export type AnalyticsEvent =
   // rather than an observed user action. `post_abandoned` carries the same
   // `exit_method`, but only ever for a real composition — that is the one
   // to trust.
+  //
+  // Field attribution (added 2026-10-26, see
+  // app/screens/CreateBounty/postStepFields.ts): `last_field` is the field the
+  // poster last focused or edited ('none' when they touched nothing, as 214 of
+  // the 267 people with an all-time abandon on the postings screen did in
+  // every abandon they had), `fields_touched` every
+  // field edited, and `incomplete_fields` the required fields on the exit
+  // step that would still have blocked them. Earlier events have none of the
+  // three, so split on that date.
   // Canonical: composer reached on purpose (was `post_flow_started`).
   | 'composer_opened'
   | 'post_field_focused'

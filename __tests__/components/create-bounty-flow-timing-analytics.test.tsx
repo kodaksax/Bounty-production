@@ -869,6 +869,38 @@ describe('CreateBountyFlow — bounty_started means composer intent, not navigat
 
       expect(lastEventNamed('post_step_abandoned')).toMatchObject({ composer_started: true });
     });
+
+    it('reports last_field none for a mount nobody touched, plus what was still incomplete', () => {
+      const { unmount } = render(<CreateBountyFlow deliberateTap />);
+      unmount();
+
+      // mockDraft has a valid title and an empty description.
+      expect(lastEventNamed('post_step_abandoned')).toMatchObject({
+        last_field: 'none',
+        fields_touched: [],
+        incomplete_fields: ['description'],
+      });
+    });
+
+    it('attributes the abandon to the field the poster last edited', () => {
+      const { unmount } = render(<CreateBountyFlow deliberateTap />);
+      fireEvent.changeText(screen.getByLabelText('stub-title-input'), 'Walk my dog');
+      unmount();
+
+      expect(lastEventNamed('post_step_abandoned')).toMatchObject({
+        last_field: 'title',
+        fields_touched: ['title'],
+      });
+    });
+
+    it('does not read a raw focus event as a field name', () => {
+      // The stub wires onFocus straight to onFieldFocus, so it passes the event.
+      const { unmount } = render(<CreateBountyFlow deliberateTap />);
+      fireEvent(screen.getByLabelText('stub-title-input'), 'focus', { nativeEvent: {} });
+      unmount();
+
+      expect(lastEventNamed('post_step_abandoned')).toMatchObject({ last_field: 'none' });
+    });
   });
 });
 

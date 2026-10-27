@@ -10,6 +10,8 @@ import { StepPostPublish } from 'app/screens/CreateBounty/quick/StepPostPublish'
 import { StepTask } from 'app/screens/CreateBounty/quick/StepTask';
 import { StepWhen } from 'app/screens/CreateBounty/quick/StepWhen';
 import { StepWhere } from 'app/screens/CreateBounty/quick/StepWhere';
+import type { PostField } from 'app/screens/CreateBounty/postStepFields';
+import { fieldForPatch, incompleteFieldsForStep } from 'app/screens/CreateBounty/postStepFields';
 import { useBountyPublish } from 'app/screens/CreateBounty/useBountyPublish';
 import { bountyService } from 'app/services/bountyService';
 import { ErrorBanner } from 'components/error-banner';
@@ -248,6 +250,15 @@ export function CreateBountyFlow({
   // instance — the composer-engagement signal only cares about the FIRST
   // real interaction.
   const fieldFocusedFiredRef = useRef(false);
+  // Field-level attribution for post_step_abandoned: the last field the
+  // poster focused or edited, and every field they edited, in this flow
+  // instance. Both stay empty for a mount nobody interacted with.
+  const lastFieldRef = useRef<PostField | null>(null);
+  const fieldsTouchedRef = useRef<Set<PostField>>(new Set());
+  // The unmount cleanup below has no deps, so it reads the draft through
+  // this ref to judge which required fields were still incomplete.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   // Set right before an explicit exit path runs, so the post_step_abandoned
   // cleanup below can attribute *why* the flow was left. Left null when the
   // unmount is caused by something this component can't see directly (e.g.
@@ -625,6 +636,11 @@ export function CreateBountyFlow({
    * writes the draft on mount. */
   const handleDraftUpdate = (patch: Partial<BountyDraft>) => {
     markComposerStarted('draft_edit');
+    const field = fieldForPatch(patch);
+    if (field) {
+      lastFieldRef.current = field;
+      fieldsTouchedRef.current.add(field);
+    }
     saveDraft(patch);
   };
 
@@ -633,15 +649,20 @@ export function CreateBountyFlow({
    * flow's first screen), regardless of `deliberateTap`. `deliberate_entry`
    * lets this be segmented the same way as the rest of the funnel below —
    * see the `deliberate_entry` note above `bounty_published`. */
-  const handleFieldFocused = () => {
+  const handleFieldFocused = (field?: 'title' | 'description' | 'template') => {
     // The earliest reliable intent signal in this UX: the title field is not
     // autoFocused, so reaching here always took a tap.
     markComposerStarted('field_focus');
+    // Only a field name counts — a caller wired straight to onFocus passes
+    // the focus event instead.
+    const focusedField = typeof field === 'string' ? field : undefined;
+    if (focusedField) lastFieldRef.current = focusedField;
     if (fieldFocusedFiredRef.current) return;
     fieldFocusedFiredRef.current = true;
     analyticsService.trackEvent('post_field_focused', {
       surface: POST_SURFACE,
       step_index: 1,
+      field: focusedField,
       variant: POST_FLOW_VARIANT,
       entry_point: entryPoint,
       deliberate_entry: deliberateTapRef.current,
@@ -727,9 +748,10 @@ export function CreateBountyFlow({
       const backgroundMs =
         stepBackgroundMsRef.current +
         (backgroundedAtRef.current === null ? 0 : getMonotonicNow() - backgroundedAtRef.current);
+      const stepName = STEP_TITLES[currentStepRef.current - 1];
       analyticsService.trackEvent('post_step_abandoned', {
         step_index: currentStepRef.current,
-        step_name: STEP_TITLES[currentStepRef.current - 1],
+        step_name: stepName,
         seconds_on_step: seconds,
         seconds_capped: capped,
         background_seconds: Math.round(backgroundMs / 1000),
@@ -737,6 +759,11 @@ export function CreateBountyFlow({
         variant: POST_FLOW_VARIANT,
         deliberate_entry: deliberateTapRef.current,
         composer_started: composerStartedRef.current,
+        // Which field the exit happened on (see postStepFields.ts). 'none'
+        // rather than null so "never touched a field" is a breakdown value.
+        last_field: lastFieldRef.current ?? 'none',
+        fields_touched: Array.from(fieldsTouchedRef.current),
+        incomplete_fields: incompleteFieldsForStep(stepName, draftRef.current),
       });
 
       // Only a composition that actually began can be abandoned.

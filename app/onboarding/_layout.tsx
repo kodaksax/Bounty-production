@@ -11,6 +11,7 @@
 
 import { Stack } from 'expo-router';
 import React from 'react';
+import { OnboardingEntryTracker } from '../../components/onboarding/OnboardingEntryTracker';
 import { OnboardingProvider } from '../../lib/context/onboarding-context';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
@@ -19,6 +20,7 @@ export default function OnboardingLayout() {
 
   return (
     <OnboardingProvider>
+      <OnboardingEntryTracker />
       <Stack
         screenOptions={{
           headerShown: false,

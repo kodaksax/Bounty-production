@@ -343,6 +343,21 @@ export const syncAccountStatus = (userId: string, accountStatus: string): void =
   }
 };
 
+/**
+ * The device's current anonymous distinct id, or null when PostHog is
+ * unavailable. It survives identify() (PostHog merges it into the identified
+ * person) and changes on reset(), so it names "this pre-auth visitor" across a
+ * sign-up.
+ */
+export const getAnonymousId = (): string | null => {
+  try {
+    if (!_posthog || typeof _posthog.getAnonymousId !== 'function') return null;
+    return _posthog.getAnonymousId() ?? null;
+  } catch {
+    return null;
+  }
+};
+
 /** Set immutable person properties without replacing values already stored by PostHog. */
 export const setPersonPropertiesOnce = (properties: Record<string, any>): void => {
   try {

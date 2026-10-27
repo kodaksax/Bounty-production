@@ -85,9 +85,10 @@ interface StepTaskProps {
   draft: BountyDraft;
   onUpdate: (data: Partial<BountyDraft>) => void;
   onNext: () => void;
-  /** Fired on this field's first focus — the composer's first real
-   * interaction. Optional so tests/older call sites don't need to pass it. */
-  onFieldFocus?: () => void;
+  /** Fired on every focus of an input (or a template tap) with the field it
+   * was. The first one is the composer's first real interaction. Optional so
+   * tests/older call sites don't need to pass it. */
+  onFieldFocus?: (field: 'title' | 'description' | 'template') => void;
   /** Leaves the composer. Omit to hide the close control. */
   onClose?: () => void;
   /** Paints the status-bar strip above the flow green so the hero reads as
@@ -207,7 +208,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   };
 
   const handleTemplate = (template: TaskTemplate) => {
-    onFieldFocus?.();
+    onFieldFocus?.('template');
     onUpdate({
       title: template.title,
       category: template.category,
@@ -267,7 +268,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
             <TextInput
               value={draft.title}
               onChangeText={handleChange}
-              onFocus={() => onFieldFocus?.()}
+              onFocus={() => onFieldFocus?.('title')}
               onBlur={() => setTouched(true)}
               onSubmitEditing={focusDetail}
               multiline
@@ -298,7 +299,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
               ref={detailInputRef}
               value={detail}
               onChangeText={handleDetailChange}
-              onFocus={() => onFieldFocus?.()}
+              onFocus={() => onFieldFocus?.('description')}
               onBlur={() => setDetailTouched(true)}
               onSubmitEditing={canContinue ? onNext : undefined}
               placeholder={detailExample}

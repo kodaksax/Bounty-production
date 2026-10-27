@@ -30,9 +30,11 @@ what makes a logged-out returning user see the log-in form instead of first-run 
 
 - Console (Metro, or Xcode/logcat on a store build): `[index] Routing decision:`,
   `[onboarding]`, `[sign-in]`, `[sign-up]`, `[AuthProvider]`.
-- PostHog live events: `auth_signup_started` → `auth_signup_success` → `onboarding_started`
-  (with `authenticated: true`). A stray `onboarding_welcome_viewed` **after** a successful
-  registration is the exact regression this branch fixes.
+- PostHog live events: `onboarding_started` (`entry_point: welcome`, `authenticated: false`) →
+  `auth_signup_started` → `onboarding_style_step_viewed`, with **no second** `onboarding_started`
+  after sign-up (it is one per journey, see lib/analytics/onboarding-entry.ts). A stray
+  `onboarding_welcome_viewed` **after** a successful registration is the exact regression this
+  branch fixes. (`auth_signup_success` was retired 2026-09-13.)
 - `auth_signin_blocked` — a sign-in tap rejected locally before any request. Previously invisible;
   if this fires during normal use, the throttle is too aggressive.
 - `auth_signup_session_failed` — account created, session not established. Should be ~never.
@@ -54,7 +56,7 @@ The headline bug. **Do this on a freshly reinstalled app.**
 | A1 | You land on an **onboarding step**, not Welcome and not the log-in form. |
 | A2 | You are **never asked for a password again**. |
 | A3 | No Welcome screen flashes in transit, even for a frame. |
-| A4 | PostHog: `auth_signup_success` then `onboarding_started` with `authenticated: true`. |
+| A4 | PostHog: exactly one `onboarding_started` for the run, fired on Welcome (`entry_point: welcome`); killing and reopening the app mid-onboarding adds `onboarding_resumed`, never a second start. |
 | A5 | Complete onboarding through to the app. |
 
 > **Historical note (2026-08-24):** this used to also call out running A with the role step
