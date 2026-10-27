@@ -27,8 +27,9 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
+let mockIntent: 'poster' | 'hunter' | null = 'hunter';
 jest.mock('../../../lib/context/onboarding-context', () => ({
-  useOnboarding: () => ({ data: { intent: 'hunter' }, updateData: jest.fn() }),
+  useOnboarding: () => ({ data: { intent: mockIntent }, updateData: jest.fn() }),
 }));
 
 jest.mock('../../../lib/services/analytics-service', () => ({
@@ -60,6 +61,7 @@ async function flush() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockIntent = 'hunter';
   mockComplete.mockResolvedValue(undefined);
   // Reduce Motion, so the CTA is enabled on mount and the test isn't timing the
   // typewriter to get at it.
@@ -76,6 +78,22 @@ describe('founder note completion', () => {
 
     expect(mockComplete).toHaveBeenCalledTimes(1);
     expect(mockPush).not.toHaveBeenCalled();
+    expect(useCompleteOnboarding).toHaveBeenCalledWith('/tabs/bounty-app');
+  });
+
+  it('sends a poster straight to the Post tab, not the feed', async () => {
+    mockIntent = 'poster';
+    render(<FounderNoteScreen />);
+    await flush();
+
+    expect(useCompleteOnboarding).toHaveBeenCalledWith('/tabs/bounty-app?tab=postings');
+  });
+
+  it('keeps an unset intent on the feed', async () => {
+    mockIntent = null;
+    render(<FounderNoteScreen />);
+    await flush();
+
     expect(useCompleteOnboarding).toHaveBeenCalledWith('/tabs/bounty-app');
   });
 

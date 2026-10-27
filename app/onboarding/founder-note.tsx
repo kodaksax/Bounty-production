@@ -67,6 +67,7 @@ import { useAccessibleAnimation } from '../../hooks/use-accessible-animation';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useCompleteOnboarding } from '../../hooks/useCompleteOnboarding';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { bountyAppTabPath } from '../../lib/navigation/bounty-app-tab';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { founderNoteStrings } from '../../lib/strings/founderNote';
@@ -114,7 +115,14 @@ export default function FounderNoteScreen() {
   const insets = useSafeAreaInsets();
   const { data: onboardingData } = useOnboarding();
   const { profile } = useAuthProfile();
-  const { complete, isLoading: isCompleting } = useCompleteOnboarding('/tabs/bounty-app');
+  // Posters land on the Post tab, in the composer, rather than the feed: of
+  // 39 poster-intent completers since 1 Sep, 13 of the 16 who ever opened the
+  // composer did so within 5 minutes and 23 never did. Whoever posts posts
+  // right away, so the first screen after onboarding should be the one they
+  // post from. Hunters (and an unset intent) still land on the feed.
+  const { complete, isLoading: isCompleting } = useCompleteOnboarding(
+    onboardingData.intent === 'poster' ? bountyAppTabPath('postings') : '/tabs/bounty-app'
+  );
   const { prefersReducedMotion } = useAccessibleAnimation();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);

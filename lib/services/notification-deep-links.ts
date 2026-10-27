@@ -100,6 +100,11 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'application') {
         return { kind: 'route', path: POSTER_REQUESTS_PATH };
       }
+      // The unfinished-post reminder: the Post tab, where the composer offers
+      // to continue the draft from the step it stopped on.
+      if (ctx.type === 'draft_reminder') {
+        return { kind: 'route', path: bountyAppTabPath('postings') };
+      }
       // Hunter's daily closure digest (SBA-09): bountyId is the first live
       // alternative it names. With none, the next step is still finding
       // another bounty, so go to the feed rather than nowhere.

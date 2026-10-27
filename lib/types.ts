@@ -666,6 +666,8 @@ export type NotificationType =
   | 'application_closure_digest'
   /** Poster-facing: they approved a hunter's work 24h ago and still haven't rated them. Fires once per completion_submissions row. */
   | 'rating_reminder'
+  /** Poster-facing, local only (lib/services/draft-reminder.ts): their unfinished post has sat untouched for 24h. Scheduled on the device that holds the draft, never sent by the server or stored in notifications; data.stepsLeft is how many composer steps remain. */
+  | 'draft_reminder'
   | 'account_warning'
   | 'account_restricted'
   | 'payout_paid'

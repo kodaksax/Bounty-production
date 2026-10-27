@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { storage } from '../../lib/storage';
+import {
+  cancelDraftReminder,
+  scheduleDraftReminderSoon,
+} from '../../lib/services/draft-reminder';
 import type { Attachment } from '../../lib/types';
 import type { TrustTier } from '../../lib/utils/trust-tier';
 
@@ -37,6 +41,7 @@ export async function clearBountyDraftForUser(userId?: string): Promise<void> {
   try {
     await storage.removeItem(getDraftKey(userId));
     notifyDraftPresence(getDraftKey(userId), false);
+    if (userId) await cancelDraftReminder(userId);
   } catch (error) {
     console.error('Failed to clear bounty draft for user', userId ?? '(anonymous)', ':', error);
   }
@@ -205,13 +210,19 @@ export function useBountyDraft(userId?: string) {
       // Merge against the latest draft (draftRef, not render-time state) so
       // several saves in one tick all survive, and persist that same value.
       const updatedValue: BountyDraft = { ...draftRef.current, ...draftData };
+      const inProgress = isBountyDraftInProgress(updatedValue);
       setDraft(updatedValue);
-      notifyDraftPresence(draftKey, isBountyDraftInProgress(updatedValue));
+      notifyDraftPresence(draftKey, inProgress);
       await storage.setItem(draftKey, JSON.stringify(updatedValue));
+      // The 24h "your draft is waiting" reminder follows the last edit.
+      if (userId) {
+        if (inProgress) scheduleDraftReminderSoon(userId, updatedValue);
+        else void cancelDraftReminder(userId);
+      }
     } catch (error) {
       console.error('Failed to save bounty draft:', error);
     }
-  }, [draftKey, setDraft]);
+  }, [draftKey, setDraft, userId]);
 
   // Clear draft from AsyncStorage
   const clearDraft = useCallback(async () => {
@@ -219,10 +230,12 @@ export function useBountyDraft(userId?: string) {
       setDraft(defaultDraft);
       notifyDraftPresence(draftKey, false);
       await storage.removeItem(draftKey);
+      // Published or discarded: nothing left to remind about.
+      if (userId) await cancelDraftReminder(userId);
     } catch (error) {
       console.error('Failed to clear bounty draft:', error);
     }
-  }, [draftKey, setDraft]);
+  }, [draftKey, setDraft, userId]);
 
   return {
     draft,

@@ -266,3 +266,13 @@ describe('application_closure_digest (SBA-09)', () => {
     })).toEqual({ kind: 'route', path: '/bounty/b1?source=notification' });
   });
 });
+
+describe('resolveNotificationDeepLink: draft_reminder', () => {
+  test('opens the Post tab, where the composer offers to continue the draft', () => {
+    expect(resolveNotificationDeepLink({ type: 'draft_reminder', data: {} })).toEqual({
+      kind: 'route',
+      path: '/tabs/bounty-app?tab=postings',
+    });
+    expect(categoryForNotificationType('draft_reminder')).toBe('marketplace');
+  });
+});
