@@ -103,6 +103,11 @@ jest.mock('app/screens/CreateBounty/quick/StepTask', () => ({
         <TouchableOpacity accessibilityLabel="stub-next" onPress={props.onNext}>
           <Text>StepTask</Text>
         </TouchableOpacity>
+        {props.onClose && (
+          <TouchableOpacity accessibilityLabel="stub-close" onPress={props.onClose}>
+            <Text>Close</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   },
@@ -125,6 +130,7 @@ jest.mock('app/screens/CreateBounty/quick/PostCelebration', () => ({ PostCelebra
 jest.mock('app/screens/CreateBounty/quick/StepPostPublish', () => ({ StepPostPublish: () => null }));
 jest.mock('components/add-money-screen', () => ({ AddMoneyScreen: () => null }));
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CreateBountyFlow } from 'app/screens/CreateBounty/index';
 import { analyticsService } from 'lib/services/analytics-service';
 
@@ -240,5 +246,47 @@ describe('CreateBountyFlow — "Continue your post" prompt', () => {
     expect(eventsNamed('post_step_completed')).toEqual([
       expect.objectContaining({ step_index: 1 }),
     ]);
+  });
+});
+
+// The app-open prompt's trigger (lib/storage/abandoned-draft.ts): a tab
+// switch away from an unfinished draft flags it; other exits don't.
+describe('CreateBountyFlow — abandoned-draft flag', () => {
+  const ABANDONED_KEY = '@bounty_abandoned_draft:poster-1';
+  const flagWrites = () =>
+    (AsyncStorage.setItem as jest.Mock).mock.calls.filter(c => c[0] === ABANDONED_KEY);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDraft = draftWith();
+  });
+
+  it('flags a draft left by switching tabs', () => {
+    const { unmount } = render(<CreateBountyFlow />);
+    unmount();
+
+    expect(eventsNamed('post_step_abandoned')).toEqual([
+      expect.objectContaining({ exit_method: 'tab' }),
+    ]);
+    expect(flagWrites()).toHaveLength(1);
+  });
+
+  it('does not flag a tab switch with no draft', () => {
+    mockDraft = draftWith({ title: '', description: '' });
+    const { unmount } = render(<CreateBountyFlow />);
+    unmount();
+
+    expect(flagWrites()).toHaveLength(0);
+  });
+
+  it('does not flag closing the composer', () => {
+    const { unmount } = render(<CreateBountyFlow onCancel={jest.fn()} />);
+    fireEvent.press(screen.getByLabelText('stub-close'));
+    unmount();
+
+    expect(eventsNamed('post_step_abandoned')).toEqual([
+      expect.objectContaining({ exit_method: 'close' }),
+    ]);
+    expect(flagWrites()).toHaveLength(0);
   });
 });
