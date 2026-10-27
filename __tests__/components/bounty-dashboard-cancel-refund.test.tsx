@@ -3,6 +3,10 @@
  * "Edit details" on an open bounty nobody has been hired for, confirms in the
  * app with the amount and where it goes, and runs the shared refund-then-delete
  * path (lib/services/bounty-cancel-refund.ts).
+ *
+ * 2026-10-27 regression: both actions sat behind the status panel's collapsed
+ * "More actions", so posters could not find them. They now render in the hero
+ * card's Manage row without any disclosure.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
@@ -14,17 +18,20 @@ import { lightTheme } from '../../lib/themes/lightTheme';
 let mockTheme: any = lightTheme;
 let mockBounty: any;
 let mockApplicationCount = 0;
+let mockRole: 'poster' | 'hunter' = 'poster';
+let mockParams: Record<string, string> = { bountyId: 'b1' };
 const mockRefresh = jest.fn();
 const mockPlan = jest.fn();
 const mockCancel = jest.fn();
 const mockMarkRemoved = jest.fn();
 const mockRefundEscrow = jest.fn();
 const mockBack = jest.fn();
+const mockReplace = jest.fn();
 
 jest.mock('expo-image', () => ({ Image: () => null }));
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ bountyId: 'b1' }),
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: mockBack, canGoBack: () => true }),
+  useLocalSearchParams: () => mockParams,
+  useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: mockBack, canGoBack: () => true }),
 }));
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');
@@ -61,10 +68,10 @@ jest.mock('../../lib/services/bounty-cancel-refund', () => {
 jest.mock('../../hooks/useBountyLifecycle', () => ({
   useBountyLifecycle: () => ({
     bounty: mockBounty,
-    role: 'poster',
+    role: mockRole,
     state: resolveBountyLifecycle({
       bounty: mockBounty,
-      role: 'poster',
+      role: mockRole,
       applicationCount: mockApplicationCount,
     }),
     otherParty: { id: null, name: null, avatar: null },
@@ -82,12 +89,15 @@ jest.mock('../../lib/services/message-service', () => ({
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn().mockResolvedValue([]) },
 }));
+// The editor itself is covered elsewhere; here only whether it opens matters.
+jest.mock('../../components/edit-posting-modal', () => {
+  const { Text } = require('react-native');
+  return {
+    EditPostingModal: ({ visible }: { visible: boolean }) => (visible ? <Text>edit-modal-open</Text> : null),
+  };
+});
 
 import BountyDashboard from '../../app/postings/[bountyId]/index';
-
-function openMoreActions() {
-  fireEvent.press(screen.getByLabelText('More actions'));
-}
 
 /** The buttons of the most recent Alert.alert call. */
 function lastAlert() {
@@ -101,6 +111,8 @@ beforeEach(() => {
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   mockTheme = lightTheme;
   mockApplicationCount = 0;
+  mockRole = 'poster';
+  mockParams = { bountyId: 'b1' };
   mockBounty = {
     id: 'b1',
     title: 'Fix a fence',
@@ -124,25 +136,93 @@ describe('BountyDashboard — Cancel and refund', () => {
   it.each([
     ['light', lightTheme],
     ['dark', darkTheme],
-  ])('sits next to Edit details on an open, unhired bounty (%s theme)', (_n, theme) => {
+  ])('sits next to Edit details on an open, unhired bounty, with no disclosure to open (%s theme)', (_n, theme) => {
     mockTheme = theme;
     render(<BountyDashboard />);
-    openMoreActions();
+    expect(screen.getByTestId('bounty-manage-actions')).toBeTruthy();
     expect(screen.getByLabelText('Edit details')).toBeTruthy();
     expect(screen.getByLabelText('Cancel and refund')).toBeTruthy();
+    // Not duplicated under the status panel's "More actions".
+    if (screen.queryByLabelText('More actions')) fireEvent.press(screen.getByLabelText('More actions'));
+    expect(screen.getAllByLabelText('Edit details')).toHaveLength(1);
+    expect(screen.getAllByLabelText('Cancel and refund')).toHaveLength(1);
   });
 
-  it('is still offered once hunters have applied (editing is not)', () => {
+  it('Edit details opens the editor while nobody has applied', () => {
+    render(<BountyDashboard />);
+    fireEvent.press(screen.getByLabelText('Edit details'));
+    expect(screen.getByText('edit-modal-open')).toBeTruthy();
+  });
+
+  it('is still offered once hunters have applied; Edit explains why the terms are locked', () => {
     mockApplicationCount = 2;
     render(<BountyDashboard />);
-    openMoreActions();
     expect(screen.getByLabelText('Cancel and refund')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Edit details'));
+    expect(screen.queryByText('edit-modal-open')).toBeNull();
+    expect(lastAlert().title).toBe('Details are locked');
+    expect(lastAlert().message).toContain('2 hunters have applied on these terms');
+  });
+
+  it('?openEdit=true opens the editor on an editable bounty', () => {
+    mockParams = { bountyId: 'b1', openEdit: 'true' };
+    render(<BountyDashboard />);
+    expect(screen.getByText('edit-modal-open')).toBeTruthy();
+  });
+
+  it('?openEdit=true does not open the editor over a hired bounty', () => {
+    mockParams = { bountyId: 'b1', openEdit: 'true' };
+    mockBounty = { ...mockBounty, status: 'in_progress', accepted_by: 'hunter-1' };
+    render(<BountyDashboard />);
+    expect(screen.queryByText('edit-modal-open')).toBeNull();
+    expect(lastAlert().title).toBe("Can't edit this bounty");
+  });
+
+  it('a hired bounty says why it cannot be edited or cancelled instead of offering either', () => {
+    mockBounty = { ...mockBounty, status: 'in_progress', accepted_by: 'hunter-1' };
+    render(<BountyDashboard />);
+    expect(screen.getByTestId('bounty-manage-locked')).toBeTruthy();
     expect(screen.queryByLabelText('Edit details')).toBeNull();
+  });
+
+  it('a completed bounty offers no edit or cancel', () => {
+    mockBounty = { ...mockBounty, status: 'completed', accepted_by: 'hunter-1' };
+    render(<BountyDashboard />);
+    expect(screen.queryByTestId('bounty-manage-actions')).toBeNull();
+    expect(screen.queryByLabelText('Edit details')).toBeNull();
+    expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
+  });
+
+  it('a non-owner never sees the owner actions and is redirected off the screen', () => {
+    mockRole = 'hunter';
+    render(<BountyDashboard />);
+    expect(screen.queryByTestId('bounty-manage-actions')).toBeNull();
+    expect(screen.queryByLabelText('Edit details')).toBeNull();
+    expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
+    expect(mockReplace).toHaveBeenCalled();
+  });
+
+  it('a second confirm while the cancel is in flight does not run it twice', async () => {
+    let finish: (v: unknown) => void = () => {};
+    mockCancel.mockImplementation(() => new Promise(r => (finish = r)));
+    render(<BountyDashboard />);
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Cancel and refund'));
+    });
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    const go = lastAlert().buttons.find((b: any) => b.style === 'destructive');
+    await act(async () => {
+      go.onPress();
+      go.onPress();
+    });
+    expect(mockCancel).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finish({ refundAmount: 40, destination: 'wallet' });
+    });
   });
 
   it('confirms in the app with the refund amount and destination, then cancels', async () => {
     render(<BountyDashboard />);
-    openMoreActions();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
@@ -169,7 +249,6 @@ describe('BountyDashboard — Cancel and refund', () => {
 
   it('"Keep it" does nothing', async () => {
     render(<BountyDashboard />);
-    openMoreActions();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
@@ -184,7 +263,6 @@ describe('BountyDashboard — Cancel and refund', () => {
     const { BountyRefundFailedError } = jest.requireActual('../../lib/services/bounty-cancel-refund');
     mockCancel.mockRejectedValue(new BountyRefundFailedError(new Error('owner_refund_in_progress')));
     render(<BountyDashboard />);
-    openMoreActions();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
@@ -201,7 +279,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     mockBounty = { ...mockBounty, status: 'in_progress', accepted_by: 'hunter-1' };
     render(<BountyDashboard />);
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
-    if (screen.queryByLabelText('More actions')) openMoreActions();
+    if (screen.queryByLabelText('More actions')) fireEvent.press(screen.getByLabelText('More actions'));
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
   });
 
@@ -209,7 +287,6 @@ describe('BountyDashboard — Cancel and refund', () => {
     mockBounty = { ...mockBounty, is_for_honor: true, amount: 0 };
     mockPlan.mockResolvedValue({ refundAmount: 0, destination: null });
     render(<BountyDashboard />);
-    openMoreActions();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel bounty'));
     });
