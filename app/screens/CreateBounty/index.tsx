@@ -26,6 +26,7 @@ import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
 import { markPosterActivated } from 'lib/analytics/lifecycle';
 import { analyticsService } from 'lib/services/analytics-service';
+import { markDraftAbandoned } from 'lib/storage/abandoned-draft';
 import { useStripe } from 'lib/stripe-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import { validateContactInfo, validateDescription } from 'lib/utils/bounty-validation';
@@ -272,6 +273,8 @@ export function CreateBountyFlow({
   // this ref to judge which required fields were still incomplete.
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  const userIdRef = useRef(session?.user?.id);
+  userIdRef.current = session?.user?.id;
   // Set right before an explicit exit path runs, so the post_step_abandoned
   // cleanup below can attribute *why* the flow was left. Left null when the
   // unmount is caused by something this component can't see directly (e.g.
@@ -838,6 +841,12 @@ export function CreateBountyFlow({
         fields_touched: Array.from(fieldsTouchedRef.current),
         incomplete_fields: incompleteFieldsForStep(stepName, draftRef.current),
       });
+
+      // A poster who switched tabs away from an unfinished draft is who the
+      // app-open resume prompt is for (app/hooks/useResumeComposerPrompt.ts).
+      if (exitMethod === 'tab' && userIdRef.current && draftRef.current.title?.trim()) {
+        void markDraftAbandoned(userIdRef.current);
+      }
 
       // Only a composition that actually began can be abandoned.
       if (!composerStartedRef.current) return;
