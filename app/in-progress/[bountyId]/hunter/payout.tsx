@@ -1,6 +1,7 @@
 // app/in-progress/[bountyId]/hunter/payout.tsx - Payout stage for hunter
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useReturnToTabShell } from '../../../../lib/navigation/tab-shell-return';
 import { FEED_FALLBACK, useSafeBack } from '../../../../hooks/useSafeBack';
 import React, { useEffect, useState } from 'react';
 import {
@@ -45,6 +46,7 @@ const HUNTER_STAGES: StageInfo[] = [
 export default function HunterPayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   // Push notifications can open this screen with nothing under it; fall
   // back to this bounty's hunter hub rather than leaving back dead.
   const goBack = useSafeBack(
@@ -165,7 +167,7 @@ export default function HunterPayoutScreen() {
                 {
                   text: 'OK',
                   onPress: () => {
-                    router.replace('/tabs/bounty-app');
+                    returnToTabShell();
                   },
                 },
               ]);
@@ -220,7 +222,7 @@ export default function HunterPayoutScreen() {
                 {
                   text: 'OK',
                   onPress: () => {
-                    router.replace('/tabs/bounty-app');
+                    returnToTabShell();
                   },
                 },
               ]);

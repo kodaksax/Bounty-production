@@ -14,7 +14,7 @@
  * than throwing.
  */
 import { NavigationContext } from '@react-navigation/native';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 type FocusNavigation = {
   isFocused: () => boolean;
@@ -51,11 +51,18 @@ export function useIsScreenFocused(): boolean {
  * pushed over it — never on the first focus, which the screen's own mount
  * effects already cover. The callback is read through a ref, so callers
  * don't need to memoize it.
+ *
+ * `active: false` is for a tab of the tab shell that is mounted but not the
+ * one in view: a return then only marks it stale, and the refresh runs once
+ * `active` turns true, so a Back press doesn't refetch every off-screen tab.
  */
-export function useRefreshOnReturn(onReturn: () => void) {
+export function useRefreshOnReturn(onReturn: () => void, { active = true }: { active?: boolean } = {}) {
   const navigation = useFocusNavigation();
   const callbackRef = useRef(onReturn);
   callbackRef.current = onReturn;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const staleRef = useRef(false);
 
   useEffect(() => {
     if (!navigation) return;
@@ -66,13 +73,50 @@ export function useRefreshOnReturn(onReturn: () => void) {
     const offFocus = navigation.addListener('focus', () => {
       if (!covered) return;
       covered = false;
-      callbackRef.current();
+      if (activeRef.current) callbackRef.current();
+      else staleRef.current = true;
     });
     return () => {
       offBlur();
       offFocus();
     };
   }, [navigation]);
+
+  useEffect(() => {
+    if (!active || !staleRef.current) return;
+    staleRef.current = false;
+    callbackRef.current();
+  }, [active]);
+}
+
+/**
+ * For a native <Modal> (AppModal) that can open a screen: the screen is
+ * pushed onto the navigator *under* the modal, where it can't be seen. This
+ * hides the modal while another screen covers the one it was opened on and
+ * shows it again when that screen is popped, so Back returns to the modal.
+ *
+ * Pass the modal's own open state and the parent's unmount callback; hand the
+ * returned `presented` to AppModal's `visible` and `onClosed` to its
+ * `onClosed`. Only a real close (`visible` false) reaches `onClose`.
+ */
+export function useModalYieldsToPushedScreens(visible: boolean, onClose: () => void) {
+  const focused = useIsScreenFocused();
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Closed while hidden (e.g. closed as it pushes the screen): AppModal has
+  // already finished its own close, so no onClosed is coming — finish here.
+  useEffect(() => {
+    if (!visible && !focused) onCloseRef.current();
+  }, [visible, focused]);
+
+  const onClosed = useCallback(() => {
+    if (!visibleRef.current) onCloseRef.current();
+  }, []);
+
+  return { presented: visible && focused, onClosed };
 }
 
 /**

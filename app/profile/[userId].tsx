@@ -346,9 +346,17 @@ export default function UserProfileScreen() {
   };
 
   const handleBack = async () => {
-    // If a referrer was provided when opening this profile, try to route
-    // back to it. Use navigationIntent to hand the referrer to the BountyApp
-    // root which will apply it even if the BountyApp is already mounted.
+    // Pop to the screen this profile was opened from: it stayed mounted
+    // underneath (root stack), so its list position, segment and filters are
+    // still there — the same place the iOS swipe and Android back return to.
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    // Nothing to pop (a cold link straight to this profile). If a referrer
+    // names a tab, open the shell on it: navigationIntent hands it to the
+    // BountyApp root, which applies it on mount.
     if (referrer) {
       try {
         const decoded = decodeURIComponent(referrer as string);
@@ -361,11 +369,7 @@ export default function UserProfileScreen() {
       }
     }
 
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/');
-    }
+    router.replace('/');
   };
 
   if (loading) {

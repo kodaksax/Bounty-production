@@ -23,7 +23,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ROUTES } from '../../../lib/routes';
+import { useReturnToTabShell } from '../../../lib/navigation/tab-shell-return';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 import { withReplayMask } from '../../../components/replay-mask';
 
@@ -35,6 +35,7 @@ function DisputeScreen() {
     reason?: string;
   }>();
   const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   const { session } = useAuthContext();
   const userId = session?.user?.id;
   
@@ -278,10 +279,9 @@ function DisputeScreen() {
     // context is visible. Otherwise fall back to history back.
     try {
         if (from === 'in-progress') {
-          // Use a full href with query string and replace to ensure the tab
-          // wrapper (`/tabs/bounty-app`) mounts and receives the `tab`
-          // and `initialTab` params so BottomNav is shown.
-          router.replace(`${ROUTES.TABS.BOUNTY_APP}?tab=messages&initialTab=inProgress`)
+          // Back to the mounted tab shell, on My Work (a fresh shell when
+          // none is mounted, so BottomNav is still shown).
+          returnToTabShell({ tab: 'messages', initialTab: 'inProgress' })
         return;
       }
     } catch (e) {

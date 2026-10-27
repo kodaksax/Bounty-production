@@ -16,7 +16,7 @@
 const PREV_API_TIMEOUT = process.env.API_TIMEOUT;
 process.env.API_TIMEOUT = '150';
 
-import { act, cleanup, render, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 
 // --- Rich react-native mock (the global jest.setup mock lacks Animated.FlatList
@@ -69,6 +69,8 @@ jest.mock('react-native', () => {
         )
       );
     }
+    // Exposed so a test can page the list the way scrolling to the end does.
+    (global as any).__feedOnEndReached = props.onEndReached;
     return ReactMock.createElement('FlatList', {}, header, body, footer);
   });
 
@@ -152,9 +154,33 @@ jest.mock('../../components/bounty-grid-feed', () => ({
       )
     ),
 }));
-jest.mock('../../components/bounty-list-item', () => ({
-  BountyListItem: ({ title }: any) =>
-    require('react').createElement('Text', { testID: 'bounty-item' }, title),
+// Cards wire into the feed's detail host the way the real ones do (open on
+// press, report unmount); the popup itself is a probe showing what it holds.
+jest.mock('../../components/bounty-list-item', () => {
+  const ReactMock = require('react');
+  const { useBountyDetailHost } = require('../../components/bounty-detail-host');
+  return {
+    BountyListItem: ({ id, title }: any) => {
+      const host = useBountyDetailHost();
+      ReactMock.useEffect(() => () => host?.cardGone(String(id)), [host, id]);
+      return ReactMock.createElement(
+        'Text',
+        {
+          testID: 'bounty-item',
+          onPress: () => host?.open({ id, title }, { x: 0, y: 0, width: 100, height: 100 }),
+        },
+        title
+      );
+    },
+  };
+});
+jest.mock('../../components/bountydetailmodal', () => ({
+  BountyDetailModal: ({ bounty, origin }: any) =>
+    require('react').createElement(
+      'Text',
+      { testID: 'bounty-detail' },
+      `${bounty.title}|${origin ? 'from-card' : 'plain'}`
+    ),
 }));
 jest.mock('../../components/ui/skeleton-loaders', () => ({
   PostingsListSkeleton: () => require('react').createElement('View', { testID: 'skeleton' }),
@@ -556,5 +582,60 @@ describe('BountyFeed lifecycle visibility', () => {
       await act(async () => {});
       expect(cards(queryAllByTestId)).toEqual(['w1:review']);
     });
+  });
+  // Resuming from background (and the refresh after posting / accepting)
+  // used to reload page one only, cutting a list paged further down back to
+  // ten rows: anyone scrolled past them was clamped to the end of page one.
+  it('re-reads every loaded page on a refresh instead of cutting back to page one', async () => {
+    const page = (offset: number, limit: number) =>
+      Array.from({ length: limit }, (_, i) =>
+        openBounty({ id: String(offset + i + 1), title: `Bounty ${offset + i + 1}` })
+      );
+    bountyService.getAll.mockImplementation(async (opts: any) =>
+      opts?.status === 'open' ? page(opts.offset ?? 0, opts.limit ?? 10) : []
+    );
+
+    const ref = React.createRef<any>();
+    const { queryAllByTestId } = renderFeed(ref);
+    await waitFor(() => expect(titles(queryAllByTestId)).toHaveLength(10));
+
+    act(() => {
+      (global as any).__feedOnEndReached();
+    });
+    await waitFor(() => expect(titles(queryAllByTestId)).toHaveLength(20));
+
+    act(() => {
+      ref.current.refresh();
+    });
+    await waitFor(() => expect(feedLoadCalls()).toBe(3));
+    const reload = bountyService.getAll.mock.calls.filter((c: any[]) => c[0]?.status === 'open')[2][0];
+    expect(reload).toEqual(expect.objectContaining({ offset: 0, limit: 20 }));
+    await act(async () => {});
+    expect(titles(queryAllByTestId)).toHaveLength(20);
+  });
+  // Apply in the popup, open the poster's profile, come back: the feed
+  // reloads the user's applications and drops the bounty just applied to.
+  // The popup used to live inside that bounty's row and vanished with it.
+  it('keeps the detail popup open when its bounty drops out of the feed under it', async () => {
+    bountyService.getAll.mockResolvedValue([
+      openBounty({ id: '1', title: 'Fix my bike' }),
+      openBounty({ id: '2', title: 'Walk my dog' }),
+    ]);
+    const props = { setActiveScreen: jest.fn(), currentUserId: 'user-123' };
+    const view = render(React.createElement(BountyFeed, { ...props, activeScreen: 'bounty' }));
+    await waitFor(() => expect(titles(view.queryAllByTestId)).toEqual(['Fix my bike', 'Walk my dog']));
+
+    fireEvent.press(view.getByText('Fix my bike'));
+    expect(view.getByTestId('bounty-detail').props.children).toBe('Fix my bike|from-card');
+
+    // The application now exists; the feed re-reads applications on return.
+    bountyRequestService.getAll.mockResolvedValue([{ id: 'r1', bounty_id: '1', status: 'pending' }]);
+    view.rerender(React.createElement(BountyFeed, { ...props, activeScreen: 'elsewhere' }));
+    view.rerender(React.createElement(BountyFeed, { ...props, activeScreen: 'bounty' }));
+
+    await waitFor(() => expect(titles(view.queryAllByTestId)).toEqual(['Walk my dog']));
+    // Still open, on the same bounty — just no longer growing out of a card
+    // that is gone.
+    expect(view.getByTestId('bounty-detail').props.children).toBe('Fix my bike|plain');
   });
 });

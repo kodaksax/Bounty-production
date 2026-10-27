@@ -34,6 +34,7 @@ import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
 import { getUserFriendlyError } from '../../../../lib/utils/error-messages';
 import { ROUTES } from '../../../../lib/routes';
+import { useReturnToTabShell } from '../../../../lib/navigation/tab-shell-return';
 import { discardApplication } from '../../../../lib/services/application-withdrawal';
 import { messageService } from '../../../../lib/services/message-service';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
@@ -41,12 +42,12 @@ import type { AppTheme } from '../../../../lib/themes/types';
 import type { BountyActionKey } from '../../../../lib/utils/bounty-lifecycle';
 import { getBountyStages } from '../../../../lib/utils/bounty-lifecycle';
 
-const FEED_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?tab=bounty`;
 const MY_WORK_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?tab=messages&initialTab=inProgress`;
 
 export default function HunterFlowIndex() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   const insets = useSafeAreaInsets();
   // Until the session restores every viewer looks anonymous, which would
   // resolve an accepted hunter to a visitor and forward them to the wrong
@@ -142,8 +143,9 @@ export default function HunterFlowIndex() {
                 surface: 'hunter_detail',
               });
               // The bounty is now hidden from this hunter's work list (the
-              // list reloads the hidden set on mount), so leave the screen.
-              router.replace(MY_WORK_ROUTE as never);
+              // Inbox reloads the hidden set when it is returned to), so
+              // leave the screen.
+              returnToTabShell({ tab: 'messages', initialTab: 'inProgress' });
             } catch (err) {
               const friendly = getUserFriendlyError(err);
               Alert.alert(friendly.title, friendly.message);
@@ -155,12 +157,12 @@ export default function HunterFlowIndex() {
       ],
       { cancelable: true }
     );
-  }, [routeBountyId, currentUserId, router]);
+  }, [routeBountyId, currentUserId, returnToTabShell]);
 
   const handlers = useMemo((): Partial<Record<BountyActionKey, () => void>> => {
     if (!routeBountyId) return {};
     return {
-      find_bounties: () => router.replace(FEED_ROUTE as never),
+      find_bounties: () => returnToTabShell({ tab: 'bounty' }),
       view_bounty: () =>
         router.push({ pathname: '/bounty/[id]/public', params: { id: routeBountyId } } as never),
       apply: () =>
@@ -184,7 +186,7 @@ export default function HunterFlowIndex() {
         router.push({ pathname: '/bounty/[id]/cancel', params: { id: routeBountyId } } as never),
       contact_support: () => router.push('/tabs/need-help-screen' as never),
     };
-  }, [routeBountyId, handleMessage, handleDiscardApplication, router]);
+  }, [routeBountyId, handleMessage, handleDiscardApplication, router, returnToTabShell]);
 
   const goBack = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -206,7 +208,7 @@ export default function HunterFlowIndex() {
         message="The poster removed it, or the link points somewhere that no longer exists."
         icon="search-off"
         actionText="Find other bounties"
-        onAction={() => router.replace(FEED_ROUTE as never)}
+        onAction={() => returnToTabShell({ tab: 'bounty' })}
       />
     );
   }

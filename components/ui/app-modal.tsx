@@ -63,19 +63,20 @@ type Measurable = {
  * Attach `originRef` to the element and open through `openFrom(() => show())`:
  * it measures the element first and opens in the same callback, so the
  * dialog's first frame already knows where to grow from. Opens plainly when
- * the element can't be measured.
+ * the element can't be measured. `open` also receives the measured rect, for
+ * a caller that hands the dialog to an owner elsewhere (BountyDetailHost).
  */
 export function useModalOrigin<T = unknown>() {
   const originRef = useRef<T | null>(null);
   const [origin, setOrigin] = useState<ModalOrigin | null>(null);
 
-  const openFrom = useCallback((open: () => void) => {
+  const openFrom = useCallback((open: (origin: ModalOrigin | null) => void) => {
     const node = originRef.current as Measurable | null;
     let opened = false;
-    const openOnce = () => {
+    const openOnce = (measured: ModalOrigin | null = null) => {
       if (opened) return;
       opened = true;
-      open();
+      open(measured);
     };
     if (!node?.measureInWindow) {
       setOrigin(null);
@@ -83,12 +84,13 @@ export function useModalOrigin<T = unknown>() {
       return;
     }
     node.measureInWindow((x, y, width, height) => {
-      setOrigin(width > 0 && height > 0 ? { x, y, width, height } : null);
-      openOnce();
+      const measured = width > 0 && height > 0 ? { x, y, width, height } : null;
+      setOrigin(measured);
+      openOnce(measured);
     });
     // measureInWindow answers within the frame; never let a dropped callback
     // swallow the tap.
-    setTimeout(openOnce, 50);
+    setTimeout(() => openOnce(), 50);
   }, []);
 
   return { originRef, origin, openFrom };

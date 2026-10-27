@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocation } from 'app/hooks/useLocation';
 import { BountyCompactItem } from 'components/bounty-compact-item';
+import { BountyDetailHost } from 'components/bounty-detail-host';
 import { BountyGridFeed } from 'components/bounty-grid-feed';
 import { BountyListItem } from 'components/bounty-list-item';
 import {
@@ -128,6 +129,9 @@ interface BountyFeedProps {
 }
 
 const PAGE_SIZE = 10;
+// Most rows a reload in place (resume, a refresh after posting/accepting)
+// re-reads in one request — search_bounties_nearby's own server-side cap.
+const MAX_RELOAD_ROWS = 100;
 // The progress cards page through the poster's whole live set. Nearly every
 // poster fits in one page; the page cap only bounds a runaway loop.
 const MY_ACTIVE_BOUNTIES_PAGE_SIZE = 100;
@@ -202,7 +206,7 @@ function nearbyToBounty(nb: NearbyBounty): Bounty {
 // mount's topic unique even during a rapid unmount/remount.
 let bountyFeedMountCounter = 0;
 
-export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(
+const BountyFeedContent = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeedContent(
   { activeScreen, setActiveScreen, currentUserId },
   ref
 ) {
@@ -842,7 +846,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   ]);
 
   const loadBounties = useCallback(
-    async ({ reset = false }: { reset?: boolean } = {}) => {
+    async ({ reset = false, keepLoaded = false }: { reset?: boolean; keepLoaded?: boolean } = {}) => {
       if (reset) {
         setIsLoadingBounties(true);
         setLoadError(null);
@@ -850,11 +854,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         setLoadingMore(true);
       }
       const pageOffset = reset ? 0 : offsetRef.current;
+      // A reload in place re-reads everything already loaded rather than just
+      // page one. Cutting the list back to one page clamped anyone scrolled
+      // past it to the end of that page — on every resume from background,
+      // even with a bounty open over the feed.
+      const limit =
+        reset && keepLoaded
+          ? Math.min(MAX_RELOAD_ROWS, Math.max(PAGE_SIZE, offsetRef.current))
+          : PAGE_SIZE;
       const startedAt = Date.now();
       logger.info('feed.bounties.request_started', {
         reset,
         offset: pageOffset,
-        pageSize: PAGE_SIZE,
+        pageSize: limit,
       });
       try {
         const fetchedBounties =
@@ -864,7 +876,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                   latitude: searchCoords?.latitude,
                   longitude: searchCoords?.longitude,
                   radiusMiles: distanceFilter,
-                  limit: PAGE_SIZE,
+                  limit,
                   offset: pageOffset,
                   includeTest: includeTestBounties,
                   // A radius limits in-person work only (SBA-02).
@@ -878,7 +890,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 // load-error state below.
                 bountyService.getAll({
                   status: 'open',
-                  limit: PAGE_SIZE,
+                  limit,
                   offset: pageOffset,
                   includeTest: includeTestBounties,
                   throwOnError: true,
@@ -910,7 +922,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         // count would re-request rows already consumed, and a page that filters
         // down to fewer than PAGE_SIZE items does not mean the list ended.
         offsetRef.current = pageOffset + pageRows.length;
-        setHasMore(pageRows.length === PAGE_SIZE);
+        setHasMore(pageRows.length === limit);
         setLoadError(null);
         logger.info('feed.bounties.request_completed', {
           reset,
@@ -1024,7 +1036,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // open count. The loaded rows stay live through realtime; keeping them
   // rather than reloading page one is what preserves the scroll position.
   // Silent: nothing flips back to a skeleton or a blank count.
+  // Only when the feed is the tab in view — a Back from something opened on
+  // another tab shouldn't refetch an off-screen feed; switching back to it
+  // reloads the same two lists (the activeScreen effect further down).
   useRefreshOnReturn(() => {
+    if (activeScreen !== 'bounty') return;
     loadUserApplications().catch(err => console.error('Failed to refresh user applications:', err));
     loadMyActiveBounties().catch(err => console.error('Failed to refresh active bounties:', err));
     bountyService
@@ -1185,10 +1201,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   useImperativeHandle(
     ref,
     () => ({
+      // After posting or accepting: fresh rows, same scroll position.
       refresh: () => {
-        offsetRef.current = 0;
         setHasMore(true);
-        loadBounties({ reset: true });
+        loadBounties({ reset: true, keepLoaded: true });
       },
       handleTabRepress: () => {
         bountyListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -1241,9 +1257,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     useCallback(() => {
       if (activeScreen !== 'bounty') return;
       logger.info('feed.foreground.refresh_started', { targets: ['bounties', 'applications'] });
-      offsetRef.current = 0;
       setHasMore(true);
-      loadBounties({ reset: true });
+      loadBounties({ reset: true, keepLoaded: true });
       loadUserApplications().catch(err => {
         logger.warning('feed.foreground.applications_refresh_failed', {
           error: err instanceof Error ? err.message : String(err),
@@ -1849,6 +1864,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         />
       )}
     </View>
+  );
+});
+
+/**
+ * The feed's cards open their detail popup in this host instead of inside
+ * their own row, so it stays open when the row leaves the feed under it —
+ * see components/bounty-detail-host.tsx.
+ */
+export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(props, ref) {
+  return (
+    <BountyDetailHost>
+      <BountyFeedContent ref={ref} {...props} />
+    </BountyDetailHost>
   );
 });
 

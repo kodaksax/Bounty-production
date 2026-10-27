@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
 import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useReturnToTabShell } from '../../../lib/navigation/tab-shell-return';
 import { ROUTES } from '../../../lib/routes';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
@@ -36,6 +37,7 @@ const FEED_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?tab=bounty`;
 export default function BountyDetailRouter() {
   const { id, source } = useLocalSearchParams<{ id?: string; source?: string }>();
   const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   // The session restores after the first render on a cold start. Routing
   // before it resolves would send a poster (or an accepted hunter) to the
   // public read-only view, which is exactly the mis-route this screen exists
@@ -161,7 +163,7 @@ export default function BountyDetailRouter() {
         message="It was removed, completed, or the link points somewhere that no longer exists."
         icon="search-off"
         actionText="Browse bounties"
-        onAction={() => router.replace(FEED_ROUTE as never)}
+        onAction={() => returnToTabShell({ tab: 'bounty' })}
       />
     );
   }

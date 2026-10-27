@@ -1,6 +1,7 @@
 // app/postings/[bountyId]/payout.tsx - Payout Screen
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useReturnToTabShell } from '../../../lib/navigation/tab-shell-return';
 import { FEED_FALLBACK, useSafeBack } from '../../../hooks/useSafeBack';
 import { useEffect, useState } from 'react';
 import {
@@ -40,6 +41,7 @@ import { useWallet } from '../../../lib/wallet-context';
 export default function PayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   // Fall back to the poster dashboard when there is no history to pop.
   const goBack = useSafeBack(
     bountyId ? { pathname: '/postings/[bountyId]', params: { bountyId } } : FEED_FALLBACK
@@ -237,7 +239,7 @@ export default function PayoutScreen() {
               text: 'OK',
               onPress: () => {
                 // Navigate back to postings screen
-                router.replace('/tabs/bounty-app');
+                returnToTabShell();
               },
             },
           ]
@@ -324,7 +326,7 @@ export default function PayoutScreen() {
                   {
                     text: 'OK',
                     onPress: () => {
-                      router.replace('/tabs/bounty-app');
+                      returnToTabShell();
                     },
                   },
                 ]);
@@ -383,7 +385,7 @@ export default function PayoutScreen() {
                   {
                     text: 'OK',
                     onPress: () => {
-                      router.replace('/tabs/bounty-app');
+                      returnToTabShell();
                     },
                   },
                 ]
@@ -427,7 +429,7 @@ export default function PayoutScreen() {
                 {
                   text: 'OK',
                   onPress: () => {
-                    router.replace('/tabs/bounty-app');
+                    returnToTabShell();
                   },
                 },
               ]);

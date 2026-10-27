@@ -38,6 +38,7 @@ import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
 import { saveLastScreen } from '../../lib/storage/last-screen'
 import { parseBountyAppTabParams, parseBountyAppTabUrl } from '../../lib/navigation/bounty-app-tab'
+import { onTabShellRequest } from '../../lib/navigation/tab-shell-return'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { useTopInsetOverlay } from '../../lib/context/TopInsetOverlayContext'
 
@@ -488,6 +489,17 @@ function BountyAppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkKey, setActiveScreen])
 
+  // A flow returning to this shell (useReturnToTabShell) pops back to it
+  // rather than re-linking it, so the tab it asks for comes this way.
+  useEffect(
+    () =>
+      onTabShellRequest(target => {
+        setActiveScreen(target.tab)
+        if (target.initialTab) setPendingInitialTab(target.initialTab)
+      }),
+    [setActiveScreen]
+  )
+
   // If the admin tab is selected, navigate to the admin route from an effect
   // to avoid triggering navigation/state updates during render (which causes
   // the "Cannot update a component while rendering a different component" error).
@@ -547,7 +559,10 @@ function BountyAppInner() {
   )
   const profilePage = useMemo(() => <ProfileScreen onBack={backToFeed} />, [backToFeed])
   // InboxScreen and NeedHelpScreen take activeScreen but never read it; a
-  // constant keeps them from re-rendering on every tab change.
+  // constant keeps them from re-rendering on every tab change. The Inbox
+  // does get whether it is the tab in view, which only flips when it is
+  // entered or left: it holds its refresh-on-return until then.
+  const inboxIsActive = activeScreen === 'messages'
   const inboxPage = useMemo(
     () => (
       <ReplayMask>
@@ -557,10 +572,11 @@ function BountyAppInner() {
           activeScreen="messages"
           setActiveScreen={setActiveScreen}
           onBountyAccepted={refreshFeed} // Refresh feed when a bounty is accepted
+          isActive={inboxIsActive}
         />
       </ReplayMask>
     ),
-    [inboxInitialTab, backToFeed, setActiveScreen, refreshFeed]
+    [inboxInitialTab, backToFeed, setActiveScreen, refreshFeed, inboxIsActive]
   )
   // The Post tab is preloaded like every other neighbour, so it slides in
   // fully rendered instead of mounting the whole composer after the slide.

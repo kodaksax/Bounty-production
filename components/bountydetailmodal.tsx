@@ -25,6 +25,7 @@ import {
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { useModalYieldsToPushedScreens, useRefreshOnReturn } from '../hooks/useRouteFocus'
 import { formatExactAddress, useBountyExactLocation } from '../hooks/useBountyExactLocation'
 import { formatPublicLocation } from '../lib/utils/public-location'
 import { useHapticFeedback } from '../lib/haptic-feedback'
@@ -62,7 +63,7 @@ interface DetailRow {
   urgent?: boolean;
 }
 
-interface BountyDetailModalProps {
+export interface BountyDetailModalProps {
   bounty: {
     id: string | number
     username?: string
@@ -456,6 +457,24 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     setVisible(false)
   }
 
+  // A screen opened from inside the dialog (the poster's profile, the hunter
+  // hub after applying) would otherwise open hidden under this native
+  // <Modal>. The dialog steps aside while that screen covers the feed and
+  // comes back when it is popped, so Back from the poster's profile lands on
+  // this bounty again rather than on a bare feed.
+  const { presented, onClosed: handleModalClosed } = useModalYieldsToPushedScreens(visible, onClose)
+  // Coming back to the dialog: re-read the bounty, so a change while the
+  // user was away (accepted by someone else, closed) is what it shows and
+  // what Apply checks. A failed or empty read keeps what is already showing.
+  useRefreshOnReturn(() => {
+    bountyService
+      .getById(initialBounty.id)
+      .then(fresh => {
+        if (fresh) setDetailBounty(prev => ({ ...(prev ?? initialBounty), ...fresh }) as any)
+      })
+      .catch(() => {})
+  })
+
   // Check if user has already applied
   useEffect(() => {
     const checkApplicationStatus = async () => {
@@ -717,9 +736,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
   return (
     <AppModal
-      visible={visible}
+      visible={presented}
       onRequestClose={handleClose}
-      onClosed={onClose}
+      onClosed={handleModalClosed}
       variant="dialog"
       origin={origin}
     >

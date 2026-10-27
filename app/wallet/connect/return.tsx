@@ -10,20 +10,19 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import type { Href } from 'expo-router';
-import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../../components/ui/branding-logo';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { API_BASE_URL } from '../../../lib/config/api';
+import { useReturnToTabShell } from '../../../lib/navigation/tab-shell-return';
 import { markInitialNavigationDone } from '../../initial-navigation/initialNavigation';
 
 type VerifyStatus = 'loading' | 'success' | 'pending' | 'error';
 
 export default function ConnectReturnScreen() {
-  const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   const insets = useSafeAreaInsets();
   const { session, isLoading: authLoading } = useAuthContext();
 
@@ -73,7 +72,9 @@ export default function ConnectReturnScreen() {
     } catch {
       /* ignore */
     }
-    router.replace('/tabs/wallet-screen' as Href);
+    // The wallet tab of the shell underneath (a fresh shell after a cold
+    // return), which re-syncs the balance as it comes back into view.
+    returnToTabShell({ tab: 'wallet' });
   };
 
   const handleRetry = () => {
