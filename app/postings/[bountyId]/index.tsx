@@ -15,8 +15,10 @@
  * Everything on this screen is now derived from backend state through
  * useBountyLifecycle → resolveBountyLifecycle: one status, one explanation, one
  * primary action, and the same story the hunter is being told from their side.
- * Secondary and destructive actions live behind the panel's disclosure so the
- * primary action is never one of six equal buttons.
+ * Secondary actions live behind the panel's disclosure so the primary action is
+ * never one of six equal buttons. The poster's own Edit / Cancel are the
+ * exception: they sit in the hero card's Manage row, because behind the
+ * disclosure posters could not find them.
  *
  * Access: a non-poster is no longer met with an "Access Denied" alert that
  * bounced them backwards (a dead end reachable from any deep link) — they are
@@ -27,6 +29,7 @@ import { saveStructuredBountyEdit } from '../../../lib/services/bounty-requireme
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   RefreshControl,
   ScrollView,
@@ -132,12 +135,26 @@ export default function BountyDashboard() {
     return () => popColor(theme.background);
   }, [pushColor, popColor, theme.background]);
 
+  // Editing is only honest while the terms can still legally change: open,
+  // nobody hired, and nobody has applied on the current terms yet.
+  const canEditTerms =
+    !!bounty && bounty.status === 'open' && !bounty.accepted_by && applicationCount === 0;
+
+  const explainEditLocked = useCallback(() => {
+    if (!bounty) return;
+    const { title, message } = describeEditLocked(bounty, applicationCount);
+    Alert.alert(title, message);
+  }, [bounty, applicationCount]);
+
+  // Waits for the bounty so a notification for a bounty that has since been
+  // applied to or hired can't open the editor over agreed terms.
   React.useEffect(() => {
-    if (openEdit === 'true' && !autoOpenEditHandledRef.current) {
-      autoOpenEditHandledRef.current = true;
-      setShowEditModal(true);
-    }
-  }, [openEdit]);
+    if (openEdit !== 'true' || autoOpenEditHandledRef.current) return;
+    if (isLoading || !bounty || role !== 'poster') return;
+    autoOpenEditHandledRef.current = true;
+    if (canEditTerms) setShowEditModal(true);
+    else explainEditLocked();
+  }, [openEdit, isLoading, bounty, role, canEditTerms, explainEditLocked]);
 
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -331,16 +348,21 @@ export default function BountyDashboard() {
       contact_support: () => router.push('/tabs/need-help-screen' as never),
     };
 
-    // Editing is only honest while the terms can still legally change.
-    if (bounty.status === 'open' && !bounty.accepted_by && applicationCount === 0) {
-      map.edit = () => setShowEditModal(true);
-    }
-    // Open and nobody hired: the poster's own exit, refunding anything held.
+    // Open and nobody hired: the poster can edit (or hear why not) and cancel,
+    // refunding anything held. Both render in the Manage row, always visible.
     if (canPosterCancelBounty(bounty)) {
+      map.edit = canEditTerms ? () => setShowEditModal(true) : explainEditLocked;
       map.delete = () => void handleCancelAndRefund();
     }
     return map;
-  }, [bounty, routeBountyId, applicationCount, handleMessage, handleCancelAndRefund, router]);
+  }, [bounty, routeBountyId, canEditTerms, explainEditLocked, handleMessage, handleCancelAndRefund, router]);
+
+  // Edit and cancel live in the Manage row rather than behind the panel's
+  // "More actions" disclosure, where posters couldn't find them.
+  const panelHandlers = useMemo(() => {
+    const { edit: _edit, delete: _delete, ...rest } = handlers;
+    return rest;
+  }, [handlers]);
 
   // ── Redirect rather than dead-end a non-poster ────────────────────────────
   React.useEffect(() => {
@@ -407,6 +429,11 @@ export default function BountyDashboard() {
   // formatCategoryLabel returns null for a bounty with no category.
   const categoryLabel = formatCategoryLabel((bounty as any).category);
   const hunterName = otherParty.name || 'your hunter';
+  // Same label the lifecycle gives this action ("Cancel and refund", or
+  // "Cancel bounty" for for-honor).
+  const cancelLabel =
+    state.secondaryActions.find(a => a.key === 'delete')?.label ??
+    (bounty.is_for_honor ? 'Cancel bounty' : 'Cancel and refund');
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
@@ -493,6 +520,48 @@ export default function BountyDashboard() {
               />
             </View>
           )}
+
+          {/* ── Manage: the poster's own edit / cancel, never hidden ───────── */}
+          {canPosterCancelBounty(bounty) ? (
+            <View style={s.manageRow} testID="bounty-manage-actions">
+              <TouchableOpacity
+                style={[s.outlineBtn, !canEditTerms && s.dimmedBtn]}
+                onPress={handlers.edit}
+                accessibilityRole="button"
+                accessibilityLabel="Edit details"
+                accessibilityHint={
+                  canEditTerms
+                    ? 'Change the title, description, reward or deadline'
+                    : 'Explains why the details are locked'
+                }
+              >
+                <MaterialIcons name={canEditTerms ? 'edit' : 'lock-outline'} size={16} color={theme.text} />
+                <Text style={s.outlineBtnText}>Edit details</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.outlineBtn, s.dangerBtn]}
+                onPress={handlers.delete}
+                disabled={busyAction === 'delete'}
+                accessibilityRole="button"
+                accessibilityLabel={cancelLabel}
+                accessibilityState={{ disabled: busyAction === 'delete', busy: busyAction === 'delete' }}
+              >
+                {busyAction === 'delete' ? (
+                  <ActivityIndicator size="small" color={theme.error} />
+                ) : (
+                  <MaterialIcons name="cancel" size={16} color={theme.error} />
+                )}
+                <Text style={[s.outlineBtnText, { color: theme.error }]}>{cancelLabel}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : bounty.status === 'in_progress' || bounty.status === 'cancellation_requested' ? (
+            <View style={s.manageNote} testID="bounty-manage-locked">
+              <MaterialIcons name="lock-outline" size={14} color={theme.textSecondary} />
+              <Text style={s.cardBodyMuted}>
+                {`${hunterName} is working on this, so it can't be edited or cancelled. Message them, or use Report a problem if something's wrong.`}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* ── The command center: what's happening, what's next, what to do ── */}
@@ -500,7 +569,7 @@ export default function BountyDashboard() {
           state={state}
           role="poster"
           otherPartyName={otherParty.name}
-          onAction={handlers}
+          onAction={panelHandlers}
           busyAction={busyAction}
         />
 
@@ -707,6 +776,34 @@ export default function BountyDashboard() {
 }
 
 /**
+ * Why "Edit details" won't open, and what to do instead. Applicants judged the
+ * bounty on its current terms, and a hired hunter agreed to them, so neither
+ * is changed underneath them.
+ */
+function describeEditLocked(
+  bounty: Pick<Bounty, 'status'> & { accepted_by?: unknown },
+  applicationCount: number
+): { title: string; message: string } {
+  if (bounty.status === 'open' && !bounty.accepted_by && applicationCount > 0) {
+    const who = applicationCount === 1 ? 'A hunter has' : `${applicationCount} hunters have`;
+    return {
+      title: 'Details are locked',
+      message: `${who} applied on these terms, so they can't change now. Review the applications, or cancel the bounty if you no longer need it.`,
+    };
+  }
+  if (bounty.accepted_by || bounty.status === 'in_progress' || bounty.status === 'cancellation_requested') {
+    return {
+      title: "Can't edit this bounty",
+      message: "A hunter has been hired, so the agreed details can't change. Message them, or use Report a problem if something's wrong.",
+    };
+  }
+  return {
+    title: "Can't edit this bounty",
+    message: 'This bounty has ended, so its details are kept as they were.',
+  };
+}
+
+/**
  * Presentational rows. They take the already-memoized style sheet rather than
  * the theme so they never rebuild a StyleSheet per render — the pattern the
  * rest of the hot screens follow.
@@ -894,6 +991,24 @@ function makeStyles(t: AppTheme) {
       minHeight: 44,
     },
     outlineBtnText: { color: t.text, fontSize: 13, fontWeight: '600' },
+    dimmedBtn: { opacity: 0.6 },
+    dangerBtn: { borderColor: t.error },
+    manageRow: {
+      flexDirection: 'row',
+      gap: 8,
+      flexWrap: 'wrap',
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: t.surfaceSecondary,
+    },
+    manageNote: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 6,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: t.surfaceSecondary,
+    },
 
     proofRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     paymentAmount: { color: t.text, fontSize: 18, fontWeight: '800' },
