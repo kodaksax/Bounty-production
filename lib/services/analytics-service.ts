@@ -394,6 +394,9 @@ export type AnalyticsEvent =
   // `to_step`) or 'dismissed'. A prompt that disappears because the poster
   // started editing step 1 instead sends nothing further, so
   // shown − continued − dismissed is the "ignored" bucket.
+  // `surface: 'app_open'` is the same prompt as a sheet on the next app open
+  // after a tab switch away from a draft (app/hooks/useResumeComposerPrompt.ts);
+  // 'continued' there opens the composer on the Task step.
   | 'post_resume_prompt'
   | 'post_step_completed'
   | 'post_step_abandoned'
