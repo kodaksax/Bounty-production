@@ -7,7 +7,7 @@ import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpac
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar'
 import { FOLLOW_FEATURE_ENABLED } from '../../lib/feature-flags'
-import { ROUTES } from '../../lib/routes'
+import { useReturnToTabShell } from '../../lib/navigation/tab-shell-return'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
 import { followService } from '../../lib/services/follow-service'
@@ -20,6 +20,7 @@ import { getCurrentUserId } from '../../lib/utils/data-utils'
 export default function ChoosePeopleScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
+  const returnToTabShell = useReturnToTabShell()
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
   const [loading, setLoading] = useState(true)
@@ -98,8 +99,8 @@ export default function ChoosePeopleScreen() {
 
       if (conv && conv.id) {
         await navigationIntent.setPendingConversationId(conv.id)
-        // Navigate to bounty-app with tab=messages so the in-app Messenger renders (matches bottom nav messages behavior)
-        router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'messages' } } as any)
+        // Back to the mounted tab shell, on the Inbox tab (matches bottom nav messages behavior)
+        returnToTabShell({ tab: 'messages' })
       } else {
         router.back()
       }
@@ -138,17 +139,17 @@ export default function ChoosePeopleScreen() {
         <View style={styles.header}>
         <TouchableOpacity
           onPress={() => {
-              // Prefer going back if possible, otherwise navigate to the in-app Messenger
-              // by pushing the bounty-app route with tab=messages (this matches the left-most bottom-nav behavior).
+              // Prefer going back if possible, otherwise return to the tab shell's
+              // Inbox tab (this matches the left-most bottom-nav behavior).
               try {
                 // @ts-ignore
                 if (typeof router.canGoBack === 'function' ? router.canGoBack() : false) {
                   router.back()
                 } else {
-                  router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'messages' } } as any)
+                  returnToTabShell({ tab: 'messages' })
                 }
               } catch {
-                router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { tab: 'messages' } } as any)
+                returnToTabShell({ tab: 'messages' })
               }
             }}
           style={styles.iconButton}

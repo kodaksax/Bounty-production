@@ -3,7 +3,7 @@
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { saveStructuredBountyEdit } from '../../lib/services/bounty-requirements-service';
 import { MaterialIcons } from "@expo/vector-icons"
-import { useFocusEffect, useRouter } from "expo-router"
+import { useRouter } from "expo-router"
 import { discardApplication, withdrawApplication } from "lib/services/application-withdrawal"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
@@ -32,6 +32,7 @@ import type { SharedValue } from "react-native-reanimated"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useTabPager } from "../../components/ui/tab-pager"
 import { defaultInboxSegment, inboxSegmentForLink } from '../../lib/navigation/bounty-app-tab'
+import { onTabShellRequest } from '../../lib/navigation/tab-shell-return'
 import { BrandingLogo } from "../../components/ui/branding-logo"
 import { BountyConversationRow, type InboxPerson } from "../../components/bounty-inbox/thread-list-row"
 import { NotNearbyToggle } from "../../components/not-nearby-toggle"
@@ -41,6 +42,7 @@ import { getBottomNavContentPadding } from "../../lib/constants/navigation"
 import { useConversations } from '../../hooks/useConversations'
 import { findPairConversation } from '../../hooks/useBountyThread'
 import { useValidUserId } from '../../hooks/useValidUserId'
+import { useRefreshOnReturn } from '../../hooks/useRouteFocus'
 import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
 import { uniqueRealtimeTopic } from '../../lib/utils/realtime-topic'
@@ -69,6 +71,8 @@ interface InboxScreenProps {
   activeScreen: string
   setActiveScreen: (screen: string) => void
   onBountyAccepted?: (bountyId?: string | number) => void // Callback when a bounty is accepted
+  /** Whether this is the tab in view (the tab shell keeps it mounted when it isn't). */
+  isActive?: boolean
 }
 
 /**
@@ -93,7 +97,7 @@ function segmentForInitialTab(initialTab: string | undefined): InboxTab {
   return inboxSegmentForLink(initialTab) ?? "inProgress"
 }
 
-export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyAccepted }: InboxScreenProps) {
+export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyAccepted, isActive = true }: InboxScreenProps) {
   const rawUserId = useValidUserId()
   const currentUserId = rawUserId ?? undefined
   const router = useRouter()
@@ -633,17 +637,23 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   // ---- Thread rows ----
   // Returning from a thread (where the user may have hired, submitted, paid…)
-  // must not leave the inbox showing the old state.
-  const firstFocusRef = useRef(true)
-  useFocusEffect(
-    React.useCallback(() => {
-      if (firstFocusRef.current) {
-        firstFocusRef.current = false
-        return
-      }
-      refreshAll()
+  // must not leave the inbox showing the old state. Silent: the rows stay
+  // put while they reload — turning the pull-to-refresh spinner on from code
+  // shifted the list by the spinner's height on iOS on every Back. Held
+  // until the Inbox is the tab in view, so a Back elsewhere in the shell
+  // doesn't refetch it. Also re-reads the hidden set: a card discarded from
+  // the hunter hub was hidden there, not in this screen's copy.
+  useRefreshOnReturn(
+    () => {
+      Promise.all([loadMyBounties(), loadInProgress()]).catch(() => {})
       refreshConversations().catch(() => {})
-    }, [refreshAll, refreshConversations])
+      if (currentUserId) {
+        loadHunterHiddenBountyIds(currentUserId)
+          .then((ids) => setHunterHiddenBountyIds((prev) => new Set([...prev, ...ids])))
+          .catch(() => {})
+      }
+    },
+    { active: isActive }
   )
 
   const handleRefresh = React.useCallback(async () => {
@@ -934,6 +944,20 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     appliedInitialTabRef.current = initialTab
     if (initialTab !== undefined) selectSegment(segmentForInitialTab(initialTab))
   }, [initialTab, selectSegment])
+
+  // A flow returning to the shell on a segment (back from a dispute, a
+  // discarded application → My Work) asks every time. Through initialTab
+  // alone a repeat of the last request was no change, so it was ignored and
+  // the Inbox stayed on whichever segment the user had moved to since.
+  useEffect(
+    () =>
+      onTabShellRequest(target => {
+        if (target.tab === 'messages' && target.initialTab) {
+          selectSegment(segmentForInitialTab(target.initialTab))
+        }
+      }),
+    [selectSegment]
+  )
 
   // No link chose a segment: open on My Bounties for a poster with an open
   // bounty, where its applications are (SBA-10). Decided once, as soon as

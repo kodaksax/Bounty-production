@@ -16,6 +16,7 @@ import { press } from '../lib/motion'
 import { formatBountyWhere } from '../lib/utils/bounty-distance'
 import { getScheduleChip } from '../lib/utils/schedule-utils'
 import { BountyDetailModal } from "./bountydetailmodal"
+import { useBountyDetailHost } from "./bounty-detail-host"
 import { useModalOrigin } from "./ui/app-modal"
 import { CountdownBadge } from "./ui/countdown-badge"
 
@@ -120,10 +121,23 @@ function BountyFeaturedItemComponent({
   // The detail dialog grows out of this card rather than appearing mid-screen.
   const { originRef, origin, openFrom } = useModalOrigin<React.ComponentRef<typeof TouchableOpacity>>()
 
+  // In the feed the popup belongs to the feed's BountyDetailHost, so it
+  // survives this row leaving the list (e.g. once the bounty is applied to).
+  // Anywhere else this card opens its own.
+  const detailHost = useBountyDetailHost()
+  useEffect(() => () => detailHost?.cardGone(String(id)), [detailHost, id])
+  const detailBounty = useMemo(
+    () => ({
+      id, username: resolvedUsername, title, price, distance, location: location ?? undefined,
+      description, user_id, work_type, poster_avatar, is_for_honor: isForHonor,
+    }),
+    [id, resolvedUsername, title, price, distance, location, description, user_id, work_type, poster_avatar, isForHonor]
+  )
+
   const handlePress = useCallback(() => {
     triggerHaptic('light')
-    openFrom(() => setShowDetail(true))
-  }, [triggerHaptic, openFrom])
+    openFrom(measured => (detailHost ? detailHost.open(detailBounty, measured) : setShowDetail(true)))
+  }, [triggerHaptic, openFrom, detailHost, detailBounty])
 
   const firstImageUri = useMemo(() => {
     if (!attachments_json) return null
@@ -253,10 +267,7 @@ function BountyFeaturedItemComponent({
       {showDetail && (
         <BountyDetailModal
           origin={origin}
-          bounty={{
-            id, username: resolvedUsername, title, price, distance, location: location ?? undefined,
-            description, user_id, work_type, poster_avatar, is_for_honor: isForHonor,
-          }}
+          bounty={detailBounty}
           onClose={() => setShowDetail(false)}
         />
       )}

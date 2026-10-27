@@ -129,6 +129,9 @@ jest.mock('../../components/ui/branding-logo', () => ({ BrandingLogo: () => null
 jest.mock('../../components/ui/wallet-balance-button', () => ({ WalletBalanceButton: () => null }));
 jest.mock('../../components/bounty-compact-item', () => ({ BountyCompactItem: () => null }));
 jest.mock('../../components/bounty-grid-feed', () => ({ BountyGridFeed: () => null }));
+// The feed hosts the cards' detail popup (components/bounty-detail-host.tsx);
+// its import tree is out of scope here, like the cards themselves.
+jest.mock('../../components/bountydetailmodal', () => ({ BountyDetailModal: () => null }));
 jest.mock('../../components/bounty-list-item', () => ({ BountyListItem: () => null }));
 jest.mock('../../components/ui/skeleton-loaders', () => ({
   PostingsListSkeleton: () => require('react').createElement('View', { testID: 'skeleton' }),

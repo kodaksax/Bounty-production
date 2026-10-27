@@ -29,6 +29,7 @@ import { evaluateNextMoment } from '../lib/moments/engine';
 import { momentsService } from '../lib/moments/momentsService';
 import { referralService } from '../lib/moments/referral-service';
 import { MOMENT_REGISTRY } from '../lib/moments/registry';
+import { tabShellTargetForRoute } from '../lib/navigation/tab-shell-return';
 import {
     effectiveLastSessionAt,
     evaluateReturningUser,
@@ -89,7 +90,7 @@ const MomentsContext = createContext<MomentsContextValue | null>(null);
  * Module-level "who's driving" slot backing MomentsProvider's dedupe guard
  * (see mountTokenRef below). A duplicate mount happens when navigation pushes a
  * route that re-renders app/tabs/bounty-app.tsx on top of itself (several
- * moment actions `router.push` to '/tabs/bounty-app' — see registry.ts),
+ * moment actions used to `router.push` to '/tabs/bounty-app' — see registry.ts),
  * stacking a second instance on top of the one that's still alive
  * underneath instead of the intended single tab shell. Without a guard, both
  * instances independently fetch state, evaluate, and fire markShown +
@@ -98,9 +99,10 @@ const MomentsContext = createContext<MomentsContextValue | null>(null);
  * instance mounts FIRST claims the slot and keeps driving the queue for its
  * whole lifetime; later instances render children but stay inert (no
  * fetch/evaluate/present), so at most one MomentsProvider is ever "live" at
- * a time. This is a defensive backstop, not a fix for the duplicate
- * navigation itself — that's a separate, larger change to the moments that
- * `router.push('/tabs/bounty-app')` from an already-mounted bounty-app.
+ * a time. This is a defensive backstop: moments that point at a shell tab
+ * now switch to it in place (see `accept`), and flows that return to the
+ * shell pop back to it (lib/navigation/tab-shell-return.ts), but any other
+ * path that still stacks a shell is covered here.
  *
  * When the primary instance unmounts, it releases the slot and notifies
  * every still-mounted demoted instance (see momentsSlotListeners below) so
@@ -683,6 +685,14 @@ export function MomentsProvider({
         metadata: { ...existing.metadata, startedAt: existing.metadata?.startedAt ?? startedAt },
       }));
       momentsService.markStarted(userId, def.type);
+      // A moment pointing at a tab of the shell this provider lives in
+      // switches to it in place: pushing the route would stack a second shell
+      // over this one (and a second provider — see liveMomentsInstance).
+      const shellTarget = tabShellTargetForRoute(def.action.route);
+      if (shellTarget && onContinueToRef.current) {
+        onContinueToRef.current(shellTarget.tab);
+        return;
+      }
       router.push(def.action.route as any);
       return;
     }

@@ -3,7 +3,6 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { format } from 'date-fns';
-import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +23,7 @@ import { useForegroundRefresh } from '../../hooks/useForegroundRefresh';
 import { useRefreshOnReturn } from '../../hooks/useRouteFocus';
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
+import { useReturnToTabShell } from '../../lib/navigation/tab-shell-return';
 import { StripePaymentMethod, stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
@@ -101,7 +101,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const { paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
   const { session } = useAuthContext();
-  const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [refreshing, setRefreshing] = useState(false);
@@ -188,13 +188,15 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             title="No Transactions Yet"
             description="Your transaction history will appear here. Start by posting a bounty or completing work to see your activity."
             actionLabel="Browse Bounties"
-            onAction={() => router.push('/tabs/bounty-app')}
+            // To the feed in the shell this tab already lives in, not a
+            // second shell pushed on top of it.
+            onAction={() => returnToTabShell({ tab: 'bounty' })}
             style={{ paddingVertical: 40 }}
           />
         </View>
       </View>
     ),
-    [s, router]
+    [s, returnToTabShell]
   );
 
   const renderTransactionItem = useCallback(

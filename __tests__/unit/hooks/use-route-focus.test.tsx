@@ -7,6 +7,7 @@ import { act, render } from '@testing-library/react-native';
 import React from 'react';
 import {
   useIsScreenFocused,
+  useModalYieldsToPushedScreens,
   useRefreshOnReturn,
   useSwipeBackEnabled,
 } from '../../../hooks/useRouteFocus';
@@ -86,6 +87,49 @@ describe('useRefreshOnReturn', () => {
   });
 });
 
+describe('useRefreshOnReturn — a tab that is not in view', () => {
+  function TabProbe({ onReturn, active }: { onReturn: () => void; active: boolean }) {
+    useRefreshOnReturn(onReturn, { active });
+    return null;
+  }
+
+  it('holds a return until the tab is shown, then refreshes once', () => {
+    const nav = fakeNavigation();
+    const onReturn = jest.fn();
+    const { rerender } = render(withNavigation(nav, <TabProbe onReturn={onReturn} active={false} />));
+
+    act(() => nav.emit('blur'));
+    act(() => nav.emit('focus'));
+    expect(onReturn).not.toHaveBeenCalled();
+
+    rerender(withNavigation(nav, <TabProbe onReturn={onReturn} active />));
+    expect(onReturn).toHaveBeenCalledTimes(1);
+
+    // Leaving and re-entering the tab with no return in between: nothing new.
+    rerender(withNavigation(nav, <TabProbe onReturn={onReturn} active={false} />));
+    rerender(withNavigation(nav, <TabProbe onReturn={onReturn} active />));
+    expect(onReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes straight away when the tab is in view', () => {
+    const nav = fakeNavigation();
+    const onReturn = jest.fn();
+    render(withNavigation(nav, <TabProbe onReturn={onReturn} active />));
+
+    act(() => nav.emit('blur'));
+    act(() => nav.emit('focus'));
+    expect(onReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it('never refreshes on a plain tab switch', () => {
+    const nav = fakeNavigation();
+    const onReturn = jest.fn();
+    const { rerender } = render(withNavigation(nav, <TabProbe onReturn={onReturn} active={false} />));
+    rerender(withNavigation(nav, <TabProbe onReturn={onReturn} active />));
+    expect(onReturn).not.toHaveBeenCalled();
+  });
+});
+
 describe('useIsScreenFocused', () => {
   function FocusProbe({ onValue }: { onValue: (focused: boolean) => void }) {
     onValue(useIsScreenFocused());
@@ -125,5 +169,63 @@ describe('useSwipeBackEnabled', () => {
 
     rerender(withNavigation(nav, <SwipeProbe enabled={false} />));
     expect(nav.setOptions).toHaveBeenLastCalledWith({ gestureEnabled: false });
+  });
+});
+
+describe('useModalYieldsToPushedScreens', () => {
+  type Result = ReturnType<typeof useModalYieldsToPushedScreens>;
+  let latest: Result = { presented: false, onClosed: () => {} };
+  function ModalProbe({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+    latest = useModalYieldsToPushedScreens(visible, onClose);
+    return null;
+  }
+
+  it('hides while a pushed screen covers it and comes back on return, without closing', () => {
+    const nav = fakeNavigation();
+    const onClose = jest.fn();
+    render(withNavigation(nav, <ModalProbe visible onClose={onClose} />));
+    expect(latest.presented).toBe(true);
+
+    // Tapping the poster pushes their profile.
+    act(() => nav.emit('blur'));
+    expect(latest.presented).toBe(false);
+    // AppModal reports its (hide) animation finished — not a real close.
+    act(() => latest.onClosed());
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Back from the profile.
+    act(() => nav.emit('focus'));
+    expect(latest.presented).toBe(true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes normally once the close animation finishes', () => {
+    const nav = fakeNavigation();
+    const onClose = jest.fn();
+    const { rerender } = render(withNavigation(nav, <ModalProbe visible onClose={onClose} />));
+
+    rerender(withNavigation(nav, <ModalProbe visible={false} onClose={onClose} />));
+    expect(latest.presented).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+    act(() => latest.onClosed());
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes for good when closed while hidden (push, then close)', () => {
+    const nav = fakeNavigation();
+    const onClose = jest.fn();
+    const { rerender } = render(withNavigation(nav, <ModalProbe visible onClose={onClose} />));
+
+    act(() => nav.emit('blur'));
+    rerender(withNavigation(nav, <ModalProbe visible={false} onClose={onClose} />));
+    expect(onClose).toHaveBeenCalled();
+
+    act(() => nav.emit('focus'));
+    expect(latest.presented).toBe(false);
+  });
+
+  it('behaves like a plain modal outside a navigator', () => {
+    render(withNavigation(null, <ModalProbe visible onClose={jest.fn()} />));
+    expect(latest.presented).toBe(true);
   });
 });

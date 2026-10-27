@@ -38,7 +38,7 @@ import { trustSafetyStrings } from '../../../lib/strings/trust-safety';
 import { TrustSafetyNotice } from '../../../components/ui/trust-safety-notice';
 import { HunterEarningsCard } from '../../../components/ui/hunter-earnings-card';
 import { calculateHunterEarnings } from '../../../lib/constants/fees';
-import { ROUTES } from '../../../lib/routes';
+import { useReturnToTabShell } from '../../../lib/navigation/tab-shell-return';
 import { getUserFriendlyError } from '../../../lib/utils/error-messages';
 import { ApplicationPitchModal } from '../../../components/application-pitch-modal';
 import { IdRequirementModal } from '../../../components/id-requirement-modal';
@@ -53,6 +53,7 @@ import { BountyRequirementsSummary } from '../../../components/bounty-requiremen
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
   const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   // Push notifications and shared links open this screen with nothing under
   // it, so a bare router.back() would leave the back arrow dead.
   const goBack = useSafeBack();
@@ -680,7 +681,7 @@ export default function PublicBountyDetail() {
               </View>
               <TouchableOpacity
                 style={s.actionButton}
-                onPress={() => router.replace(`${ROUTES.TABS.BOUNTY_APP}?tab=bounty` as never)}
+                onPress={() => returnToTabShell({ tab: 'bounty' })}
                 accessibilityRole="button"
                 accessibilityLabel="Browse other bounties"
               >

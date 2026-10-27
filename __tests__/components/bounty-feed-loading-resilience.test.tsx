@@ -167,6 +167,9 @@ jest.mock('../../components/bounty-grid-feed', () => ({
       )
     ),
 }));
+// The feed hosts the cards' detail popup (components/bounty-detail-host.tsx);
+// its import tree is out of scope here, like the cards themselves.
+jest.mock('../../components/bountydetailmodal', () => ({ BountyDetailModal: () => null }));
 jest.mock('../../components/bounty-list-item', () => ({
   BountyListItem: ({ title }: any) =>
     require('react').createElement('Text', { testID: 'bounty-item' }, title),

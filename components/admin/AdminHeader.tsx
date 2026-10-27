@@ -6,6 +6,7 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdmin } from '../../lib/admin-context';
+import { useReturnToTabShell } from '../../lib/navigation/tab-shell-return';
 import { ROUTES } from '../../lib/routes';
 
 interface AdminHeaderProps {
@@ -34,6 +35,7 @@ export function AdminHeader({
   const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
   const { setAdminTabEnabled } = useAdmin();
+  const returnToTabShell = useReturnToTabShell();
 
   const handleExitAdmin = useCallback(() => {
     Alert.alert(
@@ -47,13 +49,14 @@ export function AdminHeader({
           onPress: async () => {
             await setAdminTabEnabled(false);
             try {
-              router.replace(ROUTES.TABS.BOUNTY_APP);
+              // Pop back to the app shell the console was opened from.
+              returnToTabShell();
             } catch {}
           },
         },
       ]
     );
-  }, [setAdminTabEnabled]);
+  }, [setAdminTabEnabled, returnToTabShell]);
 
   // Deep-link safe back: pop when there is history, otherwise navigate to the
   // declared parent (or the admin dashboard) so the operator is never stranded.

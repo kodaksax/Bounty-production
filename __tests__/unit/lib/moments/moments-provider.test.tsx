@@ -15,8 +15,9 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 // Extend the existing react-native mock (from jest.setup.js) with AppState
@@ -121,6 +122,7 @@ jest.mock('../../../../lib/supabase', () => ({
 
 import { MomentsProvider, useMoments } from '../../../../providers/moments-provider';
 import { analyticsService } from '../../../../lib/services/analytics-service';
+import { MOMENT_REGISTRY } from '../../../../lib/moments/registry';
 
 let latest: ReturnType<typeof useMoments> | null = null;
 
@@ -325,5 +327,46 @@ describe('MomentsProvider — a single activation presents at most once', () => 
 
     first.unmount();
     other.unmount();
+  });
+});
+
+// A moment whose action is a tab of the shell the provider lives in used to
+// `router.push` that route, stacking a second tab shell (feed reset to the
+// top) over the mounted one. It now switches the tab in place.
+describe('MomentsProvider — moments that open a shell tab', () => {
+  const def = MOMENT_REGISTRY.find(d => d.type === 'stripe_connect_onboarding')!;
+  const originalAction = def.action;
+
+  beforeEach(() => mockPush.mockClear());
+  afterEach(() => {
+    (def as { action: unknown }).action = originalAction;
+  });
+
+  async function acceptWith(route: string, onContinueTo?: jest.Mock) {
+    (def as { action: unknown }).action = { type: 'navigate', route };
+    render(
+      <MomentsProvider activeScreen="wallet" onContinueTo={onContinueTo}>
+        <Capture />
+      </MomentsProvider>
+    );
+    await waitFor(() => expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding'));
+    elapse(1000);
+    await act(async () => {
+      await latest!.accept();
+    });
+  }
+
+  it('switches to the tab instead of pushing the route', async () => {
+    const onContinueTo = jest.fn();
+    await acceptWith('/tabs/wallet-screen', onContinueTo);
+    expect(onContinueTo).toHaveBeenCalledWith('wallet');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('still pushes routes that are not shell tabs', async () => {
+    const onContinueTo = jest.fn();
+    await acceptWith('/wallet/connect/embedded-onboarding', onContinueTo);
+    expect(mockPush).toHaveBeenCalledWith('/wallet/connect/embedded-onboarding');
+    expect(onContinueTo).not.toHaveBeenCalled();
   });
 });

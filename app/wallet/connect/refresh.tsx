@@ -17,10 +17,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../../components/ui/branding-logo';
+import { useReturnToTabShell } from '../../../lib/navigation/tab-shell-return';
 import { markInitialNavigationDone } from '../../initial-navigation/initialNavigation';
 
 export default function ConnectRefreshScreen() {
   const router = useRouter();
+  const returnToTabShell = useReturnToTabShell();
   const { replacementId } = useLocalSearchParams<{ replacementId?: string }>();
   const insets = useSafeAreaInsets();
 
@@ -33,7 +35,7 @@ export default function ConnectRefreshScreen() {
     // Navigate to the wallet/withdraw area where onboarding can be restarted
     if (typeof replacementId === 'string' && replacementId) {
       router.replace({ pathname: '/wallet/connect/embedded-onboarding', params: { replacementId } } as Href);
-    } else router.replace('/tabs/wallet-screen' as Href);
+    } else returnToTabShell({ tab: 'wallet' });
   };
 
   return (

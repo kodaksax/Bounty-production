@@ -10,6 +10,7 @@ import { useHapticFeedback } from '../lib/haptic-feedback'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { BountyDetailModal } from "./bountydetailmodal"
+import { useBountyDetailHost } from "./bounty-detail-host"
 import { press } from "../lib/motion"
 import { useModalOrigin } from "./ui/app-modal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
@@ -80,10 +81,25 @@ function BountyCompactItemComponent({
   // The detail dialog grows out of this row rather than appearing mid-screen.
   const { originRef, origin, openFrom } = useModalOrigin<React.ComponentRef<typeof TouchableOpacity>>()
 
+  // In the feed the popup belongs to the feed's BountyDetailHost, so it
+  // survives this row leaving the list (e.g. once the bounty is applied to).
+  // Anywhere else this card opens its own.
+  const detailHost = useBountyDetailHost()
+  useEffect(() => () => detailHost?.cardGone(String(id)), [detailHost, id])
+  const detailBounty = useMemo(
+    () => ({
+      id, username: resolvedUsername, title, price, distance, location: location ?? undefined,
+      description, user_id, work_type, poster_avatar: poster_avatar ?? undefined, is_for_honor: isForHonor,
+      category, created_at: createdAt, position_in_list: position,
+      ranking_variant: rankingVariant, rank_score: rankScore,
+    }),
+    [id, resolvedUsername, title, price, distance, location, description, user_id, work_type, poster_avatar, isForHonor, category, createdAt, position, rankingVariant, rankScore]
+  )
+
   const handleBountyPress = useCallback(() => {
     triggerHaptic('light')
-    openFrom(() => setShowDetail(true))
-  }, [triggerHaptic, openFrom])
+    openFrom(measured => (detailHost ? detailHost.open(detailBounty, measured) : setShowDetail(true)))
+  }, [triggerHaptic, openFrom, detailHost, detailBounty])
 
   const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : `, ${formatBountyWhere(distance, location) ?? 'location to be determined'}`}${incomplete ? `, limited details${missingSummary ? `, ${missingSummary}` : ''}` : ''}`
 
@@ -165,12 +181,7 @@ function BountyCompactItemComponent({
       {showDetail && (
         <BountyDetailModal
           origin={origin}
-          bounty={{
-            id, username: resolvedUsername, title, price, distance, location: location ?? undefined,
-            description, user_id, work_type, poster_avatar: poster_avatar ?? undefined, is_for_honor: isForHonor,
-            category, created_at: createdAt, position_in_list: position,
-            ranking_variant: rankingVariant, rank_score: rankScore,
-          }}
+          bounty={detailBounty}
           onClose={() => setShowDetail(false)}
         />
       )}
