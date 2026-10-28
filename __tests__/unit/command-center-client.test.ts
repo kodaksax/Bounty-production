@@ -29,6 +29,7 @@ const {
   eventLabel,
   eventClassification,
   financialStatusMeta,
+  escrowHoldReasonLabel,
   isCompletedButUnverified,
   normalizeSource,
   compareSeverity,
@@ -199,6 +200,25 @@ describe('marketplace status is kept separate from financial status', () => {
   test('a bounty with no financial row at all does not read as verified', () => {
     expect(mapFinancialSummary(null)).toBeNull();
     expect(isCompletedButUnverified(null)).toBe(false);
+  });
+
+  test('a Stripe hold carries the guard reason the status change is refused for (#957)', () => {
+    const financial = mapFinancialSummary({
+      bounty_id: 'b1',
+      marketplace_status: 'open',
+      financial_status: 'escrow_held',
+      escrow_amount: 0,
+      escrow_hold_reason: 'stripe_payment_captured',
+    })!;
+    expect(financialStatusMeta(financial.financialStatus).label).toBe('Escrow held');
+    expect(financial.escrowHoldReason).toBe('stripe_payment_captured');
+    expect(mapFinancialSummary({ bounty_id: 'b2' })!.escrowHoldReason).toBeUndefined();
+  });
+
+  test('hold reasons read as text, not raw keys', () => {
+    expect(escrowHoldReasonLabel('stripe_payment_pending_payment')).toBe('Stripe payment: pending payment');
+    expect(escrowHoldReasonLabel('wallet_escrow_held')).toBe('Wallet escrow, not released or refunded');
+    expect(escrowHoldReasonLabel('v3_funding_held')).toBe('Stripe hold (v3 funding)');
   });
 });
 

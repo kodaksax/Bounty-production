@@ -193,6 +193,16 @@ export function financialStatusMeta(status: AdminFinancialStatus | string) {
   );
 }
 
+/** Readable text for a fn_bounty_unsettled_escrow_reason() value. */
+export function escrowHoldReasonLabel(reason: string): string {
+  if (reason === 'wallet_escrow_held') return 'Wallet escrow, not released or refunded';
+  if (reason === 'v3_funding_held') return 'Stripe hold (v3 funding)';
+  if (reason.startsWith('stripe_payment_')) {
+    return `Stripe payment: ${reason.slice('stripe_payment_'.length).replace(/_/g, ' ')}`;
+  }
+  return humanizeEventType(reason);
+}
+
 /**
  * True when the marketplace says "done" but the money has not been confirmed.
  * This is the headline state the brief calls out: COMPLETED + FINANCIAL
@@ -303,6 +313,7 @@ export function mapFinancialSummary(row: any): AdminBountyFinancialSummary | nul
     pendingLedgerCount: toNumber(row.pending_ledger_count),
     paymentRecords: toNumber(row.payment_records),
     webhookEvents: toNumber(row.webhook_events),
+    escrowHoldReason: row.escrow_hold_reason ?? undefined,
   };
 }
 
@@ -443,6 +454,7 @@ export const __commandCenterInternals = {
   eventLabel,
   eventClassification,
   financialStatusMeta,
+  escrowHoldReasonLabel,
   isCompletedButUnverified,
   isStripeConfirmation,
   normalizeSource,
