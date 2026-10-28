@@ -442,6 +442,12 @@ export interface AdminBountyFinancialSummary {
   pendingLedgerCount: number;
   paymentRecords: number;
   webhookEvents: number;
+  /**
+   * fn_bounty_unsettled_escrow_reason(): set while money is held, e.g.
+   * 'wallet_escrow_held', 'stripe_payment_captured', 'v3_funding_held'.
+   * admin_set_bounty_status() refuses to end or reopen the bounty while set.
+   */
+  escrowHoldReason?: string;
 }
 
 export interface AdminCommandBountyDetail {

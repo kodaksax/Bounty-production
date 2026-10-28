@@ -40,6 +40,7 @@ import type { ViolationType } from '../../../../lib/admin/adminDataClient';
 import { AdminModerationError, adminDataClient } from '../../../../lib/admin/adminDataClient';
 import {
   commandCenterClient,
+  escrowHoldReasonLabel,
   financialStatusMeta,
   isCompletedButUnverified,
 } from '../../../../lib/admin/commandCenterClient';
@@ -108,6 +109,15 @@ const STATUS_TRANSITIONS: Record<AdminBountyStatus, Transition[]> = {
   ],
   deleted: [{ status: 'archived', label: 'Restore as archived', icon: 'restore_from_trash' as IconName }],
 };
+
+/** The target statuses admin_set_bounty_status() refuses while money is held. */
+const ESCROW_GUARDED_STATUSES: ReadonlySet<AdminBountyStatus> = new Set<AdminBountyStatus>([
+  'completed',
+  'cancelled',
+  'archived',
+  'deleted',
+  'open',
+]);
 
 const VIOLATION_OPTIONS: { label: string; value: ViolationType }[] = [
   { label: 'Spam', value: 'spam' },
@@ -363,6 +373,9 @@ export default function AdminBountyDetailScreen() {
   // _moderation_takedown_status in the moderation migration) — both mean the
   // same thing for this button's purposes: nothing left to remove.
   const isRemoved = bounty.status === 'archived' || bounty.status === 'deleted';
+  const holdReason = financial?.escrowHoldReason;
+  const isLockedByHold = (transition: Transition) =>
+    holdReason != null && !transition.settlesEscrow && ESCROW_GUARDED_STATUSES.has(transition.status);
 
   return (
     <AdminScreen>
@@ -458,6 +471,13 @@ export default function AdminBountyDetailScreen() {
               >
                 {financialStatusMeta(financial.financialStatus).explanation}
               </Text>
+              {financial.escrowHoldReason ? (
+                <AdminRow
+                  label="Money held"
+                  value={escrowHoldReasonLabel(financial.escrowHoldReason)}
+                  icon="lock-outline"
+                />
+              ) : null}
               <AdminRow label="Escrow taken" value={formatMoney(financial.escrowAmount)} icon="lock" />
               <AdminRow label="Released" value={formatMoney(financial.releaseAmount)} icon="north-east" />
               <AdminRow label="Refunded" value={formatMoney(financial.refundAmount)} icon="undo" />
@@ -593,7 +613,7 @@ export default function AdminBountyDetailScreen() {
                   icon={transition.icon}
                   variant={transition.destructive ? 'warning' : 'secondary'}
                   loading={pendingAction === transition.status}
-                  disabled={busy && pendingAction !== transition.status}
+                  disabled={(busy && pendingAction !== transition.status) || isLockedByHold(transition)}
                   onPress={() => confirmStatusChange(transition)}
                   style={styles.actionButton}
                 />
@@ -611,6 +631,19 @@ export default function AdminBountyDetailScreen() {
             Status changes affect the bounty lifecycle only. They never move escrow — use
             Transactions or Disputes to settle money.
           </Text>
+          {holdReason && transitions.some(isLockedByHold) ? (
+            <Text
+              style={{
+                fontSize: 12,
+                color: theme.warning,
+                marginTop: theme.spacing.sm,
+                lineHeight: 18,
+              }}
+            >
+              Money is still held ({escrowHoldReasonLabel(holdReason)}). Status changes that end or
+              reopen this bounty stay locked until that money is settled.
+            </Text>
+          ) : null}
         </AdminSection>
 
         {/* ── Moderation ─────────────────────────────────────────────── */}
