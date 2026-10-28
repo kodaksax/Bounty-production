@@ -667,6 +667,9 @@ export type AnalyticsEvent =
   // this was declared but never actually captured anywhere before 2026-09-14.
   | 'profile_viewed'
   | 'profile_updated'
+  // Own-profile "Stand out to posters" checklist (components/ui/hunter-profile-checklist.tsx).
+  // `item` = HunterChecklistItemId, `state` = its state when tapped.
+  | 'profile_checklist_item_tapped'
   // Hunter capability layer — self-reported skills, bounty-specific "why me?"
   // pitch, and portfolio work samples. See lib/utils/skill-match.ts,
   // lib/utils/pitch-requirement.ts, lib/services/portfolio-service.ts.
