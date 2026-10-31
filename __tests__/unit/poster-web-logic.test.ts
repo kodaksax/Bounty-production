@@ -226,3 +226,51 @@ describe('normalizeSupportInput', () => {
     expect(r.message.length).toBeLessThanOrEqual(2000)
   })
 })
+
+describe('normalizeProofConsentInput — the "Share your result" form', () => {
+  const { normalizeProofConsentInput } = require('../../supabase/functions/poster-web/logic')
+
+  test('an answer is required', () => {
+    expect(normalizeProofConsentInput({}).error).toBe('Choose whether we can share this job.')
+    expect(normalizeProofConsentInput(null).error).toBeDefined()
+  })
+
+  test('no to the page is no to everything on it', () => {
+    const r = normalizeProofConsentInput({
+      share_task: false, share_photos: true, share_testimonial: true, testimonial: 'Great', attribution: 'first_name', first_name: 'Dana',
+    })
+    expect(r).toMatchObject({ shareTask: false, sharePhotos: false, shareTestimonial: false, testimonial: null, attribution: 'anonymous', firstName: null })
+    expect(r.error).toBeUndefined()
+  })
+
+  test('a quote permission needs a quote; markup and runs of space are dropped', () => {
+    expect(normalizeProofConsentInput({ share_task: true, share_testimonial: true, testimonial: '   ' }).shareTestimonial).toBe(false)
+    const r = normalizeProofConsentInput({ share_task: true, share_testimonial: true, testimonial: ' Fast <b>and</b>\n\n tidy ' })
+    expect(r).toMatchObject({ shareTestimonial: true, testimonial: 'Fast and tidy' })
+    // A quote that is only markup is no quote.
+    expect(normalizeProofConsentInput({ share_task: true, share_testimonial: true, testimonial: '<br/><img src=x onerror=alert(1)>' }))
+      .toMatchObject({ shareTestimonial: false, testimonial: null })
+  })
+
+  test('stripMarkup removes whole tags and leaves no bracket behind', () => {
+    const { stripMarkup } = require('../../supabase/functions/poster-web/logic')
+    expect(stripMarkup('<p>Great</p><p>job</p>')).toBe('Great job')
+    expect(stripMarkup('<script>alert(1)</script>Nice')).toBe('alert(1) Nice')
+    expect(stripMarkup('Under <$50, done in 2 hrs >:)')).toBe('Under $50, done in 2 hrs :)')
+    expect(stripMarkup('<<b>>bold<</b>>')).toBe('bold')
+    expect(stripMarkup('5 < 10 and 10 > 5')).toBe('5 10 and 10 5')
+    expect(stripMarkup('<!-- hidden -->Hi')).toBe('Hi')
+    for (const s of ['<a href="x">hi</a>', '< b >x', 'a<b', '<<<>>>', '<<script>script>']) expect(stripMarkup(s)).not.toMatch(/[<>]/)
+  })
+
+  test('first names: letters only, otherwise asks again', () => {
+    expect(normalizeProofConsentInput({ share_task: true, attribution: 'first_name', first_name: 'Dana' })).toMatchObject({ attribution: 'first_name', firstName: 'Dana' })
+    expect(normalizeProofConsentInput({ share_task: true, attribution: 'first_name', first_name: 'José' }).error).toBeUndefined()
+    expect(normalizeProofConsentInput({ share_task: true, attribution: 'first_name', first_name: 'dana@example.com' }).error).toMatch(/first name/)
+    expect(normalizeProofConsentInput({ share_task: true, attribution: 'first_name', first_name: '' }).error).toMatch(/first name/)
+  })
+
+  test('long quotes are refused, not truncated', () => {
+    expect(normalizeProofConsentInput({ share_task: true, testimonial: 'a'.repeat(601) }).error).toMatch(/600/)
+  })
+})

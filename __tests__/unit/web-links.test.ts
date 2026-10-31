@@ -100,3 +100,19 @@ describe('webManageLink — bounty emails open the website, not the app', () => 
     expect(isUuid(null)).toBe(false)
   })
 })
+
+describe('proof consent request links', () => {
+  const { webBountyCta } = require('../../supabase/functions/_shared/web-links')
+  const BOUNTY_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+
+  test('opens the share view, never an applicant', () => {
+    const cta = webBountyCta(undefined, { type: 'proof_consent_request', bountyId: BOUNTY_ID, requestId: '11111111-1111-4111-8111-111111111111' })
+    expect(cta.label).toBe('Share your result')
+    const url = new URL(cta.url)
+    expect(url.pathname).toBe('/manage/')
+    expect(url.searchParams.get('bounty')).toBe(BOUNTY_ID)
+    expect(url.searchParams.get('view')).toBe('share')
+    expect(url.searchParams.has('applicant')).toBe(false)
+    expect(url.searchParams.get('utm_campaign')).toBe('proof_consent_request')
+  })
+})

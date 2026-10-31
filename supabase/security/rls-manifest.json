@@ -28,6 +28,11 @@
     "ratings": "trg_ratings_guard"
   },
   "protected": {
+    "bounty_proofs": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] },
+      "required_triggers": ["trg_bounty_proofs_guard"]
+    },
     "bounty_targeting_config": {
       "policies": [],
       "grants": { "anon": [], "authenticated": [] }
@@ -707,7 +712,19 @@
       "require_execute": [
         "authenticated"
       ]
-    }
+    },
+    { "signature": "proof_public_get(text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "proof_public_list(text,text[],integer,integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "proof_public_index()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "proof_public_photo(text,integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_proof_eligibility(uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_proof_poster_state(uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_request_proof_consent(integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "proof_poster_get(uuid)", "forbid_execute": ["anon", "PUBLIC"] },
+    { "signature": "proof_poster_set_consent(uuid,boolean,boolean,text,boolean,text,text,text)", "forbid_execute": ["anon", "PUBLIC"] },
+    { "signature": "proof_admin_publish(uuid,jsonb,boolean,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "proof_admin_unpublish(uuid,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "proof_admin_queue()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] }
   ],
   "baseline": {
     "production": [

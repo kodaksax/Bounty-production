@@ -67,6 +67,7 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   follow: 'followers',
 
   marketing_promo: 'marketing',
+  proof_consent_request: 'marketing',
 };
 
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [

@@ -33,6 +33,14 @@
 //   POST /poster-web/requests/:id/decline
 //   POST /poster-web/bounties/:id/confirm-completion
 //   POST /poster-web/support            { bounty_id?, request_id?, reason, message, phone? }
+//   GET  /poster-web/bounties/:id/proof
+//   POST /poster-web/bounties/:id/proof  { share_task, share_photos, testimonial?, share_testimonial,
+//                                          attribution: 'anonymous'|'first_name', first_name? }
+//
+// The proof routes are the poster's permission for a public proof page
+// (bountyfinder.net/proof, migration 20261027120000_bounty_proof_pages). Both
+// call the SQL functions AS THE USER, which check ownership with auth.uid();
+// nothing here decides who may publish what.
 
 declare const Deno: any
 
@@ -48,6 +56,7 @@ import {
   explainBountyStatus,
   explainPayment,
   formatMoney,
+  normalizeProofConsentInput,
   normalizeSupportInput,
   summarizeHunter,
   type DecisionState,
@@ -442,6 +451,55 @@ Deno.serve(async (req: Request) => {
       return reply({ ...result, case_id: caseId }, result.httpStatus)
     }
 
+    // ── GET|POST /bounties/:id/proof ────────────────────────────────────
+    if (seg.length === 3 && seg[0] === 'bounties' && seg[2] === 'proof' && (req.method === 'GET' || req.method === 'POST')) {
+      const bountyId = seg[1]
+      if (!isUuid(bountyId)) return reply({ error: 'We couldn’t find that bounty on your account.', code: 'not_found' }, 404)
+
+      if (req.method === 'GET') {
+        const { data, error } = await asUser.rpc('proof_poster_get', { p_bounty_id: bountyId })
+        if (error) return reply(...proofError(error))
+        return reply({ ok: true, proof: data })
+      }
+
+      const body = (await req.json().catch(() => null)) as Json | null
+      const input = normalizeProofConsentInput(body)
+      if (input.error) return reply({ ok: false, error: input.error, code: 'invalid_input' }, 400)
+
+      // Read only to know whether this answer takes a live page down (for
+      // analytics). A "not yours" answers now; any other failure must not block
+      // a withdrawal, so it is logged and the unpublish event is skipped. The
+      // SQL records proof.unpublished in bounty_events either way.
+      const { data: before, error: beforeError } = await asUser.rpc('proof_poster_get', { p_bounty_id: bountyId })
+      if (beforeError?.code === 'P0002') return reply(...proofError(beforeError))
+      if (beforeError) console.warn('[poster-web] proof pre-read failed', { code: beforeError.code, message: beforeError.message })
+      const { data, error } = await asUser.rpc('proof_poster_set_consent', {
+        p_bounty_id: bountyId,
+        p_share_task: input.shareTask,
+        p_share_photos: input.sharePhotos,
+        p_testimonial: input.testimonial,
+        p_share_testimonial: input.shareTestimonial,
+        p_attribution: input.attribution,
+        p_attribution_name: input.firstName,
+        p_source: 'web',
+      })
+      if (error) return reply(...proofError(error))
+
+      // Ids and booleans only: never the quote or the name.
+      capture(userId, 'proof_consent_recorded', {
+        bounty_id: bountyId,
+        share_task: input.shareTask,
+        share_photos: input.sharePhotos,
+        share_testimonial: input.shareTestimonial && Boolean(input.testimonial),
+        attribution: input.attribution,
+        status: (data as Json | null)?.status ?? null,
+      })
+      if ((before as Json | null)?.status === 'published' && !input.shareTask) {
+        capture(userId, 'proof_bounty_unpublished', { bounty_id: bountyId, reason: 'poster_withdrew_consent' })
+      }
+      return reply({ ok: true, proof: data })
+    }
+
     // ── POST /support ───────────────────────────────────────────────────
     if (req.method === 'POST' && seg.length === 1 && seg[0] === 'support') {
       const body = (await req.json().catch(() => null)) as Json | null
@@ -496,6 +554,21 @@ Deno.serve(async (req: Request) => {
 })
 
 // ── helpers ───────────────────────────────────────────────────────────────
+
+// The proof SQL functions raise P0002 for "not yours / not found" and 22023
+// for a request they refuse; their messages are written for the poster.
+// 42501 (a missing grant, or the bounty_proofs guard) is a permission refusal,
+// not a fault: say so without echoing the database's wording.
+function proofError(error: { code?: string; message?: string }): [Json, number] {
+  if (error.code === 'P0002') return [{ ok: false, error: 'We couldn’t find that bounty on your account.', code: 'not_found' }, 404]
+  if (error.code === '22023') return [{ ok: false, error: error.message ?? 'That can’t be saved.', code: 'invalid_input' }, 400]
+  if (error.code === '42501') {
+    console.warn('[poster-web] proof rpc refused', { code: error.code, message: error.message })
+    return [{ ok: false, error: 'You can’t change sharing for this bounty.', code: 'forbidden' }, 403]
+  }
+  console.error('[poster-web] proof rpc failed', { code: error.code, message: error.message })
+  return [{ ok: false, error: 'Something went wrong on our side. Please try again in a moment.', code: 'server_error' }, 500]
+}
 
 function countBy(rows: Json[], key: string): Map<string, number> {
   const m = new Map<string, number>()

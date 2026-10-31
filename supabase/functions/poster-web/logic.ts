@@ -355,3 +355,43 @@ export function normalizeSupportInput(body: Record<string, unknown> | null): {
   }
   return { reason, message, phone }
 }
+
+// A quote is plain text. Anything shaped like a tag (< then a letter, / or !)
+// goes whole, a space in its place, so "<p>Great</p><p>job</p>" reads "Great
+// job"; then any stray bracket ("under <$50" keeps its words); then runs of
+// whitespace. proof_poster_set_consent applies the same rule, and a CHECK on
+// bounty_proofs.testimonial holds it for every writer.
+export function stripMarkup(s: string): string {
+  return s.replace(/<\/?[A-Za-z!][^<>]*>/g, ' ').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+// The "Share your result" form (manage.js, view=share). Shapes the answer for
+// proof_poster_set_consent, which re-checks every rule; this only makes the
+// common mistakes answerable with a sentence instead of a database error.
+// Saying no to the page says no to everything on it.
+export function normalizeProofConsentInput(body: Record<string, unknown> | null): {
+  shareTask: boolean
+  sharePhotos: boolean
+  shareTestimonial: boolean
+  testimonial: string | null
+  attribution: 'anonymous' | 'first_name'
+  firstName: string | null
+  error?: string
+} {
+  const shareTask = body?.share_task === true
+  const testimonialRaw = typeof body?.testimonial === 'string' ? stripMarkup(body.testimonial) : ''
+  const testimonial = shareTask && testimonialRaw ? testimonialRaw : null
+  const sharePhotos = shareTask && body?.share_photos === true
+  const shareTestimonial = shareTask && body?.share_testimonial === true && testimonial !== null
+  const firstNameRaw = typeof body?.first_name === 'string' ? body.first_name.trim() : ''
+  const attribution = shareTask && body?.attribution === 'first_name' ? 'first_name' : 'anonymous'
+  const firstName = attribution === 'first_name' ? firstNameRaw : null
+  const out = { shareTask, sharePhotos, shareTestimonial, testimonial, attribution, firstName } as const
+
+  if (typeof body?.share_task !== 'boolean') return { ...out, error: 'Choose whether we can share this job.' }
+  if (testimonial && testimonial.length > 600) return { ...out, error: 'Please keep your words under 600 characters.' }
+  if (attribution === 'first_name' && !/^[\p{L}][\p{L}'’ -]{0,29}$/u.test(firstName ?? '')) {
+    return { ...out, error: 'Use just a first name (letters only), or choose to stay anonymous.' }
+  }
+  return out
+}
