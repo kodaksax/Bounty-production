@@ -78,7 +78,7 @@ const V2_ESCROW_PENDING_STATUSES = [
   'release_pending',
   'refund_pending',
 ];
-const V2_ESCROW_TERMINAL_STATUSES = ['canceled', 'refunded', 'released'];
+const V2_ESCROW_TERMINAL_STATUSES = ['canceled', 'refunded', 'released', 'released_to_balance'];
 
 interface BountyEscrowFields {
   amount?: number | null;

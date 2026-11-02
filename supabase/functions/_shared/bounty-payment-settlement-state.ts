@@ -4,6 +4,9 @@ export type BountyPaymentSettlementStatus =
   | 'captured'
   | 'release_pending'
   | 'released'
+  // v2 release credited the hunter's Bounty balance; no transfer exists, so
+  // no transfer event ever moves it (every branch below returns null).
+  | 'released_to_balance'
   | 'refund_pending'
   | 'refunded'
   | 'canceled'

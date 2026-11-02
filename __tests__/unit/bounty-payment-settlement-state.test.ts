@@ -1,6 +1,12 @@
 import { transitionBountyPaymentForTransfer } from '../../supabase/functions/_shared/bounty-payment-settlement-state';
 
 describe('Phase 2 bounty payment transfer reconciliation', () => {
+  it('never moves a payment that was credited to the hunter balance', () => {
+    for (const event of ['created', 'paid', 'failed', 'reversed'] as const) {
+      expect(transitionBountyPaymentForTransfer('released_to_balance', event)).toBeNull();
+    }
+  });
+
   it('moves a transfer-requested payment to released only on Stripe transfer.created', () => {
     expect(transitionBountyPaymentForTransfer('captured', 'created')).toBe('released');
     expect(transitionBountyPaymentForTransfer('release_pending', 'created')).toBe('released');

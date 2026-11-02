@@ -40,7 +40,10 @@ export interface CreateBountyPaymentResult {
 
 export interface ReleaseBountyPaymentResult {
   released: boolean;
-  transferId: string;
+  /** null for v2, which credits the hunter's Bounty balance instead of transferring. */
+  transferId: string | null;
+  /** v2: the hunter's release ledger row. */
+  transactionId?: string | null;
   hunterId?: string;
   amount?: number;
   platformFee?: number;

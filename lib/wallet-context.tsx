@@ -982,8 +982,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // only the transfer.created webhook makes it 'released'. Treating
           // that as failure would tell the poster the payout broke when it is
           // simply not confirmed yet.
+          // v2 now credits the hunter's Bounty balance ('released_to_balance').
           const acceptedRelease =
             result.status === 'released' ||
+            result.status === 'released_to_balance' ||
             (result.status === 'release_pending' && !!result.transferId);
           if (!acceptedRelease) return false;
           try {

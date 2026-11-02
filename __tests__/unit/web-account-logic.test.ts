@@ -55,6 +55,8 @@ describe('payout stages', () => {
     expect(payoutStageV2({ status: 'pending_payment' })).toBe('none')
     expect(payoutStageV2({ status: 'canceled' })).toBe('none')
     expect(payoutStageV2(null)).toBe('none')
+    // A v2 release now credits the hunter's Bounty balance, never "paid".
+    expect(payoutStageV2({ status: 'released_to_balance', stripe_transfer_id: null })).toBe('balance_credited')
   })
 
   it('maps v3 funding states, never calling an uncharged authorization refunded', () => {
@@ -105,6 +107,15 @@ describe('release routing and responses', () => {
     expect(interpretPaymentsRelease(200, { status: 'release_pending', transferId: 'tr_1' })).toMatchObject({ ok: true, state: 'sending' })
     expect(interpretPaymentsRelease(409, { status: 'release_pending', transferId: 'tr_1' })).toMatchObject({ ok: true, state: 'sending' })
     expect(interpretPaymentsRelease(200, { status: 'released', transferId: 'tr_1', reused: true })).toMatchObject({ ok: true, state: 'paid' })
+  })
+
+  it('treats a v2 balance credit (new or repeated) as balance_credited, never paid', () => {
+    expect(interpretPaymentsRelease(200, { released: true, status: 'released_to_balance', transferId: null, transactionId: 'wt_1' }))
+      .toEqual({ ok: true, state: 'balance_credited', transferId: null, transactionId: 'wt_1' })
+    expect(interpretPaymentsRelease(200, { released: true, status: 'released_to_balance', transferId: null, reused: true }))
+      .toMatchObject({ ok: true, state: 'balance_credited', transactionId: null })
+    // Only a 200 is a credit: a refusal carrying the status is still a failure.
+    expect(interpretPaymentsRelease(409, { status: 'released_to_balance', code: 'invalid_status' })).toMatchObject({ ok: false })
   })
 
   it('recognises every "hunter cannot be paid yet" code, v2 and v3', () => {

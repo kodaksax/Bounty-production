@@ -1,6 +1,18 @@
 import { bountyHoldsUnreleasedEscrow } from '../../../lib/utils/payment-architecture';
 
 describe('bountyHoldsUnreleasedEscrow', () => {
+  it('treats a v2 payment credited to the hunter balance as released', () => {
+    expect(
+      bountyHoldsUnreleasedEscrow({
+        amount: 50,
+        is_for_honor: false,
+        status: 'in_progress',
+        payment_architecture_version: 2,
+        payment_status: 'released_to_balance',
+      })
+    ).toBe(false);
+  });
+
   it('is true for a funded paid bounty still in escrow', () => {
     expect(bountyHoldsUnreleasedEscrow({ amount: 50, is_for_honor: false, status: 'open' })).toBe(true);
     expect(

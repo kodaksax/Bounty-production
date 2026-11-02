@@ -130,7 +130,12 @@ export default function PayoutScreen() {
             String(bounty.id),
             bounty.accepted_by || undefined
           );
-          if (!releaseResult.released || releaseResult.status !== 'released') {
+          // v2 credits the hunter's Bounty balance ('released_to_balance');
+          // v3 is final only once Stripe confirms the transfer ('released').
+          if (
+            !releaseResult.released ||
+            (releaseResult.status !== 'released' && releaseResult.status !== 'released_to_balance')
+          ) {
             throw new Error(
               'Transfer requested. Waiting for Stripe to confirm settlement before completing this bounty.'
             );

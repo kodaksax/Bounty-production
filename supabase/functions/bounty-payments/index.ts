@@ -4,13 +4,17 @@
 // Isolated from the legacy wallet/payments/connect functions so the existing
 // custodial-wallet flow (version 1) keeps working unchanged.
 //
-// Money flow:
+// Money flow (v2):
 //   Poster --PaymentIntent(transfer_group=bounty_<id>, capture=automatic)--> platform balance (Charge)
-//   platform balance --Transfer(source_transaction=charge, destination=hunter)--> Hunter's Connect acct
+//   /release credits the hunter's Bounty balance (apply_v2_release_to_balance,
+//   migration 20261102120000); the money stays on the platform balance until
+//   the hunter withdraws via connect /withdraw, which creates the Transfer +
+//   Payout. Same as a v1 wallet release, so app and web posts pay out alike.
+//   (v3 still transfers to the hunter's Connect account on release.)
 //
 // Routes:
 //   POST /bounty-payments/create   — poster funds a bounty (creates PaymentIntent)
-//   POST /bounty-payments/release  — release captured funds to the hunter (Transfer)
+//   POST /bounty-payments/release  — v2: credit the hunter's balance; v3: Transfer
 //   POST /bounty-payments/cancel   — cancel (pre-capture) or refund (post-capture)
 //
 // Lifecycle is tracked in public.bounty_payments; the webhooks function
@@ -204,6 +208,7 @@ const ACTIVE_BP_STATUSES = [
   'captured',
   'release_pending',
   'released',
+  'released_to_balance',
   'refund_pending',
   'refunded',
   'disputed',
@@ -1241,6 +1246,29 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // v2 releases credit the hunter's balance; a repeat returns that credit.
+      if (bp.status === 'released_to_balance') {
+        const { data: priorTx } = (await withDbTimeout(
+          supabaseAdmin
+            .from('wallet_transactions')
+            .select('id, amount')
+            .eq('bounty_id', bountyId)
+            .eq('type', 'release')
+            .eq('status', 'completed')
+            .filter('metadata->>bounty_payment_id', 'eq', bp.id)
+            .maybeSingle()
+        )) as any;
+        return reply({
+          released: true,
+          transferId: null,
+          transactionId: priorTx?.id ?? null,
+          hunterAmount: priorTx ? Number(priorTx.amount) : undefined,
+          status: 'released_to_balance',
+          settlementState: 'ledger_only',
+          reused: true,
+        });
+      }
+
       if (bp.status === 'release_pending' && bp.stripe_transfer_id) {
         return reply(
           {
@@ -1255,11 +1283,10 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Only a captured payment, or a transfer Stripe has terminally failed,
-      // can start a release attempt. A `failed` retry intentionally uses a
-      // new deterministic key below; retrying with the old key would replay
-      // Stripe's prior failed response forever. Other terminal states remain
-      // non-releasable.
+      // Only a captured payment can be credited, or one whose transfer from
+      // the pre-balance release path Stripe failed or reversed (the money is
+      // back on the platform balance). apply_v2_release_to_balance re-checks
+      // this under a row lock. Other terminal states remain non-releasable.
       if (!['authorized', 'captured', 'failed'].includes(bp.status)) {
         return reply(
           {
@@ -1303,40 +1330,6 @@ Deno.serve(async (req: Request) => {
       }
       const hunterId = payee.hunterId;
 
-      // Verify the hunter is payout-ready on Stripe Connect.
-      const { data: hunterProfile, error: hunterErr } = (await withDbTimeout(
-        supabaseAdmin
-          .from('profiles')
-          .select('stripe_connect_account_id, stripe_connect_payouts_enabled')
-          .eq('id', hunterId)
-          .maybeSingle()
-      )) as any;
-      if (hunterErr) {
-        return reply(
-          {
-            error: 'Failed to load hunter payout profile.',
-            code: 'hunter_profile_load_failed',
-            retryable: true,
-          },
-          500
-        );
-      }
-      if (!hunterProfile?.stripe_connect_account_id) {
-        return reply(
-          {
-            error: 'The hunter has not completed payout onboarding yet.',
-            code: 'hunter_not_onboarded',
-          },
-          400
-        );
-      }
-      if (hunterProfile.stripe_connect_payouts_enabled !== true) {
-        return reply(
-          { error: 'The hunter cannot receive payouts yet.', code: 'hunter_payouts_disabled' },
-          400
-        );
-      }
-
       // The charge id should already be set by the payment_intent.succeeded
       // webhook. If it's missing (webhook lag), resolve it live from the PI.
       let chargeId: string | null = bp.stripe_charge_id ?? null;
@@ -1378,113 +1371,75 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Create the Transfer, drawing from the specific settled charge
-      // (source_transaction) so Connect balance accounting is exact. Stripe
-      // idempotency key makes duplicate requests for one attempt a no-op.
-      // Once Stripe has confirmed a terminal failure, the prior transfer id
-      // becomes the deterministic retry suffix for exactly one new attempt.
-      const transferIdempotencyKey =
-        bp.status === 'failed' && bp.stripe_transfer_id
-          ? `bounty_release_retry_${bp.id}_${bp.stripe_transfer_id}`
-          : `bounty_release_${bp.id}`;
-      let accountOperation: string;
-      try {
-        accountOperation = await reserveAccountOperation(
-          supabaseAdmin, hunterId, hunterProfile.stripe_connect_account_id,
-          'bounty_release_v2', `release_v2:${bp.id}:${requestId}`
-        );
-      } catch {
-        return reply({ error: 'Hunter payout account changed or is busy. Resume/cancel account replacement or contact support for reconciliation.', code: 'account_operation_blocked' }, 409);
-      }
-      let transfer: any;
-      try {
-        transfer = await stripe.transfers.create(
-          {
-            amount: hunterAmountCents,
-            currency: 'usd',
-            destination: hunterProfile.stripe_connect_account_id,
-            source_transaction: chargeId,
-            transfer_group: bp.transfer_group ?? `bounty_${bountyId}`,
-            metadata: {
-              bounty_id: bountyId,
-              hunter_id: hunterId,
-              poster_id: bp.poster_id,
-              request_id: requestId,
-            },
-          },
-          { idempotencyKey: transferIdempotencyKey }
-        );
-      } catch (transferErr: any) {
-        if (isDefinitiveStripeRejection(transferErr)) await finishAccountOperation(supabaseAdmin, accountOperation);
-        // The charge was captured successfully; only the transfer failed. Leave
-        // status at 'captured' so a retry goes straight back to this step. No
-        // funds are lost — they remain on the platform balance.
-        console.error('[bounty-payments] Transfer failed after capture', {
-          bountyId,
-          requestId,
-          bpId: bp.id,
-          transferErr,
-        });
-        return reply(
-          {
-            error:
-              isDefinitiveStripeRejection(transferErr)
-                ? 'Payment is held safely but the transfer to the hunter failed. Please retry.'
-                : 'We could not confirm the transfer. Financial operations are blocked until support reconciles this release.',
-            code: 'transfer_failed',
-            retryable: true,
-          },
-          502
-        );
-      }
-
-      const { error: updErr } = (await withDbTimeout(
-        supabaseAdmin
-          .from('bounty_payments')
-          .update({
-            hunter_id: hunterId,
-            stripe_transfer_id: transfer.id,
-            platform_fee_amount: platformFee,
-            status: 'release_pending',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', bp.id)
-          // Do not overwrite a webhook that reconciled transfer.created while
-          // this request was awaiting its database write.
-          .in('status', ['authorized', 'captured', 'failed'])
+      // Credit the hunter's Bounty balance (not their Connect account): the
+      // same model as a v1 wallet release, so a hunter is paid the same way
+      // whether the job was posted in the app or on the website. Payout
+      // readiness is not required to receive the credit, only to withdraw it
+      // (ADR 0001 §4.3) — trg_wallet_tx_notify_unready_payee tells an unready
+      // hunter to finish setup. The card money stays on the platform balance
+      // until connect /withdraw moves it.
+      const { data: creditRows, error: creditErr } = (await withDbTimeout(
+        supabaseAdmin.rpc('apply_v2_release_to_balance', {
+          p_bounty_payment_id: bp.id,
+          p_hunter_id: hunterId,
+          p_charge_id: chargeId,
+          p_platform_fee: platformFee,
+          p_hunter_amount: hunterAmount,
+          p_request_id: requestId,
+        })
       )) as any;
-      if (updErr) {
-        // Transfer succeeded but the row write failed. The Stripe idempotency
-        // key on the transfer means a retry won't double-pay; surface for
-        // reconciliation rather than silently succeeding.
-        console.error('[bounty-payments] CRITICAL: transfer created but row update failed', {
-          bountyId,
-          requestId,
-          bpId: bp.id,
-          transferId: transfer.id,
-          updErr,
-        });
+      if (creditErr) {
+        const msg = String(creditErr.message ?? '');
+        if (msg.startsWith('invalid_status')) {
+          return reply(
+            {
+              error: 'This bounty payment can no longer be released.',
+              code: 'invalid_status',
+              status: msg.split(':')[1] ?? null,
+            },
+            409
+          );
+        }
+        console.error('[bounty-payments] balance credit failed', { bountyId, requestId, bpId: bp.id, creditErr });
         return reply(
           {
-            error:
-              'Stripe accepted the transfer but its record could not be confirmed. Financial operations are blocked; contact support for reconciliation before retrying.',
-            code: 'record_update_failed',
-            transferId: transfer.id,
-            retryable: false,
+            error: 'We could not credit the hunter. Nothing was released; please try again.',
+            code: 'release_credit_failed',
+            retryable: true,
           },
           500
         );
       }
+      const credit = Array.isArray(creditRows) ? creditRows[0] : creditRows;
 
-      await finishAccountOperation(supabaseAdmin, accountOperation);
+      // Advisory, after the credit: never blocks or fails the release.
+      let hunterPayoutReady = false;
+      try {
+        const { data: hp } = (await withDbTimeout(
+          supabaseAdmin
+            .from('profiles')
+            .select('stripe_connect_account_id, stripe_connect_payouts_enabled')
+            .eq('id', hunterId)
+            .maybeSingle()
+        )) as any;
+        hunterPayoutReady = Boolean(hp?.stripe_connect_account_id) && hp?.stripe_connect_payouts_enabled === true;
+      } catch {
+        /* advisory only */
+      }
+
       return reply({
-        released: false,
-        transferId: transfer.id,
+        released: true,
+        transferId: null,
+        transactionId: credit?.transaction_id ?? null,
         hunterId,
         amount,
         platformFee,
         hunterAmount,
-        status: 'release_pending',
+        status: 'released_to_balance',
+        settlementState: 'ledger_only',
+        reused: credit ? credit.applied === false : false,
+        hunterPayoutReady,
+        message: `$${hunterAmount.toFixed(2)} added to the hunter's Bounty balance.`,
       });
     }
 
@@ -1529,7 +1484,7 @@ Deno.serve(async (req: Request) => {
           reused: true,
         });
       }
-      if (bp.status === 'released') {
+      if (bp.status === 'released' || bp.status === 'released_to_balance') {
         return reply(
           {
             error: 'Funds have already been released to the hunter and cannot be canceled here.',

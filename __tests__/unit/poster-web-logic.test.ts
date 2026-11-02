@@ -93,6 +93,11 @@ describe('classifyDecline', () => {
 describe('classifyRelease — what the poster is told after confirming', () => {
   test('paid', () => {
     expect(classifyRelease(200, { released: true, status: 'released' })).toMatchObject({ outcome: 'paid', needsSupport: false })
+    expect(classifyRelease(200, { released: true, status: 'released_to_balance' })).toMatchObject({
+      outcome: 'paid',
+      needsSupport: false,
+      message: expect.stringContaining('Bounty balance'),
+    })
   })
   test('transfer requested, awaiting Stripe (the 409 reuse response too)', () => {
     expect(classifyRelease(200, { released: false, status: 'release_pending' }).outcome).toBe('payment_on_its_way')

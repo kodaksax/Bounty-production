@@ -40,10 +40,12 @@ export function hunterNetCents(amountDollars: number, feePercent: number): numbe
  * The web's payout vocabulary. "paid" is used only when a Stripe object
  * confirms the transfer (ADR 0001, _shared/settlement-state.ts):
  *  - v2: bounty_payments.status = 'released' AND stripe_transfer_id, which
- *    only the transfer.created webhook sets;
+ *    only the transfer.created webhook sets (pre-2026-11-02 releases);
+ *    'released_to_balance' is a credit to the hunter's balance, like v1;
  *  - v3: bounty_v3_funding.state = 'released' AND stripe_transfer_id;
  *  - v1: the release ledger row's settlement_state = 'stripe_settled'.
- * A v1 credit to the in-app balance is "balance_credited", never "paid".
+ * A credit to the in-app balance (v1, or v2 'released_to_balance') is
+ * "balance_credited", never "paid".
  */
 export type PayoutStage =
   | 'none' //            nothing funded (for honor, or no payment record)
@@ -51,7 +53,7 @@ export type PayoutStage =
   | 'waiting_on_hunter' // approved, but the hunter cannot receive a payout yet
   | 'sending' //         transfer requested, Stripe has not confirmed it
   | 'paid' //            Stripe confirmed the transfer
-  | 'balance_credited' // v1: added to the hunter's Bounty balance
+  | 'balance_credited' // v1 / v2: added to the hunter's Bounty balance
   | 'failed' //          Stripe rejected the transfer; a retry is possible
   | 'refunding'
   | 'refunded'
@@ -71,6 +73,8 @@ export function payoutStageV2(bp: V2Payment | null): PayoutStage {
       return 'sending'
     case 'released':
       return bp.stripe_transfer_id ? 'paid' : 'sending'
+    case 'released_to_balance':
+      return 'balance_credited'
     case 'failed':
       return 'failed'
     case 'refund_pending':
@@ -170,6 +174,11 @@ export function interpretPaymentsRelease(httpStatus: number, body: any): Release
 
   if (status === 'released' && transferId) {
     return { ok: true, state: 'paid', transferId, transactionId: null }
+  }
+  // v2: credited to the hunter's Bounty balance (new or repeated request).
+  if (status === 'released_to_balance' && httpStatus === 200) {
+    const transactionId = typeof body?.transactionId === 'string' && body.transactionId ? body.transactionId : null
+    return { ok: true, state: 'balance_credited', transferId: null, transactionId }
   }
   // 200 for a new request; 409 when the same transfer was already requested.
   if (status === 'release_pending' && transferId && (httpStatus === 200 || httpStatus === 409)) {

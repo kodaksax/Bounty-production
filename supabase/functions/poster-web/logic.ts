@@ -85,6 +85,8 @@ export function explainPayment(
       return { state: 'releasing', label: 'Payment on its way', explanation: `You confirmed the job. ${amount} is on its way to your hunter.` }
     case 'released':
       return { state: 'paid_out', label: 'Paid to your hunter', explanation: `${amount} was sent to your hunter.` }
+    case 'released_to_balance':
+      return { state: 'paid_out', label: 'Released to your hunter', explanation: `You released ${amount}. It was added to your hunter’s Bounty balance, which they can withdraw to their bank.` }
     case 'failed':
       return {
         state: 'held',
@@ -235,6 +237,9 @@ export interface CompletionResult {
 export function classifyRelease(httpStatus: number, body: Record<string, unknown> | null): CompletionResult {
   const code = typeof body?.code === 'string' ? body.code : ''
   const status = typeof body?.status === 'string' ? body.status : ''
+  if (httpStatus === 200 && body?.released === true && status === 'released_to_balance') {
+    return { ok: true, outcome: 'paid', httpStatus: 200, needsSupport: false, message: 'Thank you — you confirmed the job. The payment was added to your hunter’s Bounty balance.' }
+  }
   if (httpStatus === 200 && body?.released === true) {
     return { ok: true, outcome: 'paid', httpStatus: 200, needsSupport: false, message: 'Thank you — you confirmed the job and your hunter has been paid.' }
   }
