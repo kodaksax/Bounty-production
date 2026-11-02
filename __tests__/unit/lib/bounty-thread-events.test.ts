@@ -1,4 +1,4 @@
-import { buildBountyThreadEvents, threadNeedsViewer } from '../../../lib/utils/bounty-thread-events';
+import { buildBountyThreadEvents, parseServerTimestamp, threadNeedsViewer } from '../../../lib/utils/bounty-thread-events';
 
 const POSTER = 'poster-1';
 const HUNTER = 'hunter-1';
@@ -157,5 +157,40 @@ describe('buildBountyThreadEvents', () => {
     expect(poster.find(e => e.kind === 'cancellation_requested')!.action).toBe('respond_cancellation');
     const hunter = buildBountyThreadEvents({ ...input, role: 'hunter', viewerId: HUNTER });
     expect(hunter.find(e => e.kind === 'cancellation_requested')!.action).toBe('view_cancellation');
+  });
+});
+
+// bounty_requests.accepted_at / rejected_at are `timestamp without time zone`,
+// so the API sends them with no zone. They are UTC; read as local time they
+// pushed Hired and every later card hours past the messages sent after them
+// (Staging bounty b6f5f175, 2026-11-02).
+describe('zone-less server timestamps', () => {
+  it('reads a timestamp with no zone as UTC', () => {
+    expect(parseServerTimestamp('2026-11-02T22:19:57.915565')).toBe(Date.parse('2026-11-02T22:19:57.915Z'));
+    expect(parseServerTimestamp('2026-11-02 22:19:57')).toBe(Date.parse('2026-11-02T22:19:57Z'));
+    // Zoned values are left alone.
+    expect(parseServerTimestamp('2026-11-02T22:19:57+00:00')).toBe(Date.parse('2026-11-02T22:19:57Z'));
+    expect(parseServerTimestamp('2026-11-02T17:19:57-05:00')).toBe(Date.parse('2026-11-02T22:19:57Z'));
+  });
+
+  it('keeps Hired and Work submitted at their real times, before later messages', () => {
+    const events = buildBountyThreadEvents({
+      role: 'hunter',
+      viewerId: HUNTER,
+      bounty: { ...baseBounty, created_at: '2026-11-02T22:16:45Z', status: 'in_progress', accepted_by: HUNTER },
+      request: {
+        ...pendingRequest,
+        created_at: '2026-11-02T22:18:03Z',
+        status: 'accepted',
+        accepted_at: '2026-11-02T22:19:57.915565', // as the API returns it
+        updated_at: '2026-11-02T22:19:57.915565+00:00',
+      },
+      submission: { id: 's-1', status: 'pending', submitted_at: '2026-11-02T22:41:09.808847+00:00' },
+    });
+    const at = (kind: string) => Date.parse(events.find(e => e.kind === kind)!.at);
+    expect(at('hired')).toBe(Date.parse('2026-11-02T22:19:57.915Z'));
+    expect(at('work_submitted')).toBe(Date.parse('2026-11-02T22:41:09.808Z'));
+    // A message sent at 23:23Z must sort after both cards.
+    expect(at('work_submitted')).toBeLessThan(Date.parse('2026-11-02T23:23:46Z'));
   });
 });
