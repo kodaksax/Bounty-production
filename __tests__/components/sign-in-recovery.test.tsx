@@ -188,6 +188,39 @@ describe('sign-in recovery after a failed attempt', () => {
     expect(mockReplace).toHaveBeenCalledWith('/');
   });
 
+  it('accepts email codes longer than 6 digits', async () => {
+    signInWithOtp.mockResolvedValue({ error: null });
+    verifyOtp.mockResolvedValue({ data: { session: GOOD_SESSION.session }, error: null });
+    mfaLevel.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null });
+
+    const utils = render(<SignInForm />);
+    fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
+    fireEvent.press(utils.getByLabelText('Use email code'));
+    fireEvent.press(utils.getByLabelText('Send email code'));
+    await waitFor(() => expect(utils.getByLabelText('Email sign-in code')).toBeTruthy());
+
+    fireEvent.changeText(utils.getByLabelText('Email sign-in code'), '12345678');
+    fireEvent.press(utils.getByLabelText('Verify email code'));
+    await waitFor(() =>
+      expect(verifyOtp).toHaveBeenCalledWith({ email: 'a@b.test', token: '12345678', type: 'email' })
+    );
+  });
+
+  it('shows an incomplete email code error beside the code field', async () => {
+    signInWithOtp.mockResolvedValue({ error: null });
+
+    const utils = render(<SignInForm />);
+    fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
+    fireEvent.press(utils.getByLabelText('Use email code'));
+    fireEvent.press(utils.getByLabelText('Send email code'));
+    await waitFor(() => expect(utils.getByLabelText('Email sign-in code')).toBeTruthy());
+
+    fireEvent.changeText(utils.getByLabelText('Email sign-in code'), '123');
+    fireEvent.press(utils.getByLabelText('Verify email code'));
+    expect(utils.getByText('Enter the full code from your email.')).toBeTruthy();
+    expect(verifyOtp).not.toHaveBeenCalled();
+  });
+
   it('requires the enrolled MFA challenge after email-code sign-in', async () => {
     signInWithOtp.mockResolvedValue({ error: null });
     verifyOtp.mockResolvedValue({ data: { session: GOOD_SESSION.session }, error: null });
