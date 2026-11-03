@@ -1161,7 +1161,15 @@ export const bountyService = {
   async delete(id: string | number): Promise<boolean> {
     try {
       if (isSupabaseConfigured) {
-        const { error } = await supabase.from('bounties').delete().eq('id', id);
+        // RLS filters a DELETE the caller may not make instead of rejecting
+        // it, so an empty result is a refusal, not a success. Without this a
+        // bounty whose refund (which also accepts the legacy user_id owner)
+        // went through but whose poster_id RLS check failed would be reported
+        // as cancelled while it stayed live on the feed.
+        const { data, error } = await supabase.from('bounties').delete().eq('id', id).select('id');
+        if (!error && (!data || data.length === 0)) {
+          throw new Error('bounty_delete_matched_no_rows');
+        }
         if (!error) {
           try {
             await analyticsService.trackEvent('bounty_deleted', { bountyId: String(id) });
@@ -1183,12 +1191,16 @@ export const bountyService = {
           id,
         });
 
-        const { error: softError } = await supabase
+        const { data: softData, error: softError } = await supabase
           .from('bounties')
           .update({ status: 'deleted' })
-          .eq('id', id);
+          .eq('id', id)
+          .select('id');
         if (softError) {
           throw softError;
+        }
+        if (!softData || softData.length === 0) {
+          throw new Error('bounty_soft_delete_matched_no_rows');
         }
 
         try {

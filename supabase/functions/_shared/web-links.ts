@@ -25,7 +25,7 @@ export function isUuid(value: unknown): value is string {
   return typeof value === 'string' && UUID_RE.test(value)
 }
 
-export type ManageView = 'bounty' | 'applicant' | 'complete' | 'help'
+export type ManageView = 'bounty' | 'applicant' | 'complete' | 'help' | 'share'
 
 export interface ManageLinkParams {
   bountyId?: string | null
@@ -65,6 +65,15 @@ export function webBountyCta(
 ): { url: string; label: string } | null {
   const bountyId = data.bountyId ?? data.bounty_id
   if (!isUuid(bountyId)) return null
+
+  // The completed-bounty proof request (fn_request_proof_consent) opens the
+  // dashboard's "Share your result" view, where the poster answers.
+  if (data.type === 'proof_consent_request') {
+    return {
+      url: webManageLink(base, { bountyId, view: 'share', campaign: 'proof_consent_request' }),
+      label: 'Share your result',
+    }
+  }
 
   const requestId = data.requestId ?? data.request_id
   const hasRequest = isUuid(requestId)

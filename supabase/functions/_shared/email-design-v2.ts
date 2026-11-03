@@ -85,6 +85,7 @@ const TYPE_STAMP: Record<string, [string, Tone]> = {
   bounty_quality_nudge: ['Needs a nudge', 'neutral'],
   bounty_location_nudge: ['Needs a nudge', 'neutral'],
   rating_reminder: ['Quick favor', 'neutral'],
+  proof_consent_request: ['Quick favor', 'neutral'],
   payout_paid: ['Paid out', 'success'],
   payout_failed: ['Action needed', 'alert'],
   payout_canceled: ['Action needed', 'alert'],

@@ -910,6 +910,68 @@
       },
       "notes": "Behavioral audit 2026-10-15 (NOTIF-01/HUNT-01). Path is the bounty_nearby deep link (resolveNotificationDeepLink) to the open staging bounty 2166eae2 owned by the shared qa+shoal-poster account. If that bounty is closed, swap in another open [shoal] bounty that no hunter slot has applied to.",
       "navigationHint": "A notification tap cannot be simulated here, so find the job yourself: it is titled \"[shoal] Help me move a couch 2026-09-04T13:43\" -- search for it or find it in the feed, then treat that screen as where the notification would have opened."
+    },
+    {
+      "id": "golden-poster-first-task",
+      "title": "Golden-path audit 2026-10-30 -- non-technical first-timer posts a real task and judges what happens next",
+      "phase": 4,
+      "task": "You have a real job you need done and you have never used this app. Pick ONE that fits you: haul an old couch and dresser from your garage to the curb this weekend; collect a prescription and leave it at your building's front desk before 6pm today; or carry groceries in from the car and change two ceiling light bulbs. Starting from this screen, get that job in front of people who could do it. Create whatever account you need with throwaway details only: an email at example.com, a made-up name, a made-up address in a real US city. Describe the job the way you really would and offer a price you think is fair. Keep going until either the job is live and you have seen it listed somewhere with your own eyes, or you hit something you cannot or will not get past. Then, WITHOUT guessing from other apps, write down what the app has told you about: (1) when your card is charged and how much in total, (2) who holds the money until the job is done, (3) who will see your address and when, (4) how you will choose a person and what you will know about them, (5) what happens if nobody does the job, and (6) what you should do next. Mark each one ANSWERED (quote the screen text and where it was) or NOT ANSWERED. Also count how many screens you went through before you could first type what your job was. This is a disposable test account on a test system: you are explicitly authorised to tick the age and terms boxes and to continue. Do not stop at them.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-homeowner-hal",
+        "bounty-busy-pro-bea",
+        "bounty-older-olive"
+      ],
+      "swarm": 3,
+      "maxSteps": 45,
+      "path": "/",
+      "requiresAuth": false,
+      "tags": {
+        "funnel": [
+          "funnel:signup",
+          "funnel:post",
+          "funnel:trust"
+        ],
+        "area": [
+          "area:web",
+          "area:auth",
+          "area:ux"
+        ]
+      },
+      "notes": "Golden-path audit. Web stubs Stripe (reference_shoal_stripe_web_stub): a card-entry failure is a harness artifact; judge only the copy around it. Persona emails can collide with earlier runs -- check auth.users.created_at before reporting \"already registered\"."
+    },
+    {
+      "id": "golden-hunter-first-earn",
+      "title": "Golden-path audit 2026-10-30 -- first-time earner signs up, judges a job, applies, and works out how they get paid",
+      "phase": 4,
+      "task": "You want to earn some money this week doing small jobs for people, and you have never used this app. Starting from this screen, create an account with throwaway details only (an email at example.com, a made-up name). Find a job you could realistically do. Before you apply, work out from the app alone: what it pays and how much of that you keep, where it is and how far from you, when it has to be done, and what exactly is expected. Apply to it if it is worth doing. Then, WITHOUT guessing from other apps, write down what the app has told you about: (1) whether you have the job yet or not, (2) what happens next and how you will find out, (3) what you must set up before you can be paid and whether you can do the job first, (4) when the money reaches you after you finish and where it goes, (5) what happens if the person says your work was not good enough. Mark each one ANSWERED (quote the screen text and where it was) or NOT ANSWERED. Report every word you did not understand. This is a disposable test account on a test system: you are explicitly authorised to tick the age and terms boxes and to continue. Do not stop at them. You do NOT need to finish any bank or identity setup; if asked, note what was asked and skip it if you can. Listings whose titles start with \"[shoal]\" are test jobs; treat them as real.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-student-sid",
+        "bounty-cash-cam"
+      ],
+      "swarm": 2,
+      "maxSteps": 45,
+      "path": "/",
+      "requiresAuth": false,
+      "tags": {
+        "funnel": [
+          "funnel:signup",
+          "funnel:browse",
+          "funnel:apply",
+          "funnel:payout"
+        ],
+        "area": [
+          "area:web",
+          "area:marketplace",
+          "area:ux"
+        ]
+      },
+      "notes": "Golden-path audit. Needs open bounties on staging; an empty feed is itself a finding. Connect onboarding is a Stripe-hosted step and not testable on web."
     }
   ]
 }

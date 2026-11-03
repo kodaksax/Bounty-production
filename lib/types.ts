@@ -685,6 +685,8 @@ export type NotificationType =
   | 'verification_rejected'
   | 'verification_canceled'
   | 'marketing_promo'
+  /** "Can we share how your job went?": completed-bounty proof consent, answered on the web (/manage/?view=share). */
+  | 'proof_consent_request'
   /** Operator-facing payment-integrity page. Admin recipients only. */
   | 'reconciliation_alert'
   /** Scam/abuse flag from moderation-sweep. Admin recipients only. */

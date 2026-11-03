@@ -414,9 +414,11 @@ function BountyThreadScreen() {
         <Text style={s.bannerAmount}>{bounty.is_for_honor ? 'Honor' : `$${bounty.amount}`}</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.toolRow}>
+        {/* The poster's way to edit or cancel: Inbox rows open this thread,
+            so the chip says where those actions live. */}
         <ToolChip
-          icon="visibility"
-          label="Bounty details"
+          icon={role === 'poster' ? 'tune' : 'visibility'}
+          label={role === 'poster' ? 'Manage bounty' : 'Bounty details'}
           onPress={() => router.push(`/bounty/${bounty.id}` as never)}
           theme={theme}
         />
@@ -482,7 +484,7 @@ function BountyThreadScreen() {
             onPress={() => router.push(`/bounty/${bounty.id}` as never)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel="View bounty details"
+            accessibilityLabel={role === 'poster' ? 'Manage bounty' : 'View bounty details'}
           >
             <MaterialIcons name="info-outline" size={22} color={theme.text} />
           </TouchableOpacity>

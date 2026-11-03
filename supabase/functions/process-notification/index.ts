@@ -127,6 +127,9 @@ const TYPE_CATEGORY: Record<string, Category> = {
   verification_rejected: 'verification', verification_canceled: 'verification',
   follow: 'followers',
   marketing_promo: 'marketing',
+  // "Can we share how your job went?" (fn_request_proof_consent). A request
+  // to use the job publicly, so it obeys the poster's marketing switches.
+  proof_consent_request: 'marketing',
 }
 
 function categoryForType(type: string): Category {
