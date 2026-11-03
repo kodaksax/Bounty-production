@@ -1400,6 +1400,15 @@ Deno.serve(async (req: Request) => {
             409
           );
         }
+        if (msg.startsWith('no_charge')) {
+          return reply(
+            {
+              error: 'Could not resolve the settled charge for this bounty. Try again shortly.',
+              code: 'no_charge',
+            },
+            409
+          );
+        }
         console.error('[bounty-payments] balance credit failed', { bountyId, requestId, bpId: bp.id, creditErr });
         return reply(
           {

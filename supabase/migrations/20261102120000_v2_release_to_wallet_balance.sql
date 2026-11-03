@@ -53,6 +53,12 @@ ALTER TABLE public.bounty_payments
 --    is unique and is how charge.dispute.created finds the *payer's* row;
 --    putting the poster's PaymentIntent on the hunter's credit would point a
 --    chargeback at the hunter.
+--
+--    metadata.source_charge_id is the card charge that funded this credit,
+--    always set. The withdrawal path needs it for a Transfer's
+--    source_transaction, and charge.dispute.created can use it to find the
+--    hunter credited from a disputed charge
+--    (metadata ->> 'source_charge_id' = dispute.charge).
 CREATE OR REPLACE FUNCTION public.apply_v2_release_to_balance(
   p_bounty_payment_id uuid,
   p_hunter_id         uuid,
@@ -68,6 +74,7 @@ AS $$
 DECLARE
   v_bp    public.bounty_payments%ROWTYPE;
   v_tx_id uuid;
+  v_charge_id text;
 BEGIN
   IF p_hunter_amount IS NULL OR p_hunter_amount <= 0 THEN
     RAISE EXCEPTION 'invalid_payout' USING ERRCODE = '22023';
@@ -97,6 +104,12 @@ BEGIN
     RAISE EXCEPTION 'invalid_status:%', v_bp.status USING ERRCODE = '55000';
   END IF;
 
+  -- Every credit must record its source charge (metadata.source_charge_id).
+  v_charge_id := COALESCE(v_bp.stripe_charge_id, p_charge_id);
+  IF v_charge_id IS NULL OR v_charge_id = '' THEN
+    RAISE EXCEPTION 'no_charge' USING ERRCODE = '22023';
+  END IF;
+
   INSERT INTO public.wallet_transactions (user_id, bounty_id, type, amount, description, status, metadata)
   VALUES (
     p_hunter_id,
@@ -110,7 +123,7 @@ BEGIN
       'bounty_id', v_bp.bounty_id,
       'bounty_payment_id', v_bp.id,
       'poster_id', v_bp.poster_id,
-      'stripe_charge_id', p_charge_id,
+      'source_charge_id', v_charge_id,
       'stripe_payment_intent_id', v_bp.stripe_payment_intent_id,
       'gross_amount', v_bp.amount,
       'platform_fee', p_platform_fee,
@@ -133,7 +146,7 @@ BEGIN
      SET status = 'released_to_balance',
          hunter_id = p_hunter_id,
          platform_fee_amount = p_platform_fee,
-         stripe_charge_id = COALESCE(stripe_charge_id, p_charge_id),
+         stripe_charge_id = v_charge_id,
          updated_at = now()
    WHERE id = v_bp.id;
 
