@@ -254,10 +254,24 @@ describe('bountyService', () => {
 
   it('delete returns true when Supabase delete succeeds', async () => {
     supabase.from.mockImplementationOnce(() => ({
-      delete: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ error: null })) })),
+      delete: jest.fn(() => ({
+        eq: jest.fn(() => ({ select: jest.fn(() => Promise.resolve({ data: [{ id: 10 }], error: null })) })),
+      })),
     }));
     const ok = await bountyService.delete(10);
     expect(ok).toBe(true);
+  });
+
+  // RLS filters a DELETE the caller may not make rather than erroring, so an
+  // empty result must not be reported as a successful cancel.
+  it('delete returns false when RLS matched no rows', async () => {
+    supabase.from.mockImplementationOnce(() => ({
+      delete: jest.fn(() => ({
+        eq: jest.fn(() => ({ select: jest.fn(() => Promise.resolve({ data: [], error: null })) })),
+      })),
+    }));
+    const ok = await bountyService.delete(14);
+    expect(ok).toBe(false);
   });
 
   it('search returns empty for blank query', async () => {
@@ -404,7 +418,7 @@ describe('bountyService', () => {
   it('delete returns false when Supabase delete errors', async () => {
     supabase.from.mockImplementationOnce(() => ({
       delete: jest.fn(() => ({
-        eq: jest.fn(() => Promise.resolve({ error: { message: 'boom' } })),
+        eq: jest.fn(() => ({ select: jest.fn(() => Promise.resolve({ data: null, error: { message: 'boom' } })) })),
       })),
     }));
     const ok = await bountyService.delete(11);
@@ -412,7 +426,9 @@ describe('bountyService', () => {
   });
 
   it('delete soft-deletes on FK violation and never touches bounty_payments', async () => {
-    const softUpdateEq = jest.fn(() => Promise.resolve({ error: null }));
+    const softUpdateEq = jest.fn(() => ({
+      select: jest.fn(() => Promise.resolve({ data: [{ id: 12 }], error: null })),
+    }));
     const softUpdate = jest.fn(() => ({ eq: softUpdateEq }));
     supabase.from.mockImplementation((table: string) => {
       if (table === 'bounty_payments') {
@@ -421,9 +437,11 @@ describe('bountyService', () => {
       if (table === 'bounties') {
         return {
           delete: jest.fn(() => ({
-            eq: jest.fn(() =>
-              Promise.resolve({ error: { code: '23503', message: 'fk violation' } })
-            ),
+            eq: jest.fn(() => ({
+              select: jest.fn(() =>
+                Promise.resolve({ data: null, error: { code: '23503', message: 'fk violation' } })
+              ),
+            })),
           })),
           update: softUpdate,
         };
@@ -444,12 +462,16 @@ describe('bountyService', () => {
       if (table === 'bounties') {
         return {
           delete: jest.fn(() => ({
-            eq: jest.fn(() =>
-              Promise.resolve({ error: { code: '23503', message: 'fk violation' } })
-            ),
+            eq: jest.fn(() => ({
+              select: jest.fn(() =>
+                Promise.resolve({ data: null, error: { code: '23503', message: 'fk violation' } })
+              ),
+            })),
           })),
           update: jest.fn(() => ({
-            eq: jest.fn(() => Promise.resolve({ error: { message: 'soft-delete failed' } })),
+            eq: jest.fn(() => ({
+              select: jest.fn(() => Promise.resolve({ data: null, error: { message: 'soft-delete failed' } })),
+            })),
           })),
         };
       }
