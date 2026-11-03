@@ -167,6 +167,11 @@ interface MomentsProviderProps {
    * for (SBA-06).
    */
   onContinueTo?: (screen: string) => void;
+  /**
+   * True while the shell shows a sheet of its own (the app-open resume
+   * prompt). No moment is selected meanwhile, so the two never stack.
+   */
+  suppressed?: boolean;
 }
 
 export function MomentsProvider({
@@ -174,6 +179,7 @@ export function MomentsProvider({
   activeScreen = null,
   targetScreen = null,
   onContinueTo,
+  suppressed = false,
 }: MomentsProviderProps) {
   const router = useRouter();
   const { session } = useAuthContext();
@@ -566,7 +572,9 @@ export function MomentsProvider({
   useEffect(() => {
     if (!isPrimary()) return;
     const ctx = buildContext();
-    if (!ctx || !userId) {
+    // `suppressed` yields to another sheet the shell is showing, so two
+    // modals never stack; the queue picks up again once it is answered.
+    if (!ctx || !userId || suppressed) {
       setActiveMoment(null);
       setActiveContent(null);
       return;
@@ -582,7 +590,7 @@ export function MomentsProvider({
       }
       return next;
     });
-  }, [states, buildContext, userId, isPrimary]);
+  }, [states, buildContext, userId, isPrimary, suppressed]);
 
   // Present (mark shown) whenever a new moment becomes active.
   useEffect(() => {
