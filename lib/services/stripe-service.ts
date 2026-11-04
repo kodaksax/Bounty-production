@@ -1135,7 +1135,19 @@ class StripeService {
   parseStripeError(error: any): string {
     if (!error) return 'An unknown error occurred';
 
-    const errorMessage = error.message || error.toString();
+    // Plain objects (edge-function JSON bodies such as { error: { message } }
+    // or { code }) have no `message`, and Object#toString() gives
+    // "[object Object]" — which was shown verbatim in the add-card and
+    // payment-element error banners. Look inside the common nested shapes
+    // and never surface the bare object tag.
+    const nested = [error.message, error.error?.message, error.error, error.localizedMessage].find(
+      (m: unknown): m is string => typeof m === 'string' && m.trim().length > 0
+    );
+    const stringified = nested ?? String(error);
+    const errorMessage =
+      stringified === '[object Object]'
+        ? 'Something went wrong with the payment. Please try again.'
+        : stringified;
 
     // Handle network and timeout errors with user-friendly messages
     // Distinguish our own infra timeouts (TIMEOUT code) from a browser/OS-level

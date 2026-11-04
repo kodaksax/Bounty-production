@@ -25,6 +25,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // @ts-ignore: Allow runtime npm import for Deno/edge function.
 import Stripe from 'npm:stripe@14';
 import {
+  platformFeePercentFromEnv,
+  splitPlatformFeeCents,
+  splitPlatformFeeDollars,
+} from '../_shared/platform-fee.ts';
+import {
   checkOwnerRefundGate,
   releaseOwnerRefundClaim,
 } from '../_shared/owner-refund-gate.ts';
@@ -288,7 +293,7 @@ Deno.serve(async (req: Request) => {
   const userId = user.id;
   const userEmail = sanitizeText(user.email ?? '');
 
-  const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '5');
+  const PLATFORM_FEE_PERCENT = platformFeePercentFromEnv(Deno.env.get('PLATFORM_FEE_PERCENT'));
 
   try {
     // ───────────────────────────────────────────────────────────────────────
@@ -999,8 +1004,10 @@ Deno.serve(async (req: Request) => {
         const v3AmountCents = Number(v3Funding.amount_cents);
         // Integer cents throughout — v3 removes the float rounding surface
         // that v2's dollar arithmetic carries.
-        const v3FeeCents = Math.round((v3AmountCents * PLATFORM_FEE_PERCENT) / 100);
-        const v3HunterCents = v3AmountCents - v3FeeCents;
+        const { feeCents: v3FeeCents, hunterCents: v3HunterCents } = splitPlatformFeeCents(
+          v3AmountCents,
+          PLATFORM_FEE_PERCENT
+        );
         if (v3HunterCents <= 0) {
           return reply(
             { error: 'Computed hunter payout is not positive.', code: 'invalid_payout' },
@@ -1368,9 +1375,13 @@ Deno.serve(async (req: Request) => {
       }
 
       const amount = Number(bp.amount);
-      const platformFee = Math.round(((amount * PLATFORM_FEE_PERCENT) / 100) * 100) / 100;
-      const hunterAmount = Math.round((amount - platformFee) * 100) / 100;
-      const hunterAmountCents = Math.round(hunterAmount * 100);
+      // Integer-cents split shared with v1/v3 and the web receipt — the old
+      // dollar-float form rounded half-cents down (e.g. $11.50 → $0.57 fee).
+      const {
+        platformFee,
+        hunterAmount,
+        hunterCents: hunterAmountCents,
+      } = splitPlatformFeeDollars(amount, PLATFORM_FEE_PERCENT);
       if (hunterAmountCents <= 0) {
         return reply(
           { error: 'Computed hunter payout is not positive.', code: 'invalid_payout' },

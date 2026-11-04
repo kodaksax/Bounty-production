@@ -26,6 +26,36 @@
 // This stays fail-closed: a payload that matches NO configured secret is
 // rejected, exactly as before.
 
+/**
+ * Whether a signature-verified event belongs to the mode this deployment runs in.
+ *
+ * Stripe: "For Connect webhooks, your development webhook URLs receive only test
+ * webhooks, but your production webhook URLs receive both live and test webhooks
+ * … We recommend that you check the `livemode` value" (docs.stripe.com/connect/webhooks).
+ * Production has stored 19 test-mode events (15 payment_intent.succeeded in
+ * Feb–Mar 2026, payout.failed ×2 + transfer.failed ×2 on 2026-07-16) and
+ * processed every one, because nothing compared modes. A test-mode
+ * payment_intent.succeeded carrying purpose=wallet_deposit and a real user_id
+ * would have credited real wallet balance with test money.
+ *
+ * Mode comes from the deployment's own secret key prefix. An unrecognised key
+ * format (should never happen) does not block processing.
+ */
+export function eventModeMatchesKey(
+  eventLivemode: unknown,
+  secretKey: string
+): { matches: boolean; keyMode: 'live' | 'test' | 'unknown' } {
+  const keyMode = /^(sk|rk)_live_/.test(secretKey)
+    ? 'live'
+    : /^(sk|rk)_test_/.test(secretKey)
+      ? 'test'
+      : 'unknown';
+  if (keyMode === 'unknown' || typeof eventLivemode !== 'boolean') {
+    return { matches: true, keyMode };
+  }
+  return { matches: eventLivemode === (keyMode === 'live'), keyMode };
+}
+
 /** Env vars consulted for signing secrets, in the order they are tried. */
 export const WEBHOOK_SECRET_ENV_VARS = [
   'STRIPE_WEBHOOK_SECRET',

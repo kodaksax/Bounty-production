@@ -17,29 +17,31 @@ import {
 } from '../../../lib/constants/fees';
 
 describe('platform fee constants', () => {
-  it('matches the server default (PLATFORM_FEE_PERCENT env, default 5)', () => {
-    // supabase/functions/wallet/index.ts, supabase/functions/bounty-payments/index.ts
-    // and services/api/src/services/completion-release-service.ts all default to 5.
-    expect(PLATFORM_FEE_PERCENT).toBe(5);
-    expect(PLATFORM_FEE_RATE).toBeCloseTo(0.05, 10);
+  it('matches the rate production deducts (PLATFORM_FEE_PERCENT secret = 8)', () => {
+    // Owner decision 2026-11-04: 8%. Production has deducted 8% since 2026-07-12;
+    // the server default (_shared/platform-fee.ts) is 8 too — see
+    // platform-fee-parity.test.ts.
+    expect(PLATFORM_FEE_PERCENT).toBe(8);
+    expect(PLATFORM_FEE_RATE).toBeCloseTo(0.08, 10);
   });
 
   it('renders a whole percent without a trailing decimal', () => {
-    expect(PLATFORM_FEE_DISPLAY).toBe('5%');
+    expect(PLATFORM_FEE_DISPLAY).toBe('8%');
   });
 });
 
 describe('calculateHunterEarnings', () => {
   it('splits a bounty into gross, fee and take-home', () => {
-    expect(calculateHunterEarnings(100)).toEqual({ gross: 100, fee: 5, net: 95 });
-    expect(calculateHunterEarnings(40)).toEqual({ gross: 40, fee: 2, net: 38 });
+    expect(calculateHunterEarnings(100)).toEqual({ gross: 100, fee: 8, net: 92 });
+    expect(calculateHunterEarnings(40)).toEqual({ gross: 40, fee: 3.2, net: 36.8 });
   });
 
   it('rounds the fee to cents the way the server does, so net always reconciles', () => {
-    // Server: round2((amount * PERCENT) / 100), then amount - fee.
+    // Server (_shared/platform-fee.ts): fee = round(cents * PERCENT / 100), net = rest.
+    // 1099 * 8 / 100 = 87.92 -> 88 cents.
     const { gross, fee, net } = calculateHunterEarnings(10.99);
-    expect(fee).toBeCloseTo(0.55, 10);
-    expect(net).toBeCloseTo(10.44, 10);
+    expect(fee).toBeCloseTo(0.88, 10);
+    expect(net).toBeCloseTo(10.11, 10);
     expect(Math.round((fee + net) * 100) / 100).toBe(gross);
   });
 

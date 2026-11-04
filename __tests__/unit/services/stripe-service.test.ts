@@ -705,6 +705,26 @@ describe('Stripe Service', () => {
       expect(result).toBe('Plain string error');
     });
 
+    // Regression (2026-11-04 Stripe dev-workflow audit): plain objects fell
+    // through to Object#toString() and the UI showed "[object Object]".
+    it('never returns "[object Object]" for a plain object error', () => {
+      expect(stripeService.parseStripeError({ code: 'card_declined' })).not.toContain(
+        '[object Object]'
+      );
+      expect(stripeService.parseStripeError({ error: { code: 'x' } })).not.toContain(
+        '[object Object]'
+      );
+    });
+
+    it('reads the message from nested edge-function error bodies', () => {
+      expect(stripeService.parseStripeError({ error: { message: 'Card was declined' } })).toBe(
+        'Card was declined'
+      );
+      expect(stripeService.parseStripeError({ error: 'Amount too small' })).toBe(
+        'Amount too small'
+      );
+    });
+
     it('should prioritize TimeoutError name over message', () => {
       const error = new Error('Some random message');
       error.name = 'TimeoutError';
