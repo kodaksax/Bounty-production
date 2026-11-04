@@ -8,6 +8,7 @@ import { ProfileBountyHistorySection } from "components/profile-bounty-history-s
 import { RecentReviewsSection } from "components/recent-reviews-section";
 import { SkillsetChips } from "components/skillset-chips";
 import { BrandingLogo } from "components/ui/branding-logo";
+import { HunterProfileChecklist } from "components/ui/hunter-profile-checklist";
 import { MilestoneBadgeChips } from "components/ui/milestone-badge-chips";
 import { ProfileCompletionMeter } from "components/ui/profile-completion-meter";
 import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
@@ -15,6 +16,7 @@ import { TrustBadges } from "components/ui/trust-badges";
 import { VerificationBadgeChips } from "components/ui/verification-badge-chips";
 import { useProfileActivityStats } from "hooks/useProfileActivityStats";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
+import { getHunterProfileChecklist, type HunterChecklistInput } from "lib/utils/hunter-profile-checklist";
 import { shareProfile as shareProfileLink } from "lib/utils/share-utils";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
@@ -66,6 +68,24 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // Marketplace activity stats — bounties posted/completed (poster-side) and
   // hunter_completed ("Jobs Completed", hunter-side) via the RPC-backed hook.
   const { stats: activityStats } = useProfileActivityStats(profileUuid)
+
+  // Hunter checklist: everyone except poster-only accounts (null role
+  // included -- 32 of prod's applicants have none). It owns the ID
+  // verification entry point and supersedes the completion meter's bio/photo
+  // nudges until it's done, so the two never ask for the same thing. Waits for
+  // authProfile so a still-loading profile doesn't flash every step as todo.
+  const showHunterChecklist = isOwnProfile && !!authProfile && authProfile.primary_role !== 'poster'
+  const hunterChecklistInput: HunterChecklistInput = {
+    stripe_identity_status: authProfile?.stripe_identity_status,
+    id_verification_status: authProfile?.id_verification_status,
+    id_verification_rejection_reason: authProfile?.id_verification_rejection_reason,
+    bio: authProfile?.about,
+    skills: authProfile?.skills,
+    avatar_url: authProfile?.avatar,
+    phone_verified: authProfile?.phone_verified,
+    payouts_enabled: authProfile?.stripe_connect_payouts_enabled,
+  }
+  const hunterChecklistComplete = getHunterProfileChecklist(hunterChecklistInput).isComplete
 
   // Debounce guard for refreshes triggered by mount/focus
   const lastRefreshAtRef = useRef<number>(0);
@@ -321,17 +341,22 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               rating_count: activityStats.ratingCount,
             }}
           />
-          {/* Entry point for users who skipped or were rejected to complete ID
-              verification later. Hidden once status is processing/verified. */}
-          {isOwnProfile && (() => {
+          {showHunterChecklist && <HunterProfileChecklist input={hunterChecklistInput} />}
+          {/* Poster-only accounts: entry point for users who skipped or were
+              rejected to complete ID verification later. Hidden once status
+              is processing/verified. */}
+          {isOwnProfile && !showHunterChecklist && (() => {
             const needsVerification =
               authProfile?.stripe_identity_status !== 'verified' &&
               authProfile?.id_verification_status !== 'verified' &&
               authProfile?.stripe_identity_status !== 'processing' &&
               authProfile?.id_verification_status !== 'pending';
             if (!needsVerification) return null;
+            // requires_input alone is a session opened and never finished
+            // (125 of 139 on prod 2026-10-27), not a rejection -- only a
+            // recorded reason or the legacy status means it was sent back.
             const isRejected =
-              authProfile?.stripe_identity_status === 'requires_input' ||
+              !!authProfile?.id_verification_rejection_reason?.trim() ||
               authProfile?.id_verification_status === 'rejected';
             return (
               <TouchableOpacity
@@ -383,18 +408,20 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         <PortfolioSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} />
 
         {/* Profile completion meter — encourages personalization on this own-profile-only screen */}
-        <View style={styles.section}>
-          <ProfileCompletionMeter
-            input={{
-              username: authProfile?.username,
-              display_name: authProfile?.display_name,
-              avatar_url: authProfile?.avatar,
-              bio: authProfile?.about,
-              location: authProfile?.location,
-              banner_url: authProfile?.banner_url,
-            }}
-          />
-        </View>
+        {(!showHunterChecklist || hunterChecklistComplete) && (
+          <View style={styles.section}>
+            <ProfileCompletionMeter
+              input={{
+                username: authProfile?.username,
+                display_name: authProfile?.display_name,
+                avatar_url: authProfile?.avatar,
+                bio: authProfile?.about,
+                location: authProfile?.location,
+                banner_url: authProfile?.banner_url,
+              }}
+            />
+          </View>
+        )}
 
         {/* Platform Security & Trust Badges */}
         <View style={styles.section}>

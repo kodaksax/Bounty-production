@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { storage } from '../../lib/storage';
+import { clearDraftAbandoned } from '../../lib/storage/abandoned-draft';
 import {
   cancelDraftReminder,
   scheduleDraftReminderSoon,
@@ -41,9 +42,28 @@ export async function clearBountyDraftForUser(userId?: string): Promise<void> {
   try {
     await storage.removeItem(getDraftKey(userId));
     notifyDraftPresence(getDraftKey(userId), false);
-    if (userId) await cancelDraftReminder(userId);
+    if (userId) {
+      await cancelDraftReminder(userId);
+      await clearDraftAbandoned(userId);
+    }
   } catch (error) {
     console.error('Failed to clear bounty draft for user', userId ?? '(anonymous)', ':', error);
+  }
+}
+
+/**
+ * `userId`'s saved draft when it holds a post in progress, else null. Read
+ * once from storage, outside React — for surfaces that only need to know
+ * what is waiting (the app-open resume prompt).
+ */
+export async function readBountyDraftInProgress(userId?: string): Promise<BountyDraft | null> {
+  try {
+    const saved = await storage.getItem(getDraftKey(userId));
+    if (!saved) return null;
+    const draft = JSON.parse(saved) as BountyDraft;
+    return isBountyDraftInProgress(draft) ? draft : null;
+  } catch {
+    return null;
   }
 }
 
@@ -230,8 +250,12 @@ export function useBountyDraft(userId?: string) {
       setDraft(defaultDraft);
       notifyDraftPresence(draftKey, false);
       await storage.removeItem(draftKey);
-      // Published or discarded: nothing left to remind about.
-      if (userId) await cancelDraftReminder(userId);
+      // Published or discarded: nothing left to remind about, and no draft
+      // for the app-open resume prompt to offer.
+      if (userId) {
+        await cancelDraftReminder(userId);
+        await clearDraftAbandoned(userId);
+      }
     } catch (error) {
       console.error('Failed to clear bounty draft:', error);
     }
