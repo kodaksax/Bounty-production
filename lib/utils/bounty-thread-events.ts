@@ -122,10 +122,23 @@ export interface BountyThreadInput {
 
 const ACTIVE_DISPUTE = new Set(['open', 'under_review']);
 
+/**
+ * A timestamp with no zone ("2026-11-02T22:19:57.915565") is UTC: it comes
+ * from a `timestamp without time zone` column filled by now() on a UTC
+ * database (bounty_requests.accepted_at / rejected_at). `new Date()` would
+ * read it as the phone's local time instead, putting Hired and every later
+ * card hours away from the messages around them.
+ */
+const ZONELESS_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+export function parseServerTimestamp(value: string): number {
+  const v = value.trim();
+  return new Date(ZONELESS_TIMESTAMP.test(v) ? `${v.replace(' ', 'T')}Z` : v).getTime();
+}
+
 function ts(...candidates: (string | null | undefined)[]): number | null {
   for (const c of candidates) {
     if (!c) continue;
-    const n = new Date(c).getTime();
+    const n = parseServerTimestamp(c);
     if (Number.isFinite(n)) return n;
   }
   return null;
