@@ -394,6 +394,9 @@ export type AnalyticsEvent =
   // `to_step`) or 'dismissed'. A prompt that disappears because the poster
   // started editing step 1 instead sends nothing further, so
   // shown − continued − dismissed is the "ignored" bucket.
+  // `surface: 'app_open'` is the same prompt as a sheet on the next app open
+  // after a tab switch away from a draft (app/hooks/useResumeComposerPrompt.ts);
+  // 'continued' there opens the composer on the Task step.
   | 'post_resume_prompt'
   | 'post_step_completed'
   | 'post_step_abandoned'
@@ -667,6 +670,9 @@ export type AnalyticsEvent =
   // this was declared but never actually captured anywhere before 2026-09-14.
   | 'profile_viewed'
   | 'profile_updated'
+  // Own-profile "Stand out to posters" checklist (components/ui/hunter-profile-checklist.tsx).
+  // `item` = HunterChecklistItemId, `state` = its state when tapped.
+  | 'profile_checklist_item_tapped'
   // Hunter capability layer — self-reported skills, bounty-specific "why me?"
   // pitch, and portfolio work samples. See lib/utils/skill-match.ts,
   // lib/utils/pitch-requirement.ts, lib/services/portfolio-service.ts.

@@ -12,6 +12,8 @@ import { ConnectionStatus } from 'components/connection-status'
 import { TabPagerContext } from 'components/ui/tab-pager'
 import type { TabPager } from 'components/ui/tab-pager'
 import { MomentSheet } from '../../components/moments/MomentSheet'
+import { ResumeComposerSheet } from '../../components/resume-composer-sheet'
+import { useResumeComposerPrompt } from '../hooks/useResumeComposerPrompt'
 import { MomentsProvider } from '../../providers/moments-provider'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -442,6 +444,14 @@ function BountyAppInner() {
   // Same per-user draft the composer autosaves to — drives the Post tab's
   // "unfinished post" dot (the composer itself offers the resume).
   const postDraftPending = useBountyDraftInProgress(currentUserId)
+  // App-open "your draft is waiting" sheet for a draft left by switching
+  // tabs. Continue opens the composer, which starts on the Task step.
+  const resumePrompt = useResumeComposerPrompt(currentUserId, activeScreen)
+  const { onContinue: answerResumePrompt } = resumePrompt
+  const continueToComposer = useCallback(() => {
+    answerResumePrompt()
+    setActiveScreen('postings')
+  }, [answerResumePrompt, setActiveScreen])
 
   // Ref to the BountyFeed component — used for scroll-to-top and refresh on tab repress
   const bountyFeedRef = useRef<BountyFeedHandle>(null)
@@ -660,7 +670,12 @@ function BountyAppInner() {
   }
 
   return (
-    <MomentsProvider activeScreen={activeScreen} targetScreen={barScreen} onContinueTo={setActiveScreen}>
+    <MomentsProvider
+      activeScreen={activeScreen}
+      targetScreen={barScreen}
+      onContinueTo={setActiveScreen}
+      suppressed={resumePrompt.draftTitle !== null}
+    >
       <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' }}>
         {/* Connection Status Banner - appears at top when offline */}
         <ConnectionStatus showQueueCount={true} />
@@ -719,6 +734,11 @@ function BountyAppInner() {
             (verify identity, set up payouts, enable notifications, etc.)
             can surface over any tab, not just right after onboarding. */}
         <MomentSheet />
+        <ResumeComposerSheet
+          draftTitle={resumePrompt.draftTitle}
+          onContinue={continueToComposer}
+          onDismiss={resumePrompt.onDismiss}
+        />
       </View>
     </MomentsProvider>
   )

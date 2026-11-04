@@ -125,6 +125,9 @@ export function SignInForm() {
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [emailCode, setEmailCode] = useState('');
   const [emailCodeLoading, setEmailCodeLoading] = useState(false);
+  // Shown beside the code field: the shared banner sits above the email
+  // input, out of view while the code is being entered.
+  const [emailCodeError, setEmailCodeError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
   const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -868,6 +871,7 @@ export function SignInForm() {
     }
     setEmailCodeLoading(true);
     setSocialAuthError(null);
+    setEmailCodeError(null);
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -876,7 +880,9 @@ export function SignInForm() {
       if (error) throw error;
       setEmailCodeSent(true);
     } catch (error) {
-      setSocialAuthError(getUserFriendlyError(error).message);
+      const message = getUserFriendlyError(error).message;
+      if (emailCodeSent) setEmailCodeError(message);
+      else setSocialAuthError(message);
     } finally {
       setEmailCodeLoading(false);
     }
@@ -884,12 +890,15 @@ export function SignInForm() {
 
   const verifyEmailCode = async () => {
     const email = identifier.trim().toLowerCase();
-    if (!/^\d{6}$/.test(emailCode.trim())) {
-      setSocialAuthError('Enter the 6-digit code from your email.');
+    // Supabase's email OTP length is a project setting (6–10 digits), so
+    // don't hard-code 6 here or longer codes are truncated and rejected.
+    if (!/^\d{6,10}$/.test(emailCode.trim())) {
+      setEmailCodeError('Enter the full code from your email.');
       return;
     }
     setEmailCodeLoading(true);
     setSocialAuthError(null);
+    setEmailCodeError(null);
     try {
       const { data, error } = await supabase.auth.verifyOtp({
         email,
@@ -911,7 +920,7 @@ export function SignInForm() {
           : '/') as Href
       );
     } catch (error) {
-      setSocialAuthError(getUserFriendlyError(error).message);
+      setEmailCodeError(getUserFriendlyError(error).message);
     } finally {
       setEmailCodeLoading(false);
     }
@@ -1335,11 +1344,15 @@ export function SignInForm() {
               {emailCodeMode && emailCodeSent && (
                 <View>
                   <TextInput
+                    autoFocus
                     value={emailCode}
-                    onChangeText={(value) => setEmailCode(value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="6-digit email code"
+                    onChangeText={(value) => {
+                      setEmailCode(value.replace(/\D/g, '').slice(0, 10));
+                      if (emailCodeError) setEmailCodeError(null);
+                    }}
+                    placeholder="Code from your email"
                     keyboardType="number-pad"
-                    maxLength={6}
+                    maxLength={10}
                     editable={!emailCodeLoading}
                     autoComplete="one-time-code"
                     accessibilityLabel="Email sign-in code"
@@ -1347,6 +1360,7 @@ export function SignInForm() {
                     style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
                     placeholderTextColor={theme.textDisabled}
                   />
+                  {emailCodeError ? <ValidationMessage message={emailCodeError} /> : null}
                   <TouchableOpacity onPress={() => void sendEmailCode()} disabled={emailCodeLoading} className="mt-2 self-end">
                     <Text style={{ color: theme.textSecondary }}>Send a new code</Text>
                   </TouchableOpacity>
@@ -1355,6 +1369,10 @@ export function SignInForm() {
 
               {emailCodeMode ? (
                 <Button
+                  // Fresh native view per step. Reusing the Send button's view
+                  // after the code field mounts above it left iOS hit-testing
+                  // the old frame: Verify drew in place but never got the tap.
+                  key={emailCodeSent ? 'verify-email-code' : 'send-email-code'}
                   onPress={emailCodeSent ? verifyEmailCode : sendEmailCode}
                   loading={emailCodeLoading}
                   accessibilityLabel={emailCodeSent ? 'Verify email code' : 'Send email code'}
@@ -1383,6 +1401,7 @@ export function SignInForm() {
                   setEmailCodeMode((mode) => !mode);
                   setEmailCodeSent(false);
                   setEmailCode('');
+                  setEmailCodeError(null);
                   setSocialAuthError(null);
                 }}
                 accessibilityRole="button"
