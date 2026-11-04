@@ -69,10 +69,10 @@ describe('bounty-payments edge function request/error contract', () => {
   });
 
   it('critical release and refund failures are retryable and do not expose provider detail', () => {
-    expect(releaseRoute).toContain("code: 'transfer_failed'");
-    expect(releaseRoute).toContain("code: 'record_update_failed'");
+    expect(releaseRoute).toContain("code: 'release_credit_failed'");
     expect(releaseRoute).toContain('retryable: true');
     expect(releaseRoute).not.toContain('detail: transferErr?.message');
+    expect(releaseRoute).not.toContain('detail: creditErr');
 
     expect(cancelRoute).toContain("code: 'refund_failed'");
     expect(cancelRoute).toContain('retryable: true');

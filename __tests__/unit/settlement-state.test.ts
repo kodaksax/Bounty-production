@@ -342,19 +342,23 @@ describe('REGRESSION 2: a withdrawal cannot be completed without a payout id', (
 });
 
 describe('REGRESSION 3: an unready hunter cannot trigger a settled fund release', () => {
-  test('the v2 release endpoint blocks a hunter without payouts enabled', () => {
-    // The /release route now serves v3 first (it captures an authorization and
-    // Transfers) and falls through to the v2 path. Slice to the LAST
-    // stripe.transfers.create so the v2 release guard — which sits after the v3
-    // block's own Transfer call — is included.
-    const releaseRoute = bountyPaymentsSource.slice(
-      bountyPaymentsSource.indexOf("subPath === '/release'"),
-      bountyPaymentsSource.lastIndexOf('stripe.transfers.create')
+  test('a v2 release to an unready hunter is a balance credit, never a settlement', () => {
+    // ADR 0001 §4.3: like v1, a v2 release credits the balance and is not blocked
+    // on payout readiness. The readiness read is advisory and follows the credit.
+    const start = bountyPaymentsSource.indexOf("if (bp.status === 'released_to_balance')");
+    const v2Release = bountyPaymentsSource.slice(
+      start,
+      bountyPaymentsSource.indexOf('// POST /bounty-payments/cancel', start)
     );
-    expect(releaseRoute.length).toBeGreaterThan(500);
-    expect(releaseRoute).toMatch(/stripe_connect_payouts_enabled !== true/);
-    expect(releaseRoute).toMatch(/hunter_payouts_disabled/);
-    expect(releaseRoute).toMatch(/hunter_not_onboarded/);
+    expect(v2Release.length).toBeGreaterThan(500);
+    expect(v2Release).not.toContain('stripe.transfers.create');
+    expect(v2Release).not.toMatch(/hunter_payouts_disabled|hunter_not_onboarded/);
+    expect(v2Release.indexOf("rpc('apply_v2_release_to_balance'")).toBeGreaterThan(-1);
+    expect(v2Release.indexOf('stripe_connect_payouts_enabled')).toBeGreaterThan(
+      v2Release.indexOf("rpc('apply_v2_release_to_balance'")
+    );
+    expect(v2Release).toContain("settlementState: 'ledger_only'");
+    expect(v2Release).not.toContain("settlementState: 'settled'");
   });
 
   test('a v1 release to an unready hunter can never claim settlement', () => {

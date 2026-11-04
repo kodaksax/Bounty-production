@@ -423,7 +423,14 @@ describe('durable reservation and migration contracts', () => {
     }
     const releases = fs.readFileSync(path.join(__dirname, '../../supabase/functions/bounty-payments/index.ts'), 'utf8');
     expect(releases.indexOf("'bounty_release_v3'")).toBeLessThan(releases.indexOf('stripe.paymentIntents.capture(', releases.indexOf("'bounty_release_v3'")));
-    expect(releases.indexOf("'bounty_release_v2'")).toBeLessThan(releases.indexOf('transfer = await stripe.transfers.create('));
+    // v2 release only credits the hunter's balance, so it moves no Stripe money
+    // and needs no reservation; the Transfer happens at withdrawal, covered above.
+    const v2Release = releases.slice(
+      releases.indexOf("if (bp.status === 'released_to_balance')"),
+      releases.indexOf('// POST /bounty-payments/cancel', releases.indexOf("if (bp.status === 'released_to_balance')"))
+    );
+    expect(v2Release).toContain("rpc('apply_v2_release_to_balance'");
+    expect(v2Release).not.toContain('stripe.transfers.create');
     const admin = fs.readFileSync(path.join(__dirname, '../../supabase/functions/admin-withdrawals/index.ts'), 'utf8');
     expect(admin.indexOf("'admin_retry'")).toBeLessThan(admin.indexOf("rpc('retry_failed_withdrawal'"));
     expect(admin).toContain('withdrawalAccountMatches(supabase, targetUserId, t.stripe_connect_account_id, p.stripe_connect_account_id)');
