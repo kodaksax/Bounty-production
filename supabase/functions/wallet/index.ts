@@ -30,6 +30,7 @@ import {
     type SettlementState,
 } from '../_shared/settlement-state.ts';
 import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
+import { platformFeePercentFromEnv, splitPlatformFeeDollars } from '../_shared/platform-fee.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1339,9 +1340,13 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '5');
-        const platformFee = Math.round(((totalAmount * PLATFORM_FEE_PERCENT) / 100) * 100) / 100;
-        const hunterAmount = Math.round((totalAmount - platformFee) * 100) / 100;
+        const PLATFORM_FEE_PERCENT = platformFeePercentFromEnv(Deno.env.get('PLATFORM_FEE_PERCENT'));
+        // Integer-cents split shared with v2/v3 and the web receipt — the old
+        // dollar-float form rounded half-cents down (e.g. $11.50 → $0.57 fee).
+        const { platformFee, hunterAmount } = splitPlatformFeeDollars(
+          totalAmount,
+          PLATFORM_FEE_PERCENT
+        );
         const effectiveKey = idempotencyKey || `release_${bountyId}_${hunterId}`;
 
         // Insert release transaction as 'pending' first; promote to 'completed' after

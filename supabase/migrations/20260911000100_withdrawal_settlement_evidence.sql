@@ -40,7 +40,7 @@
 -- migration behind it. Re-run it once the settlement columns land.
 
 -- ---------------------------------------------------------------------------
--- 1. The constraint
+-- The constraint (added in step 2 below, AFTER the backfill)
 -- ---------------------------------------------------------------------------
 --
 -- Follows the shape of the existing
@@ -66,6 +66,71 @@ BEGIN
     RETURN;
   END IF;
 
+  -- ---------------------------------------------------------------------------
+  -- 1. Backfill the stranded rows from evidence already in the database
+  -- ---------------------------------------------------------------------------
+  --
+  -- ORDER MATTERS (corrected 2026-11-04 before the production apply): the
+  -- backfill must run BEFORE the constraint is added. ADD CONSTRAINT validates
+  -- existing rows immediately, and two stranded rows (ac50b23f 09-16,
+  -- e589b243 09-17) were created after the cutoff — adding the constraint first
+  -- aborted the whole block. Those two also carry stripe_payout_status =
+  -- 'in_transit' (not NULL), so the original `IS NULL` match skipped them.
+  -- The match now covers NULL and the non-terminal statuses, and still only
+  -- when Stripe's own payout.paid is on record AND no payout.failed /
+  -- payout.canceled exists for the same payout. Production on 2026-11-04:
+  -- 7 rows, $106.40, every one with payout.paid and none with a failure event.
+  --
+  -- This reads Stripe's own statement and stamps the column the derive trigger
+  -- keys off. It moves no money, touches no balance, and does not alter status
+  -- or completed_at — it records a settlement that already happened.
+  --
+  -- Idempotent: only matches rows not already stamped 'paid'.
+  --
+  -- NOTE ON THE JSON PATH: `stripe_events.event_data` holds the Stripe OBJECT
+  -- (the payout), not the event envelope — so the id is at `->>'id'`, not at
+  -- `#>>'{data,object,id}'` as Stripe's webhook payload would suggest. The
+  -- envelope path silently returns NULL and matches nothing, which is how a
+  -- backfill can report success and stamp zero rows.
+
+  WITH paid_payouts AS (
+    SELECT DISTINCT e.event_data ->> 'id' AS payout_id
+    FROM public.stripe_events e
+    WHERE e.event_type = 'payout.paid'
+      AND e.event_data ->> 'id' IS NOT NULL
+      AND e.event_data ->> 'status' = 'paid'
+  ),
+  undelivered_payouts AS (
+    SELECT DISTINCT e.event_data ->> 'id' AS payout_id
+    FROM public.stripe_events e
+    WHERE e.event_type IN ('payout.failed', 'payout.canceled')
+      AND e.event_data ->> 'id' IS NOT NULL
+  )
+  UPDATE public.wallet_transactions w
+     -- Explicit typing to match wallet_transactions_stripe_payout_status_valid.
+     SET stripe_payout_status = 'paid'::text,
+         updated_at = now(),
+         metadata = coalesce(w.metadata, '{}'::jsonb)
+                    || jsonb_build_object(
+                         'payout_status', 'paid',
+                         'settlement_backfilled_at', now(),
+                         'settlement_backfill_source', 'stripe_events.payout.paid'
+                       )
+    FROM paid_payouts p
+   WHERE w.stripe_payout_id = p.payout_id
+     AND w.type = 'withdrawal'::wallet_tx_type_enum
+     AND w.status = 'completed'::wallet_tx_status_enum
+     AND (w.stripe_payout_status IS NULL
+          OR w.stripe_payout_status IN ('pending'::text, 'in_transit'::text))
+     AND NOT EXISTS (SELECT 1 FROM undelivered_payouts u WHERE u.payout_id = w.stripe_payout_id);
+
+  GET DIAGNOSTICS v_stamped = ROW_COUNT;
+  RAISE NOTICE 'Settlement backfill stamped % withdrawal row(s) from stripe_events (expected 7 on production as of 2026-11-04).', v_stamped;
+
+  -- ---------------------------------------------------------------------------
+  -- 2. The constraint
+  -- ---------------------------------------------------------------------------
+
   ALTER TABLE public.wallet_transactions
     DROP CONSTRAINT IF EXISTS wallet_transactions_completed_withdrawal_requires_settlement;
 
@@ -85,50 +150,7 @@ BEGIN
 
   COMMENT ON CONSTRAINT wallet_transactions_completed_withdrawal_requires_settlement
     ON public.wallet_transactions IS
-    'A withdrawal may only read `completed` once a Stripe Payout has been observed paid. A payout id alone is not evidence — five rows reached completed with an id and no settled status. Rows created before 2026-09-11 are grandfathered; see the backfill in this migration.';
-
-  -- ---------------------------------------------------------------------------
-  -- 2. Backfill the stranded rows from evidence already in the database
-  -- ---------------------------------------------------------------------------
-  --
-  -- Every one of the five has a payout.paid event sitting in `stripe_events`.
-  -- This reads Stripe's own statement and stamps the column the derive trigger
-  -- keys off. It moves no money, touches no balance, and does not alter status
-  -- or completed_at — it records a settlement that already happened.
-  --
-  -- Idempotent: only matches rows still missing the stamp.
-  --
-  -- NOTE ON THE JSON PATH: `stripe_events.event_data` holds the Stripe OBJECT
-  -- (the payout), not the event envelope — so the id is at `->>'id'`, not at
-  -- `#>>'{data,object,id}'` as Stripe's webhook payload would suggest. The
-  -- envelope path silently returns NULL and matches nothing, which is how a
-  -- backfill can report success and stamp zero rows.
-
-  WITH paid_payouts AS (
-    SELECT DISTINCT e.event_data ->> 'id' AS payout_id
-    FROM public.stripe_events e
-    WHERE e.event_type = 'payout.paid'
-      AND e.event_data ->> 'id' IS NOT NULL
-      AND e.event_data ->> 'status' = 'paid'
-  )
-  UPDATE public.wallet_transactions w
-     -- Same explicit typing as the CHECK constraint above, for the same reason.
-     SET stripe_payout_status = 'paid'::text,
-         updated_at = now(),
-         metadata = coalesce(w.metadata, '{}'::jsonb)
-                    || jsonb_build_object(
-                         'payout_status', 'paid',
-                         'settlement_backfilled_at', now(),
-                         'settlement_backfill_source', 'stripe_events.payout.paid'
-                       )
-    FROM paid_payouts p
-   WHERE w.stripe_payout_id = p.payout_id
-     AND w.type = 'withdrawal'::wallet_tx_type_enum
-     AND w.status = 'completed'::wallet_tx_status_enum
-     AND w.stripe_payout_status IS NULL;
-
-  GET DIAGNOSTICS v_stamped = ROW_COUNT;
-  RAISE NOTICE 'Settlement backfill stamped % withdrawal row(s) from stripe_events (expected 5 on production as of 2026-09-11).', v_stamped;
+    'A withdrawal may only read `completed` once a Stripe Payout has been observed paid. A payout id alone is not evidence — rows reached completed with an id and no settled status. Rows created before 2026-09-11 are grandfathered; see the backfill in this migration.';
 END;
 $$;
 

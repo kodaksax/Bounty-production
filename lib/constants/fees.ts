@@ -1,11 +1,16 @@
 /**
  * Platform fee — the single client-side source of truth.
  *
- * This MUST track the server's `PLATFORM_FEE_PERCENT` env default, which is
- * read in three places and defaults to 5:
- *   - supabase/functions/wallet/index.ts       (internal wallet release)
- *   - supabase/functions/bounty-payments/index.ts (v2 / v3 release)
- *   - services/api/src/services/completion-release-service.ts
+ * This MUST equal the rate the server deducts: the `PLATFORM_FEE_PERCENT`
+ * function secret (8 in production since 2026-07-12), whose default is
+ * DEFAULT_PLATFORM_FEE_PERCENT in supabase/functions/_shared/platform-fee.ts,
+ * read by wallet (v1 release), bounty-payments (v2/v3 release) and
+ * web-account (receipts). platform-fee-parity.test.ts asserts the defaults match.
+ *
+ * 2026-11-04: production deducted 8% from 2026-07-12 while this file said 5%
+ * (it was "aligned to the server default" on 09-05 without checking the live
+ * secret). The owner confirmed 8% as the rate. Before changing this number,
+ * check the live secret, not the code default.
  *
  * Before this file existed the client kept its own constant at 10% and the
  * FAQ derived its copy from it, so the app told every user the fee was twice
@@ -19,13 +24,13 @@
  * env can be tuned without a client release.
  */
 
-/** Platform service fee, as a percent (5 = 5%). Mirrors PLATFORM_FEE_PERCENT. */
-export const PLATFORM_FEE_PERCENT = 5;
+/** Platform service fee, as a percent (8 = 8%). Mirrors the PLATFORM_FEE_PERCENT secret. */
+export const PLATFORM_FEE_PERCENT = 8;
 
-/** Same fee expressed as a rate (0.05). */
+/** Same fee expressed as a rate (0.08). */
 export const PLATFORM_FEE_RATE = PLATFORM_FEE_PERCENT / 100;
 
-/** "5%" — for display. Avoids "5.0%" for whole numbers. */
+/** "8%" — for display. Avoids "8.0%" for whole numbers. */
 export const PLATFORM_FEE_DISPLAY = `${
   Number.isInteger(PLATFORM_FEE_PERCENT)
     ? PLATFORM_FEE_PERCENT
@@ -57,10 +62,13 @@ export function calculateHunterEarnings(
   actualFee?: number | null
 ): HunterEarnings {
   const gross = Number.isFinite(amount) && (amount as number) > 0 ? Number(amount) : 0;
+  // Estimate in integer cents, exactly like supabase/functions/_shared/platform-fee.ts.
+  // The previous dollar-float form disagreed with the server on 102 amounts
+  // under $1,000 (e.g. $20.70 → $1.03 shown vs $1.04 deducted).
   const fee =
     actualFee != null && Number.isFinite(actualFee)
       ? Math.max(0, Number(actualFee))
-      : Math.round(gross * PLATFORM_FEE_RATE * 100) / 100;
+      : Math.round((Math.round(gross * 100) * PLATFORM_FEE_PERCENT) / 100) / 100;
   return {
     gross,
     fee,

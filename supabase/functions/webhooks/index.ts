@@ -15,6 +15,15 @@ import {
   decidePayoutEventAction,
 } from '../_shared/payout-state.ts';
 import type { WalletTransaction } from '../_shared/types.ts';
+import {
+  buildStripeDisputeRow,
+  decideDisputeLossAction,
+  disputeChargeRef,
+  resolveDisputePayer,
+  type DisputeChargeRef,
+  type DisputePayerLookups,
+  type PayerRow,
+} from '../_shared/stripe-dispute.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
 import {
   bountyPaymentRefundUpdate,
@@ -24,6 +33,7 @@ import {
 } from '../_shared/refund-reflection.ts';
 import {
     collectWebhookSecrets,
+    eventModeMatchesKey,
     verifyStripeSignature,
     WEBHOOK_SECRET_ENV_VARS,
 } from '../_shared/webhook-signature.ts';
@@ -58,6 +68,61 @@ function logCritical(event: string, context: Record<string, unknown>) {
     `CRITICAL [webhooks] ${event}`,
     JSON.stringify({ event, ts: new Date().toISOString(), ...context })
   );
+}
+
+/**
+ * Supabase-backed lookups for resolveDisputePayer (_shared/stripe-dispute.ts):
+ * v1 wallet deposit → v2 bounty_payments → v3 bounty_v3_funding. Matches by
+ * PaymentIntent first, then by charge id. Query errors are thrown so Stripe
+ * retries instead of an outage reading as "no payer".
+ */
+function disputePayerLookups(supabase: any): DisputePayerLookups {
+  async function byChargeRef(
+    table: string,
+    columns: string,
+    ref: DisputeChargeRef
+  ): Promise<Record<string, any> | null> {
+    const attempts: Array<[string, string]> = [];
+    if (ref.paymentIntentId) attempts.push(['stripe_payment_intent_id', ref.paymentIntentId]);
+    if (ref.chargeId) attempts.push(['stripe_charge_id', ref.chargeId]);
+    for (const [column, value] of attempts) {
+      const { data, error } = await supabase
+        .from(table)
+        .select(columns)
+        .eq(column, value)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) return row;
+    }
+    return null;
+  }
+
+  return {
+    async walletDepositByCharge(ref): Promise<PayerRow | null> {
+      const row = await byChargeRef('wallet_transactions', 'user_id, bounty_id', ref);
+      return row ? { userId: row.user_id ?? null, bountyId: row.bounty_id ?? null } : null;
+    },
+    async bountyPaymentByCharge(ref): Promise<PayerRow | null> {
+      const row = await byChargeRef('bounty_payments', 'poster_id, bounty_id', ref);
+      return row ? { userId: row.poster_id ?? null, bountyId: row.bounty_id ?? null } : null;
+    },
+    async v3FundingByCharge(ref): Promise<PayerRow | null> {
+      const row = await byChargeRef('bounty_v3_funding', 'bounty_id', ref);
+      if (!row?.bounty_id) return null;
+      const { data: bounty, error } = await supabase
+        .from('bounties')
+        .select('poster_id, user_id')
+        .eq('id', row.bounty_id)
+        .maybeSingle();
+      if (error) throw error;
+      return {
+        userId: (bounty?.poster_id ?? bounty?.user_id ?? null) as string | null,
+        bountyId: row.bounty_id,
+      };
+    },
+  };
 }
 
 /**
@@ -1568,6 +1633,21 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Webhook verification/parsing failed' }, 400);
   }
 
+  // A live Connect endpoint also receives TEST-mode events from connected
+  // accounts (Stripe docs, Connect webhooks). Acknowledge them so Stripe stops
+  // retrying, but never let test money touch live records — or vice versa.
+  const modeCheck = eventModeMatchesKey((event as { livemode?: unknown }).livemode, stripeKey);
+  if (!modeCheck.matches) {
+    console.warn('[webhooks] Ignoring event from the other Stripe mode', {
+      eventId: event.id,
+      type: event.type,
+      eventLivemode: (event as { livemode?: unknown }).livemode,
+      deploymentMode: modeCheck.keyMode,
+      account: (event as { account?: string }).account ?? null,
+    });
+    return jsonResponse({ received: true, ignored: 'livemode_mismatch' });
+  }
+
   try {
     // Claim the event before doing any work.
     //
@@ -3073,61 +3153,45 @@ Deno.serve(async (req: Request) => {
 
       case 'charge.dispute.created': {
         const dispute = event.data.object as Stripe.Dispute;
-        const disputePaymentIntentId =
-          typeof dispute.payment_intent === 'string'
-            ? dispute.payment_intent
-            : ((dispute.payment_intent as Stripe.PaymentIntent | null)?.id ?? null);
+        const disputeRef = disputeChargeRef(dispute as any);
+        const disputePaymentIntentId = disputeRef.paymentIntentId;
         const disputeAmountDollars = dispute.amount / 100;
 
         console.log(
           `[webhooks] charge.dispute.created: dispute=${dispute.id} pi=${disputePaymentIntentId} amount=$${disputeAmountDollars}`
         );
 
-        // Look up the original wallet transaction to find the poster
-        let disputeUserId: string | null = null;
-        if (disputePaymentIntentId) {
-          const { data: origTx, error: origTxError } = await supabase
-            .from('wallet_transactions')
-            .select('user_id')
-            .eq('stripe_payment_intent_id', disputePaymentIntentId)
-            .maybeSingle();
-
-          if (origTxError) {
-            console.error(
-              '[webhooks] charge.dispute.created: failed to look up originating wallet_transaction',
-              {
-                dispute_id: dispute.id,
-                stripe_payment_intent_id: disputePaymentIntentId,
-                error: origTxError,
-              }
-            );
-            throw origTxError;
-          }
-
-          disputeUserId = (origTx as { user_id: string } | null)?.user_id ?? null;
+        // Find who paid: v1 wallet deposit, v2 bounty_payments or v3 funding.
+        // Previously only wallet_transactions was searched, so chargebacks on
+        // every escrow-funded bounty were dropped. See _shared/stripe-dispute.ts.
+        let disputePayer;
+        try {
+          disputePayer = await resolveDisputePayer(disputeRef, disputePayerLookups(supabase));
+        } catch (payerLookupError) {
+          console.error('[webhooks] charge.dispute.created: failed to look up the disputed payer', {
+            dispute_id: dispute.id,
+            payment_intent_id: disputePaymentIntentId,
+            error: payerLookupError,
+          });
+          throw payerLookupError;
         }
 
-        if (!disputeUserId) {
+        if (!disputePayer) {
           console.warn(
-            `[webhooks] charge.dispute.created: no wallet_transaction found for pi=${disputePaymentIntentId} — logging only`
+            `[webhooks] charge.dispute.created: no Bounty payment record for pi=${disputePaymentIntentId} charge=${disputeRef.chargeId} — logging only`
           );
           break;
         }
+        const disputeUserId = disputePayer.userId;
+        console.log(
+          `[webhooks] charge.dispute.created: payer ${disputeUserId} via ${disputePayer.source} bounty=${disputePayer.bountyId}`
+        );
 
         // Insert or update bounty_disputes for this Stripe dispute.
         // Avoid using Supabase/PostgREST `upsert` with `onConflict` because the
         // underlying index is a partial unique index (WHERE stripe_dispute_id IS NOT NULL)
         // which PostgREST cannot express in its generated ON CONFLICT clause.
-        const disputeRow = {
-          initiator_id: disputeUserId,
-          reason: `Stripe chargeback dispute opened (${dispute.id})`,
-          status: 'stripe_dispute',
-          stripe_dispute_id: dispute.id,
-          stripe_payment_intent_id: disputePaymentIntentId,
-          // 'cancellation' is the closest available dispute_stage value for a Stripe
-          // chargeback, which arrives outside the normal in-app dispute flow.
-          dispute_stage: 'cancellation',
-        } as any;
+        const disputeRow = buildStripeDisputeRow(dispute.id, disputeRef, disputePayer) as any;
 
         // First try to find an existing row by stripe_dispute_id
         const { data: existingDispute, error: selectDisputeError } = await supabase
@@ -3278,58 +3342,52 @@ Deno.serve(async (req: Request) => {
           throw resolveError;
         }
 
+        // Who paid, and through which architecture. Needed even when the
+        // dispute row exists: it decides whether a LOST dispute may be taken
+        // from the wallet (v1 deposits only — see decideDisputeLossAction).
+        let closedPayer;
+        try {
+          closedPayer = await resolveDisputePayer(
+            disputeChargeRef(closedDispute as any),
+            disputePayerLookups(supabase)
+          );
+        } catch (closedPayerError) {
+          console.error('[webhooks] charge.dispute.closed: failed to look up the disputed payer', {
+            dispute_id: closedDispute.id,
+            payment_intent_id: closedPaymentIntentId ?? null,
+            stripe_charge_id: closedDispute.charge ?? null,
+            error: closedPayerError,
+          });
+          throw closedPayerError;
+        }
+
         let closedUserId =
           (resolvedDispute as { initiator_id: string } | null)?.initiator_id ?? null;
 
         if (!closedUserId) {
-          // Fallback: look up the user via wallet_transactions when no bounty_disputes row
-          // exists (e.g. charge.dispute.created was never processed, or row was deleted).
-          // Prefer lookup by PaymentIntent ID; if that's not available (legacy charge),
-          // fall back to the Stripe charge ID.
-          let closedWalletTx: { user_id?: string } | null = null;
-          let closedWalletTxError: any = null;
-
-          if (closedPaymentIntentId) {
-            ({ data: closedWalletTx, error: closedWalletTxError } = await supabase
-              .from('wallet_transactions')
-              .select('user_id')
-              .eq('stripe_payment_intent_id', closedPaymentIntentId)
-              .maybeSingle());
-          } else if ((closedDispute.charge as string | undefined) != null) {
-            ({ data: closedWalletTx, error: closedWalletTxError } = await supabase
-              .from('wallet_transactions')
-              .select('user_id')
-              .eq('stripe_charge_id', closedDispute.charge as string)
-              .maybeSingle());
-          }
-
-          if (closedWalletTxError) {
-            console.error(
-              '[webhooks] charge.dispute.closed: failed wallet_transactions fallback lookup',
-              {
-                dispute_id: closedDispute.id,
-                stripe_payment_intent_id: closedPaymentIntentId ?? null,
-                stripe_charge_id: closedDispute.charge ?? null,
-                error: closedWalletTxError,
-              }
-            );
-            throw closedWalletTxError;
-          }
-
-          closedUserId =
-            (closedWalletTx as Pick<WalletTransaction, 'user_id'> | null)?.user_id ?? null;
+          // No bounty_disputes row (charge.dispute.created was never processed,
+          // or the row was deleted) — fall back to the payment records.
+          closedUserId = closedPayer?.userId ?? null;
 
           if (!closedUserId) {
             console.warn(
-              `[webhooks] charge.dispute.closed: no bounty_disputes or wallet_transactions row for dispute ${closedDispute.id} — skipping balance/wallet ops`
+              `[webhooks] charge.dispute.closed: no bounty_disputes row or Bounty payment record for dispute ${closedDispute.id} — skipping balance/wallet ops`
             );
             break;
           }
 
           console.warn(
-            `[webhooks] charge.dispute.closed: recovered user ${closedUserId} from wallet_transactions for dispute ${closedDispute.id}`
+            `[webhooks] charge.dispute.closed: recovered user ${closedUserId} from ${closedPayer?.source} for dispute ${closedDispute.id}`
           );
         }
+
+        // Only attribute the wallet consequence to the payer the payment
+        // records name. If the row's initiator and the records disagree, the
+        // decision falls to manual review rather than debiting either user.
+        const closedLossAction = decideDisputeLossAction(
+          closedPayer && closedPayer.userId === closedUserId ? closedPayer : null
+        );
+        let disputeLossNeedsReview = false;
 
         // Track whether the wallet was actually unfrozen so the user-facing
         // notification can reflect the true account state when there are
@@ -3400,8 +3458,24 @@ Deno.serve(async (req: Request) => {
               `[webhooks] charge.dispute.closed (won): wallet remains frozen for user ${closedUserId} due to ${remainingOpenCountNumber} remaining open Stripe dispute(s)`
             );
           }
+        } else if (closedLossAction.kind === 'manual_review') {
+          // Platform lost a chargeback on money that never passed through the
+          // payer's wallet (v2/v3 escrow), or the payer could not be tied to a
+          // payment record. Debiting the wallet here would be a new financial
+          // policy, so record it, keep the account frozen, and hand it to an
+          // admin. The bounty_disputes row is already resolved_lost above.
+          disputeLossNeedsReview = true;
+          logCritical('stripe dispute lost — wallet NOT debited, needs admin decision', {
+            stripe_dispute_id: closedDispute.id,
+            payment_intent_id: closedPaymentIntentId ?? null,
+            user_id: closedUserId,
+            payer_source: closedPayer?.source ?? null,
+            bounty_id: closedPayer?.bountyId ?? null,
+            amount: closedAmountDollars,
+            reason: closedLossAction.reason,
+          });
         } else {
-          // Platform lost — deduct the disputed amount.
+          // Platform lost a chargeback on a v1 wallet deposit — deduct the disputed amount.
           // balance_frozen remains true (set during charge.dispute.created) intentionally:
           // the account should stay restricted until a manual admin review clears it.
 
@@ -3538,6 +3612,9 @@ Deno.serve(async (req: Request) => {
             outcomeMsg =
               'The payment dispute on your account has been resolved in your favor. Your wallet may still be frozen pending other disputes or review.';
           }
+        } else if (disputeLossNeedsReview) {
+          outcomeMsg =
+            'The payment dispute on your account has been resolved against you. Your wallet stays frozen while our support team reviews the outcome — we will contact you about next steps.';
         } else {
           if (typeof disputeLossApplied !== 'undefined' && disputeLossApplied === false) {
             outcomeMsg = `The payment dispute on your account has been resolved against you. We attempted to deduct $${closedAmountDollars.toFixed(

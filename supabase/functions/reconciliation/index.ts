@@ -687,7 +687,16 @@ serve(async (req: Request) => {
             .update({
               status: expected,
               updated_at: new Date().toISOString(),
-              ...(expected === 'completed' ? { completed_at: new Date().toISOString() } : {}),
+              // `completed` only follows a Stripe-observed `paid` payout
+              // (isSafeStatusRepair). Stamp that evidence in the same write:
+              // the derive trigger reads stripe_payout_status, and
+              // wallet_transactions_completed_withdrawal_requires_settlement
+              // (20260911000100) rejects a completed withdrawal without it.
+              // Leaving it out is exactly how 7 paid rows got stranded at
+              // settlement_state='stripe_pending'.
+              ...(expected === 'completed'
+                ? { completed_at: new Date().toISOString(), stripe_payout_status: 'paid' }
+                : {}),
             })
             .eq('id', local.id as string)
             .eq('status', 'pending'); // CAS: only if still pending

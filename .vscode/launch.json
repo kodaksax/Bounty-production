@@ -1,0 +1,34 @@
+{
+  // See docs/payments/STRIPE_DEV_WORKFLOW.md. All Stripe configs are TEST MODE
+  // and use the `bounty-staging` CLI profile set in .vscode/settings.json.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Official Stripe extension debugger: runs `stripe listen` (profile
+      // bounty-staging) and forwards platform AND Connect events to :8000.
+      // Use it for any local receiver that trusts this listener's signing
+      // secret (`stripe listen --print-secret --project-name bounty-staging`).
+      // For the webhooks edge function, prefer the task "Stripe: serve webhooks
+      // function locally + forward events": it starts the function with the
+      // matching secret and its own listener, so do not run both at once.
+      "name": "Stripe: forward events to local webhooks (:8000)",
+      "type": "stripe",
+      "request": "launch",
+      "command": "listen",
+      "forwardTo": "http://localhost:8000/webhooks",
+      "forwardConnectTo": "http://localhost:8000/webhooks"
+    },
+    {
+      // Breakpoints in supabase/functions/webhooks/index.ts and _shared/*.ts.
+      // Start the task "Stripe: serve webhooks locally (wait for debugger)",
+      // then run this, then trigger an event.
+      "name": "Attach: local webhooks (Deno)",
+      "type": "node",
+      "request": "attach",
+      "address": "127.0.0.1",
+      "port": 9229,
+      "restart": false,
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

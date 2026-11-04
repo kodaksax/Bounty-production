@@ -14,5 +14,12 @@
   "css.lint.unknownAtRules": "ignore",
   "github-actions.workflows.pinned.workflows": [
     ".github/workflows/ci.yml"
-  ]
+  ],
+  // Stripe extension: use a dedicated CLI profile so it can never pick up the
+  // `default` profile, which is the PRODUCTION account (acct_1PGppVJekUCspsfJ).
+  // Authenticate once with
+  //   stripe login --project-name bounty-staging
+  // choosing the "Coal Spinner" sandbox (acct_1SCOhHQu3TJHRHBb, staging).
+  // See docs/payments/STRIPE_DEV_WORKFLOW.md.
+  "stripe.projectName": "bounty-staging"
 }

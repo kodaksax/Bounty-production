@@ -1,0 +1,116 @@
+{
+  // Stripe TEST-MODE workflow. Every task goes through scripts/stripe-dev.mjs,
+  // which reads keys from the git-ignored .env.staging and refuses live keys
+  // and the production Supabase project. See docs/payments/STRIPE_DEV_WORKFLOW.md.
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "stripeEnv",
+      "type": "pickString",
+      "description": "Which test environment",
+      "options": ["staging", "development"],
+      "default": "staging"
+    },
+    {
+      "id": "stripeEvent",
+      "type": "pickString",
+      "description": "Event to trigger (test fixtures)",
+      "options": [
+        "payment_intent.succeeded",
+        "payment_intent.payment_failed",
+        "payment_intent.canceled",
+        "charge.refunded",
+        "charge.dispute.created",
+        "checkout.session.completed",
+        "setup_intent.succeeded",
+        "account.updated",
+        "transfer.created",
+        "payout.paid",
+        "payout.failed"
+      ]
+    },
+    {
+      "id": "stripeEventId",
+      "type": "promptString",
+      "description": "Event id to resend (evt_...)"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "Stripe: whoami (test account + Supabase project)",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs whoami --env ${input:stripeEnv}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Stripe: webhook endpoint coverage",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs endpoints --env ${input:stripeEnv}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Stripe: serve webhooks function locally + forward events",
+      "detail": "Runs supabase/functions/webhooks under Deno on :8000 and stripe listen --forward-to/--forward-connect-to it",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs serve-webhooks --env ${input:stripeEnv}",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "stripe-dev",
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "activeBegin": true, "beginsPattern": "stripe-dev\\]", "endsPattern": "Ready!" }
+      }
+    },
+    {
+      "label": "Stripe: serve webhooks locally (wait for debugger)",
+      "detail": "Same, but Deno waits on 127.0.0.1:9229 — then run the 'Attach: local webhooks (Deno)' launch config",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs serve-webhooks --env ${input:stripeEnv}",
+      "options": { "env": { "DENO_INSPECT": "1" } },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "stripe-dev",
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "activeBegin": true, "beginsPattern": "stripe-dev\\]", "endsPattern": "Debugger listening" }
+      }
+    },
+    {
+      "label": "Stripe: trigger test event",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs trigger ${input:stripeEvent} --env ${input:stripeEnv}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Stripe: resend event to the deployed endpoint",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs cli events resend ${input:stripeEventId} --env ${input:stripeEnv}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Stripe: stream test events (no forwarding)",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs listen --env ${input:stripeEnv}",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Stripe: tail API request logs",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs logs --env ${input:stripeEnv}",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Stripe: reconcile PaymentIntents vs database (read-only)",
+      "type": "shell",
+      "command": "node scripts/stripe-dev.mjs reconcile --days 30 --env ${input:stripeEnv}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Payments: run payment test suites",
+      "type": "shell",
+      "command": "npx jest --ci --testPathPattern \"(stripe|payment|payout|webhook|wallet|withdraw|fee|refund|dispute|escrow|connect|reconcil|transfer|deposit|release|funding|checkout|settlement)\"",
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
