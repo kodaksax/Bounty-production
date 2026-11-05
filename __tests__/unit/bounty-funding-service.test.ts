@@ -154,6 +154,7 @@ describe('bounty-funding-service (unit)', () => {
 
     test.each([
       ['insufficient_funds_for_escrow', 'insufficient_funds'],
+      ['card_charge_failed', 'insufficient_funds'],
       ['Insufficient funds: new balance would be -30', 'insufficient_funds'],
       // The DB guard firing means an acceptance path skipped escrow. That is
       // NOT a balance problem, so it must not be folded into

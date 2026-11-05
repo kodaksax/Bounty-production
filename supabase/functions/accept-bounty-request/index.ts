@@ -1,9 +1,19 @@
 // Allow remote Deno std import in this file (Edge Function runtime).
 // @ts-ignore: Remote Deno std types may not be available to the workspace TypeScript server
 import { serve } from 'https://deno.land/std@0.201.0/http/server.ts';
+import Stripe from 'npm:stripe@14';
+import {
+  blockedAccountCode,
+  fundAcceptanceFromCard,
+  mayChargeCard,
+  unwindChargeAfterFailedAccept,
+  type AcceptFundingDeps,
+  type AcceptFundingResult,
+  type FundingStripe,
+} from './logic.ts';
 
-// Edge Function: accept-bounty-request (no external deps)
-// POST body: { request_id: string }
+// Edge Function: accept-bounty-request
+// POST body: { request_id: string, allow_card_charge?: boolean }
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_KEY =
@@ -16,7 +26,178 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   console.error('Missing SUPABASE_URL or SERVICE_ROLE_KEY in environment');
 }
 
-serve(async (req: Request) => {
+const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY') || '';
+
+// The app's web build calls this from a browser. Access is by the bearer token,
+// checked below, so the origin doesn't matter.
+const corsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+// Wrap DB queries in a timeout so a paused/cold-starting DB returns a fast
+// failure instead of hanging (mirrors payments/wallet/bounty-payments).
+// fn_accept_bounty_request is deliberately NOT wrapped: a timeout there would
+// not stop it committing, and we would then refund a hire that went through.
+const DB_TIMEOUT_MS = 8000;
+function withDbTimeout<T>(query: PromiseLike<T>): Promise<T> {
+  return Promise.race([
+    Promise.resolve(query),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(Object.assign(new Error('DB_TIMEOUT'), { code: 'DB_TIMEOUT' })),
+        DB_TIMEOUT_MS
+      )
+    ),
+  ]);
+}
+
+function sanitizeText(input: unknown): string {
+  if (!input) return '';
+  return String(input).replace(/[<>]/g, '').trim().slice(0, 1000);
+}
+
+function fundingDeps(baseUrl: string, callerToken: string): AcceptFundingDeps | null {
+  if (!STRIPE_SECRET_KEY) return null;
+
+  const stripe = new Stripe(STRIPE_SECRET_KEY, {
+    apiVersion: '2023-10-16',
+    httpClient: Stripe.createFetchHttpClient(),
+  }) as unknown as FundingStripe;
+
+  const serviceHeaders = {
+    apikey: SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+  };
+
+  const firstRow = async (path: string): Promise<any> => {
+    const res = await withDbTimeout(
+      fetch(`${baseUrl}/rest/v1/${path}`, { headers: serviceHeaders })
+    );
+    if (!res.ok) throw new Error(`${path.split('?')[0]} lookup failed: ${res.status}`);
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows[0] ?? null : null;
+  };
+
+  const rpc = async (name: string, args: unknown, bearer: string): Promise<any> => {
+    const res = await withDbTimeout(
+      fetch(`${baseUrl}/rest/v1/rpc/${name}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${bearer}`,
+        },
+        body: JSON.stringify(args),
+      })
+    );
+    if (!res.ok)
+      throw new Error(`${name} failed: ${res.status} ${await res.text().catch(() => '')}`);
+    return res.json();
+  };
+
+  return {
+    stripe,
+    // Runs as the poster: the function refuses any caller but the poster, and
+    // the ownership check above has established that this caller is one. A 42501
+    // from a stale denormalized poster_id throws, which means "no charge".
+    getShortfall: async bountyId => {
+      const rows = await rpc(
+        'fn_get_bounty_funding_requirement',
+        { p_bounty_id: bountyId },
+        callerToken
+      );
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      return row ? Number(row.shortfall) : null;
+    },
+    getBountyStatus: async bountyId =>
+      (await firstRow(`bounties?id=eq.${encodeURIComponent(bountyId)}&select=status`))?.status ??
+      null,
+    getProfileCustomerId: async userId =>
+      (await firstRow(`profiles?id=eq.${encodeURIComponent(userId)}&select=stripe_customer_id`))
+        ?.stripe_customer_id ?? null,
+    getDefaultCardId: async userId =>
+      (
+        await firstRow(
+          `payment_methods?user_id=eq.${encodeURIComponent(
+            userId
+          )}&type=eq.card&is_default=eq.true` +
+            `&select=stripe_payment_method_id&order=updated_at.desc&limit=1`
+        )
+      )?.stripe_payment_method_id ?? null,
+    getRequestStatus: async requestId =>
+      (await firstRow(`bounty_requests?id=eq.${encodeURIComponent(requestId)}&select=status`))
+        ?.status ?? null,
+    applyDeposit: async ({ userId, amount, paymentIntentId, metadata }) => {
+      await rpc(
+        'apply_deposit',
+        {
+          p_user_id: userId,
+          p_amount: amount,
+          p_payment_intent_id: paymentIntentId,
+          p_metadata: metadata,
+        },
+        SUPABASE_SERVICE_KEY
+      );
+    },
+    applyRefund: async ({ userId, amount, refundId, chargeId, description, metadata }) => {
+      await rpc(
+        'apply_refund',
+        {
+          p_user_id: userId,
+          p_amount: amount,
+          p_stripe_refund_id: refundId,
+          p_stripe_charge_id: chargeId,
+          p_description: description,
+          p_metadata: metadata,
+        },
+        SUPABASE_SERVICE_KEY
+      );
+    },
+    alertAdmins: async ({ title, body, bountyId }) => {
+      // The paging list, which delivers through send-notification-email. If the
+      // database is the thing that failed, go straight to that function: its
+      // team alert needs no database.
+      try {
+        await rpc(
+          'fn_notify_admins',
+          {
+            p_type: 'accept_refund_reversal_failed',
+            p_severity: 'critical',
+            p_title: title,
+            p_body: body,
+            p_data: {},
+            p_bounty_id: bountyId,
+          },
+          SUPABASE_SERVICE_KEY
+        );
+        return;
+      } catch (err) {
+        console.error('accept-bounty-request: fn_notify_admins failed, using the team alert', err);
+      }
+      try {
+        const res = await fetch(`${baseUrl}/functions/v1/send-notification-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          },
+          body: JSON.stringify({ supportAlert: true, title, body, data: {} }),
+        });
+        if (!res.ok) console.error('accept-bounty-request: team alert failed', res.status);
+      } catch (err) {
+        console.error('accept-bounty-request: team alert failed', err);
+      }
+    },
+    log: {
+      warn: (message, details) => console.warn(message, details),
+      error: (message, details) => console.error(message, details),
+    },
+  };
+}
+
+const handleRequest = async (req: Request): Promise<Response> => {
   try {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
       return new Response(
@@ -27,11 +208,8 @@ serve(async (req: Request) => {
     if (req.method !== 'POST')
       return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
 
-    // Authenticate the caller. This function calls the DB RPC with the
-    // service-role key (which carries no auth.uid() context), so without this
-    // check ANY authenticated user could accept ANY pending bounty request for
-    // ANY bounty by supplying an arbitrary request_id — the RPC itself only
-    // validates request/bounty state, not caller identity.
+    // Authenticate the caller. Stripe and the wallet RPCs run with the service
+    // key, so nothing here may proceed on behalf of an unverified user.
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Missing or invalid authorization header' }), {
@@ -57,12 +235,14 @@ serve(async (req: Request) => {
     if (!requestId)
       return new Response(JSON.stringify({ error: 'Missing request_id' }), { status: 400 });
 
-    // Verify the caller is the poster who owns the bounty this request targets
-    // before mutating anything. bounty_requests.poster_id is denormalized onto
-    // the row specifically for checks like this.
+    // A first check, to refuse strangers before doing any work. It is not the
+    // authority: bounty_requests.poster_id is written by the applying hunter and
+    // no policy checks it. fn_accept_bounty_request below runs as this caller and
+    // checks the bounty's own poster, and fn_get_bounty_funding_requirement does
+    // the same before any charge.
     const lookupUrl = `${baseUrl}/rest/v1/bounty_requests?id=eq.${encodeURIComponent(
       String(requestId)
-    )}&select=poster_id,status`;
+    )}&select=poster_id,status,bounty_id`;
     const lookupResp = await fetch(lookupUrl, {
       headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
     }).catch(() => null);
@@ -83,15 +263,99 @@ serve(async (req: Request) => {
       );
     }
 
+    // A suspended poster can't hire, and must never reach the charge below. The
+    // service-role RPC call skips its own assert_account_active. If the status
+    // can't be read, nothing has happened yet, so fail closed.
+    let accountStatus: string | null;
+    try {
+      const statusResp = await withDbTimeout(
+        fetch(
+          `${baseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(callerId)}&select=account_status`,
+          {
+            headers: {
+              apikey: SUPABASE_SERVICE_KEY,
+              Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+            },
+          }
+        )
+      );
+      if (!statusResp.ok) throw new Error(`status ${statusResp.status}`);
+      const statusRows: any = await statusResp.json();
+      accountStatus = Array.isArray(statusRows) ? statusRows[0]?.account_status ?? null : null;
+    } catch (statusErr) {
+      console.error('accept-bounty-request: could not read account status', statusErr);
+      return new Response(JSON.stringify({ error: 'Failed to verify account status' }), {
+        status: 503,
+      });
+    }
+    const blocked = blockedAccountCode(accountStatus);
+    if (blocked) {
+      return new Response(
+        JSON.stringify({ error: 'Your account cannot accept requests right now', code: blocked }),
+        { status: 403 }
+      );
+    }
+
+    // Pay at accept with a saved card: charge any wallet shortfall as a deposit,
+    // then accept below as usual. The app sends allow_card_charge: false because
+    // its own sheet has already shown the poster the amount and taken any payment,
+    // so a shortfall here is a balance that moved after they confirmed: refuse it
+    // and let the sheet ask, rather than charge a card they were told it wouldn't.
+    const funding = mayChargeCard(requestRow.status, body?.allow_card_charge)
+      ? fundingDeps(baseUrl, callerToken)
+      : null;
+    let funded: AcceptFundingResult = { kind: 'not_charged' };
+    if (funding) {
+      funded = await fundAcceptanceFromCard(funding, {
+        requestId: sanitizeText(requestId),
+        bountyId: sanitizeText(requestRow.bounty_id),
+        posterId: callerId,
+      });
+    }
+    if (funded.kind === 'card_failed') {
+      console.warn('accept-bounty-request: card not charged', {
+        requestId,
+        reason: funded.reason,
+      });
+      return new Response(
+        JSON.stringify({
+          error: 'Payment required: your card could not be charged',
+          code: 'card_charge_failed',
+          fallback: 'top_up',
+        }),
+        { status: 402 }
+      );
+    }
+    if (funded.kind === 'in_progress') {
+      return new Response(
+        JSON.stringify({
+          error: 'This acceptance is already in progress',
+          code: 'accept_in_progress',
+        }),
+        { status: 409 }
+      );
+    }
+    if (funded.kind === 'unavailable') {
+      return new Response(
+        JSON.stringify({
+          error: 'Could not confirm the payment. Please try again.',
+          code: 'payment_unconfirmed',
+        }),
+        { status: 503 }
+      );
+    }
+
     // Call the DB-stored PL/pgSQL function via Supabase REST RPC endpoint
     const rpcUrl = `${baseUrl}/rest/v1/rpc/fn_accept_bounty_request`;
 
+    // As the caller, never the service key: the RPC only checks the poster and
+    // account status when auth.role() = 'authenticated'.
     const rpcResp = await fetch(rpcUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: SUPABASE_SERVICE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        Authorization: `Bearer ${callerToken}`,
       },
       body: JSON.stringify({ p_request_id: String(requestId) }),
     }).catch(e => ({ ok: false, status: 500, text: () => Promise.resolve(String(e)) }));
@@ -104,6 +368,21 @@ serve(async (req: Request) => {
         ? (rpcResp as any).text()
         : Promise.resolve('<no-body>'));
       console.error('fn_accept_bounty_request RPC failed', { status, text });
+      if (funded.kind === 'charged' && funding) {
+        const unwound = await unwindChargeAfterFailedAccept(funding, {
+          requestId: sanitizeText(requestId),
+          posterId: callerId,
+          charge: funded,
+          bountyId: sanitizeText(requestRow.bounty_id),
+          rpcStatus: status,
+          rpcBody: text || '',
+        });
+        console.warn('accept-bounty-request: acceptance failed after a charge', {
+          requestId,
+          paymentIntentId: funded.paymentIntentId,
+          unwound,
+        });
+      }
       // Map not-found errors to 404, and state-conflict errors to 409
       if (/request_not_found|bounty_not_found/i.test(text || '')) {
         return new Response(JSON.stringify({ error: 'Not Found', details: text }), { status: 404 });
@@ -205,4 +484,11 @@ serve(async (req: Request) => {
       status: 500,
     });
   }
+};
+
+serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const response = await handleRequest(req);
+  for (const [name, value] of Object.entries(corsHeaders)) response.headers.set(name, value);
+  return response;
 });

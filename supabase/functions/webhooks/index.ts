@@ -25,6 +25,7 @@ import {
   type PayerRow,
 } from '../_shared/stripe-dispute.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
+import { handleDeferredBountySetup } from './deferred-bounty-setup.ts';
 import {
   bountyPaymentRefundUpdate,
   liveRefunds,
@@ -3995,6 +3996,21 @@ Deno.serve(async (req: Request) => {
           console.log(
             `[webhooks] checkout.session ${session.id} flow_type="${session.metadata?.flow_type ?? 'none'}" — not a bounty submission, skipping`
           );
+          break;
+        }
+
+        // Card saved, nothing charged: payment_status is 'no_payment_required',
+        // so this has to run before the settlement gate below.
+        if (session.mode === 'setup') {
+          await handleDeferredBountySetup({
+            supabase,
+            stripe,
+            session,
+            eventId: event.id,
+            authRedirectUrl:
+              Deno.env.get('BOUNTY_AUTH_REDIRECT_URL') ??
+              'https://www.bountyfinder.net/manage/?utm_source=bounty_email&utm_medium=email&utm_campaign=account_access',
+          });
           break;
         }
 

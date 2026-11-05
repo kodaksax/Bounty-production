@@ -14,21 +14,25 @@
 //   - Every route requires a Supabase Auth session (Authorization: Bearer
 //     <user access token>). Links in emails carry only ids; nothing in a URL
 //     authenticates anyone.
-//   - State-changing routes act AS THE USER: they call the same RPC / RLS
-//     paths the mobile app calls, with the user's own token, so the database
-//     enforces ownership (fn_accept_bounty_request checks poster_id and
-//     assert_account_active when auth.role() = 'authenticated';
-//     bounty_requests / completion_submissions updates go through RLS).
+//   - State-changing routes act AS THE USER: they call the same paths the mobile
+//     app calls, with the user's own token, so the database enforces ownership
+//     (accept-bounty-request passes the token to fn_accept_bounty_request, which
+//     checks poster_id and assert_account_active when auth.role() =
+//     'authenticated'; bounty_requests / completion_submissions updates go
+//     through RLS).
 //   - Reads use the service role (hunter profiles and ratings are not
 //     readable by posters under RLS) with an explicit poster_id filter, and
 //     return only allowlisted fields (logic.ts summarizeHunter). A bounty the
 //     caller doesn't own is 404, not 403, so ids can't be probed.
 //   - Money: completion calls the UNCHANGED bounty-payments/release endpoint
-//     with the user's token. This function never talks to Stripe.
+//     with the user's token, and accepting calls accept-bounty-request, which
+//     charges a saved card for any shortfall. This function never talks to Stripe.
 //
 // ROUTES
 //   GET  /poster-web/bounties
 //   GET  /poster-web/bounties/:id
+//   POST /poster-web/held-posts/:id/confirm
+//   POST /poster-web/held-posts/:id/decline
 //   POST /poster-web/requests/:id/accept
 //   POST /poster-web/requests/:id/decline
 //   POST /poster-web/bounties/:id/confirm-completion
@@ -49,7 +53,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isUuid, webManageLink } from '../_shared/web-links.ts'
 import { capture, openSupportCase } from '../_shared/support-cases.ts'
 import {
+  acceptFailureReason,
   classifyAccept,
+  classifyHeldPostConfirm,
   classifyDecline,
   classifyRelease,
   decisionResult,
@@ -58,6 +64,7 @@ import {
   formatMoney,
   normalizeProofConsentInput,
   normalizeSupportInput,
+  summarizeHeldPost,
   summarizeHunter,
   type DecisionState,
 } from './logic.ts'
@@ -84,6 +91,9 @@ const SUPPORT_EMAIL = Deno.env.get('NOTIFICATION_REPLY_TO_EMAIL') || 'support@bo
 const WEB_MANAGE_BASE = Deno.env.get('WEB_MANAGE_BASE')
 
 type Json = Record<string, unknown>
+
+// Kept in step with fn_claim_pending_bounties, which enforces it.
+const HELD_POST_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 Deno.serve(async (req: Request) => {
   const cors = corsFor(req)
@@ -119,6 +129,19 @@ Deno.serve(async (req: Request) => {
   try {
     // ── GET /bounties ───────────────────────────────────────────────────
     if (req.method === 'GET' && seg.length === 1 && seg[0] === 'bounties') {
+      // Posts someone made with this account's email while signed out. Listed for
+      // the owner to confirm or decline; signing in never publishes them. A lookup
+      // failure must not take the dashboard down.
+      const { data: held, error: heldErr } = await admin
+        .from('pending_bounties')
+        .select('id, title, description, amount, work_type, location, deadline, created_at, claim_card')
+        .eq('claim_user_id', userId)
+        .eq('status', 'awaiting_sign_in')
+        .gt('claim_requested_at', new Date(Date.now() - HELD_POST_TTL_MS).toISOString())
+        .order('created_at', { ascending: false })
+      if (heldErr) console.error('[poster-web] held post lookup failed', { userId, code: heldErr.code })
+      const heldPosts = ((held ?? []) as Json[]).map(summarizeHeldPost)
+
       const { data: rows, error } = await admin
         .from('bounties')
         .select('id, title, amount, status, work_type, location, created_at, accepted_by, funding_mode, is_for_honor')
@@ -143,6 +166,7 @@ Deno.serve(async (req: Request) => {
       const submittedBy = countBy((submissions.data ?? []) as Json[], 'bounty_id')
 
       return reply({
+        held_posts: heldPosts,
         bounties: bounties.map((b) => {
           const id = b.id as string
           const pendingApplicants = pendingBy.get(id) ?? 0
@@ -267,6 +291,46 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    // ── POST /held-posts/:id/confirm | decline ──────────────────────────
+    // The owner's answer to "Post this bounty?". The conditions are in the SQL and
+    // the update, so another account's id simply finds nothing.
+    if (req.method === 'POST' && seg.length === 3 && seg[0] === 'held-posts' && (seg[2] === 'confirm' || seg[2] === 'decline')) {
+      const pendingId = seg[1]
+      const notWaiting = classifyHeldPostConfirm([])
+      if (!isUuid(pendingId)) return reply(notWaiting, notWaiting.httpStatus)
+
+      if (seg[2] === 'confirm') {
+        const { data: claimed, error: claimErr } = await admin.rpc('fn_claim_pending_bounties', {
+          p_user_id: userId,
+          p_pending_id: pendingId,
+        })
+        if (claimErr) {
+          console.error('[poster-web] held post confirm failed', { userId, pendingId, code: claimErr.code, message: claimErr.message })
+          return reply(decisionResult('retry'), decisionResult('retry').httpStatus)
+        }
+        const result = classifyHeldPostConfirm(claimed)
+        capture(userId, 'web_held_post_decision', { decision: 'confirm', outcome: result.outcome, bounty_id: result.bounty_id })
+        return reply(result, result.httpStatus)
+      }
+
+      // Declined: the post is dropped and the held card details go with it. Conditional
+      // on still waiting for this user, so a repeat or a race is a no-op.
+      const { data: declined, error: declineErr } = await admin
+        .from('pending_bounties')
+        .update({ status: 'expired', claim_card: null })
+        .eq('id', pendingId)
+        .eq('claim_user_id', userId)
+        .eq('status', 'awaiting_sign_in')
+        .select('id')
+      if (declineErr) {
+        console.error('[poster-web] held post decline failed', { userId, pendingId, code: declineErr.code })
+        return reply(decisionResult('retry'), decisionResult('retry').httpStatus)
+      }
+      if (!declined?.length) return reply(notWaiting, notWaiting.httpStatus)
+      capture(userId, 'web_held_post_decision', { decision: 'decline', outcome: 'declined' })
+      return reply({ ok: true, outcome: 'declined', message: 'We won’t post it. Nothing was charged.' })
+    }
+
     // ── POST /requests/:id/accept | decline ─────────────────────────────
     if (req.method === 'POST' && seg.length === 3 && seg[0] === 'requests' && (seg[2] === 'accept' || seg[2] === 'decline')) {
       const requestId = seg[1]
@@ -279,14 +343,27 @@ Deno.serve(async (req: Request) => {
       if (!before.request || !owned) return reply(decisionResult('not_found'), 404)
 
       if (seg[2] === 'accept') {
-        // The same atomic transition the app uses, as the user: row locks on
-        // the request then the bounty, open-status check, escrow reservation
-        // for pay-at-accept bounties, and every other pending request
-        // rejected — all in one transaction.
-        const { error: rpcErr } = await asUser.rpc('fn_accept_bounty_request', { p_request_id: requestId })
+        // The same path the app uses, as the user: any wallet shortfall is
+        // charged to a saved card, then fn_accept_bounty_request takes row locks
+        // on the request and the bounty, checks the open status, reserves escrow
+        // for pay-at-accept bounties, and rejects every other pending request,
+        // all in one transaction. The state read after it decides the outcome,
+        // so a timeout here can't misreport a hire that went through.
+        let acceptError: string | null = null
+        try {
+          const acceptResp = await fetch(`${supabaseUrl}/functions/v1/accept-bounty-request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', apikey: anonKey, Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ request_id: requestId }),
+            signal: AbortSignal.timeout(30000),
+          })
+          if (!acceptResp.ok) acceptError = acceptFailureReason(acceptResp.status, await acceptResp.text())
+        } catch (acceptErr) {
+          acceptError = `network: ${acceptErr instanceof Error ? acceptErr.message : String(acceptErr)}`
+        }
         const after = await loadDecisionState(admin, requestId)
-        const result = classifyAccept(after, rpcErr ? String(rpcErr.message ?? rpcErr.code ?? 'error') : null)
-        if (rpcErr && result.outcome === 'retry') console.error('[poster-web] accept failed', { requestId, code: rpcErr.code, message: rpcErr.message })
+        const result = classifyAccept(after, acceptError)
+        if (acceptError && result.outcome === 'retry') console.error('[poster-web] accept failed', { requestId, reason: acceptError })
 
         if (result.outcome === 'accepted') {
           // The hunter is told by the existing acceptance trigger

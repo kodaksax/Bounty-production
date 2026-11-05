@@ -182,13 +182,94 @@ export function classifyAccept(state: DecisionState, rpcError: string | null): D
   if (request.status !== 'pending') return decisionResult('request_closed')
 
   if (rpcError) {
-    if (/insufficient_funds_for_escrow|bounty_not_funded|_locked_by_|funding_mode/i.test(rpcError)) {
+    if (/insufficient_funds_for_escrow|bounty_not_funded|_locked_by_|funding_mode|card_charge_failed/i.test(rpcError)) {
       return decisionResult('not_funded')
     }
     return decisionResult('retry')
   }
   // RPC reported success but state doesn't show it: never claim success.
   return decisionResult('retry')
+}
+
+/**
+ * The reason inside a failed accept-bounty-request response, for classifyAccept:
+ * the database's own message when the RPC failed, otherwise the function's code.
+ */
+export function acceptFailureReason(status: number, text: string): string {
+  let body: any = null
+  try {
+    body = JSON.parse(text)
+  } catch {
+    return `http_${status}`
+  }
+  if (typeof body?.details === 'string' && body.details) return body.details
+  return String(body?.code ?? body?.error ?? `http_${status}`)
+}
+
+// ── Posts held for sign-in ────────────────────────────────────────────────
+//
+// Someone used this account's email on the public form while signed out. They
+// may be the owner, or a stranger, so nothing goes live until the owner says so.
+
+export interface HeldPost {
+  id: string
+  title: string
+  description: string
+  amount: number
+  work_type: string
+  location: string | null
+  deadline: string | null
+  created_at: string
+  card: { brand: string | null; last4: string | null } | null
+}
+
+/** Only what the owner needs to recognize the post. Never the Stripe ids. */
+export function summarizeHeldPost(row: Record<string, any>): HeldPost {
+  return {
+    id: row.id,
+    title: row.title,
+    description: typeof row.description === 'string' ? row.description.slice(0, 2000) : '',
+    amount: Number(row.amount),
+    work_type: row.work_type,
+    location: row.location ?? null,
+    deadline: row.deadline ?? null,
+    created_at: row.created_at,
+    card: row.claim_card
+      ? { brand: row.claim_card.brand ?? null, last4: row.claim_card.last4 ?? null }
+      : null,
+  }
+}
+
+export type HeldPostOutcome = 'posted' | 'refused' | 'not_found'
+
+/** What fn_claim_pending_bounties returned for the post the owner confirmed. */
+export function classifyHeldPostConfirm(rows: unknown): {
+  ok: boolean
+  outcome: HeldPostOutcome
+  httpStatus: number
+  message: string
+  bounty_id: string | null
+} {
+  const row = Array.isArray(rows) ? (rows[0] as Record<string, any> | undefined) : undefined
+  if (!row) {
+    return {
+      ok: false,
+      outcome: 'not_found',
+      httpStatus: 404,
+      message: 'This post is no longer waiting for you. It may have expired or already been handled.',
+      bounty_id: null,
+    }
+  }
+  if (row.outcome === 'created') {
+    return { ok: true, outcome: 'posted', httpStatus: 200, message: 'Your bounty is live.', bounty_id: row.bounty_id ?? null }
+  }
+  return {
+    ok: false,
+    outcome: 'refused',
+    httpStatus: 409,
+    message: 'We couldn’t post this bounty. Your card wasn’t charged. Contact us and a person will help.',
+    bounty_id: null,
+  }
 }
 
 /** Decline is a plain conditional update; this classifies its result. */

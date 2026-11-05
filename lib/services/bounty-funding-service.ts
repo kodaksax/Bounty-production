@@ -270,7 +270,12 @@ export function classifyAcceptFundingError(err: unknown): AcceptFundingFailureRe
   const msg = messageOf(err).toLowerCase();
   if (!msg) return 'unknown';
 
-  if (msg.includes('insufficient_funds_for_escrow') || msg.includes('insufficient funds')) {
+  if (
+    msg.includes('insufficient_funds_for_escrow') ||
+    msg.includes('insufficient funds') ||
+    // The saved card couldn't pay the shortfall, so this is the same recovery.
+    msg.includes('card_charge_failed')
+  ) {
     return 'insufficient_funds';
   }
   // The DB guard fired. This is NOT a statement about the balance — see the

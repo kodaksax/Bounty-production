@@ -694,6 +694,30 @@
       ]
     },
     {
+      "signature": "fn_create_bounty_from_pending_deferred(uuid,uuid,text,text)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_new_account_open_cap_reached(uuid)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
+      "signature": "fn_claim_pending_bounties(uuid,uuid)",
+      "forbid_execute": [
+        "anon",
+        "authenticated",
+        "PUBLIC"
+      ]
+    },
+    {
       "signature": "fn_get_posting_card_requirement(numeric)",
       "forbid_execute": [
         "anon",

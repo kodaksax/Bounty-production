@@ -5,6 +5,15 @@ describe('bountyRequestService (unit)', () => {
   beforeEach(() => {
     jest.resetModules()
     jest.clearAllMocks()
+    // acceptRequest reaches the database through the accept-bounty-request edge
+    // function, whose client returns the RPC's { data, error } shape. Each test's
+    // `rpc` mock stands in for that result, so the mapping is what's under test.
+    jest.doMock('../../lib/services/accept-request-edge', () => ({
+      invokeAcceptBountyRequest: (requestId: string) =>
+        require('../../lib/supabase').supabase.rpc('fn_accept_bounty_request', {
+          p_request_id: requestId,
+        }),
+    }))
   })
 
   // Helper: build chainable Supabase mock builder
@@ -348,6 +357,48 @@ describe('bountyRequestService (unit)', () => {
     await expect(svc.acceptRequest('r1')).rejects.toMatchObject({
       message: 'insufficient_funds_for_escrow',
     })
+  })
+
+  test.each([
+    ['card_charge_failed', 402],
+    ['accept_in_progress', 409],
+  ])('acceptRequest maps the edge function code %s to %s', async (message, status) => {
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: jest.fn(), warning: jest.fn(), info: jest.fn() },
+    }))
+    jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow: jest.fn() } }))
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: jest.fn().mockResolvedValue({ data: null, error: { message, code: message, status } }),
+        from: jest.fn(() => makeChainBuilder({ data: null, error: null })),
+      },
+    }))
+
+    const svc = require('../../lib/services/bounty-request-service').bountyRequestService
+
+    await expect(svc.acceptRequest('r1')).rejects.toMatchObject({ status })
+  })
+
+  test('acceptRequest maps a suspended account from the edge function to 403', async () => {
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: jest.fn(), warning: jest.fn(), info: jest.fn() },
+    }))
+    jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow: jest.fn() } }))
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'account_suspended', code: 'account_suspended', status: 403 },
+        }),
+        from: jest.fn(() => makeChainBuilder({ data: null, error: null })),
+      },
+    }))
+
+    const svc = require('../../lib/services/bounty-request-service').bountyRequestService
+
+    await expect(svc.acceptRequest('r1')).rejects.toMatchObject({ status: 403 })
   })
 
   test('getAll propagates lookup failures when requested', async () => {

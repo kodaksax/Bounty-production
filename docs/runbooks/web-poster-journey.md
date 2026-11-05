@@ -32,9 +32,17 @@ from production data and code:
 | The page itself | `Bounty-landing-page`: `manage/index.html`, `assets/manage.js` |
 
 Accept, decline and completion run **as the signed-in user** through the same
-paths as the app: `fn_accept_bounty_request` and RLS updates. Completion calls
-the **unchanged** `bounty-payments/release` with the user's token. No Stripe
-code changed.
+paths as the app: `accept-bounty-request` (which charges a saved card for any
+wallet shortfall, then runs `fn_accept_bounty_request` as the user) and RLS
+updates. Completion calls the **unchanged** `bounty-payments/release` with the
+user's token. `poster-web` itself has no Stripe code.
+
+A post made while signed out with an existing account's email is **held**, not
+published. `GET /poster-web/bounties` returns it in `held_posts`, and the page must
+show it with "Post this bounty?". `POST /poster-web/held-posts/:id/confirm` publishes
+it and `/decline` drops it. Signing in alone does nothing, so a stranger can't post
+as someone just because the owner clicked an unexplained sign-in email. Holds lapse
+after 7 days.
 
 `send-notification-email` now includes the Resend-template code that was
 deployed by hand on 2026-10-02 (v34) but never committed. Without it, this
