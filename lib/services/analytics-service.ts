@@ -85,6 +85,8 @@ const heycatch = (): HeyCatchApi | null => {
 // Every canonical event SHOULD carry, where known: bounty_id, amount,
 // application_id, role ('poster' | 'hunter'), surface, and source/referrer.
 // Never attach raw message/description text, emails, or precise coordinates.
+// (One exception: waitlist_captured sets `waitlist_email` as a PostHog-only
+// person property — see the event's comment below.)
 // PostHog is behavioural analytics; the Supabase row state is operational truth.
 // ──────────────────────────────────────────────────────────────────────────
 export type AnalyticsEvent =
@@ -219,7 +221,17 @@ export type AnalyticsEvent =
   | 'onboarding_no_nearby_bounties'
   | 'onboarding_online_bounties_viewed'
   | 'onboarding_notify_me_requested'
+  // Unserviceable region (app/onboarding/waitlist.tsx): shown when the
+  // onboarding location step geocodes to a country outside
+  // SERVICEABLE_COUNTRY_CODES (lib/utils/serviceable-region.ts).
+  // waitlist_captured fires once per successful email submit and is the
+  // ONLY event allowed to carry an email: it goes to PostHog alone, as the
+  // person property `waitlist_email` via $set (see trackEvent's
+  // `setPersonProperties` option) so a PostHog destination can notify the
+  // owner. It never reaches HeyCatch or Sentry breadcrumbs.
   | 'unserviceable_region_shown'
+  | 'unserviceable_region_continued'
+  | 'waitlist_captured'
   // Moments Queue — post-onboarding contextual activation prompts, see lib/moments/*
   // Funnel order for one moment instance: moment_event_enqueued (the real
   // business event that made it eligible) -> moment_shown (presented) ->
@@ -869,8 +881,16 @@ class AnalyticsService {
    * Track an analytics event
    * @param event - Event name
    * @param properties - Event properties
+   * @param options.setPersonProperties - PostHog-only person properties sent
+   *   as `$set` on this same event (so a destination triggered by it sees
+   *   them). Never forwarded to HeyCatch or Sentry; use it for the rare value
+   *   that must not leave PostHog, e.g. waitlist_captured's email.
    */
-  async trackEvent(event: AnalyticsEvent, properties?: AnalyticsProperties): Promise<void> {
+  async trackEvent(
+    event: AnalyticsEvent,
+    properties?: AnalyticsProperties,
+    options?: { setPersonProperties?: AnalyticsProperties }
+  ): Promise<void> {
     try {
       const normalizedProperties = normalizePropertyKeys(properties);
       const enrichedProperties = {
@@ -884,7 +904,12 @@ class AnalyticsService {
       // Track in PostHog via the shared client. The helper is a no-op when
       // the client hasn't initialized yet (e.g. missing key in Expo Go).
       try {
-        posthogCapture(event, enrichedProperties);
+        posthogCapture(
+          event,
+          options?.setPersonProperties
+            ? { ...enrichedProperties, $set: options.setPersonProperties }
+            : enrichedProperties
+        );
       } catch {
         // ignore — never let analytics failures bubble up to the caller
       }

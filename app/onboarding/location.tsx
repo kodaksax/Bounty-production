@@ -42,6 +42,7 @@ import { locationService } from '../../lib/services/location-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
+import { isServiceableCountry } from '../../lib/utils/serviceable-region';
 
 type LocationPrecision = 'precise' | 'approximate' | 'denied' | 'skipped';
 
@@ -63,7 +64,10 @@ export default function LocationScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const finish = (precision: LocationPrecision, extra?: { location?: string }) => {
+  const finish = (
+    precision: LocationPrecision,
+    extra?: { location?: string; countryCode?: string; region?: string }
+  ) => {
     // Always overwrite `location`, clearing it when this answer resolved none:
     // a user who stored a precise address, came back, then skipped/denied or
     // chose approximate must not have the old address written on completion.
@@ -72,6 +76,18 @@ export default function LocationScreen() {
       precision,
       intent: onboardingData.intent ?? 'none',
     });
+    // A geocoded country outside the service area gets the waitlist screen
+    // before role select. Only a geocoder answer counts: device locale is too
+    // weak a signal (plenty of US users run en-GB), and an unknown country
+    // (skip, denial, failed fix) must never land a US user on "not here yet".
+    // The waitlist screen is not a wall; it continues to role select.
+    if (extra?.countryCode && !isServiceableCountry(extra.countryCode)) {
+      router.push({
+        pathname: '/onboarding/waitlist',
+        params: { country_code: extra.countryCode, region: extra.region ?? '' },
+      });
+      return;
+    }
     router.push('/onboarding/role-select');
   };
 
@@ -107,12 +123,22 @@ export default function LocationScreen() {
         // Coarse only: a city/region label, never the street-level address.
         const region = await locationService.reverseGeocodeRegion(coords);
         const label = [region?.city, region?.region].filter(Boolean).join(', ');
-        finish('approximate', label ? { location: label } : undefined);
+        finish('approximate', {
+          location: label || undefined,
+          countryCode: region?.countryCode,
+          region: region?.region,
+        });
         return;
       }
 
-      const address = await locationService.reverseGeocode(coords);
-      finish('precise', address ? { location: address } : undefined);
+      // One geocoder request for both the address and the country (iOS
+      // throttles back-to-back reverse geocodes).
+      const resolved = await locationService.reverseGeocodeWithRegion(coords);
+      finish('precise', {
+        location: resolved?.address ?? undefined,
+        countryCode: resolved?.countryCode,
+        region: resolved?.region,
+      });
     } catch (error) {
       console.error('[Onboarding] location step failed:', error);
       // Never trap someone on this screen over a geocoder failure.

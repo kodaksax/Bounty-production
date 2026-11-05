@@ -167,6 +167,39 @@ class LocationService {
   }
 
   /**
+   * Reverse geocode to the same address string as reverseGeocode() plus the
+   * country/region, in ONE geocoder request. iOS throttles CLGeocoder to
+   * roughly one request per user action, so callers that need both (the
+   * onboarding location step's serviceability check) must not chain
+   * reverseGeocode() + reverseGeocodeRegion().
+   */
+  async reverseGeocodeWithRegion(coords: LocationCoordinates): Promise<{
+    address: string | null;
+    countryCode?: string;
+    region?: string;
+    city?: string;
+  } | null> {
+    try {
+      const results = await Location.reverseGeocodeAsync(coords);
+      if (!results || results.length === 0) return null;
+
+      const location = results[0];
+      const parts = [location.street, location.city, location.region, location.postalCode].filter(
+        Boolean
+      );
+      return {
+        address: parts.length > 0 ? parts.join(', ') : null,
+        countryCode: location.isoCountryCode?.toUpperCase(),
+        region: location.region || undefined,
+        city: location.city || undefined,
+      };
+    } catch (error) {
+      console.error('Error reverse geocoding with region:', error);
+      return null;
+    }
+  }
+
+  /**
    * Reverse geocode coordinates to a formatted address plus a coarse
    * neighborhood label (falls back to city when the device geocoder doesn't
    * report a district). Used by the map location picker when the user drags
