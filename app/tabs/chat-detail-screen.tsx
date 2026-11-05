@@ -62,6 +62,8 @@ interface ChatDetailScreenProps {
   topBanner?: ReactNode
   /** Replaces the composer, e.g. while no conversation exists yet. */
   composerOverride?: ReactNode
+  /** Called after a message from the composer is accepted by sendMessage. */
+  onMessageSent?: () => void
 }
 
 export function ChatDetailScreen({
@@ -73,6 +75,7 @@ export function ChatDetailScreen({
   headerRight,
   topBanner,
   composerOverride,
+  onMessageSent,
 }: ChatDetailScreenProps) {
   const router = useRouter()
   const { theme } = useAppThemeContext()
@@ -167,6 +170,7 @@ export function ChatDetailScreen({
     if (!await sendMessage(text, mediaUrl, replyTo)) {
       throw new Error('Failed to send message')
     }
+    onMessageSent?.()
     // Offset 0 is the newest message in an inverted list.
     setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 100)
   }

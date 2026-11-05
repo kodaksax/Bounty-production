@@ -262,8 +262,10 @@ before it, per poster:
 3. `payment_completed`: the top-up captured (pay variant only).
 4. `accept_funding_succeeded`: escrow reserved and the hunter accepted.
 
-Exits: `accept_funding_failed` (`reason`), and `accept_funding_abandoned`
-(`stage`, `trigger`: cancel | background | unmount).
+Exits: `accept_funding_failed` (`reason`, per failed step, can repeat), and
+`accept_blocked_by_payment` (once per gate: the attempt ended at payment with
+nobody hired; see "Acceptance root cause" below). `accept_blocked_by_payment`
+replaced `accept_funding_abandoned` on 2026-11-05.
 
 Before 2026-10-22, opening the add-a-card sheet sent nothing, so a poster
 with no saved card went from `required` straight to `abandoned`. In the 60
@@ -272,6 +274,50 @@ days to 10-22, 6 external posters reached step 1, all with
 declined, 10-18). Two backed out within 8 s without opening any payment
 sheet. Three used older versions of the gate (09-10 to 09-24): two had a
 separate top-up step, and one charged a card without sending `_started`.
+
+## Acceptance root cause (2026-11-05)
+
+Question: is the acceptance problem "posters aren't returning" or "posters
+look and reject"? Three events answer it per application, all joined on
+`application_id` (snake_case, like `application_accepted`). Readout:
+`scripts/ops/acceptance-root-cause.sql` (HogQL, buckets every application
+submitted since the release into one outcome).
+
+| Event | Fires when | Replaces |
+|---|---|---|
+| `application_viewed` | A pending application is on the poster's screen. `surface`: `inbox_list` (Inbox > My Bounties row, at least 50% visible for 250 ms, only while the Inbox tab and My Bounties segment are showing; once per application per session), `requests_list` (legacy Requests tab card; same rules), `bounty_thread` (opened on its own, once per foreground visit). | `applicant_list_viewed` |
+| `application_dismissed` | The poster opened the application in the bounty thread and left (`trigger`: `leave` or `background`) without accepting, passing or messaging. `dwell_ms`. | nothing (the implicit counterpart of `application_declined`) |
+| `accept_blocked_by_payment` | A hire attempt ended at the payment step with nobody hired. Once per gate. `trigger`: `cancel`, `background`, `unmount`, `deposit_unconfirmed`, `prior_deposit_unconfirmed`. Also `stage`, `balanceCovers`, `paymentAttempts`, `lastFailureCode`. | `accept_funding_abandoned` |
+
+Shared properties (`lib/analytics/application-view.ts`): `bounty_id`,
+`application_id`, `hunter_id`, `applicant_count`, `application_age_hours`,
+`hunter_verified`, `hunter_completed`, `has_message`, `applicant_distance_mi`,
+`is_for_honor`, `amount`, `trustTier`. No message text.
+
+`application_declined` gained `application_id` on the same date (it had only
+`bountyId`/`hunterId`), so declines join too.
+
+Why the retirements:
+
+- `applicant_list_viewed` fired per bounty whenever the list rendered. BountyApp
+  preloads the Inbox as Wallet's swipe neighbour, so it also fired for posters
+  who never opened the Inbox. Weeks before 2026-11-05 overstate views. Its
+  `bountyId` is `bounty_id` on the replacement.
+  `scripts/ops/poster-exits-weekly.sql` reads both names.
+- `accept_funding_abandoned` fired on every background and then again on the
+  later cancel or unmount, so one attempt could count 2 or 3 times. It sent
+  nothing when the sheet closed on an unconfirmed deposit or refused to open
+  because of one. In the 90 days to 11-05: 12 `accept_funding_required` and 11
+  `accept_funding_abandoned` from 7 external posters, against 1
+  `application_accepted`.
+
+Repoint: the PostHog insight "💰 Funding-at-accept — new escrow taxonomy"
+(`BWYMQtEz`) uses `accept_funding_abandoned`. Older builds keep sending the
+retired names until they update, so split queries on the release date.
+
+Known gap: the web poster page (`supabase/functions/poster-web`) shows
+applicants but sends none of these events. A poster who only reviews on the
+web reads as "returned, didn't look" in the readout.
 
 ### `payment_completed` is not broken
 

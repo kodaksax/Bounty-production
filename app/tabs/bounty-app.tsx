@@ -557,7 +557,10 @@ function BountyAppInner() {
   )
   const profilePage = useMemo(() => <ProfileScreen onBack={backToFeed} />, [backToFeed])
   // InboxScreen and NeedHelpScreen take activeScreen but never read it; a
-  // constant keeps them from re-rendering on every tab change.
+  // constant keeps them from re-rendering on every tab change. `isActive`
+  // only flips when the pager settles on / leaves the Inbox, and gates its
+  // application_viewed analytics (it is preloaded beside Wallet otherwise).
+  const inboxIsActive = activeScreen === 'messages'
   const inboxPage = useMemo(
     () => (
       <ReplayMask>
@@ -567,10 +570,11 @@ function BountyAppInner() {
           activeScreen="messages"
           setActiveScreen={setActiveScreen}
           onBountyAccepted={refreshFeed} // Refresh feed when a bounty is accepted
+          isActive={inboxIsActive}
         />
       </ReplayMask>
     ),
-    [inboxInitialTab, backToFeed, setActiveScreen, refreshFeed]
+    [inboxInitialTab, backToFeed, setActiveScreen, refreshFeed, inboxIsActive]
   )
   // The Post tab is preloaded like every other neighbour, so it slides in
   // fully rendered instead of mounting the whole composer after the slide.

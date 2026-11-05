@@ -45,6 +45,9 @@ export function useRejectRequest({
         await analyticsService.trackEvent('application_declined', {
           bountyId: request?.bounty_id ? String(request.bounty_id) : undefined,
           hunterId: hunterId ? String(hunterId) : undefined,
+          // Joins to application_viewed / application_dismissed /
+          // accept_blocked_by_payment / application_accepted (added 2026-11-05).
+          application_id: String(requestId),
           trustTier: (request?.bounty as any)?.trust_tier || 'standard',
         })
       } catch {

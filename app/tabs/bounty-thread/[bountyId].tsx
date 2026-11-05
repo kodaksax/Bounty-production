@@ -36,6 +36,7 @@ import { WorkflowDisputeModal } from '../../../components/workflow-dispute-modal
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useAcceptFunding } from '../../../hooks/useAcceptFunding';
 import { useAcceptRequest } from '../../../hooks/useAcceptRequest';
+import { useApplicationDecisionVisit } from '../../../hooks/useApplicationDecisionVisit';
 import { useBountyThread } from '../../../hooks/useBountyThread';
 import { useRejectRequest } from '../../../hooks/useRejectRequest';
 import { useValidUserId } from '../../../hooks/useValidUserId';
@@ -135,6 +136,13 @@ function BountyThreadScreen() {
     setError: setLocalError,
   });
 
+  // application_viewed on arrival, application_dismissed if the poster leaves
+  // without accepting, passing or messaging (acceptance root-cause analytics).
+  const { markEngaged } = useApplicationDecisionVisit({
+    request,
+    enabled: role === 'poster' && request?.status === 'pending',
+  });
+
   // ---- New-card pop-in: cards present on first load stay put, except the
   // one waiting on the viewer, which pops to draw the eye. ----
   const seenIds = useRef<Set<string> | null>(null);
@@ -213,6 +221,7 @@ function BountyThreadScreen() {
         case 'accept_or_decline': {
           if (!request) return;
           if (choice === 'accept') {
+            markEngaged('accept');
             setBusyEventId(event.id);
             try {
               await handleAcceptRequest(request.id);
@@ -228,6 +237,7 @@ function BountyThreadScreen() {
               text: 'Pass',
               style: 'destructive',
               onPress: async () => {
+                markEngaged('decline');
                 setBusyEventId(event.id);
                 try {
                   await handleRejectRequest(request.id);
@@ -306,7 +316,7 @@ function BountyThreadScreen() {
           return;
       }
     },
-    [bounty, request, counterpart?.id, counterpartName, dispute, handleAcceptRequest, handleRejectRequest, reload, router, viewerId]
+    [bounty, request, counterpart?.id, counterpartName, dispute, handleAcceptRequest, handleRejectRequest, markEngaged, reload, router, viewerId]
   );
 
   const timelineItems: ChatTimelineItem[] = useMemo(() => {
@@ -333,6 +343,7 @@ function BountyThreadScreen() {
   const canStartChat = !!counterpart && (role === 'poster' || isAcceptedHunter);
   const startChat = useCallback(async () => {
     if (!viewerId || !counterpart || !bounty) return;
+    markEngaged('message');
     setStartingChat(true);
     try {
       const conv = await supabaseMessaging.getOrCreateConversation(
@@ -346,7 +357,7 @@ function BountyThreadScreen() {
     } finally {
       setStartingChat(false);
     }
-  }, [viewerId, counterpart, bounty, thread]);
+  }, [viewerId, counterpart, bounty, thread, markEngaged]);
 
   const conversation: Conversation = useMemo(
     () =>
@@ -492,6 +503,7 @@ function BountyThreadScreen() {
         topBanner={topBanner}
         timelineItems={timelineItems}
         composerOverride={composerOverride}
+        onMessageSent={() => markEngaged('message')}
       />
 
       {role === 'hunter' && (

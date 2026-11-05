@@ -10,6 +10,7 @@ import { navigationIntent } from 'lib/services/navigation-intent'
 import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
 import { supabase } from 'lib/supabase'
 import { wasApplicantProfileViewed } from 'lib/analytics/sessionFlags'
+import type { AcceptFundingContext } from './useAcceptFunding'
 import { deriveCoarseVerificationStatus } from 'lib/utils/normalize-profile'
 import { router } from 'expo-router'
 import { useCallback } from 'react'
@@ -40,7 +41,7 @@ interface UseAcceptRequestParams {
    */
   ensureFunded?: (
     bountyId: string | number,
-    context?: { hunterName?: string; hunterAvatar?: string | null; variant?: string }
+    context?: AcceptFundingContext
   ) => Promise<boolean>
   /**
    * Pulls the authoritative wallet balance from the server. Called immediately
@@ -55,7 +56,7 @@ interface UseAcceptRequestParams {
   handleAcceptFailure?: (
     error: unknown,
     bountyId: string | number,
-    context?: { hunterName?: string; hunterAvatar?: string | null; variant?: string }
+    context?: AcceptFundingContext
   ) => Promise<boolean>
   /**
    * Show the "Request Accepted" confirmation alert. Defaults to true. The
@@ -155,6 +156,10 @@ export function useAcceptRequest({
         // charge reads as "pay to hire Ada" rather than an anonymous top-up.
         hunterAvatar: request.profile?.avatar || (request.profile as any)?.avatar_url || null,
         variant: wasDeferredFunding ? 'deferred' : 'control',
+        // Lets accept_blocked_by_payment join to application_viewed /
+        // application_accepted on application_id.
+        applicationId: String(requestId),
+        hunterId: hunterIdForConv ? String(hunterIdForConv) : undefined,
       }
       if (ensureFunded && resolvedBountyId != null) {
         const funded = await ensureFunded(resolvedBountyId, fundingContext)

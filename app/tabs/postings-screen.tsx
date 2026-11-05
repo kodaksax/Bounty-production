@@ -55,7 +55,7 @@ import { toBountyUpdateError } from '../../lib/services/bounty-update-error'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
-import { useApplicantListViewed } from '../../hooks/useApplicantListViewed'
+import { useApplicationListViews } from '../../hooks/useApplicationListViews'
 import { AcceptFundingGate } from '../../components/accept-funding-gate'
 import type { BountyListRow, InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
@@ -554,7 +554,13 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // button never appeared and accepting was the only way to open a thread.
   const { handleAskApplicant, askingRequestId, isAskApplicantBusy } = useAskApplicant({ bountyRequests })
 
-  useApplicantListViewed(bountyRequests, activeTab === 'requests', isLoading.requests)
+  // One application_viewed per ApplicantCard the poster actually has on screen.
+  const applicationListViews = useApplicationListViews<ApplicantListRow<BountyRequestWithDetails>>({
+    surface: 'requests_list',
+    enabled: activeTab === 'requests',
+    bountyRequests,
+    getApplication: (row) => (row.kind === 'notNearby' ? null : row.item),
+  })
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.
@@ -1341,6 +1347,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   data={requestRows}
                   keyExtractor={keyExtractorRequest}
                   renderItem={renderRequestItem}
+                  {...applicationListViews}
                   ListHeaderComponent={<BountyWorkflowGuide variant="poster-requests" />}
                   ListEmptyComponent={
                     isLoading.requests ? (
