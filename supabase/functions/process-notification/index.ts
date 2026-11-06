@@ -26,6 +26,19 @@ import {
   truncateMessage,
   type LegacyNotificationPreferences,
 } from './email-fallback.ts'
+import {
+  groupKey,
+  groupVerdict,
+  parseReceipts,
+  planTicketUpdates,
+  RECEIPT_BATCH_LIMIT,
+  RECEIPT_CHUNK_SIZE,
+  RECEIPT_FAILURE_REASON,
+  tokensToPrune,
+  type ParsedReceipt,
+  type TicketStatus,
+  type TicketUpdate,
+} from './receipt-fallback.ts'
 
 // Inlined from ./message (local imports are not supported by the Supabase bundler)
 function createExpoMessage(to: string, opts: { title?: string; body?: string; data?: any; sound?: string } = {}) {
@@ -340,6 +353,482 @@ function sanitizeUuid(value: unknown): string {
   return text
 }
 
+// ---------------------------------------------------------------------------
+// Email fallback — shared by the send path (a push the provider rejected at
+// ticket time) and the receipt path (a push Expo accepted but APNs/FCM could
+// not deliver, learned ~15 minutes later). Both claim the same
+// notification_email_fallbacks key, so one application is emailed once.
+// ---------------------------------------------------------------------------
+type FallbackResult = 'sent' | 'already_emailed' | 'opted_out' | 'no_provider' | 'failed' | 'no_bounty'
+
+interface FallbackContext {
+  bountyId: string | null
+  bountyTitle: string | null
+  applicantCount: number
+}
+
+async function loadFallbackContext(
+  admin: SupabaseClient,
+  notificationType: string,
+  outboxData: Record<string, unknown>
+): Promise<FallbackContext> {
+  const bountyId = typeof outboxData.bountyId === 'string' ? outboxData.bountyId : null
+  let bountyTitle: string | null = null
+  let applicantCount = 1
+  if (bountyId) {
+    const { data: bountyRow } = await admin.from('bounties').select('title').eq('id', bountyId).maybeSingle()
+    bountyTitle = (bountyRow as { title?: string } | null)?.title ?? null
+    if (isPosterFallbackType(notificationType)) {
+      const { count: pendingCount } = await admin
+        .from('bounty_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('bounty_id', bountyId)
+        .eq('status', 'pending')
+      if (typeof pendingCount === 'number' && pendingCount > 0) applicantCount = pendingCount
+    }
+  }
+  return { bountyId, bountyTitle, applicantCount }
+}
+
+// Legacy per-type toggles (notification_preferences). Row-absent = allow,
+// matching the channel-preference fail-open default.
+async function loadLegacyOptOut(admin: SupabaseClient, notificationType: string, userIds: string[]): Promise<Set<string>> {
+  const optedOut = new Set<string>()
+  if (userIds.length === 0) return optedOut
+  try {
+    const { data: legacyRows } = await admin
+      .from('notification_preferences')
+      .select('user_id, applications_enabled, acceptances_enabled, reminders_enabled')
+      .in('user_id', userIds)
+    for (const p of ((legacyRows || []) as Array<LegacyNotificationPreferences & { user_id: string }>)) {
+      if (isLegacyOptedOut(notificationType, p)) optedOut.add(p.user_id)
+    }
+  } catch (e) {
+    console.error('[process-notification] legacy preference lookup failed (continuing with defaults)', e)
+  }
+  return optedOut
+}
+
+/**
+ * Claim the dedupe key, send the fallback email to one recipient, and release
+ * the claim if the send did not go out (the cap is one DELIVERED email). The
+ * caller has already decided the recipient is eligible and not opted out.
+ */
+async function sendFallbackEmail(
+  admin: SupabaseClient,
+  env: { supabaseUrl: string; serviceRoleKey: string },
+  a: {
+    userId: string
+    notificationType: string
+    category: Category
+    outboxId: string
+    outboxData: Record<string, unknown>
+    ctx: FallbackContext
+    pushReason: string
+  }
+): Promise<{ result: FallbackResult; deliveryError: Record<string, unknown> | null }> {
+  const { userId, notificationType, category, outboxId, outboxData, ctx, pushReason } = a
+  const { bountyId, bountyTitle, applicantCount } = ctx
+  const posterFallback = isPosterFallbackType(notificationType)
+
+  if (!bountyId && fallbackNeedsBounty(notificationType)) {
+    // No bounty to link to or count applicants for; nothing useful to send.
+    return { result: 'no_bounty', deliveryError: null }
+  }
+
+  // Claim first (insert-or-nothing on the dedupe key) so concurrent
+  // invocations and outbox retries can never double-send.
+  const dedupeKey = fallbackDedupeKey(outboxData, outboxId, notificationType)
+  const { data: claimed, error: claimErr } = await admin
+    .from('notification_email_fallbacks')
+    .upsert(
+      { dedupe_key: dedupeKey, user_id: userId, notification_type: notificationType, outbox_id: outboxId, bounty_id: bountyId, push_failure_reason: pushReason },
+      { onConflict: 'dedupe_key', ignoreDuplicates: true }
+    )
+    .select('dedupe_key')
+  if (claimErr) {
+    console.error('[process-notification] email fallback claim failed', claimErr)
+    return {
+      result: 'failed',
+      deliveryError: { user_id: userId, channel: 'email', reason: 'fallback_claim_failed', code: claimErr.code ?? null, message: truncateMessage(claimErr.message) },
+    }
+  }
+  if (!claimed || claimed.length === 0) return { result: 'already_emailed', deliveryError: null }
+
+  // A single applicant is linked directly; several go to the list.
+  const requestId = typeof outboxData.requestId === 'string' ? outboxData.requestId : null
+  const linkRequestId = applicantCount === 1 ? requestId : null
+
+  // Reply handling: a per-email reply address that routes a reply to
+  // this poster/bounty/applicant. Best-effort — if the context can't
+  // be stored the email still goes out, saying replies reach support.
+  let replyTo: string | null = null
+  if (posterFallback && REPLY_DOMAIN && bountyId) {
+    const token = await createReplyContext(admin, {
+      posterId: userId,
+      bountyId,
+      requestId: linkRequestId,
+      notificationType,
+    })
+    replyTo = token ? replyAddressFor(token, REPLY_DOMAIN) : null
+  }
+
+  const { title: emailTitle, body: emailBody } = buildFallbackEmail(notificationType, {
+    bountyTitle,
+    applicantCount,
+    data: outboxData,
+    replyHandled: replyTo !== null,
+  })
+  let result: FallbackResult = 'failed'
+  let emailError: string | null = null
+  try {
+    const resp = await fetch(`${env.supabaseUrl}/functions/v1/send-notification-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.serviceRoleKey}` },
+      body: JSON.stringify({
+        userIds: [userId],
+        category,
+        type: notificationType,
+        title: emailTitle,
+        body: emailBody,
+        data: {
+          ...emailDataWithoutAppLinks(outboxData),
+          ...(posterFallback
+            ? {
+                ctaUrl: webManageLink(WEB_MANAGE_BASE, {
+                  bountyId,
+                  requestId: linkRequestId,
+                  view: linkRequestId ? 'applicant' : 'bounty',
+                  campaign: 'applicant_review',
+                }),
+                ctaLabel: applicantCount === 1 ? 'Review applicant' : `Review ${applicantCount} applicants`,
+                helpUrl: webManageLink(WEB_MANAGE_BASE, { bountyId, view: 'help', campaign: 'applicant_review' }),
+                ...(replyTo ? { replyTo } : {}),
+              }
+            : {}),
+        },
+      }),
+    })
+    const json = (await resp.json().catch(() => null)) as { sent?: number; providerConfigured?: boolean; error?: string } | null
+    if (resp.ok && json && typeof json.sent === 'number' && json.sent > 0) {
+      result = 'sent'
+    } else if (json && json.providerConfigured === false) {
+      result = 'no_provider'
+    } else {
+      emailError = truncateMessage(json?.error ?? `http_${resp.status}`)
+    }
+  } catch (e) {
+    emailError = truncateMessage(e)
+  }
+
+  if (result !== 'sent') {
+    // Release the claim so a later notification for the same
+    // application can try again: the cap is one DELIVERED email.
+    await admin.from('notification_email_fallbacks').delete().eq('dedupe_key', dedupeKey)
+    return {
+      result,
+      deliveryError: { user_id: userId, channel: 'email', reason: `fallback_${result}`, code: null, message: emailError },
+    }
+  }
+  return { result, deliveryError: null }
+}
+
+// ---------------------------------------------------------------------------
+// Push receipts (mode 'check_receipts', called by pg_cron every 5 minutes via
+// fn_check_push_receipts). Reads Expo's delivery receipts for tickets stored at
+// send time, prunes dead tokens, and emails the recipient when NO device got
+// the push. See receipt-fallback.ts for why and for the per-device rules.
+// ---------------------------------------------------------------------------
+interface ReceiptTicketRow {
+  ticket_id: string
+  outbox_id: string
+  user_id: string
+  notification_type: string
+  token: string
+  status: TicketStatus
+  attempts: number
+  created_at: string
+  error_code?: string | null
+  error_message?: string | null
+  fallback_result?: string | null
+}
+
+async function checkPushReceipts(
+  admin: SupabaseClient,
+  env: { supabaseUrl: string; serviceRoleKey: string }
+): Promise<Record<string, unknown>> {
+  const now = new Date()
+  const { data: dueData, error: dueErr } = await admin
+    .from('push_receipt_tickets')
+    .select('ticket_id, outbox_id, user_id, notification_type, token, status, attempts, created_at')
+    .eq('status', 'pending')
+    .lte('check_after', now.toISOString())
+    .order('check_after', { ascending: true })
+    .limit(RECEIPT_BATCH_LIMIT)
+  if (dueErr) {
+    console.error('[process-notification] receipt ticket lookup failed', dueErr)
+    return { ok: false, error: 'ticket_lookup_failed' }
+  }
+  const due = (dueData || []) as ReceiptTicketRow[]
+
+  // Ask Expo. A chunk that fails is left untouched (not treated as "no
+  // receipt"), so an Expo outage can't age tickets toward expiry unseen.
+  const receipts = new Map<string, ParsedReceipt>()
+  const asked = new Set<string>()
+  let chunkFailures = 0
+  for (let i = 0; i < due.length; i += RECEIPT_CHUNK_SIZE) {
+    const chunk = due.slice(i, i + RECEIPT_CHUNK_SIZE)
+    try {
+      const resp = await fetch('https://exp.host/--/api/v2/push/getReceipts', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: chunk.map((t) => t.ticket_id) }),
+      })
+      if (!resp.ok) {
+        chunkFailures++
+        console.error('[process-notification] getReceipts http error', resp.status)
+        continue
+      }
+      const body = await resp.json().catch(() => null)
+      for (const [ticketId, receipt] of parseReceipts(body)) receipts.set(ticketId, receipt)
+      for (const t of chunk) asked.add(t.ticket_id)
+    } catch (e) {
+      chunkFailures++
+      console.error('[process-notification] getReceipts failed', e)
+    }
+  }
+
+  const updates = planTicketUpdates(due.filter((t) => asked.has(t.ticket_id)), receipts, now)
+  const resolvedAt = now.toISOString()
+  const writes: PromiseLike<unknown>[] = []
+
+  const okIds = updates.filter((u): u is Extract<TicketUpdate, { status: 'ok' }> => u.status === 'ok').map((u) => u.ticketId)
+  if (okIds.length > 0) {
+    writes.push(admin.from('push_receipt_tickets').update({ status: 'ok', resolved_at: resolvedAt }).in('ticket_id', okIds))
+  }
+  for (const u of updates) {
+    if (u.status === 'error') {
+      writes.push(
+        admin.from('push_receipt_tickets').update({ status: 'error', resolved_at: resolvedAt, error_code: u.code, error_message: u.message }).eq('ticket_id', u.ticketId)
+      )
+    }
+  }
+  // Pending retries and expiries share an `attempts` value in practice, so
+  // batch them per (status, attempts) instead of one write per ticket.
+  const retryByAttempts = new Map<number, { ids: string[]; checkAfter: string }>()
+  const expireByAttempts = new Map<number, string[]>()
+  for (const u of updates) {
+    if (u.status === 'pending') {
+      const entry = retryByAttempts.get(u.attempts) ?? { ids: [], checkAfter: u.checkAfter }
+      entry.ids.push(u.ticketId)
+      retryByAttempts.set(u.attempts, entry)
+    } else if (u.status === 'expired') {
+      expireByAttempts.set(u.attempts, [...(expireByAttempts.get(u.attempts) ?? []), u.ticketId])
+    }
+  }
+  for (const [attempts, { ids, checkAfter }] of retryByAttempts) {
+    writes.push(admin.from('push_receipt_tickets').update({ attempts, check_after: checkAfter }).in('ticket_id', ids))
+  }
+  for (const [attempts, ids] of expireByAttempts) {
+    writes.push(admin.from('push_receipt_tickets').update({ status: 'expired', attempts, resolved_at: resolvedAt }).in('ticket_id', ids))
+  }
+  await Promise.all(writes)
+
+  // Dead tokens: delete exactly as the ticket path does (the app re-registers
+  // on its next foreground). Credential errors never prune.
+  const tokenByTicket = new Map(due.map((t) => [t.ticket_id, t.token]))
+  const dead = tokensToPrune(updates, tokenByTicket)
+  if (dead.length > 0) {
+    const { error: pruneErr } = await admin.from('push_tokens').delete().in('token', dead)
+    if (pruneErr) console.error('[process-notification] failed to delete dead tokens (receipts)', pruneErr)
+  }
+
+  // Judge each recipient whose tickets just failed or expired. A recipient with
+  // several devices is emailed only if none of them got the push.
+  const touched = new Map<string, ReceiptTicketRow>()
+  for (const u of updates) {
+    if (u.status !== 'error' && u.status !== 'expired') continue
+    const row = due.find((t) => t.ticket_id === u.ticketId)
+    if (row) touched.set(groupKey(row.outbox_id, row.user_id), row)
+  }
+  // Retry emails that failed transiently (Resend 429, provider not configured):
+  // their tickets are already resolved, so nothing else would revisit them.
+  // The claim is released on failure, so retrying is safe; stop after 2 hours.
+  const retrySince = new Date(now.getTime() - 2 * 3_600_000).toISOString()
+  const { data: retryData } = await admin.rpc('fn_due_push_receipt_email_fallbacks', {
+    p_since: retrySince,
+    p_limit: 100,
+  })
+  const retriedGroups = new Set<string>()
+  for (const row of ((retryData || []) as ReceiptTicketRow[])) {
+    const key = groupKey(row.outbox_id, row.user_id)
+    if (!touched.has(key)) {
+      touched.set(key, row)
+      retriedGroups.add(key)
+    }
+  }
+
+  const posthogEvents: Array<{ event: string; distinct_id: string; properties?: Record<string, unknown> }> = []
+  const outboxCache = new Map<string, { data: Record<string, unknown>; ctx: FallbackContext } | null>()
+  const emailPrefCache = new Map<string, Map<string, boolean>>()
+  const summary = { groupsFailed: 0, emailsSent: 0, alreadyEmailed: 0, optedOut: 0, notSent: 0 }
+
+  for (const seed of touched.values()) {
+    const { data: groupData } = await admin
+      .from('push_receipt_tickets')
+      .select('ticket_id, outbox_id, user_id, notification_type, token, status, attempts, created_at, error_code, error_message, fallback_result')
+      .eq('outbox_id', seed.outbox_id)
+      .eq('user_id', seed.user_id)
+    const group = (groupData || []) as ReceiptTicketRow[]
+    if (groupVerdict(group.map((t) => t.status)) !== 'failed') continue
+    // Already handled on an earlier run (e.g. a sibling that expired later).
+    if (group.some((t) => t.fallback_result)) continue
+    summary.groupsFailed++
+
+    const errored = group.find((t) => t.status === 'error')
+    const code = errored?.error_code ?? 'unknown'
+    const message = errored?.error_message ?? null
+    const { outbox_id: outboxId, user_id: userId } = seed
+    const notificationType = seed.notification_type
+
+    let cached = outboxCache.get(outboxId)
+    if (cached === undefined) {
+      const { data: outboxRow } = await admin.from('notifications_outbox').select('data').eq('id', outboxId).maybeSingle()
+      if (outboxRow) {
+        const raw = (outboxRow as { data?: unknown }).data
+        const data = normalizeDataKeys(raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {})
+        cached = { data, ctx: await loadFallbackContext(admin, notificationType, data) }
+      } else {
+        cached = null
+      }
+      outboxCache.set(outboxId, cached)
+    }
+
+    let fallbackResult: FallbackResult | 'no_outbox' = 'no_outbox'
+    let deliveryError: Record<string, unknown> | null = null
+    if (cached && isEmailFallbackType(notificationType)) {
+      const category = categoryForType(notificationType)
+
+      let emailPrefs = emailPrefCache.get(category)
+      if (!emailPrefs) {
+        emailPrefs = new Map<string, boolean>()
+        emailPrefCache.set(category, emailPrefs)
+      }
+      if (!emailPrefs.has(`${userId}:email`)) {
+        try {
+          const { data: prefRows } = await admin
+            .from('notification_channel_preferences')
+            .select('user_id, channel, enabled')
+            .eq('user_id', userId)
+            .eq('category', category)
+          for (const p of ((prefRows || []) as { user_id: string; channel: string; enabled: boolean }[])) {
+            emailPrefs.set(`${p.user_id}:${p.channel}`, p.enabled)
+          }
+        } catch (e) {
+          console.error('[process-notification] channel preference lookup failed (continuing with defaults)', e)
+        }
+        // Mark looked-up even when no row exists, so it isn't re-queried.
+        if (!emailPrefs.has(`${userId}:email`)) emailPrefs.set(`${userId}:email`, true)
+      }
+      const legacy = await loadLegacyOptOut(admin, notificationType, [userId])
+      if (!isChannelEnabled(emailPrefs, userId, 'email', category) || legacy.has(userId)) {
+        fallbackResult = 'opted_out'
+      } else {
+        const sent = await sendFallbackEmail(
+          admin,
+          env,
+          { userId, notificationType, category, outboxId, outboxData: cached.data, ctx: cached.ctx, pushReason: RECEIPT_FAILURE_REASON }
+        )
+        fallbackResult = sent.result
+        deliveryError = sent.deliveryError
+      }
+    }
+
+    // 'failed' / 'no_provider' are transient: leave fallback_result NULL so the
+    // retry pass above picks the group up again. Everything else is final.
+    const transient = fallbackResult === 'failed' || fallbackResult === 'no_provider'
+    if (!transient) {
+      await admin
+        .from('push_receipt_tickets')
+        .update({ fallback_result: fallbackResult })
+        .eq('outbox_id', outboxId)
+        .eq('user_id', userId)
+        .is('fallback_result', null)
+    }
+
+    // Name the receipt failure on the outbox row too (same shape as the send
+    // path), so it is diagnosable from the DB without PostHog. Written once per
+    // group: a transient retry must not append the same entry again.
+    if (!retriedGroups.has(groupKey(outboxId, userId))) {
+      try {
+        const { data: cur } = await admin.from('notifications_outbox').select('delivery_errors').eq('id', outboxId).maybeSingle()
+        const rawExisting = (cur as { delivery_errors?: unknown } | null)?.delivery_errors
+        const existing: Array<Record<string, unknown>> = Array.isArray(rawExisting) ? (rawExisting as Array<Record<string, unknown>>) : []
+        const added: Array<Record<string, unknown>> = [
+          { user_id: userId, channel: 'push', reason: RECEIPT_FAILURE_REASON, code, message: truncateMessage(message) },
+        ]
+        if (deliveryError) added.push(deliveryError)
+        await admin.from('notifications_outbox').update({ delivery_errors: [...existing, ...added] }).eq('id', outboxId)
+      } catch (e) {
+        console.error('[process-notification] failed to record receipt error on outbox row (non-fatal)', e)
+      }
+    }
+
+    const baseProps = {
+      notification_type: notificationType,
+      category: categoryForType(notificationType),
+      bounty_id: cached?.ctx.bountyId ?? null,
+      detected_by: 'push_receipt',
+    }
+    if (fallbackResult === 'sent') {
+      summary.emailsSent++
+      posthogEvents.push({
+        event: 'notification_sent',
+        distinct_id: userId,
+        properties: {
+          ...baseProps,
+          channel: 'email',
+          notification_delivered_via: 'email',
+          push_failure_reason: RECEIPT_FAILURE_REASON,
+          provider_error_code: code,
+          provider_error_message: message,
+        },
+      })
+    } else if (fallbackResult === 'already_emailed') {
+      summary.alreadyEmailed++
+    } else if (!(transient && retriedGroups.has(groupKey(outboxId, userId)))) {
+      // A transient failure is reported once, not on every 5-minute retry.
+      if (fallbackResult === 'opted_out') summary.optedOut++
+      else summary.notSent++
+      posthogEvents.push({
+        event: 'notification_failed',
+        distinct_id: userId,
+        properties: {
+          ...baseProps,
+          reason: RECEIPT_FAILURE_REASON,
+          provider_error_code: code,
+          provider_error_message: message,
+          email_fallback: fallbackResult,
+        },
+      })
+    }
+  }
+
+  schedulePostHogCapture(posthogEvents)
+
+  return {
+    ok: chunkFailures === 0,
+    due: due.length,
+    resolvedOk: okIds.length,
+    resolvedError: updates.filter((u) => u.status === 'error').length,
+    stillPending: updates.filter((u) => u.status === 'pending').length,
+    expired: updates.filter((u) => u.status === 'expired').length,
+    prunedTokens: dead.length,
+    chunkFailures,
+    ...summary,
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -372,6 +861,12 @@ Deno.serve(async (req: Request) => {
       payload = await req.json();
     } catch {
       return jsonResponse({ error: 'Invalid JSON' }, 400);
+    }
+
+    // Receipt sweep (pg_cron -> fn_check_push_receipts). Not tied to an outbox row.
+    if (payload && payload.mode === 'check_receipts') {
+      const result = await checkPushReceipts(supabaseAdmin, { supabaseUrl, serviceRoleKey })
+      return jsonResponse(result, result.error ? 500 : 200)
     }
 
     // Support both direct {id} and Supabase Webhook {record: {id}} formats
@@ -579,7 +1074,6 @@ Deno.serve(async (req: Request) => {
     // that could not reach the recipient (see the fallback step below),
     // capped at one email per application / per digest. Every other type
     // keeps the blanket fan-out.
-    const posterFallback = isPosterFallbackType(notificationType)
     const emailFallback = isEmailFallbackType(notificationType)
     // Admin alerts at critical/high are emailed by public.fn_notify_admins
     // itself, so the email never waits on this worker; don't send a second.
@@ -632,6 +1126,10 @@ Deno.serve(async (req: Request) => {
     // HTTP-level / exception failures: the row is marked 'failed' for retry.
     const errors: any[] = []
     const invalidTokens: string[] = []
+    // Accepted Expo tickets for types with an email fallback. The ticket only
+    // says Expo took the message; the receipt (read ~15 minutes later by
+    // check_receipts) says whether a device could be reached.
+    const receiptRows: Array<{ ticket_id: string; outbox_id: string; user_id: string; notification_type: string; token: string }> = []
     let sent = 0
 
     if (pushRecipients.length > 0) {
@@ -747,6 +1245,10 @@ Deno.serve(async (req: Request) => {
               const isError = !!ticket && (ticket as { status?: string }).status === 'error'
               if (!isError) {
                 markOutcome(owner, { status: 'sent' })
+                const ticketId = (ticket as { id?: unknown } | null)?.id
+                if (emailFallback && typeof ticketId === 'string' && ticketId && chunkTokens[index]) {
+                  receiptRows.push({ ticket_id: ticketId, outbox_id: id, user_id: owner, notification_type: notificationType, token: chunkTokens[index] })
+                }
                 return
               }
               const { code, message } = describeTicketError(ticket)
@@ -769,6 +1271,16 @@ Deno.serve(async (req: Request) => {
             markOutcome(userId, { status: 'failed', reason: 'push_send_error', code: 'exception', message: truncateMessage(e) })
           }
         }
+      }
+
+      // Remember the accepted tickets so their receipts can be checked. Best
+      // effort: losing this write only loses the receipt safety net for this
+      // notification, never the push or the ticket-time fallback.
+      if (receiptRows.length > 0) {
+        const { error: receiptErr } = await supabaseAdmin
+          .from('push_receipt_tickets')
+          .upsert(receiptRows, { onConflict: 'ticket_id', ignoreDuplicates: true })
+        if (receiptErr) console.error('[process-notification] failed to store push receipt tickets (non-fatal)', receiptErr)
       }
 
       // Delete tokens Expo reported as DeviceNotRegistered. The app re-registers
@@ -796,150 +1308,28 @@ Deno.serve(async (req: Request) => {
     // (hunter) only: when push could not reach the recipient (failed, no
     // token, or push turned off), send ONE email per application (per digest
     // for the digest), respecting both preference tables.
-    type FallbackResult = 'sent' | 'already_emailed' | 'opted_out' | 'no_provider' | 'failed' | 'no_bounty'
     const fallbackResult = new Map<string, FallbackResult>()
     if (emailFallback) {
       const candidates = selectFallbackCandidates(recipients, pushOutcome, quietHoursBlocked)
 
       if (candidates.length > 0) {
-        // Legacy per-type toggles (notification_preferences). Row-absent = allow,
-        // matching the channel-preference fail-open default.
-        const legacyOptOut = new Set<string>()
-        try {
-          const { data: legacyRows } = await supabaseAdmin
-            .from('notification_preferences')
-            .select('user_id, applications_enabled, acceptances_enabled, reminders_enabled')
-            .in('user_id', candidates)
-          for (const p of ((legacyRows || []) as Array<LegacyNotificationPreferences & { user_id: string }>)) {
-            if (isLegacyOptedOut(notificationType, p)) legacyOptOut.add(p.user_id)
-          }
-        } catch (e) {
-          console.error('[process-notification] legacy preference lookup failed (continuing with defaults)', e)
-        }
+        const legacyOptOut = await loadLegacyOptOut(supabaseAdmin, notificationType, candidates)
+        const fallbackCtx = await loadFallbackContext(supabaseAdmin, notificationType, outboxData)
 
-        const bountyId = typeof outboxData.bountyId === 'string' ? outboxData.bountyId : null
-        let bountyTitle: string | null = null
-        let applicantCount = 1
-        if (bountyId) {
-          const { data: bountyRow } = await supabaseAdmin.from('bounties').select('title').eq('id', bountyId).maybeSingle()
-          bountyTitle = (bountyRow as { title?: string } | null)?.title ?? null
-          if (posterFallback) {
-            const { count: pendingCount } = await supabaseAdmin
-              .from('bounty_requests')
-              .select('id', { count: 'exact', head: true })
-              .eq('bounty_id', bountyId)
-              .eq('status', 'pending')
-            if (typeof pendingCount === 'number' && pendingCount > 0) applicantCount = pendingCount
-          }
-        }
-
-        const dedupeKey = fallbackDedupeKey(outboxData, id, notificationType)
         for (const userId of candidates) {
           if (!emailRecipients.includes(userId) || legacyOptOut.has(userId)) {
             fallbackResult.set(userId, 'opted_out')
             continue
           }
-          if (!bountyId && fallbackNeedsBounty(notificationType)) {
-            // No bounty to link to or count applicants for; nothing useful to send.
-            fallbackResult.set(userId, 'no_bounty')
-            continue
-          }
-
-          // Claim first (insert-or-nothing on the dedupe key) so concurrent
-          // invocations and outbox retries can never double-send.
           const outcome = pushOutcome.get(userId)
           const pushReason = outcome?.status === 'failed' ? outcome.reason : 'push_disabled'
-          const { data: claimed, error: claimErr } = await supabaseAdmin
-            .from('notification_email_fallbacks')
-            .upsert(
-              { dedupe_key: dedupeKey, user_id: userId, notification_type: notificationType, outbox_id: id, bounty_id: bountyId, push_failure_reason: pushReason },
-              { onConflict: 'dedupe_key', ignoreDuplicates: true }
-            )
-            .select('dedupe_key')
-          if (claimErr) {
-            console.error('[process-notification] email fallback claim failed', claimErr)
-            fallbackResult.set(userId, 'failed')
-            deliveryErrors.push({ user_id: userId, channel: 'email', reason: 'fallback_claim_failed', code: claimErr.code ?? null, message: truncateMessage(claimErr.message) })
-            continue
-          }
-          if (!claimed || claimed.length === 0) {
-            fallbackResult.set(userId, 'already_emailed')
-            continue
-          }
-
-          // A single applicant is linked directly; several go to the list.
-          const requestId = typeof outboxData.requestId === 'string' ? outboxData.requestId : null
-          const linkRequestId = applicantCount === 1 ? requestId : null
-
-          // Reply handling: a per-email reply address that routes a reply to
-          // this poster/bounty/applicant. Best-effort — if the context can't
-          // be stored the email still goes out, saying replies reach support.
-          let replyTo: string | null = null
-          if (posterFallback && REPLY_DOMAIN && bountyId) {
-            const token = await createReplyContext(supabaseAdmin, {
-              posterId: userId,
-              bountyId,
-              requestId: linkRequestId,
-              notificationType,
-            })
-            replyTo = token ? replyAddressFor(token, REPLY_DOMAIN) : null
-          }
-
-          const { title: emailTitle, body: emailBody } = buildFallbackEmail(notificationType, {
-            bountyTitle,
-            applicantCount,
-            data: outboxData,
-            replyHandled: replyTo !== null,
-          })
-          let result: FallbackResult = 'failed'
-          let emailError: string | null = null
-          try {
-            const resp = await fetch(`${supabaseUrl}/functions/v1/send-notification-email`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceRoleKey}` },
-              body: JSON.stringify({
-                userIds: [userId],
-                category,
-                type: notificationType,
-                title: emailTitle,
-                body: emailBody,
-                data: {
-                  ...emailDataWithoutAppLinks(outboxData),
-                  ...(posterFallback
-                    ? {
-                        ctaUrl: webManageLink(WEB_MANAGE_BASE, {
-                          bountyId,
-                          requestId: linkRequestId,
-                          view: linkRequestId ? 'applicant' : 'bounty',
-                          campaign: 'applicant_review',
-                        }),
-                        ctaLabel: applicantCount === 1 ? 'Review applicant' : `Review ${applicantCount} applicants`,
-                        helpUrl: webManageLink(WEB_MANAGE_BASE, { bountyId, view: 'help', campaign: 'applicant_review' }),
-                        ...(replyTo ? { replyTo } : {}),
-                      }
-                    : {}),
-                },
-              }),
-            })
-            const json = (await resp.json().catch(() => null)) as { sent?: number; providerConfigured?: boolean; error?: string } | null
-            if (resp.ok && json && typeof json.sent === 'number' && json.sent > 0) {
-              result = 'sent'
-            } else if (json && json.providerConfigured === false) {
-              result = 'no_provider'
-            } else {
-              emailError = truncateMessage(json?.error ?? `http_${resp.status}`)
-            }
-          } catch (e) {
-            emailError = truncateMessage(e)
-          }
-
-          if (result !== 'sent') {
-            // Release the claim so a later notification for the same
-            // application can try again: the cap is one DELIVERED email.
-            await supabaseAdmin.from('notification_email_fallbacks').delete().eq('dedupe_key', dedupeKey)
-            deliveryErrors.push({ user_id: userId, channel: 'email', reason: `fallback_${result}`, code: null, message: emailError })
-          }
-          fallbackResult.set(userId, result)
+          const sentFallback = await sendFallbackEmail(
+            supabaseAdmin,
+            { supabaseUrl, serviceRoleKey },
+            { userId, notificationType, category, outboxId: id, outboxData, ctx: fallbackCtx, pushReason }
+          )
+          if (sentFallback.deliveryError) deliveryErrors.push(sentFallback.deliveryError)
+          fallbackResult.set(userId, sentFallback.result)
         }
       }
     }
