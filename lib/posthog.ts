@@ -149,6 +149,8 @@ try {
         // relax these to make recordings easier to read; use
         // `PostHogMaskView` from posthog-react-native to mask *more*.
         sessionReplayConfig: {
+          // Limit local replay recordings so analytics cannot consume excessive device storage.
+          sampleRate: 0.1,
           // Masks all text input fields (emails, addresses, phone numbers, payment fields).
           // Static <Text> content is not guaranteed to be masked — wrap sensitive UI in PostHogMaskView.
           maskAllTextInputs: true,

@@ -486,6 +486,10 @@ describe('lib/posthog — session replay configuration', () => {
     expect(options.enableSessionReplay).toBe(true);
   });
 
+  test('session replay is sampled to limit local recording writes', () => {
+    expect(options.sessionReplayConfig.sampleRate).toBe(0.1);
+  });
+
   test('session replay masks all text inputs and all images', () => {
     expect(options.sessionReplayConfig).toEqual(
       expect.objectContaining({
