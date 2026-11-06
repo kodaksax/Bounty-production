@@ -4,6 +4,7 @@ import { buildApplicationEventProps } from 'lib/analytics/application-view'
 import { markApplicationViewed } from 'lib/analytics/sessionFlags'
 import { analyticsService } from 'lib/services/analytics-service'
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service'
+import { useIsScreenFocused } from './useRouteFocus'
 
 /** Something the poster did with the application that is not walking away. */
 export type ApplicationEngagement = 'accept' | 'decline' | 'message'
@@ -52,11 +53,15 @@ export function useApplicationDecisionVisit({
   requestRef.current = request
   const enabledRef = useRef(enabled)
   enabledRef.current = enabled
+  const focused = useIsScreenFocused()
+  const focusedRef = useRef(focused)
+  focusedRef.current = focused
+  const appActiveRef = useRef(AppState.currentState === 'active')
   const applicationId = enabled && request ? String(request.id) : null
 
   const startVisit = useCallback(() => {
     const current = requestRef.current
-    if (!current || !enabledRef.current || engagedRef.current || visitRef.current) return
+    if (!current || !enabledRef.current || !focusedRef.current || !appActiveRef.current || engagedRef.current || visitRef.current) return
     visitRef.current = { request: current, startedAt: Date.now() }
     const firstView = markApplicationViewed(String(current.id))
     void analyticsService
@@ -87,18 +92,19 @@ export function useApplicationDecisionVisit({
   useEffect(() => {
     engagedRef.current = false
     if (!applicationId) return
-    if (AppState.currentState !== 'background') startVisit()
+    if (focused && appActiveRef.current) startVisit()
     return () => {
-      // Unmount, or the application stopped being pending / changed. Only a
-      // real exit (unmount) while still pending counts as leaving.
+      // Route blur or unmount while still pending counts as leaving. A change
+      // in application status closes silently.
       endVisit(enabledRef.current && requestRef.current && String(requestRef.current.id) === applicationId ? 'leave' : null)
     }
-  }, [applicationId, startVisit, endVisit])
+  }, [applicationId, focused, startVisit, endVisit])
 
   useEffect(() => {
     const sub = AppState?.addEventListener?.('change', next => {
-      if (next === 'background') endVisit('background')
-      else if (next === 'active') startVisit()
+      appActiveRef.current = next === 'active'
+      if (next !== 'active') endVisit('background')
+      else if (focusedRef.current) startVisit()
     })
     return () => sub?.remove?.()
   }, [startVisit, endVisit])

@@ -16,9 +16,13 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 const mockTrackEvent = jest.fn(() => Promise.resolve());
+let mockIsScreenFocused = true;
 
 jest.mock('lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: (...args: unknown[]) => (mockTrackEvent as any)(...args) },
+}));
+jest.mock('hooks/useRouteFocus', () => ({
+  useIsScreenFocused: () => mockIsScreenFocused,
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -57,11 +61,15 @@ const appStateListener = () => mockAppStateListen.mock.calls.find(c => c[0] === 
 beforeEach(() => {
   mockTrackEvent.mockClear();
   mockAppStateListen.mockClear();
+  mockIsScreenFocused = true;
   __resetApplicationViewFlagsForTests();
   RN.AppState.currentState = 'active';
 });
 
 describe('useApplicationListViews (inbox_list / requests_list)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
   const r1 = makeRequest('r1');
   const r2 = makeRequest('r2');
   const r3 = makeRequest('r3', 'b2');
@@ -87,10 +95,12 @@ describe('useApplicationListViews (inbox_list / requests_list)', () => {
         changed: [],
       })
     );
+  const waitForExposure = () => act(() => jest.advanceTimersByTime(250));
 
   test('reports each visible application once, with its bounty’s applicant count', () => {
     const { result } = render(true);
     show(result, rows);
+    waitForExposure();
 
     const viewed = events('application_viewed');
     expect(viewed.map(p => p.application_id)).toEqual(['r1', 'r2', 'r3']);
@@ -112,6 +122,7 @@ describe('useApplicationListViews (inbox_list / requests_list)', () => {
     // Scrolling the same rows out and back in does not refire.
     show(result, []);
     show(result, rows);
+    waitForExposure();
     expect(events('application_viewed')).toHaveLength(3);
   });
 
@@ -121,6 +132,7 @@ describe('useApplicationListViews (inbox_list / requests_list)', () => {
     expect(events('application_viewed')).toHaveLength(0);
 
     rerender({ enabled: true });
+    waitForExposure();
     expect(events('application_viewed').map(p => p.application_id)).toEqual(['r1']);
   });
 
@@ -129,6 +141,7 @@ describe('useApplicationListViews (inbox_list / requests_list)', () => {
     show(result, [rows[0]]);
     show(result, [rows[2]]);
     rerender({ enabled: true });
+    waitForExposure();
     expect(events('application_viewed').map(p => p.application_id)).toEqual(['r2']);
   });
 
@@ -144,6 +157,39 @@ describe('useApplicationListViews (inbox_list / requests_list)', () => {
     rerender({ enabled: false });
     expect(result.current.onViewableItemsChanged).toBe(first.onViewableItemsChanged);
     expect(result.current.viewabilityConfig).toBe(first.viewabilityConfig);
+  });
+
+  test('hidden time does not satisfy the visible exposure interval', () => {
+    const { result } = render(true);
+    show(result, [rows[0]]);
+    act(() => jest.advanceTimersByTime(100));
+    act(() => appStateListener()('background'));
+    act(() => jest.advanceTimersByTime(500));
+    expect(events('application_viewed')).toHaveLength(0);
+
+    act(() => appStateListener()('active'));
+    act(() => jest.advanceTimersByTime(249));
+    expect(events('application_viewed')).toHaveLength(0);
+    act(() => jest.advanceTimersByTime(1));
+    expect(events('application_viewed').map(p => p.application_id)).toEqual(['r1']);
+  });
+
+  test('route blur cancels exposure and focus restarts it from zero', () => {
+    const { result, rerender } = render(true);
+    show(result, [rows[0]]);
+    act(() => jest.advanceTimersByTime(100));
+
+    mockIsScreenFocused = false;
+    rerender({ enabled: true });
+    act(() => jest.advanceTimersByTime(500));
+    expect(events('application_viewed')).toHaveLength(0);
+
+    mockIsScreenFocused = true;
+    rerender({ enabled: true });
+    act(() => jest.advanceTimersByTime(249));
+    expect(events('application_viewed')).toHaveLength(0);
+    act(() => jest.advanceTimersByTime(1));
+    expect(events('application_viewed').map(p => p.application_id)).toEqual(['r1']);
   });
 });
 
@@ -193,6 +239,24 @@ describe('useApplicationDecisionVisit (bounty_thread)', () => {
 
     unmount();
     expect(events('application_dismissed').map(p => p.trigger)).toEqual(['background', 'leave']);
+  });
+
+  test('route blur ends the visit and foregrounding while covered does not start another', () => {
+    const request = makeRequest('r1');
+    const { rerender, unmount } = render(request);
+    mockIsScreenFocused = false;
+    rerender({ request, enabled: true });
+    expect(events('application_dismissed').map(p => p.trigger)).toEqual(['leave']);
+
+    act(() => appStateListener()('background'));
+    act(() => appStateListener()('active'));
+    expect(events('application_viewed')).toHaveLength(1);
+
+    mockIsScreenFocused = true;
+    rerender({ request, enabled: true });
+    expect(events('application_viewed')).toHaveLength(2);
+    unmount();
+    expect(events('application_dismissed').map(p => p.trigger)).toEqual(['leave', 'leave']);
   });
 
   test('an Accept that backgrounds the app (Apple Pay) is never counted as a dismissal or a re-view', () => {

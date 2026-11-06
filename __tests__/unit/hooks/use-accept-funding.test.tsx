@@ -334,6 +334,38 @@ describe('useAcceptFunding', () => {
       await waitFor(() => expect(reconciledProbe.resolved).toBe(true));
     });
 
+    test('a failed requirement fetch during retry omits unknown funding properties', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const firstProbe = openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
+      await act(async () => {
+        result.current.gate.onPaymentSucceeded(30);
+      });
+      await waitFor(() => expect(firstProbe.resolved).toBe(false));
+
+      mockGetRequirement.mockRejectedValueOnce(new Error('offline'));
+      let retryResolved: boolean | undefined;
+      await act(async () => {
+        retryResolved = await result.current.ensureFunded('b1', {
+          variant: 'deferred',
+          applicationId: 'app1',
+        });
+      });
+
+      expect(retryResolved).toBe(false);
+      const blocked = allPropsFor('accept_blocked_by_payment').slice(-1)[0];
+      expect(blocked).toMatchObject({
+        trigger: 'prior_deposit_unconfirmed',
+        bounty_id: 'b1',
+        application_id: 'app1',
+      });
+      expect(blocked).not.toHaveProperty('amountBucket');
+      expect(blocked).not.toHaveProperty('fundingMode');
+      expect(blocked).not.toHaveProperty('firstBounty');
+    });
+
     test('a cancelled payment leaves the sheet up and resolves nothing', async () => {
       const { result } = renderHook(() => useAcceptFunding(FAST));
       const probe = openGate(result, NEEDS_TOPUP);

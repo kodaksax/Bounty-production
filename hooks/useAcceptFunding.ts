@@ -245,11 +245,15 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   /** Shared analytics properties. Never carries an exact amount or balance. */
   const eventProps = useCallback(
     (req: BountyFundingRequirement | null, context: AcceptFundingContext) => ({
-      bountyId: req?.bountyId,
-      amountBucket: amountBucket(req?.amountRequired ?? 0),
-      fundingMode: req?.fundingMode ?? 'at_post',
+      ...(req
+        ? {
+            bountyId: req.bountyId,
+            amountBucket: amountBucket(req.amountRequired),
+            fundingMode: req.fundingMode,
+            firstBounty: req.fundingMode === 'at_accept',
+          }
+        : {}),
       variant: context.variant ?? 'unknown',
-      firstBounty: req?.fundingMode === 'at_accept',
       source: 'accept_flow',
     }),
     []

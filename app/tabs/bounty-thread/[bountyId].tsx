@@ -343,7 +343,6 @@ function BountyThreadScreen() {
   const canStartChat = !!counterpart && (role === 'poster' || isAcceptedHunter);
   const startChat = useCallback(async () => {
     if (!viewerId || !counterpart || !bounty) return;
-    markEngaged('message');
     setStartingChat(true);
     try {
       const conv = await supabaseMessaging.getOrCreateConversation(
@@ -357,7 +356,7 @@ function BountyThreadScreen() {
     } finally {
       setStartingChat(false);
     }
-  }, [viewerId, counterpart, bounty, thread, markEngaged]);
+  }, [viewerId, counterpart, bounty, thread]);
 
   const conversation: Conversation = useMemo(
     () =>

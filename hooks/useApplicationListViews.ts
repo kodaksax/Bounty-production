@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react'
-import type { ViewToken } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppState, type ViewToken } from 'react-native'
 import {
   buildApplicationEventProps,
   countApplicantsByBounty,
@@ -8,15 +8,16 @@ import {
 import { consumeFirstApplicationViewOnSurface, markApplicationViewed } from 'lib/analytics/sessionFlags'
 import { analyticsService } from 'lib/services/analytics-service'
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service'
+import { useIsScreenFocused } from './useRouteFocus'
 
 /**
- * Half-visible for a quarter second: a row the poster could actually read,
- * not one that flicked past during a fling. Module constant because FlatList
- * throws if viewabilityConfig changes identity between renders.
+ * The hook enforces a 250 ms visible exposure after FlatList reports geometry.
+ * Module constant because FlatList throws if viewabilityConfig changes identity
+ * between renders.
  */
 export const APPLICATION_VIEWABILITY_CONFIG = {
   itemVisiblePercentThreshold: 50,
-  minimumViewTime: 250,
+  minimumViewTime: 0,
 } as const
 
 /**
@@ -45,12 +46,17 @@ export function useApplicationListViews<T>({
   getApplication: (item: T) => BountyRequestWithDetails | null
 }) {
   const visibleRef = useRef<Map<string, BountyRequestWithDetails>>(new Map())
-  const enabledRef = useRef(enabled)
-  enabledRef.current = enabled
+  const focused = useIsScreenFocused()
+  const [appActive, setAppActive] = useState(() => AppState.currentState === 'active')
+  const screenVisibleRef = useRef(false)
+  screenVisibleRef.current = focused && appActive
+  const canReportRef = useRef(false)
+  canReportRef.current = enabled && focused && appActive
   const getApplicationRef = useRef(getApplication)
   getApplicationRef.current = getApplication
   const countsRef = useRef<Map<string, number>>(new Map())
   countsRef.current = countApplicantsByBounty(bountyRequests)
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const report = useCallback(
     (request: BountyRequestWithDetails) => {
@@ -71,26 +77,58 @@ export function useApplicationListViews<T>({
   )
   const reportRef = useRef(report)
   reportRef.current = report
+  const clearTimer = useCallback((applicationId: string) => {
+    const timer = timersRef.current.get(applicationId)
+    if (timer !== undefined) clearTimeout(timer)
+    timersRef.current.delete(applicationId)
+  }, [])
+  const scheduleReport = useCallback((request: BountyRequestWithDetails) => {
+    const applicationId = String(request.id)
+    if (!canReportRef.current || timersRef.current.has(applicationId)) return
+    const timer = setTimeout(() => {
+      timersRef.current.delete(applicationId)
+      if (canReportRef.current && visibleRef.current.has(applicationId)) reportRef.current(request)
+    }, 250)
+    timersRef.current.set(applicationId, timer)
+  }, [])
 
   // Stable for the FlatList's lifetime (it must never change identity).
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (!screenVisibleRef.current) return
     const next = new Map<string, BountyRequestWithDetails>()
     for (const token of viewableItems) {
       if (!token.isViewable) continue
       const request = getApplicationRef.current(token.item as T)
       if (request && request.status === 'pending') next.set(String(request.id), request)
     }
+    timersRef.current.forEach((_, id) => {
+      if (!next.has(id)) clearTimer(id)
+    })
     visibleRef.current = next
-    if (enabledRef.current) next.forEach(r => reportRef.current(r))
+    if (canReportRef.current) next.forEach(scheduleReport)
   }).current
 
   // The list became visible with rows already on screen (tab switch, segment
-  // swipe settling): those rows don't produce a viewability change, so report
-  // them here.
+  // swipe settling): start their exposure interval here, too.
   useEffect(() => {
-    if (!enabled) return
-    visibleRef.current.forEach(r => report(r))
-  }, [enabled, report])
+    if (!enabled || !focused || !appActive) {
+      timersRef.current.forEach((_, id) => clearTimer(id))
+      return
+    }
+    visibleRef.current.forEach(scheduleReport)
+  }, [enabled, focused, appActive, clearTimer, scheduleReport])
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => setAppActive(next === 'active'))
+    return () => sub.remove()
+  }, [])
+
+  useEffect(
+    () => () => {
+      timersRef.current.forEach((_, id) => clearTimer(id))
+    },
+    [clearTimer]
+  )
 
   return { onViewableItemsChanged, viewabilityConfig: APPLICATION_VIEWABILITY_CONFIG }
 }
