@@ -106,12 +106,13 @@ export type GroupVerdict = 'delivered' | 'failed' | 'wait' | 'unknown'
  * notification. They are judged together:
  *  - any receipt ok            -> delivered (one device got it; no email)
  *  - otherwise any still pending -> wait (another device may yet succeed)
- *  - otherwise any error        -> failed (no device got it; send the email)
- *  - otherwise (all expired)    -> unknown (we cannot tell; do not email)
+ *  - otherwise any expired     -> unknown (we cannot tell; do not email)
+ *  - otherwise any error       -> failed (no device got it; send the email)
  */
 export function groupVerdict(statuses: TicketStatus[]): GroupVerdict {
   if (statuses.includes('ok')) return 'delivered'
   if (statuses.includes('pending')) return 'wait'
+  if (statuses.includes('expired')) return 'unknown'
   if (statuses.includes('error')) return 'failed'
   return 'unknown'
 }

@@ -115,8 +115,8 @@ describe('groupVerdict (one recipient, possibly several devices)', () => {
     expect(groupVerdict(['error', 'pending'])).toBe('wait')
   })
 
-  test('a failed device plus an expired one is still a failure', () => {
-    expect(groupVerdict(['error', 'expired'])).toBe('failed')
+  test('a failed device plus an expired one is unknown, not a failure', () => {
+    expect(groupVerdict(['error', 'expired'])).toBe('unknown')
   })
 
   test('only unknowns -> do not email on a guess', () => {

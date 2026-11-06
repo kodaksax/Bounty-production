@@ -570,7 +570,6 @@ async function checkPushReceipts(
     return { ok: false, error: 'ticket_lookup_failed' }
   }
   const due = (dueData || []) as ReceiptTicketRow[]
-  if (due.length === 0) return { ok: true, due: 0 }
 
   // Ask Expo. A chunk that fails is left untouched (not treated as "no
   // receipt"), so an Expo outage can't age tickets toward expiry unseen.
@@ -656,13 +655,10 @@ async function checkPushReceipts(
   // their tickets are already resolved, so nothing else would revisit them.
   // The claim is released on failure, so retrying is safe; stop after 2 hours.
   const retrySince = new Date(now.getTime() - 2 * 3_600_000).toISOString()
-  const { data: retryData } = await admin
-    .from('push_receipt_tickets')
-    .select('ticket_id, outbox_id, user_id, notification_type, token, status, attempts, created_at')
-    .eq('status', 'error')
-    .is('fallback_result', null)
-    .gte('resolved_at', retrySince)
-    .limit(100)
+  const { data: retryData } = await admin.rpc('fn_due_push_receipt_email_fallbacks', {
+    p_since: retrySince,
+    p_limit: 100,
+  })
   const retriedGroups = new Set<string>()
   for (const row of ((retryData || []) as ReceiptTicketRow[])) {
     const key = groupKey(row.outbox_id, row.user_id)
