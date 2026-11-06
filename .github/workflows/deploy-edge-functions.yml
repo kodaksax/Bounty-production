@@ -158,7 +158,9 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned to the repo's own CLI (package.json). 3.0.0 rejects
+          # supabase/config.toml ([inbucket] is no longer supported).
+          version: 2.93.1
 
       - name: Determine which functions to deploy
         id: targets

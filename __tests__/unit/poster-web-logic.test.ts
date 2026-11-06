@@ -1,11 +1,14 @@
 import {
+  acceptFailureReason,
   classifyAccept,
+  classifyHeldPostConfirm,
   classifyDecline,
   classifyRelease,
   explainBountyStatus,
   explainPayment,
   formatMoney,
   normalizeSupportInput,
+  summarizeHeldPost,
   summarizeHunter,
   type DecisionState,
 } from '../../supabase/functions/poster-web/logic'
@@ -73,6 +76,67 @@ describe('classifyAccept — atomic, idempotent, race-safe outcomes', () => {
 
   test('unknown request or bounty', () => {
     expect(classifyAccept({ request: null, bounty: null }, 'request_not_found').httpStatus).toBe(404)
+  })
+})
+
+describe('posts held for sign-in', () => {
+  const row = {
+    id: 'p1', title: 'Walk my cat', description: 'Long enough', amount: '25.00', work_type: 'online',
+    location: null, deadline: null, created_at: '2026-11-05T00:00:00Z',
+    claim_card: { payment_method_id: 'pm_secret', customer_id: 'cus_secret', brand: 'visa', last4: '4242', exp_month: 1, exp_year: 2030 },
+  }
+
+  test('shows the owner enough to recognize it, and no Stripe ids', () => {
+    const summary = summarizeHeldPost(row)
+    expect(summary).toMatchObject({ title: 'Walk my cat', amount: 25, card: { brand: 'visa', last4: '4242' } })
+    expect(JSON.stringify(summary)).not.toMatch(/pm_secret|cus_secret/)
+  })
+
+  test('confirming publishes', () => {
+    expect(classifyHeldPostConfirm([{ pending_id: 'p1', bounty_id: 'b1', outcome: 'created' }])).toMatchObject({
+      ok: true, outcome: 'posted', httpStatus: 200, bounty_id: 'b1',
+    })
+  })
+
+  test('a refused post says so, and that nothing was charged', () => {
+    const r = classifyHeldPostConfirm([{ pending_id: 'p1', bounty_id: null, outcome: 'failed' }])
+    expect(r).toMatchObject({ ok: false, outcome: 'refused', httpStatus: 409 })
+    expect(r.message).toMatch(/wasn’t charged/)
+  })
+
+  test('another account, an expired hold or a repeat finds nothing', () => {
+    expect(classifyHeldPostConfirm([])).toMatchObject({ ok: false, outcome: 'not_found', httpStatus: 404 })
+    expect(classifyHeldPostConfirm(null)).toMatchObject({ outcome: 'not_found' })
+  })
+})
+
+describe('accepting through accept-bounty-request', () => {
+  const postgrest = (message: string) =>
+    JSON.stringify({ error: 'x', details: JSON.stringify({ code: 'P0001', message }) })
+
+  test('a card that could not pay reads as not funded', () => {
+    const reason = acceptFailureReason(402, JSON.stringify({ code: 'card_charge_failed', fallback: 'top_up' }))
+    expect(classifyAccept(state('pending', 'open', null), reason).outcome).toBe('not_funded')
+  })
+
+  test('the database reason still classifies', () => {
+    const reason = acceptFailureReason(402, postgrest('insufficient_funds_for_escrow'))
+    expect(classifyAccept(state('pending', 'open', null), reason).outcome).toBe('not_funded')
+  })
+
+  test('a duplicate stays a calm success', () => {
+    const reason = acceptFailureReason(409, postgrest('request_not_pending'))
+    expect(classifyAccept(state('accepted', 'in_progress', R1), reason).outcome).toBe('already_accepted')
+  })
+
+  test('a gateway error with nothing changed is a retry', () => {
+    const reason = acceptFailureReason(502, '<html>')
+    expect(reason).toBe('http_502')
+    expect(classifyAccept(state('pending', 'open', null), reason).outcome).toBe('retry')
+  })
+
+  test('a timeout after the hire went through is reported as a hire, because state decides', () => {
+    expect(classifyAccept(state('accepted', 'in_progress', R1), 'network: timed out').outcome).toBe('already_accepted')
   })
 })
 

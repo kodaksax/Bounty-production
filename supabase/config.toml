@@ -159,6 +159,16 @@ verify_jwt = false
 # Verifies the user's access token itself (auth.getUser) on every route and
 # acts as that user for every write. Must be off so the browser's CORS
 # preflight (OPTIONS, no Authorization header) reaches the function.
+# accept-bounty-request: authenticates the caller itself via /auth/v1/user. The
+# gateway check would refuse the browser's CORS preflight, and can reject valid
+# user JWTs (see payments above).
+[functions.accept-bounty-request]
+verify_jwt = false
+
+# Public website intake: anonymous callers, optional auth handled in the function.
+[functions.bounty-checkout]
+verify_jwt = false
+
 [functions.poster-web]
 verify_jwt = false
 

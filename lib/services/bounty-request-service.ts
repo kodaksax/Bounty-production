@@ -1,3 +1,4 @@
+import { invokeAcceptBountyRequest } from 'lib/services/accept-request-edge';
 import { analyticsService } from 'lib/services/analytics-service';
 import { inferRoleFromFirstAction } from 'lib/services/role-inference-service';
 import type { Bounty, BountyRequest, Profile } from 'lib/services/database.types';
@@ -1071,8 +1072,12 @@ export const bountyRequestService = {
       });
     }
 
-    // If using Supabase client, use the atomic SECURITY DEFINER RPC to transition
-    // both bounty_requests and bounties in a single round-trip, bypassing RLS.
+    // If using Supabase, go through the accept-bounty-request edge function: it
+    // checks the poster's account, then runs the atomic SECURITY DEFINER RPC that
+    // transitions both bounty_requests and bounties in a single round-trip,
+    // bypassing RLS. The funding gate has already taken any payment, so this asks
+    // the function not to charge a card. It reports failures in the RPC's own
+    // { data, error } shape, so the mapping below is the same either way.
     // This avoids a race condition where the direct client-side update to `bounties`
     // could fail silently (due to RLS or a missing accepted_by column) causing the
     // bounty to stay permanently at 'open' and the request to bounce back to 'pending'.
@@ -1081,9 +1086,9 @@ export const bountyRequestService = {
 
       // Try the atomic SECURITY DEFINER function first (preferred path).
       try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('fn_accept_bounty_request', {
-          p_request_id: String(requestId),
-        });
+        const { data: rpcData, error: rpcError } = await invokeAcceptBountyRequest(
+          String(requestId)
+        );
 
         if (rpcError) {
           // Map known exception messages to structured HTTP-like status codes so
@@ -1106,7 +1111,12 @@ export const bountyRequestService = {
             (err as any).rpc = rpcError;
             throw err;
           }
-          if (msg.includes('request_not_pending') || msg.includes('bounty_not_open')) {
+          // accept_in_progress: a second tap while the first is still charging.
+          if (
+            msg.includes('request_not_pending') ||
+            msg.includes('bounty_not_open') ||
+            msg.includes('accept_in_progress')
+          ) {
             const err = new Error('Bounty or request is no longer in the expected state');
             (err as any).status = 409;
             (err as any).code = (rpcError as any)?.code;
@@ -1125,7 +1135,10 @@ export const bountyRequestService = {
             msg.includes('insufficient_funds_for_escrow') ||
             msg.includes('bounty_not_funded') ||
             msg.includes('_locked_by_') ||
-            msg.includes('bounty_funding_mode_is_immutable')
+            msg.includes('bounty_funding_mode_is_immutable') ||
+            // The saved card was declined or needs authentication. Nothing was
+            // accepted; the poster falls back to the top-up.
+            msg.includes('card_charge_failed')
           ) {
             const err = new Error(msg);
             (err as any).status = 402;
@@ -1145,6 +1158,7 @@ export const bountyRequestService = {
             throw err;
           }
           const err = new Error(msg || 'fn_accept_bounty_request failed');
+          (err as any).status = (rpcError as any)?.status;
           (err as any).code = (rpcError as any)?.code;
           (err as any).rpc = rpcError;
           throw err;
