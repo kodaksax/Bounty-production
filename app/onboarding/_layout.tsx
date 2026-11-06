@@ -33,6 +33,7 @@ export default function OnboardingLayout() {
         <Stack.Screen name="username" />
         <Stack.Screen name="style" />
         <Stack.Screen name="location" />
+        <Stack.Screen name="waitlist" />
         <Stack.Screen name="payouts" />
         <Stack.Screen name="poster-profile" />
         <Stack.Screen name="founder-note" />

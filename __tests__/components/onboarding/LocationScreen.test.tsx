@@ -52,7 +52,7 @@ jest.mock('react-native-svg', () => ({
 const mockLocationService = {
   requestPermission: jest.fn(),
   getCurrentLocation: jest.fn(),
-  reverseGeocode: jest.fn(),
+  reverseGeocodeWithRegion: jest.fn(),
   reverseGeocodeRegion: jest.fn(),
 };
 jest.mock('../../../lib/services/location-service', () => ({
@@ -77,7 +77,12 @@ beforeEach(() => {
     status: 'granted',
   });
   mockLocationService.getCurrentLocation.mockResolvedValue({ latitude: 40.7, longitude: -73.9 });
-  mockLocationService.reverseGeocode.mockResolvedValue('12 Main St, Brooklyn, NY, 11211');
+  mockLocationService.reverseGeocodeWithRegion.mockResolvedValue({
+    address: '12 Main St, Brooklyn, NY, 11211',
+    countryCode: 'US',
+    region: 'NY',
+    city: 'Brooklyn',
+  });
   mockLocationService.reverseGeocodeRegion.mockResolvedValue({
     countryCode: 'US',
     region: 'NY',
@@ -103,7 +108,7 @@ describe('onboarding location step', () => {
     fireEvent.press(getByLabelText('Only use approximate location'));
     await flush();
 
-    expect(mockLocationService.reverseGeocode).not.toHaveBeenCalled();
+    expect(mockLocationService.reverseGeocodeWithRegion).not.toHaveBeenCalled();
     expect(mockUpdateData).toHaveBeenCalledWith({
       locationPrecision: 'approximate',
       location: 'Brooklyn, NY',
@@ -146,5 +151,60 @@ describe('onboarding location step', () => {
 
     expect(mockUpdateData).toHaveBeenCalledWith({ locationPrecision: 'precise', location: '' });
     expect(mockPush).toHaveBeenCalledWith('/onboarding/role-select');
+  });
+
+  describe('unserviceable region', () => {
+    it('sends a precise fix outside the US to the waitlist, still storing the address', async () => {
+      mockLocationService.reverseGeocodeWithRegion.mockResolvedValue({
+        address: '10 Downing St, London, England, SW1A 2AA',
+        countryCode: 'GB',
+        region: 'England',
+        city: 'London',
+      });
+
+      const { getByLabelText } = render(<LocationScreen />);
+      fireEvent.press(getByLabelText('Allow location'));
+      await flush();
+
+      expect(mockUpdateData).toHaveBeenCalledWith({
+        locationPrecision: 'precise',
+        location: '10 Downing St, London, England, SW1A 2AA',
+      });
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/onboarding/waitlist',
+        params: { country_code: 'GB', region: 'England' },
+      });
+      expect(mockPush).not.toHaveBeenCalledWith('/onboarding/role-select');
+    });
+
+    it('sends an approximate fix outside the US to the waitlist', async () => {
+      mockLocationService.reverseGeocodeRegion.mockResolvedValue({
+        countryCode: 'ca',
+        region: 'Ontario',
+        city: 'Toronto',
+      });
+
+      const { getByLabelText } = render(<LocationScreen />);
+      fireEvent.press(getByLabelText('Only use approximate location'));
+      await flush();
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/onboarding/waitlist',
+        params: { country_code: 'ca', region: 'Ontario' },
+      });
+    });
+
+    it('never shows the waitlist when the country is unknown', async () => {
+      mockLocationService.reverseGeocodeWithRegion.mockResolvedValue({
+        address: 'Somewhere',
+        countryCode: undefined,
+      });
+
+      const { getByLabelText } = render(<LocationScreen />);
+      fireEvent.press(getByLabelText('Allow location'));
+      await flush();
+
+      expect(mockPush).toHaveBeenCalledWith('/onboarding/role-select');
+    });
   });
 });
