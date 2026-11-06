@@ -108,7 +108,15 @@ describe('bounty targeting migration regressions', () => {
   })
 
   it('authenticates processing before reading any outbox and isolates the new delivery path', () => {
-    expect(worker.indexOf("req.headers.get('authorization')")).toBeLessThan(worker.indexOf(".from('notifications_outbox')"))
+    // Order is judged inside the request handler: helpers declared above it may
+    // read the outbox, but they only run when the handler calls them.
+    const handler = worker.slice(worker.indexOf('Deno.serve('))
+    const authCheck = handler.indexOf("req.headers.get('authorization')")
+    expect(authCheck).toBeGreaterThan(-1)
+    for (const outboxAccess of [".from('notifications_outbox')", 'checkPushReceipts(']) {
+      expect(handler).toContain(outboxAccess)
+      expect(authCheck).toBeLessThan(handler.indexOf(outboxAccess))
+    }
     expect(worker).toContain('targetingOutbox = isTargetingOutbox(rows)')
     expect(worker).toContain('processTargetingOutbox({')
     expect(sql).toContain("AND state IN ('pending', 'failed')")
