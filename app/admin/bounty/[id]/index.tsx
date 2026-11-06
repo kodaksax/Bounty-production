@@ -14,8 +14,8 @@
 //    non-existent `profiles.is_admin` column and therefore threw every time.
 //    (Fixed in lib/admin/adminDataClient.ts.)
 import { MaterialIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdminAttachmentGallery } from '../../../../components/admin/AdminAttachmentGallery';
 import { AdminHeader } from '../../../../components/admin/AdminHeader';
@@ -40,6 +40,7 @@ import type { ViolationType } from '../../../../lib/admin/adminDataClient';
 import { AdminModerationError, adminDataClient } from '../../../../lib/admin/adminDataClient';
 import {
   commandCenterClient,
+  escrowHoldReasonLabel,
   financialStatusMeta,
   isCompletedButUnverified,
 } from '../../../../lib/admin/commandCenterClient';
@@ -109,6 +110,15 @@ const STATUS_TRANSITIONS: Record<AdminBountyStatus, Transition[]> = {
   deleted: [{ status: 'archived', label: 'Restore as archived', icon: 'restore_from_trash' as IconName }],
 };
 
+/** The target statuses admin_set_bounty_status() refuses while money is held. */
+const ESCROW_GUARDED_STATUSES: ReadonlySet<AdminBountyStatus> = new Set<AdminBountyStatus>([
+  'completed',
+  'cancelled',
+  'archived',
+  'deleted',
+  'open',
+]);
+
 const VIOLATION_OPTIONS: { label: string; value: ViolationType }[] = [
   { label: 'Spam', value: 'spam' },
   { label: 'Harassment', value: 'harassment' },
@@ -133,39 +143,72 @@ export default function AdminBountyDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  const loadBounty = useCallback(async () => {
-    if (!id) {
-      setError('No bounty id was provided.');
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await adminDataClient.fetchAdminBountyById(id);
-      setBounty(data);
-      if (data) {
-        // Relation counts are best-effort and must not block the record
-        // itself from rendering.
-        adminDataClient
-          .fetchBountyRelations(id)
-          .then(setRelations)
-          .catch(() => setRelations(null));
-        commandCenterClient
-          .fetchBountyDetail(id)
-          .then((detail) => setFinancial(detail?.financial ?? null))
-          .catch(() => setFinancial(null));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load bounty');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id]);
+  // Only the newest load may write state, so a slow response from an earlier
+  // focus cannot put a settled hold back on screen.
+  const loadSeq = useRef(0);
+  const loadedIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    void loadBounty();
-  }, [loadBounty]);
+  const loadBounty = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!id) {
+        setError('No bounty id was provided.');
+        setIsLoading(false);
+        return;
+      }
+      const seq = ++loadSeq.current;
+      const isCurrent = () => seq === loadSeq.current;
+      if (!silent) {
+        setIsLoading(true);
+        setError(null);
+      }
+      try {
+        const data = await adminDataClient.fetchAdminBountyById(id);
+        if (!isCurrent()) return;
+        setBounty(data);
+        loadedIdRef.current = data ? id : null;
+        if (data) {
+          // Relation counts are best-effort and must not block the record
+          // itself from rendering. A silent refresh that fails keeps what is
+          // on screen: dropping `financial` would unlock actions on a guess,
+          // and the server refuses them anyway while money is held.
+          adminDataClient
+            .fetchBountyRelations(id)
+            .then((next) => {
+              if (isCurrent()) setRelations(next);
+            })
+            .catch(() => {
+              if (isCurrent() && !silent) setRelations(null);
+            });
+          commandCenterClient
+            .fetchBountyDetail(id)
+            .then((detail) => {
+              if (isCurrent()) setFinancial(detail?.financial ?? null);
+            })
+            .catch(() => {
+              if (isCurrent() && !silent) setFinancial(null);
+            });
+        }
+      } catch (err) {
+        if (isCurrent() && !silent) {
+          setError(err instanceof Error ? err.message : 'Failed to load bounty');
+        }
+      } finally {
+        if (isCurrent()) setIsLoading(false);
+      }
+    },
+    [id]
+  );
+
+  // Runs on mount and on every return to this screen. It stays mounted in the
+  // admin Stack while an admin settles escrow on Disputes or Transactions, so
+  // without this the cached escrowHoldReason keeps guarded actions disabled
+  // after the server would allow them. Once a record is showing the reload is
+  // silent, which keeps the screen and its scroll position in place.
+  useFocusEffect(
+    useCallback(() => {
+      void loadBounty({ silent: loadedIdRef.current === id });
+    }, [loadBounty, id])
+  );
 
   const applyStatus = useCallback(
     async (next: AdminBountyStatus, settlesEscrow = false) => {
@@ -350,7 +393,7 @@ export default function AdminBountyDetailScreen() {
               : `No bounty exists with id ${shortId(id)}. It may have been permanently deleted.`
           }
           detail={error}
-          onRetry={error ? loadBounty : undefined}
+          onRetry={error ? () => void loadBounty() : undefined}
         />
       </AdminScreen>
     );
@@ -363,6 +406,9 @@ export default function AdminBountyDetailScreen() {
   // _moderation_takedown_status in the moderation migration) — both mean the
   // same thing for this button's purposes: nothing left to remove.
   const isRemoved = bounty.status === 'archived' || bounty.status === 'deleted';
+  const holdReason = financial?.escrowHoldReason;
+  const isLockedByHold = (transition: Transition) =>
+    holdReason != null && !transition.settlesEscrow && ESCROW_GUARDED_STATUSES.has(transition.status);
 
   return (
     <AdminScreen>
@@ -458,6 +504,13 @@ export default function AdminBountyDetailScreen() {
               >
                 {financialStatusMeta(financial.financialStatus).explanation}
               </Text>
+              {financial.escrowHoldReason ? (
+                <AdminRow
+                  label="Money held"
+                  value={escrowHoldReasonLabel(financial.escrowHoldReason)}
+                  icon="lock-outline"
+                />
+              ) : null}
               <AdminRow label="Escrow taken" value={formatMoney(financial.escrowAmount)} icon="lock" />
               <AdminRow label="Released" value={formatMoney(financial.releaseAmount)} icon="north-east" />
               <AdminRow label="Refunded" value={formatMoney(financial.refundAmount)} icon="undo" />
@@ -593,7 +646,7 @@ export default function AdminBountyDetailScreen() {
                   icon={transition.icon}
                   variant={transition.destructive ? 'warning' : 'secondary'}
                   loading={pendingAction === transition.status}
-                  disabled={busy && pendingAction !== transition.status}
+                  disabled={(busy && pendingAction !== transition.status) || isLockedByHold(transition)}
                   onPress={() => confirmStatusChange(transition)}
                   style={styles.actionButton}
                 />
@@ -611,6 +664,19 @@ export default function AdminBountyDetailScreen() {
             Status changes affect the bounty lifecycle only. They never move escrow — use
             Transactions or Disputes to settle money.
           </Text>
+          {holdReason && transitions.some(isLockedByHold) ? (
+            <Text
+              style={{
+                fontSize: 12,
+                color: theme.warning,
+                marginTop: theme.spacing.sm,
+                lineHeight: 18,
+              }}
+            >
+              Money is still held ({escrowHoldReasonLabel(holdReason)}). Status changes that end or
+              reopen this bounty stay locked until that money is settled.
+            </Text>
+          ) : null}
         </AdminSection>
 
         {/* ── Moderation ─────────────────────────────────────────────── */}
