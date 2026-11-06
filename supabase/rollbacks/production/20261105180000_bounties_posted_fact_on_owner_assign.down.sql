@@ -12,13 +12,11 @@
 BEGIN;
 
 CREATE TEMP TABLE _reverted_posters ON COMMIT DROP AS
-  SELECT DISTINCT user_id FROM public.analytics_facts_backfill_log
-  WHERE batch = 'bounties_posted_2026_11_05';
+  SELECT DISTINCT user_id FROM public.analytics_facts_backfill_log;
 
 DELETE FROM public.analytics_user_facts f
 USING public.analytics_facts_backfill_log l
-WHERE l.batch = 'bounties_posted_2026_11_05'
-  AND f.user_id = l.user_id
+WHERE f.user_id = l.user_id
   AND f.metric = l.metric
   AND f.source_id = l.source_id;
 

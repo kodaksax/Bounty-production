@@ -7,11 +7,9 @@
  * email so we can tell them when Bounty opens there, and is never a wall:
  * both "Continue anyway" and the post-submit "Continue" go on to role select.
  *
- * There is deliberately no backend. Submitting fires `waitlist_captured` with
- * the email as a PostHog-only person property (`waitlist_email`, via $set);
- * a PostHog destination on that event notifies the owner. The
- * region_waitlist_signups table (migration 20260808010000) is the place to
- * persist these if the list outgrows PostHog.
+ * Submissions are stored in region_waitlist_signups and also fire
+ * `waitlist_captured` with the email as a PostHog-only person property
+ * (`waitlist_email`, via $set).
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -19,11 +17,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
+import {
+  KeyboardAwareScrollView,
+  KeyboardAvoidingScreen,
+} from '../../components/ui/keyboard-avoiding';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
@@ -62,6 +64,7 @@ export default function WaitlistScreen() {
 
   const [email, setEmail] = useState<string>(session?.user?.email ?? '');
   const [showError, setShowError] = useState(false);
+  const [showSubmitError, setShowSubmitError] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const baseProps = {
@@ -77,7 +80,7 @@ export default function WaitlistScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (submitted) return;
     const trimmed = email.trim().toLowerCase();
     if (!isValidWaitlistEmail(trimmed)) {
@@ -85,26 +88,41 @@ export default function WaitlistScreen() {
       setShowError(true);
       return;
     }
-    hapticFeedback.success();
-    analyticsService.trackEvent(
-      'waitlist_captured',
-      {
-        ...baseProps,
-        is_signed_in: !!session?.user?.id,
-        email_matches_account:
-          !!session?.user?.email && session.user.email.toLowerCase() === trimmed,
-      },
-      {
-        setPersonProperties: {
-          waitlist_email: trimmed,
-          waitlist_country_code: countryCode,
-          waitlist_region: region,
-          waitlist_captured_at: new Date().toISOString(),
+    setShowError(false);
+    setShowSubmitError(false);
+    try {
+      const { error } = await supabase.from('region_waitlist_signups').insert({
+        user_id: session?.user?.id ?? null,
+        email: trimmed,
+        country_code: countryCode ?? null,
+        region: region ?? null,
+        source: 'mobile_onboarding',
+      });
+      if (error && error.code !== '23505') throw error;
+
+      hapticFeedback.success();
+      analyticsService.trackEvent(
+        'waitlist_captured',
+        {
+          ...baseProps,
+          is_signed_in: !!session?.user?.id,
+          email_matches_account:
+            !!session?.user?.email && session.user.email.toLowerCase() === trimmed,
         },
-      }
-    );
-    setEmail(trimmed);
-    setSubmitted(true);
+        {
+          setPersonProperties: {
+            waitlist_email: trimmed,
+            waitlist_country_code: countryCode,
+            waitlist_region: region,
+            waitlist_captured_at: new Date().toISOString(),
+          },
+        }
+      );
+      setSubmitted(true);
+    } catch {
+      hapticFeedback.error();
+      setShowSubmitError(true);
+    }
   };
 
   const handleContinue = () => {
@@ -137,63 +155,76 @@ export default function WaitlistScreen() {
           )}
         </View>
 
-        <View style={styles.hero}>
-          <View style={styles.iconBadge}>
-            <MaterialIcons
-              name={submitted ? 'mark-email-read' : 'public'}
-              size={44}
-              color={theme.primary}
-            />
+        <KeyboardAwareScrollView
+          offset={insets.bottom}
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.hero}>
+            <View style={styles.iconBadge}>
+              <MaterialIcons
+                name={submitted ? 'mark-email-read' : 'public'}
+                size={44}
+                color={theme.primary}
+              />
+            </View>
           </View>
-        </View>
 
-        {submitted ? (
-          <>
-            <Text style={styles.heading} accessibilityRole="header">
-              You&apos;re on the list
-            </Text>
-            <Text style={styles.subheading}>
-              We&apos;ll email {email} when Bounty opens in {placeLabel}. You can still look around
-              in the meantime.
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.heading} accessibilityRole="header">
-              Bounty isn&apos;t in {placeLabel} yet
-            </Text>
-            <Text style={styles.subheading}>
-              We&apos;re live in the US for now. Leave your email and we&apos;ll let you know as
-              soon as bounties open near you.
-            </Text>
-
-            <TextInput
-              value={email}
-              onChangeText={text => {
-                setEmail(text);
-                if (showError) setShowError(false);
-              }}
-              placeholder="you@example.com"
-              placeholderTextColor={theme.textDisabled}
-              style={[styles.input, showError && styles.inputError]}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="email"
-              textContentType="emailAddress"
-              returnKeyType="done"
-              onSubmitEditing={handleSubmit}
-              accessibilityLabel="Email address"
-            />
-            {showError && (
-              <Text style={styles.errorText} accessibilityLiveRegion="polite">
-                Enter a valid email address.
+          {submitted ? (
+            <>
+              <Text style={styles.heading} accessibilityRole="header">
+                You&apos;re on the list
               </Text>
-            )}
-          </>
-        )}
+              <Text style={styles.subheading}>
+                We&apos;ll let you know when Bounty opens in {placeLabel}. You can still look around
+                in the meantime.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.heading} accessibilityRole="header">
+                Bounty isn&apos;t in {placeLabel} yet
+              </Text>
+              <Text style={styles.subheading}>
+                We&apos;re live in the US for now. Leave your email and we&apos;ll let you know as
+                soon as bounties open near you.
+              </Text>
 
-        <View style={styles.spacer} />
+              <TextInput
+                value={email}
+                onChangeText={text => {
+                  setEmail(text);
+                  if (showError) setShowError(false);
+                  if (showSubmitError) setShowSubmitError(false);
+                }}
+                placeholder="you@example.com"
+                placeholderTextColor={theme.textDisabled}
+                style={[styles.input, showError && styles.inputError]}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit}
+                accessibilityLabel="Email address"
+              />
+              {showError && (
+                <Text style={styles.errorText} accessibilityLiveRegion="polite">
+                  Enter a valid email address.
+                </Text>
+              )}
+              {showSubmitError && (
+                <Text style={styles.errorText} accessibilityLiveRegion="polite">
+                  We couldn&apos;t save your email. Please try again.
+                </Text>
+              )}
+            </>
+          )}
+
+          <View style={styles.spacer} />
+        </KeyboardAwareScrollView>
 
         <View style={styles.actionContainer}>
           {submitted ? (
@@ -240,6 +271,9 @@ function makeStyles(theme: AppTheme) {
       flex: 1,
       backgroundColor: theme.background,
       paddingHorizontal: 24,
+    },
+    scrollContent: {
+      flexGrow: 1,
     },
     backRow: {
       paddingTop: 8,
