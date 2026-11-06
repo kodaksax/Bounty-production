@@ -66,47 +66,6 @@ CREATE INDEX IF NOT EXISTS push_receipt_tickets_due_idx
 CREATE INDEX IF NOT EXISTS push_receipt_tickets_group_idx
   ON public.push_receipt_tickets (outbox_id, user_id);
 
--- Select retryable groups before limiting so an ineligible group (for example,
--- one with a delivered or still-pending sibling ticket) cannot starve retries.
-CREATE OR REPLACE FUNCTION public.fn_due_push_receipt_email_fallbacks(
-  p_since timestamptz,
-  p_limit integer DEFAULT 100
-)
-RETURNS TABLE (
-  ticket_id text,
-  outbox_id uuid,
-  user_id uuid,
-  notification_type text,
-  token text,
-  status text,
-  attempts integer,
-  created_at timestamptz
-)
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-  SELECT DISTINCT ON (t.outbox_id, t.user_id)
-         t.ticket_id, t.outbox_id, t.user_id, t.notification_type,
-         t.token, t.status, t.attempts, t.created_at
-    FROM public.push_receipt_tickets AS t
-   WHERE t.status = 'error'
-     AND t.fallback_result IS NULL
-     AND t.resolved_at >= p_since
-     AND NOT EXISTS (
-       SELECT 1
-         FROM public.push_receipt_tickets AS sibling
-        WHERE sibling.outbox_id = t.outbox_id
-          AND sibling.user_id = t.user_id
-          AND (sibling.status IN ('ok', 'pending', 'expired') OR sibling.fallback_result IS NOT NULL)
-     )
-   ORDER BY t.outbox_id, t.user_id, t.resolved_at DESC, t.ticket_id
-   LIMIT LEAST(GREATEST(COALESCE(p_limit, 0), 0), 100);
-$function$;
-
-REVOKE ALL ON FUNCTION public.fn_due_push_receipt_email_fallbacks(timestamptz, integer) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.fn_due_push_receipt_email_fallbacks(timestamptz, integer) TO service_role;
-
 -- Service-role only: RLS on with no policies, and explicit revokes (anon gets
 -- auto-granted privileges on new tables; REVOKE FROM PUBLIC does not cover it).
 ALTER TABLE public.push_receipt_tickets ENABLE ROW LEVEL SECURITY;
@@ -137,12 +96,7 @@ BEGIN
     FROM public.push_receipt_tickets
    WHERE status = 'pending' AND check_after <= now();
   IF v_due = 0 THEN
-    -- Email retries remain due after their receipt tickets have resolved.
-    SELECT count(*) INTO v_due
-      FROM public.fn_due_push_receipt_email_fallbacks(now() - interval '2 hours', 1);
-    IF v_due = 0 THEN
-      RETURN 0;
-    END IF;
+    RETURN 0;
   END IF;
 
   SELECT decrypted_secret INTO v_url FROM vault.decrypted_secrets WHERE name = 'SUPABASE_URL';
