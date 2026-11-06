@@ -11,7 +11,8 @@
 --
 -- (B) First-application times for new genuine posters' bounties, the
 --     denominator of part 2 (PostHog, below): did the poster open the
---     applicant list (applicant_list_viewed) within 24 h of the first
+--     applicant list (application_viewed; applicant_list_viewed before
+--     2026-11-05) within 24 h of the first
 --     application? Copy the bounty_id / first_app_at rows into the HogQL.
 --
 -- "Genuine": not is_test, poster not profiles.is_internal (the audit's
@@ -52,15 +53,20 @@ ORDER BY 3;
 
 -- ── Part 2 of 2 (PostHog HogQL) ─────────────────────────────────────────────
 -- Paste (B)'s rows into the VALUES list. A bounty "converts" when its poster's
--- first applicant_list_viewed for it lands within 24 h of first_app_at.
+-- first application_viewed for it lands within 24 h of first_app_at.
+-- applicant_list_viewed was retired 2026-11-05 (it also fired while the Inbox
+-- sat preloaded off-screen, so pre-cutover weeks overstate views); both are
+-- read so the series spans the cutover. Note the property rename too.
 --
 --   WITH firsts AS (
 --     SELECT * FROM (SELECT 'bounty-uuid' AS bounty_id, toDateTime('2026-10-20 12:00:00') AS first_app_at
 --                    /* UNION ALL SELECT ... per row of (B) */)
 --   ), views AS (
---     SELECT properties.bountyId AS bounty_id, min(timestamp) AS first_view
+--     SELECT coalesce(toString(properties.bounty_id), toString(properties.bountyId)) AS bounty_id,
+--            min(timestamp) AS first_view
 --     FROM events
---     WHERE event = 'applicant_list_viewed' AND coalesce(properties.is_internal, false) = false
+--     WHERE event IN ('application_viewed', 'applicant_list_viewed')
+--       AND coalesce(person.properties.is_internal, false) != true
 --     GROUP BY bounty_id
 --   )
 --   SELECT toStartOfWeek(f.first_app_at) AS week,

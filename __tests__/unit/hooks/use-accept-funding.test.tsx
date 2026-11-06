@@ -15,8 +15,8 @@
 //   * a partial deposit re-prompts for the remainder, but a deposit the server
 //     has not seen yet never does (that would charge the same money twice);
 //   * backing out — by tapping cancel, by unmounting, or by backgrounding —
-//     emits accept_funding_abandoned; cancel and unmount also resolve false so
-//     the caller never accepts anything;
+//     emits accept_blocked_by_payment ONCE per gate; cancel and unmount also
+//     resolve false so the caller never accepts anything;
 //   * failures are surfaced by bucketed reason and only funding failures
 //     reopen the gate in place.
 
@@ -153,7 +153,7 @@ describe('useAcceptFunding', () => {
       expect(propsFor('accept_funding_started')).toMatchObject({ paymentRequired: false });
     });
 
-    test('backing out resolves false, charges nothing, and emits abandoned', async () => {
+    test('backing out resolves false, charges nothing, and emits accept_blocked_by_payment', async () => {
       const { result } = renderHook(() => useAcceptFunding(FAST));
       const probe = openGate(result, NEEDS_FUNDING);
       await waitFor(() => expect(result.current.gate.stage).toBe('confirm'));
@@ -164,7 +164,7 @@ describe('useAcceptFunding', () => {
 
       expect(probe.resolved).toBe(false);
       expect(result.current.gate.active).toBe(false);
-      expect(propsFor('accept_funding_abandoned')).toMatchObject({
+      expect(propsFor('accept_blocked_by_payment')).toMatchObject({
         stage: 'confirm',
         trigger: 'cancel',
       });
@@ -298,6 +298,9 @@ describe('useAcceptFunding', () => {
       expect(message).toContain('Sam');
       expect(propsFor('accept_funding_failed')).toMatchObject({ reason: 'deposit_unconfirmed' });
       expect(allPropsFor('accept_funding_failed').some(p => p.reason === 'partial_deposit')).toBe(false);
+      expect(allPropsFor('accept_blocked_by_payment')).toEqual([
+        expect.objectContaining({ trigger: 'deposit_unconfirmed', stage: 'settling', bounty_id: 'b1' }),
+      ]);
     });
 
     test('reopening after an unconfirmed deposit reconciles it before another top-up', async () => {
@@ -317,6 +320,11 @@ describe('useAcceptFunding', () => {
       expect(result.current.gate.active).toBe(false);
       expect(result.current.gate.stage).toBe('idle');
       expect(mockAlert).toHaveBeenCalledTimes(2);
+      // The second hire attempt never got a sheet: still blocked at payment.
+      expect(allPropsFor('accept_blocked_by_payment').map(p => p.trigger)).toEqual([
+        'deposit_unconfirmed',
+        'prior_deposit_unconfirmed',
+      ]);
 
       mockGetRequirement.mockResolvedValue(COVERED_AFTER_TOPUP);
       const reconciledProbe = openGate(result, COVERED_AFTER_TOPUP);
@@ -324,6 +332,38 @@ describe('useAcceptFunding', () => {
       expect(reconciledProbe.settled).toBe(false);
       act(() => result.current.gate.onConfirm());
       await waitFor(() => expect(reconciledProbe.resolved).toBe(true));
+    });
+
+    test('a failed requirement fetch during retry omits unknown funding properties', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const firstProbe = openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
+      await act(async () => {
+        result.current.gate.onPaymentSucceeded(30);
+      });
+      await waitFor(() => expect(firstProbe.resolved).toBe(false));
+
+      mockGetRequirement.mockRejectedValueOnce(new Error('offline'));
+      let retryResolved: boolean | undefined;
+      await act(async () => {
+        retryResolved = await result.current.ensureFunded('b1', {
+          variant: 'deferred',
+          applicationId: 'app1',
+        });
+      });
+
+      expect(retryResolved).toBe(false);
+      const blocked = allPropsFor('accept_blocked_by_payment').slice(-1)[0];
+      expect(blocked).toMatchObject({
+        trigger: 'prior_deposit_unconfirmed',
+        bounty_id: 'b1',
+        application_id: 'app1',
+      });
+      expect(blocked).not.toHaveProperty('amountBucket');
+      expect(blocked).not.toHaveProperty('fundingMode');
+      expect(blocked).not.toHaveProperty('firstBounty');
     });
 
     test('a cancelled payment leaves the sheet up and resolves nothing', async () => {
@@ -346,7 +386,7 @@ describe('useAcceptFunding', () => {
         result.current.gate.onCancel();
       });
       expect(probe.resolved).toBe(false);
-      expect(propsFor('accept_funding_abandoned')).toMatchObject({ stage: 'pay', trigger: 'cancel' });
+      expect(propsFor('accept_blocked_by_payment')).toMatchObject({ stage: 'pay', trigger: 'cancel' });
     });
 
     test('a declined payment leaves the sheet up and resolves nothing', async () => {
@@ -410,7 +450,7 @@ describe('useAcceptFunding', () => {
       expect(result.current.gate.paymentFailure).toBeNull();
     });
 
-    test('cancel resolves false and emits abandoned from the pay sheet', async () => {
+    test('cancel resolves false and emits accept_blocked_by_payment from the pay sheet', async () => {
       const { result } = renderHook(() => useAcceptFunding(FAST));
       const probe = openGate(result, NEEDS_TOPUP);
       await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
@@ -421,7 +461,7 @@ describe('useAcceptFunding', () => {
 
       expect(probe.resolved).toBe(false);
       expect(result.current.gate.active).toBe(false);
-      expect(propsFor('accept_funding_abandoned')).toMatchObject({ stage: 'pay', trigger: 'cancel' });
+      expect(propsFor('accept_blocked_by_payment')).toMatchObject({ stage: 'pay', trigger: 'cancel' });
     });
 
     test('cancelling while a deposit is settling stops the poll and resolves false', async () => {
@@ -480,7 +520,7 @@ describe('useAcceptFunding', () => {
   });
 
   describe('abandonment the poster never taps', () => {
-    test('unmounting with the gate open emits abandoned and resolves false', async () => {
+    test('unmounting with the gate open emits accept_blocked_by_payment and resolves false', async () => {
       const { result, unmount } = renderHook(() => useAcceptFunding(FAST));
       const probe = openGate(result, NEEDS_TOPUP);
       await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
@@ -488,7 +528,7 @@ describe('useAcceptFunding', () => {
       unmount();
 
       await waitFor(() => expect(probe.resolved).toBe(false));
-      expect(propsFor('accept_funding_abandoned')).toMatchObject({
+      expect(propsFor('accept_blocked_by_payment')).toMatchObject({
         stage: 'pay',
         trigger: 'unmount',
       });
@@ -497,10 +537,10 @@ describe('useAcceptFunding', () => {
     test('unmounting with no gate open emits nothing', () => {
       const { unmount } = renderHook(() => useAcceptFunding(FAST));
       unmount();
-      expect(eventNames()).not.toContain('accept_funding_abandoned');
+      expect(eventNames()).not.toContain('accept_blocked_by_payment');
     });
 
-    test('backgrounding with the gate open emits abandoned but keeps the gate up', async () => {
+    test('backgrounding with the gate open emits accept_blocked_by_payment but keeps the gate up', async () => {
       const { result } = renderHook(() => useAcceptFunding(FAST));
       const listener = mockAppStateListen.mock.calls.find(c => c[0] === 'change')?.[1];
       expect(typeof listener).toBe('function');
@@ -510,7 +550,7 @@ describe('useAcceptFunding', () => {
 
       act(() => listener('background'));
 
-      expect(propsFor('accept_funding_abandoned')).toMatchObject({
+      expect(propsFor('accept_blocked_by_payment')).toMatchObject({
         stage: 'pay',
         trigger: 'background',
       });
@@ -532,7 +572,7 @@ describe('useAcceptFunding', () => {
       act(() => listener('inactive'));
       act(() => listener('active'));
 
-      expect(eventNames()).not.toContain('accept_funding_abandoned');
+      expect(eventNames()).not.toContain('accept_blocked_by_payment');
     });
 
     test('opening the add-a-card sheet is accept_funding_started, but not a charge in flight', async () => {
@@ -552,14 +592,86 @@ describe('useAcceptFunding', () => {
       // Linking a card reports no outcome, so leaving the app afterwards is
       // still an abandonment.
       act(() => listener('background'));
-      expect(propsFor('accept_funding_abandoned')).toMatchObject({ stage: 'pay', trigger: 'background' });
+      expect(propsFor('accept_blocked_by_payment')).toMatchObject({ stage: 'pay', trigger: 'background' });
     });
 
     test('backgrounding with no gate open emits nothing', () => {
       renderHook(() => useAcceptFunding(FAST));
       const listener = mockAppStateListen.mock.calls.find(c => c[0] === 'change')?.[1];
       act(() => listener('background'));
-      expect(eventNames()).not.toContain('accept_funding_abandoned');
+      expect(eventNames()).not.toContain('accept_blocked_by_payment');
+    });
+  });
+
+  describe('accept_blocked_by_payment', () => {
+    test('fires once per gate: a background that never comes back is not re-counted on cancel', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const listener = mockAppStateListen.mock.calls.find(c => c[0] === 'change')?.[1];
+      const probe = openGate(result, NEEDS_TOPUP);
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      act(() => listener('background'));
+      act(() => listener('active'));
+      act(() => listener('background'));
+      await act(async () => {
+        result.current.gate.onCancel();
+      });
+
+      expect(probe.resolved).toBe(false);
+      expect(allPropsFor('accept_blocked_by_payment')).toEqual([
+        expect.objectContaining({ trigger: 'background', stage: 'pay' }),
+      ]);
+    });
+
+    test('a fresh gate for the same bounty can be blocked again', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      openGate(result, NEEDS_FUNDING);
+      await waitFor(() => expect(result.current.gate.stage).toBe('confirm'));
+      await act(async () => result.current.gate.onCancel());
+      openGate(result, NEEDS_FUNDING);
+      await waitFor(() => expect(result.current.gate.stage).toBe('confirm'));
+      await act(async () => result.current.gate.onCancel());
+
+      expect(allPropsFor('accept_blocked_by_payment')).toHaveLength(2);
+    });
+
+    test('carries the application, the attempts made and the last refusal, never an exact amount', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      openGate(result, NEEDS_TOPUP, { applicationId: 'r1', hunterId: 'h1' });
+      await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+
+      act(() => result.current.gate.onPaymentStarted('card'));
+      act(() => result.current.gate.onPaymentFailed('failed', { error_code: 'card_declined' }));
+      act(() => result.current.gate.onPaymentStarted('applePay'));
+      act(() => result.current.gate.onPaymentFailed('cancelled'));
+      await act(async () => result.current.gate.onCancel());
+
+      const props = propsFor('accept_blocked_by_payment');
+      expect(props).toMatchObject({
+        bounty_id: 'b1',
+        application_id: 'r1',
+        hunter_id: 'h1',
+        trigger: 'cancel',
+        stage: 'pay',
+        balanceCovers: false,
+        paymentAttempts: 2,
+        lastFailureCode: 'payment_cancelled',
+        variant: 'deferred',
+        fundingMode: 'at_accept',
+      });
+      // snake_case ids only (joins to application_*), and amounts stay bucketed.
+      expect(props).not.toHaveProperty('bountyId');
+      expect(props).not.toHaveProperty('amount');
+      expect(props.amountBucket).toEqual(expect.any(String));
+    });
+
+    test('hiring through the gate emits nothing', async () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      const probe = openGate(result, NEEDS_FUNDING);
+      await waitFor(() => expect(result.current.gate.stage).toBe('confirm'));
+      act(() => result.current.gate.onConfirm());
+      await waitFor(() => expect(probe.resolved).toBe(true));
+      expect(eventNames()).not.toContain('accept_blocked_by_payment');
     });
   });
 

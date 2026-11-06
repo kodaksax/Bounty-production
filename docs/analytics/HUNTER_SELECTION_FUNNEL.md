@@ -2,6 +2,11 @@
 
 Date: 2026-09-14
 
+> **2026-11-05:** `applicant_list_viewed` is retired. Use `application_viewed`
+> (per application, `bounty_id` not `bountyId`, `surface` says where). See
+> "Acceptance root cause" in `EVENT_TAXONOMY_CUTOVER.md`. The queries below
+> still name the old event.
+
 Goal: measure whether trust signals (ID verification, completion history, self-reported
 skills, pitch text) actually change a poster's applicant → accept decision, and where in
 the applicant-review flow posters drop off. This does **not** assume an answer — see

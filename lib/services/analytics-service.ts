@@ -462,14 +462,43 @@ export type AnalyticsEvent =
   // so a `reason` value would be fabricated. Add the property only if a real
   // reason-picker ships.
   | 'application_declined'
-  // The applicant list/queue for a bounty was rendered with results. Fired
-  // once per bounty whose pending-applicant count is shown to the poster
-  // (the "Requests" tab lists pending applications across ALL of a poster's
-  // open bounties in one flat list, so this fires once per distinct bounty
-  // represented, not once per screen view) -- see app/tabs/inbox-screen.tsx.
-  // Refires only when that bounty's visible applicant count actually changes
-  // (a new application arrived), not on every re-render.
-  | 'applicant_list_viewed'
+  // ---- Acceptance root cause (2026-11-05) ----------------------------------
+  // Splits every unaccepted application into exactly one bucket:
+  //   never viewed                 -> no application_viewed
+  //   looked and left              -> application_dismissed
+  //   looked and passed            -> application_declined
+  //   tried to hire, payment stopped it -> accept_blocked_by_payment
+  //   hired                        -> application_accepted
+  // All join on `application_id` (snake_case, as on application_accepted).
+  // Shared props: lib/analytics/application-view.ts buildApplicationEventProps
+  // (bounty_id, application_id, hunter_id, applicant_count,
+  // application_age_hours, hunter_verified, hunter_completed, has_message,
+  // applicant_distance_mi, is_for_honor, amount, trustTier).
+  //
+  // The POSTER had a pending application on screen. `surface`:
+  //   inbox_list    -- a row in Inbox > My Bounties, >=50% visible for 250ms,
+  //                    only while the Inbox tab and My Bounties segment are
+  //                    showing. Once per application per app session.
+  //   requests_list -- an ApplicantCard on the legacy postings-screen Requests
+  //                    tab. Same rules.
+  //   bounty_thread -- the application opened on its own (Accept / Pass).
+  //                    Once per visit (foreground stretch on the thread).
+  // `first_view_this_session` is true for the first view of that application
+  // on any surface this session. Replaces `applicant_list_viewed` (retired
+  // 2026-11-05): that fired per BOUNTY whenever the list rendered, including
+  // while the Inbox sat preloaded off-screen next to Wallet, so it overstated
+  // views. Fired from hooks/useApplicationListViews.ts and
+  // hooks/useApplicationDecisionVisit.ts.
+  | 'application_viewed'
+  // The POSTER opened a pending application in the bounty thread and left
+  // (`trigger`: 'leave' = back/unmount, 'background' = app backgrounded)
+  // without accepting, passing or messaging. `dwell_ms` = time on it, to the
+  // nearest 100ms. Implicit counterpart of `application_declined` (explicit
+  // Pass); retires nothing. Never fires when the application stops being
+  // pending while open, nor after the poster engaged in that mount (an Accept
+  // that backgrounds for Apple Pay is measured by the pay-gate events).
+  // hooks/useApplicationDecisionVisit.ts.
+  | 'application_dismissed'
   // The POSTER opened a conversation with an applicant WITHOUT accepting them
   // (the "Ask a question" action on ApplicantCard). Sizes P0-02: accepting used
   // to be the only way to talk to a hunter, so a poster had to commit
@@ -601,9 +630,23 @@ export type AnalyticsEvent =
   //   accept_funding_failed        (NEW) — carries `reason` from
   //                                        classifyAcceptFundingError, never a
   //                                        raw DB/Stripe message
-  //   accept_funding_abandoned     (NEW) — poster left the pay gate without
-  //                                        hiring; `trigger` says how:
-  //                                        cancel | background | unmount
+  //   accept_blocked_by_payment    — the hire attempt ended at the payment
+  //                                        step with nobody hired. ONCE per gate
+  //                                        opening (or per refusal to open).
+  //                                        `trigger`: cancel | background |
+  //                                        unmount | deposit_unconfirmed |
+  //                                        prior_deposit_unconfirmed. Also
+  //                                        `stage`, `balanceCovers`,
+  //                                        `paymentAttempts`, `lastFailureCode`,
+  //                                        bounty_id / application_id /
+  //                                        hunter_id. A 'background' block can
+  //                                        still recover: join to
+  //                                        application_accepted on
+  //                                        application_id. Replaces
+  //                                        `accept_funding_abandoned` (retired
+  //                                        2026-11-05), which re-fired on every
+  //                                        background and was silent for both
+  //                                        unconfirmed-deposit exits.
   //
   // Every event in this block carries `variant` (control | deferred),
   // `fundingMode` ('at_post' | 'at_accept') and `firstBounty`, so the two arms
@@ -615,7 +658,7 @@ export type AnalyticsEvent =
   | 'accept_funding_started'
   | 'accept_funding_succeeded'
   | 'accept_funding_failed'
-  | 'accept_funding_abandoned'
+  | 'accept_blocked_by_payment'
   // Stripe Phase 2 (payment_architecture_version=2) bounty escrow routing —
   // see lib/utils/payment-architecture.ts. escrow_funded/escrow_released/
   // escrow_refunded above are reused for both architectures (properties

@@ -32,3 +32,33 @@ export function markApplicantProfileViewed(bountyId: string, hunterId: string): 
 export function wasApplicantProfileViewed(bountyId: string, hunterId: string): boolean {
   return viewedApplicantProfiles.has(applicantProfileKey(bountyId, hunterId))
 }
+
+// Applications the poster has seen this session. `byId` backs
+// application_viewed's `first_view_this_session`; `bySurface` keeps the LIST
+// surfaces (Inbox rows, legacy Requests cards) to one application_viewed per
+// application per session, so scrolling a row in and out never refires it.
+// The bounty thread deliberately does not use `bySurface`: every visit there
+// is its own view, paired with at most one application_dismissed.
+const viewedApplicationIds = new Set<string>()
+const viewedApplicationSurfaces = new Set<string>()
+
+/** Records a view; returns whether it was the first of this application on ANY surface. */
+export function markApplicationViewed(applicationId: string): boolean {
+  const first = !viewedApplicationIds.has(applicationId)
+  viewedApplicationIds.add(applicationId)
+  return first
+}
+
+/** True the first time (applicationId, surface) is seen this session, false after. */
+export function consumeFirstApplicationViewOnSurface(applicationId: string, surface: string): boolean {
+  const key = `${surface}:${applicationId}`
+  if (viewedApplicationSurfaces.has(key)) return false
+  viewedApplicationSurfaces.add(key)
+  return true
+}
+
+/** Test-only: module state otherwise lives for the app session. */
+export function __resetApplicationViewFlagsForTests(): void {
+  viewedApplicationIds.clear()
+  viewedApplicationSurfaces.clear()
+}

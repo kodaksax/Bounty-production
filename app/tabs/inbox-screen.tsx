@@ -47,7 +47,7 @@ import { uniqueRealtimeTopic } from '../../lib/utils/realtime-topic'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { EmptyState } from '../../components/ui/empty-state'
 import { PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
-import { useApplicantListViewed } from '../../hooks/useApplicantListViewed'
+import { useApplicationListViews } from '../../hooks/useApplicationListViews'
 import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
   IN_PROGRESS_FILTERS,
@@ -69,6 +69,13 @@ interface InboxScreenProps {
   activeScreen: string
   setActiveScreen: (screen: string) => void
   onBountyAccepted?: (bountyId?: string | number) => void // Callback when a bounty is accepted
+  /**
+   * False while BountyApp keeps this tab preloaded off-screen (it mounts as a
+   * swipe neighbour of Wallet). Gates `application_viewed`, so a poster who
+   * never opened the Inbox is not counted as having seen their applicants.
+   * Defaults to true for any other mount.
+   */
+  isActive?: boolean
 }
 
 /**
@@ -93,7 +100,7 @@ function segmentForInitialTab(initialTab: string | undefined): InboxTab {
   return inboxSegmentForLink(initialTab) ?? "inProgress"
 }
 
-export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyAccepted }: InboxScreenProps) {
+export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyAccepted, isActive = true }: InboxScreenProps) {
   const rawUserId = useValidUserId()
   const currentUserId = rawUserId ?? undefined
   const router = useRouter()
@@ -339,8 +346,14 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     }
   }, [openBountyIdsKey, currentUserId, loadRequestsForMyBounties])
 
-  // Applicants are now reviewed from My Bounties.
-  useApplicantListViewed(bountyRequests, activeTab === 'myPostings', isLoading.requests)
+  // Applicants are now reviewed from My Bounties: one application_viewed per
+  // applicant row the poster actually has on screen there.
+  const applicationListViews = useApplicationListViews<InboxListItem>({
+    surface: 'inbox_list',
+    enabled: isActive && activeTab === 'myPostings',
+    bountyRequests,
+    getApplication: (item) => (isNotNearbyItem(item) ? null : item.application),
+  })
 
   // Set of bounty IDs that have at least one pending hunter application.
   // Used to prevent the poster from editing bounty terms after a hunter has applied.
@@ -1080,6 +1093,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
           removeClippedSubviews={false}
           initialNumToRender={6}
           windowSize={7}
+          {...(tab === 'myPostings' ? applicationListViews : {})}
         />
   )
 

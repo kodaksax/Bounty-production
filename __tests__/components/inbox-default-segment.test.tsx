@@ -3,21 +3,21 @@
  * they posted, because that is where its applications arrive. Hunter-only
  * accounts keep My Work, and an explicit link (SBA-12) always wins.
  *
- * The active segment is read from the `active` argument InboxScreen passes to
- * useApplicantListViewed (true only while My Bounties is showing), which is
- * also exactly what drives the done-when event, applicant_list_viewed.
+ * The active segment is read from the `enabled` option InboxScreen passes to
+ * useApplicationListViews (true only while My Bounties is showing), which is
+ * also exactly what gates the done-when event, application_viewed.
  */
 import { render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { lightTheme } from '../../lib/themes/lightTheme';
 
 const mockGetByUserId = jest.fn();
-const mockApplicantListViewed = jest.fn();
+const mockApplicationListViews = jest.fn(() => ({}));
 let mockUserId: string | null = 'poster-1';
 
 jest.mock('../../hooks/useValidUserId', () => ({ useValidUserId: () => mockUserId }));
-jest.mock('../../hooks/useApplicantListViewed', () => ({
-  useApplicantListViewed: (...args: unknown[]) => mockApplicantListViewed(...args),
+jest.mock('../../hooks/useApplicationListViews', () => ({
+  useApplicationListViews: (...args: unknown[]) => (mockApplicationListViews as any)(...args),
 }));
 jest.mock('../../hooks/useConversations', () => ({
   useConversations: () => ({ conversations: [], loading: false, refresh: jest.fn() }),
@@ -61,8 +61,8 @@ const WORKING = { id: 'b-work', status: 'in_progress', title: 'Paint', amount: 5
 
 /** The last `active` flag InboxScreen gave the applicants-viewed hook. */
 function myBountiesShowing(): boolean {
-  const calls = mockApplicantListViewed.mock.calls;
-  return calls.length > 0 && calls[calls.length - 1][1] === true;
+  const calls = mockApplicationListViews.mock.calls;
+  return calls.length > 0 && (calls[calls.length - 1] as any[])[0].enabled === true;
 }
 
 function renderInbox(initialTab?: string) {
@@ -88,7 +88,7 @@ describe('InboxScreen default segment', () => {
     renderInbox();
     await waitFor(() => expect(mockGetByUserId).toHaveBeenCalled());
     // Let the load settle, then confirm it never moved.
-    await waitFor(() => expect(mockApplicantListViewed.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(mockApplicationListViews.mock.calls.length).toBeGreaterThan(1));
     expect(myBountiesShowing()).toBe(false);
   });
 
@@ -96,7 +96,7 @@ describe('InboxScreen default segment', () => {
     mockGetByUserId.mockResolvedValue([]);
     renderInbox();
     await waitFor(() => expect(mockGetByUserId).toHaveBeenCalled());
-    await waitFor(() => expect(mockApplicantListViewed.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(mockApplicationListViews.mock.calls.length).toBeGreaterThan(1));
     expect(myBountiesShowing()).toBe(false);
   });
 
@@ -104,7 +104,7 @@ describe('InboxScreen default segment', () => {
     mockGetByUserId.mockResolvedValue([OPEN]);
     renderInbox('inProgress');
     await waitFor(() => expect(mockGetByUserId).toHaveBeenCalled());
-    await waitFor(() => expect(mockApplicantListViewed.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(mockApplicationListViews.mock.calls.length).toBeGreaterThan(1));
     expect(myBountiesShowing()).toBe(false);
   });
 

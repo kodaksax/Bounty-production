@@ -92,7 +92,31 @@ export interface AcceptFundingContext {
   hunterAvatar?: string | null;
   /** Tags the experiment arm onto every event this gate emits. */
   variant?: string;
+  /**
+   * The application being hired. Carried onto `accept_blocked_by_payment` so
+   * it joins to `application_viewed` / `application_accepted` on
+   * application_id without a lookup.
+   */
+  applicationId?: string;
+  /** The hunter being hired, for the same join. */
+  hunterId?: string;
 }
+
+/**
+ * How a hire attempt ended at the payment step without anyone being hired.
+ * See `accept_blocked_by_payment` in lib/services/analytics-service.ts.
+ */
+export type AcceptBlockedTrigger =
+  /** Poster closed the sheet ("Not now" / back). */
+  | 'cancel'
+  /** App went to the background with the sheet up and no payment in flight. */
+  | 'background'
+  /** The screen holding the sheet unmounted (tab switch, sign-out, reset). */
+  | 'unmount'
+  /** Stripe took a top-up but the server never reflected it; sheet closed. */
+  | 'deposit_unconfirmed'
+  /** A previous top-up was still unconfirmed, so the sheet refused to open. */
+  | 'prior_deposit_unconfirmed';
 
 export interface AcceptFundingGate {
   /** True whenever the gate should be rendered over the current screen. */
@@ -141,6 +165,12 @@ interface PendingGate {
   resolve: (proceed: boolean) => void;
   bountyId: string;
   context: AcceptFundingContext;
+  /** `accept_blocked_by_payment` fires at most once per opened gate. */
+  blockedTracked: boolean;
+  /** Payment UIs opened from this gate (card, Apple Pay, add-a-card). */
+  paymentAttempts: number;
+  /** error_code of the last refused charge, if any. */
+  lastFailureCode?: string;
 }
 
 interface UnresolvedDeposit {
@@ -215,25 +245,69 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   /** Shared analytics properties. Never carries an exact amount or balance. */
   const eventProps = useCallback(
     (req: BountyFundingRequirement | null, context: AcceptFundingContext) => ({
-      bountyId: req?.bountyId,
-      amountBucket: amountBucket(req?.amountRequired ?? 0),
-      fundingMode: req?.fundingMode ?? 'at_post',
+      ...(req
+        ? {
+            bountyId: req.bountyId,
+            amountBucket: amountBucket(req.amountRequired),
+            fundingMode: req.fundingMode,
+            firstBounty: req.fundingMode === 'at_accept',
+          }
+        : {}),
       variant: context.variant ?? 'unknown',
-      firstBounty: req?.fundingMode === 'at_accept',
       source: 'accept_flow',
     }),
     []
   );
 
-  const trackAbandoned = useCallback(
-    (pending: PendingGate, trigger: 'cancel' | 'background' | 'unmount') => {
-      analyticsService.trackEvent('accept_funding_abandoned', {
-        ...eventProps(requirementRef.current, pending.context),
-        stage: stageRef.current,
-        trigger,
+  /**
+   * `accept_blocked_by_payment`: the poster tried to hire and the payment step
+   * is where it stopped. Replaces `accept_funding_abandoned` (retired
+   * 2026-11-05), which fired on every background AND again on the later
+   * cancel/unmount, and was silent for the two unconfirmed-deposit exits.
+   */
+  const emitBlocked = useCallback(
+    (args: {
+      bountyId: string;
+      context: AcceptFundingContext;
+      req: BountyFundingRequirement | null;
+      stage: AcceptFundingStage;
+      trigger: AcceptBlockedTrigger;
+      paymentAttempts: number;
+      lastFailureCode?: string;
+    }) => {
+      const { bountyId: _camelBountyId, ...shared } = eventProps(args.req, args.context);
+      analyticsService.trackEvent('accept_blocked_by_payment', {
+        ...shared,
+        bounty_id: args.req?.bountyId ?? args.bountyId,
+        application_id: args.context.applicationId,
+        hunter_id: args.context.hunterId,
+        trigger: args.trigger,
+        stage: args.stage,
+        // Same cut as accept_funding_required: "hesitated at the price" (the
+        // balance already covered it) vs. "had to go and find money".
+        balanceCovers: args.req ? args.req.shortfall <= 0 : undefined,
+        paymentAttempts: args.paymentAttempts,
+        lastFailureCode: args.lastFailureCode,
       });
     },
     [eventProps]
+  );
+
+  const trackBlocked = useCallback(
+    (pending: PendingGate, trigger: AcceptBlockedTrigger) => {
+      if (pending.blockedTracked) return;
+      pending.blockedTracked = true;
+      emitBlocked({
+        bountyId: pending.bountyId,
+        context: pending.context,
+        req: requirementRef.current,
+        stage: stageRef.current,
+        trigger,
+        paymentAttempts: pending.paymentAttempts,
+        lastFailureCode: pending.lastFailureCode,
+      });
+    },
+    [emitBlocked]
   );
 
   const close = useCallback((proceed: boolean) => {
@@ -273,7 +347,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       const pending = pendingRef.current;
       if (!pending) return;
       if (paymentInFlightRef.current || stageRef.current === 'settling') return;
-      trackAbandoned(pending, 'background');
+      trackBlocked(pending, 'background');
     });
 
     return () => {
@@ -282,10 +356,10 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       if (!pending) return;
       pendingRef.current = null;
       paymentInFlightRef.current = false;
-      trackAbandoned(pending, 'unmount');
+      trackBlocked(pending, 'unmount');
       pending.resolve(false);
     };
-  }, [trackAbandoned]);
+  }, [trackBlocked]);
 
   const openGate = useCallback(
     async (
@@ -300,7 +374,17 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       setRemainderAfterDeposit(false);
       setPaymentFailure(null);
 
-      const stopForUnresolvedDeposit = () => {
+      const stopForUnresolvedDeposit = (latest: BountyFundingRequirement | null = null) => {
+        // The poster asked to hire and the sheet would not open because an
+        // earlier top-up is still unconfirmed: blocked at payment, no sheet.
+        emitBlocked({
+          bountyId: id,
+          context,
+          req: latest,
+          stage: 'checking',
+          trigger: 'prior_deposit_unconfirmed',
+          paymentAttempts: 0,
+        });
         setStage('idle');
         setRequirement(null);
         Alert.alert(
@@ -335,7 +419,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
             }
           }
           if (unresolvedDepositRef.current === unresolvedDeposit) {
-            return stopForUnresolvedDeposit();
+            return stopForUnresolvedDeposit(req);
           }
         }
       }
@@ -371,10 +455,10 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       setStage(req.shortfall > 0 ? 'pay' : 'confirm');
 
       return new Promise<boolean>(resolve => {
-        pendingRef.current = { resolve, bountyId: id, context };
+        pendingRef.current = { resolve, bountyId: id, context, blockedTracked: false, paymentAttempts: 0 };
       });
     },
-    [depositReflected, eventProps, settlePollAttempts, settlePollDelayMs]
+    [depositReflected, emitBlocked, eventProps, settlePollAttempts, settlePollDelayMs]
   );
 
   const ensureFunded = useCallback(
@@ -453,6 +537,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       // Linking a card charges nothing and reports no outcome back, so it
       // must not hold the background-abandonment check off.
       if (method !== 'linkCard') paymentInFlightRef.current = true;
+      pending.paymentAttempts += 1;
       setPaymentFailure(null);
       analyticsService.trackEvent('accept_funding_started', {
         ...eventProps(requirementRef.current, pending.context),
@@ -468,6 +553,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       const pending = pendingRef.current;
       paymentInFlightRef.current = false;
       if (!pending) return;
+      pending.lastFailureCode = outcome === 'failed' ? failure?.error_code ?? 'payment_failed' : 'payment_cancelled';
       analyticsService.trackEvent('accept_funding_failed', {
         ...eventProps(requirementRef.current, pending.context),
         // Same decline_code / code / type / payment_method_type as the
@@ -524,6 +610,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
           reason: 'deposit_unconfirmed',
         });
         unresolvedDepositRef.current = unresolvedDeposit;
+        trackBlocked(pending, 'deposit_unconfirmed');
         close(false);
         Alert.alert(
           'Your payment went through',
@@ -555,7 +642,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       setRemainderAfterDeposit(true);
       setStage('pay');
     },
-    [close, depositReflected, eventProps, settlePollAttempts, settlePollDelayMs]
+    [close, depositReflected, eventProps, settlePollAttempts, settlePollDelayMs, trackBlocked]
   );
 
   const onPaymentPending = useCallback(() => {
@@ -566,9 +653,9 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   const onCancel = useCallback(() => {
     if (stageRef.current === 'pending') return;
     const pending = pendingRef.current;
-    if (pending) trackAbandoned(pending, 'cancel');
+    if (pending) trackBlocked(pending, 'cancel');
     close(false);
-  }, [close, trackAbandoned]);
+  }, [close, trackBlocked]);
 
   const gate: AcceptFundingGate = {
     // 'checking' is deliberately NOT active: it lasts one RPC, and flashing a
