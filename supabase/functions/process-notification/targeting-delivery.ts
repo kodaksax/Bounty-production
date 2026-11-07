@@ -250,8 +250,13 @@ export async function processTargetingOutbox(options: {
           }
         }
       }
+      // Not `...args`: that object is the claim RPC's and carries p_attempt_id,
+      // which the ack does not declare. PostgREST resolves an RPC by its exact
+      // parameter names, so the extra key is PGRST202 "function not found", and
+      // the throw below then abandons every remaining hunter in the dispatch.
       const { data: acknowledged, error: ackError } = await admin.rpc('fn_ack_bounty_targeting_delivery', {
-        ...args, p_state: state, p_error: reason,
+        p_outbox_id: row.id, p_hunter_id: hunterId, p_channel: channel, p_claim_id: claimId,
+        p_state: state, p_error: reason,
       })
       if (ackError || acknowledged !== true) throw new Error('Targeting channel acknowledgement failed')
       if (state === 'accepted' || state === 'failed' || state === 'unknown') {

@@ -247,8 +247,8 @@ function CancellationRequestScreen() {
         <AlertCircle size={48} color={theme.warning} />
         <Text style={s.stateTitle}>Report a problem instead</Text>
         <Text style={s.stateBody}>
-          Once a hunter is working on your bounty, you can't cancel it yourself. If the hunter has
-          gone quiet or the work isn't right, report it. Bounty support follows up with both of you
+          Once a hunter is working on your bounty, you can&apos;t cancel it yourself. If the hunter has
+          gone quiet or the work isn&apos;t right, report it. Bounty support follows up with both of you
           and decides what happens to the escrow.
         </Text>
         <View style={s.stateActions}>

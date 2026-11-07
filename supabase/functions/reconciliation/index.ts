@@ -39,6 +39,7 @@ import {
     correlatePayoutToPendingWithdrawal,
     isSafeStatusRepair,
     normalizeStripeStatus,
+    runReportOutcome,
     splitInvariantViolations,
     type Health,
     type Severity,
@@ -1279,7 +1280,7 @@ serve(async (req: Request) => {
 
     const deltaCents = totalStripeAmountCents - totalLedgerAmountCents;
     const criticalFindings = findings.filter(f => f.severity === 'CRITICAL').length;
-    const health = computeHealth({
+    const computedHealth = computeHealth({
       mismatched,
       orphanStripe,
       orphanLedger,
@@ -1287,6 +1288,7 @@ serve(async (req: Request) => {
       deltaCents,
       criticalFindings,
     });
+    let failedFindings = 0;
 
     // Persist findings (skip INFO-level repairs already captured above? no —
     // keep everything; the audit value is in the complete picture).
@@ -1352,6 +1354,7 @@ serve(async (req: Request) => {
         }
       }
 
+      failedFindings = persistErrors.length;
       if (persistErrors.length > 0) {
         // Loud: a reconciliation run whose findings vanish is worse than one
         // that did not run, because it looks like a clean pass.
@@ -1366,6 +1369,12 @@ serve(async (req: Request) => {
         );
       }
     }
+
+    const { health, error: reportError } = runReportOutcome(
+      computedHealth,
+      failedFindings,
+      findings.length
+    );
 
     const report: DriftReport = {
       timestamp: new Date().toISOString(),
@@ -1398,6 +1407,7 @@ serve(async (req: Request) => {
       health,
       safe_repairs: safeRepairs,
       unreconciled,
+      error: reportError,
     });
 
     console.log('[reconciliation] run complete', {

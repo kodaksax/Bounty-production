@@ -106,4 +106,14 @@ export async function logClientInfo(message: string, metadata?: Record<string, a
   }
 }
 
-export default { logClientError, logClientInfo };
+/**
+ * For high-frequency lifecycle lines that are only useful while debugging.
+ * logClientInfo is a server round trip, so anything firing on each foreground or
+ * network change costs a request at the moment the app is trying to load. These
+ * stay off the network unless EXPO_PUBLIC_LOG_CLIENT_VERBOSE is on.
+ */
+export function logClientVerbose(message: string, metadata?: Record<string, any>) {
+  if (verboseClientLogs) void logClientInfo(message, metadata);
+}
+
+export default { logClientError, logClientInfo, logClientVerbose };

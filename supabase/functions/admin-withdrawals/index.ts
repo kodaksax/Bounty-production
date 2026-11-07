@@ -278,11 +278,18 @@ async function comparePlatformBalance(
     // time were hourly repeats of ~5 underlying conditions). Trend history
     // is preserved regardless via the stripe_balance_snapshots insert below,
     // which always runs.
+    //
+    // Open means unresolved as well as unacknowledged, and only a finding of
+    // the same severity covers this one. Matching on acknowledged_at alone let
+    // an old resolved warning absorb a new shortfall, so the critical insert,
+    // whose trigger is what pages someone, never ran.
     const { data: openFinding, error: openFindingError } = await supabase
       .from('reconciliation_findings')
       .select('id')
       .eq('finding_type', 'platform_balance_drift')
+      .eq('severity', severity)
       .is('acknowledged_at', null)
+      .is('resolved_at', null)
       .order('run_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -383,7 +390,9 @@ async function compareConnectAccountBalance(
       .select('id')
       .eq('finding_type', 'connect_account_balance_drift')
       .eq('user_id', userId)
+      .eq('severity', severity)
       .is('acknowledged_at', null)
+      .is('resolved_at', null)
       .order('run_at', { ascending: false })
       .limit(1)
       .maybeSingle();

@@ -164,12 +164,10 @@ async function fetchLatestSubmission(bountyId: string): Promise<CompletionSubmis
       .eq('bounty_id', bountyId)
       .order('submitted_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') return null; // No rows
-      throw new Error(error?.message ?? JSON.stringify(error));
-    }
+    if (error) throw new Error(error?.message ?? JSON.stringify(error));
+    if (!data) return null;
 
     return {
       ...data,

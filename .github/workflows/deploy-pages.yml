@@ -5,7 +5,9 @@ on:
     branches:
       - main
     paths:
-      - 'docs/**'
+      - 'docs/**/*.html'
+      - 'docs/**/*.css'
+      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -30,10 +32,28 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
       
+      # docs/ also holds internal audits and runbooks. Publish an explicit list
+      # of public pages, never the folder. The auth/ and wallet/ pages are live
+      # redirect targets, so they must stay.
+      - name: Collect public pages
+        working-directory: docs
+        run: |
+          mkdir -p ../_site
+          cp --parents \
+            index.html \
+            privacy.html \
+            terms.html \
+            styles.css \
+            auth/callback/index.html \
+            auth/update-password/index.html \
+            wallet/connect/refresh/index.html \
+            wallet/connect/return/index.html \
+            ../_site/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './docs'
+          path: './_site'
       
       - name: Deploy to GitHub Pages
         id: deployment

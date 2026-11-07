@@ -145,6 +145,11 @@ async function loadCachedMessages(conversationId: string): Promise<Message[]> {
 export function getProfileAvatarUrl(avatarPath?: string | null): string | undefined {
   if (!avatarPath) return undefined;
 
+  // profiles.avatar holds a full URL, not a bucket path. getPublicUrl() would
+  // prefix it with this bucket's URL and produce an address storage rejects
+  // with a 400, leaving every conversation row without its avatar.
+  if (/^https?:\/\//i.test(avatarPath)) return avatarPath;
+
   const { data } = supabase.storage.from('Profilepictures').getPublicUrl(avatarPath);
 
   return data?.publicUrl;

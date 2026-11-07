@@ -2,7 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { logClientError, logClientInfo } from '../lib/services/monitoring';
+import { logClientError, logClientVerbose } from '../lib/services/monitoring';
 import { wsAdapter } from '../lib/services/websocket-adapter';
 import { supabase } from '../lib/supabase';
 import { safeCleanup } from '../lib/utils/lifecycle';
@@ -13,6 +13,8 @@ export interface WebSocketState {
   connectionState: string;
   reconnectAttempts: number;
 }
+
+const verboseClient = process.env.EXPO_PUBLIC_LOG_CLIENT_VERBOSE === '1';
 
 /**
  * Hook to manage WebSocket connection lifecycle
@@ -46,13 +48,13 @@ export function useWebSocket() {
       // Check if user is authenticated. If no session, wait briefly for auth state to change.
       let session = (await supabase.auth.getSession()).data.session;
       if (!session) {
-        logClientInfo('WebSocket connect skipped - no active session; waiting briefly for auth');
+        logClientVerbose('WebSocket connect skipped - no active session; waiting briefly for auth');
 
         // Wait up to 5s for a SIGNED_IN event that provides a session
         const awaited = await waitForAuthEvent(5000);
 
         if (!awaited) {
-          logClientInfo('No session after waiting, aborting WebSocket connect');
+          logClientVerbose('No session after waiting, aborting WebSocket connect');
           return;
         }
 
@@ -60,7 +62,7 @@ export function useWebSocket() {
         session = awaited;
       }
 
-      logClientInfo('Initiating WebSocket connection');
+      logClientVerbose('Initiating WebSocket connection');
       await wsAdapter.connect();
     } catch (error) {
       logClientError('Error connecting to WebSocket', { error });
@@ -69,14 +71,14 @@ export function useWebSocket() {
 
   // Disconnect from WebSocket
   const disconnect = useCallback(() => {
-    logClientInfo('Disconnecting WebSocket');
+    logClientVerbose('Disconnecting WebSocket');
     wsAdapter.disconnect();
     updateState();
   }, [updateState]);
 
   // Reconnect WebSocket
   const reconnect = useCallback(() => {
-    logClientInfo('Reconnecting WebSocket');
+    logClientVerbose('Reconnecting WebSocket');
     wsAdapter.reconnect();
   }, []);
 
@@ -84,14 +86,13 @@ export function useWebSocket() {
     mountedRef.current = true;
 
     // Set up event listeners
-    const verboseClient = process.env.EXPO_PUBLIC_LOG_CLIENT_VERBOSE === '1';
     const unsubscribeConnect = wsAdapter.on('connect', () => {
-      if (verboseClient) logClientInfo('WebSocket connected');
+      logClientVerbose('WebSocket connected');
       updateState();
     });
 
     const unsubscribeDisconnect = wsAdapter.on('disconnect', () => {
-      if (verboseClient) logClientInfo('WebSocket disconnected');
+      logClientVerbose('WebSocket disconnected');
       updateState();
     });
 
@@ -108,12 +109,12 @@ export function useWebSocket() {
     // Handle app state changes (reconnect when app comes to foreground)
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
-        logClientInfo('App became active, checking WebSocket connection');
+        logClientVerbose('App became active, checking WebSocket connection');
         if (!wsAdapter.isConnected()) {
           connect();
         }
       } else if (nextAppState === 'background') {
-        logClientInfo('App went to background');
+        logClientVerbose('App went to background');
         // Keep connection alive in background for notifications
         // Could disconnect here if you want to save battery
       }
@@ -124,10 +125,10 @@ export function useWebSocket() {
     // Handle network state changes
     const unsubscribeNetInfo = NetInfo.addEventListener(state => {
       if (state.isConnected && !wsAdapter.isConnected()) {
-        logClientInfo('Network reconnected, reconnecting WebSocket');
+        logClientVerbose('Network reconnected, reconnecting WebSocket');
         connect();
       } else if (!state.isConnected) {
-        logClientInfo('Network disconnected');
+        logClientVerbose('Network disconnected');
       }
     });
 

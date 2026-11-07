@@ -44,6 +44,10 @@ class CachedDataService {
   private isOnline = true;
   private memoryCache = new Map<string, CacheEntry<any>>();
   private events = new EventEmitter();
+  /** The network pass currently running for a key. */
+  private inFlight = new Map<string, Promise<unknown>>();
+  /** The one forced pass waiting for the current pass to finish, per key. */
+  private queuedRefresh = new Map<string, Promise<unknown>>();
 
   constructor() {
     // Listen for network state changes
@@ -222,6 +226,62 @@ class CachedDataService {
   }
 
   /**
+   * One network pass per key: joins the pass already running, else starts one.
+   *
+   * Several screens mount the same cached query at once (useConversations has
+   * five call sites), and a single realtime event reaches all of them. Without
+   * this each instance ran its own multi-request fetch. setCache() notifies
+   * every subscriber, so one pass updates them all.
+   */
+  private fetchOnce<T>(key: string, fetchFn: () => Promise<T>, options: CacheOptions): Promise<T> {
+    const running = this.inFlight.get(key) as Promise<T> | undefined;
+    if (running) return running;
+
+    const pass: Promise<T> = (async () => {
+      const data = await fetchFn();
+      await this.setCache(key, data, options);
+      return data;
+    })().finally(() => {
+      if (this.inFlight.get(key) === pass) this.inFlight.delete(key);
+    });
+    this.inFlight.set(key, pass);
+    return pass;
+  }
+
+  /**
+   * A forced refresh must see writes made before it was requested, so it cannot
+   * join a pass that may have read the database earlier. It waits for that pass
+   * and runs once more; concurrent forced refreshes share that single trailing
+   * pass, so a burst costs at most two passes however many callers join it.
+   */
+  private refreshOnce<T>(key: string, fetchFn: () => Promise<T>, options: CacheOptions): Promise<T> {
+    const running = this.inFlight.get(key);
+    if (!running) return this.fetchOnce(key, fetchFn, options);
+
+    const queued = this.queuedRefresh.get(key) as Promise<T> | undefined;
+    if (queued) return queued;
+
+    const settle = () => undefined;
+    const next: Promise<T> = running.then(settle, settle).then(() => {
+      if (this.queuedRefresh.get(key) === next) this.queuedRefresh.delete(key);
+      return this.fetchOnce(key, fetchFn, options);
+    });
+    this.queuedRefresh.set(key, next);
+    return next;
+  }
+
+  /** Stop new callers joining passes started before a clear (e.g. on logout). */
+  private forgetPasses(key?: string): void {
+    if (key === undefined) {
+      this.inFlight.clear();
+      this.queuedRefresh.clear();
+      return;
+    }
+    this.inFlight.delete(key);
+    this.queuedRefresh.delete(key);
+  }
+
+  /**
    * Fetch data with automatic caching
    * Returns cached data if offline or if cache is fresh
    */
@@ -248,17 +308,20 @@ class CachedDataService {
       if (!forceRefresh) {
         const cached = await this.getFromCache<T>(key);
         if (cached !== null) {
-          // Return cached data but fetch in background to update cache
-          fetchFn()
-            .then(data => {
-              this.setCache(key, data, options);
-              this.events.emit(REVALIDATION_EVENT, key, data);
-            })
-            .catch(err => {
-              logger.error('Background cache update failed', { key, error: err });
-              // emit a revalidation error so consumers can surface errors
-              this.events.emit(REVALIDATION_ERROR_EVENT, key, err);
-            });
+          // Return cached data but fetch in background to update cache. Only
+          // the caller that starts the pass reports its outcome; a pass that is
+          // already running revalidates this key on its own.
+          if (!this.inFlight.has(key)) {
+            this.fetchOnce(key, fetchFn, options)
+              .then(data => {
+                this.events.emit(REVALIDATION_EVENT, key, data);
+              })
+              .catch(err => {
+                logger.error('Background cache update failed', { key, error: err });
+                // emit a revalidation error so consumers can surface errors
+                this.events.emit(REVALIDATION_ERROR_EVENT, key, err);
+              });
+          }
 
           logger.info(`Using cached data (stale-while-revalidate): ${key}`);
           return cached;
@@ -266,9 +329,9 @@ class CachedDataService {
       }
 
       // Fetch fresh data
-      const data = await fetchFn();
-      await this.setCache(key, data, options);
-      return data;
+      return forceRefresh
+        ? await this.refreshOnce(key, fetchFn, options)
+        : await this.fetchOnce(key, fetchFn, options);
     } catch (error) {
       // If fetch fails, try to return cached data as fallback
       const cached = await this.getFromCache<T>(key);
@@ -286,6 +349,7 @@ class CachedDataService {
    */
   async invalidate(key: string): Promise<void> {
     try {
+      this.forgetPasses(key);
       this.memoryCache.delete(key);
       const cacheKey = this.getCacheKey(key);
       await AsyncStorage.removeItem(cacheKey);
@@ -300,6 +364,7 @@ class CachedDataService {
    */
   async clearAll(): Promise<void> {
     try {
+      this.forgetPasses();
       this.memoryCache.clear();
 
       // Get all keys and remove cache entries
@@ -326,6 +391,10 @@ class CachedDataService {
         if (key.includes(pattern)) {
           this.memoryCache.delete(key);
         }
+      }
+
+      for (const key of [...this.inFlight.keys(), ...this.queuedRefresh.keys()]) {
+        if (key.includes(pattern)) this.forgetPasses(key);
       }
 
       // Clear from storage

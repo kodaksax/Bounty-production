@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useWebSocket, WebSocketState } from '../hooks/useWebSocket';
-import { logClientError, logClientInfo } from '../lib/services/monitoring';
+import { logClientError, logClientVerbose } from '../lib/services/monitoring';
 import { isDeviceOnline, useOptionalNetworkContext } from './network-provider';
 
 interface WebSocketContextValue extends WebSocketState {
@@ -44,12 +44,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
    */
   const enhancedReconnect = useCallback(async () => {
     if (!isLoggedIn) {
-      logClientInfo('Skipping reconnect - user not logged in');
+      logClientVerbose('Skipping reconnect - user not logged in');
       return;
     }
 
     if (!isDeviceOnlineRef.current) {
-      logClientInfo('Skipping reconnect - device is offline');
+      logClientVerbose('Skipping reconnect - device is offline');
       return;
     }
 
@@ -73,7 +73,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     // Calculate delay with exponential backoff
     const delay = Math.min(baseDelay * Math.pow(2, attempts), maxDelay);
     
-    logClientInfo(`Reconnecting (attempt ${attempts + 1}/${maxAttempts}) in ${delay}ms`);
+    logClientVerbose(`Reconnecting (attempt ${attempts + 1}/${maxAttempts}) in ${delay}ms`);
     
     reconnectTimeoutRef.current = setTimeout(async () => {
       try {
@@ -147,12 +147,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const { isConnected, connect, disconnect } = webSocketState;
     
     if (isLoggedIn && !isConnected) {
-      logClientInfo('User logged in, connecting WebSocket');
+      logClientVerbose('User logged in, connecting WebSocket');
       connect().catch((error) => {
         logClientError('Failed to connect WebSocket on login', { error });
       });
     } else if (!isLoggedIn && isConnected) {
-      logClientInfo('User logged out, disconnecting WebSocket');
+      logClientVerbose('User logged out, disconnecting WebSocket');
       disconnect();
       setConnectionQuality('disconnected');
       setLastConnectedAt(null);
@@ -185,7 +185,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
     if (!deviceConnected && prev) {
       // Device went offline — proactively mark disconnected
-      logClientInfo('Device network lost, marking WebSocket disconnected');
+      logClientVerbose('Device network lost, marking WebSocket disconnected');
       isDeviceOnlineRef.current = false;
       setConnectionQuality('disconnected');
       reconnectAttemptsRef.current = 0;
@@ -197,7 +197,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
     } else if (deviceConnected && !prev && isLoggedIn) {
       // Device came back online while user is logged in — reconnect
-      logClientInfo('Device network restored, triggering WebSocket reconnect');
+      logClientVerbose('Device network restored, triggering WebSocket reconnect');
       isDeviceOnlineRef.current = true;
       reconnectAttemptsRef.current = 0;
       enhancedReconnectRef.current();

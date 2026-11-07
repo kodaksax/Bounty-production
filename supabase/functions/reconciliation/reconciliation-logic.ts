@@ -110,6 +110,25 @@ export function computeHealth(counts: HealthCounts): Health {
   return 'GREEN';
 }
 
+/**
+ * How a run reports itself once it knows whether its findings were stored.
+ *
+ * Findings that were not stored must not look like a clean pass. Job health
+ * watches reconciliation_reports.error, so a run that lost findings has to set
+ * it: reporting the computed health alone is how this stayed silent.
+ */
+export function runReportOutcome(
+  computedHealth: Health,
+  failedFindings: number,
+  totalFindings: number
+): { health: Health; error: string | null } {
+  if (failedFindings === 0) return { health: computedHealth, error: null };
+  return {
+    health: 'RED',
+    error: `findings_persist_failed: ${failedFindings} of ${totalFindings}`,
+  };
+}
+
 /** Severity for a payout that both sides agree is still pending. */
 export function payoutAgeSeverity(ageHours: number): Severity | null {
   if (ageHours > PAYOUT_PENDING_CRITICAL_HOURS) return 'CRITICAL';

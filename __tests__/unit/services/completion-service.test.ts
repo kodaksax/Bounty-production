@@ -422,7 +422,7 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
+                maybeSingle: jest.fn().mockResolvedValue({ data: mockData, error: null }),
               }),
             }),
           }),
@@ -442,10 +442,7 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({
-                  data: null,
-                  error: { code: 'PGRST116' },
-                }),
+                maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
               }),
             }),
           }),
@@ -463,7 +460,7 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({
+                maybeSingle: jest.fn().mockResolvedValue({
                   data: null,
                   error: { message: 'Connection failed' },
                 }),
@@ -735,7 +732,7 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({
+                maybeSingle: jest.fn().mockResolvedValue({
                   data: { ...mockSubmission, proof_items: '[]' },
                   error: null,
                 }),
@@ -799,7 +796,7 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
+                maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
               }),
             }),
           }),
@@ -1074,7 +1071,7 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
+                maybeSingle: jest.fn().mockResolvedValue({ data: mockData, error: null }),
               }),
             }),
           }),

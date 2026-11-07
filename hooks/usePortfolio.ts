@@ -3,6 +3,8 @@ import type { PortfolioItem } from '../lib/types';
 import { portfolioService } from '../lib/services/portfolio-service';
 import { migrateLegacyPortfolioItems } from '../lib/services/portfolio-legacy-migration';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 interface UsePortfolioResult {
   items: PortfolioItem[];
   loading: boolean;
@@ -24,6 +26,15 @@ export function usePortfolio(userId: string, isOwnProfile = false): UsePortfolio
   const [error, setError] = useState<string | null>(null);
 
   const fetchItems = async () => {
+    // The profile screen passes the 'current-user' placeholder until the auth
+    // profile resolves. portfolio_items.user_id is a uuid, so querying with it
+    // is a guaranteed 400 (a third of this table's reads in production), and
+    // the legacy migration must never run against a placeholder id.
+    if (!UUID_RE.test(userId)) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);

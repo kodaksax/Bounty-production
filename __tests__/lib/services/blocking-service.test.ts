@@ -89,19 +89,35 @@ describe('blockingService', () => {
     expect(res.isBlocked).toBe(false);
   });
 
-  test('isUserBlocked returns false on PGRST116 (no rows)', async () => {
+  test('isUserBlocked returns false when no block row exists', async () => {
     (getCurrentUserId as jest.Mock).mockReturnValue('me');
     (supabase.from as jest.Mock).mockReturnValue({
       select: () => ({
         eq: () => ({
           eq: () => ({
-            single: async () => ({ data: null, error: { code: 'PGRST116' } }),
+            maybeSingle: async () => ({ data: null, error: null }),
           }),
         }),
       }),
     });
     const res = await blockingService.isUserBlocked('someone');
     expect(res.isBlocked).toBe(false);
+    expect(res.error).toBeUndefined();
+  });
+
+  test('isUserBlocked returns true when a block row exists', async () => {
+    (getCurrentUserId as jest.Mock).mockReturnValue('me');
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: { blocker_id: 'me' }, error: null }),
+          }),
+        }),
+      }),
+    });
+    const res = await blockingService.isUserBlocked('someone');
+    expect(res.isBlocked).toBe(true);
   });
 
   test('getBlockedUsers requires authentication', async () => {

@@ -95,10 +95,9 @@ export const blockingService = {
         .select('blocker_id')
         .eq('blocker_id', currentUserId)
         .eq('blocked_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        // PGRST116 = no rows found, which is fine
+      if (error) {
         logger.error('Error checking block status:', { error });
         return { isBlocked: false, error: error.message };
       }

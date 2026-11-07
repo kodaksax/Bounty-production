@@ -486,6 +486,10 @@
     { "signature": "admin_apply_balance_adjustment(uuid,uuid,numeric,text,text,uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_bounty_unsettled_escrow_reason(uuid)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "record_reconciliation_finding(text,text,uuid,jsonb,boolean)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "record_reconciliation_findings(jsonb)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "admin_user_stats(uuid[])", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
+    { "signature": "fn_mark_poster_interacted(uuid)", "forbid_execute": ["anon", "PUBLIC"] },
+    { "signature": "fn_prune_operational_logs()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "increment_withdrawal_counter(uuid,timestamp with time zone)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "is_admin()", "forbid_execute": ["anon", "PUBLIC"] },
     {

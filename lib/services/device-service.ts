@@ -49,7 +49,7 @@ export const deviceService = {
                 .eq('is_active', true)
                 .order('last_active', { ascending: false })
                 .limit(1)
-                .single();
+                .maybeSingle();
 
             if (existingDevice) {
                 // Update last active

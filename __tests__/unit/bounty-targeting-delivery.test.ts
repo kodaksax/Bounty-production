@@ -1,5 +1,43 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { isTargetingOutbox, processTargetingOutbox } from '../../supabase/functions/process-notification/targeting-delivery'
 import { extractInvalidTokens } from '../../supabase/functions/process-notification/push-receipts'
+
+const TARGETING_MIGRATION = readFileSync(
+  join(process.cwd(), 'supabase/migrations/20261014230000_consolidate_bounty_targeting.sql'),
+  'utf8',
+)
+
+/** Parameters a migration declares for `name`, or null when it is defined elsewhere. */
+function declaredParams(name: string): { all: string[]; required: string[] } | null {
+  const start = TARGETING_MIGRATION.indexOf(`CREATE FUNCTION public.${name}(`)
+  if (start < 0) return null
+  const open = TARGETING_MIGRATION.indexOf('(', start)
+  const close = TARGETING_MIGRATION.indexOf(')', open)
+  const params = TARGETING_MIGRATION.slice(open + 1, close)
+    .split(',').map(param => param.trim()).filter(Boolean)
+  const paramName = (param: string) => param.split(/\s+/)[0]
+  return {
+    all: params.map(paramName),
+    required: params.filter(param => !/\bDEFAULT\b/i.test(param)).map(paramName),
+  }
+}
+
+/**
+ * PostgREST resolves an RPC by its exact named parameters, so one extra key is
+ * PGRST202 "function not found", not an ignored argument. A permissive mock
+ * hid exactly that: the ack call carried the claim's p_attempt_id, every
+ * delivery failed on prod, and this suite stayed green.
+ */
+function postgrestSignatureError(name: string, args: Record<string, unknown>) {
+  const declared = declaredParams(name)
+  if (!declared) return null
+  const keys = Object.keys(args)
+  const unknown = keys.filter(key => !declared.all.includes(key))
+  const missing = declared.required.filter(param => !keys.includes(param))
+  if (unknown.length === 0 && missing.length === 0) return null
+  return { code: 'PGRST202', message: `${name}: unknown ${unknown}; missing ${missing}` }
+}
 
 function fixture() {
   const row = { id: 'outbox', title: 'Nearby', body: 'New work', data: {
@@ -48,6 +86,8 @@ function fixture() {
       return query
     },
     rpc: jest.fn(async (name: string, args: any) => {
+      const signatureError = postgrestSignatureError(name, args)
+      if (signatureError) return { data: null, error: signatureError }
       if (name === 'fn_bounty_distribution_gate') return { data: { allowed }, error: null }
       const key = `${args.p_hunter_id}:${args.p_channel}`
       const entry = states.get(key)!
@@ -106,6 +146,33 @@ describe('new bounty-nearby durable delivery claims', () => {
     expect(isTargetingOutbox({ data: { type: 'payment', targeting_version: 1 } })).toBe(false)
     expect(isTargetingOutbox({ data: { type: 'bounty_nearby' } })).toBe(false)
     expect(isTargetingOutbox({ data: { type: 'bounty_nearby', targeting_version: 1 } })).toBe(true)
+  })
+
+  it('reaches every recipient: a channel ack never aborts the rest of the dispatch', async () => {
+    const f = fixture()
+    await f.run()
+    // Both hunters, not just the first. The ack bug threw after the first
+    // channel, so a dispatch could never get past hunter-a.
+    expect(f.states.get('hunter-a:in_app')?.state).toBe('accepted')
+    expect(f.states.get('hunter-a:push')?.state).toBe('accepted')
+    expect(f.states.get('hunter-b:in_app')?.state).toBe('accepted')
+    expect(f.states.get('hunter-b:push')?.state).toBe('accepted')
+    expect(f.getOutboxStatus()).toBe('sent')
+  })
+
+  it('sends each targeting RPC exactly the parameters its migration declares', async () => {
+    const f = fixture()
+    await f.run()
+    const calls = (f.admin.rpc as jest.Mock).mock.calls as [string, Record<string, unknown>][]
+    const seen = new Set(calls.map(([name]) => name))
+    for (const name of [
+      'fn_claim_bounty_targeting_delivery',
+      'fn_ack_bounty_targeting_delivery',
+      'fn_finish_bounty_targeting_outbox',
+    ]) {
+      expect(seen).toContain(name)
+    }
+    for (const [name, args] of calls) expect(postgrestSignatureError(name, args)).toBeNull()
   })
 
   it('concurrent workers send once per recipient, then retries send nothing', async () => {
