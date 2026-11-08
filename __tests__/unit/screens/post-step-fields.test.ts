@@ -68,6 +68,21 @@ describe('incompleteFieldsForStep', () => {
     expect(incompleteFieldsForStep('Compensation', draft({ amount: 0, isForHonor: true }))).toEqual([]);
   });
 
+  describe('with optional details', () => {
+    const options = { detailOptional: true };
+
+    it('does not report an empty or whitespace-only description', () => {
+      expect(incompleteFieldsForStep('Task', draft({ description: '' }), options)).toEqual([]);
+      expect(incompleteFieldsForStep('Task', draft({ description: '   ' }), options)).toEqual([]);
+    });
+
+    it('still reports a description that is started but too short', () => {
+      expect(incompleteFieldsForStep('Task', draft({ description: 'too short' }), options)).toEqual([
+        'description',
+      ]);
+    });
+  });
+
   it('returns nothing for an unknown step', () => {
     expect(incompleteFieldsForStep(undefined, draft({ title: '' }))).toEqual([]);
   });
@@ -79,6 +94,11 @@ describe('resumeStepForDraft', () => {
   it('stays on Task while the task is unfinished', () => {
     expect(resumeStepForDraft(draft({ description: 'too short' }))).toBe(1);
     expect(resumeStepForDraft(draft({ title: '' }))).toBe(1);
+  });
+
+  it('moves past Task for a draft with no details once they are optional', () => {
+    expect(resumeStepForDraft(draft({ description: '' }))).toBe(1);
+    expect(resumeStepForDraft(draft({ description: '' }), { detailOptional: true })).toBe(2);
   });
 
   it('reopens on Location for an in-person draft with an address but no pin', () => {

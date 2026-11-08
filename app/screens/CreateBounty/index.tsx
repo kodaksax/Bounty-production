@@ -15,6 +15,7 @@ import {
   composerScreenForStep,
   createComposerTelemetry,
 } from 'app/screens/CreateBounty/composerTelemetry';
+import { useTemplateDetailsEnabled } from 'app/screens/CreateBounty/composerFlags';
 import type { PostField } from 'app/screens/CreateBounty/postStepFields';
 import {
   fieldForPatch,
@@ -198,7 +199,10 @@ export function CreateBountyFlow({
   // `draft` itself has been reset to defaults.
   const publishedDraftRef = useRef<BountyDraft | null>(null);
   const { session } = useAuthContext();
-  const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
+  const detailOptional = useTemplateDetailsEnabled();
+  const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id, {
+    detailOptional,
+  });
   const { createEscrow, balance } = useWallet();
   const { paymentMethods } = useStripe();
   const { theme } = useAppThemeContext();
@@ -232,6 +236,8 @@ export function CreateBountyFlow({
   // mount-settle because post_started now fires later than that, and by then
   // the poster's own first keystroke would make every start look "resumed".
   const resumedDraftRef = useRef(false);
+  const resumeDraftRef = useRef<BountyDraft | null>(null);
+  const resumePromptShownRef = useRef(false);
   // Mirrors `currentStep` for use inside cleanup/callbacks that would
   // otherwise close over a stale value.
   const currentStepRef = useRef(1);
@@ -281,6 +287,8 @@ export function CreateBountyFlow({
   // this ref to judge which required fields were still incomplete.
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  const detailOptionalRef = useRef(detailOptional);
+  detailOptionalRef.current = detailOptional;
   const userIdRef = useRef(session?.user?.id);
   userIdRef.current = session?.user?.id;
   // Set right before an explicit exit path runs, so the post_step_abandoned
@@ -634,29 +642,39 @@ export function CreateBountyFlow({
   // This effect deliberately does NOT emit post_started; see
   // markComposerStarted() below.
   useEffect(() => {
-    if (isLoading || !isActive || flowMountedRef.current) return;
-    flowMountedRef.current = true;
-    resumedDraftRef.current = Boolean(draft.title?.trim());
-    flowTimerRef.current.start();
-    stepTimerRef.current.start();
-    stepBackgroundMsRef.current = 0;
-    backgroundedAtRef.current = appStateRef.current === 'active' ? null : getMonotonicNow();
-    if (deliberateTapRef.current) {
-      analyticsService.trackEvent('composer_opened', {
-        role: 'poster',
-        composer_screen: composerScreenForStep(currentStepRef.current),
-        variant: POST_FLOW_VARIANT,
-        entry_point: entryPoint,
-        deliberate_entry: true,
-      });
+    if (isLoading || !isActive) return;
+    if (!flowMountedRef.current) {
+      flowMountedRef.current = true;
+      resumedDraftRef.current = Boolean(draft.title?.trim());
+      resumeDraftRef.current = draft;
+      flowTimerRef.current.start();
+      stepTimerRef.current.start();
+      stepBackgroundMsRef.current = 0;
+      backgroundedAtRef.current = appStateRef.current === 'active' ? null : getMonotonicNow();
+      if (deliberateTapRef.current) {
+        analyticsService.trackEvent('composer_opened', {
+          role: 'poster',
+          composer_screen: composerScreenForStep(currentStepRef.current),
+          variant: POST_FLOW_VARIANT,
+          entry_point: entryPoint,
+          deliberate_entry: true,
+        });
+      }
     }
     // Leaving the Post tab resets the flow to step 1, so a poster coming back
     // to a draft that had got further sees only a pre-filled title. Offer to
-    // pick up where it stopped. A draft still unfinished on step 1 needs no
-    // prompt — the poster is already looking at it.
-    if (resumedDraftRef.current && currentStepRef.current === 1) {
-      const resumeStep = resumeStepForDraft(draft);
+    // pick up where it stopped. Re-evaluate when the optional-detail flag
+    // resolves, but only against the draft present when the flow first opened.
+    if (
+      flowMountedRef.current &&
+      resumedDraftRef.current &&
+      !resumePromptShownRef.current &&
+      !composerStartedRef.current &&
+      currentStep === 1
+    ) {
+      const resumeStep = resumeStepForDraft(resumeDraftRef.current ?? draft, { detailOptional });
       if (resumeStep > 1) {
+        resumePromptShownRef.current = true;
         setResumePromptStep(resumeStep);
         analyticsService.trackEvent('post_resume_prompt', {
           surface: POST_SURFACE,
@@ -669,10 +687,7 @@ export function CreateBountyFlow({
         });
       }
     }
-    // `draft` is read only for the one-time snapshot above; listing it would
-    // only re-run an effect that has already latched.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, isActive, draft.title, entryPoint]);
+  }, [isLoading, isActive, draft, currentStep, entryPoint, detailOptional]);
 
   /**
    * post_started — emitted at most once per composer instance, on the FIRST
@@ -859,7 +874,9 @@ export function CreateBountyFlow({
         // rather than null so "never touched a field" is a breakdown value.
         last_field: lastFieldRef.current ?? 'none',
         fields_touched: Array.from(fieldsTouchedRef.current),
-        incomplete_fields: incompleteFieldsForStep(stepName, draftRef.current),
+        incomplete_fields: incompleteFieldsForStep(stepName, draftRef.current, {
+          detailOptional: detailOptionalRef.current,
+        }),
       });
 
       // A poster who switched tabs away from an unfinished draft is who the

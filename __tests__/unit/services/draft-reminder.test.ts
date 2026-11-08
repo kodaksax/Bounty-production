@@ -84,6 +84,10 @@ describe('draftReminderContent', () => {
     expect(draftReminderContent(draft({ workType: 'online' })).body).toBe(
       '"Walk my dog" is 1 step from going live.'
     );
+    expect(draftReminderContent(draft({ description: '' }), { detailOptional: true })).toMatchObject({
+      body: '"Walk my dog" is 2 steps from going live.',
+      data: { stepsLeft: 2 },
+    });
   });
 
   it('deep-links to the Post tab', () => {
@@ -95,6 +99,14 @@ describe('draftReminderContent', () => {
 });
 
 describe('scheduleDraftReminder', () => {
+  it('schedules the optional-detail step count for a title-only draft', async () => {
+    await scheduleDraftReminder(user, draft({ description: '' }), NOW, { detailOptional: true });
+
+    const req = (mockNotifications.scheduleNotificationAsync.mock.calls[0] as any[])[0];
+    expect(req.content.body).toBe('"Walk my dog" is 2 steps from going live.');
+    expect(req.content.data.stepsLeft).toBe(2);
+  });
+
   it('schedules one replaceable reminder 24h out and reports it once', async () => {
     await scheduleDraftReminder(user, draft(), NOW);
 

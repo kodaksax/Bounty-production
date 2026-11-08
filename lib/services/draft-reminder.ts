@@ -23,6 +23,7 @@
 import { Platform } from 'react-native';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { resumeStepForDraft } from 'app/screens/CreateBounty/postStepFields';
+import type { TaskGateOptions } from 'app/screens/CreateBounty/postStepFields';
 import { bountyAppTabPath } from '../navigation/bounty-app-tab';
 import { capture as posthogCapture } from '../posthog';
 import { storage } from '../storage';
@@ -64,8 +65,8 @@ interface ReminderState {
 }
 
 /** The notification's text and payload for a draft. */
-export function draftReminderContent(draft: BountyDraft) {
-  const stepsLeft = TOTAL_STEPS - resumeStepForDraft(draft) + 1;
+export function draftReminderContent(draft: BountyDraft, options: TaskGateOptions = {}) {
+  const stepsLeft = TOTAL_STEPS - resumeStepForDraft(draft, options) + 1;
   const title = draft.title.trim();
   return {
     title: 'Your bounty draft is waiting',
@@ -129,7 +130,8 @@ async function marketplacePushAllowed(userId: string, now: number): Promise<bool
 export async function scheduleDraftReminder(
   userId: string,
   draft: BountyDraft,
-  now: number = Date.now()
+  now: number = Date.now(),
+  options: TaskGateOptions = {}
 ): Promise<void> {
   if (Platform.OS === 'web') return;
   const N = notificationsModule();
@@ -144,7 +146,7 @@ export async function scheduleDraftReminder(
   if (generationOf(userId) !== generation) return;
 
   const fireAt = now + DRAFT_REMINDER_DELAY_MS;
-  const content = draftReminderContent(draft);
+  const content = draftReminderContent(draft, options);
   try {
     await N.scheduleNotificationAsync({
       identifier: draftReminderIdentifier(userId),
@@ -188,14 +190,18 @@ export async function scheduleDraftReminder(
 const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** scheduleDraftReminder after the poster pauses — one call per typing burst. */
-export function scheduleDraftReminderSoon(userId: string, draft: BountyDraft): void {
+export function scheduleDraftReminderSoon(
+  userId: string,
+  draft: BountyDraft,
+  options: TaskGateOptions = {}
+): void {
   const existing = pendingTimers.get(userId);
   if (existing) clearTimeout(existing);
   pendingTimers.set(
     userId,
     setTimeout(() => {
       pendingTimers.delete(userId);
-      void scheduleDraftReminder(userId, draft);
+      void scheduleDraftReminder(userId, draft, Date.now(), options);
     }, DRAFT_REMINDER_DEBOUNCE_MS)
   );
 }

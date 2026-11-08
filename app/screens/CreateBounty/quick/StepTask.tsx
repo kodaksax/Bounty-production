@@ -4,6 +4,8 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,19 +20,22 @@ import { DEFAULT_OVERLAY_KEY, useTopInsetOverlay } from '../../../../lib/context
 import { pageTranslateX, useTabPager } from '../../../../components/ui/tab-pager';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import {
+  containsContactInfo,
   validateContactInfo,
-  validateDescription,
   validateTitle,
 } from '../../../../lib/utils/bounty-validation';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { InfoTooltip } from '../../../../components/ui/tooltip';
 import { trackTrustContentViewed } from '../../../../lib/analytics/trust-content';
+import { useTemplateDetailsEnabled } from '../composerFlags';
 import { composerScreenForStep, type ComposerTelemetry, type MissingField } from '../composerTelemetry';
+import { validateTaskDetail } from '../postStepFields';
 import { BlockedTapCapture } from './BlockedTapCapture';
 import { StepProgressRow, useStepEntrance } from './QuickStepLayout';
 import { SuggestionPlaceholder } from './SuggestionPlaceholder';
 import { findTaskTemplateByTitle, TASK_TEMPLATES, type TaskTemplate } from './taskTemplates';
+import { useFocusAfterScroll } from './useFocusAfterScroll';
 
 // Cycled in the empty field to show the kind of answer that works here. These
 // are examples only — none of them is ever written into the draft.
@@ -49,6 +54,16 @@ const CUSTOM_DETAIL_EXAMPLE = 'Two boxes from my car up to the 3rd floor, Sunday
 // Mirrors lib/utils/bounty-validation.ts validateDescription, which the server
 // also enforces for in-person bounties (20261019230000_posting_quality_rules).
 const MIN_DETAIL_LENGTH = 20;
+
+// What a blocked Next tap says beside the field it focuses. A contact-info
+// block has no entry: its own error is already on screen.
+const BLOCKED_NEXT_MESSAGES: Partial<Record<MissingField, string>> = {
+  title: 'Say what you need done (5 characters or more).',
+  description: 'Add a few words about what you need and when (20 characters or more).',
+};
+
+// Space left above the card when it is scrolled to the top of the view.
+const CARD_SCROLL_MARGIN = 12;
 
 interface StepTaskProps {
   draft: BountyDraft;
@@ -87,6 +102,10 @@ const MAX_LENGTH = 120;
  * the details have at least 20 characters, for templates and typed titles
  * alike.
  *
+ * With the `composer-template-details` flag on, the details are optional (the
+ * 20 characters apply only once something is typed) and a tap on a blocked
+ * Next focuses the field in the way and says why.
+ *
  * Unlike the later steps this doesn't use QuickStepLayout: the CTA lives in
  * the card next to the field instead of being pinned to the bottom.
  */
@@ -100,7 +119,10 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const entrance = useStepEntrance();
   const [touched, setTouched] = useState(false);
   const [detailTouched, setDetailTouched] = useState(false);
+  const [blockedField, setBlockedField] = useState<MissingField | null>(null);
+  const titleInputRef = useRef<TextInput>(null);
   const detailInputRef = useRef<TextInput>(null);
+  const templateDetails = useTemplateDetailsEnabled();
 
   // RootFrame (app/_layout.tsx) reserves the status-bar strip above all app
   // content in the screen colour. Hand it the hero's green, translated with
@@ -134,7 +156,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const isEmpty = length === 0;
   const detail = draft.description || '';
   const detailLength = detail.trim().length;
-  const detailError = validateDescription(detail);
+  const detailError = validateTaskDetail(detail, { detailOptional: templateDetails });
   // Checked here rather than only at publish, where it surfaces as a generic
   // failure after the poster has already picked a location and price.
   const contactError = validateContactInfo(draft.title, detail);
@@ -166,18 +188,42 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
     onNext();
   };
 
+  // Set before the handlers that use it: a contact-info block in the title is
+  // shown and focused there rather than under the details.
+  const contactInTitle = templateDetails && !!contactError && containsContactInfo(draft.title);
+
   const handleNextBlocked = () => {
     telemetry?.nextTapped({ step, draft, blocked: true, missingField });
+    if (!templateDetails || !missingField) return;
+    setBlockedField(missingField);
+    focusAfterScroll(missingField === 'title' || contactInTitle ? titleInputRef : detailInputRef, cardScrollY());
   };
 
   const titleErrorShown = touched && !!error && !isEmpty;
   const contactErrorShown = !!contactError;
   // The card's "Add what and when" / "N more characters" hint, or the red line
   // under the field. The hint gives way to the character counter on long titles.
+  // With optional details an empty field isn't a validation at all.
   const detailLengthShown =
     !contactError &&
+    (!templateDetails || detailLength > 0) &&
     ((length <= 90 && detailLength < MIN_DETAIL_LENGTH) ||
       (detailTouched && !!detailError && detailLength > 0));
+
+  // The message from a blocked Next tap, for as long as that field is what's
+  // still in the way. Each field shows one line at most.
+  const blockedMessage =
+    templateDetails && missingField && blockedField === missingField
+      ? (BLOCKED_NEXT_MESSAGES[missingField] ?? null)
+      : null;
+  const titleMessage =
+    (missingField === 'title' ? blockedMessage : null) ??
+    (contactInTitle ? contactError : null) ??
+    (titleErrorShown ? error : null);
+  const detailMessage =
+    (missingField === 'description' ? blockedMessage : null) ??
+    (contactInTitle ? null : contactError) ??
+    (detailTouched && detailError && detailLength > 0 ? detailError : null);
 
   useEffect(() => {
     if (!telemetry) return;
@@ -189,15 +235,26 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
 
   // Templates sit below the card, so bring the card back into view first.
   const scrollRef = useRef<ScrollView>(null);
+  const { focusAfterScroll, onScrollOffset } = useFocusAfterScroll(scrollRef);
+  const cardYRef = useRef(0);
+  // The card's top rather than the screen's: at y 0 the hero pushes Next under
+  // the keyboard on small phones.
+  const cardScrollY = () => Math.max(0, cardYRef.current - topInset - CARD_SCROLL_MARGIN);
   const focusDetail = () => {
+    if (templateDetails) {
+      focusAfterScroll(detailInputRef, cardScrollY());
+      return;
+    }
     scrollRef.current?.scrollTo({ y: 0, animated: true });
     detailInputRef.current?.focus();
   };
 
   let cardHint = 'Location and reward come next';
   if (length > 90) cardHint = `${length}/${MAX_LENGTH}`;
-  else if (detailLength === 0) cardHint = 'Add what and when to continue';
-  else if (detailLength < MIN_DETAIL_LENGTH) {
+  else if (detailLength === 0) {
+    if (!templateDetails) cardHint = 'Add what and when to continue';
+    else if (!isEmpty) cardHint = 'Optional, but details help people say yes';
+  } else if (detailLength < MIN_DETAIL_LENGTH) {
     const remaining = MIN_DETAIL_LENGTH - detailLength;
     cardHint = `${remaining} more character${remaining === 1 ? '' : 's'}`;
   }
@@ -255,6 +312,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: true,
+          listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => onScrollOffset(e.nativeEvent.contentOffset.y),
         })}
         scrollEventThrottle={16}
       >
@@ -274,9 +332,10 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
         </View>
 
         {/* Raised card overlapping the hero's bottom edge */}
-        <View style={styles.card}>
+        <View testID="step-task-card" style={styles.card} onLayout={(e) => { cardYRef.current = e.nativeEvent.layout.y; }}>
           <View>
             <TextInput
+              ref={titleInputRef}
               value={draft.title}
               onChangeText={handleChange}
               onFocus={() => onFieldFocus?.('title')}
@@ -299,9 +358,9 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
             ) : null}
           </View>
 
-          {touched && error && !isEmpty ? <Text style={styles.error}>{error}</Text> : null}
+          {titleMessage ? <Text style={styles.error}>{titleMessage}</Text> : null}
 
-          {/* Required detail — becomes the bounty description. */}
+          {/* Becomes the bounty description. Required unless the flag is on. */}
           <View style={styles.detailBlock}>
             <Text style={styles.detailLabel}>
               What exactly, and when?
@@ -313,26 +372,22 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
               onFocus={() => onFieldFocus?.('description')}
               onBlur={() => setDetailTouched(true)}
               onSubmitEditing={canContinue ? onNext : undefined}
-              placeholder={detailExample}
+              placeholder={templateDetails ? `e.g. ${detailExample}` : detailExample}
               placeholderTextColor={theme.textDisabled}
               multiline
               submitBehavior="blurAndSubmit"
               textAlignVertical="top"
               style={styles.detailInput}
               accessibilityLabel="What exactly, and when?"
-              accessibilityHint={`Required, at least ${MIN_DETAIL_LENGTH} characters. For example: ${detailExample}`}
+              accessibilityHint={`${templateDetails ? `Optional. If you add details, use at least ${MIN_DETAIL_LENGTH} characters.` : `Required, at least ${MIN_DETAIL_LENGTH} characters.`} For example: ${detailExample}`}
             />
           </View>
 
-          {contactError ? (
-            <Text style={styles.error}>{contactError}</Text>
-          ) : detailTouched && detailError && detailLength > 0 ? (
-            <Text style={styles.error}>{detailError}</Text>
-          ) : null}
+          {detailMessage ? <Text style={styles.error}>{detailMessage}</Text> : null}
 
           <View style={styles.cardFooter}>
             <Text style={styles.cardHint}>{cardHint}</Text>
-            <BlockedTapCapture blocked={!canContinue} onBlockedTap={telemetry ? handleNextBlocked : undefined}>
+            <BlockedTapCapture blocked={!canContinue} onBlockedTap={telemetry || templateDetails ? handleNextBlocked : undefined}>
               <TouchableOpacity
                 onPress={handleNextPress}
                 disabled={!canContinue}
