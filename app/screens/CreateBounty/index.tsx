@@ -15,6 +15,7 @@ import {
   composerScreenForStep,
   createComposerTelemetry,
 } from 'app/screens/CreateBounty/composerTelemetry';
+import { useTemplateDetailsEnabled } from 'app/screens/CreateBounty/composerFlags';
 import type { PostField } from 'app/screens/CreateBounty/postStepFields';
 import {
   fieldForPatch,
@@ -281,6 +282,9 @@ export function CreateBountyFlow({
   // this ref to judge which required fields were still incomplete.
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  const detailOptional = useTemplateDetailsEnabled();
+  const detailOptionalRef = useRef(detailOptional);
+  detailOptionalRef.current = detailOptional;
   const userIdRef = useRef(session?.user?.id);
   userIdRef.current = session?.user?.id;
   // Set right before an explicit exit path runs, so the post_step_abandoned
@@ -655,7 +659,7 @@ export function CreateBountyFlow({
     // pick up where it stopped. A draft still unfinished on step 1 needs no
     // prompt — the poster is already looking at it.
     if (resumedDraftRef.current && currentStepRef.current === 1) {
-      const resumeStep = resumeStepForDraft(draft);
+      const resumeStep = resumeStepForDraft(draft, { detailOptional });
       if (resumeStep > 1) {
         setResumePromptStep(resumeStep);
         analyticsService.trackEvent('post_resume_prompt', {
@@ -859,7 +863,9 @@ export function CreateBountyFlow({
         // rather than null so "never touched a field" is a breakdown value.
         last_field: lastFieldRef.current ?? 'none',
         fields_touched: Array.from(fieldsTouchedRef.current),
-        incomplete_fields: incompleteFieldsForStep(stepName, draftRef.current),
+        incomplete_fields: incompleteFieldsForStep(stepName, draftRef.current, {
+          detailOptional: detailOptionalRef.current,
+        }),
       });
 
       // A poster who switched tabs away from an unfinished draft is who the

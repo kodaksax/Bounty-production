@@ -54,6 +54,20 @@ export function fieldForPatch(patch: Partial<BountyDraft>): PostField | null {
   return null;
 }
 
+export interface TaskGateOptions {
+  /** The `composer-template-details` flag: an empty detail no longer blocks Next. */
+  detailOptional?: boolean;
+}
+
+/** The step-1 detail rule. Text that is there still has to reach 20 characters. */
+export function validateTaskDetail(
+  value: string | undefined | null,
+  { detailOptional = false }: TaskGateOptions = {}
+): string | null {
+  if (detailOptional && !(value ?? '').trim()) return null;
+  return validateDescription(value);
+}
+
 /**
  * Required fields on `stepName` that would still stop the poster from moving
  * on, judged against the draft at the moment they left. Mirrors the gates in
@@ -62,12 +76,16 @@ export function fieldForPatch(patch: Partial<BountyDraft>): PostField | null {
  * $1 floor, not posting_policy_config's minimum, so an amount between the two
  * is not reported here.
  */
-export function incompleteFieldsForStep(stepName: string | undefined, draft: BountyDraft): PostField[] {
+export function incompleteFieldsForStep(
+  stepName: string | undefined,
+  draft: BountyDraft,
+  options: TaskGateOptions = {}
+): PostField[] {
   const missing: PostField[] = [];
   switch (stepName) {
     case 'Task':
       if (validateTitle(draft.title)) missing.push('title');
-      if (validateDescription(draft.description)) missing.push('description');
+      if (validateTaskDetail(draft.description, options)) missing.push('description');
       if (validateContactInfo(draft.title, draft.description)) missing.push('contact_info');
       break;
     case 'Location':
@@ -94,8 +112,8 @@ export function incompleteFieldsForStep(stepName: string | undefined, draft: Bou
  * skipping past Location would publish it unmatchable. Compensation is the
  * last step, so a finished draft reopens there.
  */
-export function resumeStepForDraft(draft: BountyDraft): 1 | 2 | 3 {
-  if (incompleteFieldsForStep('Task', draft).length > 0) return 1;
+export function resumeStepForDraft(draft: BountyDraft, options: TaskGateOptions = {}): 1 | 2 | 3 {
+  if (incompleteFieldsForStep('Task', draft, options).length > 0) return 1;
   const pinned = draft.latitude != null && draft.longitude != null;
   if (draft.workType !== 'online' && !pinned) return 2;
   return 3;
