@@ -25,7 +25,8 @@ import { useAuthContext } from '../hooks/use-auth-context';
 import { useAuthProfile } from '../hooks/useAuthProfile';
 import { hapticFeedback } from '../lib/haptic-feedback';
 import { backfillEventMoments } from '../lib/moments/backfill';
-import { evaluateNextMoment } from '../lib/moments/engine';
+import { useMomentsEligibilityFixEnabled } from '../lib/moments/eligibilityFixFlag';
+import { evaluateNextMoment, isMomentResolved } from '../lib/moments/engine';
 import { momentsService } from '../lib/moments/momentsService';
 import { referralService } from '../lib/moments/referral-service';
 import { MOMENT_REGISTRY } from '../lib/moments/registry';
@@ -168,6 +169,11 @@ interface MomentsProviderProps {
    */
   onContinueTo?: (screen: string) => void;
   /**
+   * Moves the tab shell to the composer, attributing it to `entryPoint`.
+   * Called when a moment whose action is `{ type: 'composer' }` is accepted.
+   */
+  onOpenComposer?: (entryPoint: string) => void;
+  /**
    * True while the shell shows a sheet of its own (the app-open resume
    * prompt). No moment is selected meanwhile, so the two never stack.
    */
@@ -179,9 +185,11 @@ export function MomentsProvider({
   activeScreen = null,
   targetScreen = null,
   onContinueTo,
+  onOpenComposer,
   suppressed = false,
 }: MomentsProviderProps) {
   const router = useRouter();
+  const eligibilityFixEnabled = useMomentsEligibilityFixEnabled();
   const { session } = useAuthContext();
   const { profile } = useAuthProfile();
   const userId = session?.user?.id ?? null;
@@ -223,6 +231,11 @@ export function MomentsProvider({
   screensRef.current = { activeScreen, targetScreen };
   const onContinueToRef = useRef(onContinueTo);
   onContinueToRef.current = onContinueTo;
+  const onOpenComposerRef = useRef(onOpenComposer);
+  onOpenComposerRef.current = onOpenComposer;
+  // Read by the auto-expire effect, which must leave the moment on screen alone.
+  const activeMomentRef = useRef(activeMoment);
+  activeMomentRef.current = activeMoment;
   // Dedupe guard for duplicate MomentsProvider mounts (see liveMomentsInstance
   // doc comment above). Claiming the slot happens in an effect — not during
   // render — so an interrupted/discarded render (concurrent React) can never
@@ -449,6 +462,7 @@ export function MomentsProvider({
       activeScreen,
       hasEngaged,
       hasPublishedBounty,
+      keepPresentedMoments: eligibilityFixEnabled,
       profile: {
         hasAvatar: !!profile.avatar,
         hasBio: !!profile.about,
@@ -476,6 +490,7 @@ export function MomentsProvider({
     activeScreen,
     hasEngaged,
     hasPublishedBounty,
+    eligibilityFixEnabled,
   ]);
 
   // Auto-complete state-derived moments whose underlying goal was met after
@@ -546,7 +561,10 @@ export function MomentsProvider({
         if (
           state?.status === 'shown' &&
           def.maxShownCount != null &&
-          state.shownCount >= def.maxShownCount
+          state.shownCount >= def.maxShownCount &&
+          // The last allowed show reaches the cap the moment it is presented;
+          // it hasn't been given up on while it is still on screen.
+          !(eligibilityFixEnabled && activeMomentRef.current?.type === def.type)
         ) {
           resolvingMomentsRef.current.add(def.type);
           try {
@@ -562,7 +580,7 @@ export function MomentsProvider({
         }
       }
     })();
-  }, [states, buildContext, userId, patchState, isPrimary]);
+  }, [states, buildContext, userId, patchState, isPrimary, eligibilityFixEnabled]);
 
   // Compute the single next-eligible moment. Structurally impossible to
   // surface more than one at a time — evaluateNextMoment always returns
@@ -574,14 +592,23 @@ export function MomentsProvider({
     const ctx = buildContext();
     // `suppressed` yields to another sheet the shell is showing, so two
     // modals never stack; the queue picks up again once it is answered.
-    if (!ctx || !userId || suppressed) {
+    if (!userId || suppressed || (!ctx && !eligibilityFixEnabled)) {
       setActiveMoment(null);
       setActiveContent(null);
       return;
     }
+    // A context that is briefly unavailable (the profile reloading) says
+    // nothing about the moment on screen.
+    if (!ctx) return;
 
     const next = evaluateNextMoment(ctx, states);
     setActiveMoment(prev => {
+      // A presented moment stays until the user answers it or it is otherwise
+      // closed: nothing else may replace it, including a moment with a higher
+      // priority or a change in its own eligibility.
+      if (eligibilityFixEnabled && prev && !isMomentResolved(states.get(prev.type) ?? null)) {
+        return prev;
+      }
       if (prev?.type === next?.type) return prev;
       if (next) {
         setActiveContent(next.content(ctx));
@@ -590,7 +617,7 @@ export function MomentsProvider({
       }
       return next;
     });
-  }, [states, buildContext, userId, isPrimary, suppressed]);
+  }, [states, buildContext, userId, isPrimary, suppressed, eligibilityFixEnabled]);
 
   // Present (mark shown) whenever a new moment becomes active.
   useEffect(() => {
@@ -673,7 +700,8 @@ export function MomentsProvider({
     setActiveMoment(null);
     setActiveContent(null);
 
-    if (def.action.type === 'navigate') {
+    const action = (eligibilityFixEnabled && def.flaggedAction) || def.action;
+    if (action.type !== 'inline') {
       // Not resolved yet — the user still has to finish the destination
       // flow (e.g. Stripe Connect onboarding). Record that they actively
       // engaged it (distinct from merely having it shown), and snooze it
@@ -691,11 +719,15 @@ export function MomentsProvider({
         metadata: { ...existing.metadata, startedAt: existing.metadata?.startedAt ?? startedAt },
       }));
       momentsService.markStarted(userId, def.type);
-      router.push(def.action.route as any);
+      if (action.type === 'composer') {
+        onOpenComposerRef.current?.(action.entryPoint);
+      } else {
+        router.push(action.route as any);
+      }
       return;
     }
 
-    const handler = INLINE_HANDLERS[def.action.handlerKey];
+    const handler = INLINE_HANDLERS[action.handlerKey];
     const success = handler ? await handler() : false;
     if (success) {
       await momentsService.markCompleted(userId, def.type);
@@ -712,7 +744,15 @@ export function MomentsProvider({
       });
     }
     await refresh();
-  }, [activeMoment, userId, router, refresh, patchState, isPresentationTooRecent]);
+  }, [
+    activeMoment,
+    userId,
+    router,
+    refresh,
+    patchState,
+    isPresentationTooRecent,
+    eligibilityFixEnabled,
+  ]);
 
   const value = useMemo<MomentsContextValue>(
     () => ({ activeMoment, activeContent, accept, dismiss, snooze, refresh }),

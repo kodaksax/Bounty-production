@@ -55,6 +55,10 @@ jest.mock('../../../../hooks/useAuthProfile', () => ({
   useAuthProfile: () => ({ profile: mockProfile }),
 }));
 
+jest.mock('../../../../lib/moments/eligibilityFixFlag', () => ({
+  useMomentsEligibilityFixEnabled: () => false,
+}));
+
 jest.mock('../../../../lib/moments/backfill', () => ({
   backfillEventMoments: jest.fn(() => Promise.resolve()),
 }));

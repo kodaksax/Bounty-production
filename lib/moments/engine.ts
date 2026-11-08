@@ -48,6 +48,25 @@ function isRetired(def: MomentDefinition, state: MomentState | null): boolean {
   return false;
 }
 
+/**
+ * Has this moment been answered or otherwise closed, so that it should come
+ * off the screen? A missing row, 'pending', 'shown' and an elapsed snooze are
+ * all still open. MomentsProvider keeps an open moment presented regardless of
+ * what else becomes eligible.
+ */
+export function isMomentResolved(state: MomentState | null): boolean {
+  if (!state) return false;
+  if (state.status === 'snoozed') {
+    return !!state.snoozedUntil && new Date(state.snoozedUntil).getTime() > Date.now();
+  }
+  return (
+    state.status === 'dismissed' ||
+    state.status === 'completed' ||
+    state.status === 'expired' ||
+    state.status === 'in_progress'
+  );
+}
+
 function prerequisitesMet(def: MomentDefinition, states: Map<MomentType, MomentState>): boolean {
   if (!def.prerequisites || def.prerequisites.length === 0) return true;
   return def.prerequisites.every(p => states.get(p)?.status === 'completed');
