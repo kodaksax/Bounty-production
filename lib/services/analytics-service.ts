@@ -802,6 +802,10 @@ export type AnalyticsEvent =
   // is different: enqueue_analytics_person_snapshot() derives it from behaviour
   // on the server, so a change there does not produce this event.
   | 'role_changed'
+  // Someone with primary_role = poster applied for a bounty and was asked once
+  // whether they want to earn too. `choice` is 'apply_once' or 'earn_too'.
+  | 'poster_apply_prompt_shown'
+  | 'poster_apply_prompt_answered'
   // Someone opened a trust explainer (lib/analytics/trust-content.ts): `topic`
   // is what it covers, `surface` where it was opened from ('unknown' when the
   // entry path didn't say). On /legal/how-it-works, one 'how_it_works' per open

@@ -55,6 +55,16 @@ jest.mock('../../../../hooks/useAuthProfile', () => ({
   useAuthProfile: () => ({ profile: mockProfile }),
 }));
 
+let mockPosterHomeEnabled = false;
+jest.mock('../../../../lib/onboarding/poster-home', () => ({
+  usePosterHomeEnabled: () => mockPosterHomeEnabled,
+}));
+
+let mockStoredRole: string | null = null;
+jest.mock('../../../../lib/services/auth-profile-service', () => ({
+  authProfileService: { getPrimaryRoleForAnalytics: () => mockStoredRole },
+}));
+
 jest.mock('../../../../lib/moments/backfill', () => ({
   backfillEventMoments: jest.fn(() => Promise.resolve()),
 }));
@@ -209,6 +219,47 @@ describe('MomentsProvider — dismiss does not reopen on subsequent re-renders',
       rerender(<Root activeScreen="wallet" />);
     });
     expect(latest?.activeMoment).toBeNull();
+  });
+});
+
+// updateProfile drops primary_role from the in-memory profile, so the
+// suppression reads the role the service last saw. The mocked profile here says
+// hunter, which is what proves the stored role is what's being read.
+describe('MomentsProvider — poster-home suppression', () => {
+  beforeEach(() => {
+    latest = null;
+    mockPosterHomeEnabled = false;
+    mockStoredRole = null;
+  });
+  afterEach(() => {
+    mockPosterHomeEnabled = false;
+    mockStoredRole = null;
+  });
+
+  async function settledMoment() {
+    render(<Root activeScreen="wallet" />);
+    await waitFor(() => expect(latest).not.toBeNull());
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    return latest?.activeMoment?.type ?? null;
+  }
+
+  it('suppresses a hunter moment for a poster with the flag on', async () => {
+    mockPosterHomeEnabled = true;
+    mockStoredRole = 'poster';
+    expect(await settledMoment()).toBeNull();
+  });
+
+  it('leaves it alone with the flag off', async () => {
+    mockStoredRole = 'poster';
+    expect(await settledMoment()).toBe('stripe_connect_onboarding');
+  });
+
+  it('leaves it alone for a hunter with the flag on', async () => {
+    mockPosterHomeEnabled = true;
+    mockStoredRole = 'hunter';
+    expect(await settledMoment()).toBe('stripe_connect_onboarding');
   });
 });
 

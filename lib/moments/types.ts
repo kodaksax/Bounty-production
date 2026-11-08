@@ -95,6 +95,11 @@ export interface MomentContext {
    */
   activeScreen: string | null;
   /**
+   * True when the `poster-home` flag is on and this user's role is poster.
+   * The engine then leaves out the moments in POSTER_SUPPRESSED_MOMENTS.
+   */
+  isPosterHomeUser?: boolean;
+  /**
    * True once the user has published at least one bounty or submitted at
    * least one application (bounty_requests row), regardless of role. This is
    * the "they've done something real" signal that lets a moment bypass the

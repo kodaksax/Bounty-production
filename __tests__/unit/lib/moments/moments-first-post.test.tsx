@@ -31,6 +31,16 @@ jest.mock('../../../../hooks/useAuthProfile', () => ({
   useAuthProfile: () => ({ profile: mockProfile }),
 }));
 
+let mockPosterHomeEnabled = false;
+jest.mock('../../../../lib/onboarding/poster-home', () => ({
+  usePosterHomeEnabled: () => mockPosterHomeEnabled,
+}));
+
+let mockStoredRole: string | null = null;
+jest.mock('../../../../lib/services/auth-profile-service', () => ({
+  authProfileService: { getPrimaryRoleForAnalytics: () => mockStoredRole },
+}));
+
 jest.mock('../../../../lib/moments/backfill', () => ({
   backfillEventMoments: jest.fn(() => Promise.resolve()),
 }));

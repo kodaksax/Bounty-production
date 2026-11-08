@@ -20,6 +20,8 @@ import { BountyFormatProvider } from '../../../lib/bounty-format-context';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useLocalSearchParams: () => ({}),
+  Redirect: () => null,
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -32,6 +34,11 @@ jest.mock('../../../lib/context/onboarding-context', () => ({
 
 jest.mock('../../../lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: jest.fn() },
+}));
+
+jest.mock('../../../lib/onboarding/poster-home', () => ({
+  ...jest.requireActual('../../../lib/onboarding/poster-home'),
+  usePosterHomeDecision: () => false,
 }));
 
 jest.mock('../../../lib/haptic-feedback', () => ({

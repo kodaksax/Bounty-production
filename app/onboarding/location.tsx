@@ -37,10 +37,12 @@ import {
 } from '../../components/onboarding/OnboardingProgressDots';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
+import { stepAfterLocation, usePosterHomeDecision } from '../../lib/onboarding/poster-home';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { locationService } from '../../lib/services/location-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { palette } from '../../lib/themes/colors';
+import { posterHomeStrings } from '../../lib/strings/posterHome';
 import type { AppTheme } from '../../lib/themes/types';
 import { isServiceableCountry } from '../../lib/utils/serviceable-region';
 
@@ -51,6 +53,9 @@ export default function LocationScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
   const { data: onboardingData, updateData } = useOnboarding();
+  const posterHome = usePosterHomeDecision() === true;
+  const roleCopy =
+    posterHome && onboardingData.intent ? posterHomeStrings.location[onboardingData.intent] : null;
   const styles = useMemo(() => makeStyles(theme), [theme]);
   // Which CTA is waiting on the OS prompt / geocoder, so only that button
   // shows a spinner while both stay disabled.
@@ -88,7 +93,7 @@ export default function LocationScreen() {
       });
       return;
     }
-    router.push('/onboarding/role-select');
+    router.push(stepAfterLocation(onboardingData.intent, posterHome));
   };
 
   const requestAndResolve = async (requested: 'precise' | 'approximate') => {
@@ -176,7 +181,7 @@ export default function LocationScreen() {
 
       <OnboardingProgressDots
         total={ONBOARDING_TOTAL_STEPS}
-        activeIndex={2}
+        activeIndex={posterHome ? 3 : 2}
         style={styles.dotsContainer}
       />
 
@@ -184,10 +189,12 @@ export default function LocationScreen() {
         <BountyCompassMark theme={theme} size={168} />
       </View>
 
-      <Text style={styles.heading}>Allow location to see the closest bounties</Text>
+      <Text style={styles.heading}>
+        {roleCopy?.heading ?? 'Allow location to see the closest bounties'}
+      </Text>
       <Text style={styles.subheading}>
-        With your location we can show you the bounties closest to you, and put what you post in
-        front of the people nearest to it.
+        {roleCopy?.subheading ??
+          'With your location we can show you the bounties closest to you, and put what you post in front of the people nearest to it.'}
       </Text>
 
       <View style={styles.spacer} />
@@ -232,7 +239,9 @@ export default function LocationScreen() {
           onPress={handleSkip}
           disabled={pendingAction !== null}
           accessibilityRole="button"
-          accessibilityLabel="Not now - you will see online bounties only"
+          accessibilityLabel={
+            roleCopy?.skipAccessibilityLabel ?? 'Not now - you will see online bounties only'
+          }
         >
           <Text style={styles.skipLinkText}>Not now</Text>
         </TouchableOpacity>

@@ -46,6 +46,11 @@ jest.mock('../../../lib/supabase', () => ({
   },
 }));
 
+jest.mock('../../../lib/onboarding/poster-home', () => ({
+  ...jest.requireActual('../../../lib/onboarding/poster-home'),
+  usePosterHomeDecision: () => false,
+}));
+
 jest.mock('../../../lib/haptic-feedback', () => ({
   hapticFeedback: { light: jest.fn(), success: jest.fn(), error: jest.fn(), medium: jest.fn() },
 }));

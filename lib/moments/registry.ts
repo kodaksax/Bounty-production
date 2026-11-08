@@ -41,7 +41,7 @@
  */
 
 import { referralService } from './referral-service';
-import type { MomentContext, MomentDefinition, MomentState } from './types';
+import type { MomentContext, MomentDefinition, MomentState, MomentType } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -120,6 +120,13 @@ export function trustPromptsAllowed(ctx: MomentContext): boolean {
   if (ctx.profile.primaryRole === 'hunter' || ctx.profile.primaryRole === 'both') return true;
   return ctx.hasPublishedBounty;
 }
+
+/** Moments about getting paid, which someone who signed up to hire doesn't need. */
+export const POSTER_SUPPRESSED_MOMENTS: ReadonlySet<MomentType> = new Set<MomentType>([
+  'stripe_connect_onboarding',
+  'identity_verification',
+  'accept_first_bounty',
+]);
 
 export const MOMENT_REGISTRY: MomentDefinition[] = [
   // ---------------------------------------------------------------------

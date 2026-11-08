@@ -58,6 +58,12 @@ jest.mock('lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: jest.fn() },
 }));
 
+let mockRoleFirst = false;
+jest.mock('lib/onboarding/poster-home', () => ({
+  ...jest.requireActual('lib/onboarding/poster-home'),
+  resolvePosterHomeDecision: () => Promise.resolve(mockRoleFirst),
+}));
+
 const mockHasLocalOnboardingFlag = jest.fn().mockResolvedValue(false);
 jest.mock('lib/storage/onboarding', () => ({
   hasLocalOnboardingFlag: (...args: unknown[]) => mockHasLocalOnboardingFlag(...args),
@@ -81,12 +87,42 @@ function resetState() {
   mockAuthProfile.loading = false;
   mockAuthProfile.profileFetchError = null;
   mockOnboarding.data.intent = null;
+  delete (mockOnboarding.data as { locationPrecision?: unknown }).locationPrecision;
   mockOnboarding.loading = false;
+  mockRoleFirst = false;
   mockHasLocalOnboardingFlag.mockClear().mockResolvedValue(false);
 }
 
 describe('onboarding gate (app/onboarding/index.tsx)', () => {
   beforeEach(resetState);
+
+  describe('resuming with poster-home on', () => {
+    function resume(intent: 'poster' | 'hunter', locationPrecision: string | null) {
+      mockAuthContext.session = SIGNED_IN;
+      mockAuthProfile.profile = { username: 'newuser', onboarding_completed: false };
+      mockOnboarding.data.intent = intent;
+      (mockOnboarding.data as { locationPrecision?: unknown }).locationPrecision = locationPrecision;
+      mockRoleFirst = true;
+      render(<OnboardingIndex />);
+    }
+
+    it('sends a poster who stopped after the role step to location', async () => {
+      resume('poster', null);
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/location'));
+    });
+
+    it('sends a hunter who stopped after the role step to the feed-layout step', async () => {
+      resume('hunter', null);
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith('/onboarding/style?after_role=1')
+      );
+    });
+
+    it('moves on once location has been answered', async () => {
+      resume('poster', 'skipped');
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding/poster-profile'));
+    });
+  });
 
   describe('authenticated user (the Bug A path)', () => {
     it('routes a freshly registered user with NO intent into the style step, not Welcome', async () => {

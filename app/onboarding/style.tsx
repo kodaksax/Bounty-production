@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -27,6 +27,7 @@ import {
   ONBOARDING_TOTAL_STEPS,
   OnboardingProgressDots,
 } from '../../components/onboarding/OnboardingProgressDots';
+import { ScreenLoader } from '../../components/ui/screen-loader';
 import { useAccessibleAnimation } from '../../hooks/use-accessible-animation';
 import { type BountyFormat, useBountyFormat } from '../../lib/bounty-format-context';
 import {
@@ -36,12 +37,28 @@ import {
   indexForFormat,
 } from '../../lib/bounty-format-options';
 import { hapticFeedback } from '../../lib/haptic-feedback';
+import { usePosterHomeDecision } from '../../lib/onboarding/poster-home';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
 
-export default function StyleScreen() {
+/**
+ * Sign-up and the onboarding gate all send a new account here. With
+ * `poster-home` on, the role is asked first, so anyone who hasn't come through
+ * the role step goes there instead. Posters never come back: they skip this
+ * screen.
+ */
+export default function StyleStep() {
+  const posterHome = usePosterHomeDecision();
+  const { after_role: afterRole } = useLocalSearchParams<{ after_role?: string }>();
+
+  if (posterHome === null) return <ScreenLoader />;
+  if (posterHome && !afterRole) return <Redirect href="/onboarding/role-select" />;
+  return <StyleScreen dotIndex={posterHome ? 2 : 1} />;
+}
+
+function StyleScreen({ dotIndex }: { dotIndex: number }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
@@ -128,7 +145,7 @@ export default function StyleScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <OnboardingProgressDots
         total={ONBOARDING_TOTAL_STEPS}
-        activeIndex={1}
+        activeIndex={dotIndex}
         style={styles.dotsContainer}
       />
 
