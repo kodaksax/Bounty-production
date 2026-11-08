@@ -125,7 +125,11 @@ export class AuthProfileService {
   private profileResolvedForUserId: string | null = null;
   // The last primary_role seen for this user. role_changed needs the value
   // from before a write, and currentProfile loses it after any updateProfile.
-  private storedPrimaryRole: { userId: string; role: string | null } | null = null;
+  private storedPrimaryRole: {
+    userId: string;
+    role: AuthProfile['primary_role'] | null;
+  } | null = null;
+  private profileUpdateTails = new Map<string, Promise<void>>();
 
   private constructor() {}
 
@@ -364,6 +368,10 @@ export class AuthProfileService {
    */
   async setSession(session: Session | null): Promise<void> {
     const previousUserId = this.currentSession?.user?.id;
+    const newUserId = session?.user?.id ?? null;
+    if (previousUserId !== newUserId) {
+      this.storedPrimaryRole = null;
+    }
     this.currentSession = session;
 
     console.log('[authProfileService] setSession called', {
@@ -422,6 +430,14 @@ export class AuthProfileService {
    */
   getCurrentProfile(): AuthProfile | null {
     return this.currentProfile;
+  }
+
+  getPrimaryRoleForAnalytics(): AuthProfile['primary_role'] | null {
+    const userId = this.getAuthUserId() ?? this.currentProfile?.id ?? null;
+    if (this.storedPrimaryRole?.userId === userId) {
+      return this.storedPrimaryRole.role;
+    }
+    return this.currentProfile?.id === userId ? this.currentProfile.primary_role ?? null : null;
   }
 
   /**
@@ -652,6 +668,9 @@ export class AuthProfileService {
           is_internal: typeof data.is_internal === 'boolean' ? data.is_internal : undefined,
         };
 
+        if (data.primary_role !== undefined) {
+          this.storedPrimaryRole = { userId, role: data.primary_role ?? null };
+        }
         console.log('[authProfileService] Profile data mapped', {
           username: profile.username,
           id: profile.id,
@@ -838,6 +857,9 @@ export class AuthProfileService {
           is_internal: typeof data.is_internal === 'boolean' ? data.is_internal : undefined,
         };
 
+        if (data.primary_role !== undefined) {
+          this.storedPrimaryRole = { userId, role: data.primary_role ?? null };
+        }
         console.log(
           '[authProfileService] Fresh profile fetched, updating cache and notifying listeners'
         );
@@ -891,6 +913,34 @@ export class AuthProfileService {
       return null;
     }
 
+    return this.serializeProfileUpdate(userId, () =>
+      this.updateProfileForUser(userId, updates, options)
+    );
+  }
+
+  private async serializeProfileUpdate<T>(userId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.profileUpdateTails.get(userId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    this.profileUpdateTails.set(userId, current);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.profileUpdateTails.get(userId) === current) {
+        this.profileUpdateTails.delete(userId);
+      }
+    }
+  }
+
+  private async updateProfileForUser(
+    userId: string,
+    updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>,
+    options?: { roleChangeSource?: RoleChangeSource }
+  ): Promise<AuthProfile | null> {
     try {
       // Use Supabase SDK's built-in network handling and timeouts
       // Use update() with an equality filter so unit tests that mock
@@ -976,8 +1026,6 @@ export class AuthProfileService {
             : undefined,
       };
 
-      // `profile` above doesn't carry primary_role, so remember it here for the
-      // next role write to compare against.
       if (freshRow.primary_role !== undefined) {
         this.storedPrimaryRole = { userId, role: freshRow.primary_role ?? null };
       }

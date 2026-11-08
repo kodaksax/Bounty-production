@@ -95,9 +95,82 @@ describe('role_changed', () => {
 
     await authProfileService.updateProfile({ about: 'hello' });
     expect((authProfileService as any).currentProfile.primary_role).toBeUndefined();
+    expect(authProfileService.getPrimaryRoleForAnalytics()).toBe('poster');
     await authProfileService.updateProfile({ primary_role: 'hunter' }, { roleChangeSource: 'onboarding' });
 
     expect(roleEvents()).toEqual([{ from: 'poster', to: 'hunter', source: 'onboarding' }]);
+  });
+
+  it('serializes role writes through their authoritative read-back', async () => {
+    const { supabase } = require('../../../lib/supabase');
+    let releaseReadback!: () => void;
+    let notifyReadbackStarted!: () => void;
+    const readbackStarted = new Promise<void>((resolve) => {
+      notifyReadbackStarted = resolve;
+    });
+    const heldReadback = new Promise<void>((resolve) => {
+      releaseReadback = resolve;
+    });
+    let readbacks = 0;
+    supabase.rpc.mockImplementation(async () => {
+      const role = storedRole;
+      readbacks += 1;
+      if (readbacks === 1) {
+        notifyReadbackStarted();
+        await heldReadback;
+      }
+      return { data: { id: USER_ID, username: 'u', primary_role: role }, error: null };
+    });
+
+    const posterWrite = authProfileService.updateProfile(
+      { primary_role: 'poster' },
+      { roleChangeSource: 'onboarding' }
+    );
+    await readbackStarted;
+    const hunterWrite = authProfileService.updateProfile(
+      { primary_role: 'hunter' },
+      { roleChangeSource: 'onboarding' }
+    );
+    await Promise.resolve();
+
+    expect(storedRole).toBe('poster');
+    expect(roleEvents()).toEqual([{ from: 'none', to: 'poster', source: 'onboarding' }]);
+
+    releaseReadback();
+    await Promise.all([posterWrite, hunterWrite]);
+
+    expect(roleEvents()).toEqual([
+      { from: 'none', to: 'poster', source: 'onboarding' },
+      { from: 'poster', to: 'hunter', source: 'onboarding' },
+    ]);
+  });
+
+  it('uses the role from an accepted self-profile refresh for analytics', async () => {
+    const service = authProfileService as any;
+    const loadFromCache = jest.spyOn(service, 'loadFromCache').mockResolvedValue(null);
+    const cacheProfile = jest.spyOn(service, 'cacheProfile').mockResolvedValue(undefined);
+    const { supabase } = require('../../../lib/supabase');
+    supabase.rpc.mockResolvedValue({
+      data: { id: USER_ID, username: 'u', primary_role: 'poster' },
+      error: null,
+    });
+    service.storedPrimaryRole = { userId: USER_ID, role: 'hunter' };
+
+    await authProfileService.fetchAndSyncProfile(USER_ID);
+
+    expect(authProfileService.getPrimaryRoleForAnalytics()).toBe('poster');
+    loadFromCache.mockRestore();
+    cacheProfile.mockRestore();
+  });
+
+  it('clears the stored role when the session ends', async () => {
+    const service = authProfileService as any;
+    service.storedPrimaryRole = { userId: USER_ID, role: 'poster' };
+    jest.spyOn(service, 'clearCache').mockResolvedValue(undefined);
+
+    await authProfileService.setSession(null);
+
+    expect(authProfileService.getPrimaryRoleForAnalytics()).toBeNull();
   });
 
   it('sends nothing when the update does not touch the role', async () => {

@@ -175,8 +175,9 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   // The card's "Add what and when" / "N more characters" hint, or the red line
   // under the field. The hint gives way to the character counter on long titles.
   const detailLengthShown =
-    (length <= 90 && detailLength < MIN_DETAIL_LENGTH) ||
-    (detailTouched && !!detailError && detailLength > 0);
+    !contactError &&
+    ((length <= 90 && detailLength < MIN_DETAIL_LENGTH) ||
+      (detailTouched && !!detailError && detailLength > 0));
 
   useEffect(() => {
     if (!telemetry) return;

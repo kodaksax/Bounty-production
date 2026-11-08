@@ -262,9 +262,9 @@ describe('BountyFeed local distance default (SBA-02)', () => {
     const { analyticsService } = require('../../lib/services/analytics-service');
     const { authProfileService } = require('../../lib/services/auth-profile-service');
     const track = jest.spyOn(analyticsService, 'trackEvent');
-    const profile = jest
-      .spyOn(authProfileService, 'getCurrentProfile')
-      .mockReturnValue(stored ? { id: 'user-123', primary_role: stored } : null);
+    const role = jest
+      .spyOn(authProfileService, 'getPrimaryRoleForAnalytics')
+      .mockReturnValue(stored ?? null);
     renderFeed();
 
     await waitFor(() =>
@@ -274,7 +274,7 @@ describe('BountyFeed local distance default (SBA-02)', () => {
       )
     );
     track.mockRestore();
-    profile.mockRestore();
+    role.mockRestore();
   });
 
   it('uses the saved profile point when the device has no fix', async () => {
