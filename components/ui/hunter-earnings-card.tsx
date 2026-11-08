@@ -7,6 +7,7 @@ import {
   PLATFORM_FEE_DISPLAY,
   calculateHunterEarnings,
 } from '../../lib/constants/fees';
+import { markTrustContentSurface } from '../../lib/analytics/trust-content';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -88,7 +89,10 @@ export function HunterEarningsCard({
       ) : null}
 
       <TouchableOpacity
-        onPress={() => router.push('/legal/how-it-works' as Href)}
+        onPress={() => {
+          markTrustContentSurface('hunter_earnings');
+          router.push('/legal/how-it-works' as Href);
+        }}
         accessibilityRole="link"
         accessibilityLabel="Learn how payment and escrow work"
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

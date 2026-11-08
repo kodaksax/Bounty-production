@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
+import { BlockedTapCapture } from './BlockedTapCapture';
 
 /**
  * Direction of the step change: 1 when moving forward, -1 when moving back.
@@ -131,6 +132,8 @@ interface QuickStepLayoutProps {
   onCta: () => void;
   ctaDisabled?: boolean;
   ctaBusy?: boolean;
+  /** Called for a tap on the CTA while it is disabled or busy. Measurement only. */
+  onCtaBlocked?: () => void;
   /** Small muted line rendered just above the CTA. */
   footerNote?: string;
 }
@@ -154,6 +157,7 @@ export function QuickStepLayout({
   onCta,
   ctaDisabled = false,
   ctaBusy = false,
+  onCtaBlocked,
   footerNote,
 }: QuickStepLayoutProps) {
   const { theme } = useAppThemeContext();
@@ -189,6 +193,7 @@ export function QuickStepLayout({
         {/* Bottom CTA */}
         <View style={styles.footer}>
         {footerNote ? <Text style={styles.footerNote}>{footerNote}</Text> : null}
+        <BlockedTapCapture blocked={!ctaEnabled} onBlockedTap={onCtaBlocked}>
         <TouchableOpacity
           onPress={onCta}
           disabled={!ctaEnabled}
@@ -211,6 +216,7 @@ export function QuickStepLayout({
               {ctaLabel}
             </Text>
           </TouchableOpacity>
+        </BlockedTapCapture>
         </View>
       </Animated.View>
     </View>

@@ -570,6 +570,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       radius_is_default: distanceFilter !== DISTANCE_OFF && isDefaultDistance,
       has_feed_location: hasFeedLocation,
       has_location_permission: Boolean(permission?.granted),
+      role: authProfileService.getCurrentProfile()?.primary_role ?? 'none',
       sort_order: sortByHighestPay ? 'amount_desc' : distanceFilter !== 'off' ? 'distance' : 'recent',
       is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
       // Metro-level viewer region (e.g. "Baltimore, MD") so demand density is

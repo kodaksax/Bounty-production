@@ -7,6 +7,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
 import { syncAccountStatus, syncInternalFlag } from '../posthog';
+import { analyticsService } from './analytics-service';
 import { isSupabaseConfigured, supabase, supabaseEnv } from '../supabase';
 import { logger } from '../utils/error-logger';
 
@@ -15,6 +16,9 @@ const PROFILE_CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes — long enough to su
 
 // Helper to generate user-specific cache key
 const getProfileCacheKey = (userId: string) => `${PROFILE_CACHE_KEY_PREFIX}:${userId}`;
+
+/** Who wrote profiles.primary_role, for the role_changed event. */
+export type RoleChangeSource = 'onboarding' | 'first_action_inference';
 
 export interface AuthProfile {
   id: string; // User ID from Supabase auth
@@ -119,6 +123,9 @@ export class AuthProfileService {
   // profile", or they route a freshly-signed-in user as if they were brand
   // new. See isProfileResolved().
   private profileResolvedForUserId: string | null = null;
+  // The last primary_role seen for this user. role_changed needs the value
+  // from before a write, and currentProfile loses it after any updateProfile.
+  private storedPrimaryRole: { userId: string; role: string | null } | null = null;
 
   private constructor() {}
 
@@ -844,11 +851,34 @@ export class AuthProfileService {
     }
   }
 
+  /** Emits role_changed when a successful write changed profiles.primary_role. */
+  private reportPrimaryRoleWrite(
+    userId: string,
+    nextRole: AuthProfile['primary_role'],
+    source: RoleChangeSource | undefined
+  ): void {
+    if (nextRole === undefined) return;
+    const previousRole =
+      this.storedPrimaryRole?.userId === userId
+        ? this.storedPrimaryRole.role
+        : this.currentProfile?.id === userId
+          ? (this.currentProfile.primary_role ?? null)
+          : null;
+    this.storedPrimaryRole = { userId, role: nextRole };
+    if (previousRole === nextRole) return;
+    void analyticsService.trackEvent('role_changed', {
+      from: previousRole ?? 'none',
+      to: nextRole,
+      source: source ?? 'unknown',
+    });
+  }
+
   /**
    * Update the authenticated user's profile
    */
   async updateProfile(
-    updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>
+    updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>,
+    options?: { roleChangeSource?: RoleChangeSource }
   ): Promise<AuthProfile | null> {
     const userId = this.getAuthUserId();
     if (!userId) {
@@ -911,6 +941,8 @@ export class AuthProfileService {
         return null;
       }
 
+      this.reportPrimaryRoleWrite(userId, updates.primary_role, options?.roleChangeSource);
+
       // Fetch the authoritative post-update row via the self-scoped RPC
       // instead of relying on UPDATE...RETURNING for it. get_my_profile()
       // is SECURITY DEFINER and hard-scoped to auth.uid(), so it can still
@@ -943,6 +975,12 @@ export class AuthProfileService {
             ? freshRow.onboarding_completed
             : undefined,
       };
+
+      // `profile` above doesn't carry primary_role, so remember it here for the
+      // next role write to compare against.
+      if (freshRow.primary_role !== undefined) {
+        this.storedPrimaryRole = { userId, role: freshRow.primary_role ?? null };
+      }
 
       this.currentProfile = profile;
       await this.cacheProfile(profile);

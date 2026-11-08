@@ -3,6 +3,7 @@ import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
 import { SettingsSection } from 'components/ui/settings-section';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
+import { markTrustContentSurface } from 'lib/analytics/trust-content';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import React, { useMemo } from 'react';
@@ -42,7 +43,10 @@ export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({
             icon="shield"
             label="How Bounty works"
             description="Fees, escrow, getting paid, and what happens if something goes wrong."
-            onPress={() => router.push('/legal/how-it-works' as Href)}
+            onPress={() => {
+              markTrustContentSurface('help_support');
+              router.push('/legal/how-it-works' as Href);
+            }}
           />
           <SettingsRow
             icon="support-agent"

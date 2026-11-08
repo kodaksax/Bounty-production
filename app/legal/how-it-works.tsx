@@ -1,10 +1,15 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SettingsScreenHeader } from '../../components/ui/settings-screen-header';
 import { TrustSafetyNotice } from '../../components/ui/trust-safety-notice';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
+import {
+  consumeTrustContentSurface,
+  trackTrustContentViewed,
+  type TrustContentTopic,
+} from '../../lib/analytics/trust-content';
 import { PLATFORM_FEE_DISPLAY } from '../../lib/constants/fees';
 import { EMAIL_SUBJECTS, SUPPORT_EMAIL } from '../../lib/constants/support';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -23,6 +28,8 @@ import type { AppTheme } from '../../lib/themes/types';
  */
 
 type Section = {
+  /** The `topic` reported when this section comes on screen. */
+  topic: TrustContentTopic;
   icon: keyof typeof MaterialIcons.glyphMap;
   title: string;
   body: string;
@@ -32,6 +39,7 @@ type Section = {
 
 const SECTIONS: Section[] = [
   {
+    topic: 'fees',
     icon: 'sell',
     title: 'No fee to post',
     // Deliberately does not promise "not charged when you post": pay-at-accept
@@ -43,6 +51,7 @@ const SECTIONS: Section[] = [
     terms: 'Terms §30 (Payments & Escrow)',
   },
   {
+    topic: 'escrow',
     icon: 'lock',
     title: 'Your money is held in escrow',
     body:
@@ -50,6 +59,7 @@ const SECTIONS: Section[] = [
     terms: 'Terms §30 (Payments & Escrow)',
   },
   {
+    topic: 'verification',
     // Not a shield icon and not "verify their identity" on its own: 5 Shoal
     // agents (2026-09-19) read that as hunter screening, and the ones who
     // worked out it was only payout KYC trusted the page less for it.
@@ -60,6 +70,7 @@ const SECTIONS: Section[] = [
     terms: 'Terms §30 (Stripe Connect and Payouts)',
   },
   {
+    topic: 'cancellation',
     icon: 'undo',
     title: 'Cancelling a bounty',
     body:
@@ -67,6 +78,7 @@ const SECTIONS: Section[] = [
     terms: 'Terms §7 (Refunds) and §30 (Cancellation & Refunds)',
   },
   {
+    topic: 'hunter_payment',
     icon: 'payments',
     title: 'Getting paid as a hunter',
     body:
@@ -74,6 +86,7 @@ const SECTIONS: Section[] = [
     terms: 'Terms §30 (Payments & Escrow)',
   },
   {
+    topic: 'cash_out',
     icon: 'account-balance',
     title: 'Cashing out',
     body:
@@ -81,6 +94,7 @@ const SECTIONS: Section[] = [
     terms: 'Terms §30 (Stripe Connect and Payouts)',
   },
   {
+    topic: 'dispute',
     icon: 'gavel',
     title: 'If something goes wrong',
     body:
@@ -89,15 +103,53 @@ const SECTIONS: Section[] = [
   },
 ];
 
+// How far a section must be inside the viewport to count as on screen.
+const SECTION_VISIBLE_MARGIN = 48;
+
 export default function HowItWorksRoute() {
   const router = useRouter();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
+  const surfaceRef = useRef<string | null>(null);
+  const getSurface = () => {
+    if (surfaceRef.current === null) surfaceRef.current = consumeTrustContentSurface();
+    return surfaceRef.current;
+  };
+  const viewportRef = useRef({ height: 0, scrollY: 0 });
+  const sectionTopsRef = useRef(new Map<TrustContentTopic, number>());
+  const sectionsSeenRef = useRef(new Set<TrustContentTopic>());
+
+  useEffect(() => {
+    trackTrustContentViewed('how_it_works', getSurface());
+  }, []);
+
+  const reportVisibleSections = () => {
+    const { height, scrollY } = viewportRef.current;
+    if (height <= 0) return;
+    sectionTopsRef.current.forEach((top, topic) => {
+      if (top + SECTION_VISIBLE_MARGIN >= scrollY + height || sectionsSeenRef.current.has(topic)) return;
+      sectionsSeenRef.current.add(topic);
+      trackTrustContentViewed(topic, getSurface());
+    });
+  };
+
   return (
     <View style={s.container}>
       <SettingsScreenHeader icon="shield" title="How Bounty works" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={s.content}>
+      <ScrollView
+        testID="how-it-works-scroll"
+        contentContainerStyle={s.content}
+        scrollEventThrottle={100}
+        onLayout={e => {
+          viewportRef.current.height = e.nativeEvent.layout.height;
+          reportVisibleSections();
+        }}
+        onScroll={e => {
+          viewportRef.current.scrollY = e.nativeEvent.contentOffset.y;
+          reportVisibleSections();
+        }}
+      >
         <Text style={s.intro}>
           Bounty is a way to pay someone nearby to do a small job — or to get paid for doing one.
           Here is exactly what happens to the money, and what protects you on either side.
@@ -105,7 +157,15 @@ export default function HowItWorksRoute() {
         <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
 
         {SECTIONS.map(section => (
-          <View key={section.title} style={s.card}>
+          <View
+            key={section.title}
+            testID={`how-it-works-section-${section.topic}`}
+            style={s.card}
+            onLayout={e => {
+              sectionTopsRef.current.set(section.topic, e.nativeEvent.layout.y);
+              reportVisibleSections();
+            }}
+          >
             <View style={s.cardHead}>
               <MaterialIcons name={section.icon} size={20} color={theme.primary} style={s.cardIcon} />
               <Text style={s.cardTitle}>{section.title}</Text>

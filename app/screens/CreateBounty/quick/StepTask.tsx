@@ -25,8 +25,12 @@ import {
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { InfoTooltip } from '../../../../components/ui/tooltip';
+import { trackTrustContentViewed } from '../../../../lib/analytics/trust-content';
+import { composerScreenForStep, type ComposerTelemetry, type MissingField } from '../composerTelemetry';
+import { BlockedTapCapture } from './BlockedTapCapture';
 import { StepProgressRow, useStepEntrance } from './QuickStepLayout';
 import { SuggestionPlaceholder } from './SuggestionPlaceholder';
+import { findTaskTemplateByTitle, TASK_TEMPLATES, type TaskTemplate } from './taskTemplates';
 
 // Cycled in the empty field to show the kind of answer that works here. These
 // are examples only — none of them is ever written into the draft.
@@ -37,41 +41,6 @@ const SUGGESTIONS = [
   'Mount my TV',
   'Wait in line for me',
   'Take photos of my car',
-];
-
-type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
-
-interface TaskTemplate {
-  id: string;
-  title: string;
-  /** One of lib/constants/bounty-categories.ts's BOUNTY_CATEGORIES ids —
-   * keeps template-originated bounties filterable in the feed the same way
-   * as hand-picked categories. */
-  category: string;
-  amount: number;
-  icon: IconName;
-  /** Example answer to "What exactly, and when?" for this template. Shown as
-   * the details field's placeholder only — never written into the draft. */
-  detailExample: string;
-}
-
-// A curated set of one-tap starting points, chosen to signal the odd-jobs range
-// of the marketplace — the errands people don't expect to be able to hand off —
-// rather than to cover every BOUNTY_CATEGORIES bucket. Prices are rough market
-// anchors, not quotes, and StepPay shows them as an editable, pre-filled amount.
-const TASK_TEMPLATES: TaskTemplate[] = [
-  { id: 'hold_merch_line', title: 'Hold my spot in the merch line', category: 'other', amount: 25, icon: 'confirmation-number', detailExample: 'Saturday from 9am at the arena box office, until doors open at noon' },
-  { id: 'lecture_notes', title: 'Take lecture notes for me', category: 'writing', amount: 20, icon: 'description', detailExample: 'BIO 101 on Tuesday 10-11:15am, typed notes sent the same day' },
-  { id: 'home_haircut', title: 'Cut my hair at my place', category: 'other', amount: 65, icon: 'content-cut', detailExample: 'Short fade and beard trim, Sunday afternoon, I have clippers' },
-  { id: 'mount_tv', title: 'Mount my TV', category: 'labor', amount: 35, icon: 'tv', detailExample: '55-inch TV on drywall, mount included, any weekday after 5pm' },
-  { id: 'explain_insurance', title: 'Explain my insurance policy', category: 'other', amount: 30, icon: 'shield', detailExample: 'A 30-minute call to walk through my renters policy this week' },
-  { id: 'hem_gown', title: 'Hem my gown', category: 'other', amount: 45, icon: 'checkroom', detailExample: 'Take a floor-length gown up about 2 inches, needed by Friday' },
-  { id: 'tagalog_grocery_run', title: 'Tagalog language translator', category: 'other', amount: 55, icon: 'translate', detailExample: 'Translate at a 1-hour doctor visit, Monday at 10am' },
-  { id: 'walk_dog', title: 'Walk my dog', category: 'other', amount: 20, icon: 'pets', detailExample: 'One 30-minute walk for a friendly lab, Saturday morning' },
-  { id: 'clean_closet', title: 'Clean out my closet', category: 'labor', amount: 60, icon: 'cleaning-services', detailExample: 'Sort and bag one walk-in closet, about 2 hours, this weekend' },
-  { id: 'help_move_in', title: 'Help me move in', category: 'labor', amount: 90, icon: 'local-shipping', detailExample: 'Carry boxes and a couch up 2 flights, Saturday 10am to 1pm' },
-  { id: 'design_artwork', title: 'Design an artwork', category: 'design', amount: 100, icon: 'brush', detailExample: 'A square logo for my bakery, 2 drafts, final files by next Friday' },
-  { id: 'assemble_furniture', title: 'Assemble my furniture', category: 'labor', amount: 40, icon: 'handyman', detailExample: 'One IKEA dresser and a bed frame, Sunday after 2pm' },
 ];
 
 // Placeholder for a title the poster typed themselves.
@@ -98,6 +67,8 @@ interface StepTaskProps {
   /** The host's top gap, which the later steps sit below. The hero pads its
    * progress row by it so the row lands where theirs does. */
   topInset?: number;
+  /** Drop-off events. Omitted while the flow is preloaded off-screen. */
+  telemetry?: ComposerTelemetry;
   step: number;
   totalSteps: number;
 }
@@ -119,7 +90,7 @@ const MAX_LENGTH = 120;
  * Unlike the later steps this doesn't use QuickStepLayout: the CTA lives in
  * the card next to the field instead of being pinned to the bottom.
  */
-export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintStatusBar = true, topInset = 0, step, totalSteps }: StepTaskProps) {
+export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintStatusBar = true, topInset = 0, telemetry, step, totalSteps }: StepTaskProps) {
   const { theme } = useAppThemeContext();
   // Scales off the viewport width so the headline stays proportionate from
   // small phones up to tablets. 375 is the reference width.
@@ -170,17 +141,50 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const canContinue = !error && !detailError && !contactError;
   // Follows the title: a template's own example, else a generic one. Derived
   // from the title rather than remembered, so it survives drafts and Back.
-  const detailExample =
-    TASK_TEMPLATES.find((t) => t.title === (draft.title || '').trim())?.detailExample ??
-    CUSTOM_DETAIL_EXAMPLE;
+  const detailExample = findTaskTemplateByTitle(draft.title)?.detailExample ?? CUSTOM_DETAIL_EXAMPLE;
+  // The first thing still stopping Next, in the order the fields appear.
+  const missingField: MissingField | null = error
+    ? 'title'
+    : detailError
+      ? 'description'
+      : contactError
+        ? 'contact'
+        : null;
 
   const handleChange = (value: string) => {
+    telemetry?.titleFirstTyped(step, draft);
     onUpdate({ title: value });
   };
 
   const handleDetailChange = (value: string) => {
+    telemetry?.detailFirstTyped(step, draft);
     onUpdate({ description: value });
   };
+
+  const handleNextPress = () => {
+    telemetry?.nextTapped({ step, draft, blocked: false, missingField: null });
+    onNext();
+  };
+
+  const handleNextBlocked = () => {
+    telemetry?.nextTapped({ step, draft, blocked: true, missingField });
+  };
+
+  const titleErrorShown = touched && !!error && !isEmpty;
+  const contactErrorShown = !!contactError;
+  // The card's "Add what and when" / "N more characters" hint, or the red line
+  // under the field. The hint gives way to the character counter on long titles.
+  const detailLengthShown =
+    (length <= 90 && detailLength < MIN_DETAIL_LENGTH) ||
+    (detailTouched && !!detailError && detailLength > 0);
+
+  useEffect(() => {
+    if (!telemetry) return;
+    const title = draft.title;
+    if (titleErrorShown) telemetry.validationShown({ step, title, field: 'title', rule: 'title' });
+    if (contactErrorShown) telemetry.validationShown({ step, title, field: 'contact', rule: 'contact_info' });
+    if (detailLengthShown) telemetry.validationShown({ step, title, field: 'description', rule: 'min_length' });
+  }, [telemetry, step, draft.title, titleErrorShown, contactErrorShown, detailLengthShown]);
 
   // Templates sit below the card, so bring the card back into view first.
   const scrollRef = useRef<ScrollView>(null);
@@ -197,6 +201,8 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
     cardHint = `${remaining} more character${remaining === 1 ? '' : 's'}`;
   }
 
+  const composerScreen = composerScreenForStep(step);
+
   // Records which marketplace term a poster looked up. Rides alongside the
   // shared post_step_viewed funnel rather than adding a step to it.
   const handleHelpOpen = (term: string) => {
@@ -204,7 +210,9 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
       surface: 'create_flow',
       step_index: step,
       term,
+      composer_screen: composerScreen,
     });
+    trackTrustContentViewed('how_it_works', composerScreen, { composer_screen: composerScreen, term });
   };
 
   const handleTemplate = (template: TaskTemplate) => {
@@ -221,12 +229,14 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
       category: template.category,
       method: 'template',
       template_id: template.id,
+      composer_screen: composerScreen,
     });
     analyticsService.trackEvent('post_chip_tapped', {
       surface: 'create_flow',
       chip_id: template.id,
       category: template.category,
       amount: template.amount,
+      composer_screen: composerScreen,
     });
     // Stay on this step: the template names the job, the poster still has to
     // say what exactly and when. Any details already typed are kept.
@@ -321,24 +331,26 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
 
           <View style={styles.cardFooter}>
             <Text style={styles.cardHint}>{cardHint}</Text>
-            <TouchableOpacity
-              onPress={onNext}
-              disabled={!canContinue}
-              activeOpacity={0.85}
-              style={[styles.nextButton, canContinue ? styles.nextButtonEnabled : null]}
-              accessibilityRole="button"
-              accessibilityLabel="Next"
-              accessibilityState={{ disabled: !canContinue }}
-            >
-              <Text style={[styles.nextLabel, canContinue ? styles.nextLabelEnabled : null]}>
-                Next
-              </Text>
-              <MaterialIcons
-                name="arrow-forward"
-                size={18}
-                color={canContinue ? '#ffffff' : theme.textSecondary}
-              />
-            </TouchableOpacity>
+            <BlockedTapCapture blocked={!canContinue} onBlockedTap={telemetry ? handleNextBlocked : undefined}>
+              <TouchableOpacity
+                onPress={handleNextPress}
+                disabled={!canContinue}
+                activeOpacity={0.85}
+                style={[styles.nextButton, canContinue ? styles.nextButtonEnabled : null]}
+                accessibilityRole="button"
+                accessibilityLabel="Next"
+                accessibilityState={{ disabled: !canContinue }}
+              >
+                <Text style={[styles.nextLabel, canContinue ? styles.nextLabelEnabled : null]}>
+                  Next
+                </Text>
+                <MaterialIcons
+                  name="arrow-forward"
+                  size={18}
+                  color={canContinue ? '#ffffff' : theme.textSecondary}
+                />
+              </TouchableOpacity>
+            </BlockedTapCapture>
           </View>
         </View>
 

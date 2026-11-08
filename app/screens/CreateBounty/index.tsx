@@ -10,6 +10,11 @@ import { StepPostPublish } from 'app/screens/CreateBounty/quick/StepPostPublish'
 import { StepTask } from 'app/screens/CreateBounty/quick/StepTask';
 import { StepWhen } from 'app/screens/CreateBounty/quick/StepWhen';
 import { StepWhere } from 'app/screens/CreateBounty/quick/StepWhere';
+import {
+  COMPOSER_STEP_TITLES,
+  composerScreenForStep,
+  createComposerTelemetry,
+} from 'app/screens/CreateBounty/composerTelemetry';
 import type { PostField } from 'app/screens/CreateBounty/postStepFields';
 import {
   fieldForPatch,
@@ -90,7 +95,7 @@ interface CreateBountyFlowProps {
  * StepPostPublish, against the live bounty.
  */
 const TOTAL_STEPS = 3;
-const STEP_TITLES = ['Task', 'Location', 'Compensation'];
+const STEP_TITLES = COMPOSER_STEP_TITLES;
 
 /**
  * Identifies this posting surface in the shared posting funnel. The onboarding
@@ -251,6 +256,9 @@ export function CreateBountyFlow({
   const stepBackgroundMsRef = useRef(0);
   const backgroundedAtRef = useRef<number | null>(null);
   const titleTypedFiredRef = useRef(false);
+  // Held here because the step screens unmount on every step change, and
+  // "first keystroke" / "once per field and rule" are per composer session.
+  const telemetryRef = useRef(createComposerTelemetry());
   // Snapshots `deliberateTap` at construction — a ref initializer runs only
   // on this instance's first render, so a later prop change (or a parent
   // re-render that leaves this component mounted) can't retroactively flip
@@ -361,6 +369,7 @@ export function CreateBountyFlow({
       analyticsService.trackEvent('bounty_published', {
         role: 'poster',
         surface: meta.surface,
+        composer_screen: composerScreenForStep(TOTAL_STEPS),
         bounty_id: bountyId,
         // Always 'new': this create flow is the only bounty_published site,
         // every call mints a fresh bounty id, and the app has no relist or
@@ -388,6 +397,7 @@ export function CreateBountyFlow({
         bounty_id: bountyId,
         amount: meta.amountDollars,
         surface: meta.surface,
+        composer_screen: composerScreenForStep(TOTAL_STEPS),
       });
       // Hand off to the confirmation screen rather than leaving the flow —
       // onComplete now fires from its Continue button, so the host screen
@@ -416,6 +426,7 @@ export function CreateBountyFlow({
       titleTypedFiredRef.current = true;
       analyticsService.trackEvent('post_title_typed', {
         surface: POST_SURFACE,
+        composer_screen: composerScreenForStep(1),
         // No category-chip UI exists yet on the control arm — always false.
         used_chip: false,
         char_count: (draft.title || '').trim().length,
@@ -555,6 +566,7 @@ export function CreateBountyFlow({
     analyticsService.trackEvent('post_resume_prompt', {
       surface: POST_SURFACE,
       action: 'continued',
+      composer_screen: composerScreenForStep(1),
       to_step: target,
       to_step_name: STEP_TITLES[target - 1],
       variant: POST_FLOW_VARIANT,
@@ -569,6 +581,7 @@ export function CreateBountyFlow({
     analyticsService.trackEvent('post_resume_prompt', {
       surface: POST_SURFACE,
       action: 'dismissed',
+      composer_screen: composerScreenForStep(1),
       to_step: resumePromptStep,
       to_step_name: STEP_TITLES[resumePromptStep - 1],
       variant: POST_FLOW_VARIANT,
@@ -631,6 +644,7 @@ export function CreateBountyFlow({
     if (deliberateTapRef.current) {
       analyticsService.trackEvent('composer_opened', {
         role: 'poster',
+        composer_screen: composerScreenForStep(currentStepRef.current),
         variant: POST_FLOW_VARIANT,
         entry_point: entryPoint,
         deliberate_entry: true,
@@ -647,6 +661,7 @@ export function CreateBountyFlow({
         analyticsService.trackEvent('post_resume_prompt', {
           surface: POST_SURFACE,
           action: 'shown',
+          composer_screen: composerScreenForStep(1),
           to_step: resumeStep,
           to_step_name: STEP_TITLES[resumeStep - 1],
           variant: POST_FLOW_VARIANT,
@@ -696,6 +711,7 @@ export function CreateBountyFlow({
       entry_point: entryPointRef.current,
       deliberate_entry: deliberateTapRef.current,
       trigger,
+      composer_screen: composerScreenForStep(currentStepRef.current),
     });
   };
 
@@ -736,6 +752,7 @@ export function CreateBountyFlow({
     analyticsService.trackEvent('post_field_focused', {
       surface: POST_SURFACE,
       step_index: 1,
+      composer_screen: composerScreenForStep(1),
       field: focusedField,
       variant: POST_FLOW_VARIANT,
       entry_point: entryPoint,
@@ -764,6 +781,7 @@ export function CreateBountyFlow({
     analyticsService.trackEvent('post_step_viewed', {
       surface: POST_SURFACE,
       direction: currentStep >= previousStep ? 'forward' : 'back',
+      composer_screen: composerScreenForStep(currentStep),
       step_index: currentStep,
       step_name: STEP_TITLES[currentStep - 1],
       variant: POST_FLOW_VARIANT,
@@ -776,6 +794,7 @@ export function CreateBountyFlow({
       const { seconds, capped } = capSeconds(stepTimerRef.current.elapsedSeconds());
       analyticsService.trackEvent('post_step_completed', {
         step_index: previousStep,
+        composer_screen: composerScreenForStep(previousStep),
         step_name: STEP_TITLES[previousStep - 1],
         seconds_on_step: seconds,
         seconds_capped: capped,
@@ -831,6 +850,7 @@ export function CreateBountyFlow({
         seconds_on_step: seconds,
         seconds_capped: capped,
         background_seconds: Math.round(backgroundMs / 1000),
+        composer_screen: composerScreenForStep(currentStepRef.current),
         exit_method: exitMethod,
         variant: POST_FLOW_VARIANT,
         deliberate_entry: deliberateTapRef.current,
@@ -853,6 +873,7 @@ export function CreateBountyFlow({
       analyticsService.trackEvent('post_abandoned', {
         surface: POST_SURFACE,
         step: currentStepRef.current,
+        composer_screen: composerScreenForStep(currentStepRef.current),
         stepTitle: STEP_TITLES[currentStepRef.current - 1],
         // Carried here too so `exit_method: 'tab'` finally means "left a
         // real composition via the tab bar" on at least one event, rather
@@ -910,6 +931,7 @@ export function CreateBountyFlow({
                 onUpdate={handleDraftUpdate}
                 onNext={handleNext}
                 onFieldFocus={handleFieldFocused}
+                telemetry={isActive ? telemetryRef.current : undefined}
                 // Off-screen outside the pager, tinting would turn the status
                 // bar green over whichever screen is actually showing.
                 tintStatusBar={isEmailVerified && (isActive || inTabPager)}
@@ -932,6 +954,7 @@ export function CreateBountyFlow({
             {!postedBountyId && currentStep === 2 && (
               <StepWhere
                 draft={draft}
+                telemetry={isActive ? telemetryRef.current : undefined}
                 onUpdate={handleDraftUpdate}
                 onNext={handleNext}
                 onBack={handleBack}
@@ -942,6 +965,7 @@ export function CreateBountyFlow({
             {!postedBountyId && currentStep === 3 && (
               <StepPay
                 draft={draft}
+                telemetry={isActive ? telemetryRef.current : undefined}
                 onUpdate={handleDraftUpdate}
                 onNext={handlePublishFromAmountStep}
                 onBack={handleBack}

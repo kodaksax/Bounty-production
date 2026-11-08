@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { type Href, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { markTrustContentSurface } from '../../lib/analytics/trust-content';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -43,6 +44,7 @@ export function HunterProfileChecklist({ input }: HunterProfileChecklistProps) {
     analyticsService
       .trackEvent('profile_checklist_item_tapped', { item: item.id, state: item.state })
       .catch(() => {});
+    if (item.id === 'id_verification') markTrustContentSurface('profile_checklist');
     router.push(route);
   };
 

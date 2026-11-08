@@ -12,6 +12,8 @@
 // Sharing one instance guarantees autocapture, manual `capture()` calls, and
 // service-level events all flow into the same PostHog project with a single,
 // consistent distinct id.
+import { Platform } from 'react-native';
+
 const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
@@ -19,6 +21,32 @@ const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posth
 // project (see EXPO_PUBLIC_ENVIRONMENT in .env.*). Tag every event and person
 // with this so Insights/dashboards can filter non-production traffic out.
 const APP_ENVIRONMENT = process.env.EXPO_PUBLIC_ENVIRONMENT || 'development';
+
+// Resolved on first use and required lazily, because this module is evaluated
+// from the root layout and a native-module failure there must not block startup.
+const resolveAppBuild = (): string => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    return require('expo-application').nativeBuildVersion || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
+
+let _deviceSuperProperties: Record<string, string> | null = null;
+
+// Sent with every event, including the SDK's own ($screen, $set, Application *),
+// which never pass through analyticsService.trackEvent.
+const deviceSuperProperties = (): Record<string, string> => {
+  if (!_deviceSuperProperties) {
+    _deviceSuperProperties = {
+      app_env: APP_ENVIRONMENT,
+      platform: Platform.OS,
+      app_build: resolveAppBuild(),
+    };
+  }
+  return _deviceSuperProperties;
+};
 
 const INTERNAL_EMAILS = new Set([
   'jordanmag11@yahoo.com',
@@ -76,7 +104,7 @@ const resetKeepingDeviceProperties = (): void => {
   const internal = deviceIsInternal();
   _posthog.reset();
   if (typeof _posthog.register !== 'function') return;
-  _posthog.register({ app_env: APP_ENVIRONMENT });
+  _posthog.register(deviceSuperProperties());
   if (internal) markInternalDevice();
 };
 
@@ -119,10 +147,13 @@ try {
           // `register({ app_env })` below runs after the constructor, but the
           // constructor already queues "Application Installed"/"Updated", so
           // those arrived untagged (503 installs in the 30 days to
-          // 2026-10-06) and vanished from any app_env-filtered funnel.
-          if (event.properties?.app_env === undefined) {
-            event.properties = { ...event.properties, app_env: APP_ENVIRONMENT };
+          // 2026-10-06) and vanished from any app_env-filtered funnel. The
+          // same gap applies to platform and app_build.
+          const properties: Record<string, unknown> = { ...event.properties };
+          for (const [key, value] of Object.entries(deviceSuperProperties())) {
+            if (properties[key] === undefined) properties[key] = value;
           }
+          event.properties = properties;
           return event;
         },
         // Uncaught exceptions and rejections go to PostHog on every device, so
@@ -169,7 +200,7 @@ try {
         },
         debug: __DEV__,
       });
-      _posthog.register({ app_env: APP_ENVIRONMENT });
+      _posthog.register(deviceSuperProperties());
     }
   } else if (__DEV__) {
     // eslint-disable-next-line no-console

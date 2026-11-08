@@ -513,6 +513,32 @@ describe('CreateBountyFlow — post_step_viewed fires once per step entry', () =
     });
   });
 
+  it('tags composer events with the step they belong to, leaving $screen_name to the SDK', () => {
+    const { unmount } = render(<CreateBountyFlow deliberateTap />);
+    fireEvent(screen.getByLabelText('stub-title-input'), 'focus');
+    fireEvent.press(screen.getByLabelText('stub-next')); // -> Location
+    fireEvent.press(screen.getByLabelText('stub-next')); // -> Compensation
+
+    expect(lastEventNamed('composer_opened')).toMatchObject({ composer_screen: 'composer_task' });
+    expect(lastEventNamed('bounty_started')).toMatchObject({ composer_screen: 'composer_task' });
+    expect(lastEventNamed('post_field_focused')).toMatchObject({ composer_screen: 'composer_task' });
+    expect(lastEventNamed('post_title_typed')).toMatchObject({ composer_screen: 'composer_task' });
+    expect(eventsNamed('post_step_viewed').map(e => e.composer_screen)).toEqual([
+      'composer_task',
+      'composer_location',
+      'composer_pay',
+    ]);
+    // Named for the step just finished, like its step_index.
+    expect(eventsNamed('post_step_completed').map(e => e.composer_screen)).toEqual([
+      'composer_task',
+      'composer_location',
+    ]);
+    unmount();
+    expect(lastEventNamed('post_step_abandoned')).toMatchObject({ composer_screen: 'composer_pay' });
+    expect(lastEventNamed('post_abandoned')).toMatchObject({ composer_screen: 'composer_pay' });
+    expect(trackEvent.mock.calls.some(call => '$screen_name' in (call[1] ?? {}))).toBe(false);
+  });
+
   it('emits only the canonical step properties (step_index number + step_name)', () => {
     render(<CreateBountyFlow />);
 
@@ -960,6 +986,8 @@ describe('CreateBountyFlow — abandonment is not the only way out', () => {
     });
 
     expect(eventsNamed('bounty_published')).toHaveLength(1);
+    expect(lastEventNamed('bounty_published')).toMatchObject({ composer_screen: 'composer_pay' });
+    expect(lastEventNamed('bounty_submitted')).toMatchObject({ composer_screen: 'composer_pay' });
 
     unmount();
 
