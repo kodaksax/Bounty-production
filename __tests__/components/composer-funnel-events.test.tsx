@@ -288,6 +288,21 @@ describe('post_validation_shown on Task', () => {
     ]);
   });
 
+  it('does not report a hidden min-length error when contact information takes precedence', () => {
+    const { getByLabelText } = render(
+      <StepTaskHarness
+        telemetry={createComposerTelemetry()}
+        initial={{ title: 'A'.repeat(91), description: '410-555-1212' }}
+      />
+    );
+
+    fireEvent(getByLabelText(DETAIL_LABEL), 'blur');
+
+    expect(eventsNamed('post_validation_shown')).toEqual([
+      { field: 'contact', rule: 'contact_info', composer_screen: 'composer_task' },
+    ]);
+  });
+
   it('fires the title rule only once the title error shows, after blur', () => {
     const { getByLabelText } = render(
       <StepTaskHarness telemetry={createComposerTelemetry()} initial={{ title: 'abc', description: TWENTY }} />

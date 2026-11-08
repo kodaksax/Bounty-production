@@ -205,6 +205,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   // under the field. The hint gives way to the character counter on long titles.
   // With optional details an empty field isn't a validation at all.
   const detailLengthShown =
+    !contactError &&
     (!templateDetails || detailLength > 0) &&
     ((length <= 90 && detailLength < MIN_DETAIL_LENGTH) ||
       (detailTouched && !!detailError && detailLength > 0));

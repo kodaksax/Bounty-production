@@ -75,6 +75,19 @@ describe('/legal/how-it-works', () => {
     ]);
   });
 
+  it('does not report a section above the viewport as seen', () => {
+    const { getByTestId } = render(<HowItWorksRoute />);
+    const scroll = getByTestId('how-it-works-scroll');
+
+    fireEvent(scroll, 'layout', layoutOf(0, 600));
+    fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { y: 1000 } } });
+    fireEvent(getByTestId('how-it-works-section-escrow'), 'layout', layoutOf(200, 100));
+    expect(viewed().map((e) => e.topic)).toEqual(['how_it_works']);
+
+    fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { y: 150 } } });
+    expect(viewed().map((e) => e.topic)).toEqual(['how_it_works', 'escrow']);
+  });
+
   it('has no review section, so never reports a review topic', () => {
     const { queryByTestId } = render(<HowItWorksRoute />);
     expect(queryByTestId('how-it-works-section-review')).toBeNull();

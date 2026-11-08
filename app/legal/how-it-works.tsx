@@ -117,7 +117,7 @@ export default function HowItWorksRoute() {
     return surfaceRef.current;
   };
   const viewportRef = useRef({ height: 0, scrollY: 0 });
-  const sectionTopsRef = useRef(new Map<TrustContentTopic, number>());
+  const sectionBoundsRef = useRef(new Map<TrustContentTopic, { top: number; height: number }>());
   const sectionsSeenRef = useRef(new Set<TrustContentTopic>());
 
   useEffect(() => {
@@ -127,8 +127,13 @@ export default function HowItWorksRoute() {
   const reportVisibleSections = () => {
     const { height, scrollY } = viewportRef.current;
     if (height <= 0) return;
-    sectionTopsRef.current.forEach((top, topic) => {
-      if (top + SECTION_VISIBLE_MARGIN >= scrollY + height || sectionsSeenRef.current.has(topic)) return;
+    sectionBoundsRef.current.forEach(({ top, height: sectionHeight }, topic) => {
+      if (
+        top + sectionHeight <= scrollY ||
+        top + SECTION_VISIBLE_MARGIN >= scrollY + height ||
+        sectionsSeenRef.current.has(topic)
+      )
+        return;
       sectionsSeenRef.current.add(topic);
       trackTrustContentViewed(topic, getSurface());
     });
@@ -162,7 +167,10 @@ export default function HowItWorksRoute() {
             testID={`how-it-works-section-${section.topic}`}
             style={s.card}
             onLayout={e => {
-              sectionTopsRef.current.set(section.topic, e.nativeEvent.layout.y);
+              sectionBoundsRef.current.set(section.topic, {
+                top: e.nativeEvent.layout.y,
+                height: e.nativeEvent.layout.height,
+              });
               reportVisibleSections();
             }}
           >

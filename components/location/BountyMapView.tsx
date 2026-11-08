@@ -122,7 +122,7 @@ function BountyMapViewInner({ category, height = '100%' }: BountyMapViewProps) {
         source: 'map',
         filters_applied: category ? [`category:${category}`] : [],
         has_location_permission: Boolean(permission?.granted),
-        role: authProfileService.getCurrentProfile()?.primary_role ?? 'none',
+        role: authProfileService.getPrimaryRoleForAnalytics() ?? 'none',
         is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
         // metro_region (not `region`) — getDeviceServiceabilityContext()
         // below already emits a differently-scoped `region` (device locale).
