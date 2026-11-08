@@ -12,6 +12,7 @@ import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
 import { ArchivedBountyCard } from "./archived-bounty-card"
 import { ScreenHeader } from "./ui/screen-header"
+import { withAlpha } from '../lib/utils';
 
 interface ArchivedBountiesScreenProps {
   onBack?: () => void
@@ -199,9 +200,9 @@ function makeStyles(t: AppTheme) {
       borderRadius: 44,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.16)' : 'rgba(0,142,42,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.16) : withAlpha(t.primary, 0.1),
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(0,142,42,0.35)' : 'rgba(0,142,42,0.25)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.35) : withAlpha(t.primary, 0.25),
       marginBottom: 20,
     },
     emptyTitle: {

@@ -5,6 +5,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 import { TrustSafetyNotice } from './trust-safety-notice';
+import { withAlpha } from '../../lib/utils';
 
 interface EscrowExplainerProps {
   amount?: number;
@@ -28,7 +29,7 @@ export function EscrowExplainer({
       variant === 'banner' && s.bannerContainer,
     ]}>
       <View style={s.iconContainer}>
-        <MaterialIcons name="shield" size={variant === 'inline' ? 20 : 28} color="#008E2A" />
+        <MaterialIcons name="shield" size={variant === 'inline' ? 20 : 28} color={theme.primaryLight} />
       </View>
 
       <View style={s.textContainer}>
@@ -74,13 +75,13 @@ export function EscrowExplainer({
         accessible={true}
         accessibilityLabel="Escrow protection explanation"
       >
-        <Pressable style={s.modalOverlay} onPress={() => setShowModal(false)}>
-          <Pressable style={s.modalContent} onPress={() => {}}>
+        <Pressable accessibilityRole="button" style={s.modalOverlay} onPress={() => setShowModal(false)}>
+          <Pressable accessibilityRole="button" style={s.modalContent} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Modal Header */}
               <View style={s.modalHeader}>
                 <View style={s.modalIconCircle}>
-                  <MaterialIcons name="lock" size={40} color="#008E2A" />
+                  <MaterialIcons name="lock" size={40} color={theme.primaryLight} />
                 </View>
                 <Text style={s.modalTitle}>In-App Escrow</Text>
                 <Text style={s.modalSubtitle}>An open listing is not proof of funding</Text>
@@ -122,7 +123,7 @@ export function EscrowExplainer({
                   'Payout timing depends on Stripe and the receiving bank',
                 ].map(text => (
                   <View key={text} style={s.guarantee}>
-                    <MaterialIcons name="check-circle" size={20} color="#008E2A" />
+                    <MaterialIcons name="check-circle" size={20} color={theme.primaryLight} />
                     <Text style={s.guaranteeText}>{text}</Text>
                   </View>
                 ))}
@@ -158,11 +159,11 @@ export function EscrowProtectionBanner({ amount }: { amount?: number }) {
 
   return (
     <View style={s.protectionBanner}>
-      <MaterialIcons name="lock" size={14} color="#008E2A" />
+      <MaterialIcons name="lock" size={14} color={theme.primaryLight} />
       <Text style={s.protectionBannerText}>
         {amount ? `$${amount.toFixed(2)} · in-app escrow when funded` : 'In-app escrow when funded'}
       </Text>
-      <MaterialIcons name="verified-user" size={12} color="#008E2A" />
+      <MaterialIcons name="verified-user" size={12} color={theme.primaryLight} />
     </View>
   );
 }
@@ -170,10 +171,10 @@ export function EscrowProtectionBanner({ amount }: { amount?: number }) {
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : t.surface,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.1) : t.surface,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,142,42,0.35)',
+      borderColor: t.isDark ? withAlpha(t.text, 0.1) : withAlpha(t.primary, 0.35),
       padding: 16,
       flexDirection: 'row',
       alignItems: 'flex-start',
@@ -186,8 +187,8 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
     },
     bannerContainer: {
-      backgroundColor: t.isDark ? '#22262C' : t.surface,
-      borderColor: '#008E2A',
+      backgroundColor: t.surface,
+      borderColor: t.primary,
     },
     iconContainer: {
       width: 48,
@@ -228,14 +229,14 @@ function makeStyles(t: AppTheme) {
     learnMoreText: {
       fontSize: 13,
       fontWeight: '600',
-      color: t.isDark ? '#1FAE49' : t.primary,
+      color: t.isDark ? t.primaryLight : t.primary,
     },
     protectionBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.1) : t.surfaceSecondary,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.2) : t.border,
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 16,
@@ -243,9 +244,9 @@ function makeStyles(t: AppTheme) {
       alignSelf: 'flex-start',
     },
     protectionBannerText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
-      color: t.primary,
+      color: t.primaryLight,
     },
     modalOverlay: {
       flex: 1,
@@ -289,7 +290,7 @@ function makeStyles(t: AppTheme) {
     sectionTitle: {
       fontSize: 14,
       fontWeight: '700',
-      color: t.isDark ? '#1FAE49' : t.primary,
+      color: t.isDark ? t.primaryLight : t.primary,
       textTransform: 'uppercase',
       letterSpacing: 1,
       marginBottom: 16,
@@ -306,7 +307,7 @@ function makeStyles(t: AppTheme) {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: '#008E2A',
+      backgroundColor: t.primary,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -337,7 +338,7 @@ function makeStyles(t: AppTheme) {
       marginVertical: 8,
     },
     guaranteesContainer: {
-      backgroundColor: t.isDark ? 'rgba(6,78,59,0.5)' : 'rgba(0,142,42,0.07)',
+      backgroundColor: t.isDark ? t.primaryTint : withAlpha(t.primary, 0.07),
       borderRadius: 12,
       padding: 16,
       marginBottom: 16,
@@ -356,7 +357,7 @@ function makeStyles(t: AppTheme) {
     processingInfo: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(6,78,59,0.3)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? t.primaryTint : t.surfaceSecondary,
       borderRadius: 8,
       padding: 12,
       gap: 10,
@@ -369,9 +370,7 @@ function makeStyles(t: AppTheme) {
       lineHeight: 16,
     },
     closeButton: {
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: t.primary,
       paddingVertical: 14,
       borderRadius: 8,
       alignItems: 'center',

@@ -41,6 +41,7 @@ import { useProfileActivityStats } from "../../hooks/useProfileActivityStats";
 import { authProfileService } from "../../lib/services/auth-profile-service";
 import { blockingService } from "../../lib/services/blocking-service";
 import { navigationIntent } from "../../lib/services/navigation-intent";
+import { withAlpha } from '../../lib/utils';
 ;
 
 // Same open/close timing as the app-wide AppModal primitive (see
@@ -80,7 +81,7 @@ function MoreMenuPopover({ visible, onDismiss, children, style }: {
   if (!mounted) return null;
 
   return (
-    <Pressable style={popoverStyles.wrapper} onPress={onDismiss}>
+    <Pressable accessibilityRole="button" style={popoverStyles.wrapper} onPress={onDismiss}>
       <View style={popoverStyles.backdrop} />
       <Animated.View style={[style, animStyle]}>{children}</Animated.View>
     </Pressable>
@@ -255,7 +256,7 @@ export default function UserProfileScreen() {
 
   const handleMessage = () => {
     if (!userId || !currentUserId) {
-      Alert.alert('Error', 'Unable to start conversation.');
+      Alert.alert("Couldn't start conversation", "Please try again.");
       return;
     }
 
@@ -327,11 +328,11 @@ export default function UserProfileScreen() {
                     : `You have blocked ${profile?.username}`
                 );
               } else {
-                Alert.alert('Error', result.error || `Failed to ${actionVerb} user.`);
+                Alert.alert("Something went wrong", result.error || `Failed to ${actionVerb} user.`);
               }
             } catch (error) {
               console.error(`Error ${actionVerb}ing user:`, error);
-              Alert.alert('Error', `An error occurred while ${actionVerb}ing this user.`);
+              Alert.alert("Something went wrong", `An error occurred while ${actionVerb}ing this user.`);
             }
             setShowMoreMenu(false);
           },
@@ -396,15 +397,15 @@ export default function UserProfileScreen() {
           centerNode={<BrandingLogo size="small" />}
         />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={48} color={theme.errorText} />
           <Text style={styles.errorTitle}>Profile not found</Text>
           <Text style={styles.errorText}>
             {error || "This user profile could not be loaded."}
           </Text>
           {session ? (
             <>
-              <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: '#2563eb' }]}
+              <TouchableOpacity accessibilityRole="button"
+                style={[styles.retryButton, { backgroundColor: theme.info }]}
                 onPress={async () => {
                   try {
                     // attempt to refresh the authenticated profile
@@ -417,8 +418,8 @@ export default function UserProfileScreen() {
                 <Text style={[styles.retryButtonText, { color: '#fff' }]}>Retry Profile</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.retryButton, { marginTop: 12, backgroundColor: '#ef4444' }]}
+              <TouchableOpacity accessibilityRole="button"
+                style={[styles.retryButton, { marginTop: 12, backgroundColor: theme.error }]}
                 onPress={async () => {
                   try {
                     // Local scope only: don't revoke this user's sessions on
@@ -437,8 +438,8 @@ export default function UserProfileScreen() {
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity style={styles.retryButton} onPress={handleBack}>
-              <Text style={styles.retryButtonText}>Go Back</Text>
+            <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={handleBack}>
+              <Text style={styles.retryButtonText}>Go back</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -476,16 +477,16 @@ export default function UserProfileScreen() {
           onDismiss={() => setShowMoreMenu(false)}
           style={[styles.moreMenuContainer, { top: 48 }]}
         >
-          <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
-            <MaterialIcons name="share" size={20} color="#929497" />
+          <TouchableOpacity accessibilityRole="button" style={styles.moreMenuItem} onPress={handleShare}>
+            <MaterialIcons name="share" size={20} color={theme.textSecondary} />
             <Text style={styles.moreMenuText}>Share Profile</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
-            <MaterialIcons name="report" size={20} color="#fbbf24" />
+          <TouchableOpacity accessibilityRole="button" style={styles.moreMenuItem} onPress={handleReport}>
+            <MaterialIcons name="report" size={20} color={theme.warningText} />
             <Text style={styles.moreMenuText}>Report</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.moreMenuItem} onPress={handleBlock}>
-            <MaterialIcons name="block" size={20} color="#ef4444" />
+          <TouchableOpacity accessibilityRole="button" style={styles.moreMenuItem} onPress={handleBlock}>
+            <MaterialIcons name="block" size={20} color={theme.errorText} />
             <Text style={styles.moreMenuText}>Block</Text>
           </TouchableOpacity>
         </MoreMenuPopover>
@@ -495,7 +496,7 @@ export default function UserProfileScreen() {
       {displayError && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error || followError}</Text>
-          <TouchableOpacity onPress={() => setDismissedError(true)}>
+          <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => setDismissedError(true)}>
             <MaterialIcons name="close" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -521,25 +522,25 @@ export default function UserProfileScreen() {
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           {isOwnProfile ? (
-            <TouchableOpacity style={styles.primaryButton} onPress={handleEditProfile}>
+            <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleEditProfile}>
               <MaterialIcons name="edit" size={18} color="#22262C" />
               <Text style={styles.primaryButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
             FOLLOW_FEATURE_ENABLED ? (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.secondaryButton, isFollowing && styles.followingButton]}
                 onPress={toggleFollow}
                 disabled={followLoading}
               >
                 {followLoading ? (
-                  <ActivityIndicator size="small" color={isFollowing ? "#008E2A" : "#ffffff"} />
+                  <ActivityIndicator size="small" color={isFollowing ? theme.primaryLight : "#ffffff"} />
                 ) : (
                   <>
                     <MaterialIcons
                       name={isFollowing ? "person-remove" : "person-add"}
                       size={18}
-                      color={isFollowing ? "#008E2A" : "#ffffff"}
+                      color={isFollowing ? theme.primaryLight : "#ffffff"}
                     />
                     <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
                       {isFollowing ? "Following" : "Follow"}
@@ -560,9 +561,9 @@ export default function UserProfileScreen() {
               </View>
             ) : (
               <View style={styles.resendPrompt}>
-                <MaterialIcons name="warning" size={16} color="#fbbf24" />
+                <MaterialIcons name="warning" size={16} color={theme.warningText} />
                 <Text style={styles.resendPromptText}>Email not verified</Text>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.resendButton, resendLoading && styles.resendButtonDisabled]}
                   onPress={handleResendVerification}
                   disabled={resendLoading}
@@ -653,12 +654,12 @@ export default function UserProfileScreen() {
             kept below the hiring-relevant content rather than beside it. */}
         {FOLLOW_FEATURE_ENABLED && (
           <View style={styles.statsContainer}>
-            <TouchableOpacity style={styles.statItem} onPress={handleFollowersPress}>
+            <TouchableOpacity accessibilityRole="button" style={styles.statItem} onPress={handleFollowersPress}>
               <Text style={styles.statValue}>{followerCount}</Text>
               <Text style={styles.statLabel}>Followers</Text>
             </TouchableOpacity>
             <View style={styles.statDivider} />
-            <TouchableOpacity style={styles.statItem} onPress={handleFollowingPress}>
+            <TouchableOpacity accessibilityRole="button" style={styles.statItem} onPress={handleFollowingPress}>
               <Text style={styles.statValue}>{followingCount}</Text>
               <Text style={styles.statLabel}>Following</Text>
             </TouchableOpacity>
@@ -767,9 +768,7 @@ function makeStyles(theme: AppTheme) {
       marginBottom: 24,
     },
     retryButton: {
-      backgroundColor: "#008E2A",
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,
@@ -783,7 +782,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      backgroundColor: "#dc2626",
+      backgroundColor: theme.error,
       paddingHorizontal: 16,
       paddingVertical: 12,
       marginHorizontal: 16,
@@ -794,7 +793,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: 'rgba(220,38,38,0.12)',
+      backgroundColor: withAlpha(theme.error, 0.12),
       padding: 10,
       marginHorizontal: 16,
       marginBottom: 12,
@@ -810,7 +809,7 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       paddingHorizontal: 12,
       paddingVertical: 6,
-      backgroundColor: '#b91c1c',
+      backgroundColor: theme.error,
       borderRadius: 8,
     },
     offlineRetryText: {
@@ -870,10 +869,10 @@ function makeStyles(theme: AppTheme) {
       fontWeight: "600",
     },
     followingButton: {
-      backgroundColor: "rgba(167, 243, 208, 0.1)",
+      backgroundColor: theme.primaryTint,
     },
     followingButtonText: {
-      color: "#008E2A",
+      color: theme.primaryLight,
     },
     statsContainer: {
       flexDirection: "row",
@@ -939,7 +938,7 @@ function makeStyles(theme: AppTheme) {
     },
     resendPromptText: {
       fontSize: 12,
-      color: "#fbbf24",
+      color: theme.warningText,
       fontWeight: "500",
     },
     resendButton: {

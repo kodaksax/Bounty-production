@@ -4,6 +4,9 @@ import React, { memo, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { cn } from '../lib/utils';
 import { getMediaKind, isEmojiOnly, mediaFileName, mediaPreviewLabel } from '../lib/utils/message-media';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
+import { withAlpha } from '../lib/utils';
 
 /**
  * Every text size in a message bubble, in one place. Change these to resize
@@ -76,6 +79,8 @@ export const MessageBubble = memo(({
   onMediaPress,
   onReplyPress
 }: MessageBubbleProps) => {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [mediaFailed, setMediaFailed] = useState(false);
 
   const handleLongPress = () => {
@@ -115,25 +120,25 @@ export const MessageBubble = memo(({
       case 'sent':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="check" size={12} color="#929497" />
+            <MaterialIcons name="check" size={12} color={theme.textSecondary} />
           </View>
         );
       case 'delivered':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="done-all" size={12} color="#929497" />
+            <MaterialIcons name="done-all" size={12} color={theme.textSecondary} />
           </View>
         );
       case 'read':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="done-all" size={12} color="#60a5fa" />
+            <MaterialIcons name="done-all" size={12} color={theme.infoText} />
           </View>
         );
       case 'failed':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="error" size={12} color="#ef4444" />
+            <MaterialIcons name="error" size={12} color={theme.errorText} />
           </View>
         );
       default:
@@ -162,7 +167,7 @@ export const MessageBubble = memo(({
         <View style={[styles.quoteBar, isUser ? styles.quoteBarUser : styles.quoteBarOther]} />
         <View style={styles.quoteBody}>
           <View style={styles.quoteHeader}>
-            <MaterialIcons name="reply" size={12} color={isUser ? '#DBF0E1' : '#1FAE49'} />
+            <MaterialIcons name="reply" size={12} color={theme.primaryLight} />
             <Text
               style={[styles.quoteSender, isUser ? styles.quoteSenderUser : styles.quoteSenderOther]}
               numberOfLines={1}
@@ -199,7 +204,7 @@ export const MessageBubble = memo(({
           <MaterialIcons
             name={mediaFailed ? 'broken-image' : 'insert-drive-file'}
             size={20}
-            color="#F4F1EC"
+            color={theme.text}
           />
           <Text style={styles.fileChipText} numberOfLines={1}>
             {mediaFileName(mediaUrl)}
@@ -227,12 +232,12 @@ export const MessageBubble = memo(({
           />
           {status === 'sending' && (
             <View style={styles.mediaOverlay}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={theme.text} />
             </View>
           )}
           {mediaKind === 'video' && status !== 'sending' && (
             <View style={styles.playOverlay}>
-              <MaterialIcons name="play-arrow" size={28} color="#FFFFFF" />
+              <MaterialIcons name="play-arrow" size={28} color={theme.text} />
             </View>
           )}
         </View>
@@ -243,14 +248,14 @@ export const MessageBubble = memo(({
   // An emoji-only reply still needs its quote, so it keeps the bubble layout.
   if (jumboEmoji && replyTo === undefined) {
     return (
-      <TouchableOpacity activeOpacity={0.8} onLongPress={handleLongPress} delayLongPress={500}>
+      <TouchableOpacity accessibilityRole="button" activeOpacity={0.8} onLongPress={handleLongPress} delayLongPress={500}>
         <View
           className={cn('mb-3 px-3 max-w-[80%]', isUser ? 'ml-auto' : 'mr-auto')}
           style={isHighlighted ? styles.highlighted : undefined}
         >
           {isPinned && (
             <View style={styles.pinnedBadge}>
-              <MaterialIcons name="push-pin" size={12} color="#fbbf24" />
+              <MaterialIcons name="push-pin" size={12} color={theme.warningText} />
               <Text style={styles.pinnedText}>Pinned</Text>
             </View>
           )}
@@ -264,7 +269,7 @@ export const MessageBubble = memo(({
   }
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       activeOpacity={0.8}
       onLongPress={handleLongPress}
       delayLongPress={500}
@@ -281,7 +286,7 @@ export const MessageBubble = memo(({
         )}>
           {isPinned && (
             <View style={styles.pinnedBadge}>
-              <MaterialIcons name="push-pin" size={12} color="#fbbf24" />
+              <MaterialIcons name="push-pin" size={12} color={theme.warningText} />
               <Text style={styles.pinnedText}>Pinned</Text>
             </View>
           )}
@@ -294,13 +299,13 @@ export const MessageBubble = memo(({
         </View>
         {/* Retry button for failed messages */}
         {status === 'failed' && isUser && onRetry && (
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             onPress={handleRetry}
             style={styles.retryButton}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="refresh" size={16} color="#ef4444" />
-            <Text style={styles.retryText}>Retry</Text>
+            <MaterialIcons name="refresh" size={16} color={theme.errorText} />
+            <Text style={styles.retryText}>Try again</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -310,19 +315,20 @@ export const MessageBubble = memo(({
 
 MessageBubble.displayName = 'MessageBubble';
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   body: {
     fontSize: MESSAGE_FONT_SIZE.body,
     lineHeight: Math.round(MESSAGE_FONT_SIZE.body * 1.45),
-    color: '#FFFFFF',
+    color: theme.text,
   },
   highlighted: {
-    borderRadius: 18,
-    backgroundColor: 'rgba(31, 174, 73, 0.18)',
+    borderRadius: 16,
+    backgroundColor: withAlpha(theme.primary, 0.18),
   },
   quote: {
     flexDirection: 'row',
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 6,
     maxWidth: 240,
@@ -331,17 +337,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
   quoteOther: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: withAlpha(theme.text, 0.08),
   },
   quoteBar: {
     width: 3,
     alignSelf: 'stretch',
   },
   quoteBarUser: {
-    backgroundColor: '#DBF0E1',
+    backgroundColor: theme.primaryTint,
   },
   quoteBarOther: {
-    backgroundColor: '#1FAE49',
+    backgroundColor: theme.primary,
   },
   quoteBody: {
     flexShrink: 1,
@@ -359,18 +365,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   quoteSenderUser: {
-    color: '#DBF0E1',
+    color: theme.primaryLight,
   },
   quoteSenderOther: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
   },
   quoteText: {
     fontSize: MESSAGE_FONT_SIZE.quoteText,
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: withAlpha(theme.onPrimary, 0.85),
   },
   quoteTextUnavailable: {
     fontStyle: 'italic',
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: withAlpha(theme.text, 0.6),
   },
   statusContainer: {
     alignSelf: 'flex-end',
@@ -383,13 +389,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingVertical: 2,
     paddingHorizontal: 6,
-    backgroundColor: 'rgba(251, 191, 36, 0.2)',
+    backgroundColor: withAlpha(theme.warning, 0.2),
     borderRadius: 8,
     alignSelf: 'flex-start',
   },
   pinnedText: {
     fontSize: MESSAGE_FONT_SIZE.pinnedBadge,
-    color: '#fbbf24',
+    color: theme.warningText,
     fontWeight: '600',
   },
   mediaWrapper: {
@@ -424,14 +430,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: withAlpha(theme.text, 0.12),
     maxWidth: 220,
     marginBottom: 2,
   },
   fileChipText: {
     flexShrink: 1,
     fontSize: MESSAGE_FONT_SIZE.fileName,
-    color: '#F4F1EC',
+    color: theme.text,
   },
   jumboEmoji: {
     fontSize: MESSAGE_FONT_SIZE.emojiOnly,
@@ -447,15 +453,16 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     marginTop: 4,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: withAlpha(theme.error, 0.1),
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ef4444',
+    borderColor: theme.error,
     alignSelf: 'flex-end',
   },
   retryText: {
     fontSize: MESSAGE_FONT_SIZE.retry,
-    color: '#ef4444',
+    color: theme.errorText,
     fontWeight: '600',
   },
 });
+}

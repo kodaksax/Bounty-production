@@ -18,6 +18,7 @@ import { SPACING } from '../../lib/constants/accessibility';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 const REASON_COPY: Record<string, string> = {
   document_unverified_other: "We couldn't verify your document. Please try again with a clear, well-lit photo.",
@@ -74,7 +75,7 @@ export default function VerificationRejectedScreen() {
 
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="error-outline" size={48} color="#ef4444" accessibilityElementsHidden />
+            <MaterialIcons name="error-outline" size={48} color={theme.errorText} accessibilityElementsHidden />
           </View>
           <Text style={styles.title} accessibilityRole="header">
             Let&apos;s try that again
@@ -88,7 +89,7 @@ export default function VerificationRejectedScreen() {
           accessibilityRole="button"
           accessibilityLabel="Retry verification"
         >
-          <MaterialIcons name="refresh" size={20} color="#052e1b" accessibilityElementsHidden />
+          <MaterialIcons name="refresh" size={20} color={theme.onPrimary} accessibilityElementsHidden />
           <Text style={styles.primaryButtonText}>Try again</Text>
         </TouchableOpacity>
 
@@ -122,7 +123,7 @@ function makeStyles(theme: AppTheme) {
       width: 88,
       height: 88,
       borderRadius: 44,
-      backgroundColor: 'rgba(239,68,68,0.1)',
+      backgroundColor: withAlpha(theme.error, 0.1),
       justifyContent: 'center',
       alignItems: 'center',
       marginBottom: SPACING.SCREEN_HORIZONTAL,
@@ -134,14 +135,12 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       paddingVertical: SPACING.CARD_PADDING,
       borderRadius: 999,
       marginBottom: SPACING.ELEMENT_GAP,
       gap: SPACING.COMPACT_GAP,
     },
-    primaryButtonText: { color: '#052e1b', fontSize: 18, fontWeight: 'bold' },
+    primaryButtonText: { color: theme.onPrimary, fontSize: 18, fontWeight: 'bold' },
     secondaryButton: { alignItems: 'center', paddingVertical: SPACING.COMPACT_GAP },
     secondaryButtonText: { color: theme.textSecondary, fontSize: 15, fontWeight: '500' },
   });

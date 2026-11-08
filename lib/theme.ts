@@ -28,7 +28,7 @@ export const colors = {
 
   // Text colors
   text: {
-    primary: '#E6DED1',
+    primary: '#F1EBE3',
     secondary: '#929497',
     muted: '#61656B',
     inverse: '#31363F',
@@ -128,9 +128,9 @@ export const shadows = {
   emerald: {
     shadowColor: '#008E2A', // matches lib/themes brand green
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
 } as const;
 

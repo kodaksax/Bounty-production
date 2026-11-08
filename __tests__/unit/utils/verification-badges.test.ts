@@ -71,7 +71,7 @@ describe('getVerificationBadges', () => {
   it('age_verified badge is earned only when age_verified is true', () => {
     const earned = getVerificationBadges({ ...fullyVerifiedInput, age_verified: true });
     expect(earned.find((b) => b.id === 'age_verified')?.earned).toBe(true);
-    expect(earned.find((b) => b.id === 'age_verified')?.label).toBe('✓ 18+');
+    expect(earned.find((b) => b.id === 'age_verified')?.label).toBe('18+');
 
     const unearned = getVerificationBadges({ ...fullyVerifiedInput, age_verified: false });
     expect(unearned.find((b) => b.id === 'age_verified')?.earned).toBe(false);

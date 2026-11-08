@@ -17,6 +17,7 @@ import { deviceService, UserDevice } from '../../lib/services/device-service';
 import { supabase } from '../../lib/supabase';
 import { validateNewPassword } from '../../lib/utils/password-validation';
 import { getSecureJSON, SecureKeys, setSecureJSON } from '../../lib/utils/secure-storage';
+import { showToast } from '../../lib/toast';
 
 interface PrivacySecurityScreenProps { onBack: () => void }
 
@@ -113,7 +114,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
-        Alert.alert('Error', 'Unable to verify current user.');
+        Alert.alert("Couldn't verify current user", "Please try again.");
         setLoading(false);
         return;
       }
@@ -140,12 +141,12 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         return;
       }
 
-      Alert.alert('Success', 'Your password has been updated successfully.');
+      showToast({ message: 'Your password has been updated successfully.' });
       persist({ passwordCurrent: '', passwordNew: '', passwordConfirm: '' });
 
     } catch (err) {
       console.error('Password change error:', err);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      Alert.alert("Something went wrong", 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -160,7 +161,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       }));
       Alert.alert('Device Revoked', 'The session has been revoked successfully.');
     } else {
-      Alert.alert('Error', 'Failed to revoke session. Please try again.');
+      Alert.alert("Couldn't revoke session", "Please try again.");
     }
   };
 
@@ -174,7 +175,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       const { data: { user }, error: userError } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        Alert.alert('Error', 'Unable to verify user. Please sign in again.');
+        Alert.alert("Couldn't verify user. Please sign in again", "Please try again.");
         persist({ exporting: false });
         return;
       }
@@ -194,7 +195,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     } catch (err: unknown) {
       console.error('Data export error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to export data. Please try again.';
-      Alert.alert('Error', errorMessage);
+      Alert.alert("Something went wrong", errorMessage);
     } finally {
       persist({ exporting: false });
     }
@@ -246,7 +247,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       }
     } catch (error: any) {
       console.error('[privacy-security] Error enabling 2FA:', error);
-      Alert.alert('Error', error?.message || 'Failed to enable 2FA. Please try again.');
+      Alert.alert("Something went wrong", error?.message || 'Failed to enable 2FA. Please try again.');
       setIsEnabling2FA(false);
     }
   };
@@ -272,7 +273,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         setEnrollModalVisible(false);
         setEnrollFactorId(null);
         setEnrollTotp(null);
-        Alert.alert('Success', 'Two-factor authentication has been enabled!');
+        showToast({ message: 'Two-factor authentication has been enabled!' });
       }
     } catch (error: any) {
       console.error('[privacy-security] Error verifying 2FA enrollment:', error);
@@ -322,11 +323,11 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
                 if (error) throw error;
 
                 setTwoFactorEnabled(false);
-                Alert.alert('Success', '2FA has been disabled');
+                showToast({ message: '2FA has been disabled' });
               }
             } catch (error: any) {
               console.error('[privacy-security] Error disabling 2FA:', error);
-              Alert.alert('Error', 'Failed to disable 2FA. Please try again.');
+              Alert.alert("Couldn't disable 2FA", "Please try again.");
             }
           },
         },

@@ -6,6 +6,7 @@ import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
+import { withAlpha } from '../../lib/utils';
 
 // Type for MaterialIcons icon names
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
@@ -146,11 +147,11 @@ export function TrustBadges({
         accessible={true}
         accessibilityLabel="Security badge details"
       >
-        <Pressable 
+        <Pressable accessibilityRole="button" 
           style={styles.modalOverlay}
           onPress={() => setSelectedBadge(null)}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalContent} onPress={() => {}}>
             {selectedBadge && (
               <>
                 <View style={styles.modalHeader}>
@@ -229,11 +230,11 @@ export function TrustBadgesCompact() {
         accessible={true}
         accessibilityLabel="Security badge details"
       >
-        <Pressable 
+        <Pressable accessibilityRole="button" 
           style={styles.modalOverlay}
           onPress={() => setSelectedBadge(null)}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalContent} onPress={() => {}}>
             {selectedBadge && (
               <>
                 <View style={styles.modalHeader}>
@@ -269,12 +270,12 @@ export function TrustBadgesCompact() {
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: theme.isDark ? 'rgba(5,95,70,0.3)' : theme.surface,
+      backgroundColor: theme.isDark ? theme.primaryTint : theme.surface,
       borderRadius: 16,
       padding: 16,
       marginBottom: 16,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : 'rgba(0,142,42,0.35)',
+      borderColor: theme.isDark ? theme.primaryTint : withAlpha(theme.primary, 0.35),
     },
     header: {
       flexDirection: 'row',
@@ -304,14 +305,14 @@ function makeStyles(theme: AppTheme) {
       width: '30%',
       alignItems: 'center',
       padding: 12,
-      backgroundColor: theme.isDark ? 'rgba(6,78,59,0.5)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? theme.primaryTint : theme.surfaceSecondary,
       borderRadius: 12,
     },
     listBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       padding: 12,
-      backgroundColor: theme.isDark ? 'rgba(6,78,59,0.5)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? theme.primaryTint : theme.surfaceSecondary,
       borderRadius: 12,
       gap: 12,
     },
@@ -345,16 +346,16 @@ function makeStyles(theme: AppTheme) {
     compactBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.isDark ? 'rgba(5,95,70,0.3)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? theme.primaryTint : theme.surfaceSecondary,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(167,243,208,0.15)' : theme.border,
+      borderColor: theme.isDark ? theme.primaryTint : theme.border,
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 16,
       gap: 6,
     },
     compactBadgeText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       color: theme.text,
     },

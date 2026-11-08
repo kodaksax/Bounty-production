@@ -31,23 +31,15 @@ import { getApplicationSafetyMessage } from '../../../../lib/utils/bounty-lifecy
 import { useChatSendProtection, useChatSendScope } from '../../../../hooks/use-chat-send-protection';
 import { ChatSafetyWarning } from '../../../../components/chat-safety-warning';
 import { detectOffPlatformRisk } from '../../../../lib/utils/off-platform-risk';
-
-type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
-
-interface StageInfo {
-  id: HunterStage;
-  label: string;
-  icon: string;
-}
-
-const HUNTER_STAGES: StageInfo[] = [
-  { id: 'apply', label: 'Apply for work', icon: 'work' },
-  { id: 'work_in_progress', label: 'Work in progress', icon: 'trending-up' },
-  { id: 'review_verify', label: 'Review & verify', icon: 'rate-review' },
-  { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
-];
+import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../../lib/themes/types';
+import { withAlpha } from '../../../../lib/utils';
+import { showToast } from '../../../../lib/toast';
+import { HunterStageTimeline, type HunterStage } from '../../../../components/hunter-stage-timeline';
 
 export default function HunterWorkInProgressScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   // Push notifications can open this screen with nothing under it; fall
@@ -189,10 +181,10 @@ export default function HunterWorkInProgressScreen() {
       await messageService.sendMessage(conv.id, text);
       if (!isCurrentSend()) return;
       setMessageText('');
-      Alert.alert('Success', 'Message sent successfully!');
+      showToast({ message: 'Message sent successfully!' });
     } catch (err) {
       console.error('Error sending message:', err);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      Alert.alert("Couldn't send message", "Please try again.");
     } finally {
       sendInFlightRef.current = false;
       if (started && isCurrentSend()) setIsSendingMessage(false);
@@ -227,10 +219,10 @@ export default function HunterWorkInProgressScreen() {
       if (!isCurrentSend()) return;
       setProgressUpdate('');
       setShowProgressForm(false);
-      Alert.alert('Success', 'Progress update posted successfully!');
+      showToast({ message: 'Progress update posted successfully!' });
     } catch (err) {
       console.error('Error posting progress update:', err);
-      Alert.alert('Error', 'Failed to post progress update. Please try again.');
+      Alert.alert("Couldn't post progress update", "Please try again.");
     } finally {
       sendInFlightRef.current = false;
       if (started && isCurrentSend()) setIsPostingUpdate(false);
@@ -291,16 +283,16 @@ export default function HunterWorkInProgressScreen() {
   if (error || !bounty || !request) {
     return (
       <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
-        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+        <MaterialIcons name="error-outline" size={48} color={theme.errorText} />
         <Text style={styles.errorText}>{error || 'Data not found'}</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.retryButton}
           onPress={() => routeBountyId && loadData(routeBountyId)}
         >
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
-          <Text style={styles.backButtonText}>Go Back</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={goBack}>
+          <Text style={styles.backButtonText}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -323,10 +315,10 @@ export default function HunterWorkInProgressScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={goBack}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={styles.backIcon} onPress={goBack}>
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Hunter Dashboard</Text>
+        <Text style={styles.headerTitle}>Your work</Text>
       </View>
 
       <KeyboardAwareScrollView
@@ -338,7 +330,7 @@ export default function HunterWorkInProgressScreen() {
         <View style={styles.bountyCard}>
           <View style={styles.bountyHeader}>
             <View style={styles.avatarPlaceholder}>
-              <MaterialIcons name="person" size={32} color="#1FAE49" />
+              <MaterialIcons name="person" size={32} color={theme.primaryLight} />
             </View>
             <View style={styles.bountyInfo}>
               <Text style={styles.bountyTitle} numberOfLines={2}>
@@ -352,7 +344,7 @@ export default function HunterWorkInProgressScreen() {
           <View style={styles.amountContainer}>
             {bounty.is_for_honor ? (
               <View style={styles.honorBadge}>
-                <MaterialIcons name="favorite" size={16} color="#fff" />
+                <MaterialIcons name="favorite" size={16} color={theme.text} />
                 <Text style={styles.honorText}>For Honor</Text>
               </View>
             ) : (
@@ -366,59 +358,17 @@ export default function HunterWorkInProgressScreen() {
         })} />
 
         {/* Timeline */}
-        <View style={styles.timelineContainer}>
-          <Text style={styles.sectionTitle}>Progress Timeline</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.timeline}
-          >
-            {HUNTER_STAGES.map((stage, index) => {
-              const isActive = stage.id === currentStage;
-              const stageIndex = HUNTER_STAGES.findIndex((s) => s.id === stage.id);
-              const currentIndex = HUNTER_STAGES.findIndex((s) => s.id === currentStage);
-              const isCompleted = stageIndex < currentIndex;
-              const isAccessible = stageIndex <= currentIndex;
-
-              return (
-                <View
-                  key={stage.id}
-                  style={[
-                    styles.stageItem,
-                    isActive && styles.stageItemActive,
-                    isCompleted && styles.stageItemCompleted,
-                    !isAccessible && styles.stageItemLocked,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.stageIcon,
-                      isActive && styles.stageIconActive,
-                      isCompleted && styles.stageIconCompleted,
-                    ]}
-                  >
-                    <MaterialIcons
-                      name={stage.icon as any}
-                      size={24}
-                      color={isActive || isCompleted ? '#fff' : '#1FAE49'}
-                    />
-                  </View>
-                  <Text style={styles.stageLabel}>{stage.label}</Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-        </View>
+        <HunterStageTimeline currentStage={currentStage} />
 
         {/* Quick Messaging */}
         {conversation && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quick Message</Text>
+            <Text style={styles.sectionTitle}>Quick message</Text>
             <View style={styles.messageInputContainer}>
               <TextInput
                 style={styles.messageInput}
                 placeholder="Type a message to the poster..."
-                placeholderTextColor="rgba(255,254,245,0.4)"
+                placeholderTextColor={withAlpha(theme.text, 0.4)}
                 value={messageText}
                 onChangeText={setMessageText}
                 multiline
@@ -432,9 +382,9 @@ export default function HunterWorkInProgressScreen() {
                 accessibilityLabel="Send message to poster"
               >
                 {isSendingMessage ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={theme.onPrimary} />
                 ) : (
-                  <MaterialIcons name="send" size={20} color="#fff" />
+                  <MaterialIcons name="send" size={20} color={theme.onPrimary} />
                 )}
               </TouchableOpacity>
             </View>
@@ -445,18 +395,18 @@ export default function HunterWorkInProgressScreen() {
         {/* Progress Updates Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Progress Updates</Text>
-            <TouchableOpacity
+            <Text style={styles.sectionTitle}>Updates</Text>
+            <TouchableOpacity accessibilityRole="button"
               style={styles.addUpdateButton}
               onPress={() => setShowProgressForm(!showProgressForm)}
             >
               <MaterialIcons
                 name={showProgressForm ? 'remove' : 'add'}
                 size={20}
-                color="#008E2A"
+                color={theme.primaryLight}
               />
               <Text style={styles.addUpdateText}>
-                {showProgressForm ? 'Hide' : 'Add Update'}
+                {showProgressForm ? 'Hide' : 'Add update'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -466,7 +416,7 @@ export default function HunterWorkInProgressScreen() {
               <TextInput
                 style={styles.progressInput}
                 placeholder="Describe your progress..."
-                placeholderTextColor="rgba(255,254,245,0.4)"
+                placeholderTextColor={withAlpha(theme.text, 0.4)}
                 value={progressUpdate}
                 onChangeText={setProgressUpdate}
                 multiline
@@ -474,7 +424,7 @@ export default function HunterWorkInProgressScreen() {
                 maxLength={500}
               />
               <ChatSafetyWarning risk={detectOffPlatformRisk(progressUpdate)} />
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[
                   styles.postUpdateButton,
                   (!progressUpdate.trim() || isPostingUpdate) && styles.postUpdateButtonDisabled,
@@ -483,11 +433,11 @@ export default function HunterWorkInProgressScreen() {
                 disabled={!progressUpdate.trim() || isPostingUpdate}
               >
                 {isPostingUpdate ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={theme.onPrimary} />
                 ) : (
                   <>
-                    <MaterialIcons name="send" size={18} color="#fff" />
-                    <Text style={styles.postUpdateButtonText}>Post Update</Text>
+                    <MaterialIcons name="send" size={18} color={theme.onPrimary} />
+                    <Text style={styles.postUpdateButtonText}>Post update</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -495,7 +445,7 @@ export default function HunterWorkInProgressScreen() {
           )}
 
           <View style={styles.progressHint}>
-            <MaterialIcons name="info-outline" size={16} color="#1FAE49" />
+            <MaterialIcons name="info-outline" size={16} color={theme.primaryLight} />
             <Text style={styles.progressHintText}>
               Share progress updates with the poster to keep them informed
             </Text>
@@ -509,7 +459,7 @@ export default function HunterWorkInProgressScreen() {
             {descriptionExpanded ? description : descriptionPreview}
           </Text>
           {description.length > 150 && (
-            <TouchableOpacity onPress={() => setDescriptionExpanded(!descriptionExpanded)}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setDescriptionExpanded(!descriptionExpanded)}>
               <Text style={styles.expandText}>
                 {descriptionExpanded ? 'Show Less' : 'Show More'}
               </Text>
@@ -521,40 +471,40 @@ export default function HunterWorkInProgressScreen() {
         <View style={styles.infoRow}>
           {locationText && (
             <View style={styles.infoItem}>
-              <MaterialIcons name="location-on" size={16} color="#1FAE49" />
+              <MaterialIcons name="location-on" size={16} color={theme.primaryLight} />
               <Text style={styles.infoText}>{locationText}</Text>
             </View>
           )}
           {bounty.timeline && (
             <View style={styles.infoItem}>
-              <MaterialIcons name="schedule" size={16} color="#1FAE49" />
+              <MaterialIcons name="schedule" size={16} color={theme.primaryLight} />
               <Text style={styles.infoText}>{bounty.timeline}</Text>
             </View>
           )}
         </View>
 
         {/* Mark as Complete Button */}
-        <TouchableOpacity style={styles.completeButton} onPress={handleMarkAsComplete}>
-          <MaterialIcons name="check-circle" size={20} color="#fff" />
-          <Text style={styles.completeButtonText}>Mark as Complete</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.completeButton} onPress={handleMarkAsComplete}>
+          <MaterialIcons name="check-circle" size={20} color={theme.onPrimary} />
+          <Text style={styles.completeButtonText}>Mark as complete</Text>
         </TouchableOpacity>
 
         {/* Raise Dispute / View Dispute Button */}
         {hasActiveDispute ? (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.disputeButton}
             onPress={() => (router as any).push(`/dispute/${activeDisputeId}`)}
           >
-            <MaterialIcons name="gavel" size={20} color="#f59e0b" />
-            <Text style={styles.disputeButtonText}>View Active Dispute</Text>
+            <MaterialIcons name="gavel" size={20} color={theme.warningText} />
+            <Text style={styles.disputeButtonText}>View dispute</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.disputeButton}
             onPress={() => setShowDisputeModal(true)}
           >
-            <MaterialIcons name="gavel" size={20} color="#f59e0b" />
-            <Text style={styles.disputeButtonText}>Raise Dispute</Text>
+            <MaterialIcons name="gavel" size={20} color={theme.warningText} />
+            <Text style={styles.disputeButtonText}>Open a dispute</Text>
           </TouchableOpacity>
         )}
 
@@ -581,47 +531,46 @@ export default function HunterWorkInProgressScreen() {
         )}
 
         {/* Next Button */}
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+        <TouchableOpacity accessibilityRole="button" style={styles.nextButton} onPress={handleNext}>
           <Text style={styles.nextButtonText}>Next</Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+          <MaterialIcons name="arrow-forward" size={20} color={theme.onPrimary} />
         </TouchableOpacity>
       </KeyboardAwareScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
     gap: 16,
   },
   errorText: {
-    color: '#ef4444',
+    color: theme.errorText,
     fontSize: 16,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -630,7 +579,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 16,
   },
   header: {
@@ -639,13 +588,13 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
+    borderBottomColor: withAlpha(theme.primary, 0.1),
   },
   backIcon: {
     padding: 4,
   },
   headerTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 20,
     fontWeight: '600',
   },
@@ -657,11 +606,11 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   bountyCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.3)',
+    borderColor: theme.borderSubtle,
   },
   bountyHeader: {
     flexDirection: 'row',
@@ -672,7 +621,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: withAlpha(theme.primary, 0.3),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -680,20 +629,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bountyTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 4,
   },
   postedTime: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
   },
   amountContainer: {
     alignItems: 'flex-end',
   },
   amount: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 24,
     fontWeight: '700',
   },
@@ -701,70 +650,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#ec4899',
+    backgroundColor: theme.primary,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
   },
   honorText: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 12,
     fontWeight: '600',
   },
-  timelineContainer: {
-    gap: 12,
-  },
   sectionTitle: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-  },
-  timeline: {
-    gap: 16,
-    paddingVertical: 8,
-  },
-  stageItem: {
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
-    borderWidth: 1,
-    borderColor: 'transparent',
-    minWidth: 120,
-  },
-  stageItemActive: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderColor: '#008E2A',
-    borderWidth: 2,
-  },
-  stageItemCompleted: {
-    backgroundColor: '#454952',
-    borderColor: '#008E2A',
-  },
-  stageItemLocked: {
-    opacity: 0.5,
-  },
-  stageIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  stageIconActive: {
-    backgroundColor: '#008E2A',
-  },
-  stageIconCompleted: {
-    backgroundColor: '#008E2A',
-  },
-  stageLabel: {
-    color: '#1FAE49',
-    fontSize: 12,
-    textAlign: 'center',
   },
   section: {
     gap: 12,
@@ -781,48 +682,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#454952',
+    backgroundColor: theme.surfaceSecondary,
   },
   addUpdateText: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 13,
     fontWeight: '600',
   },
   progressFormContainer: {
     gap: 12,
-    backgroundColor: 'rgba(0, 142, 42, 0.15)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
   },
   progressInput: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 12,
     padding: 12,
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     minHeight: 100,
     textAlignVertical: 'top',
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
   },
   postUpdateButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   postUpdateButtonDisabled: {
-    backgroundColor: 'rgba(0, 142, 42, 0.5)',
+    backgroundColor: withAlpha(theme.primary, 0.5),
   },
   postUpdateButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -831,18 +730,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     padding: 12,
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
+    backgroundColor: withAlpha(theme.primary, 0.1),
     borderRadius: 8,
   },
   progressHintText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     flex: 1,
   },
   completeButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -857,7 +754,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   completeButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -868,20 +765,18 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     flex: 1,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 12,
     padding: 12,
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     minHeight: 48,
     maxHeight: 120,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
   },
   sendButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -889,28 +784,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: 'rgba(0, 142, 42, 0.5)',
+    backgroundColor: withAlpha(theme.primary, 0.5),
   },
   contextPanel: {
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     gap: 8,
   },
   contextTitle: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   contextText: {
-    color: 'rgba(255,254,245,0.9)',
+    color: withAlpha(theme.text, 0.9),
     fontSize: 14,
     lineHeight: 20,
   },
   expandText: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
@@ -926,13 +821,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   infoText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 14,
   },
   nextButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -946,7 +839,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   nextButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -957,13 +850,14 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: withAlpha(theme.warning, 0.15),
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: withAlpha(theme.warning, 0.3),
   },
   disputeButtonText: {
-    color: '#f59e0b',
+    color: theme.warningText,
     fontSize: 14,
     fontWeight: '600',
   },
 });
+}

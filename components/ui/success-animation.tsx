@@ -11,7 +11,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { hapticFeedback } from '../../lib/haptic-feedback';
-import { theme } from '../../lib/theme';
+import { theme as legacyTheme } from '../../lib/theme';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 
 interface SuccessAnimationProps {
@@ -48,6 +51,8 @@ export function SuccessAnimation({
   color = '#008E2A',
   onComplete,
 }: SuccessAnimationProps) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
   const checkScale = useSharedValue(0);
@@ -163,6 +168,8 @@ interface ConfettiParticle {
 }
 
 export function ConfettiAnimation({ visible, onComplete }: { visible: boolean; onComplete?: () => void }) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const [particles] = React.useState<ConfettiParticle[]>(() =>
     Array.from({ length: 20 }, (_, i) => ({
       id: i,
@@ -207,6 +214,8 @@ export function ConfettiAnimation({ visible, onComplete }: { visible: boolean; o
 }
 
 function ConfettiParticle({ particle }: { particle: ConfettiParticle }) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const translateY = useSharedValue(-50);
   const translateX = useSharedValue(0);
   const opacity = useSharedValue(1);
@@ -261,7 +270,8 @@ function ConfettiParticle({ particle }: { particle: ConfettiParticle }) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     position: 'absolute',
     top: 0,
@@ -274,15 +284,15 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   circle: {
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
+    backgroundColor: withAlpha(theme.primary, 0.1),
     borderRadius: 80,
     width: 160,
     height: 160,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#008E2A',
-    ...theme.shadows.emerald,
+    borderColor: theme.primary,
+    ...legacyTheme.shadows.emerald,
   },
 
   confettiContainer: {
@@ -300,3 +310,4 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
 });
+}

@@ -26,6 +26,8 @@ import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { switchColors } from '../../lib/themes/switch-colors';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
+import { showToast } from '../../lib/toast';
 
 interface SecuritySettingsProps {
   onBack: () => void;
@@ -147,7 +149,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
       if (data) {
         setTwoFactorEnabled(true);
         setMfaModalVisible(false);
-        Alert.alert('Success', 'Two-factor authentication has been enabled!');
+        showToast({ message: 'Two-factor authentication has been enabled!' });
       }
     } catch (error: any) {
       console.error('[security-settings] Error verifying 2FA:', error);
@@ -173,7 +175,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
       setIsEnabling2FA(false);
     } catch (error: any) {
       console.error('[security-settings] Error cancelling 2FA setup:', error);
-      Alert.alert('Error', 'Failed to cancel 2FA setup. Please try again.');
+      Alert.alert("Couldn't cancel 2FA setup", "Please try again.");
     }
   };
 
@@ -197,11 +199,11 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
                 if (error) throw error;
 
                 setTwoFactorEnabled(false);
-                Alert.alert('Success', '2FA has been disabled');
+                showToast({ message: '2FA has been disabled' });
               }
             } catch (error: any) {
               console.error('[security-settings] Error disabling 2FA:', error);
-              Alert.alert('Error', 'Failed to disable 2FA. Please try again.');
+              Alert.alert("Couldn't disable 2FA", "Please try again.");
             }
           },
         },
@@ -233,15 +235,15 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               const result = await requestPasswordReset(user.email);
 
               if (result.success) {
-                Alert.alert('Email Sent', 'Check your inbox for password reset instructions.');
+                showToast({ message: 'Check your inbox for password reset instructions.' });
               } else {
                 // result.message is already user-facing copy; the raw Supabase
                 // error text is deliberately not surfaced here.
-                Alert.alert('Error', result.message);
+                Alert.alert("Something went wrong", result.message);
               }
             } catch (error: any) {
               console.error('[security-settings] Password reset request failed:', error);
-              Alert.alert('Error', 'Failed to send reset email. Please try again.');
+              Alert.alert("Couldn't send reset email", "Please try again.");
             }
           },
         },
@@ -392,7 +394,7 @@ function makeStyles(t: AppTheme) {
     iconBadge: {
       width: 32,
       height: 32,
-      borderRadius: 9,
+      borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: t.surfaceSecondary,
@@ -426,18 +428,18 @@ function makeStyles(t: AppTheme) {
       borderRadius: 4,
     },
     enabledBadgeText: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
-      color: t.primary,
+      color: t.primaryLight,
     },
     recommendedBadge: {
-      backgroundColor: t.isDark ? 'rgba(251,191,36,0.18)' : 'rgba(251,191,36,0.16)',
+      backgroundColor: t.isDark ? withAlpha(t.warning, 0.18) : withAlpha(t.warning, 0.16),
       paddingHorizontal: 8,
       paddingVertical: 2,
       borderRadius: 4,
     },
     recommendedBadgeText: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
       color: t.warning,
     },
@@ -448,7 +450,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 16,
       padding: 16,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(251,191,36,0.35)' : 'rgba(251,191,36,0.4)',
+      borderColor: t.isDark ? withAlpha(t.warning, 0.35) : withAlpha(t.warning, 0.4),
       marginBottom: 24,
     },
     tipsContent: {

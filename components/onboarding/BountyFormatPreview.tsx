@@ -134,7 +134,7 @@ function makeStyles(theme: AppTheme) {
     cardPrice: {
       fontSize: 14,
       fontWeight: '700',
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     // Compact format
     compactWrap: {
@@ -145,7 +145,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.background,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.border,
       padding: 8,
@@ -167,13 +167,13 @@ function makeStyles(theme: AppTheme) {
       color: theme.text,
     },
     compactMeta: {
-      fontSize: 11,
+      fontSize: 12,
       color: theme.textSecondary,
     },
     compactPrice: {
       fontSize: 13,
       fontWeight: '700',
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     // Grid format
     gridWrap: {
@@ -185,7 +185,7 @@ function makeStyles(theme: AppTheme) {
     gridCell: {
       width: '47%',
       backgroundColor: theme.background,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.border,
       overflow: 'hidden',
@@ -197,15 +197,15 @@ function makeStyles(theme: AppTheme) {
       marginBottom: 4,
     },
     gridTitle: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       color: theme.text,
       paddingHorizontal: 6,
     },
     gridPrice: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
-      color: theme.primary,
+      color: theme.primaryLight,
       paddingHorizontal: 6,
     },
   });

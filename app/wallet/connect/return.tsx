@@ -19,10 +19,16 @@ import { BrandingLogo } from '../../../components/ui/branding-logo';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { API_BASE_URL } from '../../../lib/config/api';
 import { markInitialNavigationDone } from '../../initial-navigation/initialNavigation';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../lib/themes/types';
+import { withAlpha } from '../../../lib/utils';
+import { useMemo } from 'react';
 
 type VerifyStatus = 'loading' | 'success' | 'pending' | 'error';
 
 export default function ConnectReturnScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session, isLoading: authLoading } = useAuthContext();
@@ -85,7 +91,7 @@ export default function ConnectReturnScreen() {
       case 'loading':
         return (
           <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color="#929497" />
+            <ActivityIndicator size="large" color={theme.textSecondary} />
             <Text style={styles.title}>Verifying Account</Text>
             <Text style={styles.description}>Checking your Stripe account status…</Text>
           </View>
@@ -95,16 +101,16 @@ export default function ConnectReturnScreen() {
         return (
           <View style={styles.centerContent}>
             <View style={styles.successCircle}>
-              <MaterialIcons name="check-circle" size={64} color="#052e1b" />
+              <MaterialIcons name="check-circle" size={64} color={theme.onPrimary} />
             </View>
             <Text style={styles.title}>Account Verified!</Text>
             <Text style={styles.description}>
               Your account is set up and ready to receive payouts. Earnings from completed bounties
               will be transferred to your bank.
             </Text>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleGoToWallet}>
-              <Text style={styles.primaryButtonText}>Go to Wallet</Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+            <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleGoToWallet}>
+              <Text style={styles.primaryButtonText}>Go to wallet</Text>
+              <MaterialIcons name="arrow-forward" size={20} color={theme.onPrimary} />
             </TouchableOpacity>
           </View>
         );
@@ -113,7 +119,7 @@ export default function ConnectReturnScreen() {
         return (
           <View style={styles.centerContent}>
             <View style={styles.pendingCircle}>
-              <MaterialIcons name="hourglass-empty" size={64} color="#92400e" />
+              <MaterialIcons name="hourglass-empty" size={64} color={theme.warningText} />
             </View>
             <Text style={styles.title}>Verification Pending</Text>
             <Text style={styles.description}>
@@ -121,13 +127,13 @@ export default function ConnectReturnScreen() {
                 "Stripe is still reviewing your information. This usually takes a few minutes. You'll be able to withdraw once your account is approved."
               }
             </Text>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleGoToWallet}>
-              <Text style={styles.primaryButtonText}>Go to Wallet</Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+            <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleGoToWallet}>
+              <Text style={styles.primaryButtonText}>Go to wallet</Text>
+              <MaterialIcons name="arrow-forward" size={20} color={theme.onPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleRetry}>
-              <MaterialIcons name="refresh" size={20} color="#929497" />
-              <Text style={styles.secondaryButtonText}>Check Again</Text>
+            <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={handleRetry}>
+              <MaterialIcons name="refresh" size={20} color={theme.textSecondary} />
+              <Text style={styles.secondaryButtonText}>Check again</Text>
             </TouchableOpacity>
           </View>
         );
@@ -136,19 +142,19 @@ export default function ConnectReturnScreen() {
         return (
           <View style={styles.centerContent}>
             <View style={styles.errorCircle}>
-              <MaterialIcons name="error-outline" size={64} color="#7f1d1d" />
+              <MaterialIcons name="error-outline" size={64} color={theme.errorText} />
             </View>
             <Text style={styles.title}>Verification Failed</Text>
             <Text style={styles.description}>
               {"We couldn't verify your account status. Please try again or check your wallet."}
             </Text>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleRetry}>
-              <Text style={styles.primaryButtonText}>Try Again</Text>
-              <MaterialIcons name="refresh" size={20} color="#052e1b" />
+            <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleRetry}>
+              <Text style={styles.primaryButtonText}>Try again</Text>
+              <MaterialIcons name="refresh" size={20} color={theme.onPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToWallet}>
-              <MaterialIcons name="account-balance-wallet" size={20} color="#929497" />
-              <Text style={styles.secondaryButtonText}>Go to Wallet</Text>
+            <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={handleGoToWallet}>
+              <MaterialIcons name="account-balance-wallet" size={20} color={theme.textSecondary} />
+              <Text style={styles.secondaryButtonText}>Go to wallet</Text>
             </TouchableOpacity>
           </View>
         );
@@ -168,10 +174,11 @@ export default function ConnectReturnScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008E2A',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
   },
   brandingHeader: {
@@ -192,13 +199,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: theme.text,
     marginBottom: 16,
     textAlign: 'center',
   },
   description: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.85)',
+    color: withAlpha(theme.text, 0.85),
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
@@ -208,7 +215,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#929497',
+    backgroundColor: theme.primary,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -222,7 +229,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#fde68a',
+    backgroundColor: theme.warningTint,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -236,7 +243,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#fecaca',
+    backgroundColor: theme.errorTint,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -250,7 +257,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#929497',
+    backgroundColor: theme.primary,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
@@ -259,7 +266,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryButtonText: {
-    color: '#052e1b',
+    color: theme.onPrimary,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -267,18 +274,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(5,46,27,0.4)',
+    backgroundColor: theme.primaryTint,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
     gap: 8,
     borderWidth: 2,
-    borderColor: '#929497',
+    borderColor: theme.border,
     width: '100%',
   },
   secondaryButtonText: {
-    color: '#929497',
+    color: theme.textSecondary,
     fontSize: 16,
     fontWeight: '600',
   },
 });
+}

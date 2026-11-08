@@ -197,7 +197,7 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
             <Text className="text-sm" style={{ color: theme.text }}>Add</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleSave} disabled={!profileReady} className="px-3 py-2 bg-[#008E2A] rounded-lg" accessibilityRole="button" accessibilityLabel="Save skillsets" accessibilityState={{ disabled: !profileReady }}>
-            <Text className="text-white text-sm font-semibold">Save</Text>
+            <Text className="text-sm font-semibold" style={{ color: theme.text }}>Save</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -206,7 +206,7 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
         <View className="mx-4 mb-2">
           <Text style={{ color: theme.textSecondary }}>Load your profile before editing skills.</Text>
           <TouchableOpacity onPress={() => { void refreshProfile().catch(() => {}) }} accessibilityRole="button" accessibilityLabel="Retry profile loading">
-            <Text style={{ color: theme.primary }}>Retry</Text>
+            <Text style={{ color: theme.primaryLight }}>Try again</Text>
           </TouchableOpacity>
           {onBack && <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Cancel skill editing">
             <Text style={{ color: theme.text }}>Cancel</Text>
@@ -262,7 +262,7 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
           return (
             <View key={skill.id} className="mb-4 rounded-xl p-4" style={{ backgroundColor: isActive ? theme.surfaceSecondary : theme.surface, borderWidth: isActive ? 1 : 0, borderColor: theme.border }}>
               <View className="flex-row items-center mb-3">
-                <TouchableOpacity onPress={() => setSelectedSkill(skill.id)} className="h-12 w-12 rounded-full items-center justify-center mr-3" style={{ backgroundColor: theme.surfaceSecondary }}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => setSelectedSkill(skill.id)} className="h-12 w-12 rounded-full items-center justify-center mr-3" style={{ backgroundColor: theme.surfaceSecondary }}>
                   {getIconComponent(skill.icon)}
                 </TouchableOpacity>
                 <View className="flex-1">

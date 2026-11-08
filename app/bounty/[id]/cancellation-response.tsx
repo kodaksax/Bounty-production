@@ -23,8 +23,10 @@ import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 import { withReplayMask } from '../../../components/replay-mask';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 
 function CancellationResponseScreen() {
+  const { theme } = useAppThemeContext();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { session } = useAuthContext();
@@ -59,7 +61,7 @@ function CancellationResponseScreen() {
       }
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('Error', 'Failed to load cancellation request');
+      Alert.alert("Couldn't load cancellation request", "Please try again.");
     } finally {
       setLoading(false);
     }
@@ -67,7 +69,7 @@ function CancellationResponseScreen() {
   
   const handleAccept = async () => {
     if (!userId || !cancellation) {
-      Alert.alert('Error', 'Unable to accept cancellation');
+      Alert.alert("Couldn't accept cancellation", "Please try again.");
       return;
     }
     
@@ -153,11 +155,11 @@ function CancellationResponseScreen() {
                   [{ text: 'OK', onPress: () => router.back() }]
                 );
               } else {
-                Alert.alert('Error', 'Failed to accept cancellation');
+                Alert.alert("Couldn't accept cancellation", "Please try again.");
               }
             } catch (error) {
               console.error('Error accepting cancellation:', error);
-              Alert.alert('Error', 'An unexpected error occurred');
+              Alert.alert("Something went wrong", 'An unexpected error occurred');
             } finally {
               setSubmitting(false);
               setAction(null);
@@ -170,12 +172,12 @@ function CancellationResponseScreen() {
   
   const handleReject = async () => {
     if (!responseMessage.trim()) {
-      Alert.alert('Error', 'Please provide a reason for rejection');
+      Alert.alert("Something went wrong", 'Please provide a reason for rejection');
       return;
     }
     
     if (!userId || !cancellation) {
-      Alert.alert('Error', 'Unable to reject cancellation');
+      Alert.alert("Couldn't reject cancellation", "Please try again.");
       return;
     }
     
@@ -205,11 +207,11 @@ function CancellationResponseScreen() {
                   [{ text: 'OK', onPress: () => router.back() }]
                 );
               } else {
-                Alert.alert('Error', 'Failed to reject cancellation');
+                Alert.alert("Couldn't reject cancellation", "Please try again.");
               }
             } catch (error) {
               console.error('Error rejecting cancellation:', error);
-              Alert.alert('Error', 'An unexpected error occurred');
+              Alert.alert("Something went wrong", 'An unexpected error occurred');
             } finally {
               setSubmitting(false);
               setAction(null);
@@ -236,7 +238,7 @@ function CancellationResponseScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-[#1B1E24] items-center justify-center">
-        <ActivityIndicator size="large" color="#008E2A" />
+        <ActivityIndicator size="large" color={theme.primaryLight} />
       </View>
     );
   }
@@ -244,26 +246,26 @@ function CancellationResponseScreen() {
   if (!bounty || !cancellation) {
     return (
       <View className="flex-1 bg-[#1B1E24] items-center justify-center p-6">
-        <AlertCircle size={48} color="#dc2626" />
-        <Text className="text-lg font-semibold text-white mt-4">
+        <AlertCircle size={48} color={theme.errorText} />
+        <Text className="text-lg font-semibold mt-4" style={{ color: theme.text }}>
           Cancellation request not found
         </Text>
         <Text className="text-[#929497] text-center mt-2">
           The cancellation request could not be loaded. Please contact support if you believe this is an error.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleContactSupport}
             className="bg-[#008E2A] px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
-            <Text className="text-white font-semibold ml-2">Contact Support</Text>
+            <Text className="font-semibold ml-2" style={{ color: theme.text }}>Contact support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-[#929497] font-medium text-center">Go Back</Text>
+            <Text className="text-[#929497] font-medium text-center">Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -278,10 +280,10 @@ function CancellationResponseScreen() {
     
     return (
       <View className="flex-1 bg-[#1B1E24] items-center justify-center p-6">
-        {isAccepted && <CheckCircle size={48} color="#008E2A" />}
-        {isRejected && <XCircle size={48} color="#dc2626" />}
-        {isDisputed && <Flag size={48} color="#f59e0b" />}
-        <Text className="text-lg font-semibold text-white mt-4">
+        {isAccepted && <CheckCircle size={48} color={theme.primaryLight} />}
+        {isRejected && <XCircle size={48} color={theme.errorText} />}
+        {isDisputed && <Flag size={48} color={theme.warningText} />}
+        <Text className="text-lg font-semibold mt-4" style={{ color: theme.text }}>
           {isAccepted && 'Cancellation Accepted'}
           {isRejected && 'Cancellation Rejected'}
           {isDisputed && 'Under Dispute'}
@@ -293,28 +295,28 @@ function CancellationResponseScreen() {
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
           {isRejected && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleOpenDispute}
               className="bg-amber-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
             >
               <Flag size={18} color="white" />
-              <Text className="text-white font-semibold ml-2">Open Dispute</Text>
+              <Text className="font-semibold ml-2" style={{ color: theme.text }}>Open Dispute</Text>
             </TouchableOpacity>
           )}
           {isDisputed && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleContactSupport}
               className="bg-[#008E2A] px-6 py-3 rounded-lg flex-row items-center justify-center"
             >
               <Mail size={18} color="white" />
-              <Text className="text-white font-semibold ml-2">Contact Support</Text>
+              <Text className="font-semibold ml-2" style={{ color: theme.text }}>Contact support</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-[#929497] font-medium text-center">Go Back</Text>
+            <Text className="text-[#929497] font-medium text-center">Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -329,13 +331,13 @@ function CancellationResponseScreen() {
       <KeyboardAwareScrollView className="flex-1">
         {/* Header */}
         <View className="bg-[#22262C] px-4 py-6 pt-12">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="mb-4"
           >
             <ArrowLeft size={24} color="white" />
           </TouchableOpacity>
-          <Text className="text-2xl font-bold text-white">
+          <Text className="text-2xl font-bold" style={{ color: theme.text }}>
             Cancellation Request
           </Text>
           <Text className="text-[#929497] mt-1">
@@ -348,7 +350,7 @@ function CancellationResponseScreen() {
           {/* Status Banner */}
           <View className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <View className="flex-row items-start">
-              <AlertCircle size={20} color="#f59e0b" />
+              <AlertCircle size={20} color={theme.warningText} />
               <View className="flex-1 ml-3">
                 <Text className="text-amber-900 font-semibold mb-1">
                   Action Required
@@ -374,7 +376,7 @@ function CancellationResponseScreen() {
             </Text>
             
             <Text className="text-sm text-[#929497] mb-1">Proposed Refund</Text>
-            <Text className="text-2xl font-bold text-white">
+            <Text className="text-2xl font-bold" style={{ color: theme.text }}>
               ${refundAmount.toFixed(2)}
             </Text>
             <Text className="text-sm text-[#929497] mt-1">
@@ -389,7 +391,7 @@ function CancellationResponseScreen() {
           
           {/* Response Message */}
           <View className="mb-6">
-            <Text className="text-base font-semibold text-white mb-2">
+            <Text className="text-base font-semibold mb-2" style={{ color: theme.text }}>
               Your Response {action === 'reject' && '*'}
             </Text>
             <Text className="text-sm text-[#929497] mb-3">
@@ -404,14 +406,14 @@ function CancellationResponseScreen() {
               multiline
               numberOfLines={4}
               textAlignVertical="top"
-              className="border border-[#454952] rounded-lg p-3 text-base text-white"
-              style={{ minHeight: 100 }}
+              className="border border-[#454952] rounded-lg p-3 text-base"
+              style={[{ color: theme.text }, { minHeight: 100 }]}
             />
           </View>
           
           {/* Action Buttons */}
           <View className="space-y-3">
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleAccept}
               disabled={submitting}
               className={`flex-row items-center justify-center rounded-lg py-4 ${
@@ -423,14 +425,14 @@ function CancellationResponseScreen() {
               ) : (
                 <>
                   <CheckCircle size={20} color="white" />
-                  <Text className="text-white text-center font-semibold text-base ml-2">
+                  <Text className="text-center font-semibold text-base ml-2" style={{ color: theme.text }}>
                     Accept Cancellation
                   </Text>
                 </>
               )}
             </TouchableOpacity>
             
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleReject}
               disabled={submitting}
               className={`flex-row items-center justify-center rounded-lg py-4 border-2 ${
@@ -438,10 +440,10 @@ function CancellationResponseScreen() {
               }`}
             >
               {submitting && action === 'reject' ? (
-                <ActivityIndicator color="#dc2626" />
+                <ActivityIndicator color={theme.errorText} />
               ) : (
                 <>
-                  <XCircle size={20} color="#dc2626" />
+                  <XCircle size={20} color={theme.errorText} />
                   <Text className="text-red-600 text-center font-semibold text-base ml-2">
                     Reject Cancellation
                   </Text>
@@ -450,7 +452,7 @@ function CancellationResponseScreen() {
             </TouchableOpacity>
           </View>
           
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             disabled={submitting}
             className="mt-4 py-4"
@@ -463,7 +465,7 @@ function CancellationResponseScreen() {
           {/* Support & Dispute Section */}
           <View className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
             <View className="flex-row items-start">
-              <HelpCircle size={20} color="#3b82f6" />
+              <HelpCircle size={20} color={theme.infoText} />
               <View className="flex-1 ml-3">
                 <Text className="text-blue-900 font-semibold mb-1">
                   Need Help Deciding?
@@ -474,19 +476,19 @@ function CancellationResponseScreen() {
                   re unsure about your decision or feel the refund amount is unfair, contact our support team for guidance. Response time: {SUPPORT_RESPONSE_TIMES.email}.
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleContactSupport}
                     className="flex-row items-center bg-blue-600 px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
-                    <Text className="text-white text-sm font-medium ml-1">Email Support</Text>
+                    <Text className="text-sm font-medium ml-1" style={{ color: theme.text }}>Email support</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleCallSupport}
                     className="flex-row items-center bg-blue-500 px-3 py-2 rounded-lg"
                   >
                     <Phone size={14} color="white" />
-                    <Text className="text-white text-sm font-medium ml-1">Call</Text>
+                    <Text className="text-sm font-medium ml-1" style={{ color: theme.text }}>Call</Text>
                   </TouchableOpacity>
                 </View>
               </View>

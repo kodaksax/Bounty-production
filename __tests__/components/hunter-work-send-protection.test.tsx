@@ -48,7 +48,7 @@ jest.mock('../../components/ui/keyboard-avoiding', () => ({
 
 async function renderWork() {
   const screen = render(<HunterWorkInProgressScreen />);
-  await waitFor(() => expect(screen.getByText('Quick Message')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText('Quick message')).toBeTruthy());
   return screen;
 }
 
@@ -86,11 +86,11 @@ describe('hunter free-text send protection', () => {
 
   it('blocks synchronous progress-update double taps', async () => {
     const screen = await renderWork();
-    fireEvent.press(screen.getByText('Add Update'));
+    fireEvent.press(screen.getByText('Add update'));
     fireEvent.changeText(screen.getByPlaceholderText('Describe your progress...'), 'Garden cleared');
     await act(async () => {
-      fireEvent.press(screen.getByText('Post Update'));
-      fireEvent.press(screen.getByText('Post Update'));
+      fireEvent.press(screen.getByText('Post update'));
+      fireEvent.press(screen.getByText('Post update'));
     });
     expect(mockConfirm).toHaveBeenCalledTimes(1);
     expect(mockSend).toHaveBeenCalledTimes(1);
@@ -100,12 +100,12 @@ describe('hunter free-text send protection', () => {
   it('preserves a cancelled progress draft and keeps its form open', async () => {
     mockConfirm.mockResolvedValue(false);
     const screen = await renderWork();
-    fireEvent.press(screen.getByText('Add Update'));
+    fireEvent.press(screen.getByText('Add update'));
     fireEvent.changeText(screen.getByPlaceholderText('Describe your progress...'), 'Text me at 415-555-1234');
-    await act(async () => fireEvent.press(screen.getByText('Post Update')));
+    await act(async () => fireEvent.press(screen.getByText('Post update')));
     expect(mockSend).not.toHaveBeenCalled();
     expect(screen.getByPlaceholderText('Describe your progress...').props.value).toBe('Text me at 415-555-1234');
-    expect(screen.getByText('Post Update')).toBeTruthy();
+    expect(screen.getByText('Post update')).toBeTruthy();
   });
 
   it('does not send a confirmed draft after leaving the work screen', async () => {

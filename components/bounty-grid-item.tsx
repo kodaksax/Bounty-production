@@ -18,6 +18,7 @@ import { getScheduleChip } from '../lib/utils/schedule-utils';
 import { BountyDetailModal } from './bountydetailmodal';
 import { useModalOrigin } from './ui/app-modal';
 import { CountdownBadge } from './ui/countdown-badge';
+import { withAlpha } from '../lib/utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Must match the grid feed's screen padding (SPACING.SCREEN_HORIZONTAL) and the
@@ -267,7 +268,7 @@ function BountyGridItemComponent({
                   numberOfLines={1}
                   maxFontSizeMultiplier={CARD_MAX_FONT_SCALE}
                 >
-                  {scheduleChip.icon} {scheduleChip.label}
+                  {scheduleChip.label}
                 </Text>
               </View>
             )
@@ -416,11 +417,11 @@ function makeStyles(t: AppTheme) {
       maxWidth: '55%',
       paddingHorizontal: Math.round(CW * 0.035),
       paddingVertical: 2,
-      borderRadius: 10,
+      borderRadius: 12,
       backgroundColor: 'rgba(0,0,0,0.55)',
     },
     scheduleChipUrgent: {
-      backgroundColor: 'rgba(220,38,38,0.85)',
+      backgroundColor: withAlpha(t.error, 0.85),
     },
     scheduleChipWarning: {
       backgroundColor: 'rgba(180,100,0,0.85)',
@@ -444,7 +445,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 999,
       backgroundColor: 'rgba(0,0,0,0.55)',
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.28)',
+      borderColor: withAlpha(t.text, 0.28),
     },
     limitedText: {
       fontSize: FONT.chip,
@@ -497,21 +498,21 @@ function makeStyles(t: AppTheme) {
       fontSize: FONT.price,
       lineHeight: META_HEIGHT,
       fontWeight: '800',
-      color: t.primary,
+      color: t.primaryLight,
     },
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.15) : withAlpha(t.primary, 0.1),
       borderRadius: 999,
       paddingHorizontal: Math.round(CW * 0.04),
       paddingVertical: 2,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(0,142,42,0.35)' : 'rgba(0,142,42,0.3)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.35) : withAlpha(t.primary, 0.3),
       gap: 3,
     },
     honorText: {
-      color: t.primary,
+      color: t.primaryLight,
       fontWeight: '800',
       fontSize: FONT.chip,
     },

@@ -30,6 +30,8 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { openUrlInBrowser } from '../../lib/utils/browser';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 /** Backdrop used by system PDF viewers (Preview, Chrome) around the page. */
 const VIEWER_BACKDROP = '#525659';
@@ -184,6 +186,8 @@ export interface PdfPreviewProps {
 }
 
 export function PdfPreview({ uri, name, style, borderRadius = 8 }: PdfPreviewProps) {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const usesPdfJs = Platform.OS === 'android';
   const [html, setHtml] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -237,7 +241,7 @@ export function PdfPreview({ uri, name, style, borderRadius = 8 }: PdfPreviewPro
     return (
       <View style={containerStyle}>
         <View style={styles.fallback}>
-          <MaterialIcons name="picture-as-pdf" size={56} color="#ef4444" />
+          <MaterialIcons name="picture-as-pdf" size={56} color={theme.errorText} />
           <Text style={styles.fallbackTitle} numberOfLines={2}>
             {name || 'PDF document'}
           </Text>
@@ -314,14 +318,15 @@ export function PdfPreview({ uri, name, style, borderRadius = 8 }: PdfPreviewPro
       )}
       {isLoading && (
         <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#929497" />
+          <ActivityIndicator size="large" color={theme.textSecondary} />
         </View>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     overflow: 'hidden',
     backgroundColor: VIEWER_BACKDROP,
@@ -347,14 +352,14 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   fallbackTitle: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
     marginTop: 12,
     textAlign: 'center',
   },
   fallbackText: {
-    color: '#D8D2C4',
+    color: theme.textSecondary,
     fontSize: 13,
     marginTop: 6,
     textAlign: 'center',
@@ -364,15 +369,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
   },
   fallbackButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
 });
+}
 
 export default PdfPreview;

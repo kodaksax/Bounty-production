@@ -13,6 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import type { LocalDisputeEvidence } from '../lib/types';
 import { generateEvidenceId } from '../lib/utils/dispute-helpers';
 import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 
 interface DisputeSubmissionFormProps {
   bountyTitle: string;
@@ -33,13 +34,14 @@ export function DisputeSubmissionForm({
   initialEvidence = [],
   showGuidance = true,
 }: DisputeSubmissionFormProps) {
+  const { theme } = useAppThemeContext();
   const [reason, setReason] = useState(initialReason);
   const [evidence, setEvidence] = useState<LocalDisputeEvidence[]>(initialEvidence);
   const [textEvidence, setTextEvidence] = useState('');
 
   const handleAddTextEvidence = () => {
     if (!textEvidence.trim()) {
-      Alert.alert('Error', 'Please enter evidence details');
+      Alert.alert("Something went wrong", 'Please enter evidence details');
       return;
     }
 
@@ -80,7 +82,7 @@ export function DisputeSubmissionForm({
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      Alert.alert("Couldn't pick image", "Please try again.");
     }
   };
 
@@ -104,7 +106,7 @@ export function DisputeSubmissionForm({
       }
     } catch (error) {
       console.error('Error picking document:', error);
-      Alert.alert('Error', 'Failed to pick document');
+      Alert.alert("Couldn't pick document", "Please try again.");
     }
   };
 
@@ -114,7 +116,7 @@ export function DisputeSubmissionForm({
 
   const handleSubmit = async () => {
     if (!reason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for the dispute');
+      Alert.alert("Something went wrong", 'Please provide a reason for the dispute');
       return;
     }
 
@@ -122,7 +124,7 @@ export function DisputeSubmissionForm({
       await onSubmit(reason, evidence);
     } catch (error) {
       console.error('Error submitting dispute:', error);
-      Alert.alert('Error', 'Failed to submit dispute');
+      Alert.alert("Couldn't submit dispute", "Please try again.");
     }
   };
 
@@ -140,7 +142,7 @@ export function DisputeSubmissionForm({
       {showGuidance && (
         <View className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <View className="flex-row items-start">
-            <MaterialIcons name="info-outline" size={20} color="#3b82f6" />
+            <MaterialIcons name="info-outline" size={20} color={theme.infoText} />
             <View className="flex-1 ml-3">
               <Text className="text-blue-900 font-semibold mb-1">
                 Dispute Process
@@ -161,7 +163,7 @@ export function DisputeSubmissionForm({
       {/* Reason Input */}
       <View className="mb-6">
         <Text className="text-base font-semibold text-gray-900 mb-2">
-          Reason for Dispute *
+          Reason for dispute *
         </Text>
         <Text className="text-sm text-gray-600 mb-3">
           Clearly explain why you believe this dispute should be reviewed.
@@ -209,7 +211,7 @@ export function DisputeSubmissionForm({
                           : 'text-fields'
                       }
                       size={16}
-                      color="#008E2A"
+                      color={theme.primaryLight}
                     />
                     <Text className="text-xs text-gray-500 ml-2 uppercase">
                       {item.type}
@@ -219,12 +221,12 @@ export function DisputeSubmissionForm({
                     {item.description || item.content}
                   </Text>
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button"
                   onPress={() => handleRemoveEvidence(item.id)}
                   disabled={isSubmitting}
                   className="ml-2 p-2"
                 >
-                  <MaterialIcons name="close" size={20} color="#dc2626" />
+                  <MaterialIcons name="close" size={20} color={theme.errorText} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -244,7 +246,7 @@ export function DisputeSubmissionForm({
             style={{ minHeight: 80 }}
             editable={!isSubmitting}
           />
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleAddTextEvidence}
             disabled={isSubmitting || !textEvidence.trim()}
             className={`rounded-lg py-2 px-4 flex-row items-center justify-center ${
@@ -254,7 +256,7 @@ export function DisputeSubmissionForm({
             <MaterialIcons
               name="add"
               size={18}
-              color={isSubmitting || !textEvidence.trim() ? '#929497' : 'white'}
+              color={isSubmitting || !textEvidence.trim() ? theme.textSecondary : 'white'}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -268,7 +270,7 @@ export function DisputeSubmissionForm({
 
         {/* Upload Buttons */}
         <View className="flex-row gap-2">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handlePickImage}
             disabled={isSubmitting}
             className={`flex-1 rounded-lg py-3 px-4 flex-row items-center justify-center border-2 ${
@@ -278,7 +280,7 @@ export function DisputeSubmissionForm({
             <MaterialIcons
               name="photo-library"
               size={18}
-              color={isSubmitting ? '#929497' : '#008E2A'}
+              color={isSubmitting ? theme.textSecondary : theme.primaryLight}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -289,7 +291,7 @@ export function DisputeSubmissionForm({
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handlePickDocument}
             disabled={isSubmitting}
             className={`flex-1 rounded-lg py-3 px-4 flex-row items-center justify-center border-2 ${
@@ -299,7 +301,7 @@ export function DisputeSubmissionForm({
             <MaterialIcons
               name="attach-file"
               size={18}
-              color={isSubmitting ? '#929497' : '#008E2A'}
+              color={isSubmitting ? theme.textSecondary : theme.primaryLight}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -314,7 +316,7 @@ export function DisputeSubmissionForm({
 
       {/* Action Buttons */}
       <View className="gap-3 pb-6">
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={handleSubmit}
           disabled={isSubmitting || !reason.trim()}
           className={`rounded-lg py-4 ${
@@ -324,14 +326,14 @@ export function DisputeSubmissionForm({
           {isSubmitting ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text className="text-white text-center font-semibold text-base">
+            <Text className="text-center font-semibold text-base" style={{ color: theme.text }}>
               Submit Dispute
             </Text>
           )}
         </TouchableOpacity>
 
         {onCancel && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={onCancel}
             disabled={isSubmitting}
             className="py-3"

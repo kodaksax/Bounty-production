@@ -43,6 +43,7 @@ import { messagingStrings } from '../../lib/strings/messaging';
 import { ChatSafetyWarning } from '../../components/chat-safety-warning';
 import { useChatSendProtection, useChatSendScope } from '../../hooks/use-chat-send-protection';
 import { detectOffPlatformRisk, latestIncomingRisk } from '../../lib/utils/off-platform-risk';
+import { showToast } from '../../lib/toast';
 
 
 interface ChatDetailScreenProps {
@@ -329,7 +330,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
  const handleCopy = async () => {
    if (!selectedMessageId) return;
    await copyMessage(selectedMessageId);
-   Alert.alert('Copied', 'Message copied to clipboard');
+   showToast({ message: 'Message copied to clipboard' });
  };
 
 
@@ -354,10 +355,10 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
          onPress: async () => {
            const result = await blockingService.blockUser(otherUserId);
            if (result.success) {
-             Alert.alert('User Blocked', `${displayName} has been blocked.`);
+             showToast({ message: `${displayName} has been blocked.` });
              onBack?.();
            } else {
-             Alert.alert('Error', result.error || 'Failed to block user');
+             Alert.alert("Something went wrong", result.error || 'Failed to block user');
            }
          },
        },
@@ -764,14 +765,14 @@ function makeStyles(t: AppTheme) {
      marginHorizontal: 16,
      marginTop: 8,
      padding: 12,
-     backgroundColor: '#FEE2E2',
+     backgroundColor: t.errorTint,
      borderWidth: 1,
-     borderColor: '#FCA5A5',
+     borderColor: t.error,
      borderRadius: 8,
    },
    errorText: {
      fontSize: 13,
-     color: '#991B1B',
+     color: t.errorText,
    },
    keyboardAvoidingContainer: {
      flex: 1,
@@ -803,7 +804,7 @@ function makeStyles(t: AppTheme) {
      flexDirection: 'row',
      alignItems: 'flex-end',
      backgroundColor: t.surfaceSecondary,
-     borderRadius: 22,
+     borderRadius: 20,
      paddingHorizontal: 16,
      paddingVertical: 10,
      borderWidth: 1,
@@ -842,7 +843,7 @@ function makeStyles(t: AppTheme) {
    replyLabel: {
      fontSize: 12,
      fontWeight: '700',
-     color: t.primary,
+     color: t.primaryLight,
    },
    replyPreview: {
      fontSize: 13,

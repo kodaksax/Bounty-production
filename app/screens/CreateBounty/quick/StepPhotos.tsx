@@ -11,6 +11,7 @@ import { QuickStepLayout } from './QuickStepLayout';
 import { trustSafetyStrings } from '../../../../lib/strings/trust-safety';
 import { detectOffPlatformRisk } from '../../../../lib/utils/off-platform-risk';
 import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
+import { withAlpha } from '../../../../lib/utils';
 
 interface StepPhotosProps {
   draft: BountyDraft;
@@ -250,7 +251,7 @@ function makeStyles(theme: AppTheme) {
       width: 56,
       height: 56,
       borderRadius: 28,
-      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.12)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.22) : withAlpha(theme.primary, 0.12),
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 14,
@@ -270,7 +271,7 @@ function makeStyles(theme: AppTheme) {
       marginTop: 16,
       padding: 12,
       borderRadius: 16,
-      backgroundColor: 'rgba(239,68,68,0.12)',
+      backgroundColor: withAlpha(theme.error, 0.12),
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -286,7 +287,7 @@ function makeStyles(theme: AppTheme) {
       width: 24,
       height: 24,
       borderRadius: 12,
-      backgroundColor: 'rgba(34,38,44,0.85)',
+      backgroundColor: withAlpha(theme.surface, 0.85),
       alignItems: 'center',
       justifyContent: 'center',
     },

@@ -17,6 +17,7 @@ import { QuickStepLayout } from './QuickStepLayout';
 import { trustSafetyStrings } from '../../../../lib/strings/trust-safety';
 import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
 import { PaymentMethodsModal } from '../../../../components/payment-methods-modal';
+import { withAlpha } from '../../../../lib/utils';
 
 interface StepPayProps {
   draft: BountyDraft;
@@ -304,11 +305,7 @@ export function StepPay({
               style={[
                 styles.preset,
                 {
-                  backgroundColor: active
-                    ? theme.isDark
-                      ? 'rgba(0,142,42,0.22)'
-                      : 'rgba(0,142,42,0.12)'
-                    : theme.surfaceSecondary,
+                  backgroundColor: active ? theme.isDark ? withAlpha(theme.primary, 0.22) : withAlpha(theme.primary, 0.12) : theme.surfaceSecondary,
                   borderColor: active ? theme.primary : 'transparent',
                 },
               ]}
@@ -468,7 +465,7 @@ function makeStyles(theme: AppTheme) {
     preset: {
       paddingHorizontal: 18,
       paddingVertical: 10,
-      borderRadius: 18,
+      borderRadius: 16,
       borderWidth: 2,
     },
     presetLabel: { fontSize: 16, fontWeight: '700' },
@@ -476,8 +473,8 @@ function makeStyles(theme: AppTheme) {
       marginTop: 16,
       flexDirection: 'row',
       padding: 12,
-      borderRadius: 14,
-      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.18)' : 'rgba(0,142,42,0.10)',
+      borderRadius: 12,
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.18) : withAlpha(theme.primary, 0.1),
     },
     infoIcon: { marginRight: 10, marginTop: 1 },
     infoTextWrap: { flex: 1 },
@@ -487,13 +484,13 @@ function makeStyles(theme: AppTheme) {
       marginTop: 6,
       fontSize: 13,
       fontWeight: '700',
-      color: theme.primary,
+      color: theme.primaryLight,
       textDecorationLine: 'underline',
     },
     trustCard: {
       marginTop: 16,
       padding: 12,
-      borderRadius: 14,
+      borderRadius: 12,
       borderWidth: 1,
       ...theme.insetBorder, // pressed-in edge: dark top → light bottom
       backgroundColor: theme.surfaceSecondary,
@@ -518,7 +515,7 @@ function makeStyles(theme: AppTheme) {
     checkbox: {
       width: 22,
       height: 22,
-      borderRadius: 6,
+      borderRadius: 8,
       borderWidth: 2,
       alignItems: 'center',
       justifyContent: 'center',

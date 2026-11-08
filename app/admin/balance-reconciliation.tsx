@@ -223,7 +223,7 @@ export default function BalanceReconciliationScreen() {
               </View>
               {finding.user_id && <Text style={styles.logMeta}>user: {finding.user_id}</Text>}
               {finding.auto_repaired && (
-                <Text style={[styles.logMeta, { color: theme.primary }]}>✓ auto-repaired: {finding.resolution}</Text>
+                <Text style={[styles.logMeta, { color: theme.primaryLight }]}>✓ auto-repaired: {finding.resolution}</Text>
               )}
               <Text style={styles.logMeta} numberOfLines={4}>
                 {JSON.stringify(finding.details)}
@@ -308,8 +308,6 @@ const makeStyles = (theme: AppTheme) =>
   },
   button: {
     backgroundColor: theme.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.primaryShade,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
@@ -335,7 +333,7 @@ const makeStyles = (theme: AppTheme) =>
     justifyContent: 'space-between',
     marginBottom: 6,
   },
-  logAction: { color: theme.primary, fontWeight: '700', fontSize: 13 },
+  logAction: { color: theme.primaryLight, fontWeight: '700', fontSize: 13 },
   severityBadge: { fontWeight: '700', fontSize: 12 },
   logMeta: { color: theme.textSecondary, fontSize: 12, marginBottom: 2 },
   logDate: { color: theme.textDisabled, fontSize: 11, marginTop: 4 },

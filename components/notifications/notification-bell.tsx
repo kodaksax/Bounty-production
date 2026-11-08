@@ -66,7 +66,7 @@ function makeStyles(t: AppTheme) {
     },
     badgeText: {
       color: '#FFFFFF',
-      fontSize: 9,
+      fontSize: 12,
       fontWeight: '700',
     },
   });

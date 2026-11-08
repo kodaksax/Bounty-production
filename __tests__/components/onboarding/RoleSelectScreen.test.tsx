@@ -49,8 +49,8 @@ jest.mock('../../../components/onboarding/OnboardingProgressDots', () => ({
 
 import RoleSelectScreen from '../../../app/onboarding/role-select';
 
-const POSTER = /^Make today pay\./;
-const HUNTER = /^I'd rather earn/;
+const POSTER = /^Get something done/;
+const HUNTER = /^Earn money/;
 
 beforeEach(() => {
   jest.clearAllMocks();

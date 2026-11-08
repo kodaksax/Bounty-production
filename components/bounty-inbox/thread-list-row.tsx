@@ -128,7 +128,7 @@ export function BountyConversationRow({
             <StatusBadge status={status} />
             {yourTurn && (
               <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, backgroundColor: '#d97706' }}>
-                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>YOUR MOVE</Text>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>YOUR MOVE</Text>
               </View>
             )}
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>

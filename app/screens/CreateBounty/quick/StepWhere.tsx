@@ -11,6 +11,7 @@ import { locationService } from '../../../../lib/services/location-service';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { QuickStepLayout } from './QuickStepLayout';
+import { withAlpha } from '../../../../lib/utils';
 
 interface StepWhereProps {
   draft: BountyDraft;
@@ -352,7 +353,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
         activeOpacity={0.8}
         style={[
           styles.row,
-          usedCurrentLocation ? { backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.12)' } : null,
+          usedCurrentLocation ? { backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.22) : withAlpha(theme.primary, 0.12) } : null,
         ]}
         accessibilityRole="button"
         accessibilityLabel="Use current location"
@@ -434,7 +435,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
         activeOpacity={0.8}
         style={[
           styles.row,
-          isOnline ? { backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.12)' } : null,
+          isOnline ? { backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.22) : withAlpha(theme.primary, 0.12) } : null,
         ]}
         accessibilityRole="button"
         accessibilityLabel="This can be done online"
@@ -490,7 +491,7 @@ function makeStyles(theme: AppTheme) {
     suggestionText: { flex: 1, marginLeft: 12 },
     suggestionMain: { fontSize: 16, fontWeight: '600', color: theme.text },
     suggestionSecondary: { marginTop: 2, fontSize: 13, color: theme.textSecondary },
-    attribution: { paddingHorizontal: 18, paddingBottom: 8, fontSize: 11, color: theme.textSecondary, textAlign: 'right' },
+    attribution: { paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: theme.textSecondary, textAlign: 'right' },
     resolved: { marginTop: 2, marginBottom: 8, fontSize: 14, color: theme.textSecondary },
     error: { marginTop: 4, fontSize: 14, color: theme.error },
     privacy: { marginTop: 20, fontSize: 13, lineHeight: 19, color: theme.textSecondary },

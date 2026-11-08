@@ -4,6 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'reac
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 export type VerificationLevel = 'unverified' | 'pending' | 'verified' | 'rejected';
 
@@ -126,8 +127,8 @@ export function VerificationBadge({
         accessible={true}
         accessibilityLabel="Verification status explanation"
       >
-        <Pressable style={s.modalOverlay} onPress={() => setShowModal(false)}>
-          <Pressable style={s.modalContent} onPress={() => {}}>
+        <Pressable accessibilityRole="button" style={s.modalOverlay} onPress={() => setShowModal(false)}>
+          <Pressable accessibilityRole="button" style={s.modalContent} onPress={() => {}}>
             <View style={s.modalHeader}>
               <View style={[s.modalIconCircle, { backgroundColor: badgeBg }]}>
                 <MaterialIcons name={config.icon} size={32} color={config.color} />
@@ -140,7 +141,7 @@ export function VerificationBadge({
             {status === 'verified' && (
               <View style={s.verificationDetails}>
                 <View style={s.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color="#008E2A" />
+                  <MaterialIcons name="check-circle" size={16} color={theme.primaryLight} />
                   <Text style={s.detailText}>Government-issued ID verified via Stripe Identity</Text>
                 </View>
               </View>
@@ -148,7 +149,7 @@ export function VerificationBadge({
 
             {status === 'unverified' && (
               <View style={s.tipBox}>
-                <MaterialIcons name="lightbulb-outline" size={16} color="#fbbf24" />
+                <MaterialIcons name="lightbulb-outline" size={16} color={theme.warningText} />
                 <Text style={s.tipText}>
                   Tip: ID-verified users tend to build trust with posters faster.
                 </Text>
@@ -157,7 +158,7 @@ export function VerificationBadge({
 
             {status === 'rejected' && rejectionReason && (
               <View style={s.tipBox}>
-                <MaterialIcons name="info-outline" size={16} color="#ef4444" />
+                <MaterialIcons name="info-outline" size={16} color={theme.errorText} />
                 <Text style={s.tipText}>{rejectionReason}</Text>
               </View>
             )}
@@ -230,7 +231,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 16,
     },
     verificationDetails: {
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : 'rgba(0,142,42,0.07)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.1) : withAlpha(t.primary, 0.07),
       borderRadius: 12,
       padding: 12,
       marginBottom: 16,
@@ -247,7 +248,7 @@ function makeStyles(t: AppTheme) {
     },
     tipBox: {
       flexDirection: 'row',
-      backgroundColor: 'rgba(251,191,36,0.1)',
+      backgroundColor: withAlpha(t.warning, 0.1),
       borderRadius: 12,
       padding: 12,
       marginBottom: 16,
@@ -257,13 +258,11 @@ function makeStyles(t: AppTheme) {
     tipText: {
       flex: 1,
       fontSize: 12,
-      color: t.isDark ? '#fef3c7' : '#92400e',
+      color: t.warningText,
       lineHeight: 18,
     },
     closeButton: {
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: t.primary,
       paddingVertical: 12,
       borderRadius: 8,
       alignItems: 'center',

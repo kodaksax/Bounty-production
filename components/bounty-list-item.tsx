@@ -10,10 +10,11 @@ import { useHapticFeedback } from '../lib/haptic-feedback';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { formatBountyWhere } from '../lib/utils/bounty-distance';
-import { getScheduleChip } from '../lib/utils/schedule-utils';
+import { getScheduleChip, scheduleChipIcon } from '../lib/utils/schedule-utils';
 import { BountyDetailModal } from './bountydetailmodal';
 import { useModalOrigin } from './ui/app-modal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { withAlpha } from '../lib/utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -168,12 +169,12 @@ function BountyListItemComponent({
           <View style={s.workTypeBadge}>
             {work_type === 'online' ? (
               <View style={s.onlineBadge}>
-                <MaterialIcons name="wifi" size={12} color="#008E2A" />
+                <MaterialIcons name="wifi" size={12} color={theme.primaryLight} />
                 <Text style={s.onlineText}>Remote</Text>
               </View>
             ) : (
               <View style={s.inPersonBadge}>
-                <MaterialIcons name="near-me" size={12} color="#008E2A" />
+                <MaterialIcons name="near-me" size={12} color={theme.primaryLight} />
                 <Text style={s.inPersonText}>In Person</Text>
               </View>
             )}
@@ -184,14 +185,14 @@ function BountyListItemComponent({
         <View style={s.mainContent}>
           {sectionLabel && (
             <Text style={s.sectionLabel} accessibilityRole="header">
-              {sectionLabel === 'honor' ? 'Honor bounties' : 'Dormant — low recent interest'}
+              {sectionLabel === 'honor' ? 'Honor bounties' : 'Quieter bounties'}
             </Text>
           )}
           <View style={s.titleRow}>
             <Text style={s.title}>{title}</Text>
             {isForHonor && (
               <View style={s.honorBadgeLarge}>
-                <MaterialIcons name="favorite" size={16} color="#008E2A" />
+                <MaterialIcons name="favorite" size={16} color={theme.primaryLight} />
                 <Text style={s.honorBadgeLargeText}>For Honor</Text>
               </View>
             )}
@@ -213,16 +214,14 @@ function BountyListItemComponent({
           )}
 
           <View style={s.locationRow}>
-            <MaterialIcons
-              name={work_type === 'online' ? 'wifi' : 'near-me'}
-              size={14}
-              color={theme.textDisabled}
-            />
-            <Text style={s.locationText} numberOfLines={1}>
-              {work_type === 'online'
-                ? 'Remote work'
-                : formatBountyWhere(distance, location) ?? 'Location TBD'}
-            </Text>
+            {work_type !== 'online' && (
+              <>
+                <MaterialIcons name="near-me" size={14} color={theme.textSecondary} />
+                <Text style={s.locationText} numberOfLines={1}>
+                  {formatBountyWhere(distance, location) ?? 'Location to be confirmed'}
+                </Text>
+              </>
+            )}
             {scheduleChip && (
               <View
                 style={[
@@ -232,9 +231,12 @@ function BountyListItemComponent({
                   scheduleChip.variant === 'muted'   && s.scheduleChipMuted,
                 ]}
               >
-                <Text style={s.scheduleChipText}>
-                  {scheduleChip.icon} {scheduleChip.label}
-                </Text>
+                <MaterialIcons
+                  name={scheduleChipIcon(scheduleChip.variant)}
+                  size={12}
+                  color={theme.textSecondary}
+                />
+                <Text style={s.scheduleChipText}>{scheduleChip.label}</Text>
               </View>
             )}
           </View>
@@ -245,12 +247,12 @@ function BountyListItemComponent({
           <View style={s.priceBlock}>
             {isForHonor ? (
               <>
-                <Text style={s.priceLabelHonor}>Reward</Text>
+                <Text style={s.priceLabel}>Reward</Text>
                 <Text style={s.priceValueHonor}>Honor</Text>
               </>
             ) : (
               <>
-                <Text style={s.priceLabelHonor}>Bounty</Text>
+                <Text style={s.priceLabel}>Reward</Text>
                 <Text style={s.priceValue}>${price}</Text>
               </>
             )}
@@ -385,33 +387,33 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : 'rgba(0,142,42,0.08)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.1) : withAlpha(t.primary, 0.08),
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.25)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.25),
     },
     onlineText: {
       fontSize: 12,
       fontWeight: '600',
-      color: t.primary,
+      color: t.primaryLight,
     },
     inPersonBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : 'rgba(0,142,42,0.08)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.1) : withAlpha(t.primary, 0.08),
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.25)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.25),
     },
     inPersonText: {
       fontSize: 12,
       fontWeight: '600',
-      color: t.primary,
+      color: t.primaryLight,
     },
 
     // Main content
@@ -429,16 +431,16 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.12)' : 'rgba(0,142,42,0.08)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.12) : withAlpha(t.primary, 0.08),
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 20,
       alignSelf: 'flex-start',
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.25)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.25),
     },
     honorBadgeLargeText: {
-      color: t.primary,
+      color: t.primaryLight,
       fontWeight: '700',
       fontSize: 13,
     },
@@ -476,9 +478,9 @@ function makeStyles(t: AppTheme) {
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 999,
-      backgroundColor: t.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',
+      backgroundColor: t.isDark ? withAlpha(t.warning, 0.14) : withAlpha(t.warning, 0.12),
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(245,158,11,0.32)' : 'rgba(245,158,11,0.28)',
+      borderColor: t.isDark ? withAlpha(t.warning, 0.32) : withAlpha(t.warning, 0.28),
     },
     limitedBadgeText: {
       fontSize: 12,
@@ -488,29 +490,30 @@ function makeStyles(t: AppTheme) {
     },
     locationText: {
       fontSize: 13,
-      color: t.textDisabled,
+      color: t.textSecondary,
       fontWeight: '500',
       flexShrink: 1,
     },
     scheduleChip: {
       flexDirection: 'row',
       alignItems: 'center',
+      gap: 4,
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderRadius: 12,
-      backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+      backgroundColor: t.isDark ? withAlpha(t.text, 0.08) : 'rgba(0,0,0,0.06)',
     },
     scheduleChipUrgent: {
-      backgroundColor: t.isDark ? 'rgba(220,38,38,0.2)' : 'rgba(220,38,38,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.error, 0.2) : withAlpha(t.error, 0.1),
     },
     scheduleChipWarning: {
-      backgroundColor: t.isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.warning, 0.2) : withAlpha(t.warning, 0.1),
     },
     scheduleChipMuted: {
-      backgroundColor: t.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+      backgroundColor: t.isDark ? withAlpha(t.text, 0.06) : 'rgba(0,0,0,0.04)',
     },
     scheduleChipText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       color: t.textSecondary,
     },
@@ -530,7 +533,7 @@ function makeStyles(t: AppTheme) {
       gap: 2,
     },
     priceLabel: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       color: t.textSecondary,
       textTransform: 'uppercase',
@@ -539,30 +542,21 @@ function makeStyles(t: AppTheme) {
     priceValue: {
       fontSize: 26,
       fontWeight: '800',
-      color: t.primary,
-    },
-    priceLabelHonor: {
-      fontSize: 11,
-      fontWeight: '800',
-      color: t.primary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
+      color: t.primaryLight,
     },
     priceValueHonor: {
       fontSize: 16,
       fontWeight: '700',
-      color: t.primary,
+      color: t.primaryLight,
     },
     applyButton: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       paddingHorizontal: 20,
       paddingVertical: 14,
-      borderRadius: 14,
+      borderRadius: 12,
     },
     applyButtonText: {
       color: '#ffffff',

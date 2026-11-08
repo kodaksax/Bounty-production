@@ -38,6 +38,8 @@ import Constants from 'expo-constants';
 
 import { API_BASE_URL } from '../lib/config/api';
 import { colors } from '../lib/theme';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 
 /**
  * Returns the Supabase anon key, which the Supabase Functions gateway
@@ -329,6 +331,8 @@ export function ConnectEmbeddedWebView({
   onError,
   country,
 }: ConnectEmbeddedWebViewProps) {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [init, setInit] = useState<InitPayload | null>(null);
   const [embeddedHtml, setEmbeddedHtml] = useState<string | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
@@ -786,7 +790,8 @@ export function ConnectEmbeddedWebView({
 
 export default ConnectEmbeddedWebView;
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background.primary },
   center: {
     flex: 1,
@@ -813,9 +818,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary[500],
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  retryText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  retryText: { color: theme.onPrimary, fontWeight: '600', fontSize: 15 },
   popupContainer: { flex: 1, backgroundColor: colors.background.primary },
   popupHeader: {
     flexDirection: 'row',
@@ -830,3 +835,4 @@ const styles = StyleSheet.create({
   popupDoneText: { color: colors.primary[500], fontSize: 16, fontWeight: '600' },
   popupSecondaryText: { color: colors.text.secondary, fontSize: 14 },
 });
+}

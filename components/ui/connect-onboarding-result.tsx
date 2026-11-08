@@ -240,7 +240,7 @@ export function ConnectOnboardingResult({
           <>
             <TouchableOpacity style={s.primaryButton} onPress={onRetryVerify} accessibilityRole="button" accessibilityLabel="Retry">
               <MaterialIcons name="refresh" size={18} color="#ffffff" style={s.retryIcon} />
-              <Text style={s.primaryButtonText}>Retry</Text>
+              <Text style={s.primaryButtonText}>Try again</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.secondaryButton} onPress={onDone} accessibilityRole="button" accessibilityLabel="Done">
               <Text style={s.secondaryButtonText}>Done</Text>
@@ -282,7 +282,7 @@ function makeStyles(t: AppTheme) {
     requirementsBox: {
       width: '100%',
       backgroundColor: t.surface,
-      borderRadius: 14,
+      borderRadius: 12,
       padding: 16,
       marginTop: 20,
     },
@@ -294,8 +294,6 @@ function makeStyles(t: AppTheme) {
     primaryButton: {
       flexDirection: 'row',
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       borderRadius: 12,
       paddingVertical: 16,
       alignItems: 'center',

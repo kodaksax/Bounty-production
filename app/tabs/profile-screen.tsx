@@ -31,6 +31,7 @@ import { useAuthProfile } from "../../hooks/useAuthProfile";
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile";
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
@@ -240,7 +241,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
           <View className="rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg" style={{ backgroundColor: theme.surfaceSecondary }}>
             <Text className="text-sm flex-1" style={{ color: theme.text }}>{updateMessage}</Text>
-            <TouchableOpacity onPress={() => setUpdateMessage(null)}>
+            <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => setUpdateMessage(null)}>
               <MaterialIcons name="close" size={18} color={theme.text} />
             </TouchableOpacity>
           </View>
@@ -283,7 +284,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       </View>
 
       <ScrollView
-        className="flex-1 pb-40"
+        className="flex-1"
         style={Platform.OS === 'web' ? { flex: 1, overflowY: 'scroll' } as any : undefined}
         contentContainerStyle={{ paddingBottom: 220 }}
         refreshControl={
@@ -291,7 +292,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
            tintColor={theme.textSecondary}
-            colors={['#454952']}
+            colors={[theme.primary]}
           />
         }
       >
@@ -442,7 +443,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           >
             <View className="flex-row items-center">
               <MaterialIcons name="history" size={20} color={theme.textSecondary} />
-              <Text className="text-sm font-medium ml-2" style={{ color: theme.text }}>View History</Text>
+              <Text className="text-sm font-medium ml-2" style={{ color: theme.text }}>View history</Text>
             </View>
             <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
@@ -461,7 +462,6 @@ export default ProfileScreen;
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     section: {
-      backgroundColor: theme.surface,
       paddingHorizontal: 16,
       paddingVertical: 12,
     },
@@ -473,9 +473,9 @@ function makeStyles(theme: AppTheme) {
       paddingVertical: 12,
       paddingHorizontal: 14,
       borderRadius: 12,
-      backgroundColor: theme.isDark ? 'rgba(5,46,27,0.45)' : 'rgba(0,142,42,0.1)',
+      backgroundColor: theme.isDark ? theme.primaryTint : withAlpha(theme.primary, 0.1),
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : theme.primary,
+      borderColor: theme.isDark ? theme.primaryTint : theme.primary,
     },
     verifyIdentityTextWrap: {
       flex: 1,

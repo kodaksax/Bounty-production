@@ -7,6 +7,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 
 interface SyncStatusIndicatorProps {
   /**
@@ -39,6 +41,8 @@ export function SyncStatusIndicator({
   size = 'medium',
   style 
 }: SyncStatusIndicatorProps) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { pendingCount, failedCount, isOnline } = useOfflineQueue();
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -59,7 +63,7 @@ export function SyncStatusIndicator({
     <View style={[styles.container, style]}>
       {isSyncing ? (
         <>
-          <ActivityIndicator size="small" color="#3b82f6" />
+          <ActivityIndicator size="small" color={theme.infoText} />
           {detailed && (
             <Text style={[styles.text, { fontSize: textSize }]}>
               Syncing {pendingCount} {pendingCount === 1 ? 'item' : 'items'}
@@ -68,7 +72,7 @@ export function SyncStatusIndicator({
         </>
       ) : failedCount > 0 ? (
         <>
-          <MaterialIcons name="error-outline" size={iconSize} color="#dc2626" />
+          <MaterialIcons name="error-outline" size={iconSize} color={theme.errorText} />
           {detailed && (
             <Text style={[styles.text, styles.errorText, { fontSize: textSize }]}>
               {failedCount} failed
@@ -77,7 +81,7 @@ export function SyncStatusIndicator({
         </>
       ) : !isOnline && pendingCount > 0 ? (
         <>
-          <MaterialIcons name="cloud-off" size={iconSize} color="#f59e0b" />
+          <MaterialIcons name="cloud-off" size={iconSize} color={theme.warningText} />
           {detailed && (
             <Text style={[styles.text, styles.warningText, { fontSize: textSize }]}>
               {pendingCount} pending
@@ -89,28 +93,32 @@ export function SyncStatusIndicator({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   text: {
-    color: '#3b82f6',
+    color: theme.infoText,
     fontWeight: '500',
   },
   errorText: {
-    color: '#dc2626',
+    color: theme.errorText,
   },
   warningText: {
-    color: '#f59e0b',
+    color: theme.warningText,
   },
 });
+}
 
 /**
  * Badge version that shows a count
  */
 export function SyncStatusBadge({ style }: { style?: any }) {
+  const { theme } = useAppThemeContext();
+  const badgeStyles = React.useMemo(() => makeBadgeStyles(theme), [theme]);
   const { pendingCount, failedCount, isOnline } = useOfflineQueue();
 
   if (pendingCount === 0 && failedCount === 0) {
@@ -127,7 +135,8 @@ export function SyncStatusBadge({ style }: { style?: any }) {
   );
 }
 
-const badgeStyles = StyleSheet.create({
+function makeBadgeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   badge: {
     minWidth: 20,
     height: 20,
@@ -137,10 +146,11 @@ const badgeStyles = StyleSheet.create({
     alignItems: 'center',
   },
   badgeText: {
-    color: '#fff',
-    fontSize: 11,
+    color: theme.text,
+    fontSize: 12,
     fontWeight: '700',
   },
 });
+}
 
 // (Intentional) badge styles already defined above; no duplicate export.

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Appearance, ColorSchemeName } from 'react-native';
+import { Appearance, ColorSchemeName, Platform } from 'react-native';
 import { darkTheme } from './darkTheme';
 import { lightTheme } from './lightTheme';
 import type { AppTheme, ThemeMode } from './types';
@@ -27,10 +27,14 @@ interface AppThemeProviderProps {
   defaultMode?: ThemeMode;
 }
 
-export function AppThemeProvider({ children, defaultMode = 'dark' }: AppThemeProviderProps) {
+// Follows the phone until someone picks Light or Dark in Settings.
+export function AppThemeProvider({ children, defaultMode = 'system' }: AppThemeProviderProps) {
   const [mode, setModeState] = useState<ThemeMode>(defaultMode);
+  // Web pages are prerendered, and the prerender always sees a light scheme.
+  // Hydration doesn't repaint styles, so the first client render has to match
+  // it; the effect below then applies the visitor's real scheme.
   const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(
-    Appearance.getColorScheme() ?? 'dark'
+    Platform.OS === 'web' ? 'light' : Appearance.getColorScheme() ?? 'dark'
   );
 
   // Restore persisted preference on mount
@@ -46,6 +50,7 @@ export function AppThemeProvider({ children, defaultMode = 'dark' }: AppThemePro
 
   // Track system theme changes
   useEffect(() => {
+    if (Platform.OS === 'web') setSystemScheme(Appearance.getColorScheme() ?? 'light');
     const sub = Appearance.addChangeListener(({ colorScheme }) => {
       setSystemScheme(colorScheme);
     });

@@ -282,7 +282,7 @@ const makeStyles = (theme: AppTheme) =>
   retryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: theme.primary,
+    color: theme.primaryLight,
   },
   emptyContainer: {
     flex: 1,

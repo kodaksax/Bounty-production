@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { Attachment } from '../lib/types';
+import { showToast } from '../lib/toast';
 
 interface AttachmentViewerModalProps {
   visible: boolean;
@@ -143,7 +144,7 @@ export function AttachmentViewerModal({
    */
   const handleDownload = async () => {
     if (!attachment || !isValidUri(uri)) {
-      Alert.alert('Error', 'Invalid file URI');
+      Alert.alert("Something went wrong", 'Invalid file URI');
       return;
     }
 
@@ -238,16 +239,16 @@ export function AttachmentViewerModal({
             Alert.alert('Share to Save', 'Use the share sheet to save this file to your device.');
           } catch (shareErr) {
             console.error('[AttachmentViewer] Sharing error:', shareErr);
-            Alert.alert('Error', 'Unable to save file on this device.');
+            Alert.alert("Couldn't save file on this device", "Please try again.");
           }
         } else {
-          Alert.alert('Error', 'Saving is not supported on this device.');
+          Alert.alert("Something went wrong", 'Saving is not supported on this device.');
         }
       } else if (fileType === 'pdf' || fileType === 'document' || fileType === 'other') {
         // For documents and other files, use sharing
         const isAvailable = await Sharing.isAvailableAsync();
         if (!isAvailable) {
-          Alert.alert('Error', 'Sharing is not available on this device');
+          Alert.alert("Something went wrong", 'Sharing is not available on this device');
           return;
         }
 
@@ -272,13 +273,13 @@ export function AttachmentViewerModal({
           UTI: mimeType,
         });
 
-        Alert.alert('Success', 'File saved successfully!');
+        showToast({ message: 'File saved successfully!' });
       } else {
         Alert.alert('Info', 'Video download is not supported. You can share instead.');
       }
     } catch (error) {
       console.error('[AttachmentViewer] Download error:', error);
-      Alert.alert('Error', 'Failed to save file. Please try again.');
+      Alert.alert("Couldn't save file", "Please try again.");
     } finally {
       setIsDownloading(false);
     }

@@ -30,7 +30,7 @@ interface AddMoneyScreenProps {
 // Text color used on top of the bright brand-green primary CTA, matching the
 // dark-on-green convention used across onboarding/wallet (see e.g.
 // lib/onboarding/onboarding-details-styles.ts nextButtonText).
-const ON_PRIMARY_TEXT = '#052e1b'
+const ON_PRIMARY_TEXT = '#FFFFFF'
 
 const KEYPAD_ROWS: number[][] = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
@@ -472,8 +472,6 @@ function makeStyles(theme: AppTheme, metrics: ScreenMetrics) {
       minHeight: metrics.buttonHeight,
       borderRadius: 999,
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
     },
     primaryButtonMuted: {
       opacity: 0.45,

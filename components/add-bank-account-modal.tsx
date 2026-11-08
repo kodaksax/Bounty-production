@@ -17,6 +17,7 @@ import type { StripePaymentMethod } from "../lib/services/stripe-internal"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
 import { FeedbackModal, type FeedbackVariant } from "./ui/feedback-modal"
+import { withAlpha } from '../lib/utils';
 
 /**
  * Payload passed to the optional `onSave` callback once Financial Connections
@@ -305,7 +306,7 @@ function makeStyles(t: AppTheme) {
       width: 72,
       height: 72,
       borderRadius: 36,
-      backgroundColor: t.isDark ? 'rgba(34,197,94,0.15)' : 'rgba(0,142,42,0.12)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.15) : withAlpha(t.primary, 0.12),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -331,8 +332,6 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       borderRadius: t.radius.lg,
       paddingVertical: 14,
       marginBottom: t.spacing.lg,
@@ -347,6 +346,6 @@ function makeStyles(t: AppTheme) {
       gap: 6,
       paddingHorizontal: 12,
     },
-    securityText: { color: t.textDisabled, fontSize: 11, textAlign: 'center', flex: 1 },
+    securityText: { color: t.textDisabled, fontSize: 12, textAlign: 'center', flex: 1 },
   });
 }

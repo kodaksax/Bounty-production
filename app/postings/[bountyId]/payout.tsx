@@ -36,8 +36,14 @@ import {
   isV3Bounty,
 } from '../../../lib/utils/payment-architecture';
 import { useWallet } from '../../../lib/wallet-context';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../lib/themes/types';
+import { withAlpha } from '../../../lib/utils';
+import { useMemo } from 'react';
 
 export default function PayoutScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   // Fall back to the poster dashboard when there is no history to pop.
@@ -97,7 +103,7 @@ export default function PayoutScreen() {
 
   const handleReleasePayout = async () => {
     if (!bounty || bounty.is_for_honor) {
-      Alert.alert('Error', 'Cannot release payout for honor bounties.');
+      Alert.alert("Something went wrong", 'Cannot release payout for honor bounties.');
       return;
     }
 
@@ -331,7 +337,7 @@ export default function PayoutScreen() {
               }, 1500);
             } catch (err) {
               console.error('Error marking as complete:', err);
-              Alert.alert('Error', describeBountyUpdateError(err));
+              Alert.alert("Something went wrong", describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }
@@ -390,7 +396,7 @@ export default function PayoutScreen() {
               );
             } catch (err) {
               console.error('Error deleting bounty:', err);
-              Alert.alert('Error', describeBountyUpdateError(err));
+              Alert.alert("Something went wrong", describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }
@@ -433,7 +439,7 @@ export default function PayoutScreen() {
               ]);
             } catch (err) {
               console.error('Error archiving bounty:', err);
-              Alert.alert('Error', describeBountyUpdateError(err));
+              Alert.alert("Something went wrong", describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }
@@ -446,8 +452,8 @@ export default function PayoutScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008E2A" />
-        <Text style={styles.loadingText}>Loading payout...</Text>
+        <ActivityIndicator size="large" color={theme.primaryLight} />
+        <Text style={styles.loadingText}>Loading…</Text>
       </View>
     );
   }
@@ -455,13 +461,13 @@ export default function PayoutScreen() {
   if (error || !bounty) {
     return (
       <View style={styles.errorContainer}>
-        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+        <MaterialIcons name="error-outline" size={48} color={theme.errorText} />
         <Text style={styles.errorText}>{error || 'Bounty not found'}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={loadBounty}>
+          <Text style={styles.retryButtonText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
-          <Text style={styles.backButtonText}>Go Back</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={goBack}>
+          <Text style={styles.backButtonText}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -471,10 +477,10 @@ export default function PayoutScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={goBack}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={styles.backIcon} onPress={goBack}>
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payout</Text>
+        <Text style={styles.headerTitle}>Release payment</Text>
       </View>
 
       <ScrollView
@@ -484,7 +490,7 @@ export default function PayoutScreen() {
       >
         {/* Bounty Summary */}
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Bounty Summary</Text>
+          <Text style={styles.summaryTitle}>Summary</Text>
           <Text style={styles.bountyTitle} numberOfLines={2}>
             {bounty.title}
           </Text>
@@ -499,13 +505,13 @@ export default function PayoutScreen() {
         {/* Payout Amount Card */}
         <View style={styles.payoutCard}>
           <View style={styles.payoutHeader}>
-            <MaterialIcons name="account-balance-wallet" size={32} color="#008E2A" />
-            <Text style={styles.payoutTitle}>Payout Amount</Text>
+            <MaterialIcons name="account-balance-wallet" size={32} color={theme.primaryLight} />
+            <Text style={styles.payoutTitle}>Amount to release</Text>
           </View>
 
           {bounty.is_for_honor ? (
             <View style={styles.honorContainer}>
-              <MaterialIcons name="favorite" size={48} color="#008E2A" />
+              <MaterialIcons name="favorite" size={48} color={theme.primaryLight} />
               <Text style={styles.honorLabel}>For Honor</Text>
               <Text style={styles.honorSubtext}>
                 This bounty was created for honor, no payout amount.
@@ -516,14 +522,14 @@ export default function PayoutScreen() {
               <Text style={styles.payoutAmount}>${bounty.amount.toFixed(2)}</Text>
               {isPhase2Bounty(bounty) ? (
                 <View style={styles.balanceInfo}>
-                  <MaterialIcons name="verified-user" size={16} color="#1FAE49" />
+                  <MaterialIcons name="verified-user" size={16} color={theme.primaryLight} />
                   <Text style={styles.balanceLabel}>
                     Stripe escrow — release and payout timing may vary
                   </Text>
                 </View>
               ) : (
                 <View style={styles.balanceInfo}>
-                  <Text style={styles.balanceLabel}>Current Balance:</Text>
+                  <Text style={styles.balanceLabel}>Wallet balance:</Text>
                   <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
                 </View>
               )}
@@ -535,13 +541,13 @@ export default function PayoutScreen() {
         {!bounty.is_for_honor && bounty.status !== 'completed' && (
           <View style={styles.confirmationCard}>
             <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
-            <Text style={styles.confirmationTitle}>Confirm Payout Release</Text>
+            <Text style={styles.confirmationTitle}>Confirm payment release</Text>
             <Text style={styles.confirmationSubtext}>
               {trustSafetyStrings.paidCompletion} Confirm that the work is complete to request release.
               Processing, fraud checks, or dispute review may delay payment.
             </Text>
             <View style={styles.switchContainer}>
-              <Text style={styles.switchLabel}>I confirm payout release</Text>
+              <Text style={styles.switchLabel}>I confirm I want to release this payment</Text>
               <Switch
                 value={confirmRelease}
                 onValueChange={setConfirmRelease}
@@ -556,15 +562,15 @@ export default function PayoutScreen() {
         {bounty.status === 'completed' && (
           <>
             <View style={styles.completedCard}>
-              <MaterialIcons name="check-circle" size={48} color="#008E2A" />
-              <Text style={styles.completedTitle}>Bounty Completed</Text>
+              <MaterialIcons name="check-circle" size={48} color={theme.primaryLight} />
+              <Text style={styles.completedTitle}>Bounty completed</Text>
               <Text style={styles.completedSubtext}>
                 This bounty has already been completed and archived.
               </Text>
             </View>
 
             {/* Receipt Download */}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.receiptButton}
               onPress={() => {
                 // TODO (Post-Launch): Implement actual receipt generation and download
@@ -574,38 +580,38 @@ export default function PayoutScreen() {
                 );
               }}
             >
-              <MaterialIcons name="receipt" size={20} color="#008E2A" />
-              <Text style={styles.receiptButtonText}>Download Receipt</Text>
+              <MaterialIcons name="receipt" size={20} color={theme.primaryLight} />
+              <Text style={styles.receiptButtonText}>Download receipt</Text>
             </TouchableOpacity>
 
             {/* Completed actions: allow archive or delete after completion */}
             {bounty.status === 'completed' && (
               <View style={styles.actionButtons}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.completeButton, isProcessing && styles.buttonDisabled]}
                   onPress={handleArchiveBounty}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <ActivityIndicator size="small" color={theme.onPrimary} />
                   ) : (
                     <>
-                      <MaterialIcons name="archive" size={20} color="#fff" />
+                      <MaterialIcons name="archive" size={20} color={theme.onPrimary} />
                       <Text style={styles.completeButtonText}>Archive</Text>
                     </>
                   )}
                 </TouchableOpacity>
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.deleteButton, isProcessing && styles.buttonDisabled]}
                   onPress={handleDeleteBounty}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <ActivityIndicator size="small" color={theme.onPrimary} />
                   ) : (
                     <>
-                      <MaterialIcons name="delete" size={20} color="#fff" />
+                      <MaterialIcons name="delete" size={20} color={theme.onPrimary} />
                       <Text style={styles.deleteButtonText}>Delete</Text>
                     </>
                   )}
@@ -619,7 +625,7 @@ export default function PayoutScreen() {
         {bounty.status !== 'completed' && (
           <View style={styles.actionButtons}>
             {!bounty.is_for_honor && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[
                   styles.releaseButton,
                   (!confirmRelease || isProcessing) && styles.buttonDisabled,
@@ -628,43 +634,43 @@ export default function PayoutScreen() {
                 disabled={!confirmRelease || isProcessing}
               >
                 {isProcessing ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={theme.onPrimary} />
                 ) : (
                   <>
-                    <MaterialIcons name="attach-money" size={24} color="#fff" />
-                    <Text style={styles.releaseButtonText}>Release Payout</Text>
+                    <MaterialIcons name="attach-money" size={24} color={theme.onPrimary} />
+                    <Text style={styles.releaseButtonText}>Release payment</Text>
                   </>
                 )}
               </TouchableOpacity>
             )}
 
             {bounty.is_for_honor === true && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.completeButton, isProcessing && styles.buttonDisabled]}
                 onPress={handleMarkComplete}
                 disabled={isProcessing}
               >
                 {isProcessing ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={theme.onPrimary} />
                 ) : (
                   <>
-                    <MaterialIcons name="check" size={24} color="#fff" />
-                    <Text style={styles.completeButtonText}>Mark as Complete</Text>
+                    <MaterialIcons name="check" size={24} color={theme.onPrimary} />
+                    <Text style={styles.completeButtonText}>Mark as complete</Text>
                   </>
                 )}
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.deleteButton, isProcessing && styles.buttonDisabled]}
               onPress={handleDeleteBounty}
               disabled={isProcessing}
             >
               {isProcessing ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={theme.onPrimary} />
               ) : (
                 <>
-                  <MaterialIcons name="delete" size={24} color="#fff" />
+                  <MaterialIcons name="delete" size={24} color={theme.onPrimary} />
                   <Text style={styles.deleteButtonText}>Delete</Text>
                 </>
               )}
@@ -674,7 +680,7 @@ export default function PayoutScreen() {
 
         {/* Info Section */}
         <View style={styles.infoCard}>
-          <MaterialIcons name="info-outline" size={24} color="#1FAE49" />
+          <MaterialIcons name="info-outline" size={24} color={theme.primaryLight} />
           <Text style={styles.infoText}>
             {bounty.status === 'completed'
               ? 'This bounty has been archived and is accessible in your bounty history.'
@@ -690,53 +696,52 @@ export default function PayoutScreen() {
         visible={showSuccessAnimation}
         icon="check-circle"
         size={80}
-        color="#008E2A"
+        color={theme.primaryLight}
       />
       <ConfettiAnimation visible={showConfetti} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
   },
   loadingText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 14,
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
     padding: 24,
   },
   errorText: {
-    color: '#ef4444',
+    color: theme.errorText,
     fontSize: 16,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 16,
   },
   retryButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -745,7 +750,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -754,16 +759,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: withAlpha(theme.primary, 0.3),
     borderBottomWidth: 1,
-    borderBottomColor: '#454952',
+    borderBottomColor: theme.border,
   },
   backIcon: {
     padding: 8,
     marginRight: 8,
   },
   headerTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
     flex: 1,
@@ -775,22 +780,22 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   summaryCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
     marginBottom: 16,
   },
   summaryTitle: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
     marginBottom: 8,
   },
   bountyTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
@@ -801,20 +806,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   summaryLabel: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
   },
   summaryValue: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
   },
   payoutCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
     marginBottom: 16,
     alignItems: 'center',
   },
@@ -825,12 +830,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   payoutTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '600',
   },
   payoutAmount: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 48,
     fontWeight: '700',
     marginBottom: 12,
@@ -841,11 +846,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   balanceLabel: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
   },
   balanceAmount: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -854,33 +859,33 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   honorLabel: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 24,
     fontWeight: '700',
     marginTop: 12,
     marginBottom: 8,
   },
   honorSubtext: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     textAlign: 'center',
   },
   confirmationCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
     marginBottom: 16,
   },
   confirmationTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
   },
   confirmationSubtext: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 16,
@@ -892,33 +897,33 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   switchLabel: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
   },
   completedCard: {
-    backgroundColor: '#454952',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#008E2A',
+    borderColor: theme.primary,
     marginBottom: 16,
     alignItems: 'center',
   },
   completedTitle: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 20,
     fontWeight: '700',
     marginTop: 12,
     marginBottom: 8,
   },
   completedSubtext: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     textAlign: 'center',
   },
   receiptButton: {
-    backgroundColor: '#454952',
+    backgroundColor: theme.surfaceSecondary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -927,10 +932,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#008E2A',
+    borderColor: theme.primary,
   },
   receiptButtonText: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -939,9 +944,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   releaseButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -950,14 +953,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   releaseButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   completeButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -966,14 +967,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   completeButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   deleteButton: {
-    backgroundColor: '#ef4444',
-    borderBottomWidth: 4,
-    borderBottomColor: '#933730',
+    backgroundColor: theme.error,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -982,7 +981,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deleteButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -991,17 +990,18 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
     gap: 12,
   },
   infoText: {
     flex: 1,
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 13,
     lineHeight: 18,
   },
 });
+}

@@ -84,7 +84,7 @@ const makeStyles = (theme: AppTheme) =>
   errorCode: {
     fontSize: 64,
     fontWeight: '800',
-    color: theme.primary,
+    color: theme.primaryLight,
     marginBottom: 8,
   },
   title: {
@@ -110,8 +110,6 @@ const makeStyles = (theme: AppTheme) =>
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.primaryShade,
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
@@ -137,7 +135,7 @@ const makeStyles = (theme: AppTheme) =>
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: theme.primary,
+    color: theme.primaryLight,
   },
   helpSection: {
     alignItems: 'center',
@@ -149,7 +147,7 @@ const makeStyles = (theme: AppTheme) =>
   },
   helpLink: {
     fontSize: 14,
-    color: theme.primary,
+    color: theme.primaryLight,
     fontWeight: '500',
   },
 });

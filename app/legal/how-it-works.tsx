@@ -185,7 +185,7 @@ function makeStyles(t: AppTheme) {
     },
     card: {
       backgroundColor: t.surface,
-      borderRadius: 14,
+      borderRadius: 12,
       borderWidth: 1,
       ...t.insetBorder, // pressed-in edge: dark top → light bottom
       padding: 14,
@@ -230,7 +230,7 @@ function makeStyles(t: AppTheme) {
     termsButtonText: {
       fontSize: 15,
       fontWeight: '700',
-      color: t.primary,
+      color: t.primaryLight,
     },
     links: {
       marginTop: 12,

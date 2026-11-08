@@ -59,7 +59,7 @@ export function RatingStars({
               <MaterialIcons
                 name={isFilled ? 'star' : 'star-border'}
                 size={starSize}
-                color={isFilled ? '#fbbf24' : unfilledStarColor}
+                color={isFilled ? theme.warningText : unfilledStarColor}
               />
             </StarComponent>
           );
@@ -93,7 +93,7 @@ function makeStyles(theme: AppTheme) {
     },
     hint: {
       color: theme.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: -4,
     },
   });
