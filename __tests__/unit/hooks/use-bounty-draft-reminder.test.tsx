@@ -41,12 +41,25 @@ async function renderDraft(userId?: string) {
 }
 
 it('arms the reminder with the saved draft', async () => {
-  const { result } = await renderDraft('user-1');
+  const hook = renderHook(
+    ({ detailOptional }) => useBountyDraft('user-1', { detailOptional }),
+    { initialProps: { detailOptional: false } }
+  );
+  await waitFor(() => expect(hook.result.current.isLoading).toBe(false));
+  const { result } = hook;
   await act(() => result.current.saveDraft({ title: 'Walk my dog' }));
 
   expect(mockScheduleSoon).toHaveBeenCalledWith(
     'user-1',
-    expect.objectContaining({ title: 'Walk my dog' })
+    expect.objectContaining({ title: 'Walk my dog' }),
+    { detailOptional: false }
+  );
+
+  hook.rerender({ detailOptional: true });
+  expect(mockScheduleSoon).toHaveBeenLastCalledWith(
+    'user-1',
+    expect.objectContaining({ title: 'Walk my dog' }),
+    { detailOptional: true }
   );
 });
 

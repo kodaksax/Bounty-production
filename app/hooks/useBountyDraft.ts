@@ -5,6 +5,7 @@ import {
   cancelDraftReminder,
   scheduleDraftReminderSoon,
 } from '../../lib/services/draft-reminder';
+import type { TaskGateOptions } from 'app/screens/CreateBounty/postStepFields';
 import type { Attachment } from '../../lib/types';
 import type { TrustTier } from '../../lib/utils/trust-tier';
 
@@ -169,7 +170,8 @@ const defaultDraft: BountyDraft = {
   conditionalEndNote: undefined,
 };
 
-export function useBountyDraft(userId?: string) {
+export function useBountyDraft(userId?: string, reminderOptions: TaskGateOptions = {}) {
+  const { detailOptional = false } = reminderOptions;
   const draftKey = getDraftKey(userId);
   const [draft, setDraftState] = useState<BountyDraft>(defaultDraft);
   // The latest draft, updated synchronously. saveDraft merges against this
@@ -236,13 +238,22 @@ export function useBountyDraft(userId?: string) {
       await storage.setItem(draftKey, JSON.stringify(updatedValue));
       // The 24h "your draft is waiting" reminder follows the last edit.
       if (userId) {
-        if (inProgress) scheduleDraftReminderSoon(userId, updatedValue);
+        if (inProgress) scheduleDraftReminderSoon(userId, updatedValue, { detailOptional });
         else void cancelDraftReminder(userId);
       }
     } catch (error) {
       console.error('Failed to save bounty draft:', error);
     }
-  }, [draftKey, setDraft, userId]);
+  }, [detailOptional, draftKey, setDraft, userId]);
+
+  const previousDetailOptionalRef = useRef(detailOptional);
+  useEffect(() => {
+    if (isLoading || previousDetailOptionalRef.current === detailOptional) return;
+    previousDetailOptionalRef.current = detailOptional;
+    if (userId && isBountyDraftInProgress(draft)) {
+      scheduleDraftReminderSoon(userId, draft, { detailOptional });
+    }
+  }, [detailOptional, draft, isLoading, userId]);
 
   // Clear draft from AsyncStorage
   const clearDraft = useCallback(async () => {

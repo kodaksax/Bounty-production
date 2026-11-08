@@ -16,6 +16,7 @@ const COMPLETE_TASK = {
 };
 
 let mockDraft: any;
+let mockDetailOptional = false;
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: jest.fn(() => ({ top: 0, bottom: 0, left: 0, right: 0 })),
@@ -32,6 +33,10 @@ jest.mock('app/hooks/useBountyDraft', () => ({
     clearDraft: jest.fn(),
     isLoading: false,
   })),
+}));
+
+jest.mock('app/screens/CreateBounty/composerFlags', () => ({
+  useTemplateDetailsEnabled: () => mockDetailOptional,
 }));
 
 jest.mock('hooks/use-auth-context', () => ({
@@ -159,6 +164,7 @@ describe('CreateBountyFlow — "Continue your post" prompt', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDraft = draftWith();
+    mockDetailOptional = false;
   });
 
   it('offers Location for a finished task with no pinned address', () => {
@@ -198,6 +204,20 @@ describe('CreateBountyFlow — "Continue your post" prompt', () => {
 
     expect(screen.queryByTestId('resume-draft-banner')).toBeNull();
     expect(promptEvents()).toEqual([]);
+  });
+
+  it('shows the resume prompt when optional details resolve after the draft loads', () => {
+    mockDraft = draftWith({ description: '' });
+    const { rerender } = render(<CreateBountyFlow />);
+
+    expect(screen.queryByTestId('resume-draft-banner')).toBeNull();
+    mockDetailOptional = true;
+    rerender(<CreateBountyFlow />);
+
+    expect(screen.getByTestId('resume-draft-banner')).toBeTruthy();
+    expect(promptEvents()).toHaveLength(1);
+    rerender(<CreateBountyFlow />);
+    expect(promptEvents()).toHaveLength(1);
   });
 
   it('stays quiet with no draft', () => {
@@ -259,6 +279,7 @@ describe('CreateBountyFlow — abandoned-draft flag', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDraft = draftWith();
+    mockDetailOptional = false;
   });
 
   it('flags a draft left by switching tabs', () => {
