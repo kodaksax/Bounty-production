@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WelcomeCarousel } from '../../components/onboarding/WelcomeCarousel';
 import type { WelcomeCarouselSlide } from '../../lib/strings/welcomeCarousel';
 import { useAuthContext } from '../../hooks/use-auth-context';
+import { markTrustContentSurface } from '../../lib/analytics/trust-content';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -100,6 +101,7 @@ export default function OnboardingWelcome() {
   const handleHowItWorks = () => {
     hapticFeedback.light();
     analyticsService.trackEvent('first_screen_how_it_works_tapped', { variant: 'carousel' });
+    markTrustContentSurface('welcome');
     router.push('/legal/how-it-works' as Href);
   };
 

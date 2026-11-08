@@ -422,6 +422,7 @@ export default function EnhancedSearchScreen() {
           results_count: results.length,
           source: 'search',
           filters_applied: filtersApplied,
+          role: authProfileService.getPrimaryRoleForAnalytics() ?? 'none',
           sort_order: searchFilters.sortBy || 'date_desc',
           is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
           // metro_region (not `region`) — getDeviceServiceabilityContext()

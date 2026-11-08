@@ -27,7 +27,10 @@ export async function inferRoleFromFirstAction(
     const profile = await authProfileService.getProfileById(userId);
     if (profile?.primary_role) return;
 
-    await authProfileService.updateProfile({ primary_role: role });
+    await authProfileService.updateProfile(
+      { primary_role: role },
+      { roleChangeSource: 'first_action_inference' }
+    );
     await analyticsService.updateUserProperties({ role });
   } catch (error) {
     console.error('[role-inference] Failed to infer role from first action:', error);

@@ -21,6 +21,7 @@ import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext'
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { markHunterActivated } from '../../../lib/analytics/lifecycle';
+import { markTrustContentSurface } from '../../../lib/analytics/trust-content';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
@@ -744,6 +745,7 @@ export default function PublicBountyDetail() {
               bountyId: String(bounty.id),
             });
             setShowIdRequirementModal(false);
+            markTrustContentSurface('bounty_detail');
             router.push('/verification/onboarding-explainer');
           }}
         />

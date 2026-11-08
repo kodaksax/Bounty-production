@@ -9,11 +9,12 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { PROFILE_FALLBACK, useSafeBack } from '../../hooks/useSafeBack';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
+import { consumeTrustContentSurface, trackTrustContentViewed } from '../../lib/analytics/trust-content';
 import { SPACING } from '../../lib/constants/accessibility';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -43,6 +44,10 @@ export default function VerificationOnboardingExplainerScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+
+  useEffect(() => {
+    trackTrustContentViewed('verification', consumeTrustContentSurface());
+  }, []);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

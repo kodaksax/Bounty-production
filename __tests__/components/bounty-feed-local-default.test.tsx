@@ -255,6 +255,28 @@ describe('BountyFeed local distance default (SBA-02)', () => {
     expect(mockChips.distance?.neutralLabel).toBe('25 mi');
   });
 
+  it.each([
+    ['poster', 'poster'],
+    [undefined, 'none'],
+  ])('reports the stored role %s on bounty_list_viewed, including an empty feed', async (stored, expected) => {
+    const { analyticsService } = require('../../lib/services/analytics-service');
+    const { authProfileService } = require('../../lib/services/auth-profile-service');
+    const track = jest.spyOn(analyticsService, 'trackEvent');
+    const role = jest
+      .spyOn(authProfileService, 'getPrimaryRoleForAnalytics')
+      .mockReturnValue(stored ?? null);
+    renderFeed();
+
+    await waitFor(() =>
+      expect(track).toHaveBeenCalledWith(
+        'bounty_list_viewed',
+        expect.objectContaining({ results_count: 0, role: expected })
+      )
+    );
+    track.mockRestore();
+    role.mockRestore();
+  });
+
   it('uses the saved profile point when the device has no fix', async () => {
     getMyCoordinates.mockResolvedValue({ ok: true, coords: BALTIMORE });
     renderFeed();
