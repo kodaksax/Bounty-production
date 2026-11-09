@@ -108,7 +108,10 @@ describe('onboarding role step', () => {
   it('saves primary_role as soon as the role is chosen', () => {
     const { getByLabelText } = render(<RoleSelectScreen />);
     fireEvent.press(getByLabelText(HUNTER));
-    expect(mockUpdateProfile).toHaveBeenCalledWith({ primary_role: 'hunter' });
+    expect(mockUpdateProfile).toHaveBeenCalledWith(
+      { primary_role: 'hunter' },
+      { roleChangeSource: 'onboarding' }
+    );
   });
 
   it('saves the changed answer when the user comes back and switches', () => {
@@ -117,8 +120,8 @@ describe('onboarding role step', () => {
     mockFocusEffect?.();
     fireEvent.press(getByLabelText(HUNTER));
     expect(mockUpdateProfile.mock.calls).toEqual([
-      [{ primary_role: 'poster' }],
-      [{ primary_role: 'hunter' }],
+      [{ primary_role: 'poster' }, { roleChangeSource: 'onboarding' }],
+      [{ primary_role: 'hunter' }, { roleChangeSource: 'onboarding' }],
     ]);
   });
 

@@ -146,7 +146,7 @@ export function useCompleteOnboarding(destination: OnboardingDestination = '/tab
       if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
 
       const updated = await withTimeout(
-        authProfileService.updateProfile(profileUpdate as any),
+        authProfileService.updateProfile(profileUpdate as any, { roleChangeSource: 'onboarding' }),
         PRE_NAV_TIMEOUT_MS,
         'updateProfile'
       );

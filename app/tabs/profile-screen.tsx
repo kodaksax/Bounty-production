@@ -15,6 +15,7 @@ import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
 import { TrustBadges } from "components/ui/trust-badges";
 import { VerificationBadgeChips } from "components/ui/verification-badge-chips";
 import { useProfileActivityStats } from "hooks/useProfileActivityStats";
+import { markTrustContentSurface } from "lib/analytics/trust-content";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { getHunterProfileChecklist, type HunterChecklistInput } from "lib/utils/hunter-profile-checklist";
 import { shareProfile as shareProfileLink } from "lib/utils/share-utils";
@@ -362,7 +363,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             return (
               <TouchableOpacity
                 style={styles.verifyIdentityRow}
-                onPress={() => router.push('/verification/onboarding-explainer')}
+                onPress={() => {
+                  markTrustContentSurface('profile');
+                  router.push('/verification/onboarding-explainer');
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={isRejected ? 'Resubmit ID verification' : 'Verify your identity'}
               >

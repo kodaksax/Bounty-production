@@ -522,9 +522,16 @@ describe('lib/posthog — session replay configuration', () => {
 
   test('before_send tags events the constructor queued before register() ran', () => {
     const tagged = options.before_send({ event: 'Application Installed', properties: { build: '96' } });
-    expect(tagged.properties).toEqual({ build: '96', app_env: 'development' });
+    expect(tagged.properties).toEqual({
+      build: '96',
+      app_env: 'development',
+      platform: 'ios',
+      app_build: '1',
+    });
     expect(options.before_send({ event: 'Application Installed' }).properties).toEqual({
       app_env: 'development',
+      platform: 'ios',
+      app_build: '1',
     });
   });
 
@@ -532,6 +539,15 @@ describe('lib/posthog — session replay configuration', () => {
     const event = { event: 'app_opened', properties: { app_env: 'production' } };
     expect(options.before_send(event).properties.app_env).toBe('production');
   });
+
+  test('before_send leaves platform and app_build that are already set alone', () => {
+    const event = { event: 'app_opened', properties: { platform: 'android', app_build: '200' } };
+    expect(options.before_send(event).properties).toMatchObject({
+      platform: 'android',
+      app_build: '200',
+    });
+  });
+
 
   describe('$exception events', () => {
     const globalDev = global as unknown as { __DEV__: boolean };
@@ -599,15 +615,25 @@ describe('lib/posthog — device-level properties survive reset()', () => {
       mod = require('../../lib/posthog');
     });
     delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
+    const startupRegisters = [...client.register.mock.calls];
     client.register.mockClear();
-    return { client, mod: mod! };
+    return { client, mod: mod!, startupRegisters };
   };
 
-  test('reset() re-registers app_env, and only app_env on an ordinary device', () => {
+  test('platform and app_build are super properties from startup, so SDK events carry them', () => {
+    const { startupRegisters } = load();
+    expect(startupRegisters).toEqual([[{ app_env: 'development', platform: 'ios', app_build: '1' }]]);
+  });
+
+  test('reset() re-registers the device properties, and only those on an ordinary device', () => {
     const { client, mod } = load();
     mod.reset();
     expect(client.reset).toHaveBeenCalledTimes(1);
-    expect(client.register).toHaveBeenCalledWith({ app_env: 'development' });
+    expect(client.register).toHaveBeenCalledWith({
+      app_env: 'development',
+      platform: 'ios',
+      app_build: '1',
+    });
     expect(client.register).not.toHaveBeenCalledWith({ internal_device: true });
   });
 

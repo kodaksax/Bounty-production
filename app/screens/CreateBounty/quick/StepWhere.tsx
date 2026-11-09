@@ -10,6 +10,7 @@ import {
 import { locationService } from '../../../../lib/services/location-service';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
+import type { ComposerTelemetry } from '../composerTelemetry';
 import { QuickStepLayout } from './QuickStepLayout';
 import { withAlpha } from '../../../../lib/utils';
 
@@ -20,6 +21,8 @@ interface StepWhereProps {
   onBack: () => void;
   /** True while the parent persists this step onto a live bounty. */
   isSaving?: boolean;
+  /** Drop-off events. Omitted when this screen edits a live bounty. */
+  telemetry?: ComposerTelemetry;
   step: number;
   totalSteps: number;
 }
@@ -35,7 +38,7 @@ interface StepWhereProps {
  * and only falls back to the device geocoder when Places has nothing (outage,
  * no key) so posting is never hard-blocked.
  */
-export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, step, totalSteps }: StepWhereProps) {
+export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, telemetry, step, totalSteps }: StepWhereProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -67,6 +70,11 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
 
   const isOnline = draft.workType === 'online';
   const addressResolved = !isOnline && !usedCurrentLocation && draft.latitude != null && draft.longitude != null;
+
+  const showAddressError = (message: string) => {
+    setError(message);
+    telemetry?.validationShown({ step, title: draft.title, field: 'location', rule: 'address_unresolved' });
+  };
 
   const cancelPendingSearch = () => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -238,7 +246,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       const coords = await locationService.geocodeAddress(suggestion.description);
       if (actionSeq !== addressActionSeq.current) return;
       if (!coords) {
-        setError("We couldn't pin that address. Try another suggestion or use your current location.");
+        showAddressError("We couldn't pin that address. Try another suggestion or use your current location.");
         return;
       }
       const detail = await locationService.reverseGeocodeDetailed(coords).catch(() => null);
@@ -246,7 +254,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood: detail?.neighborhood, zipCode: detail?.postalCode });
     } catch {
       if (actionSeq === addressActionSeq.current) {
-        setError('Could not verify that address right now. Check your connection and try again.');
+        showAddressError('Could not verify that address right now. Check your connection and try again.');
       }
     } finally {
       if (actionSeq === addressActionSeq.current) setIsSelecting(false);
@@ -273,12 +281,8 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
   };
 
   const handleContinue = async () => {
-    if (isOnline) {
-      onNext();
-      return;
-    }
-
-    if (draft.latitude != null && draft.longitude != null) {
+    if (isOnline || (draft.latitude != null && draft.longitude != null)) {
+      telemetry?.nextTapped({ step, draft, blocked: false, missingField: null });
       onNext();
       return;
     }
@@ -288,6 +292,10 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
     currentAddress.current = address;
     setIsResolving(true);
     setError(null);
+    // Stays like this if the poster edits the address before this resolves:
+    // the tap didn't advance, and nothing is wrong with the field yet.
+    let tapOutcome: { blocked: boolean; missingField: 'location' | null } = { blocked: true, missingField: null };
+    const unresolved = { blocked: true, missingField: 'location' as const };
     try {
       // The poster typed but never picked a suggestion. If Places recognises
       // the text, make them choose the exact match instead of silently pinning
@@ -297,14 +305,16 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
         const matches = await fetchSuggestions(address);
         if (actionSeq !== addressActionSeq.current || matches === null) return;
         if (matches && matches.length > 0) {
-          setError('Select your address from the suggestions so hunters nearby can find it.');
+          tapOutcome = unresolved;
+          showAddressError('Select your address from the suggestions so hunters nearby can find it.');
           return;
         }
       }
       const coords = await locationService.geocodeAddress(address);
       if (actionSeq !== addressActionSeq.current || currentAddress.current !== address) return;
       if (!coords) {
-        setError("We couldn't locate that address. Try a more specific address, or use your current location.");
+        tapOutcome = unresolved;
+        showAddressError("We couldn't locate that address. Try a more specific address, or use your current location.");
         return;
       }
       // geocodeAddress only returns coordinates; reverse-geocode to also capture
@@ -322,18 +332,31 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       }
       if (actionSeq !== addressActionSeq.current || currentAddress.current !== address) return;
       onUpdate({ latitude: coords.latitude, longitude: coords.longitude, neighborhood, zipCode });
+      tapOutcome = { blocked: false, missingField: null };
       onNext();
     } catch {
       if (actionSeq === addressActionSeq.current) {
-        setError('Could not verify that address right now. Check your connection and try again.');
+        tapOutcome = unresolved;
+        showAddressError('Could not verify that address right now. Check your connection and try again.');
       }
     } finally {
+      telemetry?.nextTapped({ step, draft, ...tapOutcome });
       if (actionSeq === addressActionSeq.current) setIsResolving(false);
     }
   };
 
-  const canContinue = !isSelecting && (isOnline || (draft.location || '').trim().length >= 3);
+  const locationMissing = !isOnline && (draft.location || '').trim().length < 3;
+  const canContinue = !isSelecting && !locationMissing;
   const showSuggestions = !isOnline && !usedCurrentLocation && !addressResolved && suggestions.length > 0;
+
+  // No message explains a disabled Continue here, so the block first reaches
+  // the poster when they tap it. An in-flight lookup isn't a missing field.
+  const handleContinueBlocked = () => {
+    telemetry?.nextTapped({ step, draft, blocked: true, missingField: locationMissing ? 'location' : null });
+    if (locationMissing) {
+      telemetry?.validationShown({ step, title: draft.title, field: 'location', rule: 'location_required' });
+    }
+  };
 
   return (
     <QuickStepLayout
@@ -345,6 +368,7 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, s
       ctaDisabled={!canContinue}
       ctaBusy={isResolving || isSaving}
       onCta={handleContinue}
+      onCtaBlocked={telemetry ? handleContinueBlocked : undefined}
     >
       {/* Use current location */}
       <TouchableOpacity

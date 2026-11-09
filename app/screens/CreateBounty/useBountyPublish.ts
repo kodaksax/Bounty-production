@@ -17,6 +17,15 @@ import { getBountyPublishError } from 'lib/utils/bounty-publish-error';
 import { shouldUseStripeNativeFunding } from 'lib/utils/payment-architecture';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
+import { composerScreenForStep } from './composerTelemetry';
+
+// Publishing only ever starts from the composer's last step.
+const trackPublishEvent: typeof analyticsService.trackEvent = (event, properties, options) =>
+  analyticsService.trackEvent(
+    event,
+    { ...properties, composer_screen: composerScreenForStep(3) },
+    options
+  );
 
 /**
  * Shared escrow/publish logic for both the 6-step (control) and 2-step
@@ -210,7 +219,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // Fires once per create attempt (including a retry) BEFORE the
       // create/escrow round-trip, so bounty_published ÷ bounty_submitted is
       // the publish success rate.
-      analyticsService.trackEvent('bounty_submitted', {
+      trackPublishEvent('bounty_submitted', {
         surface,
         role: 'poster',
         is_for_honor: publishDraft.isForHonor,
@@ -238,7 +247,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
         !useStripeNativePayments &&
         !validateBalance(publishDraft.amount, balance, publishDraft.isForHonor)
       ) {
-        analyticsService.trackEvent('post_amount_blocked_by_balance', {
+        trackPublishEvent('post_amount_blocked_by_balance', {
           surface,
           attemptedAmount: publishDraft.amount,
           balance,
@@ -264,7 +273,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // keeps the analytics payload honest against the real row regardless.
       const createdTrustTier = (createdBounty as { trust_tier?: string }).trust_tier ?? 'standard';
       if (createdTrustTier !== 'standard') {
-        analyticsService.trackEvent('trust_requirement_set', {
+        trackPublishEvent('trust_requirement_set', {
           trustTier: createdTrustTier,
           requiresIdVerified: !!(createdBounty as { requires_id_verified?: boolean }).requires_id_verified,
           bountyId: String(createdBounty.id),
@@ -303,7 +312,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       // charge the poster at exactly the moment the experiment exists to avoid.
       if (created && !publishDraft.isForHonor && publishDraft.amount > 0 && !postedUnfunded) {
         try {
-          await analyticsService.trackEvent('payment_architecture_routed', {
+          await trackPublishEvent('payment_architecture_routed', {
             bountyId: String(createdBounty.id),
             version: useStripeNativePayments ? 2 : 1,
             context: 'funding',
@@ -325,7 +334,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
                   : 1;
 
             try {
-              await analyticsService.trackEvent('payment_architecture_routed', {
+              await trackPublishEvent('payment_architecture_routed', {
                 bountyId: String(createdBounty.id),
                 version: paymentArchitectureVersion,
                 context: 'funding',
@@ -335,7 +344,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
             }
 
             try {
-              await analyticsService.trackEvent('payment_initiated', {
+              await trackPublishEvent('payment_initiated', {
                 bountyId: String(createdBounty.id),
                 architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
                 amount: publishDraft.amount,
@@ -368,7 +377,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
             }
 
             try {
-              await analyticsService.trackEvent('escrow_funded', {
+              await trackPublishEvent('escrow_funded', {
                 bountyId: String(createdBounty.id),
                 architecture: paymentArchitectureVersion === 3 ? 'v3' : 'v2',
                 amount: publishDraft.amount,
@@ -378,7 +387,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
             }
           } catch (escrowError) {
             try {
-              await analyticsService.trackEvent('payment_failed', {
+              await trackPublishEvent('payment_failed', {
                 bountyId: String(createdBounty.id),
                 architecture: 'v2',
                 stage: 'create_or_confirm',
@@ -412,7 +421,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
               sessionUserId ?? ''
             );
             try {
-              await analyticsService.trackEvent('escrow_funded', {
+              await trackPublishEvent('escrow_funded', {
                 bountyId: String(createdBounty.id),
                 architecture: 'v1',
                 amount: publishDraft.amount,
@@ -422,7 +431,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
             }
           } catch (escrowError) {
             try {
-              await analyticsService.trackEvent('payment_failed', {
+              await trackPublishEvent('payment_failed', {
                 bountyId: String(createdBounty.id),
                 architecture: 'v1',
                 stage: 'create_escrow',
@@ -456,7 +465,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
           // 'first_bounty' — but it is emitted explicitly so the funnel keeps
           // meaning the same thing after the scope is widened to
           // 'all_bounties'.
-          analyticsService.trackEvent('bounty_posted_unfunded', {
+          trackPublishEvent('bounty_posted_unfunded', {
             surface,
             bountyId: String(createdBounty.id),
             amountBucket: amountBucket(publishDraft.amount),
@@ -556,7 +565,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       !useStripeNativePayments &&
       !validateBalance(publishDraft.amount, balance, publishDraft.isForHonor)
     ) {
-      analyticsService.trackEvent('post_amount_blocked_by_balance', {
+      trackPublishEvent('post_amount_blocked_by_balance', {
         surface,
         attemptedAmount: publishDraft.amount,
         balance,

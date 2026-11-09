@@ -91,7 +91,9 @@ export default function RoleSelectScreen() {
     // founder note stayed NULL. Completion still writes it again
     // (hooks/useCompleteOnboarding.ts). Not awaited: a slow write must not
     // hold the tap, and a failed one is covered by that second write.
-    authProfileService.updateProfile({ primary_role: intent }).catch(() => {});
+    authProfileService
+      .updateProfile({ primary_role: intent }, { roleChangeSource: 'onboarding' })
+      .catch(() => {});
     // Hunters go to payout setup next; posters skip it, because nothing a
     // poster does needs a Stripe payout account until they withdraw — see
     // lib/onboarding/next-step-after-role.ts.

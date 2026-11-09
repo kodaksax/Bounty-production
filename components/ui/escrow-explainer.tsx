@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { trackTrustContentViewed } from '../../lib/analytics/trust-content';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
@@ -11,16 +12,23 @@ interface EscrowExplainerProps {
   amount?: number;
   variant?: 'inline' | 'card' | 'banner';
   showLearnMore?: boolean;
+  /** Where this explainer sits, for trust_content_viewed. */
+  analyticsSurface?: string;
 }
 
 export function EscrowExplainer({
   amount,
   variant = 'card',
   showLearnMore = true,
+  analyticsSurface = 'escrow_explainer',
 }: EscrowExplainerProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [showModal, setShowModal] = useState(false);
+  const openModal = () => {
+    setShowModal(true);
+    trackTrustContentViewed('escrow', analyticsSurface);
+  };
 
   return (
     <View style={[
@@ -46,7 +54,7 @@ export function EscrowExplainer({
         {showLearnMore && variant !== 'inline' && (
           <TouchableOpacity
             style={s.learnMoreButton}
-            onPress={() => setShowModal(true)}
+            onPress={openModal}
             accessibilityRole="button"
             accessibilityLabel="Learn how escrow protection works"
           >
@@ -58,7 +66,7 @@ export function EscrowExplainer({
 
       {showLearnMore && variant === 'inline' && (
         <TouchableOpacity
-          onPress={() => setShowModal(true)}
+          onPress={openModal}
           accessibilityRole="button"
           accessibilityLabel="Learn more"
         >

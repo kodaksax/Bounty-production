@@ -7,6 +7,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
 import { syncAccountStatus, syncInternalFlag } from '../posthog';
+import { analyticsService } from './analytics-service';
 import { isSupabaseConfigured, supabase, supabaseEnv } from '../supabase';
 import { logger } from '../utils/error-logger';
 
@@ -15,6 +16,9 @@ const PROFILE_CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes — long enough to su
 
 // Helper to generate user-specific cache key
 const getProfileCacheKey = (userId: string) => `${PROFILE_CACHE_KEY_PREFIX}:${userId}`;
+
+/** Who wrote profiles.primary_role, for the role_changed event. */
+export type RoleChangeSource = 'onboarding' | 'first_action_inference';
 
 export interface AuthProfile {
   id: string; // User ID from Supabase auth
@@ -119,6 +123,13 @@ export class AuthProfileService {
   // profile", or they route a freshly-signed-in user as if they were brand
   // new. See isProfileResolved().
   private profileResolvedForUserId: string | null = null;
+  // The last primary_role seen for this user. role_changed needs the value
+  // from before a write, and currentProfile loses it after any updateProfile.
+  private storedPrimaryRole: {
+    userId: string;
+    role: AuthProfile['primary_role'] | null;
+  } | null = null;
+  private profileUpdateTails = new Map<string, Promise<void>>();
 
   private constructor() {}
 
@@ -357,6 +368,10 @@ export class AuthProfileService {
    */
   async setSession(session: Session | null): Promise<void> {
     const previousUserId = this.currentSession?.user?.id;
+    const newUserId = session?.user?.id ?? null;
+    if (previousUserId !== newUserId) {
+      this.storedPrimaryRole = null;
+    }
     this.currentSession = session;
 
     console.log('[authProfileService] setSession called', {
@@ -415,6 +430,14 @@ export class AuthProfileService {
    */
   getCurrentProfile(): AuthProfile | null {
     return this.currentProfile;
+  }
+
+  getPrimaryRoleForAnalytics(): AuthProfile['primary_role'] | null {
+    const userId = this.getAuthUserId() ?? this.currentProfile?.id ?? null;
+    if (this.storedPrimaryRole?.userId === userId) {
+      return this.storedPrimaryRole.role;
+    }
+    return this.currentProfile?.id === userId ? this.currentProfile.primary_role ?? null : null;
   }
 
   /**
@@ -645,6 +668,9 @@ export class AuthProfileService {
           is_internal: typeof data.is_internal === 'boolean' ? data.is_internal : undefined,
         };
 
+        if (data.primary_role !== undefined) {
+          this.storedPrimaryRole = { userId, role: data.primary_role ?? null };
+        }
         console.log('[authProfileService] Profile data mapped', {
           username: profile.username,
           id: profile.id,
@@ -831,6 +857,9 @@ export class AuthProfileService {
           is_internal: typeof data.is_internal === 'boolean' ? data.is_internal : undefined,
         };
 
+        if (data.primary_role !== undefined) {
+          this.storedPrimaryRole = { userId, role: data.primary_role ?? null };
+        }
         console.log(
           '[authProfileService] Fresh profile fetched, updating cache and notifying listeners'
         );
@@ -844,11 +873,34 @@ export class AuthProfileService {
     }
   }
 
+  /** Emits role_changed when a successful write changed profiles.primary_role. */
+  private reportPrimaryRoleWrite(
+    userId: string,
+    nextRole: AuthProfile['primary_role'],
+    source: RoleChangeSource | undefined
+  ): void {
+    if (nextRole === undefined) return;
+    const previousRole =
+      this.storedPrimaryRole?.userId === userId
+        ? this.storedPrimaryRole.role
+        : this.currentProfile?.id === userId
+          ? (this.currentProfile.primary_role ?? null)
+          : null;
+    this.storedPrimaryRole = { userId, role: nextRole };
+    if (previousRole === nextRole) return;
+    void analyticsService.trackEvent('role_changed', {
+      from: previousRole ?? 'none',
+      to: nextRole,
+      source: source ?? 'unknown',
+    });
+  }
+
   /**
    * Update the authenticated user's profile
    */
   async updateProfile(
-    updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>
+    updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>,
+    options?: { roleChangeSource?: RoleChangeSource }
   ): Promise<AuthProfile | null> {
     const userId = this.getAuthUserId();
     if (!userId) {
@@ -861,6 +913,34 @@ export class AuthProfileService {
       return null;
     }
 
+    return this.serializeProfileUpdate(userId, () =>
+      this.updateProfileForUser(userId, updates, options)
+    );
+  }
+
+  private async serializeProfileUpdate<T>(userId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.profileUpdateTails.get(userId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    this.profileUpdateTails.set(userId, current);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.profileUpdateTails.get(userId) === current) {
+        this.profileUpdateTails.delete(userId);
+      }
+    }
+  }
+
+  private async updateProfileForUser(
+    userId: string,
+    updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>,
+    options?: { roleChangeSource?: RoleChangeSource }
+  ): Promise<AuthProfile | null> {
     try {
       // Use Supabase SDK's built-in network handling and timeouts
       // Use update() with an equality filter so unit tests that mock
@@ -911,6 +991,8 @@ export class AuthProfileService {
         return null;
       }
 
+      this.reportPrimaryRoleWrite(userId, updates.primary_role, options?.roleChangeSource);
+
       // Fetch the authoritative post-update row via the self-scoped RPC
       // instead of relying on UPDATE...RETURNING for it. get_my_profile()
       // is SECURITY DEFINER and hard-scoped to auth.uid(), so it can still
@@ -943,6 +1025,10 @@ export class AuthProfileService {
             ? freshRow.onboarding_completed
             : undefined,
       };
+
+      if (freshRow.primary_role !== undefined) {
+        this.storedPrimaryRole = { userId, role: freshRow.primary_role ?? null };
+      }
 
       this.currentProfile = profile;
       await this.cacheProfile(profile);

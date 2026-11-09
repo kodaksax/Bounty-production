@@ -104,10 +104,12 @@ export function usePostingCardGate({
   amount,
   isForHonor,
   surface,
+  composerScreen,
 }: {
   amount: number;
   isForHonor: boolean;
   surface: string;
+  composerScreen?: string;
 }): PostingCardGate {
   const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
   const { balance } = useWallet();
@@ -189,8 +191,9 @@ export function usePostingCardGate({
       amountBucket: amountBucket(payment.amount),
       platform: Platform.OS,
       applePayReady,
+      composer_screen: composerScreen,
     }),
-    [surface, applePayReady]
+    [surface, applePayReady, composerScreen]
   );
 
   const finish = useCallback((outcome: 'proceed' | 'dismissed') => {

@@ -11,13 +11,15 @@ import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import { switchColors } from '../../../../lib/themes/switch-colors';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { detectTrustTier } from '../../../../lib/utils/trust-tier';
-import { validateAmount, validateBalance, validateContactInfo } from '../../../../lib/utils/bounty-validation';
+import { MAX_ESCROW_CENTS, validateAmount, validateBalance, validateContactInfo } from '../../../../lib/utils/bounty-validation';
 import { useWallet } from '../../../../lib/wallet-context';
 import { QuickStepLayout } from './QuickStepLayout';
 import { trustSafetyStrings } from '../../../../lib/strings/trust-safety';
 import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
 import { PaymentMethodsModal } from '../../../../components/payment-methods-modal';
 import { withAlpha } from '../../../../lib/utils';
+import { markTrustContentSurface } from '../../../../lib/analytics/trust-content';
+import { composerScreenForStep, type ComposerTelemetry } from '../composerTelemetry';
 
 interface StepPayProps {
   draft: BountyDraft;
@@ -43,9 +45,12 @@ interface StepPayProps {
   ctaLabel?: string;
   /** Publish in flight — shows the CTA spinner and blocks a second tap. */
   isSubmitting?: boolean;
+  /** Drop-off events. Omitted while the flow is preloaded off-screen. */
+  telemetry?: ComposerTelemetry;
 }
 
 const AMOUNT_PRESETS = [20, 40, 60, 100, 150];
+const MAX_AMOUNT_DOLLARS = MAX_ESCROW_CENTS / 100;
 
 // Temporarily hides the "Posting is free" balance note under the amount field.
 const SHOW_BALANCE_WARNING = false;
@@ -71,6 +76,7 @@ export function StepPay({
   totalSteps,
   ctaLabel = 'Continue',
   isSubmitting = false,
+  telemetry,
 }: StepPayProps) {
   const router = useRouter();
   const { theme } = useAppThemeContext();
@@ -78,6 +84,7 @@ export function StepPay({
   const { balance } = useWallet();
   const { honorPostsEnabled, minimumAmount } = usePostingPolicy();
   const [error, setError] = useState<string | null>(null);
+  const composerScreen = composerScreenForStep(step);
   // SBA-05: a first-time poster saves a card before posting (no charge), so
   // hiring is one tap. Decides who is asked and runs the card sheet; posting
   // itself is unchanged. See hooks/usePostingCardGate.ts.
@@ -85,6 +92,7 @@ export function StepPay({
     amount: draft.amount,
     isForHonor: draft.isForHonor,
     surface: 'create_flow',
+    composerScreen,
   });
 
   // Mirror of the amount/honor the poster has committed on this screen, updated
@@ -122,6 +130,7 @@ export function StepPay({
         hadAmount: draft.amount > 0,
         balance,
         balanceCovered: draft.amount > 0 && balance >= draft.amount,
+        composer_screen: composerScreen,
       });
     }
     setError(null);
@@ -158,6 +167,12 @@ export function StepPay({
     const amountError = validateAmount(amount, isForHonor, minimumAmount);
     if (amountError) {
       setError(amountError);
+      telemetry?.nextTapped({ step, draft, blocked: true, missingField: 'amount' });
+      // validateAmount also refuses amounts over the maximum, which isn't a
+      // minimum-amount failure.
+      if (!isForHonor && amount <= MAX_AMOUNT_DOLLARS) {
+        telemetry?.validationShown({ step, title: draft.title, field: 'amount', rule: 'min_amount' });
+      }
       return;
     }
 
@@ -169,8 +184,12 @@ export function StepPay({
     const contactError = validateContactInfo(draft.title, draft.description);
     if (contactError) {
       setError(contactError);
+      telemetry?.nextTapped({ step, draft, blocked: true, missingField: 'contact' });
+      telemetry?.validationShown({ step, title: draft.title, field: 'contact', rule: 'contact_info' });
       return;
     }
+
+    telemetry?.nextTapped({ step, draft, blocked: false, missingField: null });
 
     const amountCovered = !isForHonor && amount > 0 && balance >= amount;
 
@@ -189,6 +208,7 @@ export function StepPay({
       category: draft.category || 'none',
       balance,
       balanceCovered: amountCovered,
+      composer_screen: composerScreen,
     });
 
     if (amountCovered) {
@@ -197,6 +217,7 @@ export function StepPay({
         amount,
         source: 'existing_balance',
         architecture: 1,
+        composer_screen: composerScreen,
       });
     }
 
@@ -264,6 +285,11 @@ export function StepPay({
       // tap while a publish, or the card check before it, is in flight.
       ctaBusy={isSubmitting || cardGate.checking}
       onCta={handleContinue}
+      onCtaBlocked={
+        telemetry
+          ? () => telemetry.nextTapped({ step, draft, blocked: true, missingField: null })
+          : undefined
+      }
     >
       {/* Amount display / custom entry */}
       <View style={styles.amountRow}>
@@ -349,7 +375,10 @@ export function StepPay({
           ) : null}
           {draft.isForHonor ? null : (
             <TouchableOpacity
-              onPress={() => router.push('/legal/how-it-works' as Href)}
+              onPress={() => {
+                markTrustContentSurface(composerScreen);
+                router.push('/legal/how-it-works' as Href);
+              }}
               accessibilityRole="link"
               accessibilityLabel="How payments and escrow work"
             >

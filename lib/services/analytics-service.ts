@@ -413,6 +413,22 @@ export type AnalyticsEvent =
   | 'post_step_completed'
   | 'post_step_abandoned'
   | 'post_title_typed'
+  // Composer drop-off detail (2026-11-08), all from
+  // app/screens/CreateBounty/composerTelemetry.ts.
+  //
+  // `post_next_tapped`: every tap of a pre-publish step's Next. `blocked: true`
+  // means the tap did not advance: Next was disabled, a request was in flight
+  // (`missing_field: null`), or validation refused it on tap. Step 2 resolves a
+  // typed address first, so its event fires when the outcome is known.
+  // `post_title_first_typed` / `post_detail_typed`: first onChangeText of the
+  // title / "What exactly, and when?" field per flow instance. Not
+  // `post_title_typed`, which despite its name fires on leaving step 1.
+  // `post_validation_shown`: a blocking message or hint first appeared, at most
+  // once per field and rule per flow instance, and only once a title exists.
+  | 'post_next_tapped'
+  | 'post_title_first_typed'
+  | 'post_detail_typed'
+  | 'post_validation_shown'
   // Canonical terminal event for a live bounty. `post_published` (the old
   // posting-funnel terminal) was folded into this on 2026-08-28 — the two
   // used to BOTH fire on every create_flow publish, which was a duplicate.
@@ -779,6 +795,18 @@ export type AnalyticsEvent =
   // guarded) from lib/analytics/lifecycle.ts. NOT a running count.
   | 'poster_activated'
   | 'hunter_activated'
+  // `profiles.primary_role` actually changed (authProfileService.updateProfile,
+  // after the write succeeds). `from` is 'none' when it was empty; `source` is
+  // 'onboarding' or 'first_action_inference'. A repeat write of the same value
+  // sends nothing. This is the STATED role. The PostHog person property `role`
+  // is different: enqueue_analytics_person_snapshot() derives it from behaviour
+  // on the server, so a change there does not produce this event.
+  | 'role_changed'
+  // Someone opened a trust explainer (lib/analytics/trust-content.ts): `topic`
+  // is what it covers, `surface` where it was opened from ('unknown' when the
+  // entry path didn't say). On /legal/how-it-works, one 'how_it_works' per open
+  // plus one per section as it comes on screen.
+  | 'trust_content_viewed'
   // Search events
   | 'search_performed'
   | 'filter_applied'
@@ -790,7 +818,7 @@ export type AnalyticsEvent =
   | 'moderation_alert_viewed';
 
 export interface AnalyticsProperties {
-  [key: string]: string | number | boolean | string[] | undefined;
+  [key: string]: string | number | boolean | string[] | null | undefined;
 }
 
 // Historically this expanded every property key into both its snake_case and
