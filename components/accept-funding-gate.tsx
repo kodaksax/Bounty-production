@@ -39,8 +39,10 @@ import { TrustSafetyNotice } from 'components/ui/trust-safety-notice';
 import type { AcceptFundingGate as AcceptFundingGateState } from 'hooks/useAcceptFunding';
 import { useWalletDeposit } from 'hooks/use-wallet-deposit';
 import { getBottomNavContentGap, getBottomNavOccludedHeight } from 'lib/constants/navigation';
+import { usePaymentPromiseCopy } from 'lib/experiments/payment-promise-copy';
 import { hapticFeedback } from 'lib/haptic-feedback';
 import { stripeService } from 'lib/services/stripe-service';
+import { fundingSourceLine, paymentPromiseStrings } from 'lib/strings/payment-promise';
 import { trustSafetyStrings } from 'lib/strings/trust-safety';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
@@ -125,6 +127,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const showPaymentPromise = usePaymentPromiseCopy();
 
   // The floating BottomNav is position:absolute and overlays this gate, so the
   // action buttons must clear the bar's *occluded* height — the bar box plus
@@ -266,8 +269,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     primaryLabel = 'Confirming payment…';
     primaryA11y = 'Confirming your payment';
   } else if (!needsPayment) {
-    primaryLabel = 'Confirm & hire';
-    primaryA11y = `Confirm and hire ${gate.hunterName} for ${amount.toFixed(2)} dollars`;
+    primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : 'Confirm & hire';
+    primaryA11y = showPaymentPromise
+      ? paymentPromiseStrings.fundAndHireA11y(gate.hunterName)
+      : `Confirm and hire ${gate.hunterName} for ${amount.toFixed(2)} dollars`;
   } else if (stripeLoading) {
     primaryLabel = 'Checking payment methods…';
     primaryA11y = 'Checking payment methods';
@@ -278,8 +283,12 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     primaryLabel = 'Processing…';
     primaryA11y = 'Processing payment';
   } else {
-    primaryLabel = `Pay ${money(chargeAmount)} & hire`;
-    primaryA11y = `Pay ${chargeAmount.toFixed(2)} dollars and hire ${gate.hunterName}`;
+    primaryLabel = showPaymentPromise
+      ? paymentPromiseStrings.fundAndHire
+      : `Pay ${money(chargeAmount)} & hire`;
+    primaryA11y = showPaymentPromise
+      ? paymentPromiseStrings.fundAndHireA11y(gate.hunterName)
+      : `Pay ${chargeAmount.toFixed(2)} dollars and hire ${gate.hunterName}`;
   }
   const primaryDisabled = busy || (needsPayment && stripeLoading);
   const showApplePay = Platform.OS === 'ios' && needsPayment && !settling && !paymentPending;
@@ -297,6 +306,28 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   // white one on dark backgrounds, so the mark stays crisp in both themes.
   const applePayBg = theme.isDark ? '#ffffff' : '#000000';
   const applePayFg = theme.isDark ? '#000000' : '#ffffff';
+
+  // A control, not copy: both versions of the sheet keep it.
+  const payingWithRow =
+    needsPayment && hasPaymentMethod && !stripeLoading ? (
+      <TouchableOpacity
+        style={styles.row}
+        onPress={() => setShowPaymentMethodsModal(true)}
+        disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel={`Change payment method, currently ${stripeService.formatCardDisplay(
+          primaryCardPaymentMethod
+        )}`}
+      >
+        <Text style={styles.rowLabel}>Paying with</Text>
+        <View style={styles.rowInline}>
+          <Text style={styles.rowValue}>
+            {stripeService.formatCardDisplay(primaryCardPaymentMethod)}
+          </Text>
+          <Text style={styles.changeLink}>Change</Text>
+        </View>
+      </TouchableOpacity>
+    ) : null;
 
   return (
     <View style={styles.root}>
@@ -332,29 +363,43 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
               <Text style={styles.title} accessibilityRole="header">
                 {gate.hunterName}
               </Text>
-              <Text style={styles.subtitle}>Bounty reward {money(amount)}</Text>
+              {showPaymentPromise ? null : (
+                <Text style={styles.subtitle}>Bounty reward {money(amount)}</Text>
+              )}
             </View>
           </View>
 
-          <View style={styles.card}>
-            <Text
-              style={styles.amount}
-              accessibilityLabel={`${(needsPayment ? chargeAmount : amount).toFixed(2)} dollars`}
-            >
-              {money(needsPayment ? chargeAmount : amount)}
-            </Text>
-            <Text style={styles.amountCaption}>
-              {needsPayment ? 'charged to your card now' : 'from your wallet balance'}
-            </Text>
-            <View style={styles.heldRow}>
-              <MaterialIcons name="lock-outline" size={16} color={theme.textSecondary} />
-              <Text style={styles.heldText}>
-                {gate.requirement?.fundingMode === 'at_accept'
-                  ? trustSafetyStrings.payWhenYouHire
-                  : 'Held for in-app completion or dispute review'}
+          {showPaymentPromise ? (
+            <View style={styles.promiseCard} testID="payment-promise-summary">
+              <Text style={styles.promiseSummary}>
+                {paymentPromiseStrings.fundingSummary(money(amount))}
               </Text>
+              <Text style={styles.promiseSource}>
+                {fundingSourceLine(amount, needsPayment ? chargeAmount : 0, money)}
+              </Text>
+              <Text style={styles.promiseHold}>{paymentPromiseStrings.fundingHold}</Text>
             </View>
-          </View>
+          ) : (
+            <View style={styles.card}>
+              <Text
+                style={styles.amount}
+                accessibilityLabel={`${(needsPayment ? chargeAmount : amount).toFixed(2)} dollars`}
+              >
+                {money(needsPayment ? chargeAmount : amount)}
+              </Text>
+              <Text style={styles.amountCaption}>
+                {needsPayment ? 'charged to your card now' : 'from your wallet balance'}
+              </Text>
+              <View style={styles.heldRow}>
+                <MaterialIcons name="lock-outline" size={16} color={theme.textSecondary} />
+                <Text style={styles.heldText}>
+                  {gate.requirement?.fundingMode === 'at_accept'
+                    ? trustSafetyStrings.payWhenYouHire
+                    : 'Held for in-app completion or dispute review'}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {gate.remainderAfterDeposit && (
             <View style={styles.notice} accessibilityRole="alert">
@@ -402,49 +447,37 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             />
           )}
 
-          <View style={styles.rowGroup}>
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Wallet balance</Text>
-              <Text style={styles.rowValue}>{money(balance)}</Text>
-            </View>
-            {needsPayment ? (
-              <>
+          {showPaymentPromise ? (
+            payingWithRow && <View style={styles.rowGroup}>{payingWithRow}</View>
+          ) : (
+            <>
+              <View style={styles.rowGroup}>
                 <View style={styles.row}>
-                  <Text style={styles.rowLabel}>Charged now</Text>
-                  <Text style={styles.rowValue}>{money(chargeAmount)}</Text>
+                  <Text style={styles.rowLabel}>Wallet balance</Text>
+                  <Text style={styles.rowValue}>{money(balance)}</Text>
                 </View>
-                {hasPaymentMethod && !stripeLoading && (
-                  <TouchableOpacity
-                    style={styles.row}
-                    onPress={() => setShowPaymentMethodsModal(true)}
-                    disabled={busy}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Change payment method, currently ${stripeService.formatCardDisplay(
-                      primaryCardPaymentMethod
-                    )}`}
-                  >
-                    <Text style={styles.rowLabel}>Paying with</Text>
-                    <View style={styles.rowInline}>
-                      <Text style={styles.rowValue}>
-                        {stripeService.formatCardDisplay(primaryCardPaymentMethod)}
-                      </Text>
-                      <Text style={styles.changeLink}>Change</Text>
+                {needsPayment ? (
+                  <>
+                    <View style={styles.row}>
+                      <Text style={styles.rowLabel}>Charged now</Text>
+                      <Text style={styles.rowValue}>{money(chargeAmount)}</Text>
                     </View>
-                  </TouchableOpacity>
+                    {payingWithRow}
+                  </>
+                ) : (
+                  <View style={styles.row}>
+                    <Text style={styles.rowLabel}>After this hire</Text>
+                    <Text style={styles.rowValue}>{money(Math.max(0, balance - amount))}</Text>
+                  </View>
                 )}
-              </>
-            ) : (
-              <View style={styles.row}>
-                <Text style={styles.rowLabel}>After this hire</Text>
-                <Text style={styles.rowValue}>{money(Math.max(0, balance - amount))}</Text>
               </View>
-            )}
-          </View>
 
-          <TrustSafetyNotice message={trustSafetyStrings.posterHire} />
-          <Text style={styles.body}>
-            {trustSafetyStrings.paymentProtection} Refunds and releases depend on the bounty’s state and any dispute review.
-          </Text>
+              <TrustSafetyNotice message={trustSafetyStrings.posterHire} />
+              <Text style={styles.body}>
+                {trustSafetyStrings.paymentProtection} Refunds and releases depend on the bounty’s state and any dispute review.
+              </Text>
+            </>
+          )}
         </View>
         </ScrollView>
 
@@ -504,13 +537,17 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
 
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Not now, go back without hiring"
+            accessibilityLabel={
+              showPaymentPromise ? paymentPromiseStrings.notYetA11y : 'Not now, go back without hiring'
+            }
             accessibilityState={{ disabled: isProcessing || paymentPending }}
             style={styles.secondaryButton}
             disabled={isProcessing || paymentPending}
             onPress={handleCancel}
           >
-            <Text style={styles.secondaryButtonText}>Not now</Text>
+            <Text style={styles.secondaryButtonText}>
+              {showPaymentPromise ? paymentPromiseStrings.notYet : 'Not now'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -585,6 +622,32 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       paddingHorizontal: 16,
       alignItems: 'center',
       gap: 4,
+    },
+    promiseCard: {
+      backgroundColor: theme.surface,
+      ...theme.insetBorder, // pressed-in edge: dark top → light bottom
+      borderWidth: 1,
+      borderRadius: 16,
+      paddingVertical: metrics.cardPaddingVertical,
+      paddingHorizontal: 16,
+      gap: metrics.sectionGap,
+    },
+    promiseSummary: {
+      color: theme.text,
+      fontSize: metrics.rowFontSize + 1,
+      lineHeight: metrics.rowFontSize + 7,
+      fontWeight: '700',
+    },
+    promiseSource: {
+      color: theme.text,
+      fontSize: metrics.bodyFontSize,
+      lineHeight: metrics.bodyFontSize + 6,
+      fontWeight: '600',
+    },
+    promiseHold: {
+      color: theme.textSecondary,
+      fontSize: metrics.bodyFontSize,
+      lineHeight: metrics.bodyFontSize + 6,
     },
     amount: { color: theme.text, fontSize: metrics.amountFontSize, fontWeight: '800' },
     amountCaption: { color: theme.textSecondary, fontSize: metrics.captionFontSize },

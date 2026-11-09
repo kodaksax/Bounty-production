@@ -12,6 +12,8 @@ import {
 } from '../../lib/analytics/trust-content';
 import { PLATFORM_FEE_DISPLAY } from '../../lib/constants/fees';
 import { EMAIL_SUBJECTS, SUPPORT_EMAIL } from '../../lib/constants/support';
+import { usePaymentPromiseCopy } from '../../lib/experiments/payment-promise-copy';
+import { paymentPromiseStrings } from '../../lib/strings/payment-promise';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -42,10 +44,9 @@ const SECTIONS: Section[] = [
     topic: 'fees',
     icon: 'sell',
     title: 'No fee to post',
-    // Deliberately does not promise "not charged when you post": server
-    // eligibility (fn_can_defer_bounty_funding and the payment_experiment_config
-    // kill switch) decides pay-at-accept, so some bounties fund at posting.
-    // Shoal 2026-09-19 posters read the old wording and then hit the funding step.
+    // Out of date, and kept only for the flag-off path: since 2026-08-27 every
+    // paid wallet bounty funds at hire. With payment-promise-copy on, the route
+    // below shows paymentPromiseStrings.howItWorksFees instead.
     body:
       `There is no charge for posting beyond the reward itself. You pay the amount you named either when you post or, for some first bounties, when you accept a hunter — the app tells you which before any money moves. A ${PLATFORM_FEE_DISPLAY} service fee is deducted from that amount when it is released, so the hunter takes home the rest — both of you see the exact numbers before you commit.`,
     terms: 'Terms §30 (Payments & Escrow)',
@@ -110,6 +111,7 @@ export default function HowItWorksRoute() {
   const router = useRouter();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const showPaymentPromise = usePaymentPromiseCopy();
 
   const surfaceRef = useRef<string | null>(null);
   const getSurface = () => {
@@ -178,7 +180,11 @@ export default function HowItWorksRoute() {
               <MaterialIcons name={section.icon} size={20} color={theme.primary} style={s.cardIcon} />
               <Text style={s.cardTitle}>{section.title}</Text>
             </View>
-            <Text style={s.cardBody}>{section.body}</Text>
+            <Text style={s.cardBody}>
+              {section.topic === 'fees' && showPaymentPromise
+                ? paymentPromiseStrings.howItWorksFees(PLATFORM_FEE_DISPLAY)
+                : section.body}
+            </Text>
             <Text style={s.cardTerms}>{section.terms}</Text>
           </View>
         ))}

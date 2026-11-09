@@ -35,6 +35,15 @@ function isOnCooldown(def: MomentDefinition, state: MomentState | null): boolean
   return false;
 }
 
+/**
+ * How many times this moment may be shown: its own maxShownCount, never more
+ * than the universal MAX_MOMENT_SHOWS (which momentsService.markShown also
+ * enforces). A moment with no cap of its own gets the universal one.
+ */
+export function effectiveMaxShownCount(def: MomentDefinition): number {
+  return Math.min(def.maxShownCount ?? MAX_MOMENT_SHOWS, MAX_MOMENT_SHOWS);
+}
+
 function isRetired(def: MomentDefinition, state: MomentState | null): boolean {
   if (!state) return false;
   // A resolved moment is terminal for this queue entry. Event-triggered
@@ -43,9 +52,27 @@ function isRetired(def: MomentDefinition, state: MomentState | null): boolean {
   if (state.status === 'dismissed' || state.status === 'completed' || state.status === 'expired') {
     return true;
   }
-  const maxShownCount = Math.min(def.maxShownCount ?? MAX_MOMENT_SHOWS, MAX_MOMENT_SHOWS);
-  if (state.shownCount >= maxShownCount) return true;
+  if (state.shownCount >= effectiveMaxShownCount(def)) return true;
   return false;
+}
+
+/**
+ * Has this moment been answered or otherwise closed, so that it should come
+ * off the screen? A missing row, 'pending', 'shown' and an elapsed snooze are
+ * all still open. MomentsProvider keeps an open moment presented regardless of
+ * what else becomes eligible.
+ */
+export function isMomentResolved(state: MomentState | null): boolean {
+  if (!state) return false;
+  if (state.status === 'snoozed') {
+    return !!state.snoozedUntil && new Date(state.snoozedUntil).getTime() > Date.now();
+  }
+  return (
+    state.status === 'dismissed' ||
+    state.status === 'completed' ||
+    state.status === 'expired' ||
+    state.status === 'in_progress'
+  );
 }
 
 function prerequisitesMet(def: MomentDefinition, states: Map<MomentType, MomentState>): boolean {

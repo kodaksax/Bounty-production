@@ -110,6 +110,12 @@ export interface MomentContext {
    * this is true (see registry.ts's trustPromptsAllowed).
    */
   hasPublishedBounty: boolean;
+  /**
+   * The `moments-eligibility-fix` flag. When true, an event-triggered moment
+   * that was presented but never answered is still eligible (see registry.ts's
+   * eligibleWhenEnqueued). Absent means off.
+   */
+  keepPresentedMoments?: boolean;
   profile: {
     hasAvatar: boolean;
     hasBio: boolean;
@@ -149,7 +155,9 @@ export interface MomentContent {
 export type MomentAction =
   | { type: 'navigate'; route: string }
   /** Resolved to a real handler by MomentsProvider's handler map (e.g. request a permission in place). */
-  | { type: 'inline'; handlerKey: string };
+  | { type: 'inline'; handlerKey: string }
+  /** Moves the tab shell to the Post tab, attributing the composer to `entryPoint`. */
+  | { type: 'composer'; entryPoint: string };
 
 export interface MomentDefinition {
   type: MomentType;
@@ -176,4 +184,6 @@ export interface MomentDefinition {
   checkCompleted?: (ctx: MomentContext) => boolean;
   content: (ctx: MomentContext) => MomentContent;
   action: MomentAction;
+  /** Replaces `action` while the `moments-eligibility-fix` flag is on. */
+  flaggedAction?: MomentAction;
 }
