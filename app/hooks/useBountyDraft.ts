@@ -34,6 +34,13 @@ function notifyDraftPresence(draftKey: string, inProgress: boolean) {
   draftPresenceListeners.forEach((listener) => listener(draftKey, inProgress));
 }
 
+// A draft written from outside the composer (Search's "Post this"). The tab
+// shell keeps the composer mounted off-screen with the draft it loaded, so
+// without this it would show the old draft and, on its next autosave, merge
+// the poster's edits onto that stale copy, putting the old title back.
+type DraftWriteListener = (draftKey: string, draft: BountyDraft) => void;
+const draftWriteListeners = new Set<DraftWriteListener>();
+
 /**
  * Standalone function to clear a specific user's bounty draft from storage.
  * Safe to call outside of React (e.g. from auth-provider on sign-out).
@@ -65,6 +72,47 @@ export async function readBountyDraftInProgress(userId?: string): Promise<Bounty
   } catch {
     return null;
   }
+}
+
+/**
+ * Starts the composer's draft from a title chosen outside it (Search's "Post
+ * this"), and hands the result to any composer already mounted.
+ *
+ * Never overwrites an unfinished post on its own: when one exists (see
+ * isBountyDraftInProgress) this refuses and returns null unless
+ * `replaceExisting` is set, which callers pass only after the poster chose
+ * Replace. Replacing starts a fresh draft, so nothing from the old post
+ * leaks into the new one. A saved draft with no title yet (a description
+ * typed first) keeps its other fields and gains the title.
+ */
+export async function seedBountyDraftTitle(
+  userId: string | undefined,
+  title: string,
+  { replaceExisting = false }: { replaceExisting?: boolean } = {}
+): Promise<BountyDraft | null> {
+  const draftKey = getDraftKey(userId);
+  let existing: BountyDraft | null = null;
+  try {
+    const saved = await storage.getItem(draftKey);
+    existing = saved ? (JSON.parse(saved) as BountyDraft) : null;
+  } catch {
+    existing = null;
+  }
+  const inProgress = isBountyDraftInProgress(existing);
+  if (inProgress && !replaceExisting) return null;
+
+  const next: BountyDraft =
+    existing && !inProgress ? { ...defaultDraft, ...existing, title } : { ...defaultDraft, title };
+  await storage.setItem(draftKey, JSON.stringify(next));
+  notifyDraftPresence(draftKey, isBountyDraftInProgress(next));
+  draftWriteListeners.forEach((listener) => listener(draftKey, next));
+  if (userId) {
+    // The replaced post is gone, so the app-open "your draft is waiting"
+    // prompt has nothing of it to offer. The reminder follows the new one.
+    if (inProgress) await clearDraftAbandoned(userId);
+    scheduleDraftReminderSoon(userId, next);
+  }
+  return next;
 }
 
 /**
@@ -221,6 +269,22 @@ export function useBountyDraft(userId?: string) {
     // this effect when it re-runs or on unmount.
     return () => {
       loadRequestCounterRef.current++;
+    };
+  }, [draftKey, setDraft]);
+
+  // Follow drafts written from outside the composer (seedBountyDraftTitle).
+  useEffect(() => {
+    const listener: DraftWriteListener = (key, next) => {
+      if (key !== draftKey) return;
+      // A load still in flight may have read storage before the write; its
+      // result is older than this one, so retire it.
+      loadRequestCounterRef.current++;
+      setDraft(next);
+      setIsLoading(false);
+    };
+    draftWriteListeners.add(listener);
+    return () => {
+      draftWriteListeners.delete(listener);
     };
   }, [draftKey, setDraft]);
 

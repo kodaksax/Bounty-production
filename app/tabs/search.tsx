@@ -28,7 +28,10 @@ import {
     SearchRowIconButton,
 } from '../../components/ui/search-bar-row';
 import { Skeleton } from '../../components/ui/skeleton';
+import { PostFromSearchCard } from '../../components/search/post-from-search-card';
+import { postFromSearch } from '../../components/search/post-from-search';
 import { useAccessibleAnimation } from '../../hooks/use-accessible-animation';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { useShowTestBounties } from '../../hooks/useShowTestBounties';
 import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
 import { A11Y, SPACING } from '../../lib/constants/accessibility';
@@ -54,6 +57,14 @@ import {
 } from '../../lib/utils/bounty-completeness';
 import { logger } from '../../lib/utils/error-logger';
 import { formatPublicLocation } from '../../lib/utils/public-location';
+import {
+    SEARCH_DEBOUNCE_BASE_MS,
+    TYPING_GAP_IGNORE_MS,
+    TYPING_PACE_WINDOW,
+    postableTitleFromQuery,
+    searchDebounceMs,
+    searchPostCtaProps,
+} from '../../lib/utils/search-post-fallback';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 import { isNativeMapAvailable } from '../../lib/config/maps';
@@ -146,6 +157,14 @@ export default function EnhancedSearchScreen() {
   // faster, later one's results (e.g. filters change shortly after typing,
   // firing two overlapping requests).
   const searchRequestIdRef = useRef(0);
+  // The query the bounty results on screen belong to ('' for the browse list
+  // shown before anything is typed, null before the first search lands).
+  // Search is debounced, so this trails `query` while the poster types.
+  const [searchedBountyQuery, setSearchedBountyQuery] = useState<string | null>(null);
+  // Gaps between the poster's recent keystrokes, for the typing-paced
+  // debounce (see searchDebounceMs).
+  const lastKeystrokeAtRef = useRef<number | null>(null);
+  const keystrokeGapsRef = useRef<number[]>([]);
   const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([]);
   const [isLoadingTrending, setIsLoadingTrending] = useState(true);
 
@@ -307,7 +326,25 @@ export default function EnhancedSearchScreen() {
     loadRecentSearches();
   }, [loadRecentSearches]);
 
-  // Autocomplete suggestions with 500ms debounce
+  // A fixed 300 ms debounce still sent one query per keystroke for anyone
+  // typing slower than that. The poster this was tuned on typed a key every
+  // ~580 ms and sent 34 queries for one sentence. So the wait follows the
+  // typist's own pace, from 300 ms up to 1.2 s (see searchDebounceMs).
+  const recordKeystroke = useCallback(() => {
+    const now = Date.now();
+    const last = lastKeystrokeAtRef.current;
+    lastKeystrokeAtRef.current = now;
+    if (last === null) return;
+    keystrokeGapsRef.current = [...keystrokeGapsRef.current, now - last].slice(-TYPING_PACE_WINDOW);
+  }, []);
+  const currentSearchDebounceMs = useCallback(() => {
+    const last = lastKeystrokeAtRef.current;
+    // Not typing (a filter change, a tapped recent search): no pace to follow.
+    if (last === null || Date.now() - last > TYPING_GAP_IGNORE_MS) return SEARCH_DEBOUNCE_BASE_MS;
+    return searchDebounceMs(keystrokeGapsRef.current);
+  }, []);
+
+  // Autocomplete suggestions with 500ms debounce (longer for a slow typist)
   useEffect(() => {
     if (autocompleteRef.current) clearTimeout(autocompleteRef.current);
 
@@ -330,12 +367,12 @@ export default function EnhancedSearchScreen() {
       } finally {
         setIsLoadingSuggestions(false);
       }
-    }, AUTOCOMPLETE_DEBOUNCE_MS);
+    }, Math.max(AUTOCOMPLETE_DEBOUNCE_MS, currentSearchDebounceMs()));
 
     return () => {
       if (autocompleteRef.current) clearTimeout(autocompleteRef.current);
     };
-  }, [query]);
+  }, [query, currentSearchDebounceMs]);
 
   const handleSuggestionPress = useCallback(
     (suggestion: AutocompleteSuggestion) => {
@@ -403,6 +440,7 @@ export default function EnhancedSearchScreen() {
           ...mapped.filter(m => !m.incomplete),
           ...mapped.filter(m => m.incomplete),
         ]);
+        setSearchedBountyQuery(searchQuery.trim());
 
         const filtersApplied = describeBountyFilters(searchFilters);
         const trimmedLength = searchQuery.trim().length;
@@ -471,7 +509,7 @@ export default function EnhancedSearchScreen() {
     }
   }, []);
 
-  // Debounce search
+  // Debounce search: 300 ms, or the typist's own pace when slower.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -481,12 +519,62 @@ export default function EnhancedSearchScreen() {
       } else {
         performUserSearch(query);
       }
-    }, 300);
+    }, currentSearchDebounceMs());
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, filters, activeTab, performBountySearch, performUserSearch]);
+  }, [query, filters, activeTab, performBountySearch, performUserSearch, currentSearchDebounceMs]);
+
+  // ── "Need this done? Post it as a bounty" ────────────────────────────────
+  // A query that reads like a job request ("Remove home trash to apt.")
+  // finds nothing: the search is a substring match on titles. Offer to post
+  // it instead. Prominent in place of the empty results; compact under real
+  // ones. It follows the live query (that is what gets posted), judged
+  // against the last search that landed, so it doesn't flicker on and off
+  // between keystrokes while the next search is pending.
+  const { session } = useAuthContext();
+  const postTitle = useMemo(() => postableTitleFromQuery(query), [query]);
+  const postCardVariant: 'prominent' | 'compact' | null =
+    activeTab === 'bounties' && postTitle && searchedBountyQuery && !error
+      ? bountyResults.length === 0
+        ? 'prominent'
+        : 'compact'
+      : null;
+  const [isStartingPost, setIsStartingPost] = useState(false);
+
+  // search_post_cta_shown: once per appearance, and again if the card
+  // switches between its zero-results and under-results forms. Not per
+  // keystroke.
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const postCardVisible = postCardVariant !== null && !showMap;
+  useEffect(() => {
+    if (!postCardVisible) return;
+    analyticsService.trackEvent(
+      'search_post_cta_shown',
+      searchPostCtaProps(queryRef.current, postCardVariant === 'prominent')
+    );
+  }, [postCardVisible, postCardVariant]);
+
+  const handlePostFromSearch = useCallback(async () => {
+    if (!postTitle || isStartingPost) return;
+    analyticsService.trackEvent(
+      'search_post_cta_tapped',
+      searchPostCtaProps(query, bountyResults.length === 0)
+    );
+    setIsStartingPost(true);
+    try {
+      const outcome = await postFromSearch(session?.user?.id, postTitle);
+      // The composer is opening on the tab shell underneath; get out of
+      // its way. Anything else leaves the poster here with their search.
+      if (outcome !== 'dismissed') closeSearch();
+    } catch (e) {
+      logger.warning('Post from search failed', { error: e });
+    } finally {
+      setIsStartingPost(false);
+    }
+  }, [postTitle, isStartingPost, query, bountyResults.length, session?.user?.id, closeSearch]);
 
   const handleRecentSearchClick = useCallback(
     (search: RecentSearch) => {
@@ -738,6 +826,7 @@ export default function EnhancedSearchScreen() {
           placeholderTextColor={theme.textDisabled}
           maxFontSizeMultiplier={SEARCH_FIELD_MAX_FONT_SCALE}
           onChangeText={text => {
+            recordKeystroke();
             setQuery(text);
             if (!text.trim()) {
               setShowSuggestions(false);
@@ -1032,13 +1121,36 @@ export default function EnhancedSearchScreen() {
             renderItem={renderBountyItem}
             contentContainerStyle={s.resultsContainer}
             keyboardDismissMode="on-drag"
+            // The poster is mid-sentence with the keyboard up when the
+            // "Post this" card appears. Without this, the first tap only
+            // closes the keyboard and a second is needed to press anything.
+            keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
-              query && !isSearching && !error ? (
+              postCardVariant === 'prominent' && postTitle ? (
+                // The query reads like a job, not a keyword: "check your
+                // spelling" would be the wrong advice. Offer to post it.
+                <PostFromSearchCard
+                  variant="prominent"
+                  title={postTitle}
+                  onPost={handlePostFromSearch}
+                  busy={isStartingPost}
+                />
+              ) : query && !isSearching && !error ? (
                 <EmptyState
                   icon="search-off"
                   title="No bounties found"
                   description={`No bounties matched "${query}". Try a different keyword or check your spelling.`}
                   size="sm"
+                />
+              ) : null
+            }
+            ListFooterComponent={
+              postCardVariant === 'compact' && postTitle ? (
+                <PostFromSearchCard
+                  variant="compact"
+                  title={postTitle}
+                  onPost={handlePostFromSearch}
+                  busy={isStartingPost}
                 />
               ) : null
             }
