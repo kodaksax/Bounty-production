@@ -16,7 +16,9 @@ import {
 import { useIsScreenFocused } from '../../../../hooks/useRouteFocus';
 import { DEFAULT_OVERLAY_KEY, useTopInsetOverlay } from '../../../../lib/context/TopInsetOverlayContext';
 import { pageTranslateX, useTabPager } from '../../../../components/ui/tab-pager';
+import { usePaymentPromiseCopy } from '../../../../lib/experiments/payment-promise-copy';
 import { analyticsService } from '../../../../lib/services/analytics-service';
+import { paymentPromiseStrings } from '../../../../lib/strings/payment-promise';
 import {
   validateContactInfo,
   validateDescription,
@@ -92,6 +94,7 @@ const MAX_LENGTH = 120;
  */
 export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintStatusBar = true, topInset = 0, telemetry, step, totalSteps }: StepTaskProps) {
   const { theme } = useAppThemeContext();
+  const showPaymentPromise = usePaymentPromiseCopy();
   // Scales off the viewport width so the headline stays proportionate from
   // small phones up to tablets. 375 is the reference width.
   const { width } = useWindowDimensions();
@@ -270,6 +273,9 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
             <Text style={styles.subtitle}>
               Name it. Set a reward. Someone nearby gets it done.
             </Text>
+            {showPaymentPromise ? (
+              <Text style={styles.paymentPromise}>{paymentPromiseStrings.stepTaskLine}</Text>
+            ) : null}
           </View>
         </View>
 
@@ -426,6 +432,13 @@ function makeStyles(theme: AppTheme, scale: number) {
       fontSize: 15,
       lineHeight: 21,
       color: 'rgba(255,255,255,0.88)',
+    },
+    paymentPromise: {
+      marginTop: 8,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: '600',
+      color: HERO_TEXT,
     },
     card: {
       marginTop: -CARD_OVERLAP + 16,

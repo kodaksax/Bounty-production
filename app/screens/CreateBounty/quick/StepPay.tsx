@@ -7,6 +7,8 @@ import { usePostingCardGate } from '../../../../hooks/usePostingCardGate';
 import { usePostingPolicy } from '../../../../hooks/usePostingPolicy';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
+import { usePaymentPromiseCopy } from '../../../../lib/experiments/payment-promise-copy';
+import { paymentPromiseStrings } from '../../../../lib/strings/payment-promise';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import { switchColors } from '../../../../lib/themes/switch-colors';
 import type { AppTheme } from '../../../../lib/themes/types';
@@ -81,6 +83,7 @@ export function StepPay({
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const { balance } = useWallet();
+  const showPaymentPromise = usePaymentPromiseCopy();
   const { honorPostsEnabled, minimumAmount } = usePostingPolicy();
   const [error, setError] = useState<string | null>(null);
   const composerScreen = composerScreenForStep(step);
@@ -362,7 +365,9 @@ export function StepPay({
           <Text style={styles.infoTitle}>
             {draft.isForHonor
               ? 'This is a for-honor bounty.'
-              : trustSafetyStrings.payWhenYouHire}
+              : showPaymentPromise
+                ? paymentPromiseStrings.stepPayLine
+                : trustSafetyStrings.payWhenYouHire}
           </Text>
           <Text style={styles.infoBody}>
             {draft.isForHonor
