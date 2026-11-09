@@ -122,9 +122,19 @@ function Capture() {
 }
 
 const mockOpenComposer = jest.fn();
-function Root({ activeScreen = 'bounty' }: { activeScreen?: string }) {
+function Root({
+  activeScreen = 'bounty',
+  suppressed = false,
+}: {
+  activeScreen?: string;
+  suppressed?: boolean;
+}) {
   return (
-    <MomentsProvider activeScreen={activeScreen} onOpenComposer={mockOpenComposer}>
+    <MomentsProvider
+      activeScreen={activeScreen}
+      onOpenComposer={mockOpenComposer}
+      suppressed={suppressed}
+    >
       <Capture />
     </MomentsProvider>
   );
@@ -241,6 +251,81 @@ describe('with moments-eligibility-fix on', () => {
     expect(latest?.activeMoment).toBeNull();
   });
 
+  it('expires at the universal show cap when its own cap is higher', async () => {
+    // stripe_connect_onboarding allows 5 shows, but the engine retires every
+    // moment at MAX_MOMENT_SHOWS (3), so it will never be shown again.
+    queue(row('stripe_connect_onboarding', { status: 'shown', shownCount: 3 }));
+    render(<Root />);
+    await waitFor(() =>
+      expect(momentsService.markExpired).toHaveBeenCalledWith('user-1', 'stripe_connect_onboarding')
+    );
+  });
+
+  it('hides a moment behind the shell sheet and brings the same one back after', async () => {
+    // One allowed show, so a re-presentation or an expiry while hidden would show up.
+    queue(row('inactive_user_return'));
+    const { rerender } = render(<Root />);
+    await waitFor(() => expect(latest?.activeMoment?.type).toBe('inactive_user_return'));
+    await settle();
+
+    await act(async () => {
+      rerender(<Root suppressed />);
+    });
+    await settle();
+    expect(latest?.activeMoment).toBeNull();
+    expect(latest?.activeContent).toBeNull();
+
+    await act(async () => {
+      rerender(<Root />);
+    });
+    await settle();
+    expect(latest?.activeMoment?.type).toBe('inactive_user_return');
+    expect(momentsService.markShown).toHaveBeenCalledTimes(1);
+    expect(momentsService.markExpired).not.toHaveBeenCalled();
+
+    // A tap right as it reappears is ignored, like on any fresh presentation.
+    await act(async () => {
+      latest!.dismiss();
+    });
+    expect(momentsService.markDismissed).not.toHaveBeenCalled();
+    elapse(1000);
+    await act(async () => {
+      latest!.dismiss();
+    });
+    expect(momentsService.markDismissed).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bring back a dismissed moment when an older refresh lands after', async () => {
+    queue(row('post_first_bounty'));
+    render(<Root />);
+    await waitFor(() => expect(latest?.activeMoment?.type).toBe('post_first_bounty'));
+    await settle();
+
+    // A refresh whose fetch is still out when the user answers.
+    let landStaleFetch: (states: Map<string, any>) => void = () => {};
+    (momentsService.fetchStates as jest.Mock).mockImplementationOnce(
+      () => new Promise(resolve => (landStaleFetch = resolve))
+    );
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = latest!.refresh();
+    });
+
+    elapse(1000);
+    await act(async () => {
+      latest!.dismiss();
+    });
+    expect(latest?.activeMoment).toBeNull();
+
+    await act(async () => {
+      landStaleFetch(new Map([['post_first_bounty', row('post_first_bounty', { status: 'shown', shownCount: 1 })]]));
+      await pending;
+    });
+    await settle();
+    expect(latest?.activeMoment).toBeNull();
+    expect(momentsService.markShown).toHaveBeenCalledTimes(1);
+  });
+
   it('closes once snoozed', async () => {
     queue(row('post_first_bounty'));
     render(<Root />);
@@ -293,6 +378,14 @@ describe('with moments-eligibility-fix off', () => {
     queue(row('inactive_user_return'));
     render(<Root />);
     await waitFor(() => expect(momentsService.markExpired).toHaveBeenCalledTimes(1));
+  });
+
+  it('expires only on its own cap', async () => {
+    queue(row('stripe_connect_onboarding', { status: 'shown', shownCount: 3 }));
+    render(<Root />);
+    await settle();
+    await settle();
+    expect(momentsService.markExpired).not.toHaveBeenCalled();
   });
 
   it('does not ask again next session', async () => {

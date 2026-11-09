@@ -35,6 +35,15 @@ function isOnCooldown(def: MomentDefinition, state: MomentState | null): boolean
   return false;
 }
 
+/**
+ * How many times this moment may be shown: its own maxShownCount, never more
+ * than the universal MAX_MOMENT_SHOWS (which momentsService.markShown also
+ * enforces). A moment with no cap of its own gets the universal one.
+ */
+export function effectiveMaxShownCount(def: MomentDefinition): number {
+  return Math.min(def.maxShownCount ?? MAX_MOMENT_SHOWS, MAX_MOMENT_SHOWS);
+}
+
 function isRetired(def: MomentDefinition, state: MomentState | null): boolean {
   if (!state) return false;
   // A resolved moment is terminal for this queue entry. Event-triggered
@@ -43,8 +52,7 @@ function isRetired(def: MomentDefinition, state: MomentState | null): boolean {
   if (state.status === 'dismissed' || state.status === 'completed' || state.status === 'expired') {
     return true;
   }
-  const maxShownCount = Math.min(def.maxShownCount ?? MAX_MOMENT_SHOWS, MAX_MOMENT_SHOWS);
-  if (state.shownCount >= maxShownCount) return true;
+  if (state.shownCount >= effectiveMaxShownCount(def)) return true;
   return false;
 }
 

@@ -26,7 +26,11 @@ import { useAuthProfile } from '../hooks/useAuthProfile';
 import { hapticFeedback } from '../lib/haptic-feedback';
 import { backfillEventMoments } from '../lib/moments/backfill';
 import { useMomentsEligibilityFixEnabled } from '../lib/moments/eligibilityFixFlag';
-import { evaluateNextMoment, isMomentResolved } from '../lib/moments/engine';
+import {
+    effectiveMaxShownCount,
+    evaluateNextMoment,
+    isMomentResolved,
+} from '../lib/moments/engine';
 import { momentsService } from '../lib/moments/momentsService';
 import { referralService } from '../lib/moments/referral-service';
 import { MOMENT_REGISTRY } from '../lib/moments/registry';
@@ -79,6 +83,34 @@ async function fetchEngagement(
       .eq('hunter_id', userId),
   ]);
   return { hasPublishedBounty: !!bountyCount, hasEngaged: !!bountyCount || !!requestCount };
+}
+
+/**
+ * A refresh() whose fetch started before the user answered a moment can land
+ * after the answer, still reading 'shown'. With moments-eligibility-fix on,
+ * 'shown' is eligible again, so installing that row would re-present (and
+ * count another show of) the moment the user just closed. Keep the local
+ * answer unless the server has since recorded a later show.
+ */
+function keepLocalAnswers(
+  local: Map<MomentType, MomentState>,
+  fetched: Map<MomentType, MomentState>
+): Map<MomentType, MomentState> {
+  let merged: Map<MomentType, MomentState> | null = null;
+  for (const [type, row] of fetched) {
+    const mine = local.get(type);
+    if (
+      row.status === 'shown' &&
+      mine &&
+      mine.status !== 'shown' &&
+      mine.status !== 'pending' &&
+      mine.shownCount >= row.shownCount
+    ) {
+      merged ??= new Map(fetched);
+      merged.set(type, mine);
+    }
+  }
+  return merged ?? fetched;
 }
 
 /** The tab-shell key for the Post tab (the bounty composer). */
@@ -175,7 +207,9 @@ interface MomentsProviderProps {
   onOpenComposer?: (entryPoint: string) => void;
   /**
    * True while the shell shows a sheet of its own (the app-open resume
-   * prompt). No moment is selected meanwhile, so the two never stack.
+   * prompt). No moment is selected meanwhile, so the two never stack. With
+   * moments-eligibility-fix on, a moment already up is hidden rather than
+   * closed, and comes back once this goes false.
    */
   suppressed?: boolean;
 }
@@ -338,7 +372,8 @@ export function MomentsProvider({
     // to let evaluateNextMoment pick up an existing dismissed/snoozed/
     // completed moment before the real map landed and mark it shown again
     // — see permissionsChecked's doc comment.
-    setStates(resolvedStates);
+    const finalStates = resolvedStates;
+    setStates(prev => (eligibilityFixEnabled ? keepLocalAnswers(prev, finalStates) : finalStates));
     setPermissionsChecked(true);
 
     // Session tracking for inactive_user_return + future lifecycle
@@ -373,7 +408,7 @@ export function MomentsProvider({
         if (userIdRef.current === requestUserId) setSessionCount(count);
       });
     }
-  }, [userId, profile?.primary_role, profile?.last_session_at, isPrimary]);
+  }, [userId, profile?.primary_role, profile?.last_session_at, isPrimary, eligibilityFixEnabled]);
 
   useEffect(() => {
     // Reset every user-scoped readiness/data field immediately on any
@@ -557,11 +592,16 @@ export function MomentsProvider({
         }
         // Exhausted its maxShownCount without ever being completed or
         // explicitly dismissed/snoozed — distinguish "we gave up asking"
-        // from "the user said no" in backlog/conversion reporting.
+        // from "the user said no" in backlog/conversion reporting. Under the
+        // flag this uses the same cap the engine retires on, so a moment the
+        // engine will never show again can't sit at 'shown' forever.
+        const expiryCap = eligibilityFixEnabled
+          ? effectiveMaxShownCount(def)
+          : def.maxShownCount;
         if (
           state?.status === 'shown' &&
-          def.maxShownCount != null &&
-          state.shownCount >= def.maxShownCount &&
+          expiryCap != null &&
+          state.shownCount >= expiryCap &&
           // The last allowed show reaches the cap the moment it is presented;
           // it hasn't been given up on while it is still on screen.
           !(eligibilityFixEnabled && activeMomentRef.current?.type === def.type)
@@ -592,7 +632,18 @@ export function MomentsProvider({
     const ctx = buildContext();
     // `suppressed` yields to another sheet the shell is showing, so two
     // modals never stack; the queue picks up again once it is answered.
-    if (!userId || suppressed || (!ctx && !eligibilityFixEnabled)) {
+    if (!userId || (suppressed && !eligibilityFixEnabled) || (!ctx && !eligibilityFixEnabled)) {
+      setActiveMoment(null);
+      setActiveContent(null);
+      return;
+    }
+    if (suppressed) {
+      // Under the flag a moment already up is only hidden (see `hidden`
+      // below), not cleared: clearing it would re-present it, and count
+      // another show, once the other sheet closes. Nothing new is picked
+      // while hidden, since presenting marks a moment shown.
+      const current = activeMomentRef.current;
+      if (current && !isMomentResolved(states.get(current.type) ?? null)) return;
       setActiveMoment(null);
       setActiveContent(null);
       return;
@@ -637,6 +688,19 @@ export function MomentsProvider({
     analyticsService.trackEvent('moment_shown', { momentType: activeMoment.type });
   }, [activeMoment, userId, patchState]);
 
+  // A moment held through `suppressed` stays active but off screen until the
+  // shell's own sheet closes, so the two never stack.
+  const hidden = eligibilityFixEnabled && suppressed;
+  // Coming back into view is a fresh presentation as far as stray taps go: a
+  // double-tap that answers the shell's sheet must not also answer this one.
+  const wasHiddenRef = useRef(hidden);
+  useEffect(() => {
+    if (wasHiddenRef.current && !hidden && activeMomentRef.current) {
+      shownAtRef.current = Date.now();
+    }
+    wasHiddenRef.current = hidden;
+  }, [hidden]);
+
   // Nothing spaces moments apart, so resolving one can present the next in the
   // same sheet with its buttons in the same place — a double-tap then lands on
   // a moment the user never saw. Ignore such taps (the sheet stays open)
@@ -648,10 +712,12 @@ export function MomentsProvider({
   // always sets it, and if some path ever skipped that, ignoring taps would
   // trap the user in a sheet they can't close. markDismissed's own backstop
   // still reports such a dismissal.
+  // A hidden moment can't have been tapped, so it is treated the same way.
   const isPresentationTooRecent = useCallback(() => {
+    if (hidden) return true;
     const shownAt = shownAtRef.current;
     return shownAt != null && Date.now() - shownAt < MIN_MOMENT_VISIBLE_MS;
-  }, []);
+  }, [hidden]);
 
   // "Later" on a prompt the Post tap ran into carries on to the composer.
   const continueIfTriggeredByPost = useCallback(() => {
@@ -678,7 +744,7 @@ export function MomentsProvider({
 
   const snooze = useCallback(
     (hours = 24) => {
-      if (!activeMoment || !userId) return;
+      if (!activeMoment || !userId || hidden) return;
       const snoozedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
       momentsService.markSnoozed(userId, activeMoment.type, hours);
       patchState(activeMoment.type, { status: 'snoozed', snoozedUntil });
@@ -687,7 +753,7 @@ export function MomentsProvider({
       setActiveContent(null);
       continueIfTriggeredByPost();
     },
-    [activeMoment, userId, patchState, continueIfTriggeredByPost]
+    [activeMoment, userId, hidden, patchState, continueIfTriggeredByPost]
   );
 
   const accept = useCallback(async () => {
@@ -755,8 +821,15 @@ export function MomentsProvider({
   ]);
 
   const value = useMemo<MomentsContextValue>(
-    () => ({ activeMoment, activeContent, accept, dismiss, snooze, refresh }),
-    [activeMoment, activeContent, accept, dismiss, snooze, refresh]
+    () => ({
+      activeMoment: hidden ? null : activeMoment,
+      activeContent: hidden ? null : activeContent,
+      accept,
+      dismiss,
+      snooze,
+      refresh,
+    }),
+    [hidden, activeMoment, activeContent, accept, dismiss, snooze, refresh]
   );
 
   return <MomentsContext.Provider value={value}>{children}</MomentsContext.Provider>;
