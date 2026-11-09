@@ -266,6 +266,22 @@ describe('sign-in recovery after a failed attempt', () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalled());
   });
 
+  it('remounts the Sign In button when the error banner pushes it down', async () => {
+    signInWithPassword.mockResolvedValue(INVALID_CREDENTIALS);
+
+    const utils = render(<SignInForm />);
+    fillCredentials(utils, 'wrong-password');
+    const buttonBefore = utils.getByLabelText('Sign in');
+
+    await tapSignIn(utils);
+    await waitFor(() => expect(signInWithPassword).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(utils.getByLabelText('Sign in')).not.toBe(buttonBefore));
+
+    // A new native view gets a new iOS hit frame, so the retry tap reaches it.
+    await tapSignIn(utils);
+    await waitFor(() => expect(signInWithPassword).toHaveBeenCalledTimes(2));
+  });
+
   it('does not enable Google sign-in on Android from an iOS client ID', () => {
     const originalOs = Platform.OS;
     // The react-native jest preset ships the iOS Platform mock, whose
