@@ -2,7 +2,7 @@
  * The one line at the top of the Post tab, and how it sits with the payment
  * line on composer step 1. Flag off must leave today's screen alone.
  */
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, useWindowDimensions } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 
@@ -68,6 +68,7 @@ const step1 = () =>
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (useWindowDimensions as jest.Mock).mockReturnValue({ width: 375, height: 812, scale: 2, fontScale: 1 });
   mockLocalProofOn = true;
   mockPaymentPromiseOn = false;
   mockRole = 'poster';
@@ -169,6 +170,29 @@ describe('composer step 1', () => {
     expect(queryByText(PROOF_ANY)).toBeNull();
     expect(mockLocationHook).not.toHaveBeenCalled();
     expect(mockGetProof).not.toHaveBeenCalled();
+  });
+
+  describe.each([
+    ['flag on, short phone, email banner', true, 667, false, 1],
+    ['flag on, short phone, no banner', true, 667, true, undefined],
+    ['flag on, tall phone, email banner', true, 812, false, undefined],
+    ['flag off, short phone, email banner', false, 667, false, undefined],
+  ])('%s', (_name, flag, height, tintStatusBar, titleLines) => {
+    it('sizes the headline', () => {
+      mockLocalProofOn = flag;
+      (useWindowDimensions as jest.Mock).mockReturnValue({ width: 375, height, scale: 2, fontScale: 1 });
+      const { getByText } = render(
+        <StepTask
+          draft={draft}
+          onUpdate={jest.fn()}
+          onNext={jest.fn()}
+          step={1}
+          totalSteps={3}
+          tintStatusBar={tintStatusBar}
+        />
+      );
+      expect(getByText('What do you need done?').props.numberOfLines).toBe(titleLines);
+    });
   });
 
   it('flag off: the payment line is unchanged', () => {
