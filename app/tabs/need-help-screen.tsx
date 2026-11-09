@@ -20,6 +20,11 @@ interface NeedHelpScreenProps {
    * `isActive`). Defaults to true.
    */
   isActive?: boolean
+  /**
+   * Where this visit to the Post tab came from, when something other than the
+   * tab itself sent the poster here. Becomes the composer's `entry_point`.
+   */
+  entryPoint?: string
 }
 
 /**
@@ -31,7 +36,7 @@ interface NeedHelpScreenProps {
  * flow owns the full screen so its progress bar sits at the top, matching the
  * design; there is deliberately no branding/wallet header here.
  */
-export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav, isActive = true }: NeedHelpScreenProps) {
+export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav, isActive = true, entryPoint = "need_help_tab" }: NeedHelpScreenProps) {
   const insets = useSafeAreaInsets()
   const { theme } = useAppThemeContext()
 
@@ -63,7 +68,7 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
     >
       <CreateBountyFlow
         key={flowKey}
-        entryPoint="need_help_tab"
+        entryPoint={entryPoint}
         // Every flow instance here only becomes active when the poster
         // navigates to the Post tab (tab bar, swipe or an in-app CTA), and
         // CreateBountyFlow fires nothing while inactive — so whenever this

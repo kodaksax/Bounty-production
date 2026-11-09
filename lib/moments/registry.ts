@@ -51,8 +51,11 @@ function accountAgeDays(ctx: MomentContext): number {
 }
 
 /** Event-triggered moments share this eligibility rule: only show once explicitly enqueued and not yet resolved. */
-function eligibleWhenEnqueued(_ctx: MomentContext, state: MomentState | null): boolean {
+function eligibleWhenEnqueued(ctx: MomentContext, state: MomentState | null): boolean {
   if (state?.status === 'pending') return true;
+  // Without this, marking a moment 'shown' makes it ineligible on the very
+  // next evaluation and the sheet moves on before anyone can read it.
+  if (ctx.keepPresentedMoments && state?.status === 'shown') return true;
   if (state?.status !== 'snoozed' || !state.snoozedUntil) return false;
   return new Date(state.snoozedUntil).getTime() <= Date.now();
 }
@@ -378,6 +381,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // Bounty tab with no further in-screen tap — see the `deliberateTap`
     // query-param handling there and CreateBountyFlowProps' `deliberateTap`.
     action: { type: 'navigate', route: '/tabs/postings-screen?deliberateTap=1' },
+    flaggedAction: { type: 'composer', entryPoint: 'moment_post_first_bounty' },
   },
   {
     type: 'accept_first_bounty',
