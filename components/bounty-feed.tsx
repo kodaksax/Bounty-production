@@ -99,7 +99,9 @@ import {
 } from '../lib/utils/feed-distance-default';
 import { formatPublicLocation } from '../lib/utils/public-location';
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
-import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
+import { coarseRegionFromLocationText, getServiceabilityContext } from '../lib/utils/serviceable-region';
+import { usePosterLocalProof } from '../lib/experiments/poster-local-proof';
+import { localProofStrings } from '../lib/strings/local-proof';
 import { withTimeout } from '../lib/utils/withTimeout';
 
 export type BountyFeedHandle = {
@@ -256,6 +258,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const { showTestBounties } = useShowTestBounties();
   const includeTestBounties = isInternalViewer && showTestBounties;
 
+  const showPostATask = usePosterLocalProof();
   const { theme } = useAppThemeContext();
   const gridBannerGradient = useMemo(
     () => [theme.primary, theme.primary, theme.primary] as const,
@@ -575,10 +578,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
       // Metro-level viewer region (e.g. "Baltimore, MD") so demand density is
       // comparable to bounty_created's metro_region per metro. Named
-      // metro_region (not `region`) — getDeviceServiceabilityContext() below
-      // already emits a differently-scoped `region` (device locale).
+      // metro_region (not `region`) — getServiceabilityContext() below
+      // already emits a differently-scoped `region` (the located state or province).
       metro_region: coarseRegionFromLocationText(authProfileService.getCurrentProfile()?.location),
-      ...getDeviceServiceabilityContext(),
+      ...getServiceabilityContext(),
     });
   }, [
     isLoadingBounties,
@@ -1353,6 +1356,22 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const ItemSeparator = useCallback(() => null, []);
 
   const EmptyListComponent = useCallback(() => {
+    const postATaskButton = showPostATask ? (
+      <TouchableOpacity
+        onPress={() => setActiveScreen('postings')}
+        accessibilityRole="button"
+        accessibilityLabel={localProofStrings.postATask}
+        style={{
+          marginTop: 10,
+          backgroundColor: theme.primary,
+          paddingHorizontal: 20,
+          paddingVertical: 12,
+          borderRadius: 999,
+        }}
+      >
+        <Text style={{ color: '#ffffff', fontWeight: '700' }}>{localProofStrings.postATask}</Text>
+      </TouchableOpacity>
+    ) : null;
     if (isLoadingBounties || !applicationsLoaded) {
       return (
         <View style={{ width: '100%' }}>
@@ -1401,6 +1420,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           >
             <Text style={{ color: theme.text, fontWeight: '700' }}>Show any distance</Text>
           </TouchableOpacity>
+          {postATaskButton}
         </View>
       );
     }
@@ -1440,6 +1460,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               {clearsMultiple ? 'Clear filters' : 'Clear filter'}
             </Text>
           </TouchableOpacity>
+          {postATaskButton}
         </View>
       );
     }
@@ -1448,7 +1469,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         icon="search-off"
         title="No bounties yet"
         description="No bounties near you yet. Be the first to post one!"
-        actionLabel="Post a bounty"
+        actionLabel={showPostATask ? localProofStrings.postATask : 'Post a bounty'}
         // Switch to the Post tab rather than pushing the composer as its own
         // route: that route mounts CreateBountyFlow with no onCancel/onComplete,
         // so neither exiting nor finishing after publish could leave it.
@@ -1469,6 +1490,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     pickDistance,
     theme,
     setActiveScreen,
+    showPostATask,
   ]);
 
   const ListFooterComponent = useCallback(

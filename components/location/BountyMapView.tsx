@@ -21,7 +21,7 @@ import {
     type NearbyBounty,
 } from '../../lib/services/bounty-location-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
-import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
+import { coarseRegionFromLocationText, getServiceabilityContext } from '../../lib/utils/serviceable-region';
 
 // Continental US centroid — starting viewport only, when we have neither the
 // bounty poster's approx point nor the viewer's device location yet.
@@ -124,10 +124,10 @@ function BountyMapViewInner({ category, height = '100%' }: BountyMapViewProps) {
         has_location_permission: Boolean(permission?.granted),
         role: authProfileService.getPrimaryRoleForAnalytics() ?? 'none',
         is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
-        // metro_region (not `region`) — getDeviceServiceabilityContext()
-        // below already emits a differently-scoped `region` (device locale).
+        // metro_region (not `region`) — getServiceabilityContext()
+        // below already emits a differently-scoped `region` (the located state or province).
         metro_region: coarseRegionFromLocationText(authProfileService.getCurrentProfile()?.location),
-        ...getDeviceServiceabilityContext(),
+        ...getServiceabilityContext(),
       });
     } finally {
       setIsLoading(false);

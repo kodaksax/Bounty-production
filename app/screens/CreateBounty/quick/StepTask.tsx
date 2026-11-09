@@ -17,6 +17,7 @@ import { useIsScreenFocused } from '../../../../hooks/useRouteFocus';
 import { DEFAULT_OVERLAY_KEY, useTopInsetOverlay } from '../../../../lib/context/TopInsetOverlayContext';
 import { pageTranslateX, useTabPager } from '../../../../components/ui/tab-pager';
 import { usePaymentPromiseCopy } from '../../../../lib/experiments/payment-promise-copy';
+import { usePosterLocalProof } from '../../../../lib/experiments/poster-local-proof';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { paymentPromiseStrings } from '../../../../lib/strings/payment-promise';
 import {
@@ -95,6 +96,14 @@ const MAX_LENGTH = 120;
 export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintStatusBar = true, topInset = 0, telemetry, step, totalSteps }: StepTaskProps) {
   const { theme } = useAppThemeContext();
   const showPaymentPromise = usePaymentPromiseCopy();
+  const showLocalProof = usePosterLocalProof();
+  // Required only with the flag on, so this screen doesn't load the location
+  // and profile services for everyone else.
+  const PosterLocalNote: typeof import('../../../../components/poster-local-note').PosterLocalNote | null =
+    showLocalProof
+      ? // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        require('../../../../components/poster-local-note').PosterLocalNote
+      : null;
   // Scales off the viewport width so the headline stays proportionate from
   // small phones up to tablets. 375 is the reference width.
   const { width } = useWindowDimensions();
@@ -273,7 +282,14 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
             <Text style={styles.subtitle}>
               Name it. Set a reward. Someone nearby gets it done.
             </Text>
-            {showPaymentPromise ? (
+            {PosterLocalNote ? (
+              <View style={styles.heroNotes}>
+                <PosterLocalNote lineStyle={styles.heroNote} linkStyle={styles.heroNoteLink} />
+                {showPaymentPromise ? (
+                  <Text style={styles.heroNote}>{paymentPromiseStrings.stepTaskLine}</Text>
+                ) : null}
+              </View>
+            ) : showPaymentPromise ? (
               <Text style={styles.paymentPromise}>{paymentPromiseStrings.stepTaskLine}</Text>
             ) : null}
           </View>
@@ -440,6 +456,14 @@ function makeStyles(theme: AppTheme, scale: number) {
       fontWeight: '600',
       color: HERO_TEXT,
     },
+    heroNotes: { marginTop: 6, gap: 2 },
+    heroNote: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '600',
+      color: HERO_TEXT,
+    },
+    heroNoteLink: { textDecorationLine: 'underline' },
     card: {
       marginTop: -CARD_OVERLAP + 16,
       marginHorizontal: 16,

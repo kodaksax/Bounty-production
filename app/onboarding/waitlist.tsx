@@ -7,6 +7,9 @@
  * email so we can tell them when Bounty opens there, and is never a wall:
  * both "Continue anyway" and the post-submit "Continue" go on to role select.
  *
+ * The Post tab opens the same screen through app/waitlist.tsx, and there
+ * "Continue anyway" goes back to the composer.
+ *
  * Submissions are stored in region_waitlist_signups and also fire
  * `waitlist_captured` with the email as a PostHog-only person property
  * (`waitlist_email`, via $set).
@@ -48,12 +51,18 @@ function countryDisplayName(countryCode: string): string | null {
   }
 }
 
+type WaitlistOrigin = 'onboarding' | 'post_tab';
+
 export default function WaitlistScreen() {
+  const { data } = useOnboarding();
+  return <WaitlistContent intent={data.intent ?? 'none'} origin="onboarding" />;
+}
+
+export function WaitlistContent({ intent, origin }: { intent: string; origin: WaitlistOrigin }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
   const { session } = useAuthContext();
-  const { data: onboardingData } = useOnboarding();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const params = useLocalSearchParams<{ country_code?: string; region?: string }>();
@@ -70,8 +79,8 @@ export default function WaitlistScreen() {
   const baseProps = {
     country_code: countryCode,
     region,
-    intent: onboardingData.intent ?? 'none',
-    source: 'onboarding_location',
+    intent,
+    source: origin === 'post_tab' ? 'post_tab' : 'onboarding_location',
   };
 
   useEffect(() => {
@@ -96,7 +105,7 @@ export default function WaitlistScreen() {
         email: trimmed,
         country_code: countryCode ?? null,
         region: region ?? null,
-        source: 'mobile_onboarding',
+        source: origin === 'post_tab' ? 'mobile_post_tab' : 'mobile_onboarding',
       });
       if (error && error.code !== '23505') throw error;
 
@@ -129,6 +138,10 @@ export default function WaitlistScreen() {
     hapticFeedback.light();
     if (!submitted) {
       analyticsService.trackEvent('unserviceable_region_continued', baseProps);
+    }
+    if (origin === 'post_tab') {
+      router.back();
+      return;
     }
     router.push('/onboarding/role-select');
   };

@@ -151,6 +151,10 @@ jest.mock('../../components/ui/filter-chip', () => ({
   },
 }));
 
+let mockPostATaskOn = false;
+jest.mock('../../lib/experiments/poster-local-proof', () => ({
+  usePosterLocalProof: () => mockPostATaskOn,
+}));
 jest.mock('../../hooks/useValidUserId', () => ({ useValidUserId: () => 'user-123' }));
 jest.mock('../../hooks/useActiveHunters', () => ({
   useActiveHunters: () => ({ count: null, radiusMiles: 30, refresh: jest.fn() }),
@@ -229,6 +233,7 @@ describe('BountyFeed local distance default (SBA-02)', () => {
     delete mockChips.distance;
     delete mockChips.forYou;
     mockDevice = { location: null, permission: { granted: false } };
+    mockPostATaskOn = false;
     getMyCoordinates.mockResolvedValue({ ok: true, coords: null });
   });
 
@@ -275,6 +280,47 @@ describe('BountyFeed local distance default (SBA-02)', () => {
     );
     track.mockRestore();
     role.mockRestore();
+  });
+
+  describe('empty feed, poster-local-proof', () => {
+    const POST_A_TASK = { accessibilityLabel: 'Post a task' };
+
+    it('flag on: offers a wider radius and a Post a task button', async () => {
+      mockPostATaskOn = true;
+      mockDevice = { location: BALTIMORE, permission: { granted: true } };
+      const setActiveScreen = jest.fn();
+      const { findByText, UNSAFE_getByProps } = render(
+        React.createElement(BountyFeed, { activeScreen: 'bounty', setActiveScreen, currentUserId: 'user-123' })
+      );
+
+      expect(await findByText('Show any distance')).toBeTruthy();
+      UNSAFE_getByProps(POST_A_TASK).props.onPress();
+      expect(setActiveScreen).toHaveBeenCalledWith('postings');
+    });
+
+    it("flag off: keeps today's empty state", async () => {
+      mockDevice = { location: BALTIMORE, permission: { granted: true } };
+      const { findByText, UNSAFE_queryAllByProps } = renderFeed();
+
+      expect(await findByText('Show any distance')).toBeTruthy();
+      expect(UNSAFE_queryAllByProps(POST_A_TASK)).toHaveLength(0);
+    });
+
+    it('still reports an empty feed as bounty_list_viewed with results_count 0', async () => {
+      mockPostATaskOn = true;
+      mockDevice = { location: BALTIMORE, permission: { granted: true } };
+      const { analyticsService } = require('../../lib/services/analytics-service');
+      const track = jest.spyOn(analyticsService, 'trackEvent');
+      renderFeed();
+
+      await waitFor(() =>
+        expect(track).toHaveBeenCalledWith(
+          'bounty_list_viewed',
+          expect.objectContaining({ results_count: 0, serviceable_source: 'unknown' })
+        )
+      );
+      track.mockRestore();
+    });
   });
 
   it('uses the saved profile point when the device has no fix', async () => {
