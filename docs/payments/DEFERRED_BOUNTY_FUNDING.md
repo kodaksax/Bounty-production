@@ -179,9 +179,9 @@ a `deferred_funding_scope = 'all_bounties'` update, **not** a code change.
 The server is the only authority. Since migration `20260827000000`, the
 trigger ignores the client's `funding_mode` input. An ineligible request is
 **silently downgraded** to `'at_post'` rather than rejected — so a poster who
-does have the balance just gets today's flow instead of an error. `useBountyPublish` reads `funding_mode` back off the created row
-and only shows the "you'll be charged later" copy when the server actually
-granted it.
+does have the balance just gets today's flow instead of an error.
+`useBountyPublish` reads `funding_mode` back off the created row and only shows
+the "you'll be charged later" copy when the server actually granted it.
 
 ---
 
