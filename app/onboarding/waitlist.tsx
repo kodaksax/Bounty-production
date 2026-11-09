@@ -24,6 +24,7 @@ import {
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
+import { stepAfterLocation, usePosterHomeDecision } from '../../lib/onboarding/poster-home';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -54,6 +55,7 @@ export default function WaitlistScreen() {
   const { theme } = useAppThemeContext();
   const { session } = useAuthContext();
   const { data: onboardingData } = useOnboarding();
+  const posterHome = usePosterHomeDecision() === true;
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const params = useLocalSearchParams<{ country_code?: string; region?: string }>();
@@ -130,7 +132,7 @@ export default function WaitlistScreen() {
     if (!submitted) {
       analyticsService.trackEvent('unserviceable_region_continued', baseProps);
     }
-    router.push('/onboarding/role-select');
+    router.push(stepAfterLocation(onboardingData.intent, posterHome));
   };
 
   const handleBack = () => {

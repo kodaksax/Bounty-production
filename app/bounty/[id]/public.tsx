@@ -45,6 +45,8 @@ import { ApplicationPitchModal } from '../../../components/application-pitch-mod
 import { IdRequirementModal } from '../../../components/id-requirement-modal';
 import { ZipLocationModal } from '../../../components/zip-location-modal';
 import { useApplyLocationGate } from '../../../hooks/useApplyLocationGate';
+import { askPosterBeforeApplying } from '../../../lib/onboarding/poster-apply-prompt';
+import { usePosterHomeEnabled } from '../../../lib/onboarding/poster-home';
 import { useRequestExpiryPolicy } from '../../../hooks/useRequestExpiryPolicy';
 import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
 import { formatPostedAgo } from '../../../lib/utils/format-relative-date';
@@ -57,6 +59,7 @@ export default function PublicBountyDetail() {
   // Push notifications and shared links open this screen with nothing under
   // it, so a bare router.back() would leave the back arrow dead.
   const goBack = useSafeBack();
+  const posterHomeEnabled = usePosterHomeEnabled();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { pushColor, popColor } = useBackgroundColor();
@@ -311,6 +314,13 @@ export default function PublicBountyDetail() {
         return;
       }
     }
+
+    await askPosterBeforeApplying({
+      enabled: posterHomeEnabled,
+      userId: currentUserId,
+      bountyId: String(bounty.id),
+      surface: 'public_route',
+    });
 
     // The pitch modal (components/application-pitch-modal.tsx) replaces the
     // old bare confirm Alert — it shows the same money-line copy plus a

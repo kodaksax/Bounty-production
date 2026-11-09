@@ -24,6 +24,8 @@ import {
   View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
+import { askPosterBeforeApplying } from "../lib/onboarding/poster-apply-prompt"
+import { usePosterHomeEnabled } from "../lib/onboarding/poster-home"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { formatExactAddress, useBountyExactLocation } from '../hooks/useBountyExactLocation'
 import { formatPublicLocation } from '../lib/utils/public-location'
@@ -117,6 +119,7 @@ interface BountyDetailModalProps {
 export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateToChat, origin }: BountyDetailModalProps) {
   const router = useRouter()
   const { isEmailVerified, session } = useAuthContext()
+  const posterHomeEnabled = usePosterHomeEnabled()
   const currentUserId = session?.user?.id ?? null
   const { triggerHaptic } = useHapticFeedback()
   const { theme } = useAppThemeContext()
@@ -532,6 +535,12 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     }
 
     if (!confirmed) {
+      await askPosterBeforeApplying({
+        enabled: posterHomeEnabled,
+        userId: currentUserId,
+        bountyId: String(bounty.id),
+        surface: 'modal',
+      })
       // The ZIP prompt (if needed) comes first, so the saved point is on the
       // profile before the insert measures distance from it.
       void applyLocationGate.run({ bountyId: String(bounty.id), workType: bounty.work_type }, () => {

@@ -38,7 +38,8 @@ import { analyticsService } from '../../lib/services/analytics-service';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
-import { nextStepAfterRole } from '../../lib/onboarding/next-step-after-role';
+import { stepAfterRoleSelect, usePosterHomeDecision } from '../../lib/onboarding/poster-home';
+import { posterHomeStrings } from '../../lib/strings/posterHome';
 
 type Intent = 'poster' | 'hunter';
 
@@ -67,6 +68,10 @@ export default function RoleSelectScreen() {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
+  const posterHome = usePosterHomeDecision() === true;
+  const roleOptions = posterHome
+    ? ROLE_OPTIONS.map(option => ({ ...option, ...posterHomeStrings.roleOptions[option.intent] }))
+    : ROLE_OPTIONS;
   const { data: onboardingData, updateData } = useOnboarding();
   const [selected, setSelected] = useState<Intent | null>(onboardingData.intent);
   // A tap navigates, so a second tap landing before the push transition
@@ -97,7 +102,7 @@ export default function RoleSelectScreen() {
     // Hunters go to payout setup next; posters skip it, because nothing a
     // poster does needs a Stripe payout account until they withdraw — see
     // lib/onboarding/next-step-after-role.ts.
-    router.push(nextStepAfterRole(intent));
+    router.push(stepAfterRoleSelect(intent, posterHome));
   };
 
   // Reached from the style step (app/onboarding/style.tsx), which itself is
@@ -127,7 +132,7 @@ export default function RoleSelectScreen() {
 
       <OnboardingProgressDots
         total={ONBOARDING_TOTAL_STEPS}
-        activeIndex={3}
+        activeIndex={posterHome ? 1 : 3}
         style={styles.dotsContainer}
       />
 
@@ -138,7 +143,7 @@ export default function RoleSelectScreen() {
         <Text style={styles.subheading}>Tap the one that fits today.</Text>
 
         <View style={styles.optionsList}>
-          {ROLE_OPTIONS.map(option => {
+          {roleOptions.map(option => {
             const isSelected = selected === option.intent;
             return (
               <TouchableOpacity

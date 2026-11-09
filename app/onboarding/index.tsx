@@ -15,6 +15,7 @@ import { logger } from '../../lib/utils/error-logger';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { isOnboardingRole, nextStepAfterRole } from '../../lib/onboarding/next-step-after-role';
+import { resolvePosterHomeDecision, stepAfterRoleSelect } from '../../lib/onboarding/poster-home';
 
 // A fetch error alongside an already-verified username means "we couldn't
 // confirm current state," not "this is a new user" — retry a bounded number
@@ -123,7 +124,15 @@ export default function OnboardingIndex() {
       // This gate is skipped by most entry paths and re-runs on every profile
       // change, so it both missed starts and repeated them.
       if (isAuthenticated) {
-        router.replace(isOnboardingRole(onboardingData.intent) ? nextStepAfterRole(onboardingData.intent) : '/onboarding/style');
+        const intent = onboardingData.intent;
+        if (!isOnboardingRole(intent)) {
+          router.replace('/onboarding/style');
+          return;
+        }
+        // With `poster-home` on, the role comes before location, so a role
+        // alone no longer means the location step is behind them.
+        const roleFirst = onboardingData.locationPrecision === null && (await resolvePosterHomeDecision());
+        router.replace(stepAfterRoleSelect(intent, roleFirst));
         return;
       }
 

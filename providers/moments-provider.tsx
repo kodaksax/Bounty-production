@@ -45,7 +45,9 @@ import {
     type MomentState,
     type MomentType,
 } from '../lib/moments/types';
+import { usePosterHomeEnabled } from '../lib/onboarding/poster-home';
 import { analyticsService } from '../lib/services/analytics-service';
+import { authProfileService } from '../lib/services/auth-profile-service';
 import { locationService } from '../lib/services/location-service';
 import { notificationService } from '../lib/services/notification-service';
 import { supabase } from '../lib/supabase';
@@ -182,6 +184,7 @@ export function MomentsProvider({
   suppressed = false,
 }: MomentsProviderProps) {
   const router = useRouter();
+  const posterHomeEnabled = usePosterHomeEnabled();
   const { session } = useAuthContext();
   const { profile } = useAuthProfile();
   const userId = session?.user?.id ?? null;
@@ -447,6 +450,10 @@ export function MomentsProvider({
       accountCreatedAt: profile.created_at ?? null,
       sessionCount,
       activeScreen,
+      // Not profile.primary_role: updateProfile drops it from the in-memory
+      // profile until the next fetch.
+      isPosterHomeUser:
+        posterHomeEnabled && authProfileService.getPrimaryRoleForAnalytics() === 'poster',
       hasEngaged,
       hasPublishedBounty,
       profile: {
@@ -474,6 +481,7 @@ export function MomentsProvider({
     locPermission,
     sessionCount,
     activeScreen,
+    posterHomeEnabled,
     hasEngaged,
     hasPublishedBounty,
   ]);
