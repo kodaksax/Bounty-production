@@ -42,9 +42,9 @@ const SECTIONS: Section[] = [
     topic: 'fees',
     icon: 'sell',
     title: 'No fee to post',
-    // Deliberately does not promise "not charged when you post": pay-at-accept
-    // only applies to some first bounties (lib/experiments/deferred-funding-variant.ts
-    // plus server eligibility); everyone else funds at posting. Shoal 2026-09-19
+    // Deliberately does not promise "not charged when you post": server
+    // eligibility (fn_can_defer_bounty_funding and the payment_experiment_config
+    // kill switch) decides pay-at-accept, so some bounties fund at posting. Shoal 2026-09-19
     // posters read the old wording and then hit the funding step.
     body:
       `There is no charge for posting beyond the reward itself. You pay the amount you named either when you post or, for some first bounties, when you accept a hunter — the app tells you which before any money moves. A ${PLATFORM_FEE_DISPLAY} service fee is deducted from that amount when it is released, so the hunter takes home the rest — both of you see the exact numbers before you commit.`,

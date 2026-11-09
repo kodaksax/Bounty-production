@@ -620,9 +620,9 @@ export type AnalyticsEvent =
   | 'escrow_release_pending'
   | 'escrow_refunded'
   // ---------------------------------------------------------------------
-  // "Post first, pay at accept" experiment
-  // (PostHog flag 'post-first-pay-at-accept', see
-  //  lib/experiments/deferred-funding-variant.ts).
+  // "Post first, pay at accept" funding
+  // (the server decides funding_mode at INSERT; no PostHog flag is read, see
+  //  docs/payments/DEFERRED_BOUNTY_FUNDING.md).
   //
   // These do NOT replace the posting/payment events above — they fill the
   // gaps the existing funnel cannot express, because until now "published"

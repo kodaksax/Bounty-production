@@ -1,7 +1,11 @@
 # Deferred bounty funding — "post first, pay at accept"
 
-Status: **implemented, not yet enabled.** Ships inert; two deliberate switches
-(one DB row, one PostHog flag) turn it on. See [Rollout](#rollout).
+Status: **the default for every eligible bounty.** Migration
+`20260827000000_pay_at_accept_default_for_all_bounties.sql` moved the decision
+to the `trg_bounties_normalize_funding_mode` trigger. The client does not read a
+PostHog flag. The planned `post-first-pay-at-accept` flag was never created, and
+its client hook was removed. Sections 3 and 6 describe the original
+experiment design. The kill switch in [Rollout](#rollout) still applies.
 
 Related migration: `supabase/migrations/20260823120000_deferred_bounty_funding_pay_at_accept.sql`
 
@@ -168,15 +172,14 @@ because it is:
 
 Note this excludes a poster whose only prior bounty was for-honor. That is
 deliberate for the first read of the experiment; widening to that population is
-a `deferred_funding_scope = 'all_bounties'` update plus a PostHog audience,
-**not** a code change.
+a `deferred_funding_scope = 'all_bounties'` update, **not** a code change.
 
 ### Client asks, server grants
 
-The PostHog flag decides whether the client *asks*. It is never the authority.
-An ineligible request is **silently downgraded** to `'at_post'` rather than
-rejected — so a poster who does have the balance just gets today's flow instead
-of an error. `useBountyPublish` reads `funding_mode` back off the created row
+The server is the only authority. Since migration `20260827000000`, the
+trigger ignores the client's `funding_mode` input. An ineligible request is
+**silently downgraded** to `'at_post'` rather than rejected — so a poster who
+does have the balance just gets today's flow instead of an error. `useBountyPublish` reads `funding_mode` back off the created row
 and only shows the "you'll be charged later" copy when the server actually
 granted it.
 
@@ -271,10 +274,12 @@ and simply become correct.
 
 ## 6. Rollout
 
-Ships inert. Both switches are required.
+The original design shipped inert behind two switches. Migration
+`20260827000000` now sets the database switch on by default, with
+`deferred_funding_scope = 'all_bounties'` and no amount cap.
 
 ```sql
--- 1. Server side (the kill switch). Start here; without it the flag does nothing.
+-- 1. Server side (the kill switch). Original conservative rollout values.
 UPDATE public.payment_experiment_config
 SET deferred_funding_enabled = true,
     deferred_funding_scope   = 'first_bounty',   -- keep conservative
@@ -282,10 +287,9 @@ SET deferred_funding_enabled = true,
     updated_at = now();
 ```
 
-2. **PostHog:** create a multivariate flag `post-first-pay-at-accept` with
-   variants `control` / `test`, matching the shape of the existing
-   `welcome-page-redesign` flag. `test` maps to the `deferred` arm
-   (`lib/experiments/deferred-funding-variant.ts`). Roll out gradually.
+2. **PostHog:** no flag. The original plan used a `post-first-pay-at-accept`
+   flag, but it was never created. Migration `20260827000000` made the database
+   setting above the only switch, and the client hook for the flag was removed.
 
 ### Kill switch
 
@@ -313,7 +317,6 @@ lifting that cap is the one thing that needs a further migration.
 
 | File | Why |
 |---|---|
-| `lib/experiments/deferred-funding-variant.ts` | PostHog arm resolution, mirroring `first-screen-variant.ts` |
 | `lib/services/bounty-funding-service.ts` | the only window onto the new RPCs; failure classification; amount bucketing |
 | `hooks/useAcceptFunding.ts` | the pay-at-accept gate state machine |
 | `components/accept-funding-gate.tsx` | the single pay-at-accept sheet: "Confirm & hire" when the balance covers it, "Pay $shortfall & hire" (card / Apple Pay via `use-wallet-deposit`) when it is short; resolves on its own once the server confirms the balance |
@@ -372,9 +375,11 @@ real device + live Stripe:
    plus 17 behavioural assertions against the production schema inside a
    transaction that was then rolled back (production verified unchanged
    afterwards) — but it has not been committed to the live database.
-4. **The PostHog flag does not exist yet**, so `useDeferredFundingVariant`
-   currently resolves `'control'` for every device and the experiment is a no-op
-   even after the migration lands.
+4. **There is no PostHog flag.** The `post-first-pay-at-accept` flag was never
+   created. Migration `20260827000000` made pay-at-accept the server default, and
+   the unused client hook was removed. App 2.1.4 and older builds still evaluate
+   the flag key, so `$feature_flag_called` events for it come only from those
+   builds.
 5. **Deferred bounties have no expiry.** An unfunded bounty can sit open
    indefinitely attracting applications the poster may never fund. The existing
    `expire-bounties` function handles deadlines generally, but there is no

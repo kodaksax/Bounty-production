@@ -24,16 +24,6 @@ const mockDeleteBounty = jest.fn();
 const mockCreateEscrow = jest.fn();
 const mockTrackEvent = jest.fn();
 
-// The 'post-first-pay-at-accept' flag was never created in PostHog, so in
-// production this resolved 'control' on every device — and that 'control' was
-// stamped onto bounty_posted_unfunded for bounties that were in fact deferred.
-// Mocked to that production answer, and spied on, to prove the hook no longer
-// consults it.
-const mockUseDeferredFundingVariant = jest.fn(() => ({ variant: 'control', ready: true }));
-jest.mock('lib/experiments/deferred-funding-variant', () => ({
-  useDeferredFundingVariant: () => mockUseDeferredFundingVariant(),
-}));
-
 jest.mock('lib/services/bounty-funding-service', () => ({
   canDeferBountyFunding: (...a: unknown[]) => mockCanDefer(...a),
   amountBucket: (n: number) => (n < 25 ? 'lt_25' : n < 50 ? '25_49' : '50_99'),
@@ -112,7 +102,6 @@ const propsFor = (name: string) => mockTrackEvent.mock.calls.find(c => c[0] === 
 describe('useBountyPublish — deferred funding', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseDeferredFundingVariant.mockImplementation(() => ({ variant: 'control', ready: true }));
     mockCanDefer.mockResolvedValue(false);
     mockCreateBounty.mockResolvedValue({
       bounty: { id: 'b1', funding_mode: 'at_post' },
@@ -208,7 +197,7 @@ describe('useBountyPublish — deferred funding', () => {
       expect(onPublished).toHaveBeenCalledWith('b1', expect.objectContaining({ funded: false }));
     });
 
-    test("variant follows the funding path, not the PostHog flag (which resolves 'control')", async () => {
+    test('variant follows the funding path', async () => {
       const { result } = await setup({ balance: 0 });
       await act(async () => {
         await result.current.publish();
@@ -218,20 +207,6 @@ describe('useBountyPublish — deferred funding', () => {
         fundingMode: 'at_accept',
         variant: 'deferred',
       });
-      expect(mockUseDeferredFundingVariant).not.toHaveBeenCalled();
-    });
-
-    test('still posts deferred and reports it when the flag is unavailable', async () => {
-      mockUseDeferredFundingVariant.mockImplementation(() => {
-        throw new Error('PostHog unavailable');
-      });
-      const { result } = await setup({ balance: 0 });
-      await act(async () => {
-        await result.current.publish();
-      });
-
-      expect(mockCreateEscrow).not.toHaveBeenCalled();
-      expect(propsFor('bounty_posted_unfunded')).toMatchObject({ variant: 'deferred' });
     });
 
     test('tells the poster they will be charged when they choose someone', async () => {
