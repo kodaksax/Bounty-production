@@ -128,10 +128,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
 
   // --- "Post first, pay at accept" ----------------------------------------
   // The server decides whether a bounty is deferred, which is what
-  // deferredGrantRef records. The 'post-first-pay-at-accept' PostHog flag is
-  // no longer read: it was never created, so it resolved 'control' on every
-  // device and stamped that onto events for bounties that were in fact
-  // deferred.
+  // deferredGrantRef records. No PostHog flag takes part in this decision.
   //
   // A ref rather than state on purpose: submit() is created once by
   // useFormSubmission and closes over this hook's scope, so a state value read
@@ -146,9 +143,7 @@ export function useBountyPublish(params: UseBountyPublishParams) {
    * the button press.
    *
    * Pay-at-accept is the product default now, not an experiment arm: posting is
-   * publishing an offer and never debits the wallet. The PostHog variant no
-   * longer gates it (it was the reason the whole mechanism sat inert — the flag
-   * was never created, so every device resolved 'control' and never asked).
+   * publishing an offer and never debits the wallet. No PostHog flag gates it.
    *
    * Resolved AHEAD of the tap on purpose. The publish path must stay
    * synchronous: an await between the tap and the funding gate leaves the CTA
