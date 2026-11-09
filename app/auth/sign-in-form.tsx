@@ -1381,6 +1381,9 @@ export function SignInForm() {
                 </Button>
               ) : (
                 <Button
+                  // Same iOS stale hit frame as Verify above: the error banner
+                  // mounts above and pushes this button down, so remount it.
+                  key={authError || socialAuthError ? 'sign-in-after-error' : 'sign-in'}
                   onPress={onSignInPress}
                   loading={isSubmitting}
                   accessibilityLabel="Sign in"
