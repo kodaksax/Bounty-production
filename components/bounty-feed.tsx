@@ -1751,7 +1751,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                       <MaterialIcons
                         name="search"
                         size={18}
-                        color="rgba(255,255,255,0.85)"
+                        color={theme.textSecondary}
                         style={s.searchIcon}
                       />
                       <Text style={s.gridBannerSearchText}>Search bounties or users...</Text>
@@ -1930,7 +1930,7 @@ function makeStyles(t: AppTheme) {
       minHeight: SIZING.MIN_TOUCH_TARGET,
     },
     gridBannerSearchText: {
-      color: 'rgba(255,255,255,0.85)',
+      color: t.textSecondary,
       fontSize: TYPOGRAPHY.SIZE_SMALL,
       flex: 1,
     },

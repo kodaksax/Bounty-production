@@ -167,7 +167,7 @@ export const MessageBubble = memo(({
         <View style={[styles.quoteBar, isUser ? styles.quoteBarUser : styles.quoteBarOther]} />
         <View style={styles.quoteBody}>
           <View style={styles.quoteHeader}>
-            <MaterialIcons name="reply" size={12} color={theme.primaryLight} />
+            <MaterialIcons name="reply" size={12} color={isUser ? '#DBF0E1' : '#1FAE49'} />
             <Text
               style={[styles.quoteSender, isUser ? styles.quoteSenderUser : styles.quoteSenderOther]}
               numberOfLines={1}
@@ -204,7 +204,7 @@ export const MessageBubble = memo(({
           <MaterialIcons
             name={mediaFailed ? 'broken-image' : 'insert-drive-file'}
             size={20}
-            color={theme.text}
+            color={theme.onPrimary}
           />
           <Text style={styles.fileChipText} numberOfLines={1}>
             {mediaFileName(mediaUrl)}
@@ -232,12 +232,12 @@ export const MessageBubble = memo(({
           />
           {status === 'sending' && (
             <View style={styles.mediaOverlay}>
-              <ActivityIndicator size="small" color={theme.text} />
+              <ActivityIndicator size="small" color={theme.onPrimary} />
             </View>
           )}
           {mediaKind === 'video' && status !== 'sending' && (
             <View style={styles.playOverlay}>
-              <MaterialIcons name="play-arrow" size={28} color={theme.text} />
+              <MaterialIcons name="play-arrow" size={28} color={theme.onPrimary} />
             </View>
           )}
         </View>
@@ -320,7 +320,7 @@ function makeStyles(theme: AppTheme) {
   body: {
     fontSize: MESSAGE_FONT_SIZE.body,
     lineHeight: Math.round(MESSAGE_FONT_SIZE.body * 1.45),
-    color: theme.text,
+    color: theme.onPrimary,
   },
   highlighted: {
     borderRadius: 16,
@@ -365,10 +365,10 @@ function makeStyles(theme: AppTheme) {
     fontWeight: '700',
   },
   quoteSenderUser: {
-    color: theme.primaryLight,
+    color: '#DBF0E1',
   },
   quoteSenderOther: {
-    color: theme.primaryLight,
+    color: '#1FAE49',
   },
   quoteText: {
     fontSize: MESSAGE_FONT_SIZE.quoteText,
@@ -376,7 +376,7 @@ function makeStyles(theme: AppTheme) {
   },
   quoteTextUnavailable: {
     fontStyle: 'italic',
-    color: withAlpha(theme.text, 0.6),
+    color: withAlpha(theme.onPrimary, 0.6),
   },
   statusContainer: {
     alignSelf: 'flex-end',
@@ -437,7 +437,7 @@ function makeStyles(theme: AppTheme) {
   fileChipText: {
     flexShrink: 1,
     fontSize: MESSAGE_FONT_SIZE.fileName,
-    color: theme.text,
+    color: theme.onPrimary,
   },
   jumboEmoji: {
     fontSize: MESSAGE_FONT_SIZE.emojiOnly,

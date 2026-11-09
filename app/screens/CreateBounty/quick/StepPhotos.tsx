@@ -287,7 +287,7 @@ function makeStyles(theme: AppTheme) {
       width: 24,
       height: 24,
       borderRadius: 12,
-      backgroundColor: withAlpha(theme.surface, 0.85),
+      backgroundColor: 'rgba(34,38,44,0.85)',
       alignItems: 'center',
       justifyContent: 'center',
     },

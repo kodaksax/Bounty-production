@@ -217,7 +217,7 @@ export default function MfaChallengeScreen() {
             {isVerifying ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text className="font-semibold text-base" style={{ color: theme.text }}>Verify</Text>
+              <Text className="font-semibold text-base" style={{ color: theme.onPrimary }}>Verify</Text>
             )}
           </TouchableOpacity>
 

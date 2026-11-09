@@ -282,7 +282,7 @@ export function MessengerScreen({
       </View>
 
       <View className="px-4 py-2 flex-row justify-between items-center">
-        <Text className="text-xl font-bold" style={{ color: theme.text }}>INBOX</Text>
+        <Text className="text-xl font-bold" style={{ color: theme.onPrimary }}>INBOX</Text>
 
         {/* Right-side actions: refresh, create new group (icon), and offline badge */}
         <View className="flex-row items-center gap-4">
@@ -424,7 +424,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
 
         <View className="ml-3 flex-1 min-w-0">
           <View className="flex-row justify-between items-center">
-            <Text className="font-medium" style={{ color: theme.text }}>{displayName}</Text>
+            <Text className="font-medium" style={{ color: theme.onPrimary }}>{displayName}</Text>
             <Text className="text-xs text-[#1FAE49]">{time}</Text>
           </View>
           <View className="flex-row justify-between items-center mt-1">
@@ -433,7 +433,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
             </Text>
             {(conversation.unread ?? 0) > 0 && (
               <View className="bg-blue-500 rounded-full h-5 w-5 flex items-center justify-center">
-                <Text className="text-xs" style={{ color: theme.text }}>{conversation.unread}</Text>
+                <Text className="text-xs" style={{ color: theme.onPrimary }}>{conversation.unread}</Text>
               </View>
             )}
           </View>

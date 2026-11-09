@@ -344,7 +344,7 @@ export default function HunterWorkInProgressScreen() {
           <View style={styles.amountContainer}>
             {bounty.is_for_honor ? (
               <View style={styles.honorBadge}>
-                <MaterialIcons name="favorite" size={16} color={theme.text} />
+                <MaterialIcons name="favorite" size={16} color={theme.onPrimary} />
                 <Text style={styles.honorText}>For Honor</Text>
               </View>
             ) : (
@@ -656,7 +656,7 @@ function makeStyles(theme: AppTheme) {
     borderRadius: 16,
   },
   honorText: {
-    color: theme.text,
+    color: theme.onPrimary,
     fontSize: 12,
     fontWeight: '600',
   },

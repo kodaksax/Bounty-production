@@ -24,6 +24,7 @@ import { SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 import { withReplayMask } from '../../../components/replay-mask';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import { withAlpha } from '../../../lib/utils';
 
 function CancellationResponseScreen() {
   const { theme } = useAppThemeContext();
@@ -237,7 +238,7 @@ function CancellationResponseScreen() {
   
   if (loading) {
     return (
-      <View className="flex-1 bg-[#1B1E24] items-center justify-center">
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: theme.background }}>
         <ActivityIndicator size="large" color={theme.primaryLight} />
       </View>
     );
@@ -245,12 +246,12 @@ function CancellationResponseScreen() {
   
   if (!bounty || !cancellation) {
     return (
-      <View className="flex-1 bg-[#1B1E24] items-center justify-center p-6">
+      <View className="flex-1 items-center justify-center p-6" style={{ backgroundColor: theme.background }}>
         <AlertCircle size={48} color={theme.errorText} />
         <Text className="text-lg font-semibold mt-4" style={{ color: theme.text }}>
           Cancellation request not found
         </Text>
-        <Text className="text-[#929497] text-center mt-2">
+        <Text className="text-center mt-2" style={{ color: theme.textSecondary }}>
           The cancellation request could not be loaded. Please contact support if you believe this is an error.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
@@ -259,13 +260,13 @@ function CancellationResponseScreen() {
             className="bg-[#008E2A] px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
-            <Text className="font-semibold ml-2" style={{ color: theme.text }}>Contact support</Text>
+            <Text className="font-semibold ml-2" style={{ color: theme.onPrimary }}>Contact support</Text>
           </TouchableOpacity>
           <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-[#929497] font-medium text-center">Go back</Text>
+            <Text className="font-medium text-center" style={{ color: theme.textSecondary }}>Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -279,7 +280,7 @@ function CancellationResponseScreen() {
     const isDisputed = cancellation.status === 'disputed';
     
     return (
-      <View className="flex-1 bg-[#1B1E24] items-center justify-center p-6">
+      <View className="flex-1 items-center justify-center p-6" style={{ backgroundColor: theme.background }}>
         {isAccepted && <CheckCircle size={48} color={theme.primaryLight} />}
         {isRejected && <XCircle size={48} color={theme.errorText} />}
         {isDisputed && <Flag size={48} color={theme.warningText} />}
@@ -288,7 +289,7 @@ function CancellationResponseScreen() {
           {isRejected && 'Cancellation Rejected'}
           {isDisputed && 'Under Dispute'}
         </Text>
-        <Text className="text-[#929497] text-center mt-2">
+        <Text className="text-center mt-2" style={{ color: theme.textSecondary }}>
           {isAccepted && 'This cancellation request has already been accepted and the bounty has been cancelled.'}
           {isRejected && 'This cancellation request was rejected. If you disagree with this decision, you can open a dispute.'}
           {isDisputed && 'This cancellation is currently under dispute. Our support team will review and resolve it.'}
@@ -297,10 +298,11 @@ function CancellationResponseScreen() {
           {isRejected && (
             <TouchableOpacity accessibilityRole="button"
               onPress={handleOpenDispute}
-              className="bg-amber-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+              className="px-6 py-3 rounded-lg flex-row items-center justify-center"
+              style={{ backgroundColor: theme.warningTint }}
             >
-              <Flag size={18} color="white" />
-              <Text className="font-semibold ml-2" style={{ color: theme.text }}>Open Dispute</Text>
+              <Flag size={18} color={theme.warningText} />
+              <Text className="font-semibold ml-2" style={{ color: theme.warningText }}>Open Dispute</Text>
             </TouchableOpacity>
           )}
           {isDisputed && (
@@ -309,14 +311,14 @@ function CancellationResponseScreen() {
               className="bg-[#008E2A] px-6 py-3 rounded-lg flex-row items-center justify-center"
             >
               <Mail size={18} color="white" />
-              <Text className="font-semibold ml-2" style={{ color: theme.text }}>Contact support</Text>
+              <Text className="font-semibold ml-2" style={{ color: theme.onPrimary }}>Contact support</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-[#929497] font-medium text-center">Go back</Text>
+            <Text className="font-medium text-center" style={{ color: theme.textSecondary }}>Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -325,22 +327,23 @@ function CancellationResponseScreen() {
   
   const refundAmount = cancellation.refundAmount ?? 
     (bounty.amount * (cancellation.refundPercentage ?? 100)) / 100;
+  const acceptForeground = submitting ? theme.textSecondary : theme.onPrimary;
   
   return (
-    <View className="flex-1 bg-[#1B1E24]">
+    <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <KeyboardAwareScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-[#22262C] px-4 py-6 pt-12">
+        <View className="px-4 py-6 pt-12" style={{ backgroundColor: theme.surface }}>
           <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="mb-4"
           >
-            <ArrowLeft size={24} color="white" />
+            <ArrowLeft size={24} color={theme.text} />
           </TouchableOpacity>
           <Text className="text-2xl font-bold" style={{ color: theme.text }}>
             Cancellation Request
           </Text>
-          <Text className="text-[#929497] mt-1">
+          <Text className="mt-1" style={{ color: theme.textSecondary }}>
             {bounty.title}
           </Text>
         </View>
@@ -348,14 +351,14 @@ function CancellationResponseScreen() {
         {/* Content */}
         <View className="p-6">
           {/* Status Banner */}
-          <View className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+          <View className="border rounded-lg p-4 mb-6" style={{ backgroundColor: theme.warningTint, borderColor: withAlpha(theme.warning, 0.4) }}>
             <View className="flex-row items-start">
               <AlertCircle size={20} color={theme.warningText} />
               <View className="flex-1 ml-3">
-                <Text className="text-amber-900 font-semibold mb-1">
+                <Text className="font-semibold mb-1" style={{ color: theme.warningText }}>
                   Action Required
                 </Text>
-                <Text className="text-amber-800 text-sm">
+                <Text className="text-sm" style={{ color: theme.warningText }}>
                   The {cancellation.requesterType} has requested to cancel this bounty. 
                   Please review the request and decide whether to accept or reject it.
                 </Text>
@@ -364,26 +367,26 @@ function CancellationResponseScreen() {
           </View>
           
           {/* Cancellation Details */}
-          <View className="bg-[#2A2E35] rounded-lg p-4 mb-6">
-            <Text className="text-sm text-[#929497] mb-1">Requested By</Text>
-            <Text className="text-base font-medium text-gray-900 capitalize mb-3">
+          <View className="rounded-lg p-4 mb-6" style={{ backgroundColor: theme.surface }}>
+            <Text className="text-sm mb-1" style={{ color: theme.textSecondary }}>Requested By</Text>
+            <Text className="text-base font-medium capitalize mb-3" style={{ color: theme.text }}>
               {cancellation.requesterType}
             </Text>
             
-            <Text className="text-sm text-[#929497] mb-1">Reason</Text>
-            <Text className="text-base text-gray-900 mb-3">
+            <Text className="text-sm mb-1" style={{ color: theme.textSecondary }}>Reason</Text>
+            <Text className="text-base mb-3" style={{ color: theme.text }}>
               {cancellation.reason}
             </Text>
             
-            <Text className="text-sm text-[#929497] mb-1">Proposed Refund</Text>
+            <Text className="text-sm mb-1" style={{ color: theme.textSecondary }}>Proposed Refund</Text>
             <Text className="text-2xl font-bold" style={{ color: theme.text }}>
               ${refundAmount.toFixed(2)}
             </Text>
-            <Text className="text-sm text-[#929497] mt-1">
+            <Text className="text-sm mt-1" style={{ color: theme.textSecondary }}>
               ({cancellation.refundPercentage ?? 100}% of ${bounty.amount.toFixed(2)})
             </Text>
             {isPhase2Bounty(bounty) && (
-              <Text className="text-sm text-[#929497] mt-2">
+              <Text className="text-sm mt-2" style={{ color: theme.textSecondary }}>
                 Refunded automatically to the original payment method via Stripe-backed payment processing.
               </Text>
             )}
@@ -394,7 +397,7 @@ function CancellationResponseScreen() {
             <Text className="text-base font-semibold mb-2" style={{ color: theme.text }}>
               Your Response {action === 'reject' && '*'}
             </Text>
-            <Text className="text-sm text-[#929497] mb-3">
+            <Text className="text-sm mb-3" style={{ color: theme.textSecondary }}>
               {action === 'reject' 
                 ? 'Please explain why you are rejecting this request (required).'
                 : 'Optional: Add a message to the requester.'}
@@ -403,11 +406,12 @@ function CancellationResponseScreen() {
               value={responseMessage}
               onChangeText={setResponseMessage}
               placeholder="Enter your message..."
+              placeholderTextColor={theme.textSecondary}
               multiline
               numberOfLines={4}
               textAlignVertical="top"
-              className="border border-[#454952] rounded-lg p-3 text-base"
-              style={[{ color: theme.text }, { minHeight: 100 }]}
+              className="border rounded-lg p-3 text-base"
+              style={{ color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, minHeight: 100 }}
             />
           </View>
           
@@ -416,16 +420,15 @@ function CancellationResponseScreen() {
             <TouchableOpacity accessibilityRole="button"
               onPress={handleAccept}
               disabled={submitting}
-              className={`flex-row items-center justify-center rounded-lg py-4 ${
-                submitting ? 'bg-[#454952]' : 'bg-[#008E2A]'
-              }`}
+              className="flex-row items-center justify-center rounded-lg py-4"
+              style={{ backgroundColor: submitting ? theme.surfaceSecondary : theme.primary }}
             >
               {submitting && action === 'accept' ? (
-                <ActivityIndicator color="white" />
+                <ActivityIndicator color={acceptForeground} />
               ) : (
                 <>
-                  <CheckCircle size={20} color="white" />
-                  <Text className="text-center font-semibold text-base ml-2" style={{ color: theme.text }}>
+                  <CheckCircle size={20} color={acceptForeground} />
+                  <Text className="text-center font-semibold text-base ml-2" style={{ color: acceptForeground }}>
                     Accept Cancellation
                   </Text>
                 </>
@@ -435,16 +438,18 @@ function CancellationResponseScreen() {
             <TouchableOpacity accessibilityRole="button"
               onPress={handleReject}
               disabled={submitting}
-              className={`flex-row items-center justify-center rounded-lg py-4 border-2 ${
-                submitting ? 'bg-[#2A2E35] border-[#454952]' : 'bg-[#1B1E24] border-red-600'
-              }`}
+              className="flex-row items-center justify-center rounded-lg py-4 border-2"
+              style={{
+                backgroundColor: submitting ? theme.surfaceSecondary : theme.surface,
+                borderColor: submitting ? theme.border : theme.error,
+              }}
             >
               {submitting && action === 'reject' ? (
                 <ActivityIndicator color={theme.errorText} />
               ) : (
                 <>
                   <XCircle size={20} color={theme.errorText} />
-                  <Text className="text-red-600 text-center font-semibold text-base ml-2">
+                  <Text className="text-center font-semibold text-base ml-2" style={{ color: theme.errorText }}>
                     Reject Cancellation
                   </Text>
                 </>
@@ -457,20 +462,20 @@ function CancellationResponseScreen() {
             disabled={submitting}
             className="mt-4 py-4"
           >
-            <Text className="text-gray-600 text-center font-medium">
+            <Text className="text-center font-medium" style={{ color: theme.textSecondary }}>
               Back to Bounty
             </Text>
           </TouchableOpacity>
           
           {/* Support & Dispute Section */}
-          <View className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+          <View className="border rounded-lg p-4 mt-4" style={{ backgroundColor: theme.infoTint, borderColor: withAlpha(theme.info, 0.4) }}>
             <View className="flex-row items-start">
               <HelpCircle size={20} color={theme.infoText} />
               <View className="flex-1 ml-3">
-                <Text className="text-blue-900 font-semibold mb-1">
+                <Text className="font-semibold mb-1" style={{ color: theme.infoText }}>
                   Need Help Deciding?
                 </Text>
-                <Text className="text-blue-800 text-sm mb-3">
+                <Text className="text-sm mb-3" style={{ color: theme.infoText }}>
                   If you
                   {"'"}
                   re unsure about your decision or feel the refund amount is unfair, contact our support team for guidance. Response time: {SUPPORT_RESPONSE_TIMES.email}.
@@ -478,17 +483,17 @@ function CancellationResponseScreen() {
                 <View className="flex-row flex-wrap gap-2">
                   <TouchableOpacity accessibilityRole="button"
                     onPress={handleContactSupport}
-                    className="flex-row items-center bg-blue-600 px-3 py-2 rounded-lg"
+                    className="flex-row items-center bg-[#008E2A] px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
-                    <Text className="text-sm font-medium ml-1" style={{ color: theme.text }}>Email support</Text>
+                    <Text className="text-sm font-medium ml-1" style={{ color: theme.onPrimary }}>Email support</Text>
                   </TouchableOpacity>
                   <TouchableOpacity accessibilityRole="button"
                     onPress={handleCallSupport}
-                    className="flex-row items-center bg-blue-500 px-3 py-2 rounded-lg"
+                    className="flex-row items-center bg-[#008E2A] px-3 py-2 rounded-lg"
                   >
                     <Phone size={14} color="white" />
-                    <Text className="text-sm font-medium ml-1" style={{ color: theme.text }}>Call</Text>
+                    <Text className="text-sm font-medium ml-1" style={{ color: theme.onPrimary }}>Call</Text>
                   </TouchableOpacity>
                 </View>
               </View>

@@ -27,6 +27,7 @@ import { ROUTES } from '../../../lib/routes';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 import { withReplayMask } from '../../../components/replay-mask';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import { withAlpha } from '../../../lib/utils';
 import type { AppTheme } from '../../../lib/themes/types';
 import { useMemo } from 'react';
 import { showToast } from '../../../lib/toast';
@@ -238,10 +239,11 @@ function DisputeScreen() {
       });
       
       if (success) {
-        showToast({ message: 'Evidence added successfully' });
-        await loadData(); // Reload to show new evidence
+        // Close first: a toast can't draw above an open native Modal.
         setShowEvidenceModal(false);
         setEvidenceInput('');
+        showToast({ message: 'Evidence added successfully' });
+        await loadData(); // Reload to show new evidence
       } else {
         // handleSubmitEvidence below calls this without awaiting/catching,
         // so throwing here would only produce an unhandled promise
@@ -272,7 +274,7 @@ function DisputeScreen() {
   
   if (loading) {
     return (
-      <View className="flex-1 bg-[#1B1E24] items-center justify-center">
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: theme.background }}>
         <ActivityIndicator size="large" color={theme.primaryLight} />
       </View>
     );
@@ -299,12 +301,12 @@ function DisputeScreen() {
 
   if (!bounty || (!dispute && !cancellation && !canOpenWorkflowDispute)) {
     return (
-      <View className="flex-1 bg-[#1B1E24] items-center justify-center p-6">
+      <View className="flex-1 items-center justify-center p-6" style={{ backgroundColor: theme.background }}>
         <AlertCircle size={48} color={theme.errorText} />
         <Text className="text-lg font-semibold mt-4" style={{ color: theme.text }}>
           {bounty ? 'Nothing to report here' : 'Bounty not found'}
         </Text>
-        <Text className="text-[#929497] text-center mt-2">
+        <Text className="text-center mt-2" style={{ color: theme.textSecondary }}>
           {bounty
             ? 'You can report a problem once a hunter is working on this bounty. For anything else, contact support.'
             : 'We could not load this bounty. Contact support and we will look into it.'}
@@ -315,13 +317,13 @@ function DisputeScreen() {
             className="bg-[#008E2A] px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
-            <Text className="font-semibold ml-2" style={{ color: theme.text }}>Contact support</Text>
+            <Text className="font-semibold ml-2" style={{ color: theme.onPrimary }}>Contact support</Text>
           </TouchableOpacity>
           <TouchableOpacity accessibilityRole="button"
             onPress={handleGoBack}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-[#929497] font-medium text-center">Go back</Text>
+            <Text className="font-medium text-center" style={{ color: theme.textSecondary }}>Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -329,20 +331,20 @@ function DisputeScreen() {
   }
   
   return (
-    <View className="flex-1 bg-[#1B1E24]">
+    <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <KeyboardAwareScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-[#22262C] px-4 py-6 pt-12">
+        <View className="px-4 py-6 pt-12" style={{ backgroundColor: theme.surface }}>
           <TouchableOpacity accessibilityRole="button"
             onPress={handleGoBack}
             className="mb-4"
           >
-            <ArrowLeft size={24} color="white" />
+            <ArrowLeft size={24} color={theme.text} />
           </TouchableOpacity>
           <Text className="text-2xl font-bold" style={{ color: theme.text }}>
             {dispute ? 'Dispute Details' : 'Report a problem'}
           </Text>
-          <Text className="text-[#929497] mt-1">
+          <Text className="mt-1" style={{ color: theme.textSecondary }}>
             {bounty.title}
           </Text>
         </View>
@@ -353,25 +355,23 @@ function DisputeScreen() {
             /* Existing Dispute View */
             <>
               {/* Status Banner */}
-              <View className={`rounded-lg p-4 mb-6 ${
-                dispute.status === 'resolved' 
-                  ? 'bg-green-50 border border-green-200'
-                  : 'bg-amber-50 border border-amber-200'
-              }`}>
+              <View
+                className="rounded-lg p-4 mb-6 border"
+                style={{
+                  backgroundColor: dispute.status === 'resolved' ? theme.successTint : theme.warningTint,
+                  borderColor: withAlpha(dispute.status === 'resolved' ? theme.success : theme.warning, 0.4),
+                }}
+              >
                 <View className="flex-row items-start">
                   <AlertCircle 
                     size={20} 
                     color={dispute.status === 'resolved' ? theme.primaryLight : theme.warningText} 
                   />
                   <View className="flex-1 ml-3">
-                    <Text className={`font-semibold mb-1 ${
-                      dispute.status === 'resolved' ? 'text-green-900' : 'text-amber-900'
-                    }`}>
+                    <Text className="font-semibold mb-1" style={{ color: dispute.status === 'resolved' ? theme.successText : theme.warningText }}>
                       Dispute Status: {dispute.status.replace('_', ' ').toUpperCase()}
                     </Text>
-                    <Text className={
-                      dispute.status === 'resolved' ? 'text-green-800' : 'text-amber-800'
-                    }>
+                    <Text style={{ color: dispute.status === 'resolved' ? theme.successText : theme.warningText }}>
                       {dispute.status === 'resolved'
                         ? 'This dispute has been resolved.'
                         : 'Your dispute is being reviewed by our team.'}
@@ -381,19 +381,19 @@ function DisputeScreen() {
               </View>
               
               {/* Dispute Details */}
-              <View className="bg-[#2A2E35] rounded-lg p-4 mb-6">
-                <Text className="text-sm text-[#929497] mb-1">Reason</Text>
+              <View className="rounded-lg p-4 mb-6" style={{ backgroundColor: theme.surface }}>
+                <Text className="text-sm mb-1" style={{ color: theme.textSecondary }}>Reason</Text>
                 <Text className="text-base mb-4" style={{ color: theme.text }}>
                   {dispute.reason}
                 </Text>
                 
                 {dispute.evidence && dispute.evidence.length > 0 && (
                   <>
-                    <Text className="text-sm text-[#929497] mb-2">Evidence</Text>
+                    <Text className="text-sm mb-2" style={{ color: theme.textSecondary }}>Evidence</Text>
                     {dispute.evidence.map((ev, idx) => (
-                      <View key={ev.id} className="bg-[#2A2E35] rounded p-3 mb-2">
+                      <View key={ev.id} className="rounded p-3 mb-2" style={{ backgroundColor: theme.surfaceSecondary }}>
                         <Text className="text-sm" style={{ color: theme.text }}>{ev.content}</Text>
-                        <Text className="text-xs text-[#929497] mt-1">
+                        <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>
                           {new Date(ev.uploadedAt).toLocaleString()}
                         </Text>
                       </View>
@@ -403,7 +403,7 @@ function DisputeScreen() {
                 
                 {dispute.resolution && (
                   <>
-                    <Text className="text-sm text-[#929497] mb-1 mt-4">Resolution</Text>
+                    <Text className="text-sm mb-1 mt-4" style={{ color: theme.textSecondary }}>Resolution</Text>
                     <Text className="text-base" style={{ color: theme.text }}>
                       {dispute.resolution}
                     </Text>
@@ -417,14 +417,14 @@ function DisputeScreen() {
                   <Text className="text-base font-semibold mb-2" style={{ color: theme.text }}>
                     Add More Evidence
                   </Text>
-                  <Text className="text-sm text-[#929497] mb-3">
+                  <Text className="text-sm mb-3" style={{ color: theme.textSecondary }}>
                     Provide additional text evidence to support your dispute. For images or documents, please contact support.
                   </Text>
                   <TouchableOpacity accessibilityRole="button"
                     onPress={() => setShowEvidenceModal(true)}
                     className="flex-row items-center justify-center rounded-lg py-3 bg-[#008E2A]"
                   >
-                    <Text className="font-medium" style={{ color: theme.text }}>
+                    <Text className="font-medium" style={{ color: theme.onPrimary }}>
                       + Add Evidence
                     </Text>
                   </TouchableOpacity>
@@ -448,11 +448,13 @@ function DisputeScreen() {
                           onPress={() => setReasonCode(option.code)}
                           accessibilityRole="button"
                           accessibilityState={{ selected }}
-                          className={`px-3 py-2 rounded-full border ${
-                            selected ? 'bg-[#008E2A] border-[#008E2A]' : 'border-[#454952]'
-                          }`}
+                          className="px-3 py-2 rounded-full border"
+                          style={{
+                            backgroundColor: selected ? theme.primary : 'transparent',
+                            borderColor: selected ? theme.primary : theme.border,
+                          }}
                         >
-                          <Text className={selected ? 'text-white font-medium' : 'text-[#D8D2C4]'}>
+                          <Text className={selected ? 'font-medium' : ''} style={{ color: selected ? theme.onPrimary : theme.text }}>
                             {option.label}
                           </Text>
                         </TouchableOpacity>
@@ -460,7 +462,7 @@ function DisputeScreen() {
                     })}
                   </View>
                   {selectedReason && (
-                    <Text className="text-sm text-[#929497] mt-3">{selectedReason.help}</Text>
+                    <Text className="text-sm mt-3" style={{ color: theme.textSecondary }}>{selectedReason.help}</Text>
                   )}
                 </View>
               )}
@@ -477,14 +479,14 @@ function DisputeScreen() {
           )}
           
           {/* Support Contact Section - Always visible */}
-          <View className="bg-[#2A2E35] border border-[#454952] rounded-lg p-4 mt-6">
+          <View className="border rounded-lg p-4 mt-6" style={{ backgroundColor: theme.surface, borderColor: theme.border }}>
             <View className="flex-row items-start">
               <HelpCircle size={20} color={theme.primaryLight} />
               <View className="flex-1 ml-3">
                 <Text className="font-semibold mb-1" style={{ color: theme.text }}>
                   Dispute Mediation Support
                 </Text>
-                <Text className="text-[#929497] text-sm mb-2">
+                <Text className="text-sm mb-2" style={{ color: theme.textSecondary }}>
                   Our support team typically responds within {SUPPORT_RESPONSE_TIMES.dispute}. For urgent matters, please call us directly.
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
@@ -493,14 +495,14 @@ function DisputeScreen() {
                     className="flex-row items-center bg-[#008E2A] px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
-                    <Text className="text-sm font-medium ml-1" style={{ color: theme.text }}>{SUPPORT_EMAIL}</Text>
+                    <Text className="text-sm font-medium ml-1" style={{ color: theme.onPrimary }}>{SUPPORT_EMAIL}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity accessibilityRole="button"
                     onPress={handleCallSupport}
                     className="flex-row items-center bg-[#008E2A] px-3 py-2 rounded-lg"
                   >
                     <Phone size={14} color="white" />
-                    <Text className="text-sm font-medium ml-1" style={{ color: theme.text }}>{SUPPORT_PHONE}</Text>
+                    <Text className="text-sm font-medium ml-1" style={{ color: theme.onPrimary }}>{SUPPORT_PHONE}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -512,7 +514,7 @@ function DisputeScreen() {
             disabled={submitting}
             className="mt-4 py-4"
           >
-            <Text className="text-[#929497] text-center font-medium">
+            <Text className="text-center font-medium" style={{ color: theme.textSecondary }}>
               Back
             </Text>
           </TouchableOpacity>
@@ -553,9 +555,9 @@ function DisputeScreen() {
                 ]}
               >
                 {submitting ? (
-                  <ActivityIndicator color="white" size="small" />
+                  <ActivityIndicator color={theme.textSecondary} size="small" />
                 ) : (
-                  <Text style={styles.modalButtonText}>Submit</Text>
+                  <Text style={[styles.modalButtonText, !evidenceInput.trim() && { color: theme.textSecondary }]}>Submit</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity accessibilityRole="button"
@@ -595,7 +597,7 @@ function makeStyles(theme: AppTheme) {
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: theme.onPrimary,
+    color: theme.text,
     marginBottom: 8,
   },
   modalSubtitle: {

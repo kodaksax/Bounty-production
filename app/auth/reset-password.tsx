@@ -279,7 +279,7 @@ export function ResetPasswordScreen() {
                   onPress={handleOpenEmailApp}
                   className="w-full bg-[#008E2A] rounded-lg py-3 items-center"
                 >
-                  <Text className="font-medium" style={{ color: theme.text }}>Open Email App</Text>
+                  <Text className="font-medium" style={{ color: theme.onPrimary }}>Open Email App</Text>
                 </TouchableOpacity>
 
                 {/* Resend Email */}
@@ -328,7 +328,7 @@ export function ResetPasswordScreen() {
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text className="font-medium" style={{ color: theme.text }}>Send Reset Link</Text>
+                  <Text className="font-medium" style={{ color: theme.onPrimary }}>Send Reset Link</Text>
                 )}
               </TouchableOpacity>
             )}

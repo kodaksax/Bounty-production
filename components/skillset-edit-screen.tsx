@@ -197,7 +197,7 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
             <Text className="text-sm" style={{ color: theme.text }}>Add</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleSave} disabled={!profileReady} className="px-3 py-2 bg-[#008E2A] rounded-lg" accessibilityRole="button" accessibilityLabel="Save skillsets" accessibilityState={{ disabled: !profileReady }}>
-            <Text className="text-sm font-semibold" style={{ color: theme.text }}>Save</Text>
+            <Text className="text-sm font-semibold" style={{ color: theme.onPrimary }}>Save</Text>
           </TouchableOpacity>
         </View>
       </View>

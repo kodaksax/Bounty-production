@@ -17,7 +17,7 @@ import { formatBountyWhere } from '../lib/utils/bounty-distance'
 import { getScheduleChip } from '../lib/utils/schedule-utils'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { useModalOrigin } from "./ui/app-modal"
-import { CountdownBadge } from "./ui/countdown-badge"
+import { CountdownBadge, URGENT_CHIP_FILL } from "./ui/countdown-badge"
 import { withAlpha } from '../lib/utils';
 
 // Every slot in the card below the cover is a fixed height, and the price row
@@ -328,7 +328,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: 'rgba(0,0,0,0.55)',
     },
     scheduleChipUrgent: {
-      backgroundColor: withAlpha(t.error, 0.85),
+      backgroundColor: URGENT_CHIP_FILL,
     },
     scheduleChipWarning: {
       backgroundColor: 'rgba(180,100,0,0.85)',

@@ -4,7 +4,12 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import { useCountdown } from '../../hooks/useCountdown';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
-import { withAlpha } from '../../lib/utils';
+
+/**
+ * Sits on a photo in both themes, so it can't follow theme.error: the dark
+ * theme's lighter red drops white text below AA. Card chip styles share it.
+ */
+export const URGENT_CHIP_FILL = 'rgba(163,58,51,0.92)';
 
 export interface CountdownBadgeProps {
   endDate?: string | null;
@@ -41,7 +46,7 @@ function makeStyles(theme: AppTheme) {
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 3,
-    backgroundColor: withAlpha(theme.error, 0.92),
+    backgroundColor: URGENT_CHIP_FILL,
     borderRadius: 999,
     paddingHorizontal: 7,
     paddingVertical: 3,

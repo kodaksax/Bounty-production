@@ -91,4 +91,22 @@ describe('consumer screens', () => {
     );
     expect(offenders).toEqual([]);
   });
+
+  it('do not hard-code a dark surface through className', () => {
+    const DARK_CLASS = /\bbg-\[#(1b1e24|22262c|2a2e35)\]/i;
+    // Existing uses that sit on a fixed fill or are unreachable. Don't add to this.
+    const KNOWN = new Set([
+      'app/tabs/choose-people-screen.tsx',
+      'app/tabs/messenger/index.tsx',
+      'components/MessageBubble.tsx',
+      'components/bounty-confirmation-card.tsx',
+      'components/chat-detail-screen.tsx',
+      'components/sticky-message-interface.tsx',
+      'components/ui/skeleton-card.tsx',
+    ]);
+    const offenders = [...collect('app'), ...collect('components')].filter(
+      file => !KNOWN.has(file) && DARK_CLASS.test(fs.readFileSync(path.join(repoRoot, file), 'utf8'))
+    );
+    expect(offenders).toEqual([]);
+  });
 });

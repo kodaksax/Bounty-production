@@ -22,7 +22,6 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { Attachment } from '../lib/types';
-import { showToast } from '../lib/toast';
 
 interface AttachmentViewerModalProps {
   visible: boolean;
@@ -273,7 +272,7 @@ export function AttachmentViewerModal({
           UTI: mimeType,
         });
 
-        showToast({ message: 'File saved successfully!' });
+        Alert.alert('Success', 'File saved successfully!');
       } else {
         Alert.alert('Info', 'Video download is not supported. You can share instead.');
       }

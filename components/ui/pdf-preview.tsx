@@ -35,6 +35,9 @@ import type { AppTheme } from '../../lib/themes/types';
 
 /** Backdrop used by system PDF viewers (Preview, Chrome) around the page. */
 const VIEWER_BACKDROP = '#525659';
+// The backdrop never changes with the theme, so its foregrounds can't either.
+const VIEWER_MUTED_TEXT = '#D8D2C4';
+const VIEWER_ERROR_ICON = '#F09A92';
 /** The page itself is always white — this is the "downloaded look" the user sees. */
 const PAGE_COLOR = '#FFFFFF';
 
@@ -241,7 +244,7 @@ export function PdfPreview({ uri, name, style, borderRadius = 8 }: PdfPreviewPro
     return (
       <View style={containerStyle}>
         <View style={styles.fallback}>
-          <MaterialIcons name="picture-as-pdf" size={56} color={theme.errorText} />
+          <MaterialIcons name="picture-as-pdf" size={56} color={VIEWER_ERROR_ICON} />
           <Text style={styles.fallbackTitle} numberOfLines={2}>
             {name || 'PDF document'}
           </Text>
@@ -318,7 +321,7 @@ export function PdfPreview({ uri, name, style, borderRadius = 8 }: PdfPreviewPro
       )}
       {isLoading && (
         <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color={theme.textSecondary} />
+          <ActivityIndicator size="large" color={VIEWER_MUTED_TEXT} />
         </View>
       )}
     </View>
@@ -359,7 +362,7 @@ function makeStyles(theme: AppTheme) {
     textAlign: 'center',
   },
   fallbackText: {
-    color: theme.textSecondary,
+    color: VIEWER_MUTED_TEXT,
     fontSize: 13,
     marginTop: 6,
     textAlign: 'center',

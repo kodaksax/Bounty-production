@@ -77,7 +77,7 @@ export const StaleBountyAlert: React.FC<StaleBountyAlertProps> = ({
           onPress={handleRepost}
           className="flex-1 bg-[#008E2A] rounded-lg py-3 px-4"
         >
-          <Text className="text-center font-semibold text-sm" style={{ color: theme.text }}>
+          <Text className="text-center font-semibold text-sm" style={{ color: theme.onPrimary }}>
             Repost Bounty
           </Text>
         </TouchableOpacity>

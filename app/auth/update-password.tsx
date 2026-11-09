@@ -209,7 +209,7 @@ export function UpdatePasswordScreen() {
             }}
             className="bg-[#008E2A] rounded-lg py-3 px-6 mb-4"
           >
-            <Text className="font-medium" style={{ color: theme.text }}>Request New Reset Link</Text>
+            <Text className="font-medium" style={{ color: theme.onPrimary }}>Request New Reset Link</Text>
           </TouchableOpacity>
           <TouchableOpacity accessibilityRole="button" onPress={() => {
             router.replace(ROUTES.AUTH.SIGN_IN)
@@ -248,7 +248,7 @@ export function UpdatePasswordScreen() {
           >
             <View className="flex-row items-center">
               <MaterialIcons name="arrow-forward" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text className="font-medium" style={{ color: theme.text }}>Continue</Text>
+              <Text className="font-medium" style={{ color: theme.onPrimary }}>Continue</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -450,7 +450,7 @@ export function UpdatePasswordScreen() {
               ) : (
                 <MaterialIcons name="lock" size={20} color="#fff" style={{ marginRight: 8 }} />
               )}
-              <Text className="font-medium" style={{ color: theme.text }}>
+              <Text className="font-medium" style={{ color: theme.onPrimary }}>
                 {loading ? 'Updating Password...' : 'Update Password'}
               </Text>
             </TouchableOpacity>

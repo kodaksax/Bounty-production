@@ -92,14 +92,14 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
         <View className="bg-[#008E2A] rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto" style={{ maxHeight: windowHeight * 0.8 }}>
           {/* Header */}
           <View className="p-4 bg-[#22262C] flex items-center justify-center">
-            <MaterialIcons name="place" size={20} color={theme.text} style={{ marginRight: 8 }} />
-            <Text className="text-lg font-bold tracking-wider" style={{ color: theme.text }}>BOUNTY</Text>
+            <MaterialIcons name="place" size={20} color={theme.onPrimary} style={{ marginRight: 8 }} />
+            <Text className="text-lg font-bold tracking-wider" style={{ color: theme.onPrimary }}>BOUNTY</Text>
           </View>
 
           {/* Content */}
           <View className="p-5" style={{ maxHeight: windowHeight * 0.5 }}>
-            <Text className="text-xl font-bold mb-3" style={{ color: theme.text }}>{bountyData.title}</Text>
-            <Text className="mb-4 text-base line-clamp-3" style={{ color: theme.text }}>{bountyData.description}</Text>
+            <Text className="text-xl font-bold mb-3" style={{ color: theme.onPrimary }}>{bountyData.title}</Text>
+            <Text className="mb-4 text-base line-clamp-3" style={{ color: theme.onPrimary }}>{bountyData.description}</Text>
 
             <View className="flex justify-between items-center mb-4">
               <View className="bg-[#22262C] px-4 py-2 rounded-lg font-bold text-lg">
@@ -113,7 +113,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
                   <Text className="text-base text-[#929497]">{bountyData.location}</Text>
                 )}
                 {bountyData.isTimeSensitive && bountyData.deadline && (
-                  <Text className="text-xs mt-1" style={{ color: theme.text }}>Deadline: {bountyData.deadline}</Text>
+                  <Text className="text-xs mt-1" style={{ color: theme.onPrimary }}>Deadline: {bountyData.deadline}</Text>
                 )}
               </View>
             </View>
@@ -135,9 +135,9 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
 
                   {/* Chevron indicators */}
                   <View className="absolute inset-0 flex flex-col items-center justify-center space-y-1 overflow-hidden max-w-48 mx-auto">
-                    <MaterialIcons name="keyboard-arrow-up" size={24} color={theme.text} />
-                    <MaterialIcons name="keyboard-arrow-up" size={20} color={theme.text} />
-                    <MaterialIcons name="keyboard-arrow-up" size={16} color={theme.text} />
+                    <MaterialIcons name="keyboard-arrow-up" size={24} color={theme.onPrimary} />
+                    <MaterialIcons name="keyboard-arrow-up" size={20} color={theme.onPrimary} />
+                    <MaterialIcons name="keyboard-arrow-up" size={16} color={theme.onPrimary} />
                   </View>
                 </View>
               </View>
@@ -147,7 +147,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
           {isConfirming && (
             <View className="absolute inset-0 bg-[#008E2A] flex items-center justify-center flex-col">
               <View className="h-16 w-16 rounded-full border-4 border-white border-t-transparent animate-spin mb-4"></View>
-              <Text className="font-medium text-lg" style={{ color: theme.text }}>Posting your bounty...</Text>
+              <Text className="font-medium text-lg" style={{ color: theme.onPrimary }}>Posting your bounty...</Text>
             </View>
           )}
   </View>

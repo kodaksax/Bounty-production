@@ -1,7 +1,8 @@
 /**
  * Non-blocking confirmations. Call `showToast` when the user only needs to
  * know something worked. Keep Alert for questions and for anything they must
- * read before continuing.
+ * read before continuing. The host sits at the app root, so a toast raised
+ * while a native Modal is open is hidden behind it: close the Modal first.
  *
  * Kept free of UI imports so any screen, service or test can call it; the
  * single AppToastHost (components/ui/app-toast.tsx) does the drawing.

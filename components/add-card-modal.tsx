@@ -836,11 +836,11 @@ function makeStyles(theme: AppTheme) {
     previewLogosRow: { flexDirection: 'row', marginBottom: 12 },
     brandLogoPrimary: { height: 32, width: 32, borderRadius: 16, backgroundColor: theme.error },
     brandLogoSecondary: { height: 32, width: 32, borderRadius: 16, backgroundColor: theme.warning, marginLeft: -10 },
-    previewNumber: { color: '#fff', fontSize: 18, letterSpacing: 2, fontWeight: '600', marginBottom: 20 },
+    previewNumber: { color: theme.text, fontSize: 18, letterSpacing: 2, fontWeight: '600', marginBottom: 20 },
     previewFooterRow: { flexDirection: 'row', justifyContent: 'space-between' },
     previewMetaBlock: {},
     previewMetaLabel: { color: theme.primaryLight, fontSize: 12, marginBottom: 4 },
-    previewMetaValue: { color: '#fff', fontSize: 14, fontWeight: '600' },
+    previewMetaValue: { color: theme.text, fontSize: 14, fontWeight: '600' },
     formFieldBlock: { marginBottom: 18 },
     fieldLabel: { color: theme.textSecondary, fontSize: 13, marginBottom: 6, fontWeight: '500' },
     textInput: {
