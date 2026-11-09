@@ -39,6 +39,7 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { locationService } from '../../lib/services/location-service';
+import { recordGpsCountry } from '../../lib/services/serviceability-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { palette } from '../../lib/themes/colors';
 import type { AppTheme } from '../../lib/themes/types';
@@ -76,6 +77,7 @@ export default function LocationScreen() {
       precision,
       intent: onboardingData.intent ?? 'none',
     });
+    recordGpsCountry(extra?.countryCode, extra?.region);
     // A geocoded country outside the service area gets the waitlist screen
     // before role select. Only a geocoder answer counts: device locale is too
     // weak a signal (plenty of US users run en-GB), and an unknown country

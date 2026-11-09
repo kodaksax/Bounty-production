@@ -48,6 +48,7 @@ module.exports = {
     // expo-updates ships untransformed ESM and is native-only; map to a stub so
     // suites that import lib/supabase (via lib/config/env-guard) can parse.
     '^expo-updates$': '<rootDir>/__mocks__/expo-updates.js',
+    '^expo-location$': '<rootDir>/__mocks__/expo-location.js',
     // Binary/static assets: Metro resolves these to asset references at bundle
     // time, but Jest would try to parse the raw bytes as JavaScript.
     // The dot is double-escaped on purpose: in a JS string literal '\\.'

@@ -54,7 +54,7 @@ import {
 } from '../../lib/utils/bounty-completeness';
 import { logger } from '../../lib/utils/error-logger';
 import { formatPublicLocation } from '../../lib/utils/public-location';
-import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
+import { coarseRegionFromLocationText, getServiceabilityContext } from '../../lib/utils/serviceable-region';
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 import { isNativeMapAvailable } from '../../lib/config/maps';
 /**
@@ -425,10 +425,10 @@ export default function EnhancedSearchScreen() {
           role: authProfileService.getPrimaryRoleForAnalytics() ?? 'none',
           sort_order: searchFilters.sortBy || 'date_desc',
           is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
-          // metro_region (not `region`) — getDeviceServiceabilityContext()
-          // below already emits a differently-scoped `region` (device locale).
+          // metro_region (not `region`) — getServiceabilityContext()
+          // below already emits a differently-scoped `region` (the located state or province).
           metro_region: coarseRegionFromLocationText(authProfileService.getCurrentProfile()?.location),
-          ...getDeviceServiceabilityContext(),
+          ...getServiceabilityContext(),
         });
 
         // Save to recent searches if query exists

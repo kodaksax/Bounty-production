@@ -119,6 +119,13 @@ describe('deploy-edge-functions: which functions a push redeploys', () => {
     expect(runStep(root, first, sha, '', discovered)).toBe('gamma');
   });
 
+  it('never deploys an underscore folder, even one importing a changed _shared module', () => {
+    write(root, 'supabase/functions/_shared/held.ts', 'export const h = 1;\n');
+    write(root, 'supabase/functions/_held-fn/index.ts', "import { h } from '../_shared/held.ts';\n");
+    const sha = commitAll(root, 'held-back function');
+    expect(runStep(root, base, sha, base, discovered)).toBe('');
+  });
+
   it('drops a function directory that no longer exists', () => {
     write(root, 'supabase/functions/delta/index.ts', 'export {};\n');
     const sha = commitAll(root, 'delta (not in the discovered list)');

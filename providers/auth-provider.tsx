@@ -31,13 +31,29 @@ import {
     runAuthStageWithTimeout,
 } from '../lib/utils/auth-diagnostics';
 import { AUTH_RETRY_CONFIG, generateCorrelationId, isTimeoutError } from '../lib/utils/auth-errors';
-import { getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
+import { resolveServiceability } from '../lib/services/serviceability-service';
 import {
     resolveSupabaseAuthSubscription,
     safeUnsubscribe,
     SupabaseAuthSubscription,
 } from '../lib/utils/supabase-subscription';
 import { performMarketingAttribution } from '../services/marketingAttribution';
+
+/**
+ * Identifies now so early events merge to this user, then adds the region once
+ * it resolves. An unknown answer writes nothing, so it can't overwrite a located
+ * one on the person. Fire-and-forget: it must never block the auth-lock callback.
+ */
+function identifyWithServiceability(userId: string, email?: string): void {
+  void Promise.resolve()
+    .then(() => analyticsService.identifyUser(userId, { email }))
+    .then(() => resolveServiceability())
+    .then(context => {
+      if (context.serviceable_source === 'unknown') return undefined;
+      return analyticsService.identifyUser(userId, { email, ...context });
+    })
+    .catch(() => {});
+}
 
 type AuthData = {
   session: Session | null | undefined;
@@ -493,15 +509,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Silent session restore must identify every launch so a fresh
           // anonymous distinct id (after reset/reinstall) merges back to the
           // stable server-side user id.
-          void Promise.resolve()
-            .then(() => {
-              const serviceability = getDeviceServiceabilityContext();
-              return analyticsService.identifyUser(session.user.id, {
-                email: session.user.email,
-                ...serviceability,
-              });
-            })
-            .catch(() => {});
+          identifyWithServiceability(session.user.id, session.user.email);
           try {
             const Sentry = getSentry?.();
             if (Sentry && typeof Sentry.setUser === 'function') {
@@ -933,15 +941,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // non-promise return can't break this lock-critical callback.
           if ((_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') && session?.user) {
             const authedUser = session.user;
-            void Promise.resolve()
-              .then(() => {
-                const serviceability = getDeviceServiceabilityContext();
-                return analyticsService.identifyUser(authedUser.id, {
-                  email: authedUser.email,
-                  ...serviceability,
-                });
-              })
-              .catch(() => {});
+            identifyWithServiceability(authedUser.id, authedUser.email);
             if (_event === 'SIGNED_IN') {
               void Promise.resolve()
                 .then(() =>

@@ -17,6 +17,7 @@ import { useIsScreenFocused } from '../../../../hooks/useRouteFocus';
 import { DEFAULT_OVERLAY_KEY, useTopInsetOverlay } from '../../../../lib/context/TopInsetOverlayContext';
 import { pageTranslateX, useTabPager } from '../../../../components/ui/tab-pager';
 import { usePaymentPromiseCopy } from '../../../../lib/experiments/payment-promise-copy';
+import { usePosterLocalProof } from '../../../../lib/experiments/poster-local-proof';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { paymentPromiseStrings } from '../../../../lib/strings/payment-promise';
 import {
@@ -95,9 +96,21 @@ const MAX_LENGTH = 120;
 export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintStatusBar = true, topInset = 0, telemetry, step, totalSteps }: StepTaskProps) {
   const { theme } = useAppThemeContext();
   const showPaymentPromise = usePaymentPromiseCopy();
+  const showLocalProof = usePosterLocalProof();
+  // Required only with the flag on, so this screen doesn't load the location
+  // and profile services for everyone else.
+  const PosterLocalNote: typeof import('../../../../components/poster-local-note').PosterLocalNote | null =
+    showLocalProof
+      ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../../../../components/poster-local-note').PosterLocalNote
+      : null;
   // Scales off the viewport width so the headline stays proportionate from
   // small phones up to tablets. 375 is the reference width.
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  // The email banner takes about 170pt above the hero (tintStatusBar is off
+  // while it shows). With it and the local-proof block, a short phone only fits
+  // both fields above the tab bar with a smaller headline.
+  const compactHero = showLocalProof && !tintStatusBar && height < COMPACT_HERO_MAX_HEIGHT;
   const scale = Math.min(Math.max(width / 375, 0.85), 1.3);
   const styles = useMemo(() => makeStyles(theme, scale), [theme, scale]);
   const entrance = useStepEntrance();
@@ -267,13 +280,25 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
           <StepProgressRow step={step} totalSteps={totalSteps} onClose={onClose} onPrimary />
 
           <View style={styles.heroBody}>
-            <Text style={styles.title} accessibilityRole="header">
+            <Text
+              style={[styles.title, compactHero ? styles.titleCompact : null]}
+              numberOfLines={compactHero ? 1 : undefined}
+              adjustsFontSizeToFit={compactHero}
+              accessibilityRole="header"
+            >
               What do you need done?
             </Text>
             <Text style={styles.subtitle}>
               Name it. Set a reward. Someone nearby gets it done.
             </Text>
-            {showPaymentPromise ? (
+            {PosterLocalNote ? (
+              <View style={styles.heroNotes}>
+                <PosterLocalNote lineStyle={styles.heroNote} linkStyle={styles.heroNoteLink} />
+                {showPaymentPromise ? (
+                  <Text style={styles.heroNote}>{paymentPromiseStrings.stepTaskLine}</Text>
+                ) : null}
+              </View>
+            ) : showPaymentPromise ? (
               <Text style={styles.paymentPromise}>{paymentPromiseStrings.stepTaskLine}</Text>
             ) : null}
           </View>
@@ -406,6 +431,7 @@ export default StepTask;
 // White reads on #008E2A in both themes; the brand's dark ink doesn't (≈2.8:1).
 const HERO_TEXT = '#ffffff';
 const CARD_OVERLAP = 72;
+const COMPACT_HERO_MAX_HEIGHT = 700;
 
 function makeStyles(theme: AppTheme, scale: number) {
   const ms = (n: number) => Math.round(n * scale);
@@ -427,6 +453,11 @@ function makeStyles(theme: AppTheme, scale: number) {
       letterSpacing: -1.2,
       color: HERO_TEXT,
     },
+    titleCompact: {
+      fontSize: ms(26),
+      lineHeight: ms(30),
+      letterSpacing: -0.6,
+    },
     subtitle: {
       marginTop: 10,
       fontSize: 15,
@@ -440,6 +471,14 @@ function makeStyles(theme: AppTheme, scale: number) {
       fontWeight: '600',
       color: HERO_TEXT,
     },
+    heroNotes: { marginTop: 6, gap: 2 },
+    heroNote: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
+      color: HERO_TEXT,
+    },
+    heroNoteLink: { textDecorationLine: 'underline' },
     card: {
       marginTop: -CARD_OVERLAP + 16,
       marginHorizontal: 16,

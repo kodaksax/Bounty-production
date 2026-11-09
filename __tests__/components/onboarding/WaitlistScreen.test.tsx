@@ -10,10 +10,11 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockPush = jest.fn();
+const mockBack = jest.fn();
 const mockInsert = jest.fn();
 let mockParams: Record<string, string> = { country_code: 'GB', region: 'England' };
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn(), canGoBack: () => true }),
+  useRouter: () => ({ push: mockPush, replace: jest.fn(), back: mockBack, canGoBack: () => true }),
   useLocalSearchParams: () => mockParams,
 }));
 
@@ -50,7 +51,7 @@ jest.mock('../../../lib/haptic-feedback', () => ({
   hapticFeedback: { light: jest.fn(), success: jest.fn(), error: jest.fn(), medium: jest.fn() },
 }));
 
-import WaitlistScreen from '../../../app/onboarding/waitlist';
+import WaitlistScreen, { WaitlistContent } from '../../../app/onboarding/waitlist';
 
 const eventsNamed = (name: string) => mockTrackEvent.mock.calls.filter(([e]) => e === name);
 
@@ -154,5 +155,33 @@ describe('onboarding waitlist step', () => {
     expect(mockPush).toHaveBeenCalledWith('/onboarding/role-select');
     expect(eventsNamed('unserviceable_region_continued')).toHaveLength(1);
     expect(eventsNamed('waitlist_captured')).toHaveLength(0);
+  });
+
+  describe('opened from the Post tab', () => {
+    const renderPostTab = () => render(<WaitlistContent intent="none" origin="post_tab" />);
+
+    it('tags the event with where it came from', () => {
+      renderPostTab();
+      expect(eventsNamed('unserviceable_region_shown')[0][1]).toMatchObject({ source: 'post_tab' });
+    });
+
+    it('goes back to the composer on "Continue anyway"', () => {
+      const { getByLabelText } = renderPostTab();
+      fireEvent.press(getByLabelText('Continue anyway'));
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('writes to the same table with its own source', async () => {
+      mockSession = { user: { id: 'u1', email: 'me@bounty.test' } };
+      const { getByLabelText, getByText } = renderPostTab();
+      fireEvent.press(getByLabelText('Notify me'));
+      await waitFor(() => getByText("You're on the list"));
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'me@bounty.test', source: 'mobile_post_tab' })
+      );
+      fireEvent.press(getByLabelText('Continue'));
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
   });
 });

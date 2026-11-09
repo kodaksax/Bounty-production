@@ -163,6 +163,44 @@ export async function countActiveHuntersNearby(params: {
 }
 
 /**
+ * The smallest count the Post tab will show. The server applies the same floor
+ * (v_min_count in fn_poster_local_proof), so a smaller number never reaches the
+ * client. Keep the two equal.
+ */
+export const LOCAL_PROOF_MIN = 3;
+
+export interface PosterLocalProof {
+  /** Null when suppressed by LOCAL_PROOF_MIN. */
+  huntersActive7d: number | null;
+  /** Null when suppressed by LOCAL_PROOF_MIN. */
+  bountiesCompleted30d: number | null;
+}
+
+/** Local counts for the Post tab. Resolves to null when they can't be determined. */
+export async function getPosterLocalProof(params: {
+  latitude: number;
+  longitude: number;
+  radiusMiles: number;
+}): Promise<PosterLocalProof | null> {
+  try {
+    const { data, error } = await supabase.rpc('fn_poster_local_proof', {
+      p_lat: params.latitude,
+      p_lng: params.longitude,
+      p_radius_miles: params.radiusMiles,
+    });
+    if (error || !data) return null;
+    const row = data as { hunters_active_7d?: unknown; bounties_completed_30d?: unknown };
+    return {
+      huntersActive7d: typeof row.hunters_active_7d === 'number' ? row.hunters_active_7d : null,
+      bountiesCompleted30d:
+        typeof row.bounties_completed_30d === 'number' ? row.bounties_completed_30d : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Persists the signed-in user's coordinates so they can be counted by other
  * people's nearby queries.
  *
