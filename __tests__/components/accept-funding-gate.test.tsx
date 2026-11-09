@@ -107,6 +107,11 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
+let mockPaymentPromiseOn = false;
+jest.mock('lib/experiments/payment-promise-copy', () => ({
+  usePaymentPromiseCopy: () => mockPaymentPromiseOn,
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { AcceptFundingGate, chargeAmountForShortfall, MIN_SHORTFALL_CHARGE } = require('components/accept-funding-gate');
 
@@ -145,6 +150,7 @@ describe('AcceptFundingGate', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetDepositState();
+    mockPaymentPromiseOn = false;
     Platform.OS = 'ios';
     // A charge that never settles unless a test says otherwise.
     const inFlight = () => new Promise(() => {});
@@ -155,6 +161,125 @@ describe('AcceptFundingGate', () => {
 
   afterEach(() => {
     Platform.OS = originalOS;
+  });
+
+  describe('payment-promise-copy flag', () => {
+    const HOLD =
+      'We hold it until you approve the work. If something goes wrong, tap Report a problem and Bounty support decides; any refund goes to your Bounty balance.';
+    const cardOnly = { ...REQ, amountRequired: 30, posterBalance: 0, shortfall: 30 };
+    const balanceOnly = { ...REQ, amountRequired: 30, posterBalance: 80, shortfall: 0 };
+    const both = { ...REQ, amountRequired: 30, posterBalance: 10, shortfall: 20 };
+
+    describe('off', () => {
+      test('the card-charge sheet is unchanged', () => {
+        const { getByText, queryByText, queryByTestId } = render(<AcceptFundingGate gate={makeGate()} />);
+
+        expect(getByText('Pay $30.00 & hire')).toBeTruthy();
+        expect(getByText('Not now')).toBeTruthy();
+        expect(getByText('Bounty reward $50.00')).toBeTruthy();
+        expect(getByText('charged to your card now')).toBeTruthy();
+        expect(getByText('Wallet balance')).toBeTruthy();
+        expect(getByText(trustSafetyStrings.posterHire)).toBeTruthy();
+        expect(queryByTestId('payment-promise-summary')).toBeNull();
+        expect(queryByText('Fund and hire')).toBeNull();
+        expect(queryByText('Not yet')).toBeNull();
+      });
+
+      test('the balance-covered sheet is unchanged', () => {
+        const gate = makeGate({ stage: 'confirm', requirement: balanceOnly });
+        const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
+
+        expect(getByText('Confirm & hire')).toBeTruthy();
+        expect(getByText('After this hire')).toBeTruthy();
+        expect(queryByText('Fund and hire')).toBeNull();
+      });
+    });
+
+    describe('on', () => {
+      beforeEach(() => {
+        mockPaymentPromiseOn = true;
+      });
+
+      test.each([
+        ['card only', cardOnly, 'pay', 'Your card is charged $30.00 now.'],
+        ['balance only', balanceOnly, 'confirm', '$30.00 comes from your Bounty balance now.'],
+        ['both', both, 'pay', '$10.00 from your Bounty balance and $20.00 charged to your card now.'],
+      ])('%s shows the three approved lines', (_name, requirement, stage, sourceLine) => {
+        const { getByText } = render(
+          <AcceptFundingGate gate={makeGate({ requirement, stage })} />
+        );
+
+        expect(getByText('Reward $30.00 · You pay $30.00 · No fees for you')).toBeTruthy();
+        expect(getByText(sourceLine)).toBeTruthy();
+        expect(getByText(HOLD)).toBeTruthy();
+      });
+
+      test('a shortfall under the Stripe minimum still adds up to the reward', () => {
+        const requirement = { ...REQ, amountRequired: 30, posterBalance: 29.9, shortfall: 0.1 };
+        const { getByText } = render(<AcceptFundingGate gate={makeGate({ requirement })} />);
+
+        expect(
+          getByText('$29.50 from your Bounty balance and $0.50 charged to your card now.')
+        ).toBeTruthy();
+      });
+
+      test('the sheet is only those three lines', () => {
+        const { queryByText } = render(<AcceptFundingGate gate={makeGate()} />);
+
+        expect(queryByText('Bounty reward $50.00')).toBeNull();
+        expect(queryByText('charged to your card now')).toBeNull();
+        expect(queryByText('Wallet balance')).toBeNull();
+        expect(queryByText('Charged now')).toBeNull();
+        expect(queryByText(trustSafetyStrings.posterHire)).toBeNull();
+        expect(queryByText(/8%|15%/)).toBeNull();
+      });
+
+      test('the card can still be changed', () => {
+        const { getByText } = render(<AcceptFundingGate gate={makeGate()} />);
+
+        fireEvent.press(getByText('Change'));
+
+        expect(mockSetShowPaymentMethodsModal).toHaveBeenCalledWith(true);
+      });
+
+      test('"Fund and hire" charges exactly the shortfall', () => {
+        const gate = makeGate({ requirement: both });
+        const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+        fireEvent.press(getByText('Fund and hire'));
+
+        expect(gate.onPaymentStarted).toHaveBeenCalledWith('card');
+        expect(mockPayWithCard).toHaveBeenCalledWith(20);
+      });
+
+      test('"Fund and hire" confirms without Stripe when the balance covers it', () => {
+        const gate = makeGate({ stage: 'confirm', requirement: balanceOnly });
+        const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+        fireEvent.press(getByText('Fund and hire'));
+
+        expect(gate.onConfirm).toHaveBeenCalledTimes(1);
+        expect(mockPayWithCard).not.toHaveBeenCalled();
+      });
+
+      test('"Not yet" backs out', () => {
+        const gate = makeGate();
+        const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+        fireEvent.press(getByText('Not yet'));
+
+        expect(gate.onCancel).toHaveBeenCalledTimes(1);
+      });
+
+      test('a declined card is still explained', () => {
+        const gate = makeGate({
+          paymentFailure: { error_code: 'card_declined', error_type: 'card_error' },
+        });
+        const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+        expect(getByText('Ada is still selected. Nothing has changed on this bounty.')).toBeTruthy();
+      });
+    });
   });
 
   describe('balance covers it', () => {
