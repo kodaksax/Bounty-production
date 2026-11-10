@@ -583,6 +583,18 @@ function BountyAppInner() {
   // funnel analytics, back handler or status-bar tint), so sitting beside
   // Home, or being swiped past, logs nothing.
   const postIsActive = activeScreen === 'postings'
+  // Set when something other than the Post tab sends the poster to the
+  // composer, so it can report where they came from.
+  const [composerEntryPoint, setComposerEntryPoint] = useState<string | undefined>(undefined)
+  const openComposer = useCallback((entryPoint: string) => {
+    // A composer already on screen has reported its own entry point.
+    if (activeRef.current !== 'postings') setComposerEntryPoint(entryPoint)
+    setActiveScreen('postings')
+  }, [setActiveScreen])
+  // Lasts for one visit: the next tap on the Post tab is just a tab tap.
+  useEffect(() => {
+    if (activeScreen !== 'postings' && barScreen !== 'postings') setComposerEntryPoint(undefined)
+  }, [activeScreen, barScreen])
   const postPage = useMemo(
     () => (
       <NeedHelpScreen
@@ -591,9 +603,10 @@ function BountyAppInner() {
         onBountyPosted={refreshFeed} // Refresh feed when a new bounty is posted
         setShowBottomNav={setShowBottomNav}
         isActive={postIsActive}
+        entryPoint={composerEntryPoint}
       />
     ),
-    [setActiveScreen, refreshFeed, postIsActive]
+    [setActiveScreen, refreshFeed, postIsActive, composerEntryPoint]
   )
   const pageFor = (key: string): React.ReactNode => {
     switch (key) {
@@ -678,6 +691,7 @@ function BountyAppInner() {
       activeScreen={activeScreen}
       targetScreen={barScreen}
       onContinueTo={setActiveScreen}
+      onOpenComposer={openComposer}
       suppressed={resumePrompt.draftTitle !== null}
     >
       <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' }}>

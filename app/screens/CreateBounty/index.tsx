@@ -268,6 +268,9 @@ export function CreateBountyFlow({
   // Same reasoning as deliberateTapRef, plus it keeps the unmount effect
   // below (deps: []) from closing over a stale prop.
   const entryPointRef = useRef(entryPoint);
+  // The Post tab is preloaded, so this instance exists before anyone says why
+  // the poster is coming. The entry point is only fixed once the flow opens.
+  if (!flowMountedRef.current) entryPointRef.current = entryPoint;
   // Guards post_field_focused against firing more than once per flow
   // instance — the composer-engagement signal only cares about the FIRST
   // real interaction.

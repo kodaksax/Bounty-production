@@ -317,6 +317,21 @@ describe('CreateBountyFlow — posting-funnel timing analytics', () => {
     jest.restoreAllMocks();
   });
 
+  it('reports the entry point it was given before it opened, then keeps it', () => {
+    // The Post tab is preloaded, so the flow exists before the poster is sent.
+    const { rerender } = render(
+      <CreateBountyFlow deliberateTap isActive={false} entryPoint="need_help_tab" />
+    );
+    expect(eventsNamed('composer_opened')).toHaveLength(0);
+
+    rerender(<CreateBountyFlow deliberateTap isActive entryPoint="moment_post_first_bounty" />);
+    expect(lastEventNamed('composer_opened').entry_point).toBe('moment_post_first_bounty');
+
+    rerender(<CreateBountyFlow deliberateTap isActive entryPoint="need_help_tab" />);
+    fireEvent.changeText(screen.getByLabelText('stub-title-input'), 'Move a couch');
+    expect(lastEventNamed('bounty_started').entry_point).toBe('moment_post_first_bounty');
+  });
+
   it('subscribes to AppState exactly once (no duplicate listener)', () => {
     render(<CreateBountyFlow />);
     expect(appStateHandlers).toHaveLength(1);

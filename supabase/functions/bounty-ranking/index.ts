@@ -69,7 +69,7 @@ async function resolveVariant(distinctId: string): Promise<Variant> {
     return data.featureFlags?.[FLAG_KEY] === 'test' ? 'test' : 'control';
   } catch (error) {
     // PostHog unreachable/slow — fail open to control, same as every other
-    // flag-read in this app (see lib/experiments/deferred-funding-variant.ts).
+    // flag-read in this app.
     console.error('[bounty-ranking] flag resolution failed, defaulting to control', error);
     return 'control';
   }
