@@ -825,9 +825,11 @@ function makeStyles(t: AppTheme) {
     // a hairline light rim, and a soft drop shadow.
     glass: {
       overflow: 'hidden',
-      backgroundColor: t.isDark ? withAlpha(t.text, 0.08) : withAlpha(t.text, 0.55),
+      // Light mode: solid white pill. (t.text is near-black in light mode, so
+      // tinting with it made the composer render dark.)
+      backgroundColor: t.isDark ? withAlpha(t.text, 0.08) : '#FFFFFF',
       borderWidth: StyleSheet.hairlineWidth * 2,
-      borderColor: t.isDark ? withAlpha(t.text, 0.28) : withAlpha(t.text, 0.9),
+      borderColor: t.isDark ? withAlpha(t.text, 0.28) : withAlpha(t.text, 0.12),
       shadowColor: '#000',
       shadowOpacity: t.isDark ? 0.35 : 0.12,
       shadowRadius: 10,
