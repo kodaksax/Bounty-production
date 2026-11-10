@@ -64,6 +64,7 @@ import {
   shortfallChargeCents,
   shortfallIdempotencyKey,
 } from './logic.ts'
+import { resolveCustomerPlan } from './customer-plan.ts'
 
 // The public website calls this from a browser, so CORS has to allow its
 // origin. Prefer an explicit allowlist (BOUNTY_CHECKOUT_ALLOWED_ORIGINS,
@@ -492,6 +493,16 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // One customer per person: see planCheckoutCustomer. Before anything is
+      // stored, so a failed read leaves no pending row behind.
+      const customerPlan = await resolveCustomerPlan({
+        stripe,
+        admin: supabaseAdmin,
+        authedUserId,
+        email,
+        withTimeout: withDbTimeout,
+      })
+
       const forwardedFor = req.headers.get('x-forwarded-for') ?? ''
       const clientIp = forwardedFor.split(',')[0]?.trim() || null
 
@@ -536,14 +547,6 @@ Deno.serve(async (req: Request) => {
       // the customer is charged - from the database, never the request body.
       const authoritativeAmount = Number(pending.amount)
 
-      let existingCustomerId: string | null = null
-      if (authedUserId) {
-        const { data: profile } = (await withDbTimeout(
-          supabaseAdmin.from('profiles').select('stripe_customer_id').eq('id', authedUserId).maybeSingle()
-        )) as any
-        existingCustomerId = profile?.stripe_customer_id ?? null
-      }
-
       // Built here, never read from the body (success_url / cancel_url are
       // ignored): see checkoutReturnUrls.
       const { successUrl, cancelUrl } = checkoutReturnUrls({
@@ -573,7 +576,7 @@ Deno.serve(async (req: Request) => {
             title: draft.title,
             description: draft.description,
             email,
-            existingCustomerId,
+            customerPlan,
             successUrl,
             cancelUrl,
             pendingBountyId,
@@ -616,6 +619,10 @@ Deno.serve(async (req: Request) => {
         amount: authoritativeAmount,
         authed: !!authedUserId,
         has_coordinates: draft.latitude !== null,
+        customer: customerPlan.customerId
+          ? customerPlan.ownCustomer ? 'own' : 'matched'
+          : customerPlan.createCustomer ? 'created_by_checkout' : 'guest',
+        offer_save: customerPlan.offerSave,
       })
 
       return jsonResponse(
