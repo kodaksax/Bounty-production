@@ -44,6 +44,13 @@ it and `/decline` drops it. Signing in alone does nothing, so a stranger can't p
 as someone just because the owner clicked an unexplained sign-in email. Holds lapse
 after 7 days.
 
+When a saved card can't pay at acceptance, `poster-web` returns outcome `card_failed`.
+The page calls `POST /bounty-checkout/shortfall { request_id }` and sends the poster to
+the returned `checkout_url`, which pays the shortfall as a wallet deposit. Stripe
+returns to the dashboard with `funding=returned`. The deposit lands by webhook, so the
+page polls `GET /bounty-checkout/shortfall?request_id=` until `covered`, then accepts
+again.
+
 `send-notification-email` now includes the Resend-template code that was
 deployed by hand on 2026-10-02 (v34) but never committed. Without it, this
 deploy would have removed the "You're live" template.

@@ -124,6 +124,7 @@ export type DecisionOutcome =
   | 'bounty_closed'
   | 'request_closed'
   | 'not_funded'
+  | 'card_failed'
   | 'not_found'
   | 'retry'
 
@@ -143,6 +144,7 @@ const MESSAGES: Record<DecisionOutcome, { ok: boolean; httpStatus: number; messa
   bounty_closed: { ok: false, httpStatus: 409, message: 'This bounty is no longer open (it may have been cancelled or finished), so nobody new can be accepted.' },
   request_closed: { ok: false, httpStatus: 409, message: 'This application is no longer open — the hunter may have withdrawn or it expired.' },
   not_funded: { ok: false, httpStatus: 402, message: 'We couldn’t accept yet because this bounty’s payment isn’t in place. Nothing was charged. Contact us and we’ll help.' },
+  card_failed: { ok: false, httpStatus: 402, message: 'Your saved card couldn’t be charged, so nobody has been hired yet. You can pay with another card to finish.' },
   not_found: { ok: false, httpStatus: 404, message: 'We couldn’t find that application on your bounty.' },
   retry: { ok: false, httpStatus: 503, message: 'Something went wrong on our side. Nothing changed — please try again in a moment.' },
 }
@@ -182,7 +184,9 @@ export function classifyAccept(state: DecisionState, rpcError: string | null): D
   if (request.status !== 'pending') return decisionResult('request_closed')
 
   if (rpcError) {
-    if (/insufficient_funds_for_escrow|bounty_not_funded|_locked_by_|funding_mode|card_charge_failed/i.test(rpcError)) {
+    // The page responds to this one by offering Checkout for the shortfall.
+    if (/card_charge_failed/i.test(rpcError)) return decisionResult('card_failed')
+    if (/insufficient_funds_for_escrow|bounty_not_funded|_locked_by_|funding_mode/i.test(rpcError)) {
       return decisionResult('not_funded')
     }
     return decisionResult('retry')

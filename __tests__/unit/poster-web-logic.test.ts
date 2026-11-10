@@ -114,9 +114,11 @@ describe('accepting through accept-bounty-request', () => {
   const postgrest = (message: string) =>
     JSON.stringify({ error: 'x', details: JSON.stringify({ code: 'P0001', message }) })
 
-  test('a card that could not pay reads as not funded', () => {
+  test('a card that could not pay has its own outcome, so the page can offer Checkout', () => {
     const reason = acceptFailureReason(402, JSON.stringify({ code: 'card_charge_failed', fallback: 'top_up' }))
-    expect(classifyAccept(state('pending', 'open', null), reason).outcome).toBe('not_funded')
+    const r = classifyAccept(state('pending', 'open', null), reason)
+    expect(r).toMatchObject({ ok: false, outcome: 'card_failed', httpStatus: 402 })
+    expect(r.message).toMatch(/another card/)
   })
 
   test('the database reason still classifies', () => {

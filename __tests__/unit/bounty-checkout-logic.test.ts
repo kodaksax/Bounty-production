@@ -1,6 +1,9 @@
 import {
   buildCheckoutSessionParams,
+  buildShortfallSessionParams,
   checkoutModeForSwitch,
+  shortfallChargeCents,
+  shortfallIdempotencyKey,
 } from '../../supabase/functions/bounty-checkout/logic';
 
 const base = {
@@ -88,5 +91,74 @@ describe('setup mode', () => {
     const p = setup({ existingCustomerId: 'cus_1' });
     expect(p.customer).toBe('cus_1');
     expect(p.customer_email).toBeUndefined();
+  });
+});
+
+describe('shortfall Checkout', () => {
+  const input = {
+    shortfallDollars: 12.5,
+    bountyTitle: 'Walk my cat',
+    posterId: 'poster-1',
+    bountyId: 'bounty-1',
+    requestId: 'request-1',
+    email: 'a@example.com',
+    existingCustomerId: null,
+    returnUrl: 'https://www.bountyfinder.net/manage/?bounty=bounty-1&view=applicant',
+    nowSeconds: 1000,
+  };
+  const build = (over = {}) =>
+    buildShortfallSessionParams({ ...input, ...over }) as Record<string, any>;
+
+  it('charges exactly the shortfall in USD', () => {
+    const line = build().line_items[0].price_data;
+    expect(line.unit_amount).toBe(1250);
+    expect(line.currency).toBe('usd');
+  });
+
+  it.each([
+    [0.3, 50],
+    [0.5, 50],
+    [0.51, 51],
+    [19.99, 1999],
+    [4.35, 435],
+  ])('shortfallChargeCents(%s) = %s', (dollars, cents) => {
+    expect(shortfallChargeCents(dollars)).toBe(cents);
+  });
+
+  it('keeps foreign currency out of the wallet', () => {
+    expect(build().adaptive_pricing).toEqual({ enabled: false });
+  });
+
+  it('credits through the deposit webhook, to this poster', () => {
+    expect(build().payment_intent_data.metadata).toEqual({
+      purpose: 'wallet_deposit',
+      user_id: 'poster-1',
+      bounty_id: 'bounty-1',
+      request_id: 'request-1',
+    });
+  });
+
+  it('is ignored by the bounty-creation checkout handler', () => {
+    expect(build().metadata.flow_type).not.toBe('bounty_creation');
+    expect(build().metadata.pending_bounty_id).toBeUndefined();
+  });
+
+  it('returns only to the URL the server built', () => {
+    const p = build();
+    expect(p.success_url).toBe(`${input.returnUrl}&funding=returned`);
+    expect(p.cancel_url).toBe(`${input.returnUrl}&funding=cancelled`);
+  });
+
+  it('uses the customer when there is one', () => {
+    const p = build({ existingCustomerId: 'cus_1' });
+    expect(p.customer).toBe('cus_1');
+    expect(p.customer_email).toBeUndefined();
+  });
+
+  it('reuses a session for a double-click, not after the window or if the amount moves', () => {
+    const key = shortfallIdempotencyKey('r', 1250, 6000);
+    expect(shortfallIdempotencyKey('r', 1250, 6599)).toBe(key);
+    expect(shortfallIdempotencyKey('r', 1250, 6600)).not.toBe(key);
+    expect(shortfallIdempotencyKey('r', 900, 6000)).not.toBe(key);
   });
 });
