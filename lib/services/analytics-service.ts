@@ -400,15 +400,18 @@ export type AnalyticsEvent =
   // `step_index`, and `term` so help engagement can be paired with the shared
   // `post_step_viewed` step funnel WITHOUT adding a step to it.
   | 'post_help_opened'
-  // The "Continue your post" prompt (app/screens/CreateBounty/ResumeDraftBanner)
-  // shown when a poster comes back to the composer with a saved draft that is
-  // past step 1. One event; `action` is 'shown', 'continued' (jumped to
-  // `to_step`) or 'dismissed'. A prompt that disappears because the poster
-  // started editing step 1 instead sends nothing further, so
-  // shown − continued − dismissed is the "ignored" bucket.
-  // `surface: 'app_open'` is the same prompt as a sheet on the next app open
-  // after a tab switch away from a draft (app/hooks/useResumeComposerPrompt.ts);
-  // 'continued' there opens the composer on the Task step.
+  // Resuming a saved draft. `surface: 'create_flow'` (since 2026-11-10): the
+  // composer reopened a draft on the step it was left on, past step 1, with
+  // the "Picking up where you left off" note (app/screens/CreateBounty/
+  // ResumeDraftNote). `action` is 'restored' (to_step, draft_source 'local' |
+  // 'server' — 'server' means the copy came from another device) or
+  // 'started_over' (the note's discard, from_step). Before 2026-11-10 this
+  // surface was a dismissible banner on step 1 with actions 'shown' /
+  // 'continued' / 'dismissed'; those no longer fire from create_flow.
+  // `surface: 'app_open'` is the sheet on the next app open after a tab switch
+  // away from a draft (app/hooks/useResumeComposerPrompt.ts): 'shown' /
+  // 'continued' / 'dismissed', `to_step` = the step the composer reopens on.
+  // Never carries draft contents (drafts can hold the exact pin).
   | 'post_resume_prompt'
   | 'post_step_completed'
   | 'post_step_abandoned'

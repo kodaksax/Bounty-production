@@ -19,9 +19,9 @@ import type { PostField } from 'app/screens/CreateBounty/postStepFields';
 import {
   fieldForPatch,
   incompleteFieldsForStep,
-  resumeStepForDraft,
+  restoreStepForDraft,
 } from 'app/screens/CreateBounty/postStepFields';
-import { ResumeDraftBanner } from 'app/screens/CreateBounty/ResumeDraftBanner';
+import { ResumeDraftNote } from 'app/screens/CreateBounty/ResumeDraftNote';
 import { useBountyPublish } from 'app/screens/CreateBounty/useBountyPublish';
 import { bountyService } from 'app/services/bountyService';
 import { ErrorBanner } from 'components/error-banner';
@@ -143,14 +143,14 @@ export function CreateBountyFlow({
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
   // it slides in from.
   const [stepDirection, setStepDirection] = useState(1);
-  // The step the "Continue your post" banner offers to jump to, or null while
-  // it isn't showing. Set at most once per flow instance, when the poster
-  // arrives with a saved draft that is already past step 1.
-  const [resumePromptStep, setResumePromptStep] = useState<number | null>(null);
-  // Set right before a resume jump so the step-view effect doesn't report it
-  // as post_step_completed — the poster skipped those steps, not finished
-  // them, in this visit.
-  const resumeJumpRef = useRef(false);
+  // The step a saved draft was reopened on, while the "Picking up where you
+  // left off" note shows above it; null otherwise. Set at most once per flow
+  // instance, when the draft loads, and cleared by the first step change.
+  const [resumeNoteStep, setResumeNoteStep] = useState<number | null>(null);
+  // The user whose draft load has been turned into a starting step. Leaving
+  // the Post tab remounts this flow (NeedHelpScreen's flowKey), so this runs
+  // on every return.
+  const [restoredFor, setRestoredFor] = useState<string | null>(null);
 
   // --- Post-publish phase -------------------------------------------------
   // Non-null once the bounty is live. From here on the flow is no longer
@@ -198,7 +198,28 @@ export function CreateBountyFlow({
   // `draft` itself has been reset to defaults.
   const publishedDraftRef = useRef<BountyDraft | null>(null);
   const { session } = useAuthContext();
-  const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
+  const {
+    draft,
+    lastStep,
+    source: draftSource,
+    saveDraft,
+    saveStep,
+    clearDraft,
+    isLoading,
+  } = useBountyDraft(session?.user?.id);
+  // Open on the step the draft was left on. Done during render, the moment
+  // the load settles, so step 1 never flashes first; this also happens while
+  // the flow is preloaded off-screen, so the step is ready before the poster
+  // swipes in. restoreStepForDraft never goes past the first unfinished step.
+  const restoreKey = session?.user?.id ?? '';
+  if (!isLoading && restoredFor !== restoreKey) {
+    setRestoredFor(restoreKey);
+    const target = restoreStepForDraft(draft, lastStep);
+    if (target > 1) {
+      setCurrentStep(target);
+      setResumeNoteStep(target);
+    }
+  }
   const { createEscrow, balance } = useWallet();
   const { paymentMethods } = useStripe();
   const { theme } = useAppThemeContext();
@@ -333,11 +354,22 @@ export function CreateBountyFlow({
     };
   }, []);
 
+  /**
+   * Every pre-publish step change goes through here. The step is saved with
+   * the draft, so leaving the composer and coming back (or opening the draft
+   * on another device) lands on it. Navigating also answers the resume note.
+   */
+  const moveToStep = (target: number) => {
+    setStepDirection(target >= currentStep ? 1 : -1);
+    setCurrentStep(target);
+    setResumeNoteStep(null);
+    void saveStep(target);
+  };
+
   /** Jump to an arbitrary step (the review screen's Edit links, and the
    * insufficient-balance gate's "Edit amount"). */
   const handleGoToStep = (target: number) => {
-    setStepDirection(target >= currentStep ? 1 : -1);
-    setCurrentStep(target);
+    moveToStep(target);
   };
 
   const {
@@ -421,7 +453,6 @@ export function CreateBountyFlow({
     // Advancing a step is composer intent even if the title arrived from a
     // resumed draft and the poster never focused the field.
     markComposerStarted('step_advance');
-    setResumePromptStep(null);
     // post_title_typed — fires once, the first time the poster advances past
     // the title step (step 1), regardless of how many times they later
     // return to it.
@@ -438,17 +469,13 @@ export function CreateBountyFlow({
       });
     }
     if (currentStep < TOTAL_STEPS) {
-      const next = currentStep + 1;
-      setStepDirection(1);
-      setCurrentStep(next);
+      moveToStep(currentStep + 1);
     }
   };
 
   const handleBack = () => {
     if (currentStep > 1) {
-      const prev = currentStep - 1;
-      setStepDirection(-1);
-      setCurrentStep(prev);
+      moveToStep(currentStep - 1);
     }
   };
 
@@ -561,35 +588,35 @@ export function CreateBountyFlow({
     return false;
   };
 
-  /** "Continue your post" — jump straight to the first unfinished step. */
-  const handleResumeContinue = () => {
-    const target = resumePromptStep;
-    if (target === null) return;
-    markComposerStarted('resume');
-    analyticsService.trackEvent('post_resume_prompt', {
-      surface: POST_SURFACE,
-      action: 'continued',
-      composer_screen: composerScreenForStep(1),
-      to_step: target,
-      to_step_name: STEP_TITLES[target - 1],
-      variant: POST_FLOW_VARIANT,
-    });
-    setResumePromptStep(null);
-    resumeJumpRef.current = true;
-    handleGoToStep(target);
-  };
-
-  const handleResumeDismiss = () => {
-    if (resumePromptStep === null) return;
-    analyticsService.trackEvent('post_resume_prompt', {
-      surface: POST_SURFACE,
-      action: 'dismissed',
-      composer_screen: composerScreenForStep(1),
-      to_step: resumePromptStep,
-      to_step_name: STEP_TITLES[resumePromptStep - 1],
-      variant: POST_FLOW_VARIANT,
-    });
-    setResumePromptStep(null);
+  /**
+   * The resume note's "Start over": discard the draft on this device and the
+   * server, and go back to an empty step 1. Confirmed first, since it can't be
+   * undone and reaches the poster's other devices too.
+   */
+  const handleStartOver = () => {
+    const fromStep = currentStep;
+    Alert.alert('Start over?', 'This clears your draft on all your devices.', [
+      { text: 'Keep draft', style: 'cancel' },
+      {
+        text: 'Start over',
+        style: 'destructive',
+        onPress: () => {
+          analyticsService.trackEvent('post_resume_prompt', {
+            surface: POST_SURFACE,
+            action: 'started_over',
+            composer_screen: composerScreenForStep(fromStep),
+            from_step: fromStep,
+            from_step_name: STEP_TITLES[fromStep - 1],
+            draft_source: draftSource,
+            variant: POST_FLOW_VARIANT,
+          });
+          setResumeNoteStep(null);
+          setStepDirection(-1);
+          setCurrentStep(1);
+          void clearDraft();
+        },
+      },
+    ]);
   };
 
   /**
@@ -644,33 +671,31 @@ export function CreateBountyFlow({
     stepTimerRef.current.start();
     stepBackgroundMsRef.current = 0;
     backgroundedAtRef.current = appStateRef.current === 'active' ? null : getMonotonicNow();
+    // `currentStep`, not currentStepRef: the step-view effect below hasn't
+    // caught up with a restored step yet on this commit.
     if (deliberateTapRef.current) {
       analyticsService.trackEvent('composer_opened', {
         role: 'poster',
-        composer_screen: composerScreenForStep(currentStepRef.current),
+        composer_screen: composerScreenForStep(currentStep),
         variant: POST_FLOW_VARIANT,
         entry_point: entryPoint,
         deliberate_entry: true,
       });
     }
-    // Leaving the Post tab resets the flow to step 1, so a poster coming back
-    // to a draft that had got further sees only a pre-filled title. Offer to
-    // pick up where it stopped. A draft still unfinished on step 1 needs no
-    // prompt — the poster is already looking at it.
-    if (resumedDraftRef.current && currentStepRef.current === 1) {
-      const resumeStep = resumeStepForDraft(draft);
-      if (resumeStep > 1) {
-        setResumePromptStep(resumeStep);
-        analyticsService.trackEvent('post_resume_prompt', {
-          surface: POST_SURFACE,
-          action: 'shown',
-          composer_screen: composerScreenForStep(1),
-          to_step: resumeStep,
-          to_step_name: STEP_TITLES[resumeStep - 1],
-          variant: POST_FLOW_VARIANT,
-          entry_point: entryPoint,
-        });
-      }
+    // The flow reopened a saved draft past step 1 (see the restore above).
+    // Step names and which copy won only: never the draft's contents, which
+    // can include the exact pin.
+    if (resumeNoteStep !== null) {
+      analyticsService.trackEvent('post_resume_prompt', {
+        surface: POST_SURFACE,
+        action: 'restored',
+        composer_screen: composerScreenForStep(resumeNoteStep),
+        to_step: resumeNoteStep,
+        to_step_name: STEP_TITLES[resumeNoteStep - 1],
+        draft_source: draftSource,
+        variant: POST_FLOW_VARIANT,
+        entry_point: entryPoint,
+      });
     }
     // `draft` is read only for the one-time snapshot above; listing it would
     // only re-run an effect that has already latched.
@@ -693,15 +718,15 @@ export function CreateBountyFlow({
    * compose.
    *
    * So `post_started` now means: the poster typed, focused the title field,
-   * advanced a step, tapped "Continue your post", or tried to publish.
-   * Mount, focus, re-render, back navigation and app resume cannot reach it
-   * — none of them call this.
+   * advanced a step, or tried to publish. Mount, focus, re-render, back
+   * navigation, app resume and reopening a saved draft on its step cannot
+   * reach it — none of them call this.
    *
    * `trigger` records which of those it was, so the intent boundary itself
    * stays auditable rather than becoming another unexaminable default.
    */
   const markComposerStarted = (
-    trigger: 'field_focus' | 'draft_edit' | 'step_advance' | 'resume' | 'publish'
+    trigger: 'field_focus' | 'draft_edit' | 'step_advance' | 'publish'
   ) => {
     if (composerStartedRef.current) return;
     composerStartedRef.current = true;
@@ -723,9 +748,6 @@ export function CreateBountyFlow({
    * writes the draft on mount. */
   const handleDraftUpdate = (patch: Partial<BountyDraft>) => {
     markComposerStarted('draft_edit');
-    // Editing step 1 answers the resume prompt — the poster chose to work
-    // here. Its jump target could also be stale after the edit.
-    setResumePromptStep(null);
     const field = fieldForPatch(patch);
     if (field) {
       lastFieldRef.current = field;
@@ -743,9 +765,6 @@ export function CreateBountyFlow({
     // The earliest reliable intent signal in this UX: the title field is not
     // autoFocused, so reaching here always took a tap.
     markComposerStarted('field_focus');
-    // The banner sits at the foot of step 1, where the keyboard is about to
-    // come up — focusing a field means the poster is working here instead.
-    setResumePromptStep(null);
     // Only a field name counts — a caller wired straight to onFocus passes
     // the focus event instead.
     const focusedField = typeof field === 'string' ? field : undefined;
@@ -791,9 +810,9 @@ export function CreateBountyFlow({
       deliberate_entry: deliberateTapRef.current,
     });
 
-    const resumeJump = resumeJumpRef.current;
-    resumeJumpRef.current = false;
-    if (!isFirstEntry && currentStep > previousStep && !resumeJump) {
+    // A restored step is the first entry, so it is never reported as the
+    // steps before it being completed in this visit.
+    if (!isFirstEntry && currentStep > previousStep) {
       const { seconds, capped } = capSeconds(stepTimerRef.current.elapsedSeconds());
       analyticsService.trackEvent('post_step_completed', {
         step_index: previousStep,
@@ -925,6 +944,13 @@ export function CreateBountyFlow({
       >
         {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
 
+        {/* Above the step's progress row. Only on steps 2-3 (a draft
+            reopened on step 1 needs no note), so it never sits over step 1's
+            full-bleed hero. */}
+        {!postedBountyId && resumeNoteStep !== null && resumeNoteStep === currentStep && (
+          <ResumeDraftNote onStartOver={handleStartOver} />
+        )}
+
         <StepDirectionContext.Provider value={stepDirection}>
           <View className="flex-1">
             {/* --- Pre-publish: the three steps that gate posting --- */}
@@ -1032,17 +1058,6 @@ export function CreateBountyFlow({
             )}
           </View>
         </StepDirectionContext.Provider>
-
-        {/* Below the step rather than over it, so it never covers step 1's
-            card or fights the keyboard (focusing a field hides it). */}
-        {!postedBountyId && currentStep === 1 && resumePromptStep !== null && (
-          <ResumeDraftBanner
-            draftTitle={draft.title}
-            nextStepName={STEP_TITLES[resumePromptStep - 1]}
-            onContinue={handleResumeContinue}
-            onDismiss={handleResumeDismiss}
-          />
-        )}
 
         {submitError && (
           <View className="px-4 pb-4">

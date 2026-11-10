@@ -76,6 +76,9 @@ jest.mock('app/hooks/useBountyDraft', () => ({
     draft: mockDraft,
     saveDraft: mockSaveDraft,
     clearDraft: jest.fn(),
+    saveStep: jest.fn(),
+    lastStep: 1,
+    source: null,
     isLoading: mockIsLoading,
   })),
 }));

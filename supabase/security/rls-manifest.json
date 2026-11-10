@@ -462,6 +462,59 @@
           "SELECT"
         ]
       }
+    },
+    "bounty_drafts": {
+      "policies": [
+        {
+          "policyname": "bounty_drafts_delete_own",
+          "cmd": "DELETE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+          "with_check": null
+        },
+        {
+          "policyname": "bounty_drafts_insert_own",
+          "cmd": "INSERT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": null,
+          "with_check": "(( SELECT auth.uid() AS uid) = user_id)"
+        },
+        {
+          "policyname": "bounty_drafts_select_own",
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+          "with_check": null
+        },
+        {
+          "policyname": "bounty_drafts_update_own",
+          "cmd": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+          "with_check": "(( SELECT auth.uid() AS uid) = user_id)"
+        }
+      ],
+      "grants": {
+        "anon": [],
+        "authenticated": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      }
     }
   },
   "functions": [

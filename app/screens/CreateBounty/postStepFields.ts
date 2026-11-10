@@ -100,3 +100,19 @@ export function resumeStepForDraft(draft: BountyDraft): 1 | 2 | 3 {
   if (draft.workType !== 'online' && !pinned) return 2;
   return 3;
 }
+
+/**
+ * The step the composer reopens a saved draft on: the step the poster was on
+ * (`lastStep`), but never past the first step the draft still has to finish.
+ * That cap is what keeps an in-person draft without a pin from reopening on
+ * Compensation (see resumeStepForDraft), and it also covers a server copy
+ * written by a build with different gates. A draft saved before `lastStep`
+ * existed reopens on its first unfinished step.
+ */
+export function restoreStepForDraft(draft: BountyDraft, lastStep: number | null | undefined): 1 | 2 | 3 {
+  if (!draft.title?.trim()) return 1;
+  const furthest = resumeStepForDraft(draft);
+  if (lastStep == null || !Number.isFinite(lastStep)) return furthest;
+  const step = Math.max(1, Math.min(furthest, Math.floor(lastStep)));
+  return step as 1 | 2 | 3;
+}

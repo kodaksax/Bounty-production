@@ -3,8 +3,9 @@
  *
  * Who sees it: a poster whose last exit from the composer was a tab switch
  * with a draft still unfinished (lib/storage/abandoned-draft.ts, set by
- * CreateBountyFlow). It sits alongside the Post tab's dot, the in-composer
- * "Continue your post" banner and the 24h local reminder.
+ * CreateBountyFlow). It sits alongside the Post tab's dot, the composer's
+ * own step restore ("Picking up where you left off") and the 24h local
+ * reminder.
  *
  * "App open" is a cold start, or a return to the foreground after at least
  * SESSION_GAP_MS in the background (the 30-minute session gap used across the
@@ -12,12 +13,15 @@
  * composer already offers the resume there.
  *
  * Observed through post_resume_prompt with surface 'app_open' (action shown /
- * continued / dismissed), then bounty_published.
+ * continued / dismissed), then bounty_published. `to_step` is the step the
+ * composer reopens the draft on (it remembers the step since 2026-11-10).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { readBountyDraftInProgress } from 'app/hooks/useBountyDraft';
+import { readSavedBountyDraft } from 'app/hooks/useBountyDraft';
+import { COMPOSER_STEP_TITLES } from 'app/screens/CreateBounty/composerTelemetry';
+import { restoreStepForDraft } from 'app/screens/CreateBounty/postStepFields';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { clearDraftAbandoned, getDraftAbandonedAt } from '../../lib/storage/abandoned-draft';
 
@@ -84,6 +88,7 @@ export function useResumeComposerPrompt(
   activeScreen: string
 ): ResumeComposerPromptState {
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
+  const [toStep, setToStep] = useState(1);
   const [open, setOpen] = useState(openSeq);
   const activeScreenRef = useRef(activeScreen);
   activeScreenRef.current = activeScreen;
@@ -101,20 +106,22 @@ export function useResumeComposerPrompt(
     (async () => {
       if (activeScreenRef.current === POST_SCREEN) return;
       if ((await getDraftAbandonedAt(userId)) === null) return;
-      const draft = await readBountyDraftInProgress(userId);
-      if (!draft) {
+      const saved = await readSavedBountyDraft(userId);
+      if (!saved) {
         // The draft went away without passing through clearDraft (a storage
         // wipe can do that). Nothing left to offer.
         void clearDraftAbandoned(userId);
         return;
       }
       if (cancelled || activeScreenRef.current === POST_SCREEN) return;
-      setDraftTitle(draft.title.trim());
+      const step = restoreStepForDraft(saved.draft, saved.lastStep);
+      setToStep(step);
+      setDraftTitle(saved.draft.title.trim());
       analyticsService.trackEvent('post_resume_prompt', {
         surface: PROMPT_SURFACE,
         action: 'shown',
-        to_step: 1,
-        to_step_name: 'Task',
+        to_step: step,
+        to_step_name: COMPOSER_STEP_TITLES[step - 1],
       });
     })();
 
@@ -131,11 +138,11 @@ export function useResumeComposerPrompt(
       analyticsService.trackEvent('post_resume_prompt', {
         surface: PROMPT_SURFACE,
         action,
-        to_step: 1,
-        to_step_name: 'Task',
+        to_step: toStep,
+        to_step_name: COMPOSER_STEP_TITLES[toStep - 1],
       });
     },
-    [draftTitle, userId]
+    [draftTitle, toStep, userId]
   );
 
   const onContinue = useCallback(() => answer('continued'), [answer]);

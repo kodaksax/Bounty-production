@@ -7,6 +7,17 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 const mockStore = new Map<string, string>();
+// The server copy (lib/services/bounty-draft-sync.ts) is out of scope here:
+// behave as if offline, so the hook uses the device copy alone.
+jest.mock('lib/services/bounty-draft-sync', () => ({
+  ...jest.requireActual('lib/services/bounty-draft-sync'),
+  fetchServerDraft: jest.fn(async () => ({ status: 'unavailable' })),
+  scheduleServerDraftUpsert: jest.fn(),
+  flushServerDraftUpsert: jest.fn(async () => {}),
+  cancelServerDraftUpsert: jest.fn(),
+  deleteServerDraft: jest.fn(async () => false),
+}));
+
 jest.mock('lib/storage', () => ({
   storage: {
     getItem: jest.fn(async (key: string) => mockStore.get(key) ?? null),
