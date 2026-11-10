@@ -9,6 +9,7 @@ import { feedbackService } from '../../lib/services/feedback-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { FeedbackForm } from './feedback-form';
+import { showToast } from '../../lib/toast';
 
 interface FeedbackSupportScreenProps {
   onBack: () => void;
@@ -41,7 +42,7 @@ export const FeedbackSupportScreen: React.FC<FeedbackSupportScreenProps> = ({ on
   const handleCopyEmail = async () => {
     try {
       await Clipboard.setStringAsync(feedbackService.getSupportEmail());
-      Alert.alert('Copied', 'Support email copied to clipboard.');
+      showToast({ message: 'Support email copied to clipboard.' });
     } catch (e) {
       console.error('[FeedbackSupport] Failed to copy email:', e);
     }
@@ -203,7 +204,7 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'space-between',
       backgroundColor: t.surfaceSecondary,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 12,
       paddingVertical: 10,
     },
@@ -220,8 +221,6 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
     },
     copyButtonText: {
       color: '#ffffff',

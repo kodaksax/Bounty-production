@@ -84,7 +84,7 @@ export function getVerificationBadges(input: VerificationBadgeInput): Verificati
     },
     {
       id: 'age_verified',
-      label: '✓ 18+',
+      label: '18+',
       description: 'Age verified as 18 or older via approved government ID.',
       earned: ageEarned,
     },

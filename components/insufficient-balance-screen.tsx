@@ -12,6 +12,7 @@ import { hapticFeedback } from '../lib/haptic-feedback';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { getAmountNeeded } from '../lib/utils/bounty-validation';
+import { withAlpha } from '../lib/utils';
 
 interface InsufficientBalanceScreenProps {
   /** Current wallet balance in dollars. */
@@ -91,7 +92,7 @@ export function InsufficientBalanceScreen({
 
         <Animated.View entering={FadeInDown.delay(60).duration(220)} style={styles.card}>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Bounty Amount</Text>
+            <Text style={styles.rowLabel}>Bounty amount</Text>
             <Text style={styles.rowValue}>${bountyAmount.toFixed(2)}</Text>
           </View>
           <View style={styles.row}>
@@ -176,10 +177,10 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 10,
-      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.10)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.22) : withAlpha(theme.primary, 0.1),
     },
     title: {
-      fontSize: 21,
+      fontSize: 20,
       fontWeight: '800',
       letterSpacing: -0.3,
       color: theme.text,
@@ -228,7 +229,7 @@ function makeStyles(theme: AppTheme) {
     neededValue: {
       fontSize: 18,
       fontWeight: '800',
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     footer: {
       paddingHorizontal: 24,
@@ -253,7 +254,7 @@ function makeStyles(theme: AppTheme) {
     secondaryLinkText: {
       fontSize: 14,
       fontWeight: '600',
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     cancelText: {
       color: theme.textSecondary,

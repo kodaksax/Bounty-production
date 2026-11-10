@@ -213,7 +213,7 @@ export function InstantCashOutScreen({
       const result = await payoutMethods.openPayoutDashboard();
       if (!result.ok) {
         console.error('[instant-cash-out-screen] openPayoutDashboard failed', result.error);
-        Alert.alert('Error', result.error);
+        Alert.alert("Something went wrong", result.error);
       } else {
         console.log('[instant-cash-out-screen] refreshing Connect eligibility after dashboard return');
         await eligibility.refresh();
@@ -298,7 +298,7 @@ export function InstantCashOutScreen({
                 <MaterialIcons
                   name={item.met ? 'check-circle' : 'radio-button-unchecked'}
                   size={20}
-                  color={item.met ? '#008E2A' : theme.textDisabled}
+                  color={item.met ? theme.primaryLight : theme.textDisabled}
                 />
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={[s.checklistLabel, item.met && s.checklistLabelMet]}>{item.label}</Text>
@@ -325,7 +325,7 @@ export function InstantCashOutScreen({
                 <MaterialIcons
                   name={selectedCardId === card.id ? 'radio-button-checked' : 'radio-button-unchecked'}
                   size={22}
-                  color={selectedCardId === card.id ? '#008E2A' : theme.textDisabled}
+                  color={selectedCardId === card.id ? theme.primaryLight : theme.textDisabled}
                 />
                 <Text style={s.cardRowText}>{card.brand ?? 'Card'} •••• {card.last4}</Text>
               </TouchableOpacity>
@@ -446,29 +446,29 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   checklistLabel: { fontSize: 14, color: t.textSecondary },
   checklistLabelMet: { color: t.text },
   checklistHint: { fontSize: 12, color: t.textDisabled, marginTop: 2 },
-  errorText: { fontSize: 13, color: '#ef4444', marginTop: 4 },
+  errorText: { fontSize: 13, color: t.errorText, marginTop: 4 },
   cardRow: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: t.surfaceSecondary,
     borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 2, borderColor: 'transparent',
   },
-  cardRowSelected: { borderColor: '#008E2A', backgroundColor: t.surface },
+  cardRowSelected: { borderColor: t.primary, backgroundColor: t.surface },
   cardRowText: { marginLeft: 10, fontSize: 15, fontWeight: '600', color: t.text },
   addCardButton: {
     flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
     marginBottom: 16, paddingVertical: 6,
   },
-  addCardButtonText: { marginLeft: 6, fontSize: 14, fontWeight: '600', color: t.primary },
+  addCardButtonText: { marginLeft: 6, fontSize: 14, fontWeight: '600', color: t.primaryLight },
   amountInputContainer: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: t.surfaceSecondary,
     borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 8,
   },
-  currencySymbol: { fontSize: 22, fontWeight: '600', color: t.text, marginRight: 8 },
-  amountInput: { flex: 1, fontSize: 22, fontWeight: '600', color: t.text },
+  currencySymbol: { fontSize: 20, fontWeight: '600', color: t.text, marginRight: 8 },
+  amountInput: { flex: 1, fontSize: 20, fontWeight: '600', color: t.text },
   feeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   feeLabel: { fontSize: 13, color: t.textSecondary },
   feeValue: { fontSize: 13, color: t.textSecondary },
   feeLabelStrong: { fontSize: 14, fontWeight: '600', color: t.text },
-  feeValueStrong: { fontSize: 14, fontWeight: '700', color: '#008E2A' },
+  feeValueStrong: { fontSize: 14, fontWeight: '700', color: t.primaryLight },
   infoCard: {
     flexDirection: 'row', backgroundColor: t.surface, borderRadius: 12, padding: 12, marginBottom: 24,
   },
@@ -476,7 +476,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   footer: { padding: 16 },
   cashOutButton: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    backgroundColor: '#008E2A', borderRadius: 12, paddingVertical: 16,
+    backgroundColor: t.primary, borderRadius: 12, paddingVertical: 16,
     shadowColor: '#008E2A', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3,
   },
   cashOutButtonDisabled: { opacity: 0.5 },

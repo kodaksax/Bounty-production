@@ -288,7 +288,7 @@ export default function AdminHelpCenterScreen() {
                               accessibilityRole="link"
                               accessibilityLabel={note.routeLabel ?? 'Open screen'}
                             >
-                              <Text style={{ fontSize: 13, fontWeight: '600', color: theme.primary }}>
+                              <Text style={{ fontSize: 13, fontWeight: '600', color: theme.primaryLight }}>
                                 {note.routeLabel ?? 'Open screen'}
                               </Text>
                               <MaterialIcons name="arrow-forward" size={16} color={theme.primary} />

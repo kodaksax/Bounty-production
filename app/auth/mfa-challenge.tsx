@@ -30,6 +30,7 @@ import { safeManageRedirect } from '../../lib/navigation/manage-route';
 import { PROJECT_STORAGE_KEY, supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
+import { withAlpha } from '../../lib/utils';
 
 export default function MfaChallengeScreen() {
   useScreenBackground('#097959ff');
@@ -183,7 +184,7 @@ export default function MfaChallengeScreen() {
               onSubmitEditing={handleVerify}
               style={{
                 color: theme.text,
-                backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary,
+                backgroundColor: theme.isDark ? withAlpha(theme.text, 0.1) : theme.surfaceSecondary,
                 borderRadius: 8,
                 paddingHorizontal: 16,
                 paddingVertical: 16,
@@ -192,7 +193,7 @@ export default function MfaChallengeScreen() {
                 letterSpacing: 8,
                 fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
                 borderWidth: error ? 1 : 0,
-                borderColor: error ? '#f87171' : 'transparent',
+                borderColor: error ? theme.error : 'transparent',
               }}
               accessibilityLabel="Enter your 2FA verification code"
               accessibilityHint="6-digit code from your authenticator app"
@@ -216,7 +217,7 @@ export default function MfaChallengeScreen() {
             {isVerifying ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text className="text-white font-semibold text-base">Verify</Text>
+              <Text className="font-semibold text-base" style={{ color: theme.onPrimary }}>Verify</Text>
             )}
           </TouchableOpacity>
 

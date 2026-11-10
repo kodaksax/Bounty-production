@@ -9,7 +9,9 @@ import React, { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOfflineMode } from '../hooks/useOfflineMode';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
-import { theme } from '../lib/theme';
+import { theme as legacyTheme } from '../lib/theme';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 
 
 interface ConnectionStatusProps {
@@ -32,6 +34,8 @@ export function ConnectionStatus({
   showQueueCount = true,
   dismissDelay = 3000,
 }: ConnectionStatusProps = {}) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { isOnline, queuedItemsCount, checkConnection, isChecking } = useOfflineMode();
   const [showStatus, setShowStatus] = useState(false);
   const [wasOffline, setWasOffline] = useState(false);
@@ -80,7 +84,8 @@ export function ConnectionStatus({
 
   if (!showStatus) return null;
 
-  const backgroundColor = isOnline ? '#008E2A' : '#ef4444'; // green-500 : red-500
+  const backgroundColor = isOnline ? theme.successTint : theme.errorTint;
+  const contentColor = isOnline ? theme.successText : theme.errorText;
   const icon = isOnline ? 'wifi' : 'wifi-off';
   const message = isOnline
     ? 'Back online'
@@ -104,11 +109,11 @@ export function ConnectionStatus({
         <MaterialIcons
           name={icon}
           size={18}
-          color="#fff"
+          color={contentColor}
           accessibilityElementsHidden
         />
         <Text
-          style={styles.message}
+          style={[styles.message, { color: contentColor }]}
           accessibilityRole="text"
         >
           {message}
@@ -127,7 +132,7 @@ export function ConnectionStatus({
             <MaterialIcons
               name="refresh"
               size={18}
-              color="#fff"
+              color={contentColor}
             />
           </TouchableOpacity>
         )}
@@ -136,7 +141,8 @@ export function ConnectionStatus({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     position: 'absolute',
     top: 0,
@@ -145,7 +151,7 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     paddingVertical: SPACING.COMPACT_GAP,
     paddingHorizontal: SPACING.ELEMENT_GAP,
-    ...theme.shadows.lg,
+    ...legacyTheme.shadows.lg,
   },
 
   content: {
@@ -155,7 +161,6 @@ const styles = StyleSheet.create({
     gap: SPACING.COMPACT_GAP,
   },
   message: {
-    color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: '600',
   },
@@ -168,3 +173,4 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.COMPACT_GAP,
   },
 });
+}

@@ -17,6 +17,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { openUrlInBrowser } from '../../lib/utils/browser';
 import { useWallet } from '../../lib/wallet-context';
+import { withAlpha } from '../../lib/utils';
 
 // Human-friendly messages for well-known Stripe failure codes. Exported so
 // withdrawal-result-screen.tsx can reuse the same on-brand copy for
@@ -158,7 +159,7 @@ export function PayoutFailedBanner() {
     <View style={s.container}>
       <View style={s.content}>
         <View style={s.iconContainer}>
-          <MaterialIcons name="error-outline" size={24} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={24} color={theme.errorText} />
         </View>
         <View style={s.textContainer}>
           <Text style={s.title}>Payout Failed</Text>
@@ -173,7 +174,7 @@ export function PayoutFailedBanner() {
             accessibilityHint="Opens Stripe to update your bank account details"
           >
             {isFixing ? (
-              <ActivityIndicator size="small" color="#ef4444" />
+              <ActivityIndicator size="small" color={theme.errorText} />
             ) : (
               <Text style={s.fixButtonText}>Fix Payment Details →</Text>
             )}
@@ -187,9 +188,9 @@ export function PayoutFailedBanner() {
 function makeStyles(t: AppTheme) { return StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(239,68,68,0.12)',
+    backgroundColor: withAlpha(t.error, 0.12),
     borderLeftWidth: 4,
-    borderLeftColor: '#ef4444',
+    borderLeftColor: t.error,
     paddingVertical: 12,
     paddingHorizontal: 16,
     marginHorizontal: 16,
@@ -223,7 +224,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: '#fca5a5',
+    color: t.errorText,
     marginBottom: 6,
   },
   fixButton: {
@@ -232,7 +233,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   },
   fixButtonText: {
     fontSize: 13,
-    color: '#ef4444',
+    color: t.errorText,
     fontWeight: '600',
   },
 }); }

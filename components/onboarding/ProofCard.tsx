@@ -246,7 +246,7 @@ function makeStyles(theme: AppTheme) {
     meta: {
       fontSize: 14,
       fontWeight: '600',
-      color: theme.primary,
+      color: theme.primaryLight,
       textAlign: 'center',
       marginTop: 8,
     },

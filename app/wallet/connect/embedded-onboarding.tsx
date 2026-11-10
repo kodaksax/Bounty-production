@@ -69,6 +69,7 @@ import { supabase } from '../../../lib/supabase';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { useWallet } from '../../../lib/wallet-context';
+import { withAlpha } from '../../../lib/utils';
 
 type Phase = 'starting' | 'in_browser' | 'finalizing' | 'result' | 'error';
 type BrowserResultType = 'success' | 'cancel' | 'dismiss' | 'opened' | 'locked' | null;
@@ -568,7 +569,7 @@ export default function ConnectOnboardingScreen() {
         <View style={styles.centered}>
           <Text style={styles.errorTitle}>Please sign in</Text>
           <Text style={styles.muted}>You must be signed in to set up payouts.</Text>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss} disabled={isReplacingAccount}>
+          <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={dismiss} disabled={isReplacingAccount}>
             <Text style={styles.secondaryBtnText}>Go back</Text>
           </TouchableOpacity>
         </View>
@@ -634,7 +635,7 @@ export default function ConnectOnboardingScreen() {
           <View style={styles.body}>
             {phase === 'error' ? (
               <View style={styles.iconBadgeError}>
-                <MaterialIcons name="error-outline" size={40} color="#ef4444" />
+                <MaterialIcons name="error-outline" size={40} color={theme.errorText} />
               </View>
             ) : (
               <ActivityIndicator size="large" color={theme.primary} />
@@ -645,7 +646,7 @@ export default function ConnectOnboardingScreen() {
             {phase === 'error' ? (
               canRetry ? (
                 <>
-                  <TouchableOpacity style={styles.primaryBtn} onPress={handleRetry} disabled={isReplacingAccount}>
+                  <TouchableOpacity accessibilityRole="button" style={styles.primaryBtn} onPress={handleRetry} disabled={isReplacingAccount}>
                     <MaterialIcons name="refresh" size={20} color="#ffffff" />
                     <Text style={styles.primaryBtnText}>Try again</Text>
                   </TouchableOpacity>
@@ -665,14 +666,14 @@ export default function ConnectOnboardingScreen() {
                       )}
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={styles.secondaryBtn} onPress={dismiss}>
+                  <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={dismiss}>
                     <Text style={styles.secondaryBtnText}>{exitLabel}</Text>
                   </TouchableOpacity>
                 </>
               ) : (
                 // Non-retryable failure (e.g. a platform credential problem):
                 // retrying reproduces it instantly, so offer only the exit.
-                <TouchableOpacity style={styles.primaryBtn} onPress={dismiss} disabled={isReplacingAccount}>
+                <TouchableOpacity accessibilityRole="button" style={styles.primaryBtn} onPress={dismiss} disabled={isReplacingAccount}>
                   <Text style={styles.primaryBtnText}>{exitLabel}</Text>
                 </TouchableOpacity>
               )
@@ -725,7 +726,7 @@ function makeStyles(t: AppTheme) {
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: 'rgba(239,68,68,0.15)',
+      backgroundColor: withAlpha(t.error, 0.15),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -735,8 +736,6 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       gap: 8,
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       paddingVertical: 12,
       paddingHorizontal: 28,
       borderRadius: 999,

@@ -89,7 +89,7 @@ export function DashboardSidebar() {
               <Text className="text-xs text-muted-foreground">john@example.com</Text>
             </View>
           </View>
-          <TouchableOpacity className="rounded-md p-1 hover:bg-accent">
+          <TouchableOpacity accessibilityRole="button" className="rounded-md p-1 hover:bg-accent">
             <MaterialIcons name="logout" size={18} color="#000000" />
             <Text style={{ position: 'absolute', left: -9999 }}>Log out</Text>
           </TouchableOpacity>

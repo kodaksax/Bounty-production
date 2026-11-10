@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 
 interface Props {
   /** @deprecated Not required for embedded onboarding; retained for API compatibility. */
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export const ConnectOnboardingButton: React.FC<Props> = ({ onError, label = 'Set up payouts' }) => {
+  const { theme } = useAppThemeContext();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -39,7 +41,7 @@ export const ConnectOnboardingButton: React.FC<Props> = ({ onError, label = 'Set
         onPress={startOnboarding}
         disabled={loading}
         style={{
-          backgroundColor: '#008E2A', // emerald-600
+          backgroundColor: theme.primary, // emerald-600
           paddingVertical: 12,
           paddingHorizontal: 16,
           borderRadius: 8,
@@ -48,9 +50,9 @@ export const ConnectOnboardingButton: React.FC<Props> = ({ onError, label = 'Set
         }}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={theme.onPrimary} />
         ) : (
-          <Text style={{ color: '#fff', fontWeight: '600' }}>{label}</Text>
+          <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>{label}</Text>
         )}
       </TouchableOpacity>
     </View>

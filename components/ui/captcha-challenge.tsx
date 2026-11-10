@@ -115,7 +115,7 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
               </Text>
               {'?'}
             </Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={refresh}
               accessibilityLabel="Get a new challenge"
               hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}

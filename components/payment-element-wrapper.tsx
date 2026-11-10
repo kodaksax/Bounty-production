@@ -29,7 +29,7 @@ import { withAlpha } from '../lib/utils';
 
 // Text color on top of the primary-green fill, matching the dark-on-green
 // convention used across onboarding/wallet (see add-money-screen.tsx).
-const ON_PRIMARY_TEXT = '#052e1b';
+const ON_PRIMARY_TEXT = '#FFFFFF';
 
 // Types for the payment element wrapper
 export interface PaymentElementWrapperProps {
@@ -414,7 +414,7 @@ function makeStyles(theme: AppTheme) {
     },
     infoText: {
       fontSize: 14,
-      color: theme.primary,
+      color: theme.primaryLight,
       marginLeft: 8,
     },
     errorBanner: {
@@ -436,8 +436,6 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       borderRadius: theme.radius.lg,
       paddingVertical: 16,
       paddingHorizontal: 24,

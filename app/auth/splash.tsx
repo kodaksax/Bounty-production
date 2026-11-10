@@ -4,6 +4,8 @@ import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 // Centralized helpers: RootLayout (and any other callers) should use these
 // to show/hide the native splash. Keeping them here ensures "use splash.tsx
 // for any splash things" without scattering imports of expo-splash-screen.
@@ -61,6 +63,8 @@ export interface BrandedSplashProps {
 }
 
 export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
 	// Ensure safe area/status bar color matches branded splash
 	useScreenBackground('#00701F');
 	const { isDark } = useAppThemeContext();
@@ -148,10 +152,10 @@ export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 					<Text style={styles.devBannerTitle}>Dev server unreachable</Text>
 					<Text style={styles.devBannerMsg}>{`Cannot reach ${API_BASE_URL} — ${devHealthMsg || ''}`}</Text>
 					<View style={styles.devBannerActions}>
-						<TouchableOpacity onPress={handleRetry} style={styles.devBtn}>
-							<Text style={styles.devBtnText}>Retry</Text>
+						<TouchableOpacity accessibilityRole="button" onPress={handleRetry} style={styles.devBtn}>
+							<Text style={styles.devBtnText}>Try again</Text>
 						</TouchableOpacity>
-						<TouchableOpacity onPress={() => setDevBannerDismissed(true)} style={[styles.devBtn, styles.devBtnSecondary]}>
+						<TouchableOpacity accessibilityRole="button" onPress={() => setDevBannerDismissed(true)} style={[styles.devBtn, styles.devBtnSecondary]}>
 							<Text style={[styles.devBtnText, styles.devBtnSecondaryText]}>Continue</Text>
 						</TouchableOpacity>
 					</View>
@@ -163,10 +167,11 @@ export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 	);
 };
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#1B1E24', // page background
+		backgroundColor: theme.background, // page background
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
@@ -220,10 +225,8 @@ const styles = StyleSheet.create({
 	devBtn: {
 		paddingVertical: 8,
 		paddingHorizontal: 14,
-		borderRadius: 6,
-		backgroundColor: '#008E2A',
-		borderBottomWidth: 4,
-		borderBottomColor: '#00701F',
+		borderRadius: 8,
+		backgroundColor: theme.primary,
 		marginHorizontal: 6,
 	},
 	devBtnText: {
@@ -233,11 +236,12 @@ const styles = StyleSheet.create({
 	devBtnSecondary: {
 		backgroundColor: 'transparent',
 		borderWidth: 1,
-		borderColor: 'rgba(255,255,255,0.2)'
+		borderColor: withAlpha(theme.text, 0.2)
 	},
 	devBtnSecondaryText: {
 		color: 'rgba(255,255,255,0.9)'
 	},
 });
+}
 
 export default BrandedSplash;

@@ -282,9 +282,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             <View style={s.sectionPad}>
               {/* Warning if secure storage for sensitive keys is unavailable */}
               {!secureStoreAvailable && (
-                <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 10 }}>
-                  <Text style={{ color: '#92400E', fontWeight: '600' }}>Security Notice</Text>
-                  <Text style={{ color: '#92400E' }}>
+                <View style={{ backgroundColor: theme.warningTint, padding: 10, borderRadius: 8, marginBottom: 10 }}>
+                  <Text style={{ color: theme.warningText, fontWeight: '600' }}>Security Notice</Text>
+                  <Text style={{ color: theme.warningText }}>
                     Your device does not support secure storage. Sensitive wallet data is not being stored encrypted. Please use a managed build or sign out and back in on a supported device.
                   </Text>
                 </View>
@@ -367,7 +367,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                     accessibilityHint="Add funds to your wallet using a payment method"
                   >
                     <MaterialIcons name="add" size={20} color="#ffffff" accessibilityElementsHidden={true} />
-                    <Text style={s.actionButtonText}>Add Money</Text>
+                    <Text style={s.actionButtonText}>Add money</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={s.actionButton}
@@ -390,7 +390,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             {/* Linked Accounts Section */}
             <View style={s.sectionPad}>
               <View style={s.sectionHeaderRow}>
-                <Text style={s.sectionTitle}>Linked Accounts</Text>
+                <Text style={s.sectionTitle}>Linked accounts</Text>
                 <TouchableOpacity
                   onPress={() => setShowPaymentMethods(true)}
                   accessibilityRole="button"
@@ -414,7 +414,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                   accessibilityRole="alert"
                   accessibilityLabel="Unable to load payment methods. Service may be temporarily unavailable."
                 >
-                  <View style={[s.accountIcon, { backgroundColor: '#ef4444' }]}>
+                  <View style={[s.accountIcon, { backgroundColor: theme.error }]}>
                     <MaterialIcons name="cloud-off" size={24} color="#ffffff" accessibilityElementsHidden={true} />
                   </View>
                   <View style={{ flex: 1 }}>
@@ -428,19 +428,19 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                     accessibilityLabel="Retry loading payment methods"
                     accessibilityHint="Double tap to reload payment methods"
                   >
-                    <MaterialIcons name="refresh" size={20} color="#ffffff" accessibilityElementsHidden={true} />
+                    <MaterialIcons name="refresh" size={20} color={theme.textSecondary} accessibilityElementsHidden={true} />
                   </TouchableOpacity>
                 </View>
               ) : paymentMethods.length === 0 ? (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={s.accountCard}
                   onPress={() => setShowPaymentMethods(true)}
                 >
                   <View style={s.accountIcon}>
-                    <MaterialIcons name="add" size={24} color="#ffffff" />
+                    <MaterialIcons name="add" size={24} color={theme.text} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.accountName}>Add Payment Method</Text>
+                    <Text style={s.accountName}>Add payment method</Text>
                     <Text style={s.accountSub}>No payment methods added yet</Text>
                   </View>
                 </TouchableOpacity>
@@ -449,7 +449,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                   {paymentMethods.map((method: StripePaymentMethod, index: number) => (
                     <View key={method.id} style={s.accountCard}>
                       <View style={s.accountIcon}>
-                        <MaterialIcons name="credit-card" size={24} color="#ffffff" />
+                        <MaterialIcons name="credit-card" size={24} color={theme.text} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={s.accountName}>
@@ -468,9 +468,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             {/* Transaction History header (moved into header so it renders once) */}
             <View style={[s.sectionPad, { marginTop: 8 }]}>
               <View style={s.sectionHeaderRow}>
-                <Text style={s.sectionTitle}>Transaction History</Text>
-                <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
-                  <Text style={s.sectionManage}>View All</Text>
+                <Text style={s.sectionTitle}>Transaction history</Text>
+                <TouchableOpacity accessibilityRole="button" onPress={() => setShowTransactionHistory(true)}>
+                  <Text style={s.sectionManage}>View all</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -557,7 +557,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   balanceSkeleton: {
     width: 120,
     height: 32,
-    borderRadius: 6,
+    borderRadius: 8,
     marginTop: 4,
     backgroundColor: t.border ?? 'rgba(255,255,255,0.12)',
   },
@@ -585,7 +585,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     textAlign: 'center',
   },
   balanceRetryText: {
-    color: t.primary,
+    color: t.primaryLight,
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: '700',
   },
@@ -599,9 +599,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: t.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: t.primaryShade,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: 18,
     flex: 1,
@@ -631,6 +629,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     fontWeight: 'bold',
     minWidth: SIZING.MIN_TOUCH_TARGET,
     minHeight: SIZING.MIN_TOUCH_TARGET,
+    lineHeight: SIZING.MIN_TOUCH_TARGET,
     textAlign: 'center',
     textAlignVertical: 'center',
   },

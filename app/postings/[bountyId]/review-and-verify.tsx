@@ -35,6 +35,10 @@ import { getReviewDeadlineStatus } from '../../../lib/utils/review-deadline';
 import { MIN_RATING_SAMPLE } from '../../../lib/utils/trust-summary';
 import { useWallet } from '../../../lib/wallet-context';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../lib/themes/types';
+import { withAlpha } from '../../../lib/utils';
+import { useMemo } from 'react';
 
 interface ProofItem {
   id: string;
@@ -48,6 +52,8 @@ interface ProofItem {
 }
 
 export default function ReviewAndVerifyScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -278,7 +284,7 @@ export default function ReviewAndVerifyScreen() {
             } catch (err) {
               console.error('Error requesting revision:', err);
               Alert.alert(
-                'Error',
+                "Something went wrong",
                 err instanceof Error ? err.message : 'Failed to request revision. Please try again.'
               );
             } finally {
@@ -344,7 +350,7 @@ export default function ReviewAndVerifyScreen() {
       });
 
       if (!ok) {
-        Alert.alert('Error', 'Failed to release funds or approve work. Please contact support.');
+        Alert.alert("Something went wrong", 'Failed to release funds or approve work. Please contact support.');
         return;
       }
 
@@ -401,7 +407,7 @@ export default function ReviewAndVerifyScreen() {
     } catch (err) {
       console.error('Error approving completion:', err);
       Alert.alert(
-        'Error',
+        "Something went wrong",
         err instanceof Error ? err.message : 'Failed to approve work. Please try again.'
       );
     } finally {
@@ -426,7 +432,7 @@ export default function ReviewAndVerifyScreen() {
         <MaterialIcons
           name={item.type === 'image' ? 'image' : 'insert-drive-file'}
           size={32}
-          color="#008E2A"
+          color={theme.primaryLight}
         />
       </View>
       <View style={styles.proofInfo}>
@@ -435,8 +441,8 @@ export default function ReviewAndVerifyScreen() {
         </Text>
         <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
       </View>
-      <TouchableOpacity style={styles.viewButton} onPress={() => openAttachment(item)}>
-        <MaterialIcons name="visibility" size={20} color="#1FAE49" />
+      <TouchableOpacity accessibilityRole="button" style={styles.viewButton} onPress={() => openAttachment(item)}>
+        <MaterialIcons name="visibility" size={20} color={theme.primaryLight} />
       </TouchableOpacity>
     </View>
   );
@@ -449,8 +455,8 @@ export default function ReviewAndVerifyScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008E2A" />
-        <Text style={styles.loadingText}>Loading review...</Text>
+        <ActivityIndicator size="large" color={theme.primaryLight} />
+        <Text style={styles.loadingText}>Loading…</Text>
       </View>
     );
   }
@@ -458,12 +464,12 @@ export default function ReviewAndVerifyScreen() {
   if (error || !bounty) {
     return (
       <View style={styles.errorContainer}>
-        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+        <MaterialIcons name="error-outline" size={48} color={theme.errorText} />
         <Text style={styles.errorText}>{error || 'Bounty not found'}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={loadBounty}>
+          <Text style={styles.retryButtonText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.backButton}
           onPress={() =>
             router.push({
@@ -472,7 +478,7 @@ export default function ReviewAndVerifyScreen() {
             } as any)
           }
         >
-          <Text style={styles.backButtonText}>Go Back</Text>
+          <Text style={styles.backButtonText}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -482,7 +488,7 @@ export default function ReviewAndVerifyScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button"
           style={styles.backIcon}
           onPress={() =>
             router.push({
@@ -491,9 +497,9 @@ export default function ReviewAndVerifyScreen() {
             } as any)
           }
         >
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Review & Verify</Text>
+        <Text style={styles.headerTitle}>Review the work</Text>
       </View>
 
       <KeyboardAwareScrollView
@@ -518,7 +524,7 @@ export default function ReviewAndVerifyScreen() {
                 {hunterProfile.averageRating &&
                   (hunterProfile.ratingCount || 0) >= MIN_RATING_SAMPLE && (
                   <View style={styles.ratingRow}>
-                    <MaterialIcons name="star" size={16} color="#fcd34d" />
+                    <MaterialIcons name="star" size={16} color={theme.warningText} />
                     <Text style={styles.hunterRating}>
                       {hunterProfile.averageRating.toFixed(1)} ({hunterProfile.ratingCount || 0})
                     </Text>
@@ -548,7 +554,7 @@ export default function ReviewAndVerifyScreen() {
             <MaterialIcons
               name={reviewDeadline.overdue ? 'support-agent' : 'schedule'}
               size={18}
-              color={reviewDeadline.overdue ? '#fca5a5' : '#fcd34d'}
+              color={reviewDeadline.overdue ? theme.errorText : theme.warningText}
             />
             <Text style={styles.deadlineText}>{reviewDeadline.message}</Text>
           </View>
@@ -556,21 +562,21 @@ export default function ReviewAndVerifyScreen() {
 
         {/* Proof/Attachments Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Completion Proof</Text>
+          <Text style={styles.sectionTitle}>Hunter’s proof of work</Text>
           <Text style={styles.sectionSubtitle}>
             Submitted by the accepted hunter for this completion
           </Text>
           {isLoadingProof ? (
             <View style={styles.emptyProof}>
-              <ActivityIndicator size="small" color="#1FAE49" />
-              <Text style={styles.emptyProofText}>Loading completion proof...</Text>
+              <ActivityIndicator size="small" color={theme.primaryLight} />
+              <Text style={styles.emptyProofText}>Loading proof of work…</Text>
             </View>
           ) : proofLoadError ? (
             <View style={styles.emptyProof}>
-              <MaterialIcons name="error-outline" size={48} color="#f59e0b" />
+              <MaterialIcons name="error-outline" size={48} color={theme.warningText} />
               <Text style={styles.emptyProofText}>{proofLoadError}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={loadReviewSubmission}>
-                <Text style={styles.retryButtonText}>Retry</Text>
+              <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={loadReviewSubmission}>
+                <Text style={styles.retryButtonText}>Try again</Text>
               </TouchableOpacity>
             </View>
           ) : proofItems.length > 0 ? (
@@ -583,7 +589,7 @@ export default function ReviewAndVerifyScreen() {
             />
           ) : (
             <View style={styles.emptyProof}>
-              <MaterialIcons name="folder-open" size={48} color="#1FAE49" />
+              <MaterialIcons name="folder-open" size={48} color={theme.primaryLight} />
               <Text style={styles.emptyProofText}>
                 The hunter submitted no proof for this completion.
               </Text>
@@ -593,7 +599,7 @@ export default function ReviewAndVerifyScreen() {
 
         {originalAttachments.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Original Bounty Attachments</Text>
+            <Text style={styles.sectionTitle}>Files from your post</Text>
             <Text style={styles.sectionSubtitle}>Files attached when this bounty was posted</Text>
             <FlatList
               data={originalAttachments}
@@ -607,7 +613,7 @@ export default function ReviewAndVerifyScreen() {
 
         {/* Rating Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Rate the Work (optional)</Text>
+          <Text style={styles.sectionTitle}>Rate the work (optional)</Text>
           <Text style={styles.sectionSubtitle}>
             A quick rating helps other posters choose this hunter. You can skip this and approving still releases payment right away.
           </Text>
@@ -615,7 +621,7 @@ export default function ReviewAndVerifyScreen() {
           {/* Star Rating */}
           <View style={styles.ratingContainer}>
             {[1, 2, 3, 4, 5].map(star => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={star}
                 onPress={() => handleRatingPress(star)}
                 style={styles.starButton}
@@ -623,7 +629,7 @@ export default function ReviewAndVerifyScreen() {
                 <MaterialIcons
                   name={star <= rating ? 'star' : 'star-border'}
                   size={40}
-                  color={star <= rating ? '#fcd34d' : '#1FAE49'}
+                  color={star <= rating ? theme.warningText : theme.primaryLight}
                 />
               </TouchableOpacity>
             ))}
@@ -644,7 +650,7 @@ export default function ReviewAndVerifyScreen() {
           <TextInput
             style={styles.commentInput}
             placeholder="Share your experience with this hunter..."
-            placeholderTextColor="rgba(31, 174, 73, 0.4)"
+            placeholderTextColor={withAlpha(theme.primary, 0.4)}
             value={ratingComment}
             onChangeText={setRatingComment}
             multiline
@@ -655,7 +661,7 @@ export default function ReviewAndVerifyScreen() {
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
           {/* Request Revision Button */}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.revisionButton, isRequestingRevision && styles.revisionButtonDisabled]}
             onPress={handleRequestRevision}
             disabled={
@@ -666,17 +672,17 @@ export default function ReviewAndVerifyScreen() {
             }
           >
             {isRequestingRevision ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={theme.text} />
             ) : (
               <>
-                <MaterialIcons name="edit" size={20} color="#fff" />
-                <Text style={styles.revisionButtonText}>Request Revision</Text>
+                <MaterialIcons name="edit" size={20} color={theme.text} />
+                <Text style={styles.revisionButtonText}>Request changes</Text>
               </>
             )}
           </TouchableOpacity>
 
           {/* Next Button */}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[
               styles.nextButton,
               (isRequestingRevision ||
@@ -693,8 +699,8 @@ export default function ReviewAndVerifyScreen() {
               reviewSubmission?.status !== 'pending'
             }
           >
-            <Text style={styles.nextButtonText}>Approve & Proceed to Payout</Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+            <Text style={styles.nextButtonText}>Approve and continue to payment</Text>
+            <MaterialIcons name="arrow-forward" size={20} color={theme.onPrimary} />
           </TouchableOpacity>
         </View>
       </KeyboardAwareScrollView>
@@ -712,67 +718,66 @@ export default function ReviewAndVerifyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   deadlineCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    borderColor: 'rgba(251, 191, 36, 0.35)',
+    backgroundColor: withAlpha(theme.warning, 0.12),
+    borderColor: withAlpha(theme.warning, 0.35),
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
   deadlineCardOverdue: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    borderColor: 'rgba(239, 68, 68, 0.35)',
+    backgroundColor: withAlpha(theme.error, 0.12),
+    borderColor: withAlpha(theme.error, 0.35),
   },
   deadlineText: {
     flex: 1,
-    color: '#fffef5',
+    color: theme.text,
     fontSize: 14,
     lineHeight: 20,
   },
   container: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
   },
   loadingText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 14,
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
     padding: 24,
   },
   errorText: {
-    color: '#ef4444',
+    color: theme.errorText,
     fontSize: 16,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 16,
   },
   retryButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -781,7 +786,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -790,34 +795,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#454952',
+    borderBottomColor: theme.border,
   },
   backIcon: {
     padding: 8,
     marginRight: 8,
   },
   headerTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
     flex: 1,
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   content: {
     padding: 16,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   hunterCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
     marginBottom: 16,
   },
   hunterInfo: {
@@ -833,13 +838,13 @@ const styles = StyleSheet.create({
   avatarFallbackText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#008E2A',
+    color: theme.primaryLight,
   },
   hunterDetails: {
     flex: 1,
   },
   hunterName: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
@@ -850,26 +855,26 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   hunterRating: {
-    color: '#fcd34d',
+    color: theme.warningText,
     fontSize: 14,
     fontWeight: '500',
   },
   bountyInfoCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
     marginBottom: 16,
   },
   bountyTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
   },
   bountyAmount: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 24,
     fontWeight: '700',
   },
@@ -877,13 +882,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
   },
   sectionSubtitle: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     marginBottom: 12,
   },
@@ -893,17 +898,17 @@ const styles = StyleSheet.create({
   proofItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
   },
   proofIcon: {
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: '#454952',
+    backgroundColor: theme.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -912,28 +917,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   proofName: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 4,
   },
   proofSize: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
   },
   viewButton: {
     padding: 8,
   },
   emptyProof: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
   },
   emptyProofText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     marginTop: 12,
   },
@@ -947,26 +952,26 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   ratingText: {
-    color: '#fcd34d',
+    color: theme.warningText,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: 16,
   },
   commentLabel: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
   },
   commentInput: {
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 12,
     padding: 12,
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
     minHeight: 100,
     textAlignVertical: 'top',
   },
@@ -975,7 +980,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   revisionButton: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: theme.surfaceSecondary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -984,17 +989,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   revisionButtonDisabled: {
-    backgroundColor: 'rgba(245, 158, 11, 0.5)',
+    backgroundColor: withAlpha(theme.warning, 0.5),
   },
   revisionButtonText: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 15,
     fontWeight: '600',
   },
   nextButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1003,8 +1006,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   nextButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
 });
+}

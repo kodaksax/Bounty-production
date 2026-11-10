@@ -7,6 +7,7 @@ import { Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { QuickStepLayout } from './QuickStepLayout';
+import { withAlpha } from '../../../../lib/utils';
 
 interface StepWhenProps {
   draft: BountyDraft;
@@ -124,11 +125,7 @@ export function StepWhen({ draft, onUpdate, onNext, onBack, isSaving = false, st
               style={[
                 styles.card,
                 {
-                  backgroundColor: active
-                    ? theme.isDark
-                      ? 'rgba(0,142,42,0.22)'
-                      : 'rgba(0,142,42,0.12)'
-                    : theme.surfaceSecondary,
+                  backgroundColor: active ? theme.isDark ? withAlpha(theme.primary, 0.22) : withAlpha(theme.primary, 0.12) : theme.surfaceSecondary,
                   borderColor: active ? theme.primary : 'transparent',
                 },
               ]}

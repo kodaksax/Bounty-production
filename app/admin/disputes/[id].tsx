@@ -789,7 +789,7 @@ const makeStyles = (theme: AppTheme) =>
   evidenceType: {
     fontSize: 11,
     fontWeight: '700',
-    color: theme.primary,
+    color: theme.primaryLight,
   },
   evidenceDate: {
     fontSize: 11,
@@ -812,8 +812,6 @@ const makeStyles = (theme: AppTheme) =>
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.primaryShade,
     padding: 14,
     borderRadius: 8,
     marginBottom: 12,
@@ -832,8 +830,6 @@ const makeStyles = (theme: AppTheme) =>
   },
   closeButton: {
     backgroundColor: theme.error,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.errorShade,
   },
   cancelButton: {
     backgroundColor: 'transparent',
@@ -882,8 +878,6 @@ const makeStyles = (theme: AppTheme) =>
   },
   winnerButtonActive: {
     backgroundColor: theme.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.primaryShade,
     borderColor: theme.primary,
   },
   winnerButtonActivePoster: {

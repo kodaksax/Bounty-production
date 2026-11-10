@@ -18,6 +18,7 @@ import type { AppTheme } from '../../lib/themes/types';
 import { searchService } from '../../lib/services/search-service';
 import type { SavedSearch } from '../../lib/types';
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
+import { withAlpha } from '../../lib/utils';
 
 export default function SavedSearchesScreen() {
   const router = useRouter();
@@ -55,7 +56,7 @@ export default function SavedSearchesScreen() {
 
   const handleCreateSearch = async () => {
     if (!userId || !newSearchName.trim()) {
-      Alert.alert('Error', 'Please enter a name for your saved search');
+      Alert.alert("Something went wrong", 'Please enter a name for your saved search');
       return;
     }
 
@@ -73,7 +74,7 @@ export default function SavedSearchesScreen() {
       setShowNewSearchModal(false);
       await loadSavedSearches();
     } catch {
-      Alert.alert('Error', 'Failed to save search');
+      Alert.alert("Couldn't save search", "Please try again.");
     }
   };
 
@@ -147,7 +148,7 @@ export default function SavedSearchesScreen() {
           <MaterialIcons
             name={item.alertsEnabled ? 'notifications-active' : 'notifications-off'}
             size={20}
-            color={item.alertsEnabled ? '#fcd34d' : theme.textDisabled}
+            color={item.alertsEnabled ? theme.warningText : theme.textDisabled}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -157,7 +158,7 @@ export default function SavedSearchesScreen() {
           accessibilityLabel="Delete saved search"
           accessibilityHint="Tap to delete this saved search"
         >
-          <MaterialIcons name="delete-outline" size={20} color="#f87171" />
+          <MaterialIcons name="delete-outline" size={20} color={theme.errorText} />
         </TouchableOpacity>
       </View>
     </View>
@@ -167,7 +168,7 @@ export default function SavedSearchesScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" onPress={() => router.back()} style={styles.backBtn}>
             <MaterialIcons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Saved Searches</Text>
@@ -183,11 +184,11 @@ export default function SavedSearchesScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" onPress={() => router.back()} style={styles.backBtn}>
           <MaterialIcons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Saved Searches</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Add" accessibilityRole="button"
           onPress={() => setShowNewSearchModal(true)}
           style={styles.addBtn}
         >
@@ -208,7 +209,7 @@ export default function SavedSearchesScreen() {
           <View style={styles.emptyContainer}>
             <MaterialIcons name="bookmark-outline" size={48} color={theme.textDisabled} />
             <Text style={styles.emptyText}>No saved searches yet</Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.createBtn}
               onPress={() => setShowNewSearchModal(true)}
             >
@@ -237,7 +238,7 @@ export default function SavedSearchesScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Saved Search</Text>
-              <TouchableOpacity onPress={() => setShowNewSearchModal(false)}>
+              <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => setShowNewSearchModal(false)}>
                 <MaterialIcons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
@@ -269,13 +270,13 @@ export default function SavedSearchesScreen() {
             </View>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.cancelBtn}
                 onPress={() => setShowNewSearchModal(false)}
               >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.saveBtn, !newSearchName.trim() && styles.saveBtnDisabled]}
                 onPress={handleCreateSearch}
                 disabled={!newSearchName.trim()}
@@ -294,7 +295,7 @@ function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#008E2A',
+      backgroundColor: theme.primary,
     },
     header: {
       flexDirection: 'row',
@@ -394,7 +395,7 @@ function makeStyles(theme: AppTheme) {
     },
     searchDate: {
       color: theme.textDisabled,
-      fontSize: 11,
+      fontSize: 12,
     },
     searchActions: {
       flexDirection: 'row',
@@ -446,7 +447,7 @@ function makeStyles(theme: AppTheme) {
     },
     textInput: {
       backgroundColor: theme.surfaceSecondary,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 14,
       paddingVertical: 12,
       color: theme.text,
@@ -485,7 +486,7 @@ function makeStyles(theme: AppTheme) {
       flex: 1,
       paddingVertical: 12,
       alignItems: 'center',
-      backgroundColor: '#1FAE49',
+      backgroundColor: theme.primary,
       borderRadius: 8,
     },
     saveBtnText: {
@@ -494,7 +495,7 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '700',
     },
     saveBtnDisabled: {
-      backgroundColor: 'rgba(31,174,73,0.4)',
+      backgroundColor: withAlpha(theme.primary, 0.4),
     },
     saveBtnTextDisabled: {
       color: theme.textDisabled,

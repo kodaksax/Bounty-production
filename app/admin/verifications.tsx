@@ -23,6 +23,7 @@ import {
 import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { supabase } from '../../lib/supabase';
+import { withAlpha } from '../../lib/utils';
 
 interface VerificationItem {
   id: string;
@@ -378,7 +379,7 @@ const makeStyles = (theme: AppTheme) =>
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: 'rgba(251,191,36,0.3)',
+    borderColor: withAlpha(theme.warning, 0.3),
   },
   warningText: {
     flex: 1,

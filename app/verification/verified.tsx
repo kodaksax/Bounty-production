@@ -16,6 +16,7 @@ import { SPACING } from '../../lib/constants/accessibility';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 export default function VerificationVerifiedScreen() {
   const router = useRouter();
@@ -53,7 +54,7 @@ export default function VerificationVerifiedScreen() {
 
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="verified" size={56} color="#008E2A" accessibilityElementsHidden />
+            <MaterialIcons name="verified" size={56} color={theme.primaryLight} accessibilityElementsHidden />
           </View>
           <Text style={styles.title} accessibilityRole="header">
             You&apos;re verified!
@@ -95,7 +96,7 @@ function makeStyles(theme: AppTheme) {
       width: 100,
       height: 100,
       borderRadius: 50,
-      backgroundColor: 'rgba(0,142,42,0.12)',
+      backgroundColor: withAlpha(theme.primary, 0.12),
       justifyContent: 'center',
       alignItems: 'center',
       marginBottom: SPACING.SCREEN_HORIZONTAL,
@@ -106,12 +107,10 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       paddingVertical: SPACING.CARD_PADDING,
       borderRadius: 999,
       marginTop: SPACING.SECTION_GAP,
     },
-    primaryButtonText: { color: '#052e1b', fontSize: 18, fontWeight: 'bold' },
+    primaryButtonText: { color: theme.onPrimary, fontSize: 18, fontWeight: 'bold' },
   });
 }

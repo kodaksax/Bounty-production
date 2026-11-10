@@ -16,6 +16,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { formatCurrency } from '../../lib/utils';
 import { FAILURE_CODE_MESSAGES, getFailureMessage } from './PayoutFailedBanner';
+import { withAlpha } from '../../lib/utils';
 
 export type WithdrawalResultStatus = 'processing' | 'success' | 'failure';
 export type WithdrawalMethod = 'standard' | 'instant';
@@ -159,7 +160,7 @@ export function WithdrawalResultScreen({
             <MaterialIcons
               name={isDecline ? 'schedule' : 'error-outline'}
               size={44}
-              color={isDecline ? theme.textSecondary : '#ef4444'}
+              color={isDecline ? theme.textSecondary : theme.errorText}
             />
           </View>
           <Text style={s.resultTitle}>
@@ -205,7 +206,7 @@ export function WithdrawalResultScreen({
     <View style={[s.container, { paddingTop: insets.top + 24, paddingBottom: footerClearance }]}>
       <View style={s.centered}>
         <View style={[s.iconCircle, s.iconCircleSuccess]}>
-          <MaterialIcons name={isInstant ? 'bolt' : 'check'} size={44} color="#008E2A" />
+          <MaterialIcons name={isInstant ? 'bolt' : 'check'} size={44} color={theme.primaryLight} />
         </View>
         <Text style={s.resultTitle}>
           {fellBackToStandard ? 'Sent via Standard Transfer' : isInstant ? 'Cash Out Sent' : 'Withdrawal Initiated'}
@@ -260,13 +261,13 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   processingTitle: { fontSize: 18, fontWeight: '600', color: t.text, marginTop: 20, textAlign: 'center' },
   processingSubtitle: { fontSize: 14, color: t.textSecondary, marginTop: 6, textAlign: 'center' },
   iconCircle: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  iconCircleSuccess: { backgroundColor: 'rgba(34,197,94,0.15)' },
-  iconCircleError: { backgroundColor: 'rgba(239,68,68,0.15)' },
+  iconCircleSuccess: { backgroundColor: withAlpha(t.primary, 0.15) },
+  iconCircleError: { backgroundColor: withAlpha(t.error, 0.15) },
   resultTitle: { fontSize: 20, fontWeight: '700', color: t.text, textAlign: 'center' },
   resultAmount: { fontSize: 34, fontWeight: 'bold', color: t.text, marginTop: 8 },
   feeNote: { fontSize: 13, color: t.textSecondary, marginTop: 4 },
   errorMessage: { fontSize: 14, color: t.textSecondary, textAlign: 'center', marginTop: 12, lineHeight: 20, paddingHorizontal: 8 },
-  receipt: { width: '100%', backgroundColor: t.surface, borderRadius: 14, padding: 16, marginTop: 24 },
+  receipt: { width: '100%', backgroundColor: t.surface, borderRadius: 12, padding: 16, marginTop: 24 },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   receiptLabel: { fontSize: 13, color: t.textSecondary },
   receiptValue: { fontSize: 13, fontWeight: '600', color: t.text, flexShrink: 1, textAlign: 'right', marginLeft: 12 },

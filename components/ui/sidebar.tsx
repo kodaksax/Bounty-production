@@ -19,6 +19,7 @@ import {
 import { useIsMobile } from "hooks/use-mobile"
 import { useBackHandler } from "hooks/useBackHandler"
 import { cn } from "lib/utils"
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
 const SIDEBAR_COOKIE_NAME = "sidebar:state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -255,6 +256,7 @@ const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({ className, ...props }: React.ComponentProps<typeof Button>, ref) => {
+  const { theme } = useAppThemeContext();
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -268,7 +270,7 @@ const SidebarTrigger = React.forwardRef<
       }}
       {...(props as any)}
     >
-      <MaterialIcons name="menu" size={20} color="#fff" />
+      <MaterialIcons name="menu" size={20} color={theme.text} />
       <Text className="sr-only">Toggle Sidebar</Text>
     </TouchableOpacity>
   )

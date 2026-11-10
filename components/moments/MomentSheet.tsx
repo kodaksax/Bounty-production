@@ -157,15 +157,13 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButton: {
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       borderRadius: 999,
       paddingVertical: 16,
       alignItems: 'center',
       marginBottom: 8,
     },
     primaryButtonText: {
-      color: '#052e1b',
+      color: theme.onPrimary,
       fontSize: 16,
       fontWeight: '700',
     },

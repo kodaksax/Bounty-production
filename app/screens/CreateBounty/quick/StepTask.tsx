@@ -32,6 +32,7 @@ import { composerScreenForStep, type ComposerTelemetry, type MissingField } from
 import { BlockedTapCapture } from './BlockedTapCapture';
 import { StepProgressRow, useStepEntrance } from './QuickStepLayout';
 import { SuggestionPlaceholder } from './SuggestionPlaceholder';
+import { withAlpha } from '../../../../lib/utils';
 import { findTaskTemplateByTitle, TASK_TEMPLATES, type TaskTemplate } from './taskTemplates';
 
 // Cycled in the empty field to show the kind of answer that works here. These
@@ -456,7 +457,7 @@ function makeStyles(theme: AppTheme, scale: number) {
       minHeight: 64,
       padding: 0,
       color: theme.text,
-      fontSize: 19,
+      fontSize: 18,
       lineHeight: 25,
     },
     // Sits exactly where the input's own text begins (the input has no padding).
@@ -464,7 +465,7 @@ function makeStyles(theme: AppTheme, scale: number) {
       top: 0,
       left: 0,
       right: 0,
-      fontSize: 19,
+      fontSize: 18,
       lineHeight: 25,
       color: theme.textDisabled,
     },
@@ -550,7 +551,7 @@ function makeStyles(theme: AppTheme, scale: number) {
       height: 40,
       borderRadius: 12,
       // ~10% tint of the brand green over whatever the screen colour is.
-      backgroundColor: theme.isDark ? 'rgba(31,174,73,0.14)' : 'rgba(0,142,42,0.10)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.14) : withAlpha(theme.primary, 0.1),
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 14,

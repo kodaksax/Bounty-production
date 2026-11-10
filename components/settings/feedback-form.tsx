@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { KeyboardAwareScrollView } from '../ui/keyboard-avoiding';
+import { withAlpha } from '../../lib/utils';
 
 export interface FeedbackFormValues {
   subject: string;
@@ -84,7 +85,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       }
     } catch (e) {
       console.error('[FeedbackForm] Failed to pick screenshot:', e);
-      Alert.alert('Error', 'Failed to attach screenshot.');
+      Alert.alert("Couldn't attach screenshot", "Please try again.");
     }
   };
 
@@ -187,7 +188,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
             accessibilityLabel="Retry submission"
             style={s.retryButton}
           >
-            <Text style={s.retryButtonText}>Retry</Text>
+            <Text style={s.retryButtonText}>Try again</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -224,7 +225,7 @@ function makeStyles(t: AppTheme) {
     },
     input: {
       backgroundColor: t.surfaceSecondary,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: t.border,
       paddingHorizontal: 12,
@@ -241,7 +242,7 @@ function makeStyles(t: AppTheme) {
     },
     screenshotPreviewCard: {
       backgroundColor: t.surfaceSecondary,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       ...t.insetBorder, // pressed-in edge: dark top → light bottom
       padding: 12,
@@ -273,10 +274,10 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: t.isDark ? 'rgba(239,68,68,0.16)' : 'rgba(239,68,68,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.error, 0.16) : withAlpha(t.error, 0.1),
       borderWidth: 1,
       borderColor: t.error,
-      borderRadius: 10,
+      borderRadius: 12,
       padding: 12,
       marginBottom: 16,
     },
@@ -291,8 +292,6 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: t.error,
-      borderBottomWidth: 4,
-      borderBottomColor: t.errorShade,
     },
     retryButtonText: {
       color: '#ffffff',

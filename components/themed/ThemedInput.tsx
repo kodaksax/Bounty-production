@@ -32,7 +32,7 @@ export function ThemedInput({ containerStyle, hasError, style, ...props }: Theme
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 12,

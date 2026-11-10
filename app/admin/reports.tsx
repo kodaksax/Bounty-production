@@ -24,6 +24,8 @@ import { adminDataClient } from '../../lib/admin/adminDataClient';
 import { ROUTES } from '../../lib/routes';
 import { reportService } from '../../lib/services/report-service';
 import type { EnhancedReport, ReportStats } from '../../lib/types-admin';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { withAlpha } from '../../lib/utils';
 
 type FilterStatus = 'all' | 'pending' | 'reviewed' | 'resolved' | 'dismissed';
 type SortOption = 'newest' | 'oldest' | 'priority';
@@ -418,7 +420,7 @@ export default function AdminReportsScreen() {
     <View style={styles.statsContainer}>
       <View style={styles.statsRow}>
         {stats.critical > 0 && (
-          <View style={[styles.statBadge, { backgroundColor: 'rgba(220,38,38,0.15)' }]}>
+          <View style={[styles.statBadge, { backgroundColor: withAlpha(theme.error, 0.15) }]}>
             <MaterialIcons name="error" size={14} color={theme.error} />
             <Text style={[styles.statBadgeText, { color: theme.error }]}>
               {stats.critical} Critical
@@ -426,14 +428,14 @@ export default function AdminReportsScreen() {
           </View>
         )}
         {stats.high > 0 && (
-          <View style={[styles.statBadge, { backgroundColor: 'rgba(249,115,22,0.15)' }]}>
+          <View style={[styles.statBadge, { backgroundColor: withAlpha(theme.cancelled, 0.15) }]}>
             <MaterialIcons name="warning" size={14} color={theme.cancelled} />
             <Text style={[styles.statBadgeText, { color: theme.cancelled }]}>
               {stats.high} High
             </Text>
           </View>
         )}
-        <View style={[styles.statBadge, { backgroundColor: 'rgba(0,142,42,0.15)' }]}>
+        <View style={[styles.statBadge, { backgroundColor: withAlpha(theme.primary, 0.15) }]}>
           <MaterialIcons name="pending" size={14} color={theme.success} />
           <Text style={[styles.statBadgeText, { color: theme.success }]}>
             {stats.pending} Pending
@@ -956,7 +958,7 @@ const makeStyles = (theme: AppTheme) =>
     borderRadius: 8,
   },
   reviewAction: {
-    backgroundColor: 'rgba(59,130,246,0.15)',
+    backgroundColor: withAlpha(theme.info, 0.15),
   },
   reviewActionText: {
     fontSize: 13,
@@ -964,7 +966,7 @@ const makeStyles = (theme: AppTheme) =>
     color: theme.info,
   },
   resolveAction: {
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: withAlpha(theme.primary, 0.15),
   },
   resolveActionText: {
     fontSize: 13,
@@ -972,7 +974,7 @@ const makeStyles = (theme: AppTheme) =>
     color: theme.success,
   },
   dismissAction: {
-    backgroundColor: 'rgba(239,68,68,0.15)',
+    backgroundColor: withAlpha(theme.error, 0.15),
   },
   dismissActionText: {
     fontSize: 13,
@@ -983,7 +985,7 @@ const makeStyles = (theme: AppTheme) =>
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
-    backgroundColor: 'rgba(0,142,42,0.1)',
+    backgroundColor: withAlpha(theme.primary, 0.1),
     padding: 10,
     borderRadius: 8,
   },
@@ -1004,7 +1006,7 @@ const makeStyles = (theme: AppTheme) =>
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: withAlpha(theme.primary, 0.15),
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -1026,8 +1028,6 @@ const makeStyles = (theme: AppTheme) =>
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: theme.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.primaryShade,
     borderRadius: 10,
   },
   viewAllButtonText: {
@@ -1051,8 +1051,6 @@ const makeStyles = (theme: AppTheme) =>
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: theme.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.primaryShade,
     borderRadius: 10,
     marginTop: 8,
   },

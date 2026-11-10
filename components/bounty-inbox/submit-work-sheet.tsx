@@ -27,6 +27,7 @@ import { useAttachmentUpload } from '../../hooks/use-attachment-upload';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { KeyboardAvoidingScreen } from '../ui/keyboard-avoiding';
+import { withAlpha } from '../../lib/utils';
 
 type ProofItem = {
   id: string;
@@ -156,7 +157,7 @@ export function SubmitWorkSheet({
         onSubmitted();
       } catch (err) {
         console.error('[SubmitWorkSheet] submit failed', err);
-        Alert.alert('Error', 'Failed to submit your work. Please try again.');
+        Alert.alert("Couldn't submit your work", "Please try again.");
       } finally {
         setSubmitting(false);
       }
@@ -182,7 +183,7 @@ export function SubmitWorkSheet({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.backdrop} pointerEvents="none" />
       <KeyboardAvoidingScreen style={s.sheetWrap} offset={0}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+        <Pressable accessibilityRole="button" style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
         <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={s.grabber} />
           <View style={s.headerRow}>
@@ -349,7 +350,7 @@ function makeStyles(t: AppTheme) {
     proofTile: {
       width: 84,
       height: 84,
-      borderRadius: 14,
+      borderRadius: 12,
       overflow: 'hidden',
       backgroundColor: t.surfaceSecondary,
       borderWidth: 1,
@@ -357,7 +358,7 @@ function makeStyles(t: AppTheme) {
     },
     proofImage: { width: '100%', height: '100%' },
     proofFile: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 6, gap: 4 },
-    proofName: { color: t.textSecondary, fontSize: 10, textAlign: 'center' },
+    proofName: { color: t.textSecondary, fontSize: 12, textAlign: 'center' },
     proofRemove: {
       position: 'absolute',
       top: 4,
@@ -372,7 +373,7 @@ function makeStyles(t: AppTheme) {
     addTile: {
       width: 84,
       height: 84,
-      borderRadius: 14,
+      borderRadius: 12,
       borderWidth: 1.5,
       borderStyle: 'dashed',
       borderColor: t.primary,
@@ -380,7 +381,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
       gap: 2,
     },
-    addTileText: { color: t.primary, fontSize: 12, fontWeight: '700' },
+    addTileText: { color: t.primaryLight, fontSize: 12, fontWeight: '700' },
     submitBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -389,10 +390,8 @@ function makeStyles(t: AppTheme) {
       minHeight: 56,
       borderRadius: t.radius.xl,
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       borderWidth: 1,
-      borderColor: 'rgba(0,142,42,0.6)',
+      borderColor: withAlpha(t.primary, 0.6),
       ...t.shadows.brand,
       marginTop: 4,
       marginBottom: 6,

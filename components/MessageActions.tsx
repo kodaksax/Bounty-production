@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 
 interface MessageActionsProps {
   visible: boolean;
@@ -29,6 +31,8 @@ export function MessageActions({
   isPinned = false,
   showBlockOption = true,
 }: MessageActionsProps) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const handleAction = (action: () => void) => {
     action();
     onClose();
@@ -63,7 +67,7 @@ export function MessageActions({
                   accessibilityLabel="Reply to message"
                   accessibilityHint="Quotes this message in your reply"
                 >
-                  <MaterialIcons name="reply" size={22} color="#929497" accessibilityElementsHidden={true} />
+                  <MaterialIcons name="reply" size={22} color={theme.textSecondary} accessibilityElementsHidden={true} />
                   <Text style={styles.actionText}>Reply</Text>
                 </TouchableOpacity>
 
@@ -81,7 +85,7 @@ export function MessageActions({
               <MaterialIcons
                 name="push-pin"
                 size={22}
-                color="#929497"
+                color={theme.textSecondary}
                 accessibilityElementsHidden={true}
               />
               <Text style={styles.actionText}>{isPinned ? 'Unpin Message' : 'Pin Message'}</Text>
@@ -96,7 +100,7 @@ export function MessageActions({
               accessibilityLabel="Copy message text"
               accessibilityHint="Copies message text to clipboard"
             >
-              <MaterialIcons name="content-copy" size={22} color="#929497" accessibilityElementsHidden={true} />
+              <MaterialIcons name="content-copy" size={22} color={theme.textSecondary} accessibilityElementsHidden={true} />
               <Text style={styles.actionText}>Copy Text</Text>
             </TouchableOpacity>
 
@@ -109,7 +113,7 @@ export function MessageActions({
               accessibilityLabel="Report message"
               accessibilityHint="Reports this message"
             >
-              <MaterialIcons name="flag" size={22} color="#fca5a5" accessibilityElementsHidden={true} />
+              <MaterialIcons name="flag" size={22} color={theme.errorText} accessibilityElementsHidden={true} />
               <Text style={[styles.actionText, styles.dangerText]}>Report Message</Text>
             </TouchableOpacity>
 
@@ -124,7 +128,7 @@ export function MessageActions({
                   accessibilityLabel="Block user"
                   accessibilityHint="Blocks this user"
                 >
-                  <MaterialIcons name="block" size={22} color="#fca5a5" accessibilityElementsHidden={true} />
+                  <MaterialIcons name="block" size={22} color={theme.errorText} accessibilityElementsHidden={true} />
                   <Text style={[styles.actionText, styles.dangerText]}>Block User</Text>
                 </TouchableOpacity>
               </>
@@ -139,7 +143,7 @@ export function MessageActions({
               accessibilityLabel="Cancel"
               accessibilityHint="Closes message actions menu"
             >
-              <MaterialIcons name="close" size={22} color="#929497" accessibilityElementsHidden={true} />
+              <MaterialIcons name="close" size={22} color={theme.textSecondary} accessibilityElementsHidden={true} />
               <Text style={styles.actionText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -149,7 +153,8 @@ export function MessageActions({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -159,7 +164,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   actionSheet: {
-    backgroundColor: '#22262C',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -172,15 +177,16 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 16,
-    color: '#929497',
+    color: theme.textSecondary,
     fontWeight: '500',
   },
   dangerText: {
-    color: '#fca5a5',
+    color: theme.errorText,
   },
   divider: {
     height: 1,
-    backgroundColor: '#454952',
+    backgroundColor: theme.surfaceSecondary,
     marginHorizontal: 20,
   },
 });
+}

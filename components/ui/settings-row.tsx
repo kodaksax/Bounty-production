@@ -4,6 +4,7 @@ import type { AppTheme } from 'lib/themes/types';
 import { press } from 'lib/motion';
 import React, { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { withAlpha } from '../../lib/utils';
 
 export interface SettingsRowProps {
   /** MaterialIcons name shown on the left. */
@@ -106,14 +107,14 @@ function makeStyles(t: AppTheme) {
     iconBadge: {
       width: 32,
       height: 32,
-      borderRadius: 9,
+      borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: t.surfaceSecondary,
       marginRight: 12,
     },
     iconBadgeDestructive: {
-      backgroundColor: t.isDark ? 'rgba(239,68,68,0.16)' : 'rgba(239,68,68,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.error, 0.16) : withAlpha(t.error, 0.1),
     },
     textBlock: {
       flex: 1,

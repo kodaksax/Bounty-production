@@ -57,6 +57,8 @@ import { hideBountyForHunter } from '../../../lib/utils/hunter-hidden-bounties';
 import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
 import { useWallet } from '../../../lib/wallet-context';
 import { ChatDetailScreen, type ChatTimelineItem } from '../chat-detail-screen';
+import { withAlpha } from '../../../lib/utils';
+import { showToast } from '../../../lib/toast';
 
 export default function BountyThreadRoute() {
   return (
@@ -195,7 +197,7 @@ function BountyThreadScreen() {
   const requestCancellation = useCallback(() => {
     if (!bounty) return;
     if (bounty.status === 'cancellation_requested' || cancellation?.status === 'pending') {
-      Alert.alert('Cancellation requested', `Waiting on ${counterpartName} to respond to your request.`);
+      showToast({ message: `Waiting on ${counterpartName} to respond to your request.` });
       return;
     }
     if (hasActiveDispute) {
@@ -309,7 +311,7 @@ function BountyThreadScreen() {
           router.push(`/bounty/${id}/cancellation-response` as never);
           return;
         case 'view_cancellation':
-          Alert.alert('Cancellation requested', `Waiting on ${counterpartName} to respond to your request.`);
+          showToast({ message: `Waiting on ${counterpartName} to respond to your request.` });
           return;
         case 'view_dispute':
           if (dispute) router.push(`/dispute/${dispute.id}` as never);
@@ -632,7 +634,7 @@ function makeStyles(t: AppTheme) {
       paddingHorizontal: 16,
     },
     bannerText: { flex: 1, color: t.text, fontSize: 13, fontWeight: '600' },
-    bannerAmount: { color: t.primary, fontSize: 16, fontWeight: '800' },
+    bannerAmount: { color: t.primaryLight, fontSize: 16, fontWeight: '800' },
     toolRow: { gap: 8, paddingHorizontal: 16 },
     startChat: {
       flexDirection: 'row',
@@ -643,7 +645,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: t.radius.lg,
       backgroundColor: t.primary,
       borderWidth: 1,
-      borderColor: 'rgba(0,142,42,0.6)',
+      borderColor: withAlpha(t.primary, 0.6),
       ...t.shadows.brand,
     },
     startChatText: { color: '#fff', fontSize: 15, fontWeight: '700' },

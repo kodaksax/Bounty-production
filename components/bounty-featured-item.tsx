@@ -17,7 +17,8 @@ import { formatBountyWhere } from '../lib/utils/bounty-distance'
 import { getScheduleChip } from '../lib/utils/schedule-utils'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { useModalOrigin } from "./ui/app-modal"
-import { CountdownBadge } from "./ui/countdown-badge"
+import { CountdownBadge, URGENT_CHIP_FILL } from "./ui/countdown-badge"
+import { withAlpha } from '../lib/utils';
 
 // Every slot in the card below the cover is a fixed height, and the price row
 // is pinned to the bottom, so title / description / location / price land on
@@ -197,7 +198,7 @@ function BountyFeaturedItemComponent({
                 scheduleChip.variant === 'urgent'  && s.scheduleChipUrgent,
                 scheduleChip.variant === 'warning' && s.scheduleChipWarning,
               ]}>
-                <Text style={s.scheduleChipText}>{scheduleChip.icon} {scheduleChip.label}</Text>
+                <Text style={s.scheduleChipText}>{scheduleChip.label}</Text>
               </View>
             )
           )}
@@ -313,7 +314,7 @@ function makeStyles(t: AppTheme) {
       borderRadius: 20,
     },
     coverChipText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       color: '#fff',
     },
@@ -327,13 +328,13 @@ function makeStyles(t: AppTheme) {
       backgroundColor: 'rgba(0,0,0,0.55)',
     },
     scheduleChipUrgent: {
-      backgroundColor: 'rgba(220,38,38,0.85)',
+      backgroundColor: URGENT_CHIP_FILL,
     },
     scheduleChipWarning: {
       backgroundColor: 'rgba(180,100,0,0.85)',
     },
     scheduleChipText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       color: '#fff',
     },
@@ -361,7 +362,7 @@ function makeStyles(t: AppTheme) {
       marginTop: SLOT_GAP,
     },
     location: {
-      fontSize: 11,
+      fontSize: 12,
       color: t.textDisabled,
       lineHeight: LOCATION_HEIGHT,
       height: LOCATION_HEIGHT,
@@ -381,10 +382,10 @@ function makeStyles(t: AppTheme) {
       borderRadius: 999,
       backgroundColor: 'rgba(0,0,0,0.55)',
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.28)',
+      borderColor: withAlpha(t.text, 0.28),
     },
     limitedText: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
       color: 'rgba(255,255,255,0.9)',
       flexShrink: 1,
@@ -402,23 +403,23 @@ function makeStyles(t: AppTheme) {
       fontSize: 16,
       lineHeight: META_HEIGHT,
       fontWeight: '800',
-      color: t.primary,
+      color: t.primaryLight,
     },
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.15) : withAlpha(t.primary, 0.1),
       borderRadius: 999,
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(0,142,42,0.35)' : 'rgba(0,142,42,0.3)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.35) : withAlpha(t.primary, 0.3),
       gap: 4,
     },
     honorText: {
-      color: t.primary,
+      color: t.primaryLight,
       fontWeight: '800',
-      fontSize: 11,
+      fontSize: 12,
     },
     username: {
       fontSize: 12,

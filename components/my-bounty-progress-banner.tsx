@@ -651,7 +651,7 @@ function makeStyles(p: CardPalette) {
     },
     tabCount: {
       color: p.text,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       marginLeft: 2,
     },

@@ -196,7 +196,7 @@ export default function CommandCenterScreen() {
               action={
                 anomalies.length > 0 ? (
                   <TouchableOpacity onPress={() => go(ROUTES.ADMIN.ANOMALIES)}>
-                    <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '600' }}>
+                    <Text style={{ color: theme.primaryLight, fontSize: 13, fontWeight: '600' }}>
                       View all
                     </Text>
                   </TouchableOpacity>

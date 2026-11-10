@@ -31,9 +31,10 @@ import { formatPublicLocation } from '../../../lib/utils/public-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
 import {
-  BOUNTY_DISPLAY_STATUS_COLORS,
-  BOUNTY_DISPLAY_STATUS_LABELS,
+  BOUNTY_DISPLAY_STATUS_TONES,
+  formatBountyStatusLabel,
 } from '../../../lib/utils/bounty-display-status';
+import { StatusPill } from '../../../components/ui/status-pill';
 import { getApplicationSafetyMessage, resolveBountyLifecycle } from '../../../lib/utils/bounty-lifecycle';
 import { trustSafetyStrings } from '../../../lib/strings/trust-safety';
 import { TrustSafetyNotice } from '../../../components/ui/trust-safety-notice';
@@ -50,6 +51,7 @@ import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-pro
 import { formatPostedAgo } from '../../../lib/utils/format-relative-date';
 import { BountyTrustSignals } from '../../../components/bounty-trust-signals';
 import { BountyRequirementsSummary } from '../../../components/bounty-requirements-summary';
+import { withAlpha } from '../../../lib/utils';
 
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
@@ -416,7 +418,7 @@ export default function PublicBountyDetail() {
     const isMissing = /not found/i.test(error ?? '') || !bounty;
     return (
       <SafeAreaView style={s.errorContainer}>
-        <MaterialIcons name={isMissing ? 'search-off' : 'cloud-off'} size={48} color="#ef4444" />
+        <MaterialIcons name={isMissing ? 'search-off' : 'cloud-off'} size={48} color={theme.errorText} />
         <Text style={s.errorText}>
           {isMissing
             ? "This bounty isn't available anymore. It may have been completed, cancelled or removed."
@@ -458,7 +460,7 @@ export default function PublicBountyDetail() {
       <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
         {/* Header */}
         <View style={s.header}>
-          <TouchableOpacity style={s.backIcon} onPress={goBack}>
+          <TouchableOpacity accessibilityRole="button" style={s.backIcon} onPress={goBack}>
             <View style={s.backIconBg}>
               <MaterialIcons name="arrow-back" size={24} color={theme.text} />
             </View>
@@ -480,20 +482,10 @@ export default function PublicBountyDetail() {
             />
             
             <View style={s.heroTopRow}>
-              <View
-                style={[
-                  s.statusBadge,
-                  {
-                    backgroundColor: lifecycle
-                      ? BOUNTY_DISPLAY_STATUS_COLORS[lifecycle.status]
-                      : theme.primary,
-                  },
-                ]}
-              >
-                <Text style={s.statusBadgeText}>
-                  {lifecycle ? BOUNTY_DISPLAY_STATUS_LABELS[lifecycle.status] : 'OPEN'}
-                </Text>
-              </View>
+              <StatusPill
+                label={lifecycle ? formatBountyStatusLabel(lifecycle.status) : 'Open'}
+                tone={lifecycle ? BOUNTY_DISPLAY_STATUS_TONES[lifecycle.status] : 'success'}
+              />
               <Text style={s.bountyAge}>{formatPostedAgo(bounty.created_at)}</Text>
             </View>
 
@@ -502,7 +494,7 @@ export default function PublicBountyDetail() {
             <View style={s.priceRow}>
               {bounty.is_for_honor ? (
                 <View style={s.honorBadge}>
-                  <MaterialIcons name="local-fire-department" size={24} color="#fcd34d" />
+                  <MaterialIcons name="local-fire-department" size={24} color={theme.warningText} />
                   <Text style={s.honorText}>For Honor</Text>
                 </View>
               ) : (
@@ -614,7 +606,7 @@ export default function PublicBountyDetail() {
               accessibilityLabel="Manage this bounty in your poster dashboard"
             >
               <LinearGradient
-                colors={['#3b82f6', '#2563eb']}
+                colors={[theme.primary, theme.primary]}
                 style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
               />
               <Text style={s.actionButtonText}>Manage this bounty</Text>
@@ -627,7 +619,7 @@ export default function PublicBountyDetail() {
               accessibilityLabel="View your application for this bounty"
             >
               <LinearGradient
-                colors={['#8b5cf6', '#6d28d9']}
+                colors={[theme.primary, theme.primary]}
                 style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
               />
               <Text style={s.actionButtonText}>View your application</Text>
@@ -654,7 +646,7 @@ export default function PublicBountyDetail() {
               accessibilityState={{ disabled: isApplying, busy: isApplying }}
             >
               <LinearGradient
-                colors={['#008E2A', '#00701F']}
+                colors={[theme.primary, theme.primary]}
                 style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
               />
               {isApplying ? (
@@ -686,7 +678,7 @@ export default function PublicBountyDetail() {
                 accessibilityLabel="Browse other bounties"
               >
                 <LinearGradient
-                  colors={['#008E2A', '#00701F']}
+                  colors={[theme.primary, theme.primary]}
                   style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
                 />
                 <Text style={s.actionButtonText}>Browse other bounties</Text>
@@ -769,7 +761,7 @@ function makeStyles(t: AppTheme) {
       padding: 24,
     },
     errorText: {
-      color: '#ef4444',
+      color: t.errorText,
       fontSize: 16,
       textAlign: 'center',
     },
@@ -833,17 +825,6 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       marginBottom: 16,
     },
-    statusBadge: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 12,
-    },
-    statusBadgeText: {
-      color: '#fff',
-      fontSize: 12,
-      fontWeight: '800',
-      letterSpacing: 0.5,
-    },
     bountyAge: {
       color: t.primaryLight,
       fontSize: 13,
@@ -872,15 +853,15 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: 'rgba(245,158,11,0.2)',
+      backgroundColor: withAlpha(t.warning, 0.2),
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: 'rgba(245,158,11,0.4)',
+      borderColor: withAlpha(t.warning, 0.4),
     },
     honorText: {
-      color: '#fcd34d',
+      color: t.warningText,
       fontSize: 16,
       fontWeight: '800',
     },
@@ -963,7 +944,7 @@ function makeStyles(t: AppTheme) {
     infoIconBg: {
       width: 36,
       height: 36,
-      borderRadius: 10,
+      borderRadius: 12,
       backgroundColor: t.overlay,
       justifyContent: 'center',
       alignItems: 'center',

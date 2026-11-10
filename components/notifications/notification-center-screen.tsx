@@ -272,21 +272,21 @@ export function NotificationCenterScreen() {
           <View style={s.handle} />
           {contextMenuFor && (
             <>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={s.contextMenuRow}
                 onPress={() => { handleToggleRead(contextMenuFor); setContextMenuFor(null); }}
               >
                 <MaterialIcons name={contextMenuFor.read ? 'mark-email-unread' : 'mark-email-read'} size={20} color={theme.text} />
                 <Text style={s.contextMenuLabel}>{contextMenuFor.read ? 'Mark as unread' : 'Mark as read'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={s.contextMenuRow}
                 onPress={() => { handleArchive(contextMenuFor); setContextMenuFor(null); }}
               >
                 <MaterialIcons name="archive" size={20} color={theme.text} />
                 <Text style={s.contextMenuLabel}>Archive</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={s.contextMenuRow}
                 onPress={() => { const n = contextMenuFor; setContextMenuFor(null); setActionSheetFor(n); }}
               >
@@ -328,8 +328,6 @@ function makeStyles(t: AppTheme, m: HeaderMetrics) {
       paddingHorizontal: m.actionPaddingH,
       borderRadius: RADIUS.PILL,
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       borderWidth: 1,
       borderColor: t.primary,
       ...t.shadows.sm,

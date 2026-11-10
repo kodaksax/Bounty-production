@@ -161,7 +161,7 @@ export function WithdrawNowCard({ onWithdrawComplete }: WithdrawNowCardProps) {
               accessibilityRole="button"
               accessibilityLabel="Retry withdrawal"
             >
-              <Text style={s.primaryButtonText}>Retry</Text>
+              <Text style={s.primaryButtonText}>Try again</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -198,7 +198,7 @@ export function WithdrawNowCard({ onWithdrawComplete }: WithdrawNowCardProps) {
           {balance.isRefreshing ? (
             <ActivityIndicator color="#ffffff" size="small" />
           ) : (
-            <Text style={s.primaryButtonText}>Retry</Text>
+            <Text style={s.primaryButtonText}>Try again</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -304,7 +304,7 @@ function makeStyles(t: AppTheme) {
     amountSkeleton: {
       width: 140,
       height: 32,
-      borderRadius: 6,
+      borderRadius: 8,
       backgroundColor: t.border,
       marginVertical: 4,
     },
@@ -327,7 +327,7 @@ function makeStyles(t: AppTheme) {
     },
     referenceText: {
       color: t.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 2,
     },
     statusRow: {
@@ -348,8 +348,6 @@ function makeStyles(t: AppTheme) {
     },
     primaryButton: {
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       borderRadius: 12,
       paddingVertical: 14,
       paddingHorizontal: 20,

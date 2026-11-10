@@ -388,7 +388,7 @@ function makeStyles(theme: AppTheme) {
       bottom: -4,
       width: 22,
       height: 22,
-      borderRadius: 6,
+      borderRadius: 8,
       backgroundColor: theme.primary,
       borderWidth: 2,
       borderColor: theme.surface,

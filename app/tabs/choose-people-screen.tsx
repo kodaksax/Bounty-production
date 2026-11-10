@@ -112,7 +112,7 @@ export default function ChoosePeopleScreen() {
   const renderItem = useCallback(({ item }: { item: any }) => {
     const checked = selectedIds.includes(item.id)
     return (
-      <TouchableOpacity style={styles.row} onPress={() => toggleSelect(item.id)}>
+      <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => toggleSelect(item.id)}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Avatar className="h-12 w-12">
             <AvatarImage src={item.avatar || '/placeholder.svg?height=48&width=48'} alt={item.name || item.username} />
@@ -136,7 +136,7 @@ export default function ChoosePeopleScreen() {
       {/* Lift the main content up 30px while leaving the bottom bar (Done button and divider) in place */}
       <View style={styles.contentLift}>
         <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button"
           onPress={() => {
               // Prefer going back if possible, otherwise navigate to the in-app Messenger
               // by pushing the bounty-app route with tab=messages (this matches the left-most bottom-nav behavior).
@@ -184,8 +184,8 @@ export default function ChoosePeopleScreen() {
                       <AvatarImage src={p.avatar || '/placeholder.svg?height=56&width=56'} alt={p.name || p.username} />
                       <AvatarFallback className="bg-[#22262C] text-[#929497]">{(p.name || '').split(' ').map((s: string) => s[0]).slice(0,2).join('')}</AvatarFallback>
                     </Avatar>
-                    <TouchableOpacity style={styles.removeBadge} onPress={() => onRemoveSelected(id)}>
-                      <MaterialIcons name="close" size={14} color="#052e1b" />
+                    <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" style={styles.removeBadge} onPress={() => onRemoveSelected(id)}>
+                      <MaterialIcons name="close" size={14} color={theme.onPrimary} />
                     </TouchableOpacity>
                   </View>
                   <Text style={{ width: 80, textAlign: 'center', marginTop: 6, color: theme.text }}>{p.name?.split(' ')[0] || p.username}</Text>
@@ -211,7 +211,7 @@ export default function ChoosePeopleScreen() {
       {/* Bottom bar stays in its original position */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity style={styles.doneBtn} onPress={onDone} accessibilityRole="button">
-          <Text style={{ color: '#052e1b', fontWeight: '700' }}>Done</Text>
+          <Text style={{ color: theme.onPrimary, fontWeight: '700' }}>Done</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -230,10 +230,10 @@ function makeStyles(theme: AppTheme) {
     sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 8, color: theme.text },
     row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
     name: { marginLeft: 12, fontSize: 16, color: theme.text },
-    checkbox: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, borderColor: theme.border },
-    checkboxChecked: { width: 26, height: 26, borderRadius: 6, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center' },
+    checkbox: { width: 26, height: 26, borderRadius: 8, borderWidth: 2, borderColor: theme.border },
+    checkboxChecked: { width: 26, height: 26, borderRadius: 8, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center' },
     removeBadge: { position: 'absolute', right: -6, top: -6, backgroundColor: theme.surface, borderRadius: 12, padding: 4, elevation: 2, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6 },
     bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, backgroundColor: theme.background, borderTopWidth: 1, borderTopColor: theme.border },
-    doneBtn: { backgroundColor: theme.primary, paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginHorizontal: 16 },
+    doneBtn: { backgroundColor: theme.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginHorizontal: 16 },
   })
 }

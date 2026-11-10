@@ -11,6 +11,8 @@ import { ChatSafetyWarning } from './chat-safety-warning';
 import { TrustSafetyNotice } from './ui/trust-safety-notice';
 import { trustSafetyStrings } from '../lib/strings/trust-safety';
 import { ReportModal } from './ReportModal';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { withAlpha } from '../lib/utils';
 
 export interface ChatMessage {
   id: string;
@@ -52,6 +54,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   onTypingChange,
   typingTimeout = 2000,
 }) => {
+  const { theme } = useAppThemeContext();
   const [text, setText] = useState('');
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -172,33 +175,33 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           <View className="px-3 pb-3">
             {!expanded && <ChatSafetyWarning risk={composerRisk} />}
             <View className="flex-row items-end gap-2 bg-[#2A2E35] rounded-2xl px-3 pt-2 pb-2 border border-[#454952]">
-              <TouchableOpacity className="h-9 w-9 rounded-full bg-[#454952] items-center justify-center mt-auto">
-                <MaterialIcons name="add" size={22} color="#ffffff" />
+              <TouchableOpacity accessibilityLabel="Add" accessibilityRole="button" className="h-9 w-9 rounded-full bg-[#454952] items-center justify-center mt-auto">
+                <MaterialIcons name="add" size={22} color={theme.text} />
               </TouchableOpacity>
-              <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.9} onPress={() => setExpanded(true)}>
+              <TouchableOpacity accessibilityRole="button" style={{ flex: 1 }} activeOpacity={0.9} onPress={() => setExpanded(true)}>
                 <View pointerEvents="none">
-                  <Text numberOfLines={2} style={{ color: text ? '#ffffff' : '#929497', minHeight: 24 }}>
+                  <Text numberOfLines={2} style={{ color: text ? theme.text : theme.textSecondary, minHeight: 24 }}>
                     {text || placeholder}
                   </Text>
                 </View>
               </TouchableOpacity>
               {text.length > 0 ? (
                 <TouchableOpacity onPress={handleSend} disabled={isSending} accessibilityRole="button" accessibilityLabel="Send message" className="h-9 w-9 rounded-full bg-[#008E2A] items-center justify-center mb-1">
-                  <MaterialIcons name={isSending ? 'hourglass-empty' : 'send'} size={18} color="#ffffff" />
+                  <MaterialIcons name={isSending ? 'hourglass-empty' : 'send'} size={18} color={theme.text} />
                 </TouchableOpacity>
               ) : (
                 <>
-                  <TouchableOpacity className="h-9 w-9 rounded-full bg-[#454952] items-center justify-center mb-1">
-                    <MaterialIcons name="photo-camera" size={18} color="#929497" />
+                  <TouchableOpacity accessibilityLabel="Take a photo" accessibilityRole="button" className="h-9 w-9 rounded-full bg-[#454952] items-center justify-center mb-1">
+                    <MaterialIcons name="photo-camera" size={18} color={theme.textSecondary} />
                   </TouchableOpacity>
-                  <TouchableOpacity className="h-9 w-9 rounded-full bg-[#454952] items-center justify-center mb-1">
-                    <MaterialIcons name="mic" size={18} color="#929497" />
+                  <TouchableOpacity accessibilityRole="button" className="h-9 w-9 rounded-full bg-[#454952] items-center justify-center mb-1">
+                    <MaterialIcons name="mic" size={18} color={theme.textSecondary} />
                   </TouchableOpacity>
                 </>
               )}
             </View>
             {!atBottom && (
-              <TouchableOpacity onPress={() => listRef.current?.scrollToEnd({ animated: true })} className="self-center mt-2 px-3 py-1 bg-[#2A2E35] rounded-full">
+              <TouchableOpacity accessibilityRole="button" onPress={() => listRef.current?.scrollToEnd({ animated: true })} className="self-center mt-2 px-3 py-1 bg-[#2A2E35] rounded-full">
                 <Text className="text-xs text-[#929497]">Scroll to latest</Text>
               </TouchableOpacity>
             )}
@@ -213,31 +216,31 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           onShow={() => requestAnimationFrame(() => expandedInputRef.current?.focus())}
         >
             <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.45)', justifyContent:'flex-end' }}>
-            <Pressable style={{ flex:1 }} onPress={()=> setExpanded(false)} />
+            <Pressable accessibilityRole="button" style={{ flex:1 }} onPress={()=> setExpanded(false)} />
             <KeyboardAvoidingView behavior={Platform.select({ ios:'padding', android: undefined })}>
-              <View style={{ backgroundColor:'#22262C', paddingTop:16, paddingHorizontal:12, paddingBottom: effectiveBottomInset + 16, borderTopLeftRadius:24, borderTopRightRadius:24 }}>
-                <View style={{ alignSelf:'center', width:48, height:4, backgroundColor:'rgba(255,255,255,0.3)', borderRadius:2, marginBottom:12 }} />
+              <View style={{ backgroundColor:theme.surface, paddingTop:16, paddingHorizontal:12, paddingBottom: effectiveBottomInset + 16, borderTopLeftRadius:24, borderTopRightRadius:24 }}>
+                <View style={{ alignSelf:'center', width:48, height:4, backgroundColor:withAlpha(theme.text, 0.3), borderRadius:2, marginBottom:12 }} />
                 <ChatSafetyWarning risk={composerRisk} />
-                <View style={{ maxHeight: 220, borderRadius:16, borderWidth:1, borderColor:'#454952', backgroundColor:'#2A2E35', paddingHorizontal:12, paddingVertical:8 }}>
+                <View style={{ maxHeight: 220, borderRadius:16, borderWidth:1, borderColor:theme.border, backgroundColor:theme.surfaceSecondary, paddingHorizontal:12, paddingVertical:8 }}>
                   <TextInput
                     ref={expandedInputRef}
                     value={text}
                     onChangeText={handleTextChange}
                     placeholder={placeholder}
-                    placeholderTextColor="#61656B"
+                    placeholderTextColor={theme.textSecondary}
                     multiline
                     accessibilityLabel="Message input field"
-                    style={{ color:'#ffffff', fontSize:15, minHeight:80, textAlignVertical:'top' }}
+                    style={{ color:theme.text, fontSize:15, minHeight:80, textAlignVertical:'top' }}
                     returnKeyType="default"
                   />
                 </View>
                 <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginTop:16 }}>
                   <View style={{ flexDirection:'row', gap:12 }}>
-                    <TouchableOpacity style={{ height:42, width:42, borderRadius:21, backgroundColor:'rgba(255,255,255,0.1)', alignItems:'center', justifyContent:'center' }}>
-                      <MaterialIcons name="photo-camera" size={22} color="#929497" />
+                    <TouchableOpacity accessibilityLabel="Take a photo" accessibilityRole="button" style={{ height:42, width:42, borderRadius:21, backgroundColor:withAlpha(theme.text, 0.1), alignItems:'center', justifyContent:'center' }}>
+                      <MaterialIcons name="photo-camera" size={22} color={theme.textSecondary} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={{ height:42, width:42, borderRadius:21, backgroundColor:'rgba(255,255,255,0.1)', alignItems:'center', justifyContent:'center' }}>
-                      <MaterialIcons name="mic" size={22} color="#929497" />
+                    <TouchableOpacity accessibilityRole="button" style={{ height:42, width:42, borderRadius:21, backgroundColor:withAlpha(theme.text, 0.1), alignItems:'center', justifyContent:'center' }}>
+                      <MaterialIcons name="mic" size={22} color={theme.textSecondary} />
                     </TouchableOpacity>
                   </View>
                   <TouchableOpacity
@@ -245,9 +248,9 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
                     onPress={handleSend}
                     accessibilityRole="button"
                     accessibilityLabel="Send message"
-                    style={{ backgroundColor: text.trim()? '#008E2A':'#2A2E35', paddingHorizontal:24, height:44, borderRadius:22, alignItems:'center', justifyContent:'center', flexDirection:'row', gap:6 }}>
-                    <MaterialIcons name={isSending? 'hourglass-empty':'send'} size={20} color={text.trim()? '#ffffff':'#929497'} />
-                    <Text style={{ fontWeight:'600', color: text.trim()? '#ffffff':'#929497' }}>{isSending? 'Sending':'Send Message'}</Text>
+                    style={{ backgroundColor: text.trim() ? theme.primary : theme.surfaceSecondary, paddingHorizontal:24, height:44, borderRadius:22, alignItems:'center', justifyContent:'center', flexDirection:'row', gap:6 }}>
+                    <MaterialIcons name={isSending? 'hourglass-empty':'send'} size={20} color={text.trim() ? theme.text : theme.textSecondary} />
+                    <Text style={{ fontWeight:'600', color: text.trim() ? theme.text : theme.textSecondary }}>{isSending? 'Sending':'Send Message'}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -270,6 +273,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
  * Animated message component with slide-in effect and read receipts
  */
 const AnimatedMessage: React.FC<{ message: ChatMessage; isNewMessage: boolean }> = ({ message, isNewMessage }) => {
+  const { theme } = useAppThemeContext();
   const slideAnim = useRef(new Animated.Value(isNewMessage ? 20 : 0)).current;
   const fadeAnim = useRef(new Animated.Value(isNewMessage ? 0 : 1)).current;
 
@@ -336,7 +340,7 @@ const AnimatedMessage: React.FC<{ message: ChatMessage; isNewMessage: boolean }>
       }}
     >
       <View className={cn('px-3 py-2 rounded-2xl', message.isUser ? 'bg-[#008E2A] rounded-br-none' : 'bg-[#2A2E35] rounded-bl-none')}>
-        <Text className="text-sm text-white">{message.text}</Text>
+        <Text className="text-sm" style={{ color: theme.text }}>{message.text}</Text>
       </View>
       {renderReadReceipt()}
     </Animated.View>

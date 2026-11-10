@@ -1361,7 +1361,7 @@ export function SignInForm() {
                     placeholderTextColor={theme.textDisabled}
                   />
                   {emailCodeError ? <ValidationMessage message={emailCodeError} /> : null}
-                  <TouchableOpacity onPress={() => void sendEmailCode()} disabled={emailCodeLoading} className="mt-2 self-end">
+                  <TouchableOpacity accessibilityRole="button" onPress={() => void sendEmailCode()} disabled={emailCodeLoading} className="mt-2 self-end">
                     <Text style={{ color: theme.textSecondary }}>Send a new code</Text>
                   </TouchableOpacity>
                 </View>

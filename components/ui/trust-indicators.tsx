@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 export interface TrustIndicatorsProps {
   /** ISO timestamp of when this user's Stripe Identity verification first succeeded. */
@@ -37,16 +38,16 @@ export function TrustIndicators({ verifiedSince }: TrustIndicatorsProps) {
   return (
     <View style={styles.container}>
       <View style={styles.row}>
-        <MaterialIcons name="check-circle" size={16} color="#008E2A" accessibilityElementsHidden />
+        <MaterialIcons name="check-circle" size={16} color={theme.primaryLight} accessibilityElementsHidden />
         <Text style={styles.text}>Government ID verified</Text>
       </View>
       <View style={styles.row}>
-        <MaterialIcons name="check-circle" size={16} color="#008E2A" accessibilityElementsHidden />
+        <MaterialIcons name="check-circle" size={16} color={theme.primaryLight} accessibilityElementsHidden />
         <Text style={styles.text}>Human verified</Text>
       </View>
       {sinceLabel && (
         <View style={styles.row}>
-          <MaterialIcons name="check-circle" size={16} color="#008E2A" accessibilityElementsHidden />
+          <MaterialIcons name="check-circle" size={16} color={theme.primaryLight} accessibilityElementsHidden />
           <Text style={styles.text}>Verified since {sinceLabel}</Text>
         </View>
       )}
@@ -57,7 +58,7 @@ export function TrustIndicators({ verifiedSince }: TrustIndicatorsProps) {
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.1)' : 'rgba(0,142,42,0.07)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.1) : withAlpha(theme.primary, 0.07),
       borderRadius: 12,
       padding: 12,
       gap: 8,

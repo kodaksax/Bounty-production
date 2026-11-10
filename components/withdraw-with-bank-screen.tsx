@@ -32,6 +32,7 @@ import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdr
 import { WithdrawMethodSelect } from './withdraw-method-select';
 import { WithdrawNowCard } from './withdraw-now-card';
 import { KeyboardAwareScrollView, KeyboardAvoidingScreen } from './ui/keyboard-avoiding';
+import { withAlpha } from '../lib/utils';
 
 interface WithdrawWithBankScreenProps {
   onBack?: () => void;
@@ -443,7 +444,7 @@ export function WithdrawWithBankScreen({
       const result = await payoutMethods.openPayoutDashboard();
       if (!result.ok) {
         console.error('[withdraw-with-bank-screen] openPayoutDashboard failed', result.error);
-        Alert.alert('Error', result.error);
+        Alert.alert("Something went wrong", result.error);
       } else {
         // payoutMethods.openPayoutDashboard() already refreshed cards/bank
         // accounts/instant balance; also refresh Connect eligibility
@@ -605,7 +606,7 @@ export function WithdrawWithBankScreen({
             own reason instead of the generic onboarding prompt. */}
         {!hasConnectedAccount && (
           <View style={s.warningCard}>
-            <MaterialIcons name="warning" size={24} color="#fbbf24" />
+            <MaterialIcons name="warning" size={24} color={theme.warningText} />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={s.warningTitle}>
                 {eligibility.connectedAccountExists ? 'Payouts Currently Disabled' : 'Stripe Connect Required'}
@@ -652,7 +653,7 @@ export function WithdrawWithBankScreen({
           </View>
 
           {isLoadingAccounts ? (
-            <ActivityIndicator size="small" color="#008E2A" style={{ marginVertical: 8 }} />
+            <ActivityIndicator size="small" color={theme.primaryLight} style={{ marginVertical: 8 }} />
           ) : bankAccounts.length === 0 ? (
             <TouchableOpacity
               style={s.emptyState}
@@ -678,7 +679,7 @@ export function WithdrawWithBankScreen({
               >
                 <View style={s.radioButton}>
                   {selectedBankAccount === account.id ? (
-                    <MaterialIcons name="radio-button-checked" size={24} color="#008E2A" />
+                    <MaterialIcons name="radio-button-checked" size={24} color={theme.primaryLight} />
                   ) : (
                     <MaterialIcons
                       name="radio-button-unchecked"
@@ -786,7 +787,7 @@ export function WithdrawWithBankScreen({
                 <Text style={s.historyGroupLabel}>Pending</Text>
                 {pendingWithdrawals.map(tx => (
                   <View key={tx.id} style={s.historyRow}>
-                    <MaterialIcons name="hourglass-empty" size={18} color="#fbbf24" />
+                    <MaterialIcons name="hourglass-empty" size={18} color={theme.warningText} />
                     <Text style={s.historyAmount}>{formatCurrency(Math.abs(tx.amount))}</Text>
                     <Text style={s.historyDate}>{tx.date.toLocaleDateString()}</Text>
                   </View>
@@ -799,7 +800,7 @@ export function WithdrawWithBankScreen({
                 <Text style={s.historyGroupLabel}>Failed</Text>
                 {failedWithdrawals.map(tx => (
                   <View key={tx.id} style={s.historyRow}>
-                    <MaterialIcons name="error-outline" size={18} color="#ef4444" />
+                    <MaterialIcons name="error-outline" size={18} color={theme.errorText} />
                     <Text style={s.historyAmount}>{formatCurrency(Math.abs(tx.amount))}</Text>
                     <Text style={s.historyDate}>{tx.date.toLocaleDateString()}</Text>
                   </View>
@@ -812,7 +813,7 @@ export function WithdrawWithBankScreen({
                 <Text style={s.historyGroupLabel}>Completed</Text>
                 {completedWithdrawals.map(tx => (
                   <View key={tx.id} style={s.historyRow}>
-                    <MaterialIcons name="check-circle-outline" size={18} color="#1FAE49" />
+                    <MaterialIcons name="check-circle-outline" size={18} color={theme.primaryLight} />
                     <Text style={s.historyAmount}>{formatCurrency(Math.abs(tx.amount))}</Text>
                     <Text style={s.historyDate}>{tx.date.toLocaleDateString()}</Text>
                   </View>
@@ -926,7 +927,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     opacity: 0.4,
   },
   breakdownLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: t.textSecondary,
     marginBottom: 2,
   },
@@ -945,7 +946,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   manageMethodsLinkText: {
     fontSize: 13,
     fontWeight: '600',
-    color: t.primary,
+    color: t.primaryLight,
   },
   historyGroupLabel: {
     fontSize: 12,
@@ -995,7 +996,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: t.primary,
+    color: t.primaryLight,
     marginLeft: 4,
   },
   amountInputContainer: {
@@ -1008,14 +1009,14 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     marginBottom: 8,
   },
   currencySymbol: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '600',
     color: t.text,
     marginRight: 8,
   },
   amountInput: {
     flex: 1,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '600',
     color: t.text,
   },
@@ -1051,7 +1052,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     borderColor: 'transparent',
   },
   bankAccountCardSelected: {
-    borderColor: '#008E2A',
+    borderColor: t.primary,
     backgroundColor: t.surface,
   },
   radioButton: {
@@ -1072,13 +1073,13 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     marginRight: 8,
   },
   defaultBadge: {
-    backgroundColor: '#008E2A',
+    backgroundColor: t.primary,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
   },
   defaultBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: '#fff',
   },
@@ -1099,7 +1100,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: t.surfaceSecondary,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
   },
   emptyStateText: {
@@ -1109,7 +1110,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   },
   warningCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(251,191,36,0.2)',
+    backgroundColor: withAlpha(t.warning, 0.2),
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
@@ -1117,7 +1118,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   warningTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fbbf24',
+    color: t.warningText,
     marginBottom: 2,
   },
   warningText: {
@@ -1126,7 +1127,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     marginBottom: 8,
   },
   warningButton: {
-    backgroundColor: '#fbbf24',
+    backgroundColor: t.warning,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 8,
@@ -1159,8 +1160,6 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: t.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: t.primaryShade,
     borderRadius: 12,
     paddingVertical: 16,
     shadowColor: t.primary,
