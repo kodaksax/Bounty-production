@@ -15,6 +15,8 @@ import {
   KeyboardAwareScrollView,
   KeyboardStickyView,
   keyboardAwareListProps,
+  keyboardOverlap,
+  useAndroidKeyboardOverlap,
   useKeyboardInset,
 } from '../../components/ui/keyboard-avoiding';
 
@@ -132,7 +134,7 @@ describe('useKeyboardInset', () => {
     durations.forEach(d => expect(d).toBe(250));
   });
 
-  it('stays inert on Android, where adjustResize already shrinks the window', () => {
+  it('stays inert on Android (useAndroidKeyboardOverlap covers it there)', () => {
     const originalOS = Platform.OS;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (Platform as any).OS = 'android';
@@ -321,5 +323,102 @@ describe('keyboardAwareListProps', () => {
   it('lets a list inset itself natively and keeps taps working', () => {
     expect(keyboardAwareListProps.automaticallyAdjustKeyboardInsets).toBe(true);
     expect(keyboardAwareListProps.keyboardShouldPersistTaps).toBe('handled');
+  });
+});
+
+describe('useAndroidKeyboardOverlap', () => {
+  // Android is edge-to-edge and the window is not resized for the keyboard.
+  // The overlap is the measured view's bottom (measure's pageY + height)
+  // minus the keyboard's top (the event's screenY), same root coordinates.
+  const withAndroid = (run: () => void) => {
+    const os = Platform.OS;
+    Platform.OS = 'android';
+    try {
+      run();
+    } finally {
+      Platform.OS = os;
+    }
+  };
+
+  let frame: { pageY: number; height: number };
+
+  function AndroidProbe() {
+    const ref = createRef<View>();
+    const { height, isVisible, remeasure } = useAndroidKeyboardOverlap(ref);
+    return (
+      <View ref={ref} testID="frame" onLayout={remeasure}>
+        <Text testID="probe">{`${height}:${isVisible}`}</Text>
+      </View>
+    );
+  }
+
+  const createNodeMock = () => ({
+    measure: (cb: (x: number, y: number, w: number, h: number, px: number, py: number) => void) =>
+      cb(0, 0, 375, frame.height, 0, frame.pageY),
+  });
+
+  /** A keyboard whose top edge is at `top` in root coordinates. */
+  const androidKeyboard = (top: number) => ({
+    endCoordinates: { screenY: top, height: WINDOW_HEIGHT - top, width: 375, screenX: 0 },
+  });
+
+  beforeEach(() => {
+    // A flow from the top of the screen down to 94pt above its bottom edge
+    // (BottomNav + gesture bar).
+    frame = { pageY: 0, height: WINDOW_HEIGHT - 94 };
+  });
+
+  it('pads by how far the view reaches under the keyboard', () => {
+    withAndroid(() => {
+      const { getByTestId } = render(<AndroidProbe />, { createNodeMock });
+      emit('keyboardDidShow', androidKeyboard(WINDOW_HEIGHT - 336));
+      expect(getByTestId('probe')).toHaveTextContent(`${336 - 94}:true`);
+    });
+  });
+
+  it('settles at 0 on a device that does resize the window, instead of double-counting', () => {
+    withAndroid(() => {
+      const { getByTestId } = render(<AndroidProbe />, { createNodeMock });
+      // First report lands before the resize reaches the view…
+      emit('keyboardDidShow', androidKeyboard(WINDOW_HEIGHT - 336));
+      expect(getByTestId('probe')).toHaveTextContent('242:true');
+      // …then the view shrinks to end at the keyboard's top and re-measures.
+      frame = { pageY: 0, height: WINDOW_HEIGHT - 336 };
+      act(() => {
+        getByTestId('frame').props.onLayout();
+      });
+      expect(getByTestId('probe')).toHaveTextContent('0:false');
+    });
+  });
+
+  it('returns to 0 when the keyboard hides', () => {
+    withAndroid(() => {
+      const { getByTestId } = render(<AndroidProbe />, { createNodeMock });
+      emit('keyboardDidShow', androidKeyboard(400));
+      emit('keyboardDidHide', androidKeyboard(WINDOW_HEIGHT));
+      expect(getByTestId('probe')).toHaveTextContent('0:false');
+    });
+  });
+
+  it('ignores a re-measure while no keyboard is up', () => {
+    withAndroid(() => {
+      const { getByTestId } = render(<AndroidProbe />, { createNodeMock });
+      act(() => {
+        getByTestId('frame').props.onLayout();
+      });
+      expect(getByTestId('probe')).toHaveTextContent('0:false');
+    });
+  });
+
+  it('never subscribes on iOS', () => {
+    render(<AndroidProbe />, { createNodeMock });
+    expect(listeners.keyboardDidShow ?? []).toHaveLength(0);
+  });
+
+  it('keyboardOverlap clamps and rounds', () => {
+    expect(keyboardOverlap(718, 476)).toBe(242);
+    expect(keyboardOverlap(400, 476)).toBe(0);
+    expect(keyboardOverlap(500.4, 476)).toBe(24);
+    expect(keyboardOverlap(Number.NaN, 476)).toBe(0);
   });
 });
