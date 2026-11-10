@@ -1,4 +1,4 @@
-import type { Fonts, Radius, Shadows, Spacing, Typography } from './tokens';
+import type { Fonts, Radius, Shadows, Spacing, TextStyles, Typography } from './tokens';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -21,10 +21,10 @@ export type AppTheme = {
 
   // ── Borders ──────────────────────────────────────────────────────────────
   border: string;
+  borderSubtle: string;       // card hairlines, quieter than border
   /**
-   * Pressed-in card edge: per-side colours that read as a gradient from a
-   * dark top edge to a light bottom edge. Spread into a style that already
-   * has a borderWidth: `{ borderWidth: 1, ...theme.insetBorder }`.
+   * Card edge: one even hairline on all four sides. Spread into a style that
+   * already has a borderWidth: `{ borderWidth: 1, ...theme.insetBorder }`.
    */
   insetBorder: {
     borderTopColor: string;
@@ -39,17 +39,30 @@ export type AppTheme = {
   textDisabled: string;       // disabled / placeholder
 
   // ── Brand ─────────────────────────────────────────────────────────────────
-  primary: string;            // CTA buttons, active states
-  primaryLight: string;       // accent icons, highlight text
-  primaryShade: string;       // darker band under filled primary buttons (3D depth)
-  errorShade: string;         // darker band under filled destructive buttons
+  primary: string;            // fills, icons, active states. Not for small text.
+  primaryLight: string;       // green text: meets AA on this theme's surfaces
+  primaryShade: string;       // pressed primary fill
+  primaryTint: string;        // quiet green background behind green text
+  onPrimary: string;          // text and icons on a primary or error fill
+  errorShade: string;         // pressed destructive fill
   overlay: string;            // subtle button overlays
 
   // ── Semantic ──────────────────────────────────────────────────────────────
+  // `success`, `error`, `warning` and `info` are for fills and icons. Use the
+  // matching *Text token for words and the *Tint token behind them.
   success: string;
+  successText: string;
+  successTint: string;
   error: string;
+  errorText: string;
+  errorTint: string;
   warning: string;
+  warningText: string;
+  warningTint: string;
   info: string;
+  infoText: string;
+  infoTint: string;
+  neutralTint: string;        // quiet background for neutral pills
   completed: string;          // indigo family
   cancelled: string;          // orange family
   target: string;
@@ -60,6 +73,7 @@ export type AppTheme = {
   spacing: Spacing;
   radius: Radius;
   typography: Typography;
+  textStyles: TextStyles;
   shadows: Shadows;
   fonts: Fonts;
 };

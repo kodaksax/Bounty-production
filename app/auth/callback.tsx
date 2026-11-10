@@ -269,7 +269,7 @@ export default function AuthCallbackScreen() {
         return (
           <View style={styles.centerContent}>
             <View style={styles.successIconCircle}>
-              <MaterialIcons name="check-circle" size={64} color="#008E2A" />
+              <MaterialIcons name="check-circle" size={64} color={theme.primaryLight} />
             </View>
             <Text style={styles.title}>
               {linkType === 'recovery' ? 'Link Verified' : 'Email Confirmed!'}
@@ -290,7 +290,7 @@ export default function AuthCallbackScreen() {
         return (
           <View style={styles.centerContent}>
             <View style={styles.errorIconCircle}>
-              <MaterialIcons name="error-outline" size={64} color="#7f1d1d" />
+              <MaterialIcons name="error-outline" size={64} color={theme.errorText} />
             </View>
             <Text style={styles.title}>{copy.title}</Text>
             <Text style={styles.description}>{copy.body}</Text>
@@ -313,14 +313,14 @@ export default function AuthCallbackScreen() {
             {/* Actions */}
             <View style={styles.errorActions}>
               {isRetryable && (
-                <TouchableOpacity style={styles.primaryButton} onPress={handleRetry}>
+                <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleRetry}>
                   <Text style={styles.primaryButtonText}>Try Again</Text>
                   <MaterialIcons name="refresh" size={20} color="#ffffff" />
                 </TouchableOpacity>
               )}
               {isRecovery ? (
                 <>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={isRetryable ? styles.secondaryButton : styles.primaryButton}
                     onPress={handleRequestNewResetLink}
                   >
@@ -333,18 +333,18 @@ export default function AuthCallbackScreen() {
                       color={isRetryable ? theme.text : '#ffffff'}
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToSignIn}>
+                  <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={handleGoToSignIn}>
                     <MaterialIcons name="login" size={20} color={theme.text} />
                     <Text style={styles.secondaryButtonText}>Back to Sign In</Text>
                   </TouchableOpacity>
                 </>
               ) : (
                 <>
-                  <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenEmail}>
+                  <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={handleOpenEmail}>
                     <MaterialIcons name="email" size={20} color={theme.text} />
                     <Text style={styles.secondaryButtonText}>Check Email</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
+                  <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleGoToSignIn}>
                     <Text style={styles.primaryButtonText}>Go to Sign In</Text>
                     <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
                   </TouchableOpacity>
@@ -424,7 +424,7 @@ function makeStyles(theme: AppTheme) {
       width: 120,
       height: 120,
       borderRadius: 60,
-      backgroundColor: '#fecaca',
+      backgroundColor: theme.errorTint,
       justifyContent: 'center',
       alignItems: 'center',
       shadowColor: '#000',
@@ -483,9 +483,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
       paddingVertical: 16,
       borderRadius: 999,
       gap: 8,

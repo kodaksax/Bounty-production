@@ -101,6 +101,7 @@ import { formatPublicLocation } from '../lib/utils/public-location';
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
 import { withTimeout } from '../lib/utils/withTimeout';
+import { withAlpha } from '../lib/utils';
 
 export type BountyFeedHandle = {
   refresh: () => void;
@@ -1447,7 +1448,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       <EmptyState
         icon="search-off"
         title="No bounties yet"
-        description="No bounties near you yet. Be the first to post one!"
+        description="Be the first to post one near you."
         actionLabel="Post a bounty"
         // Switch to the Post tab rather than pushing the composer as its own
         // route: that route mounts CreateBountyFlow with no onCancel/onComplete,
@@ -1751,7 +1752,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                       <MaterialIcons
                         name="search"
                         size={18}
-                        color="rgba(255,255,255,0.85)"
+                        color={theme.textSecondary}
                         style={s.searchIcon}
                       />
                       <Text style={s.gridBannerSearchText}>Search bounties or users...</Text>
@@ -1923,14 +1924,14 @@ function makeStyles(t: AppTheme) {
     gridBannerSearchButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(5,46,27,0.35)',
+      backgroundColor: t.primaryTint,
       borderRadius: 999,
       paddingVertical: 12,
       paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
       minHeight: SIZING.MIN_TOUCH_TARGET,
     },
     gridBannerSearchText: {
-      color: 'rgba(255,255,255,0.85)',
+      color: t.textSecondary,
       fontSize: TYPOGRAPHY.SIZE_SMALL,
       flex: 1,
     },
@@ -1965,12 +1966,12 @@ function makeStyles(t: AppTheme) {
       marginRight: 5,
     },
     gridBannerCountBadge: {
-      backgroundColor: 'rgba(255,255,255,0.18)',
+      backgroundColor: withAlpha(t.text, 0.18),
       borderRadius: 999,
       paddingHorizontal: 10,
       paddingVertical: 4,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.3)',
+      borderColor: withAlpha(t.text, 0.3),
     },
     gridBannerCountText: {
       color: '#ffffff',

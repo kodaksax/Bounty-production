@@ -25,6 +25,7 @@ import type { Conversation } from "../../../lib/types"
 import { buildVisibleConversationRows, type ConversationRow } from "../../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "../chat-detail-screen"
 import { withReplayMask } from '../../../components/replay-mask';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -56,6 +57,7 @@ export function MessengerScreen({
   onNavigate: (screen: string) => void
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
+  const { theme } = useAppThemeContext();
   const router = useRouter()
   const currentUserId = useValidUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
@@ -197,7 +199,7 @@ export function MessengerScreen({
                 await deleteConversation(id)
               }
             } catch {
-              Alert.alert('Error', 'Failed to delete conversation')
+              Alert.alert("Couldn't delete conversation", "Please try again.")
             }
           },
         },
@@ -265,7 +267,7 @@ export function MessengerScreen({
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-[#008E2A] text-white" style={{ marginTop: -20 }}>
+    <View className="flex flex-col min-h-screen bg-[#008E2A]" style={{ marginTop: -20 }}>
       {/* Connection Status Banner - appears at top when offline */}
       <ConnectionStatus showQueueCount={true} />
       <View className="p-4 pt-8 pb-2">
@@ -280,11 +282,11 @@ export function MessengerScreen({
       </View>
 
       <View className="px-4 py-2 flex-row justify-between items-center">
-        <Text className="text-xl font-bold text-white">INBOX</Text>
+        <Text className="text-xl font-bold" style={{ color: theme.onPrimary }}>INBOX</Text>
 
         {/* Right-side actions: refresh, create new group (icon), and offline badge */}
         <View className="flex-row items-center gap-4">
-          <TouchableOpacity onPress={refresh} className="p-2 rounded">
+          <TouchableOpacity accessibilityLabel="Refresh" accessibilityRole="button" onPress={refresh} className="p-2 rounded">
             <MaterialIcons name="refresh" size={20} color="white" />
           </TouchableOpacity>
 
@@ -311,7 +313,7 @@ export function MessengerScreen({
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor="#ffffff"
+            tintColor={theme.text}
             colors={['#008E2A']}
           />
         }
@@ -340,6 +342,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
   onPress, 
   onDelete 
 }) {
+  const { theme } = useAppThemeContext();
   const router = useRouter()
   const currentUserId = useValidUserId()
   
@@ -388,7 +391,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
   
   // Memoize swipe action render
   const renderRightActions = useCallback(() => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       className="bg-red-500 justify-center items-center px-6 rounded-lg my-1 mr-2"
       onPress={onDelete}
     >
@@ -403,8 +406,8 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
       overshootRight={false}
       friction={2}
     >
-      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-[#008E2A]" onPress={onPress}>
-        <TouchableOpacity onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
+      <TouchableOpacity accessibilityRole="button" className="flex-row items-center p-3 rounded-lg bg-[#008E2A]" onPress={onPress}>
+        <TouchableOpacity accessibilityRole="button" onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
           <View className="relative">
             {conversation.isGroup ? (
               <GroupAvatar />
@@ -421,7 +424,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
 
         <View className="ml-3 flex-1 min-w-0">
           <View className="flex-row justify-between items-center">
-            <Text className="font-medium text-white">{displayName}</Text>
+            <Text className="font-medium" style={{ color: theme.onPrimary }}>{displayName}</Text>
             <Text className="text-xs text-[#1FAE49]">{time}</Text>
           </View>
           <View className="flex-row justify-between items-center mt-1">
@@ -430,7 +433,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
             </Text>
             {(conversation.unread ?? 0) > 0 && (
               <View className="bg-blue-500 rounded-full h-5 w-5 flex items-center justify-center">
-                <Text className="text-white text-xs">{conversation.unread}</Text>
+                <Text className="text-xs" style={{ color: theme.onPrimary }}>{conversation.unread}</Text>
               </View>
             )}
           </View>

@@ -114,9 +114,11 @@ describe('accepting through accept-bounty-request', () => {
   const postgrest = (message: string) =>
     JSON.stringify({ error: 'x', details: JSON.stringify({ code: 'P0001', message }) })
 
-  test('a card that could not pay reads as not funded', () => {
+  test('a card that could not pay has its own outcome, so the page can offer Checkout', () => {
     const reason = acceptFailureReason(402, JSON.stringify({ code: 'card_charge_failed', fallback: 'top_up' }))
-    expect(classifyAccept(state('pending', 'open', null), reason).outcome).toBe('not_funded')
+    const r = classifyAccept(state('pending', 'open', null), reason)
+    expect(r).toMatchObject({ ok: false, outcome: 'card_failed', httpStatus: 402 })
+    expect(r.message).toMatch(/another card/)
   })
 
   test('the database reason still classifies', () => {
@@ -184,6 +186,18 @@ describe('classifyRelease — what the poster is told after confirming', () => {
 })
 
 describe('explainPayment — accurate, plain English', () => {
+  it('a saved-card bounty before hire says the card is saved and nothing was charged', () => {
+    const b = { amount: 40, funding_mode: 'at_accept', status: 'open' }
+    const p = explainPayment(null, b, { hasSavedCard: true })
+    expect(p).toMatchObject({ state: 'card_saved', label: 'Card saved' })
+    expect(p.explanation).toMatch(/^Card saved, you’ll be charged when you hire someone\./)
+    expect(p.explanation).not.toMatch(/\bpaid\b/)
+    expect(explainPayment(null, b).state).toBe('pay_at_hire')
+    expect(explainPayment(null, { ...b, status: 'in_progress' }, { hasSavedCard: true }).state).toBe('unknown')
+    expect(explainPayment({ status: 'captured', amount: 40 }, b, { hasSavedCard: true }).state).toBe('held')
+    expect(explainPayment(null, { ...b, is_for_honor: true }, { hasSavedCard: true }).state).toBe('not_paid')
+  })
+
   test('a web-posted bounty: paid up front and held until the poster confirms', () => {
     const p = explainPayment({ status: 'captured', amount: '35.00' }, { amount: 35, funding_mode: 'at_post' })
     expect(p.state).toBe('held')

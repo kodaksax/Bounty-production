@@ -51,14 +51,14 @@ const ROLE_OPTIONS: {
   {
     intent: 'poster',
     icon: 'post-add',
-    title: 'Make today pay.',
-    body: 'Post what you need done and set your price.',
+    title: 'Get something done',
+    body: 'Post a task, set your price, and choose who does it.',
   },
   {
     intent: 'hunter',
     icon: 'explore',
-    title: "I'd rather earn",
-    body: 'Browse paid tasks near you and get picked.',
+    title: 'Earn money',
+    body: 'Find paid tasks near you and apply.',
   },
 ];
 

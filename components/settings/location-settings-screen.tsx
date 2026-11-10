@@ -166,7 +166,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
 
   const handleAddressSubmit = useCallback(async () => {
     if (!formLabel.trim() || !formAddress.trim()) {
-      Alert.alert('Error', 'Please fill in both label and address fields');
+      Alert.alert("Something went wrong", 'Please fill in both label and address fields');
       return;
     }
 
@@ -377,7 +377,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                     accessibilityLabel="Add another service area"
                   >
                     <MaterialIcons name="add" size={16} color={theme.primary} />
-                    <Text style={{ marginLeft: 6, color: theme.primary, fontSize: 13, fontWeight: '600' }}>
+                    <Text style={{ marginLeft: 6, color: theme.primaryLight, fontSize: 13, fontWeight: '600' }}>
                       Add another service area
                     </Text>
                   </TouchableOpacity>
@@ -534,7 +534,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: errorTint,
       borderWidth: 1,
       borderColor: errorBorder,
-      borderRadius: 10,
+      borderRadius: 12,
       padding: 12,
       marginBottom: 12,
     },
@@ -542,7 +542,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: errorTint,
       borderWidth: 1,
       borderColor: errorBorder,
-      borderRadius: 10,
+      borderRadius: 12,
       padding: 12,
       margin: 12,
       marginBottom: 0,
@@ -605,7 +605,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
       marginTop: 16,
       paddingVertical: 10,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: t.border,
     },

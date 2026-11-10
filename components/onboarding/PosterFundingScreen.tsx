@@ -44,7 +44,7 @@ type PosterFundingScreenProps = {
 
 // Text color placed on top of the bright brand-green primary fill, matching
 // the dark-on-green convention used across onboarding/wallet.
-const ON_PRIMARY_TEXT = '#052e1b';
+const ON_PRIMARY_TEXT = '#FFFFFF';
 
 // Poster branch, step 3 of 4. Confirms funding for the exact bounty amount
 // chosen on the previous step (no editable keypad here — that decision was

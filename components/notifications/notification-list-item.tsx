@@ -13,6 +13,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 // `progress` is a real SharedValue usable with useAnimatedStyle).
 import Swipeable, { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, { SharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import { withAlpha } from '../../lib/utils';
 
 const CATEGORY_ICON: Record<NotificationCategory, keyof typeof MaterialIcons.glyphMap> = {
   marketplace: 'storefront',
@@ -108,7 +109,7 @@ export function NotificationListItem({ notification, onPress, onLongPress, onTog
       overshootLeft={false}
       overshootRight={false}
     >
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={[s.row, unread && s.rowUnread]}
         onPress={() => onPress(notification)}
         onLongPress={() => onLongPress(notification)}
@@ -163,12 +164,12 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surface,
     },
     rowUnread: {
-      backgroundColor: t.isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+      backgroundColor: t.isDark ? withAlpha(t.text, 0.03) : 'rgba(0,0,0,0.02)',
     },
     iconBadge: {
       width: 36,
       height: 36,
-      borderRadius: 10,
+      borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: t.surfaceSecondary,
@@ -208,7 +209,7 @@ function makeStyles(t: AppTheme) {
       fontWeight: '700',
     },
     time: {
-      fontSize: 11,
+      fontSize: 12,
       color: t.textDisabled,
     },
     body: {
@@ -230,7 +231,7 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    readAction: { backgroundColor: '#3B82F6' },
+    readAction: { backgroundColor: t.info },
     archiveAction: { backgroundColor: '#61656B' },
   });
 }

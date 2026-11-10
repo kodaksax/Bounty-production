@@ -269,8 +269,8 @@ export function PayoutSetupScreen({
         animationType="fade"
         onRequestClose={() => setCountryPickerOpen(false)}
       >
-        <Pressable style={styles.pickerScrim} onPress={() => setCountryPickerOpen(false)}>
-          <Pressable style={styles.pickerCard} onPress={() => {}}>
+        <Pressable accessibilityRole="button" style={styles.pickerScrim} onPress={() => setCountryPickerOpen(false)}>
+          <Pressable accessibilityRole="button" style={styles.pickerCard} onPress={() => {}}>
             <Text style={styles.pickerTitle} accessibilityRole="header">
               Country
             </Text>
@@ -396,7 +396,7 @@ function makeStyles(t: AppTheme) {
     },
     heroTitle: {
       marginTop: 18,
-      fontSize: 22,
+      fontSize: 24,
       fontWeight: '700',
       color: t.text,
       textAlign: 'center',

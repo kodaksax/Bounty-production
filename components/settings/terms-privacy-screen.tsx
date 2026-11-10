@@ -66,7 +66,7 @@ function makeStyles(t: AppTheme) {
       flex: 1,
       alignItems: 'center',
       paddingVertical: 10,
-      borderRadius: 9,
+      borderRadius: 8,
     },
     tabButtonActive: {
       backgroundColor: t.surface,

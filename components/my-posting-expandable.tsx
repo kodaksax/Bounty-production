@@ -49,6 +49,8 @@ import { RevisionFeedbackBanner } from './ui/revision-feedback-banner';
 import { Stepper } from './ui/stepper';
 import { TrustSafetyNotice } from './ui/trust-safety-notice';
 import { WorkflowDisputeModal } from './workflow-dispute-modal';
+import { withAlpha } from '../lib/utils';
+import { showToast } from '../lib/toast';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -840,7 +842,7 @@ export function MyPostingExpandable({
         });
 
         if (resp) {
-          Alert.alert('Submission Successful', 'Your work has been submitted for review!');
+          showToast({ message: 'Your work has been submitted for review!' });
           // Lock review UI and show waiting state
           dispatchDraft({ type: 'setSubmissionPending', value: true });
           dispatchUi({ type: 'set', key: 'hasSubmission', value: true });
@@ -853,7 +855,7 @@ export function MyPostingExpandable({
         }
       } catch (err) {
         console.error('Error submitting completion:', err);
-        Alert.alert('Error', 'Failed to submit completion. Please try again.');
+        Alert.alert("Couldn't submit completion", "Please try again.");
       } finally {
         dispatchDraft({ type: 'setSubmitting', value: false });
       }
@@ -1090,10 +1092,10 @@ export function MyPostingExpandable({
           { text: 'OK', onPress: () => onRefresh?.() },
         ]);
       } else {
-        Alert.alert('Error', result.error || 'Failed to cancel bounty');
+        Alert.alert("Something went wrong", result.error || 'Failed to cancel bounty');
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert("Something went wrong", 'An unexpected error occurred');
     }
   };
 
@@ -1105,10 +1107,10 @@ export function MyPostingExpandable({
           { text: 'OK', onPress: () => onRefresh?.() },
         ]);
       } else {
-        Alert.alert('Error', result.error || 'Failed to repost bounty');
+        Alert.alert("Something went wrong", result.error || 'Failed to repost bounty');
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert("Something went wrong", 'An unexpected error occurred');
     }
   };
 
@@ -1178,7 +1180,7 @@ export function MyPostingExpandable({
             <Text style={styles.panelTitle}>Progress</Text>
             {bounty.is_for_honor ? (
               <View style={styles.honorBadge}>
-                <MaterialIcons name="favorite" size={14} color="#052e1b" />
+                <MaterialIcons name="favorite" size={14} color={theme.onPrimary} />
                 <Text style={styles.honorBadgeText}>For Honor</Text>
               </View>
             ) : (
@@ -1191,7 +1193,7 @@ export function MyPostingExpandable({
                     accessibilityRole="button"
                     accessibilityLabel={`Hunter ready, opened review modal`}
                   >
-                    <MaterialIcons name="hourglass-top" size={14} color="#052e1b" />
+                    <MaterialIcons name="hourglass-top" size={14} color={theme.onPrimary} />
                     <Text
                       style={styles.readyBadgeText}
                     >{`Hunter Ready · ${relativeTime(readyRecord.ready_at)}`}</Text>
@@ -1210,7 +1212,7 @@ export function MyPostingExpandable({
                     <MaterialIcons
                       name={hasDispute ? 'lock' : 'rate-review'}
                       size={14}
-                      color="#052e1b"
+                      color={theme.onPrimary}
                     />
                   </TouchableOpacity>
                 )}
@@ -1224,7 +1226,7 @@ export function MyPostingExpandable({
           {/* Pre-acceptance info when open */}
           {bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="hourglass-empty" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
+              <MaterialIcons name="hourglass-empty" size={18} color={theme.isDark ? theme.primaryLight : theme.primary} />
               {isOwner ? (
                 <Text style={styles.infoText}>
                   Awaiting a hunter. Review requests in the Requests tab.
@@ -1275,7 +1277,7 @@ export function MyPostingExpandable({
                 )}
 
                 <View style={styles.infoBox}>
-                  <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
+                  <MaterialIcons name="info-outline" size={18} color={theme.isDark ? theme.primaryLight : theme.primary} />
                   <Text style={styles.infoText}>
                     Congrats on being selected! Begin work on the bounty, money is in escrow; once
                     complete press the next button.
@@ -1284,7 +1286,7 @@ export function MyPostingExpandable({
 
                 <AttachmentsList attachments={attachments} />
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[
                     styles.primaryBtn,
                     (readyToSubmitPressed || !!readyRecord || hasDispute) &&
@@ -1333,7 +1335,7 @@ export function MyPostingExpandable({
                         // Trigger parent refresh to update list
                         if (onRefresh) onRefresh();
                       } else {
-                        Alert.alert('Error', 'Failed to mark Ready. Please try again.');
+                        Alert.alert("Couldn't mark Ready", "Please try again.");
                       }
                     };
 
@@ -1397,15 +1399,15 @@ export function MyPostingExpandable({
 
                   {hunterToolsExpanded && (
                     <View style={styles.hunterToolsMenu}>
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={styles.hunterToolBtn}
                         onPress={handleMessagePoster}
                       >
-                        <MaterialIcons name="chat" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
+                        <MaterialIcons name="chat" size={18} color={theme.isDark ? theme.primaryLight : theme.primary} />
                         <Text style={styles.hunterToolText}>Message Poster</Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={styles.hunterToolBtnDanger}
                         onPress={
                           hasDispute
@@ -1417,7 +1419,7 @@ export function MyPostingExpandable({
                         <MaterialIcons
                           name={hasDispute ? 'gavel' : 'report-problem'}
                           size={18}
-                          color={hasDispute ? '#f59e0b' : '#fca5a5'}
+                          color={hasDispute ? theme.warningText : theme.errorText}
                         />
                         <Text
                           style={
@@ -1459,14 +1461,14 @@ export function MyPostingExpandable({
                             accessibilityLabel="Request cancellation"
                             accessibilityHint="Asks the poster to release you from this bounty; the full amount is returned to them"
                           >
-                            <MaterialIcons name="cancel" size={18} color="#f59e0b" />
+                            <MaterialIcons name="cancel" size={18} color={theme.warningText} />
                             <Text style={styles.hunterToolTextWarning}>
-                              Request Cancellation
+                              Request cancellation
                             </Text>
                           </TouchableOpacity>
                         ) : bounty.status === 'cancellation_requested' ? (
                           <View style={styles.hunterToolBtnWarning}>
-                            <MaterialIcons name="hourglass-empty" size={18} color="#f59e0b" />
+                            <MaterialIcons name="hourglass-empty" size={18} color={theme.warningText} />
                             <Text style={styles.hunterToolTextWarning}>
                               Cancellation Requested
                             </Text>
@@ -1526,7 +1528,7 @@ export function MyPostingExpandable({
                   <MaterialIcons
                     name={hasSubmission ? 'rate-review' : 'hourglass-top'}
                     size={18}
-                    color={theme.isDark ? '#1FAE49' : theme.primary}
+                    color={theme.isDark ? theme.primaryLight : theme.primary}
                   />
                   <Text style={styles.infoText}>
                     {hasSubmission
@@ -1536,7 +1538,7 @@ export function MyPostingExpandable({
                 </View>
 
                 {hasSubmission && (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[styles.reviewSubmissionBtn, hasDispute && styles.buttonDisabled]}
                     onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
                     disabled={hasDispute}
@@ -1600,19 +1602,19 @@ export function MyPostingExpandable({
 
                   {posterToolsExpanded && (
                     <View style={styles.posterToolsMenu}>
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={styles.hunterToolBtn}
                         onPress={handleMessageHunter}
                       >
                         <MaterialIcons
                           name="chat"
                           size={18}
-                          color={theme.isDark ? '#1FAE49' : theme.primary}
+                          color={theme.isDark ? theme.primaryLight : theme.primary}
                         />
                         <Text style={styles.hunterToolText}>Message Hunter</Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={styles.hunterToolBtnDanger}
                         onPress={
                           hasDispute
@@ -1623,7 +1625,7 @@ export function MyPostingExpandable({
                         <MaterialIcons
                           name={hasDispute ? 'gavel' : 'report-problem'}
                           size={18}
-                          color={hasDispute ? '#f59e0b' : '#fca5a5'}
+                          color={hasDispute ? theme.warningText : theme.errorText}
                         />
                         <Text
                           style={
@@ -1699,7 +1701,7 @@ export function MyPostingExpandable({
                       <DisputeFrozenBanner message="A dispute has been opened for this bounty. The flow is paused until an admin resolves the dispute." />
                     )}
                     <View style={styles.infoBox}>
-                      <MaterialIcons name="hourglass-top" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
+                      <MaterialIcons name="hourglass-top" size={18} color={theme.isDark ? theme.primaryLight : theme.primary} />
                       <Text style={styles.infoText}>
                         Waiting for poster to review your submission.
                       </Text>
@@ -1741,19 +1743,19 @@ export function MyPostingExpandable({
                             <MaterialIcons
                               name={item.type === 'image' ? 'image' : 'insert-drive-file'}
                               size={24}
-                              color={theme.isDark ? '#1FAE49' : theme.primary}
+                              color={theme.isDark ? theme.primaryLight : theme.primary}
                             />
                           </View>
                           <View style={styles.proofInfo}>
                             <Text style={styles.proofName}>{item.name}</Text>
                             <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
                           </View>
-                          <TouchableOpacity onPress={() => handleRemoveProof(item.id)}>
-                            <MaterialIcons name="close" size={20} color="#ef4444" />
+                          <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => handleRemoveProof(item.id)}>
+                            <MaterialIcons name="close" size={20} color={theme.errorText} />
                           </TouchableOpacity>
                         </TouchableOpacity>
                       ))}
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={[
                           styles.addFileBtn,
                           (!(readyToSubmitPressed || !!readyRecord) || hasDispute) &&
@@ -1767,7 +1769,7 @@ export function MyPostingExpandable({
                             (readyToSubmitPressed || !!readyRecord) && !hasDispute ? 'add' : 'lock'
                           }
                           size={20}
-                          color="#008E2A"
+                          color={theme.primaryLight}
                         />
                         <Text style={styles.addFileText}>
                           {hasDispute
@@ -1780,7 +1782,7 @@ export function MyPostingExpandable({
                     </View>
 
                     {/* Submit Button */}
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={[
                         styles.primaryBtn,
                         (isSubmitting || hasDispute) && styles.buttonDisabled,
@@ -1814,7 +1816,7 @@ export function MyPostingExpandable({
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
                 <View style={styles.successPanel}>
-                  <MaterialIcons name="check-circle" size={48} color="#008E2A" />
+                  <MaterialIcons name="check-circle" size={48} color={theme.primaryLight} />
                   <Text style={styles.successTitle}>Payout Released!</Text>
                   <Text style={styles.successText}>
                     {isOwner
@@ -1834,7 +1836,7 @@ export function MyPostingExpandable({
 
                   {bounty.is_for_honor && (
                     <View style={styles.honorCard}>
-                      <MaterialIcons name="favorite" size={32} color="#ec4899" />
+                      <MaterialIcons name="favorite" size={32} color={theme.primaryLight} />
                       <Text style={styles.honorTitle}>Completed for Honor</Text>
                       <Text style={styles.honorCardText}>
                         Thank you for contributing to the community!
@@ -1847,8 +1849,8 @@ export function MyPostingExpandable({
                 {!bounty.is_for_honor && (
                   <View style={styles.receiptCard}>
                     <View style={styles.receiptHeader}>
-                      <MaterialIcons name="receipt" size={24} color={theme.isDark ? '#1FAE49' : theme.primary} />
-                      <Text style={styles.receiptTitle}>Transaction Receipt</Text>
+                      <MaterialIcons name="receipt" size={24} color={theme.isDark ? theme.primaryLight : theme.primary} />
+                      <Text style={styles.receiptTitle}>Receipt</Text>
                     </View>
                     <View style={styles.receiptDivider} />
                     <View style={styles.receiptRow}>
@@ -1866,7 +1868,7 @@ export function MyPostingExpandable({
                     <View style={styles.receiptRow}>
                       <Text style={styles.receiptLabel}>Status</Text>
                       <View style={styles.statusPill}>
-                        <MaterialIcons name="check-circle" size={16} color="#008E2A" />
+                        <MaterialIcons name="check-circle" size={16} color={theme.primaryLight} />
                         <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
@@ -1877,7 +1879,7 @@ export function MyPostingExpandable({
                 <View style={styles.actionsContainer}>
                   {isOwner ? (
                     <>
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={[styles.actionButton, styles.archiveButton]}
                         onPress={async () => {
                           if (!bounty) return;
@@ -1895,11 +1897,11 @@ export function MyPostingExpandable({
                                       status: 'archived',
                                     });
                                     if (!updated) throw new Error('Failed to archive bounty');
-                                    Alert.alert('Archived', 'Bounty archived successfully.');
+                                    showToast({ message: 'Bounty archived successfully.' });
                                     onRefresh?.();
                                   } catch (err) {
                                     console.error('Error archiving bounty:', err);
-                                    Alert.alert('Error', describeBountyUpdateError(err));
+                                    Alert.alert("Something went wrong", describeBountyUpdateError(err));
                                   } finally {
                                     setIsProcessing(false);
                                   }
@@ -1914,7 +1916,7 @@ export function MyPostingExpandable({
                         <Text style={styles.actionButtonText}>Archive</Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={[styles.actionButton, styles.deleteButton]}
                         onPress={async () => {
                           if (!bounty) return;
@@ -1942,16 +1944,13 @@ export function MyPostingExpandable({
                                     setIsProcessing(true);
                                     const success = await bountyService.delete(bounty.id);
                                     if (!success) throw new Error('Failed to delete bounty');
-                                    Alert.alert(
-                                      'Deleted',
-                                      'Bounty permanently deleted.'
-                                    );
+                                    showToast({ message: 'Bounty permanently deleted.' });
                                     onRefresh?.();
                                   } catch (err) {
                                     console.error('Error deleting bounty:', err);
                                     Alert.alert(
-                                      'Error',
-                                      'Failed to delete bounty. Please try again.'
+                                      "Couldn't delete bounty",
+                                      "Please try again."
                                     );
                                   } finally {
                                     setIsProcessing(false);
@@ -1969,7 +1968,7 @@ export function MyPostingExpandable({
                     </>
                   ) : (
                     <>
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={[styles.actionButton, styles.archiveButton]}
                         onPress={() => {
                           Alert.alert(
@@ -1990,7 +1989,7 @@ export function MyPostingExpandable({
                                     await onHide?.();
                                   } catch (err) {
                                     console.error('Error hiding bounty:', err);
-                                    Alert.alert('Error', 'Failed to hide bounty. Please try again.');
+                                    Alert.alert("Couldn't hide bounty", "Please try again.");
                                     return;
                                   }
                                   setHiddenByUser(true);
@@ -2004,7 +2003,7 @@ export function MyPostingExpandable({
                         <Text style={styles.actionButtonText}>Hide</Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={[styles.actionButton, styles.deleteButton]}
                         onPress={() => {
                           Alert.alert(
@@ -2020,7 +2019,7 @@ export function MyPostingExpandable({
                                     await onHide?.();
                                   } catch (err) {
                                     console.error('Error removing bounty from list:', err);
-                                    Alert.alert('Error', 'Failed to remove bounty. Please try again.');
+                                    Alert.alert("Couldn't remove bounty", "Please try again.");
                                     return;
                                   }
                                   setHiddenByUser(true);
@@ -2043,7 +2042,7 @@ export function MyPostingExpandable({
           {/* Conversation hint - only show when status is 'open', not when in_progress since bounty has already been accepted */}
           {!conversation && bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="chat-bubble-outline" size={18} color={theme.isDark ? '#1FAE49' : theme.primary} />
+              <MaterialIcons name="chat-bubble-outline" size={18} color={theme.isDark ? theme.primaryLight : theme.primary} />
               <Text style={styles.infoText}>
                 {isOwner
                   ? 'Conversation will appear after acceptance.'
@@ -2090,7 +2089,7 @@ export function MyPostingExpandable({
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     panel: {
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.25)' : theme.surface,
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.25) : theme.surface,
       borderRadius: 12,
       padding: 12,
       borderWidth: 1,
@@ -2109,22 +2108,22 @@ function makeStyles(theme: AppTheme) {
     timelineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
     timelineItem: { flexDirection: 'row', alignItems: 'center' },
     bubble: { width: 12, height: 12, borderRadius: 6 },
-    bubbleIdle: { backgroundColor: 'rgba(31,174,73,0.3)' },
-    bubbleActive: { backgroundColor: '#008E2A' },
-    bubbleCompleted: { backgroundColor: '#008E2A' },
+    bubbleIdle: { backgroundColor: withAlpha(theme.primary, 0.3) },
+    bubbleActive: { backgroundColor: theme.primary },
+    bubbleCompleted: { backgroundColor: theme.primary },
     connector: {
       width: 18,
       height: 2,
-      backgroundColor: 'rgba(31,174,73,0.35)',
+      backgroundColor: withAlpha(theme.primary, 0.35),
       marginHorizontal: 6,
     },
     infoBox: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 8,
-      backgroundColor: theme.isDark ? 'rgba(5, 46, 27, 0.35)' : 'rgba(0, 142, 42, 0.07)',
+      backgroundColor: theme.isDark ? theme.primaryTint : withAlpha(theme.primary, 0.07),
       borderWidth: 1,
-      borderColor: theme.isDark ? 'transparent' : 'rgba(0, 142, 42, 0.15)',
+      borderColor: theme.isDark ? 'transparent' : withAlpha(theme.primary, 0.15),
       padding: 10,
       borderRadius: 8,
       marginBottom: 8,
@@ -2135,12 +2134,10 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
       paddingHorizontal: 12,
       paddingVertical: 10,
-      borderRadius: 10,
+      borderRadius: 12,
     },
     primaryText: { color: '#fff', fontWeight: '600' },
     messagingBtn: {
@@ -2151,7 +2148,7 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: '#0284c7',
       paddingHorizontal: 16,
       paddingVertical: 12,
-      borderRadius: 10,
+      borderRadius: 12,
     },
     messagingBtnText: {
       color: '#fff',
@@ -2168,16 +2165,16 @@ function makeStyles(theme: AppTheme) {
       paddingVertical: 4,
       gap: 4,
     },
-    honorBadgeText: { color: '#052e1b', fontWeight: '800', fontSize: 12 },
+    honorBadgeText: { color: theme.onPrimary, fontWeight: '800', fontSize: 12 },
     reviewSubmissionBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      backgroundColor: '#fbbf24',
+      backgroundColor: theme.warning,
       paddingVertical: 14,
       paddingHorizontal: 16,
-      borderRadius: 10,
+      borderRadius: 12,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.25,
@@ -2193,7 +2190,7 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       paddingVertical: 20,
       gap: 8,
-      backgroundColor: 'rgba(0, 142, 42, 0.1)',
+      backgroundColor: withAlpha(theme.primary, 0.1),
       borderRadius: 12,
     },
     timerLabel: {
@@ -2209,10 +2206,10 @@ function makeStyles(theme: AppTheme) {
     },
     timerHint: {
       color: theme.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
     },
     messageTextArea: {
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.2) : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 12,
       color: theme.text,
@@ -2224,7 +2221,7 @@ function makeStyles(theme: AppTheme) {
     proofItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.2) : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 12,
       gap: 12,
@@ -2236,7 +2233,7 @@ function makeStyles(theme: AppTheme) {
       width: 40,
       height: 40,
       borderRadius: 8,
-      backgroundColor: 'rgba(0, 142, 42, 0.3)',
+      backgroundColor: withAlpha(theme.primary, 0.3),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -2266,13 +2263,13 @@ function makeStyles(theme: AppTheme) {
       gap: 8,
       backgroundColor: theme.border,
       paddingVertical: 12,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.primary,
       borderStyle: 'dashed',
     },
     addFileText: {
-      color: theme.primary,
+      color: theme.primaryLight,
       fontSize: 14,
       fontWeight: '600',
     },
@@ -2280,7 +2277,7 @@ function makeStyles(theme: AppTheme) {
       opacity: 0.5,
     },
     successPanel: {
-      backgroundColor: 'rgba(0, 142, 42, 0.1)',
+      backgroundColor: withAlpha(theme.primary, 0.1),
       borderRadius: 12,
       padding: 24,
       alignItems: 'center',
@@ -2300,7 +2297,7 @@ function makeStyles(theme: AppTheme) {
       lineHeight: 20,
     },
     payoutAmountCard: {
-      backgroundColor: 'rgba(0, 142, 42, 0.2)',
+      backgroundColor: withAlpha(theme.primary, 0.2),
       borderRadius: 12,
       padding: 20,
       alignItems: 'center',
@@ -2315,7 +2312,7 @@ function makeStyles(theme: AppTheme) {
       letterSpacing: 0.5,
     },
     payoutAmount: {
-      color: '#008E2A',
+      color: theme.primaryLight,
       fontSize: 32,
       fontWeight: '700',
     },
@@ -2324,7 +2321,7 @@ function makeStyles(theme: AppTheme) {
       fontSize: 12,
     },
     honorCard: {
-      backgroundColor: 'rgba(236, 72, 153, 0.15)',
+      backgroundColor: theme.primaryTint,
       borderRadius: 12,
       padding: 20,
       alignItems: 'center',
@@ -2343,7 +2340,7 @@ function makeStyles(theme: AppTheme) {
       textAlign: 'center',
     },
     receiptCard: {
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.1)' : theme.surfaceSecondary,
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.1) : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 16,
       gap: 12,
@@ -2390,7 +2387,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 999,
     },
     statusPillText: {
-      color: '#008E2A',
+      color: theme.primaryLight,
       fontSize: 12,
       fontWeight: '600',
     },
@@ -2410,7 +2407,7 @@ function makeStyles(theme: AppTheme) {
     },
     headerReviewBtn: {
       marginLeft: 8,
-      backgroundColor: theme.isDark ? 'rgba(167,243,208,0.9)' : theme.primary,
+      backgroundColor: theme.isDark ? theme.primaryTint : theme.primary,
       padding: 6,
       borderRadius: 8,
     },
@@ -2418,15 +2415,15 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      backgroundColor: withAlpha(theme.error, 0.1),
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: 'rgba(239, 68, 68, 0.3)',
+      borderColor: withAlpha(theme.error, 0.3),
     },
     withdrawButtonText: {
-      color: '#ef4444',
+      color: theme.errorText,
       fontSize: 12,
       fontWeight: '600',
     },
@@ -2440,7 +2437,7 @@ function makeStyles(theme: AppTheme) {
     },
     tapHintText: {
       color: theme.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
     },
     hunterToolsSection: {
       marginTop: 2,
@@ -2453,7 +2450,7 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: theme.surfaceSecondary,
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 12,
       paddingVertical: 10,
     },
@@ -2469,7 +2466,7 @@ function makeStyles(theme: AppTheme) {
     },
     hunterToolsMenu: {
       backgroundColor: theme.surface,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.border,
       padding: 10,
@@ -2482,7 +2479,7 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 10,
       paddingVertical: 10,
       borderRadius: 8,
-      backgroundColor: 'rgba(0, 142, 42, 0.25)',
+      backgroundColor: withAlpha(theme.primary, 0.25),
     },
     hunterToolBtnDanger: {
       flexDirection: 'row',
@@ -2491,7 +2488,7 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 10,
       paddingVertical: 10,
       borderRadius: 8,
-      backgroundColor: 'rgba(239, 68, 68, 0.2)',
+      backgroundColor: withAlpha(theme.error, 0.2),
     },
     hunterToolBtnWarning: {
       flexDirection: 'row',
@@ -2500,7 +2497,7 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 10,
       paddingVertical: 10,
       borderRadius: 8,
-      backgroundColor: 'rgba(245, 158, 11, 0.2)',
+      backgroundColor: withAlpha(theme.warning, 0.2),
     },
     hunterToolText: {
       color: theme.text,
@@ -2508,12 +2505,12 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '600',
     },
     hunterToolTextDanger: {
-      color: '#ef4444',
+      color: theme.errorText,
       fontSize: 14,
       fontWeight: '500',
     },
     hunterToolTextWarning: {
-      color: '#f59e0b',
+      color: theme.warningText,
       fontSize: 14,
       fontWeight: '500',
     },
@@ -2528,7 +2525,7 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: theme.surfaceSecondary,
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 12,
       paddingVertical: 10,
     },
@@ -2544,7 +2541,7 @@ function makeStyles(theme: AppTheme) {
     },
     posterToolsMenu: {
       backgroundColor: theme.surface,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.border,
       padding: 10,
@@ -2563,17 +2560,13 @@ function makeStyles(theme: AppTheme) {
       gap: 8,
       paddingHorizontal: 12,
       paddingVertical: 10,
-      borderRadius: 10,
+      borderRadius: 12,
     },
     archiveButton: {
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
     },
     deleteButton: {
-      backgroundColor: '#ef4444',
-      borderBottomWidth: 4,
-      borderBottomColor: '#933730',
+      backgroundColor: theme.error,
     },
     actionButtonText: {
       color: '#fff',

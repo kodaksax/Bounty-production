@@ -27,6 +27,7 @@ import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { MESSAGE_FONT_SIZE } from '../MessageBubble';
+import { withAlpha } from '../../lib/utils';
 
 // The chat bubble colours from MessageBubble.
 const MINE_BG = '#008E2A';
@@ -294,6 +295,7 @@ export function InteractiveMessageCard({
   const { prefersReducedMotion } = useAccessibleAnimation();
   const { triggerHaptic } = useHapticFeedback();
   const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeS(theme), [theme]);
   const st = useMemo(() => makeStackStyles(theme), [theme]);
   const fade = useRef(new Animated.Value(animateIn ? 0 : 1)).current;
 
@@ -459,7 +461,8 @@ export function InteractiveMessageCard({
 
 // Metrics follow MessageBubble: rounded-2xl with a square tail corner, max 80%
 // width, white text at the message font size.
-const s = StyleSheet.create({
+function makeS(theme: AppTheme) {
+  return StyleSheet.create({
   wrap: {
     marginBottom: 12,
     paddingHorizontal: 12,
@@ -526,11 +529,11 @@ const s = StyleSheet.create({
     marginTop: 10,
   },
   // Darker bottom band for a raised, pressable look (matches the shared Button).
-  btnOnMine: { backgroundColor: '#fff', borderBottomWidth: 3, borderBottomColor: '#D8D2C4' },
-  btnOnTheirs: { backgroundColor: MINE_BG, borderBottomWidth: 3, borderBottomColor: '#00701F' },
+  btnOnMine: { backgroundColor: '#fff',   },
+  btnOnTheirs: { backgroundColor: MINE_BG,   },
   btnOutline: {
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: withAlpha(theme.text, 0.5),
   },
   btnText: {
     fontSize: 15,
@@ -538,11 +541,12 @@ const s = StyleSheet.create({
   },
   time: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 6,
     alignSelf: 'flex-end',
   },
 });
+}
 
 // Stacked layout for the other person's cards. Themed: the card behind uses
 // the raised surface so it reads as a layer under the bubble.
@@ -584,7 +588,7 @@ function makeStackStyles(t: AppTheme) {
     },
     coverChipText: {
       color: '#fff',
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       letterSpacing: 0.4,
       textTransform: 'uppercase',
@@ -641,7 +645,7 @@ function makeStackStyles(t: AppTheme) {
       elevation: 5,
     },
     // Compact text so the overlapping bubble stays short.
-    labelStacked: { fontSize: 11, marginBottom: 0 },
+    labelStacked: { fontSize: 12, marginBottom: 0 },
     titleStacked: { fontSize: 15, lineHeight: 19 },
     // The other person's message rides on the bounty card (not the bubble)
     // so every stacked bubble is the same short height. Tap to expand.
@@ -652,6 +656,6 @@ function makeStackStyles(t: AppTheme) {
       marginTop: 6,
     },
     btnRowStacked: { marginTop: 6 },
-    btnStacked: { minHeight: 32, borderRadius: 10 },
+    btnStacked: { minHeight: 32, borderRadius: 12 },
   });
 }

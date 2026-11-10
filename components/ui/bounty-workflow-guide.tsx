@@ -7,6 +7,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
+import { withAlpha } from '../../lib/utils';
 
 type WorkflowVariant = 'poster-postings' | 'poster-requests' | 'hunter-inprogress';
 
@@ -249,7 +250,7 @@ export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
             accessibilityLabel="Got it, dismiss guide"
           >
             <Text style={styles.gotItText}>Got it!</Text>
-            <MaterialIcons name="thumb-up" size={14} color="#052e1b" />
+            <MaterialIcons name="thumb-up" size={14} color={theme.onPrimary} />
           </TouchableOpacity>
         </>
       )}
@@ -260,8 +261,8 @@ export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: 'rgba(0, 142, 42, 0.15)',
-      borderRadius: 14,
+      backgroundColor: withAlpha(theme.primary, 0.15),
+      borderRadius: 12,
       padding: 14,
       marginBottom: 12,
       borderWidth: 1,
@@ -314,7 +315,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 10,
       backgroundColor: theme.overlay,
       borderWidth: 1,
-      borderColor: 'rgba(31, 174, 73, 0.4)',
+      borderColor: withAlpha(theme.primary, 0.4),
       alignItems: 'center',
       justifyContent: 'center',
       flexShrink: 0,
@@ -322,7 +323,7 @@ function makeStyles(theme: AppTheme) {
     },
     stepNumberText: {
       color: theme.primaryLight,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '800',
     },
     stepIconWrap: {
@@ -341,15 +342,13 @@ function makeStyles(theme: AppTheme) {
       justifyContent: 'center',
       gap: 6,
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       borderRadius: 20,
       paddingVertical: 8,
       paddingHorizontal: 20,
       alignSelf: 'flex-end',
     },
     gotItText: {
-      color: '#052e1b',
+      color: theme.onPrimary,
       fontSize: 13,
       fontWeight: '700',
     },

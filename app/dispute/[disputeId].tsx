@@ -21,6 +21,10 @@ import { getCurrentUserId } from '../../lib/utils/data-utils'
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../lib/utils/dispute-helpers'
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding'
 import { withReplayMask } from '../../components/replay-mask';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
+import { showToast } from '../../lib/toast';
 
 type CommentItem = {
   id: string
@@ -42,6 +46,8 @@ type EvidenceItem = {
 }
 
 function DisputeDetailScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { disputeId } = useLocalSearchParams<{ disputeId: string }>()
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -72,7 +78,7 @@ function DisputeDetailScreen() {
       })
       if (success) {
         loadEvidence()
-        Alert.alert('Evidence Added', 'Your evidence has been uploaded.')
+        showToast({ message: 'Your evidence has been uploaded.' })
       } else {
         // The file itself uploaded fine (onUploaded only fires on storage
         // success) but persisting its metadata into dispute_evidence failed
@@ -179,10 +185,10 @@ function DisputeDetailScreen() {
         setNewComment('')
         await loadComments()
       } else {
-        Alert.alert('Error', 'Failed to send comment.')
+        Alert.alert("Couldn't send comment", "Please try again.")
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to send comment.')
+      Alert.alert("Couldn't send comment", "Please try again.")
     } finally {
       setIsSendingComment(false)
     }
@@ -199,10 +205,10 @@ function DisputeDetailScreen() {
       if (success) {
         setTextEvidence('')
         await loadEvidence()
-        Alert.alert('Evidence Added', 'Your written statement has been submitted.')
+        showToast({ message: 'Your written statement has been submitted.' })
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to add evidence.')
+      Alert.alert("Couldn't add evidence", "Please try again.")
     }
   }
 
@@ -221,7 +227,7 @@ function DisputeDetailScreen() {
               await loadDispute()
               Alert.alert('Escalated', 'Your dispute has been flagged for priority review.')
             } catch (err) {
-              Alert.alert('Error', 'Failed to escalate.')
+              Alert.alert("Couldn't escalate", "Please try again.")
             }
           },
         },
@@ -250,7 +256,7 @@ function DisputeDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1FAE49" />
+          <ActivityIndicator size="large" color={theme.primaryLight} />
           <Text style={styles.loadingText}>Loading dispute...</Text>
         </View>
       </View>
@@ -261,10 +267,10 @@ function DisputeDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={48} color={theme.errorText} />
           <Text style={styles.errorText}>Dispute not found</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>Go Back</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -289,10 +295,10 @@ function DisputeDetailScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" onPress={() => router.back()} style={{ padding: 4 }}>
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Dispute Details</Text>
+        <Text style={styles.headerTitle}>Dispute details</Text>
         <View style={[styles.statusBadge, { backgroundColor: statusColor + '30' }]}>
           <MaterialIcons name={statusIcon as any} size={14} color={statusColor} />
           <Text style={[styles.statusText, { color: statusColor }]}>{dispute.status.replace('_', ' ')}</Text>
@@ -302,7 +308,7 @@ function DisputeDetailScreen() {
       {/* Dispute info */}
       <View style={styles.disputeInfo}>
         <View style={styles.stageTag}>
-          <MaterialIcons name="label" size={14} color="#f59e0b" />
+          <MaterialIcons name="label" size={14} color={theme.warningText} />
           <Text style={styles.stageTagText}>Stage: {stageLabel}</Text>
         </View>
         <Text style={styles.reasonLabel}>Reason</Text>
@@ -313,7 +319,7 @@ function DisputeDetailScreen() {
       {/* Resolution banner */}
       {isResolved && dispute.resolution && (
         <View style={styles.resolutionBanner}>
-          <MaterialIcons name="check-circle" size={20} color="#008E2A" />
+          <MaterialIcons name="check-circle" size={20} color={theme.primaryLight} />
           <View style={{ flex: 1 }}>
             <Text style={styles.resolutionTitle}>Resolution</Text>
             <Text style={styles.resolutionText}>{dispute.resolution}</Text>
@@ -328,28 +334,28 @@ function DisputeDetailScreen() {
 
       {/* Escalation option */}
       {canEscalate && isParticipant && (
-        <TouchableOpacity style={styles.escalateBtn} onPress={handleEscalate}>
-          <MaterialIcons name="priority-high" size={18} color="#f59e0b" />
-          <Text style={styles.escalateBtnText}>Request Escalation</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.escalateBtn} onPress={handleEscalate}>
+          <MaterialIcons name="priority-high" size={18} color={theme.warningText} />
+          <Text style={styles.escalateBtnText}>Request escalation</Text>
         </TouchableOpacity>
       )}
 
       {/* Tabs */}
       <View style={styles.tabBar}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.tab, activeTab === 'comments' && styles.tabActive]}
           onPress={() => setActiveTab('comments')}
         >
-          <MaterialIcons name="chat" size={18} color={activeTab === 'comments' ? '#008E2A' : '#1FAE49'} />
+          <MaterialIcons name="chat" size={18} color={theme.primaryLight} />
           <Text style={[styles.tabText, activeTab === 'comments' && styles.tabTextActive]}>
             Messages ({comments.length})
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.tab, activeTab === 'evidence' && styles.tabActive]}
           onPress={() => setActiveTab('evidence')}
         >
-          <MaterialIcons name="folder" size={18} color={activeTab === 'evidence' ? '#008E2A' : '#1FAE49'} />
+          <MaterialIcons name="folder" size={18} color={theme.primaryLight} />
           <Text style={[styles.tabText, activeTab === 'evidence' && styles.tabTextActive]}>
             Evidence ({evidence.length})
           </Text>
@@ -366,7 +372,7 @@ function DisputeDetailScreen() {
             contentContainerStyle={{ paddingBottom: 16, paddingHorizontal: 16 }}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <MaterialIcons name="chat-bubble-outline" size={40} color="rgba(31,174,73,0.3)" />
+                <MaterialIcons name="chat-bubble-outline" size={40} color={withAlpha(theme.primary, 0.3)} />
                 <Text style={styles.emptyText}>No messages yet. Start the conversation.</Text>
               </View>
             }
@@ -391,21 +397,21 @@ function DisputeDetailScreen() {
               <TextInput
                 style={styles.commentInput}
                 placeholder="Type a message..."
-                placeholderTextColor="rgba(255,254,245,0.4)"
+                placeholderTextColor={withAlpha(theme.text, 0.4)}
                 value={newComment}
                 onChangeText={setNewComment}
                 multiline
                 maxLength={2000}
               />
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.sendBtn, (!newComment.trim() || isSendingComment) && styles.sendBtnDisabled]}
                 onPress={handleSendComment}
                 disabled={!newComment.trim() || isSendingComment}
               >
                 {isSendingComment ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={theme.onPrimary} />
                 ) : (
-                  <MaterialIcons name="send" size={20} color="#fff" />
+                  <MaterialIcons name="send" size={20} color={theme.onPrimary} />
                 )}
               </TouchableOpacity>
             </View>
@@ -420,33 +426,33 @@ function DisputeDetailScreen() {
             contentContainerStyle={{ paddingBottom: 16, paddingHorizontal: 16 }}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <MaterialIcons name="folder-open" size={40} color="rgba(31,174,73,0.3)" />
+                <MaterialIcons name="folder-open" size={40} color={withAlpha(theme.primary, 0.3)} />
                 <Text style={styles.emptyText}>No evidence submitted yet.</Text>
               </View>
             }
             ListFooterComponent={
               !isResolved && isParticipant ? (
                 <View style={styles.addEvidenceSection}>
-                  <Text style={styles.addEvidenceTitle}>Add Evidence</Text>
+                  <Text style={styles.addEvidenceTitle}>Add evidence</Text>
                   <View style={styles.evidenceInputRow}>
                     <TextInput
                       style={[styles.commentInput, { flex: 1 }]}
                       placeholder="Written statement..."
-                      placeholderTextColor="rgba(255,254,245,0.4)"
+                      placeholderTextColor={withAlpha(theme.text, 0.4)}
                       value={textEvidence}
                       onChangeText={setTextEvidence}
                     />
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityLabel="Add" accessibilityRole="button"
                       style={[styles.sendBtn, !textEvidence.trim() && styles.sendBtnDisabled]}
                       onPress={handleAddTextEvidence}
                       disabled={!textEvidence.trim()}
                     >
-                      <MaterialIcons name="add" size={20} color="#fff" />
+                      <MaterialIcons name="add" size={20} color={theme.onPrimary} />
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity style={styles.uploadBtn} onPress={() => pickAttachment()}>
-                    <MaterialIcons name="attach-file" size={18} color="#1FAE49" />
-                    <Text style={styles.uploadBtnText}>Upload File</Text>
+                  <TouchableOpacity accessibilityRole="button" style={styles.uploadBtn} onPress={() => pickAttachment()}>
+                    <MaterialIcons name="attach-file" size={18} color={theme.primaryLight} />
+                    <Text style={styles.uploadBtnText}>Upload file</Text>
                   </TouchableOpacity>
                 </View>
               ) : null
@@ -461,7 +467,7 @@ function DisputeDetailScreen() {
                       item.type === 'image' ? 'image' : 'insert-drive-file'
                     }
                     size={20}
-                    color="#1FAE49"
+                    color={theme.primaryLight}
                   />
                   <Text style={styles.evidenceUploader}>{item.uploaderName}</Text>
                   <Text style={styles.evidenceTime}>{relativeTime(item.createdAt)}</Text>
@@ -478,10 +484,11 @@ function DisputeDetailScreen() {
   )
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   loadingContainer: {
     flex: 1,
@@ -490,7 +497,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
   },
   errorContainer: {
@@ -500,19 +507,17 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   errorText: {
-    color: '#ef4444',
+    color: theme.errorText,
     fontSize: 16,
   },
   backBtn: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 8,
   },
   backBtnText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -522,11 +527,11 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
+    borderBottomColor: withAlpha(theme.primary, 0.1),
   },
   headerTitle: {
     flex: 1,
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
   },
@@ -539,7 +544,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
@@ -547,62 +552,62 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
+    borderBottomColor: withAlpha(theme.primary, 0.1),
   },
   stageTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: withAlpha(theme.warning, 0.15),
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
   stageTagText: {
-    color: '#f59e0b',
-    fontSize: 11,
+    color: theme.warningText,
+    fontSize: 12,
     fontWeight: '600',
   },
   reasonLabel: {
-    color: '#1FAE49',
-    fontSize: 11,
+    color: theme.primaryLight,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   reasonText: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     lineHeight: 20,
   },
   timeText: {
-    color: 'rgba(255,254,245,0.5)',
+    color: withAlpha(theme.text, 0.5),
     fontSize: 12,
   },
   resolutionBanner: {
     flexDirection: 'row',
     gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: withAlpha(theme.text, 0.05),
     margin: 16,
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: withAlpha(theme.text, 0.1),
   },
   resolutionTitle: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 13,
     fontWeight: '700',
   },
   resolutionText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 13,
     lineHeight: 18,
     marginTop: 4,
   },
   resolutionWinner: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     fontWeight: '600',
     marginTop: 6,
@@ -615,20 +620,20 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
     padding: 10,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderRadius: 10,
+    backgroundColor: withAlpha(theme.warning, 0.15),
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: withAlpha(theme.warning, 0.3),
   },
   escalateBtnText: {
-    color: '#f59e0b',
+    color: theme.warningText,
     fontSize: 13,
     fontWeight: '600',
   },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
+    borderBottomColor: withAlpha(theme.primary, 0.1),
   },
   tab: {
     flex: 1,
@@ -640,15 +645,15 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#008E2A',
+    borderBottomColor: theme.primary,
   },
   tabText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 13,
     fontWeight: '500',
   },
   tabTextActive: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontWeight: '700',
   },
   list: {
@@ -660,20 +665,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyText: {
-    color: 'rgba(255,254,245,0.5)',
+    color: withAlpha(theme.text, 0.5),
     fontSize: 14,
   },
   commentBubble: {
-    backgroundColor: 'rgba(0, 142, 42, 0.15)',
+    backgroundColor: withAlpha(theme.primary, 0.15),
     borderRadius: 12,
     padding: 12,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.1)',
+    borderColor: withAlpha(theme.primary, 0.1),
   },
   commentBubbleMine: {
-    backgroundColor: '#454952',
-    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: theme.surfaceSecondary,
+    borderColor: withAlpha(theme.text, 0.1),
   },
   commentHeader: {
     flexDirection: 'row',
@@ -681,16 +686,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   commentUsername: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     fontWeight: '600',
   },
   commentTime: {
-    color: 'rgba(255,254,245,0.4)',
-    fontSize: 11,
+    color: withAlpha(theme.text, 0.4),
+    fontSize: 12,
   },
   commentText: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -701,24 +706,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(31, 174, 73, 0.1)',
-    backgroundColor: '#1B1E24',
+    borderTopColor: withAlpha(theme.primary, 0.1),
+    backgroundColor: theme.background,
   },
   commentInput: {
     flex: 1,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
-    borderRadius: 10,
+    backgroundColor: theme.surfaceSecondary,
+    borderRadius: 12,
     padding: 10,
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     maxHeight: 100,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
   },
   sendBtn: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -726,17 +729,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendBtnDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: withAlpha(theme.text, 0.1),
   },
   addEvidenceSection: {
     gap: 10,
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(31, 174, 73, 0.1)',
+    borderTopColor: withAlpha(theme.primary, 0.1),
   },
   addEvidenceTitle: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -751,24 +754,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     padding: 10,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: withAlpha(theme.primary, 0.2),
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: withAlpha(theme.primary, 0.2),
     borderStyle: 'dashed',
   },
   uploadBtnText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 13,
   },
   evidenceCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.15)',
-    borderRadius: 10,
+    backgroundColor: theme.surface,
+    borderRadius: 12,
     padding: 12,
     marginTop: 8,
     gap: 6,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.1)',
+    borderColor: theme.borderSubtle,
   },
   evidenceHeader: {
     flexDirection: 'row',
@@ -777,19 +780,20 @@ const styles = StyleSheet.create({
   },
   evidenceUploader: {
     flex: 1,
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     fontWeight: '600',
   },
   evidenceTime: {
-    color: 'rgba(255,254,245,0.4)',
-    fontSize: 11,
+    color: withAlpha(theme.text, 0.4),
+    fontSize: 12,
   },
   evidenceContent: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 13,
     lineHeight: 18,
   },
 })
+}
 
 export default withReplayMask(DisputeDetailScreen);

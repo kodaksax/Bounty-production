@@ -4,6 +4,7 @@ import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { useFadeSlideAnimation } from '../../../hooks/use-accessible-animation';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
+import { withAlpha } from '../../../lib/utils';
 
 interface ResumeDraftBannerProps {
   /** The saved draft's title, quoted so the poster recognises their post. */
@@ -107,7 +108,7 @@ function makeStyles(theme: AppTheme) {
       width: 40,
       height: 40,
       borderRadius: 12,
-      backgroundColor: theme.isDark ? 'rgba(31,174,73,0.14)' : 'rgba(0,142,42,0.10)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.14) : withAlpha(theme.primary, 0.1),
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 12,

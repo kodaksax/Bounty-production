@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdmin } from '../../lib/admin-context';
 import { ROUTES } from '../../lib/routes';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { withAlpha } from '../../lib/utils';
 
 interface AdminHeaderProps {
   title: string;
@@ -109,12 +111,12 @@ export function AdminHeader({
               style={[
                 styles.adminBadge,
                 {
-                  backgroundColor: theme.isDark ? 'rgba(0,142,42,0.2)' : 'rgba(0,142,42,0.12)',
+                  backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.2) : withAlpha(theme.primary, 0.12),
                   borderColor: theme.primary,
                 },
               ]}
             >
-              <Text style={[styles.adminBadgeText, { color: theme.primary }]}>ADMIN</Text>
+              <Text style={[styles.adminBadgeText, { color: theme.primaryLight }]}>ADMIN</Text>
             </View>
           </View>
           {subtitle ? (

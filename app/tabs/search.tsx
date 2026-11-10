@@ -68,6 +68,7 @@ import {
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 import { isNativeMapAvailable } from '../../lib/config/maps';
+import { withAlpha } from '../../lib/utils';
 /**
  * react-native-maps and its clustering wrapper are heavy modules, and a static
  * import runs their initialisation the first time this screen's module is
@@ -945,7 +946,7 @@ export default function EnhancedSearchScreen() {
               <MaterialIcons
                 name="tune"
                 size={20}
-                color={hasActiveFilters ? '#fcd34d' : theme.primaryLight}
+                color={hasActiveFilters ? theme.warningText : theme.primaryLight}
                 accessibilityElementsHidden={true}
               />
               {hasActiveFilters && <View style={s.filterDot} />}
@@ -1004,7 +1005,7 @@ export default function EnhancedSearchScreen() {
         {error && (
           <View style={s.errorBox}>
             <Text style={s.errorText}>⚠ {error}</Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={() => {
                 if (activeTab === 'bounties') {
                   performBountySearch(query, filters);
@@ -1014,7 +1015,7 @@ export default function EnhancedSearchScreen() {
               }}
               style={s.retryBtn}
             >
-              <Text style={s.retryText}>Retry</Text>
+              <Text style={s.retryText}>Try again</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1197,7 +1198,7 @@ export default function EnhancedSearchScreen() {
           <View style={s.modalContent}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Filter Bounties</Text>
-              <TouchableOpacity onPress={() => setShowFilters(false)}>
+              <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => setShowFilters(false)}>
                 <MaterialIcons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
@@ -1212,7 +1213,7 @@ export default function EnhancedSearchScreen() {
                   { value: 'amount_desc', label: 'Highest Amount' },
                   { value: 'amount_asc', label: 'Lowest Amount' },
                 ].map(option => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={option.value}
                     style={[
                       s.filterOption,
@@ -1240,7 +1241,7 @@ export default function EnhancedSearchScreen() {
                   { value: 'in_progress', label: 'In Progress' },
                   { value: 'completed', label: 'Completed' },
                 ].map(option => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={option.value}
                     style={[
                       s.filterOption,
@@ -1280,7 +1281,7 @@ export default function EnhancedSearchScreen() {
                   { value: 'online', label: 'Online' },
                   { value: 'in_person', label: 'In Person' },
                 ].map(option => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={option.label}
                     style={[
                       s.filterOption,
@@ -1330,10 +1331,10 @@ export default function EnhancedSearchScreen() {
             </ScrollView>
 
             <View style={s.modalFooter}>
-              <TouchableOpacity style={s.clearFiltersBtn} onPress={clearFilters}>
+              <TouchableOpacity accessibilityRole="button" style={s.clearFiltersBtn} onPress={clearFilters}>
                 <Text style={s.clearFiltersBtnText}>Clear All</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.applyFiltersBtn} onPress={() => setShowFilters(false)}>
+              <TouchableOpacity accessibilityRole="button" style={s.applyFiltersBtn} onPress={() => setShowFilters(false)}>
                 <Text style={s.applyFiltersBtnText}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
@@ -1392,7 +1393,7 @@ function makeStyles(t: AppTheme) {
       paddingVertical: SPACING.COMPACT_GAP,
       alignItems: 'center',
       backgroundColor: t.surface,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: t.border,
     },
@@ -1471,7 +1472,7 @@ function makeStyles(t: AppTheme) {
     },
     card: {
       backgroundColor: t.surface,
-      borderRadius: 14,
+      borderRadius: 12,
       padding: SPACING.ELEMENT_GAP,
       marginBottom: 10,
       borderWidth: 1,
@@ -1510,7 +1511,7 @@ function makeStyles(t: AppTheme) {
     },
     userAvatarFallbackText: {
       color: t.primaryLight,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
     },
     cardDesc: {
@@ -1527,13 +1528,13 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 3,
       borderRadius: 999,
       marginBottom: 6,
-      backgroundColor: t.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',
+      backgroundColor: t.isDark ? withAlpha(t.warning, 0.14) : withAlpha(t.warning, 0.12),
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(245,158,11,0.32)' : 'rgba(245,158,11,0.28)',
+      borderColor: t.isDark ? withAlpha(t.warning, 0.32) : withAlpha(t.warning, 0.28),
     },
     limitedBadgeText: {
       color: t.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       flexShrink: 1,
     },
@@ -1544,31 +1545,31 @@ function makeStyles(t: AppTheme) {
       flexWrap: 'wrap',
     },
     amount: {
-      color: t.primary,
+      color: t.primaryLight,
       fontWeight: '700',
       fontSize: 13,
     },
     location: {
       color: t.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
       flex: 1,
     },
     time: {
       color: t.textDisabled,
-      fontSize: 11,
+      fontSize: 12,
     },
     // Semantic amber — preserved across themes
     honorBadge: {
-      backgroundColor: 'rgba(245,158,11,0.12)',
+      backgroundColor: withAlpha(t.warning, 0.12),
       paddingHorizontal: SPACING.COMPACT_GAP,
       paddingVertical: 2,
-      borderRadius: 6,
+      borderRadius: 8,
       borderWidth: 1,
-      borderColor: 'rgba(245,158,11,0.25)',
+      borderColor: withAlpha(t.warning, 0.25),
     },
     honorText: {
-      color: '#fbbf24',
-      fontSize: 10,
+      color: t.warningText,
+      fontSize: 12,
       fontWeight: '700',
     },
     statusBadge: {
@@ -1577,13 +1578,13 @@ function makeStyles(t: AppTheme) {
       paddingHorizontal: SPACING.COMPACT_GAP,
       paddingVertical: 2,
       backgroundColor: t.surfaceSecondary,
-      borderRadius: 6,
+      borderRadius: 8,
       borderWidth: 1,
       borderColor: t.border,
     },
     statusText: {
       color: t.textSecondary,
-      fontSize: 10,
+      fontSize: 12,
       textTransform: 'capitalize',
     },
     skillsRow: {
@@ -1593,16 +1594,16 @@ function makeStyles(t: AppTheme) {
       flexWrap: 'wrap',
     },
     skillChip: {
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.12)' : 'rgba(0,142,42,0.08)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.12) : withAlpha(t.primary, 0.08),
       paddingHorizontal: SPACING.COMPACT_GAP,
       paddingVertical: 4,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.2)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.2),
     },
     skillText: {
       color: t.primaryLight,
-      fontSize: 11,
+      fontSize: 12,
     },
     recentSection: {
       paddingHorizontal: SPACING.ELEMENT_GAP,
@@ -1620,7 +1621,7 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
     },
     clearText: {
-      color: t.primary,
+      color: t.primaryLight,
       fontSize: 12,
     },
     recentSearchItem: {
@@ -1641,22 +1642,20 @@ function makeStyles(t: AppTheme) {
     },
     // Semantic red — preserved
     errorBox: {
-      backgroundColor: 'rgba(239,68,68,0.08)',
+      backgroundColor: withAlpha(t.error, 0.08),
       margin: SPACING.ELEMENT_GAP,
       padding: 10,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: 'rgba(239,68,68,0.2)',
+      borderColor: withAlpha(t.error, 0.2),
     },
     errorText: {
-      color: '#f87171',
+      color: t.errorText,
       marginBottom: 6,
       fontSize: 13,
     },
     retryBtn: {
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       paddingHorizontal: SPACING.ELEMENT_GAP,
       paddingVertical: 6,
       borderRadius: 20,
@@ -1772,8 +1771,6 @@ function makeStyles(t: AppTheme) {
       paddingVertical: SPACING.ELEMENT_GAP,
       alignItems: 'center',
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       borderRadius: 8,
       shadowColor: t.primary,
       shadowOpacity: 0.3,
@@ -1810,20 +1807,20 @@ function makeStyles(t: AppTheme) {
     },
     suggestionSubtext: {
       color: t.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 2,
     },
     suggestionTypeBadge: {
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.12)' : 'rgba(0,142,42,0.08)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.12) : withAlpha(t.primary, 0.08),
       paddingHorizontal: SPACING.COMPACT_GAP,
       paddingVertical: 3,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.2)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.2),
     },
     suggestionTypeText: {
       color: t.primaryLight,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
     },
     trendingSection: {
@@ -1876,26 +1873,26 @@ function makeStyles(t: AppTheme) {
     trendingSkeletonLine: {
       width: '85%',
       height: 13,
-      borderRadius: 6,
+      borderRadius: 8,
     },
     trendingSkeletonAmount: {
       width: '40%',
       height: 14,
-      borderRadius: 6,
+      borderRadius: 8,
     },
     // Semantic amber — preserved
     trendingHonorBadge: {
-      backgroundColor: 'rgba(245,158,11,0.12)',
+      backgroundColor: withAlpha(t.warning, 0.12),
       paddingHorizontal: 8,
       paddingVertical: 2,
-      borderRadius: 6,
+      borderRadius: 8,
       alignSelf: 'flex-start',
       borderWidth: 1,
-      borderColor: 'rgba(245,158,11,0.25)',
+      borderColor: withAlpha(t.warning, 0.25),
     },
     trendingHonorText: {
-      color: '#fbbf24',
-      fontSize: 11,
+      color: t.warningText,
+      fontSize: 12,
       fontWeight: '700',
     },
   });

@@ -50,15 +50,15 @@ export interface BountyStatusPanelProps {
 function toneColors(theme: AppTheme, tone: BountyLifecycleTone) {
   switch (tone) {
     case 'action':
-      return { accent: theme.warning, tint: withAlpha(theme.warning, theme.isDark ? 0.14 : 0.1) };
+      return { accent: theme.warning, text: theme.warningText, fill: theme.primary, tint: withAlpha(theme.warning, theme.isDark ? 0.14 : 0.1) };
     case 'positive':
-      return { accent: theme.success, tint: withAlpha(theme.success, theme.isDark ? 0.14 : 0.1) };
+      return { accent: theme.success, text: theme.successText, fill: theme.primary, tint: withAlpha(theme.success, theme.isDark ? 0.14 : 0.1) };
     case 'warning':
-      return { accent: theme.error, tint: withAlpha(theme.error, theme.isDark ? 0.14 : 0.1) };
+      return { accent: theme.error, text: theme.errorText, fill: theme.error, tint: withAlpha(theme.error, theme.isDark ? 0.14 : 0.1) };
     case 'progress':
-      return { accent: theme.primary, tint: withAlpha(theme.primary, theme.isDark ? 0.14 : 0.1) };
+      return { accent: theme.primary, text: theme.primaryLight, fill: theme.primary, tint: withAlpha(theme.primary, theme.isDark ? 0.14 : 0.1) };
     default:
-      return { accent: theme.textSecondary, tint: theme.surfaceSecondary };
+      return { accent: theme.textSecondary, text: theme.textSecondary, fill: theme.primary, tint: theme.surfaceSecondary };
   }
 }
 
@@ -87,7 +87,7 @@ export function BountyStatusPanel({
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const { accent, tint } = toneColors(theme, state.tone);
+  const { accent, text: toneText, fill, tint } = toneColors(theme, state.tone);
   const waitingLabel = getWaitingOnLabel(state.waitingOn, role, otherPartyName);
 
   // Only actions the host screen actually wired up are offered. A primary
@@ -105,7 +105,7 @@ export function BountyStatusPanel({
         {/* Not clamped: next steps carry safety copy ("A chat message is not
             acceptance…") that was being cut off mid-sentence. */}
         <Text style={styles.inlineText}>
-          <Text style={[styles.inlineStrong, { color: accent }]}>
+          <Text style={[styles.inlineStrong, { color: toneText }]}>
             {waitingLabel ?? state.headline}
           </Text>
           {state.nextStep ? ` · ${state.nextStep}` : ''}
@@ -133,7 +133,7 @@ export function BountyStatusPanel({
         <View style={styles.headText}>
           <Text style={styles.headline}>{state.headline}</Text>
           {waitingLabel && (
-            <Text style={[styles.waiting, { color: accent }]}>{waitingLabel}</Text>
+            <Text style={[styles.waiting, { color: toneText }]}>{waitingLabel}</Text>
           )}
         </View>
       </View>
@@ -168,7 +168,7 @@ export function BountyStatusPanel({
 
       {primary && (
         <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: accent }]}
+          style={[styles.primaryBtn, { backgroundColor: fill }]}
           onPress={onAction?.[primary.key]}
           disabled={busyAction === primary.key}
           accessibilityRole="button"
@@ -340,7 +340,7 @@ function makeStyles(t: AppTheme) {
       gap: 10,
       paddingVertical: 12,
       paddingHorizontal: 12,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: t.border,
       backgroundColor: t.surface,

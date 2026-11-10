@@ -6,6 +6,7 @@ import { cva } from "class-variance-authority"
 import { useBackHandler } from "hooks/useBackHandler"
 import * as React from "react"
 import { Text, TouchableOpacity, View } from "react-native"
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 
 
 const Sheet: React.FC<any> = ({ children }) => <>{children}</>
@@ -98,9 +99,12 @@ const SheetTitle = React.forwardRef<Text, any>(({ children, ...props }, ref) => 
 ))
 SheetTitle.displayName = "SheetTitle"
 
-const SheetDescription = React.forwardRef<Text, any>(({ children, ...props }, ref) => (
-  <Text ref={ref as any} style={{ fontSize: 14, color: '#61656B' }} {...(props as any)}>{children}</Text>
-))
+const SheetDescription = React.forwardRef<Text, any>(({ children, ...props }, ref) => {
+  const { theme } = useAppThemeContext();
+  return ((
+  <Text ref={ref as any} style={{ fontSize: 14, color: theme.textSecondary }} {...(props as any)}>{children}</Text>
+));
+})
 SheetDescription.displayName = "SheetDescription"
 
 export {

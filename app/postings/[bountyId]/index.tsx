@@ -406,10 +406,10 @@ export default function BountyDashboard() {
         <Text style={s.centeredText}>
           {"You're offline or the connection dropped. Nothing about the bounty has changed."}
         </Text>
-        <TouchableOpacity style={s.retryButton} onPress={onRefresh}>
+        <TouchableOpacity accessibilityRole="button" style={s.retryButton} onPress={onRefresh}>
           <Text style={s.retryButtonText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.textButton} onPress={goBack}>
+        <TouchableOpacity accessibilityRole="button" style={s.textButton} onPress={goBack}>
           <Text style={s.textButtonText}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -880,11 +880,9 @@ function makeStyles(t: AppTheme) {
     errorTitle: { color: t.text, fontSize: 18, fontWeight: '700' },
     retryButton: {
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       paddingHorizontal: 24,
       paddingVertical: 12,
-      borderRadius: 10,
+      borderRadius: 12,
       marginTop: 8,
       minHeight: 44,
       justifyContent: 'center',
@@ -918,7 +916,7 @@ function makeStyles(t: AppTheme) {
     },
     heroTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
     heroTitle: { flex: 1, color: t.text, fontSize: 20, fontWeight: '700', lineHeight: 26 },
-    heroAmount: { color: t.text, fontSize: 22, fontWeight: '800' },
+    heroAmount: { color: t.text, fontSize: 24, fontWeight: '800' },
     honorPill: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -939,7 +937,7 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 5,
       borderRadius: 8,
     },
-    metaChipText: { color: t.textSecondary, fontSize: 11, fontWeight: '600' },
+    metaChipText: { color: t.textSecondary, fontSize: 12, fontWeight: '600' },
 
     card: {
       backgroundColor: t.surface,
@@ -987,7 +985,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surfaceSecondary,
       paddingHorizontal: 14,
       paddingVertical: 10,
-      borderRadius: 10,
+      borderRadius: 12,
       minHeight: 44,
     },
     outlineBtnText: { color: t.text, fontSize: 13, fontWeight: '600' },

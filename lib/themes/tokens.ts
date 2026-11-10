@@ -47,6 +47,23 @@ export const typography = {
   },
 } as const;
 
+/**
+ * Text roles. Spread into a style, then add a colour:
+ * `{ ...theme.textStyles.title, color: theme.text }`.
+ * Twelve points is the floor for anything a person has to read.
+ */
+export const textStyles = {
+  display: { fontSize: 32, lineHeight: 38, fontWeight: '800' as const, letterSpacing: -0.6 },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: '700' as const, letterSpacing: -0.3 },
+  heading: { fontSize: 20, lineHeight: 26, fontWeight: '700' as const, letterSpacing: -0.2 },
+  headline: { fontSize: 17, lineHeight: 22, fontWeight: '600' as const },
+  body: { fontSize: 15, lineHeight: 22, fontWeight: '400' as const },
+  label: { fontSize: 14, lineHeight: 20, fontWeight: '600' as const },
+  caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
+  micro: { fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
+  amount: { fontSize: 28, lineHeight: 34, fontWeight: '800' as const, letterSpacing: -0.5 },
+} as const;
+
 export const shadows = {
   sm: {
     shadowColor: '#000000',
@@ -76,13 +93,14 @@ export const shadows = {
     shadowRadius: 16,
     elevation: 8,
   },
-  // Brand glow — matches the brand lead green (#008E2A).
+  // Formerly a green glow under buttons. Flat now; the token stays so the
+  // styles that spread it don't all have to change at once.
   brand: {
-    shadowColor: '#008E2A',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
 } as const;
 
@@ -111,4 +129,5 @@ export type Fonts = typeof fonts;
 export type Spacing = typeof spacing;
 export type Radius = typeof radius;
 export type Typography = typeof typography;
+export type TextStyles = typeof textStyles;
 export type Shadows = typeof shadows;

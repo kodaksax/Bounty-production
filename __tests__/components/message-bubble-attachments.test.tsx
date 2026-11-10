@@ -81,7 +81,7 @@ describe('MessageBubble attachments', () => {
       />
     );
 
-    fireEvent.press(getByText('Retry'));
+    fireEvent.press(getByText('Try again'));
 
     expect(onRetry).toHaveBeenCalledWith('m1');
   });

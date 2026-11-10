@@ -11,6 +11,7 @@ import { useAppThemeContext } from 'lib/themes/AppThemeContext'
 import { isValidEmail } from 'lib/utils/password-validation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { withAlpha } from '../../lib/utils';
 
 /** Seconds to wait between reset requests */
 const RESEND_COOLDOWN_SECONDS = 60
@@ -192,7 +193,7 @@ export function ResetPasswordScreen() {
 
           {/* Title and Description */}
           <View className="items-center mb-8">
-            <View className="rounded-full p-4 mb-4" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
+            <View className="rounded-full p-4 mb-4" style={{ backgroundColor: theme.isDark ? withAlpha(theme.text, 0.1) : theme.surfaceSecondary }}>
               <MaterialIcons name="lock-reset" size={32} color={theme.text} />
             </View>
             <Text className="font-bold text-xl mb-2" style={{ color: theme.text }}>Reset Password</Text>
@@ -206,12 +207,12 @@ export function ResetPasswordScreen() {
           {/* Error Alert */}
           {error && (
             <View className="bg-red-500/20 border border-red-400 rounded-lg p-4 mb-4 flex-row items-start">
-              <MaterialIcons name="error-outline" size={20} color="#f87171" style={{ marginTop: 2 }} />
+              <MaterialIcons name="error-outline" size={20} color={theme.errorText} style={{ marginTop: 2 }} />
               <View className="ml-3 flex-1">
-                <Text style={{ color: theme.isDark ? '#fecaca' : '#991b1b', fontSize: 14 }}>{error}</Text>
+                <Text style={{ color: theme.errorText, fontSize: 14 }}>{error}</Text>
               </View>
-              <TouchableOpacity onPress={() => setError(null)}>
-                <MaterialIcons name="close" size={20} color="#f87171" />
+              <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => setError(null)}>
+                <MaterialIcons name="close" size={20} color={theme.errorText} />
               </TouchableOpacity>
             </View>
           )}
@@ -219,7 +220,7 @@ export function ResetPasswordScreen() {
           {/* Success Message */}
           {message && (
             <View className="rounded-lg p-4 mb-4 flex-row items-start" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
-              <MaterialIcons name="check-circle" size={20} color="#008E2A" style={{ marginTop: 2 }} />
+              <MaterialIcons name="check-circle" size={20} color={theme.primaryLight} style={{ marginTop: 2 }} />
               <View className="ml-3 flex-1">
                 <Text style={{ color: theme.text, fontSize: 14 }}>{message}</Text>
               </View>
@@ -247,14 +248,14 @@ export function ResetPasswordScreen() {
                     textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
                     style={{
                       color: theme.text,
-                      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary,
+                      backgroundColor: theme.isDark ? withAlpha(theme.onPrimary, 0.1) : theme.surfaceSecondary,
                       borderRadius: 8,
                       paddingLeft: 48,
                       paddingRight: 16,
                       paddingVertical: 12,
                       fontSize: 16,
                       borderWidth: fieldError ? 1 : 0,
-                      borderColor: fieldError ? '#f87171' : 'transparent',
+                      borderColor: fieldError ? theme.error : 'transparent',
                     }}
                   />
                   <View className="absolute left-3 top-1/2 -translate-y-1/2">
@@ -263,7 +264,7 @@ export function ResetPasswordScreen() {
                 </View>
                 {fieldError && (
                   <View className="flex-row items-center mt-2">
-                    <MaterialIcons name="error-outline" size={14} color="#f87171" />
+                    <MaterialIcons name="error-outline" size={14} color={theme.errorText} />
                     <Text className="text-red-400 text-xs ml-1">{fieldError}</Text>
                   </View>
                 )}
@@ -274,15 +275,15 @@ export function ResetPasswordScreen() {
             {emailSent ? (
               <View className="gap-3">
                 {/* Open Email App */}
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={handleOpenEmailApp}
                   className="w-full bg-[#008E2A] rounded-lg py-3 items-center"
                 >
-                  <Text className="text-white font-medium">Open Email App</Text>
+                  <Text className="font-medium" style={{ color: theme.onPrimary }}>Open Email App</Text>
                 </TouchableOpacity>
 
                 {/* Resend Email */}
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={handleResend}
                   disabled={loading || resendCooldown > 0 || isLockedOut}
                   className="py-3 items-center"
@@ -303,7 +304,7 @@ export function ResetPasswordScreen() {
                 </TouchableOpacity>
 
                 {/* Additional Help */}
-                <View className="rounded-lg p-4 mt-4" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
+                <View className="rounded-lg p-4 mt-4" style={{ backgroundColor: theme.isDark ? withAlpha(theme.text, 0.1) : theme.surfaceSecondary }}>
                   <Text className="text-xs text-center mb-2" style={{ color: theme.textSecondary }}>
                     Check your spam folder if you don
                     {"'"}
@@ -315,7 +316,7 @@ export function ResetPasswordScreen() {
                 </View>
               </View>
             ) : (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 disabled={loading || resendCooldown > 0 || isLockedOut}
                 onPress={handleReset}
                 className={`w-full rounded-lg py-3 items-center ${
@@ -327,13 +328,13 @@ export function ResetPasswordScreen() {
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text className="text-white font-medium">Send Reset Link</Text>
+                  <Text className="font-medium" style={{ color: theme.onPrimary }}>Send Reset Link</Text>
                 )}
               </TouchableOpacity>
             )}
 
             {/* Back to Sign In */}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={() => router.push(ROUTES.AUTH.SIGN_IN)}
               className="flex-row items-center justify-center py-3 mt-2"
             >
@@ -344,7 +345,7 @@ export function ResetPasswordScreen() {
 
           {/* Security Note */}
           <View className="mt-auto pt-8">
-            <View className="flex-row items-center justify-center rounded-lg p-3" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
+            <View className="flex-row items-center justify-center rounded-lg p-3" style={{ backgroundColor: theme.isDark ? withAlpha(theme.text, 0.1) : theme.surfaceSecondary }}>
               <MaterialIcons name="security" size={16} color={theme.textSecondary} />
               <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
                 Your security is our priority. Reset links are single-use and expire after 1 hour.

@@ -17,6 +17,10 @@ import { useAuthContext } from '../../hooks/use-auth-context';
 import { generateEvidenceId } from '../../lib/utils/dispute-helpers';
 import { KeyboardAwareScrollView } from '../../components/ui/keyboard-avoiding';
 import { withReplayMask } from '../../components/replay-mask';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
+import { showToast } from '../../lib/toast';
 
 type LocalEvidenceItem = {
   id: string;
@@ -27,6 +31,8 @@ type LocalEvidenceItem = {
 };
 
 function CreateDisputeScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { cancellationId } = useLocalSearchParams<{
     cancellationId: string;
     bountyId?: string;
@@ -50,7 +56,7 @@ function CreateDisputeScreen() {
     if (!newEvidenceContent.trim()) {
       setShowEvidenceError(true);
       if (Platform.OS !== 'web') {
-        Alert.alert('Error', 'Please provide evidence content');
+        Alert.alert("Something went wrong", 'Please provide evidence content');
       }
       return;
     }
@@ -70,7 +76,7 @@ function CreateDisputeScreen() {
     setShowAddEvidence(false);
     // Native-only success alert — web sees the evidence count update as confirmation
     if (Platform.OS !== 'web') {
-      Alert.alert('Success', 'Evidence added');
+      showToast({ message: 'Evidence added' });
     }
   };
 
@@ -110,13 +116,13 @@ function CreateDisputeScreen() {
         }
       } else {
         if (Platform.OS !== 'web') {
-          Alert.alert('Error', 'Failed to create dispute');
+          Alert.alert("Couldn't create dispute", "Please try again.");
         }
       }
     } catch (error) {
       console.error('Error creating dispute:', error);
       if (Platform.OS !== 'web') {
-        Alert.alert('Error', 'An unexpected error occurred');
+        Alert.alert("Something went wrong", 'An unexpected error occurred');
       }
     } finally {
       setIsSubmitting(false);
@@ -125,19 +131,19 @@ function CreateDisputeScreen() {
 
   const handleSubmit = async () => {
     if (!userId) {
-      if (Platform.OS !== 'web') Alert.alert('Error', 'You must be logged in to create a dispute');
+      if (Platform.OS !== 'web') Alert.alert("Something went wrong", 'You must be logged in to create a dispute');
       return;
     }
     if (!reason.trim()) {
-      if (Platform.OS !== 'web') Alert.alert('Error', 'Please provide a reason for the dispute');
+      if (Platform.OS !== 'web') Alert.alert("Something went wrong", 'Please provide a reason for the dispute');
       return;
     }
     if (reason.trim().length < 20) {
-      if (Platform.OS !== 'web') Alert.alert('Error', 'Please provide a more detailed reason (at least 20 characters)');
+      if (Platform.OS !== 'web') Alert.alert("Something went wrong", 'Please provide a more detailed reason (at least 20 characters)');
       return;
     }
     if (!cancellationId) {
-      if (Platform.OS !== 'web') Alert.alert('Error', 'Missing cancellation information');
+      if (Platform.OS !== 'web') Alert.alert("Something went wrong", 'Missing cancellation information');
       return;
     }
 
@@ -160,17 +166,17 @@ function CreateDisputeScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Dispute</Text>
+        <Text style={styles.headerTitle}>Open a dispute</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <KeyboardAwareScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Info Banner */}
         <View style={styles.infoBanner}>
-          <MaterialIcons name="info-outline" size={20} color="#3b82f6" />
+          <MaterialIcons name="info-outline" size={20} color={theme.infoText} />
           <Text style={styles.infoBannerText}>
             Disputes are reviewed by admins who will make a fair decision based on the evidence
             provided.
@@ -179,7 +185,7 @@ function CreateDisputeScreen() {
 
         {/* Reason Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reason for Dispute *</Text>
+          <Text style={styles.sectionTitle}>Reason for dispute *</Text>
           <Text style={styles.sectionHint}>
             Explain why you are disputing this cancellation and what you believe the fair outcome
             should be.
@@ -188,7 +194,7 @@ function CreateDisputeScreen() {
             value={reason}
             onChangeText={setReason}
             placeholder="Describe your dispute..."
-            placeholderTextColor="rgba(255,254,245,0.4)"
+            placeholderTextColor={withAlpha(theme.text, 0.4)}
             multiline
             numberOfLines={6}
             textAlignVertical="top"
@@ -206,12 +212,12 @@ function CreateDisputeScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Evidence ({evidence.length})</Text>
             {!showAddEvidence && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={() => setShowAddEvidence(true)}
                 style={styles.addButton}
                 disabled={isSubmitting}
               >
-                <MaterialIcons name="add" size={20} color="#008E2A" />
+                <MaterialIcons name="add" size={20} color={theme.primaryLight} />
                 <Text style={styles.addButtonText}>Add</Text>
               </TouchableOpacity>
             )}
@@ -238,15 +244,15 @@ function CreateDisputeScreen() {
                           : 'text-fields'
                       }
                       size={18}
-                      color="#008E2A"
+                      color={theme.primaryLight}
                     />
                     <Text style={styles.evidenceType}>{item.type.toUpperCase()}</Text>
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button"
                       onPress={() => handleRemoveEvidence(item.id)}
                       style={styles.removeButton}
                       disabled={isSubmitting}
                     >
-                      <MaterialIcons name="close" size={16} color="#ef4444" />
+                      <MaterialIcons name="close" size={16} color={theme.errorText} />
                     </TouchableOpacity>
                   </View>
                   {item.description && (
@@ -266,7 +272,7 @@ function CreateDisputeScreen() {
               <Text style={styles.formLabel}>Type</Text>
               <View style={styles.typeSelector}>
                 {(['text', 'link'] as const).map((type) => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={type}
                     onPress={() => setNewEvidenceType(type)}
                     style={[
@@ -297,7 +303,7 @@ function CreateDisputeScreen() {
                     ? 'https://example.com/proof'
                     : 'Describe the evidence...'
                 }
-                placeholderTextColor="rgba(255,254,245,0.4)"
+                placeholderTextColor={withAlpha(theme.text, 0.4)}
                 multiline={newEvidenceType === 'text'}
                 numberOfLines={newEvidenceType === 'text' ? 4 : 1}
                 style={styles.evidenceInput}
@@ -310,7 +316,7 @@ function CreateDisputeScreen() {
                     value={newEvidenceDescription}
                     onChangeText={setNewEvidenceDescription}
                     placeholder="Add a description..."
-                    placeholderTextColor="rgba(255,254,245,0.4)"
+                    placeholderTextColor={withAlpha(theme.text, 0.4)}
                     style={styles.evidenceInput}
                   />
                 </>
@@ -322,11 +328,11 @@ function CreateDisputeScreen() {
               )}
 
               <View style={styles.formActions}>
-                <TouchableOpacity onPress={handleAddEvidence} style={styles.formActionButton}>
-                  <MaterialIcons name="check" size={18} color="#fffef5" />
-                  <Text style={styles.formActionButtonText}>Add Evidence</Text>
+                <TouchableOpacity accessibilityRole="button" onPress={handleAddEvidence} style={styles.formActionButton}>
+                  <MaterialIcons name="check" size={18} color={theme.onPrimary} />
+                  <Text style={styles.formActionButtonText}>Add evidence</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={() => {
                     setShowAddEvidence(false);
                     setNewEvidenceContent('');
@@ -345,23 +351,23 @@ function CreateDisputeScreen() {
         {/* Web: inline confirmation card replaces Alert.alert confirm dialog */}
         {Platform.OS === 'web' && showWebConfirm && (
           <View style={styles.webConfirmCard}>
-            <MaterialIcons name="report-problem" size={20} color="#fbbf24" />
+            <MaterialIcons name="report-problem" size={20} color={theme.warningText} />
             <Text style={styles.webConfirmText}>
               Are you sure you want to create this dispute? This will notify all involved parties.
             </Text>
             <View style={styles.webConfirmActions}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={executeSubmit}
                 style={styles.webConfirmYes}
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator color="#fffef5" size="small" />
+                  <ActivityIndicator color={theme.onPrimary} size="small" />
                 ) : (
-                  <Text style={styles.webConfirmYesText}>Yes, Create Dispute</Text>
+                  <Text style={styles.webConfirmYesText}>Yes, open dispute</Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={() => setShowWebConfirm(false)}
                 style={styles.webConfirmNo}
                 disabled={isSubmitting}
@@ -374,7 +380,7 @@ function CreateDisputeScreen() {
 
         {/* Submit Button */}
         {!showWebConfirm && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleSubmit}
             disabled={isSubmitting || !reason.trim() || (Platform.OS === 'web' && reason.trim().length < 20)}
             style={[
@@ -383,11 +389,11 @@ function CreateDisputeScreen() {
             ]}
           >
             {isSubmitting ? (
-              <ActivityIndicator color="#fffef5" />
+              <ActivityIndicator color={theme.onPrimary} />
             ) : (
               <>
-                <MaterialIcons name="report-problem" size={20} color="#fffef5" />
-                <Text style={styles.submitButtonText}>Create Dispute</Text>
+                <MaterialIcons name="report-problem" size={20} color={theme.onPrimary} />
+                <Text style={styles.submitButtonText}>Open a dispute</Text>
               </>
             )}
           </TouchableOpacity>
@@ -400,10 +406,11 @@ function CreateDisputeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -411,7 +418,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     paddingTop: 48,
-    backgroundColor: '#008E2A',
+    backgroundColor: theme.background,
   },
   backButton: {
     padding: 4,
@@ -419,7 +426,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
   },
   scrollView: {
     flex: 1,
@@ -430,17 +437,17 @@ const styles = StyleSheet.create({
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(59,130,246,0.15)',
+    backgroundColor: withAlpha(theme.info, 0.15),
     borderRadius: 8,
     padding: 12,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.3)',
+    borderColor: withAlpha(theme.info, 0.3),
     gap: 8,
   },
   infoBannerText: {
     flex: 1,
-    color: '#3b82f6',
+    color: theme.infoText,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -456,24 +463,24 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
   sectionHint: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.6)',
+    color: withAlpha(theme.text, 0.6),
     marginBottom: 12,
     lineHeight: 18,
   },
   validationHint: {
     fontSize: 12,
-    color: '#fbbf24',
+    color: theme.warningText,
     marginTop: 6,
   },
   reasonInput: {
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 8,
     padding: 12,
-    color: '#fffef5',
+    color: theme.text,
     fontSize: 14,
     minHeight: 120,
     textAlignVertical: 'top',
@@ -486,14 +493,14 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#008E2A',
+    color: theme.primaryLight,
   },
   evidenceList: {
     gap: 12,
     marginTop: 12,
   },
   evidenceItem: {
-    backgroundColor: 'rgba(0,142,42,0.1)',
+    backgroundColor: withAlpha(theme.primary, 0.1),
     borderRadius: 8,
     padding: 12,
   },
@@ -504,9 +511,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   evidenceType: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#008E2A',
+    color: theme.primaryLight,
     flex: 1,
   },
   removeButton: {
@@ -515,15 +522,15 @@ const styles = StyleSheet.create({
   evidenceDescription: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 4,
   },
   evidenceContent: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
   },
   addEvidenceForm: {
-    backgroundColor: 'rgba(0,142,42,0.1)',
+    backgroundColor: withAlpha(theme.primary, 0.1),
     borderRadius: 8,
     padding: 16,
     marginTop: 12,
@@ -531,7 +538,7 @@ const styles = StyleSheet.create({
   formLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     marginBottom: 8,
   },
   typeSelector: {
@@ -543,29 +550,27 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    borderRadius: 8,
+    backgroundColor: withAlpha(theme.primary, 0.15),
     alignItems: 'center',
   },
   typeButtonActive: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
   },
   typeButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: withAlpha(theme.onPrimary, 0.6),
     textTransform: 'capitalize',
   },
   typeButtonTextActive: {
-    color: '#fffef5',
+    color: theme.onPrimary,
   },
   evidenceInput: {
-    backgroundColor: 'rgba(0,142,42,0.2)',
-    borderRadius: 6,
+    backgroundColor: theme.surfaceSecondary,
+    borderRadius: 8,
     padding: 10,
-    color: '#fffef5',
+    color: theme.text,
     fontSize: 13,
     marginBottom: 12,
   },
@@ -578,60 +583,56 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     padding: 10,
-    borderRadius: 6,
+    borderRadius: 8,
     gap: 6,
   },
   formActionButtonCancel: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: 'rgba(255,254,245,0.3)',
+    borderColor: withAlpha(theme.text, 0.3),
   },
   formActionButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.onPrimary,
   },
   formActionButtonTextCancel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.onPrimary, 0.8),
   },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#dc2626',
-    borderBottomWidth: 4,
-    borderBottomColor: '#933730',
+    backgroundColor: theme.error,
     padding: 16,
     borderRadius: 8,
     gap: 8,
     marginTop: 8,
   },
   submitButtonDisabled: {
-    backgroundColor: 'rgba(220,38,38,0.5)',
+    backgroundColor: withAlpha(theme.error, 0.5),
   },
   submitButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.onPrimary,
   },
   webConfirmCard: {
-    backgroundColor: 'rgba(251,191,36,0.1)',
+    backgroundColor: withAlpha(theme.warning, 0.1),
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(251,191,36,0.4)',
+    borderColor: withAlpha(theme.warning, 0.4),
     padding: 16,
     marginBottom: 16,
     gap: 12,
     alignItems: 'flex-start',
   },
   webConfirmText: {
-    color: '#fffef5',
+    color: theme.onPrimary,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -642,13 +643,13 @@ const styles = StyleSheet.create({
   },
   webConfirmYes: {
     flex: 1,
-    backgroundColor: '#dc2626',
+    backgroundColor: theme.error,
     padding: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     alignItems: 'center',
   },
   webConfirmYesText: {
-    color: '#fffef5',
+    color: theme.onPrimary,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -656,15 +657,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: 'rgba(255,254,245,0.3)',
+    borderColor: withAlpha(theme.text, 0.3),
     padding: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     alignItems: 'center',
   },
   webConfirmNoText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 14,
   },
 });
+}
 
 export default withReplayMask(CreateDisputeScreen);

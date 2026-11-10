@@ -87,7 +87,7 @@ function CancellationRequestScreen() {
       }
     } catch (error) {
       console.error('Error loading bounty:', error);
-      Alert.alert('Error', 'Failed to load bounty details');
+      Alert.alert("Couldn't load bounty details", "Please try again.");
     } finally {
       setLoading(false);
     }
@@ -95,12 +95,12 @@ function CancellationRequestScreen() {
 
   const handleSubmitCancellation = async () => {
     if (!reason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for cancellation');
+      Alert.alert("Something went wrong", 'Please provide a reason for cancellation');
       return;
     }
 
     if (!userId || !bounty) {
-      Alert.alert('Error', 'Unable to submit cancellation request');
+      Alert.alert("Couldn't submit cancellation request", "Please try again.");
       return;
     }
 
@@ -139,11 +139,11 @@ function CancellationRequestScreen() {
           ]
         );
       } else {
-        Alert.alert('Error', 'Failed to submit cancellation request');
+        Alert.alert("Couldn't submit cancellation request", "Please try again.");
       }
     } catch (error) {
       console.error('Error submitting cancellation:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert("Something went wrong", 'An unexpected error occurred');
     } finally {
       setSubmitting(false);
     }
@@ -167,8 +167,8 @@ function CancellationRequestScreen() {
       <View style={[s.screen, s.centered, s.centeredPad]}>
         <AlertCircle size={48} color={theme.error} />
         <Text style={s.stateTitle}>Bounty not found</Text>
-        <TouchableOpacity onPress={() => router.back()} style={[s.primaryButton, s.stateButton]}>
-          <Text style={s.primaryButtonText}>Go Back</Text>
+        <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={[s.primaryButton, s.stateButton]}>
+          <Text style={s.primaryButtonText}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -179,22 +179,22 @@ function CancellationRequestScreen() {
     return (
       <View style={[s.screen, s.centered, s.centeredPad]}>
         <AlertCircle size={48} color={theme.warning} />
-        <Text style={s.stateTitle}>Cannot Cancel</Text>
+        <Text style={s.stateTitle}>Can’t cancel this bounty</Text>
         <Text style={s.stateBody}>
           This bounty has already been completed. If you have an issue, please contact support for
           dispute resolution.
         </Text>
         <View style={s.stateActions}>
-          <TouchableOpacity onPress={handleContactSupport} style={[s.primaryButton, s.rowButton]}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleContactSupport} style={[s.primaryButton, s.rowButton]}>
             <Mail size={18} color={ON_ACCENT_TEXT} />
-            <Text style={[s.primaryButtonText, s.rowButtonText]}>Email Support</Text>
+            <Text style={[s.primaryButtonText, s.rowButtonText]}>Email support</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleCallSupport} style={[s.primaryButton, s.rowButton]}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleCallSupport} style={[s.primaryButton, s.rowButton]}>
             <Phone size={18} color={ON_ACCENT_TEXT} />
-            <Text style={[s.primaryButtonText, s.rowButtonText]}>Call Support</Text>
+            <Text style={[s.primaryButtonText, s.rowButtonText]}>Call support</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.back()} style={s.linkButton}>
-            <Text style={s.linkButtonText}>Go Back</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={s.linkButton}>
+            <Text style={s.linkButtonText}>Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -206,10 +206,10 @@ function CancellationRequestScreen() {
     return (
       <View style={[s.screen, s.centered, s.centeredPad]}>
         <AlertCircle size={48} color={theme.textSecondary} />
-        <Text style={s.stateTitle}>Already Cancelled</Text>
+        <Text style={s.stateTitle}>Already cancelled</Text>
         <Text style={s.stateBody}>This bounty has already been cancelled.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={[s.primaryButton, s.stateButton]}>
-          <Text style={s.primaryButtonText}>Go Back</Text>
+        <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={[s.primaryButton, s.stateButton]}>
+          <Text style={s.primaryButtonText}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -220,18 +220,18 @@ function CancellationRequestScreen() {
     return (
       <View style={[s.screen, s.centered, s.centeredPad]}>
         <AlertCircle size={48} color={theme.warning} />
-        <Text style={s.stateTitle}>Cancellation Pending</Text>
+        <Text style={s.stateTitle}>Cancellation pending</Text>
         <Text style={s.stateBody}>
           A cancellation request is already pending for this bounty. Please wait for the other party
           to respond.
         </Text>
         <View style={s.stateActions}>
-          <TouchableOpacity onPress={handleContactSupport} style={[s.primaryButton, s.rowButton]}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleContactSupport} style={[s.primaryButton, s.rowButton]}>
             <HelpCircle size={18} color={ON_ACCENT_TEXT} />
-            <Text style={[s.primaryButtonText, s.rowButtonText]}>Contact Support</Text>
+            <Text style={[s.primaryButtonText, s.rowButtonText]}>Contact support</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.back()} style={s.linkButton}>
-            <Text style={s.linkButtonText}>Go Back</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={s.linkButton}>
+            <Text style={s.linkButtonText}>Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -252,7 +252,7 @@ function CancellationRequestScreen() {
           and decides what happens to the escrow.
         </Text>
         <View style={s.stateActions}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() =>
               router.replace({ pathname: '/bounty/[id]/dispute', params: { id: String(id) } } as never)
             }
@@ -261,11 +261,11 @@ function CancellationRequestScreen() {
             <AlertCircle size={18} color={ON_ACCENT_TEXT} />
             <Text style={[s.primaryButtonText, s.rowButtonText]}>Report a problem</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleContactSupport} style={s.linkButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleContactSupport} style={s.linkButton}>
             <Text style={s.linkButtonText}>Contact support</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.back()} style={s.linkButton}>
-            <Text style={s.linkButtonText}>Go Back</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={s.linkButton}>
+            <Text style={s.linkButtonText}>Go back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -283,10 +283,10 @@ function CancellationRequestScreen() {
       >
         {/* Header */}
         <View style={[s.header, { paddingTop: insets.top + 16 }]}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={s.backButton}>
             <ArrowLeft size={24} color={theme.text} />
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Request Cancellation</Text>
+          <Text style={s.headerTitle}>Request cancellation</Text>
           <Text style={s.headerSubtitle}>{bounty.title}</Text>
         </View>
 
@@ -296,7 +296,7 @@ function CancellationRequestScreen() {
           <View style={[s.calloutBox, s.warningBox]}>
             <AlertCircle size={20} color={theme.warning} />
             <View style={s.calloutBody}>
-              <Text style={[s.calloutTitle, s.warningText]}>Cancellation Policy</Text>
+              <Text style={[s.calloutTitle, s.warningText]}>Cancellation policy</Text>
               <Text style={[s.calloutText, s.warningText]}>
                 {bounty.is_for_honor
                   ? 'For honor bounties are automatically cancelled after submission. We still collect your reason to improve matching and quality metrics.'
@@ -309,7 +309,7 @@ function CancellationRequestScreen() {
 
           {/* Bounty Details */}
           <View style={s.detailsCard}>
-            <Text style={s.detailLabel}>Bounty Amount</Text>
+            <Text style={s.detailLabel}>Bounty amount</Text>
             <Text style={s.detailAmount}>${bounty.amount.toFixed(2)}</Text>
             <Text style={s.detailLabel}>Status</Text>
             <Text style={s.detailValue}>{bounty.status.replace('_', ' ')}</Text>
@@ -373,17 +373,17 @@ function CancellationRequestScreen() {
           <View style={[s.calloutBox, s.infoBox]}>
             <HelpCircle size={20} color={theme.info} />
             <View style={s.calloutBody}>
-              <Text style={[s.calloutTitle, s.infoText]}>Need Help?</Text>
+              <Text style={[s.calloutTitle, s.infoText]}>Need help?</Text>
               <Text style={[s.calloutText, s.infoText, s.calloutTextSpaced]}>
                 If you have questions about the cancellation process or need assistance with a
                 dispute, our support team is here to help.
               </Text>
               <View style={s.supportRow}>
-                <TouchableOpacity onPress={handleContactSupport} style={s.supportButton}>
+                <TouchableOpacity accessibilityRole="button" onPress={handleContactSupport} style={s.supportButton}>
                   <Mail size={14} color={ON_ACCENT_TEXT} />
                   <Text style={s.supportButtonText}>Email</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleCallSupport} style={s.supportButton}>
+                <TouchableOpacity accessibilityRole="button" onPress={handleCallSupport} style={s.supportButton}>
                   <Phone size={14} color={ON_ACCENT_TEXT} />
                   <Text style={s.supportButtonText}>Call</Text>
                 </TouchableOpacity>
@@ -391,7 +391,7 @@ function CancellationRequestScreen() {
             </View>
           </View>
 
-          <TouchableOpacity onPress={() => router.back()} disabled={submitting} style={s.linkButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} disabled={submitting} style={s.linkButton}>
             <Text style={s.linkButtonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -511,10 +511,10 @@ function makeStyles(theme: AppTheme) {
     // Amber/blue body copy that stays legible on the tint in both themes: the
     // bright semantic color on dark, a deep shade of the same hue on light.
     warningText: {
-      color: theme.isDark ? '#FCD34D' : '#92400E',
+      color: theme.warningText,
     },
     infoText: {
-      color: theme.isDark ? '#93C5FD' : '#1E3A8A',
+      color: theme.isDark ? theme.infoText : '#1E3A8A',
     },
     detailsCard: {
       backgroundColor: theme.surface,
@@ -597,8 +597,6 @@ function makeStyles(theme: AppTheme) {
     },
     submitButton: {
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       borderRadius: 8,
       paddingVertical: 16,
       alignItems: 'center',
@@ -637,8 +635,6 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButton: {
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,

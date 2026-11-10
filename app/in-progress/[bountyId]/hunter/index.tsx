@@ -219,10 +219,10 @@ export default function HunterFlowIndex() {
         <Text style={s.centeredText}>
           {"You're offline or the connection dropped. Your application and any work you've submitted are unaffected."}
         </Text>
-        <TouchableOpacity style={s.retryButton} onPress={onRefresh}>
+        <TouchableOpacity accessibilityRole="button" style={s.retryButton} onPress={onRefresh}>
           <Text style={s.retryButtonText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.textButton} onPress={goBack}>
+        <TouchableOpacity accessibilityRole="button" style={s.textButton} onPress={goBack}>
           <Text style={s.textButtonText}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -312,11 +312,9 @@ function makeStyles(t: AppTheme) {
     errorTitle: { color: t.text, fontSize: 18, fontWeight: '700' },
     retryButton: {
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       paddingHorizontal: 24,
       paddingVertical: 12,
-      borderRadius: 10,
+      borderRadius: 12,
       marginTop: 8,
       minHeight: 44,
       justifyContent: 'center',
@@ -352,7 +350,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 16,
       gap: 8,
     },
-    heroTitle: { color: t.text, fontSize: 19, fontWeight: '700', lineHeight: 25 },
+    heroTitle: { color: t.text, fontSize: 18, fontWeight: '700', lineHeight: 25 },
     heroMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
     heroAmount: { color: t.text, fontSize: 18, fontWeight: '800' },
     mutedSmall: { color: t.textSecondary, fontSize: 12 },

@@ -1,4 +1,4 @@
-import { ThemeProvider } from 'components/theme-provider';
+import { AppToastHost } from '../components/ui/app-toast';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Asset } from 'expo-asset';
 import {
@@ -304,7 +304,6 @@ const LayoutContent = () => {
                     <NotificationProvider>
                       <WebSocketProvider>
                         <RuntimeReporters />
-                        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
                           <ThemeSyncer />
                           <ProfileImageViewerProvider>
                             <View style={styles.inner}>
@@ -313,9 +312,9 @@ const LayoutContent = () => {
                                 <Stack.Screen name="tabs" options={tabsScreenOptions} />
                                 <Stack.Screen name="onboarding" options={handOverOptions} />
                               </Stack>
+                              <AppToastHost />
                             </View>
                           </ProfileImageViewerProvider>
-                        </ThemeProvider>
                       </WebSocketProvider>
                     </NotificationProvider>
                   </WalletProvider>

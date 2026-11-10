@@ -213,13 +213,13 @@ function makeStyles(theme: AppTheme) {
       color: theme.text,
     },
     requiredTag: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       color: theme.error,
       textTransform: 'uppercase',
     },
     optionalTag: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       color: theme.textSecondary,
       textTransform: 'uppercase',

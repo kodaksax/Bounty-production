@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
+import { withAlpha } from '../../../../lib/utils';
 import { BlockedTapCapture } from './BlockedTapCapture';
 
 /**
@@ -263,10 +264,10 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: theme.surfaceSecondary,
       overflow: 'hidden',
     },
-    progressTrackOnPrimary: { backgroundColor: 'rgba(255,255,255,0.28)' },
+    progressTrackOnPrimary: { backgroundColor: withAlpha(theme.text, 0.28) },
     progressFill: {
       height: '100%',
-      borderRadius: 3,
+      borderRadius: 4,
       backgroundColor: theme.primary,
     },
     progressFillOnPrimary: { backgroundColor: '#ffffff' },
@@ -304,10 +305,10 @@ function makeStyles(theme: AppTheme) {
     cta: {
       flexDirection: 'row',
       height: 52,
-      borderRadius: 26,
+      borderRadius: theme.radius.lg,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    ctaLabel: { fontSize: 17, fontWeight: '700' },
+    ctaLabel: { fontSize: 16, fontWeight: '600' },
   });
 }

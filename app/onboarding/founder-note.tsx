@@ -458,7 +458,7 @@ function makeStyles(theme: AppTheme) {
     },
     quote: {
       fontFamily: 'SpaceMono',
-      fontSize: 19,
+      fontSize: 18,
       lineHeight: 32,
       letterSpacing: 0.2,
       color: theme.text,
@@ -467,7 +467,7 @@ function makeStyles(theme: AppTheme) {
     quoteGhost: { opacity: 0 },
     greeting: {
       fontFamily: 'SpaceMono',
-      fontSize: 19,
+      fontSize: 18,
       lineHeight: 32,
       color: theme.textSecondary,
       textAlign: 'center',
@@ -476,7 +476,7 @@ function makeStyles(theme: AppTheme) {
     crosshair: { marginTop: spacing['2xl'] },
     caret: {
       fontFamily: 'SpaceMono',
-      fontSize: 19,
+      fontSize: 18,
       lineHeight: 32,
       color: theme.text,
     },
@@ -510,8 +510,6 @@ function makeStyles(theme: AppTheme) {
       height: 56,
       borderRadius: radius.full,
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       alignItems: 'center',
       justifyContent: 'center',
     },

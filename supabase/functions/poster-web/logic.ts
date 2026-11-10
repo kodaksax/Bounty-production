@@ -60,18 +60,34 @@ export function explainBountyStatus(
 // ── Payment ───────────────────────────────────────────────────────────────
 
 export interface PaymentExplanation {
-  state: 'held' | 'releasing' | 'paid_out' | 'refunding' | 'refunded' | 'not_paid' | 'unknown'
+  state: 'held' | 'releasing' | 'paid_out' | 'refunding' | 'refunded' | 'not_paid' | 'card_saved' | 'pay_at_hire' | 'unknown'
   label: string
   explanation: string
 }
 
 export function explainPayment(
   payment: { status?: string | null; amount?: number | string | null } | null,
-  bounty: { amount?: number | string | null; funding_mode?: string | null; is_for_honor?: boolean | null }
+  bounty: { amount?: number | string | null; funding_mode?: string | null; is_for_honor?: boolean | null; status?: string | null },
+  poster: { hasSavedCard?: boolean } = {}
 ): PaymentExplanation {
   const amount = formatMoney(payment?.amount ?? bounty.amount)
   if (bounty.is_for_honor) {
     return { state: 'not_paid', label: 'No payment', explanation: 'This bounty is for honor, so no money is involved.' }
+  }
+  // Paid when the poster hires (card saved at post, or the app's wallet
+  // funding): before that there is no payment row, and nothing was charged.
+  if (!payment && bounty.funding_mode === 'at_accept' && bounty.status === 'open') {
+    return poster.hasSavedCard
+      ? {
+          state: 'card_saved',
+          label: 'Card saved',
+          explanation: `Card saved, you’ll be charged when you hire someone. Nothing has been charged yet, and only the part of ${amount} your Bounty balance doesn’t cover goes on the card.`,
+        }
+      : {
+          state: 'pay_at_hire',
+          label: 'Paid when you hire',
+          explanation: `Nothing has been charged yet. You’ll pay ${amount} when you hire someone.`,
+        }
   }
   switch (payment?.status) {
     case 'captured':
@@ -124,6 +140,7 @@ export type DecisionOutcome =
   | 'bounty_closed'
   | 'request_closed'
   | 'not_funded'
+  | 'card_failed'
   | 'not_found'
   | 'retry'
 
@@ -143,6 +160,7 @@ const MESSAGES: Record<DecisionOutcome, { ok: boolean; httpStatus: number; messa
   bounty_closed: { ok: false, httpStatus: 409, message: 'This bounty is no longer open (it may have been cancelled or finished), so nobody new can be accepted.' },
   request_closed: { ok: false, httpStatus: 409, message: 'This application is no longer open — the hunter may have withdrawn or it expired.' },
   not_funded: { ok: false, httpStatus: 402, message: 'We couldn’t accept yet because this bounty’s payment isn’t in place. Nothing was charged. Contact us and we’ll help.' },
+  card_failed: { ok: false, httpStatus: 402, message: 'Your saved card couldn’t be charged, so nobody has been hired yet. You can pay with another card to finish.' },
   not_found: { ok: false, httpStatus: 404, message: 'We couldn’t find that application on your bounty.' },
   retry: { ok: false, httpStatus: 503, message: 'Something went wrong on our side. Nothing changed — please try again in a moment.' },
 }
@@ -182,7 +200,9 @@ export function classifyAccept(state: DecisionState, rpcError: string | null): D
   if (request.status !== 'pending') return decisionResult('request_closed')
 
   if (rpcError) {
-    if (/insufficient_funds_for_escrow|bounty_not_funded|_locked_by_|funding_mode|card_charge_failed/i.test(rpcError)) {
+    // The page responds to this one by offering Checkout for the shortfall.
+    if (/card_charge_failed/i.test(rpcError)) return decisionResult('card_failed')
+    if (/insufficient_funds_for_escrow|bounty_not_funded|_locked_by_|funding_mode/i.test(rpcError)) {
       return decisionResult('not_funded')
     }
     return decisionResult('retry')

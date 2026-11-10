@@ -83,7 +83,7 @@ export default function FollowingScreen() {
   };
 
   const renderFollowing = ({ item }: { item: UserProfile }) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.followingItem}
       onPress={() => handleProfilePress(item.id)}
     >
@@ -117,7 +117,7 @@ export default function FollowingScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Following</Text>
@@ -126,8 +126,8 @@ export default function FollowingScreen() {
       {error && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error}</Text>
-          <TouchableOpacity onPress={loadFollowing}>
-            <Text style={styles.retryText}>Retry</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={loadFollowing}>
+            <Text style={styles.retryText}>Try again</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -183,7 +183,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      backgroundColor: "#dc2626",
+      backgroundColor: theme.error,
       paddingHorizontal: 16,
       paddingVertical: 12,
       marginHorizontal: 16,
@@ -240,7 +240,7 @@ function makeStyles(theme: AppTheme) {
     },
     followingTitle: {
       fontSize: 13,
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     emptyState: {
       alignItems: "center",

@@ -64,7 +64,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
       const success = await receiptService.shareReceipt(transaction as any)
       if (!success) Alert.alert('Receipt Generation', 'Unable to share receipt on this device.')
     } catch (error) {
-      Alert.alert('Error', 'Failed to generate receipt. Please try again.')
+      Alert.alert("Couldn't generate receipt", "Please try again.")
     } finally {
       setIsGeneratingReceipt(false)
     }
@@ -379,7 +379,7 @@ function makeStyles(t: AppTheme) {
     detailRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
     detailIcon: { height: 32, width: 32, borderRadius: 16, backgroundColor: t.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     detailContent: { flex: 1 },
-    detailLabel: { color: t.textSecondary, fontSize: 11, marginBottom: 2 },
+    detailLabel: { color: t.textSecondary, fontSize: 12, marginBottom: 2 },
     detailValue: { color: t.text, fontSize: 14, fontWeight: '500' },
     escrowBlock: { marginHorizontal: 24, marginTop: 4, marginBottom: 8, backgroundColor: t.surfaceSecondary, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: t.border },
     escrowHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 },

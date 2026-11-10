@@ -1,12 +1,17 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Skeleton } from './skeleton';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 /**
  * Skeleton card component for bounty cards during loading states.
  * This component provides a consistent loading experience across bounty lists.
  */
 export function SkeletonCard() {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   return (
     <View style={styles.card}>
       {/* Header: avatar and poster info */}
@@ -53,14 +58,15 @@ export function SkeletonCardList({ count = 3 }: { count?: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: withAlpha(theme.primary, 0.2),
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#454952',
+    borderColor: theme.border,
   },
   header: {
     flexDirection: 'row',
@@ -83,3 +89,4 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 });
+}

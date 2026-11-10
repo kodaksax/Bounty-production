@@ -220,7 +220,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.surface,
       borderWidth: 1,
       borderColor: t.border,
-      borderRadius: 14,
+      borderRadius: 12,
       paddingHorizontal: SPACING.CARD_PADDING,
       paddingVertical: 12,
       marginBottom: SPACING.COMPACT_GAP,

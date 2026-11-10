@@ -7,6 +7,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { resendVerification } from '../../lib/services/auth-service';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 interface EmailVerificationBannerProps {
   email?: string;
@@ -14,6 +17,8 @@ interface EmailVerificationBannerProps {
 }
 
 export function EmailVerificationBanner({ email, onDismiss }: EmailVerificationBannerProps) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
@@ -42,7 +47,7 @@ export function EmailVerificationBanner({ email, onDismiss }: EmailVerificationB
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconContainer}>
-          <MaterialIcons name="mark-email-unread" size={24} color="#f59e0b" />
+          <MaterialIcons name="mark-email-unread" size={24} color={theme.warningText} />
         </View>
         <View style={styles.textContainer}>
           <Text style={styles.title}>Verify your email to unlock full access</Text>
@@ -52,13 +57,13 @@ export function EmailVerificationBanner({ email, onDismiss }: EmailVerificationB
           {resendSuccess ? (
             <Text style={styles.successText}>✓ Verification email sent!</Text>
           ) : (
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               onPress={handleResend} 
               disabled={isResending}
               style={styles.resendButton}
             >
               {isResending ? (
-                <ActivityIndicator size="small" color="#f59e0b" />
+                <ActivityIndicator size="small" color={theme.warningText} />
               ) : (
                 <Text style={styles.resendText}>Resend verification email</Text>
               )}
@@ -66,23 +71,24 @@ export function EmailVerificationBanner({ email, onDismiss }: EmailVerificationB
           )}
         </View>
       </View>
-      <TouchableOpacity 
+      <TouchableOpacity accessibilityRole="button" 
         onPress={handleDismiss} 
         style={styles.dismissButton}
         accessibilityLabel="Dismiss banner"
       >
-        <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.6)" />
+        <MaterialIcons name="close" size={20} color={withAlpha(theme.text, 0.6)} />
       </TouchableOpacity>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(245,158,11,0.15)',
+    backgroundColor: withAlpha(theme.warning, 0.15),
     borderLeftWidth: 4,
-    borderLeftColor: '#f59e0b',
+    borderLeftColor: theme.warning,
     paddingVertical: 12,
     paddingHorizontal: 16,
     marginHorizontal: 16,
@@ -105,12 +111,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#ffffff',
+    color: theme.text,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
+    color: withAlpha(theme.text, 0.8),
     lineHeight: 18,
     marginBottom: 8,
   },
@@ -120,13 +126,13 @@ const styles = StyleSheet.create({
   },
   resendText: {
     fontSize: 13,
-    color: '#f59e0b',
+    color: theme.warningText,
     fontWeight: '600',
     textDecorationLine: 'underline',
   },
   successText: {
     fontSize: 13,
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontWeight: '600',
   },
   dismissButton: {
@@ -134,3 +140,4 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 });
+}

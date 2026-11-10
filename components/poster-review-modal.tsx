@@ -32,6 +32,7 @@ import { AttachmentViewerModal } from './attachment-viewer-modal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { RatingStars } from './ui/rating-stars';
 import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
+import { withAlpha } from '../lib/utils';
 
 const EMERALD_SHADOW = {
   shadowColor: '#008E2A',
@@ -357,7 +358,7 @@ export function PosterReviewModal({
       setSubmission(data);
     } catch (err) {
       console.error('Error loading submission:', err);
-      Alert.alert('Error', 'Failed to load submission');
+      Alert.alert("Couldn't load submission", "Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -399,7 +400,7 @@ export function PosterReviewModal({
       return true;
     } catch (err) {
       console.error('Error approving completion:', err);
-      Alert.alert('Error', 'Failed to approve completion. Please try again.');
+      Alert.alert("Couldn't approve completion", "Please try again.");
       setShowPayoutWarning(true);
       return false;
     } finally {
@@ -421,7 +422,7 @@ export function PosterReviewModal({
       ]);
     } catch (err) {
       console.error('Error requesting revision:', err);
-      Alert.alert('Error', 'Failed to request revision. Please try again.');
+      Alert.alert("Couldn't request revision", "Please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -561,7 +562,7 @@ export function PosterReviewModal({
         <View style={[s.container, { paddingTop: insets.top }]}>
           {/* Header */}
           <View style={s.header}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={s.closeButton}
               onPress={handleHeaderClose}
               accessibilityLabel={showRevisionForm || showPayoutWarning ? 'Back to previous step' : 'Close review modal'}
@@ -580,7 +581,7 @@ export function PosterReviewModal({
 
           {isLoading ? (
             <View style={s.loadingContainer}>
-              <ActivityIndicator size="large" color="#008E2A" />
+              <ActivityIndicator size="large" color={theme.primaryLight} />
               <Text style={s.loadingText}>Loading submission...</Text>
             </View>
           ) : !submission ? (
@@ -603,7 +604,7 @@ export function PosterReviewModal({
             >
               <View style={s.payoutWarningContainer}>
                 <View style={s.warningIcon}>
-                  <MaterialIcons name="warning" size={28} color="#fbbf24" />
+                  <MaterialIcons name="warning" size={28} color={theme.warningText} />
                 </View>
                 <Text style={s.warningTitle}>Complete and release payment?</Text>
                 <Text style={s.warningDescription}>
@@ -613,7 +614,7 @@ export function PosterReviewModal({
                 </Text>
                 {!isForHonor && bountyAmount > 0 && (
                   <View style={s.warningAmountChip}>
-                    <MaterialIcons name="account-balance-wallet" size={16} color="#fbbf24" />
+                    <MaterialIcons name="account-balance-wallet" size={16} color={theme.warningText} />
                     <Text style={s.warningAmountText}>{formattedPayoutAmount} escrow release</Text>
                   </View>
                 )}
@@ -628,7 +629,7 @@ export function PosterReviewModal({
               />
 
               <View style={s.warningActions}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[s.warningCancelButton, isProcessing && s.buttonDisabled]}
                   onPress={() => setShowPayoutWarning(false)}
                   disabled={isProcessing}
@@ -644,7 +645,7 @@ export function PosterReviewModal({
               contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
             >
               <View style={s.ratingFormContainer}>
-                <MaterialIcons name="star" size={64} color="#fbbf24" />
+                <MaterialIcons name="star" size={64} color={theme.warningText} />
                 <Text style={s.ratingTitle}>Rate {hunterName}</Text>
                 <Text style={s.ratingSubtitle}>How would you rate their work on this bounty?</Text>
                 <View style={s.ratingStarsContainer}>
@@ -661,7 +662,7 @@ export function PosterReviewModal({
                   maxLength={500}
                   textAlignVertical="top"
                 />
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[s.primaryButton, isProcessing && s.buttonDisabled]}
                   onPress={handleSubmitRating}
                   disabled={isProcessing || rating === 0}
@@ -689,7 +690,7 @@ export function PosterReviewModal({
               contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
             >
               <View style={s.revisionFormContainer}>
-                <MaterialIcons name="feedback" size={64} color="#fbbf24" />
+                <MaterialIcons name="feedback" size={64} color={theme.warningText} />
                 <Text style={s.revisionTitle}>Request Changes</Text>
                 <Text style={s.revisionSubtitle}>Explain what needs to be improved or changed.</Text>
                 <TextInput
@@ -704,10 +705,10 @@ export function PosterReviewModal({
                   textAlignVertical="top"
                 />
                 <View style={s.buttonRow}>
-                  <TouchableOpacity style={s.secondaryButton} onPress={() => setShowRevisionForm(false)}>
+                  <TouchableOpacity accessibilityRole="button" style={s.secondaryButton} onPress={() => setShowRevisionForm(false)}>
                     <Text style={s.secondaryButtonText}>Cancel</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[s.primaryButton, isProcessing && s.buttonDisabled]}
                     onPress={handleRequestRevision}
                     disabled={isProcessing}
@@ -779,7 +780,7 @@ export function PosterReviewModal({
 
               {/* Action buttons — unique colors preserved */}
               <View style={s.actionButtons}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={s.rejectButton}
                   onPress={() => setShowRevisionForm(true)}
                   disabled={isProcessing}
@@ -788,7 +789,7 @@ export function PosterReviewModal({
                   <Text style={s.rejectButtonText}>Request Changes</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[s.approveButton, isProcessing && s.buttonDisabled]}
                   onPress={() => setShowPayoutWarning(true)}
                   disabled={isProcessing}
@@ -826,20 +827,20 @@ function makeSliderStyles(t: AppTheme) {
     },
     sliderTrack: {
       position: 'relative',
-      backgroundColor: t.isDark ? 'rgba(4,120,87,0.4)' : 'rgba(0,142,42,0.15)',
+      backgroundColor: t.isDark ? 'rgba(4,120,87,0.4)' : withAlpha(t.primary, 0.15),
       borderRadius: 999,
       height: 60,
       justifyContent: 'center',
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.25)' : 'rgba(0,142,42,0.3)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.25) : withAlpha(t.primary, 0.3),
     },
     sliderFill: {
       position: 'absolute',
       left: 0,
       top: 0,
       bottom: 0,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.45)' : 'rgba(0,142,42,0.35)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.45) : withAlpha(t.primary, 0.35),
     },
     sliderLabel: {
       color: t.isDark ? 'rgba(255,254,245,0.85)' : t.text,
@@ -853,7 +854,7 @@ function makeSliderStyles(t: AppTheme) {
       width: SLIDER_HANDLE_WIDTH,
       height: 56,
       borderRadius: 28,
-      backgroundColor: '#008E2A',
+      backgroundColor: t.primary,
       justifyContent: 'center',
       alignItems: 'center',
       top: SLIDER_HANDLE_INSET,
@@ -875,7 +876,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'space-between',
       padding: 16,
       borderBottomWidth: 1,
-      borderBottomColor: t.isDark ? 'rgba(31,174,73,0.1)' : t.border,
+      borderBottomColor: t.isDark ? withAlpha(t.primary, 0.1) : t.border,
     },
     closeButton: {
       padding: 4,
@@ -923,24 +924,24 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : 'rgba(0,142,42,0.07)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : withAlpha(t.primary, 0.07),
       padding: 16,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.3)' : 'rgba(0,142,42,0.2)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.2),
     },
     hunterAvatar: {
       width: 56,
       height: 56,
       borderRadius: 28,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.12)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.12),
       justifyContent: 'center',
       alignItems: 'center',
     },
     avatarFallbackText: {
       fontSize: 20,
       fontWeight: '600',
-      color: t.primary,
+      color: t.primaryLight,
     },
     hunterDetails: {
       flex: 1,
@@ -956,7 +957,7 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
     },
     submittedText: {
-      color: t.isDark ? '#1FAE49' : t.primary,
+      color: t.isDark ? t.primaryLight : t.primary,
       fontSize: 13,
       marginTop: 4,
     },
@@ -964,18 +965,18 @@ function makeStyles(t: AppTheme) {
       gap: 12,
     },
     sectionTitle: {
-      color: t.isDark ? '#1FAE49' : t.primary,
+      color: t.isDark ? t.primaryLight : t.primary,
       fontSize: 14,
       fontWeight: '600',
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
     messageBox: {
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : t.surfaceSecondary,
       padding: 16,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.2) : t.border,
     },
     messageText: {
       color: t.text,
@@ -988,18 +989,18 @@ function makeStyles(t: AppTheme) {
     proofItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : t.surfaceSecondary,
       borderRadius: 12,
       padding: 12,
       gap: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.2) : t.border,
     },
     proofIcon: {
       width: 48,
       height: 48,
       borderRadius: 8,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.3)' : 'rgba(0,142,42,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.1),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1013,12 +1014,12 @@ function makeStyles(t: AppTheme) {
       fontWeight: '500',
     },
     proofSize: {
-      color: t.isDark ? '#1FAE49' : t.primary,
+      color: t.isDark ? t.primaryLight : t.primary,
       fontSize: 12,
     },
     emptyProof: {
       padding: 24,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.1)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.1) : t.surfaceSecondary,
       borderRadius: 12,
       alignItems: 'center',
     },
@@ -1037,9 +1038,7 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      backgroundColor: '#ef4444',
-      borderBottomWidth: 4,
-      borderBottomColor: '#933730',
+      backgroundColor: t.error,
       paddingVertical: 16,
       borderRadius: 12,
     },
@@ -1054,9 +1053,7 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: t.primary,
       paddingVertical: 16,
       borderRadius: 12,
       ...EMERALD_SHADOW,
@@ -1088,20 +1085,18 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 20,
     },
     commentInput: {
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : t.surfaceSecondary,
       borderRadius: 12,
       padding: 16,
       color: t.text,
       fontSize: 15,
       minHeight: 120,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.2) : t.border,
       width: '100%',
     },
     primaryButton: {
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: t.primary,
       paddingVertical: 16,
       paddingHorizontal: 32,
       borderRadius: 12,
@@ -1139,14 +1134,14 @@ function makeStyles(t: AppTheme) {
       textAlign: 'center',
     },
     feedbackInput: {
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : t.surfaceSecondary,
       borderRadius: 12,
       padding: 16,
       color: t.text,
       fontSize: 15,
       minHeight: 150,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.2) : t.border,
       width: '100%',
     },
     buttonRow: {
@@ -1156,7 +1151,7 @@ function makeStyles(t: AppTheme) {
     },
     secondaryButton: {
       flex: 1,
-      backgroundColor: t.isDark ? '#454952' : t.surfaceSecondary,
+      backgroundColor: t.surfaceSecondary,
       paddingVertical: 16,
       borderRadius: 12,
       alignItems: 'center',
@@ -1164,7 +1159,7 @@ function makeStyles(t: AppTheme) {
       borderColor: t.primary,
     },
     secondaryButtonText: {
-      color: t.primary,
+      color: t.primaryLight,
       fontSize: 16,
       fontWeight: '600',
     },
@@ -1172,9 +1167,9 @@ function makeStyles(t: AppTheme) {
       gap: 16,
       padding: 20,
       borderRadius: 16,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.18)' : 'rgba(0,142,42,0.07)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.18) : withAlpha(t.primary, 0.07),
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.35)' : 'rgba(0,142,42,0.2)',
+      borderColor: t.isDark ? withAlpha(t.primary, 0.35) : withAlpha(t.primary, 0.2),
       alignItems: 'center',
       alignSelf: 'stretch',
     },
@@ -1182,7 +1177,7 @@ function makeStyles(t: AppTheme) {
       width: 56,
       height: 56,
       borderRadius: 28,
-      backgroundColor: 'rgba(251,191,36,0.15)',
+      backgroundColor: withAlpha(t.warning, 0.15),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1206,10 +1201,10 @@ function makeStyles(t: AppTheme) {
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderRadius: 999,
-      backgroundColor: 'rgba(251,191,36,0.18)',
+      backgroundColor: withAlpha(t.warning, 0.18),
     },
     warningAmountText: {
-      color: '#fbbf24',
+      color: t.warningText,
       fontSize: 13,
       fontWeight: '600',
       letterSpacing: 0.2,
@@ -1232,8 +1227,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 10,
       borderRadius: 999,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.35)' : t.border,
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.2)' : t.surfaceSecondary,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.35) : t.border,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : t.surfaceSecondary,
     },
     warningCancelText: {
       color: t.textSecondary,

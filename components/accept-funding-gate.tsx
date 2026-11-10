@@ -573,7 +573,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
 }
 
 /** Matches the on-primary convention used across onboarding/wallet CTAs. */
-const ON_PRIMARY_TEXT = '#052e1b';
+const ON_PRIMARY_TEXT = '#FFFFFF';
 
 const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
   StyleSheet.create({
@@ -714,7 +714,7 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
     rowInline: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     rowLabel: { color: theme.textSecondary, fontSize: metrics.rowFontSize },
     rowValue: { color: theme.text, fontSize: metrics.rowFontSize, fontWeight: '600' },
-    changeLink: { color: theme.primary, fontSize: metrics.rowFontSize, fontWeight: '600' },
+    changeLink: { color: theme.primaryLight, fontSize: metrics.rowFontSize, fontWeight: '600' },
     actions: {
       paddingTop: metrics.sectionGap,
       gap: metrics.compact ? 8 : 12,
@@ -724,7 +724,7 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      borderRadius: 14,
+      borderRadius: 12,
       paddingVertical: metrics.buttonPaddingVertical,
     },
     applePayButtonText: { fontSize: metrics.buttonFontSize, fontWeight: '600' },
@@ -733,9 +733,7 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
-      borderRadius: 14,
+      borderRadius: 12,
       paddingVertical: metrics.buttonPaddingVertical,
     },
     primaryButtonText: {
@@ -747,7 +745,7 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
     muted: { opacity: 0.45 },
     secondaryButton: { paddingVertical: metrics.secondaryPaddingVertical, alignItems: 'center' },
     otherWaysText: {
-      color: theme.primary,
+      color: theme.primaryLight,
       fontSize: metrics.buttonFontSize - 1,
       fontWeight: '600',
     },

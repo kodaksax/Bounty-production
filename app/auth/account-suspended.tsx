@@ -3,6 +3,10 @@ import { useRouter } from 'expo-router';
 import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { EMAIL_SUBJECTS, SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES } from '../../lib/constants/support';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
+import { useMemo } from 'react';
 
 /**
  * Shown when the client-side account-status gate in providers/auth-provider.tsx
@@ -11,6 +15,8 @@ import { EMAIL_SUBJECTS, SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES } from '../../lib
  * for the server-side enforcement this screen is the UX counterpart to.
  */
 export default function AccountSuspendedScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const { clearAccountBlockedReason } = useAuthContext();
 
@@ -29,7 +35,7 @@ export default function AccountSuspendedScreen() {
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconCircle}>
-          <MaterialIcons name="pause-circle-outline" size={40} color="#f59e0b" />
+          <MaterialIcons name="pause-circle-outline" size={40} color={theme.warningText} />
         </View>
         <Text style={styles.title}>Account Suspended</Text>
         <Text style={styles.body}>
@@ -38,12 +44,12 @@ export default function AccountSuspendedScreen() {
         </Text>
         <Text style={styles.body}>Typical response time: {SUPPORT_RESPONSE_TIMES.email}.</Text>
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleContactSupport}>
+        <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleContactSupport}>
           <MaterialIcons name="mail-outline" size={18} color="#1B1E24" />
-          <Text style={styles.primaryButtonText}>Contact Support</Text>
+          <Text style={styles.primaryButtonText}>Contact support</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleBackToSignIn}>
+        <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={handleBackToSignIn}>
           <Text style={styles.secondaryButtonText}>Back to Sign In</Text>
         </TouchableOpacity>
       </View>
@@ -51,10 +57,11 @@ export default function AccountSuspendedScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -68,20 +75,20 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: 'rgba(245,158,11,0.15)',
+    backgroundColor: withAlpha(theme.warning, 0.15),
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
   },
   title: {
-    color: '#ffffff',
-    fontSize: 22,
+    color: theme.text,
+    fontSize: 24,
     fontWeight: '700',
     marginBottom: 12,
     textAlign: 'center',
   },
   body: {
-    color: 'rgba(255,255,255,0.7)',
+    color: withAlpha(theme.text, 0.7),
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',
@@ -93,7 +100,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#ffffff',
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 24,
     width: '100%',
@@ -110,8 +117,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   secondaryButtonText: {
-    color: 'rgba(255,255,255,0.6)',
+    color: withAlpha(theme.text, 0.6),
     fontSize: 15,
     fontWeight: '500',
   },
 });
+}

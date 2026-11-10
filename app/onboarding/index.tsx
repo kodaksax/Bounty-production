@@ -166,11 +166,11 @@ export default function OnboardingIndex() {
         <Text style={styles.errorText}>
           We had trouble loading your profile. Check your connection and try again.
         </Text>
-        <TouchableOpacity style={styles.retryButton} onPress={handleManualRetry} disabled={retrying}>
+        <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={handleManualRetry} disabled={retrying}>
           {retrying ? (
             <ActivityIndicator size="small" color={theme.background} />
           ) : (
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>Try again</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -207,8 +207,6 @@ function makeStyles(theme: AppTheme) {
     },
     retryButton: {
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       paddingVertical: 14,
       paddingHorizontal: 32,
       borderRadius: 999,

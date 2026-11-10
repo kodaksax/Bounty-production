@@ -14,6 +14,7 @@ import { press } from "../lib/motion"
 import { useModalOrigin } from "./ui/app-modal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
 import { formatBountyWhere } from '../lib/utils/bounty-distance'
+import { withAlpha } from '../lib/utils';
 
 export interface BountyCompactItemProps {
   id: string | number
@@ -152,7 +153,7 @@ function BountyCompactItemComponent({
         <View style={s.trailing}>
           {isForHonor ? (
             <View style={s.honorBadge}>
-              <MaterialIcons name="favorite" size={12} color="#052e1b" />
+              <MaterialIcons name="favorite" size={12} color={theme.onPrimary} />
               <Text style={s.honorText}>For Honor</Text>
             </View>
           ) : (
@@ -222,10 +223,10 @@ function makeStyles(t: AppTheme) {
       height: 36,
       borderRadius: 18,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.5)' : t.border,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.5) : t.border,
     },
     avatarFallback: {
-      backgroundColor: t.isDark ? '#00571A' : t.surfaceSecondary,
+      backgroundColor: t.isDark ? t.primary : t.surfaceSecondary,
       width: 36,
       height: 36,
       borderRadius: 18,
@@ -233,7 +234,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
     },
     avatarText: {
-      color: t.isDark ? '#B5E3C2' : t.primaryLight,
+      color: t.primaryLight,
       fontSize: 12,
       fontWeight: '700',
     },
@@ -276,7 +277,7 @@ function makeStyles(t: AppTheme) {
       flexShrink: 1,
     },
     username: {
-      color: t.isDark ? '#B5E3C2' : t.primary,
+      color: t.isDark ? t.primaryLight : t.primary,
       fontSize: TYPOGRAPHY.SIZE_XSMALL,
     },
     dot: {
@@ -295,16 +296,16 @@ function makeStyles(t: AppTheme) {
     onlineBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.08)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.15) : withAlpha(t.primary, 0.08),
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: SPACING.COMPACT_GAP,
       gap: 2,
     },
     onlineText: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
-      color: t.primary,
+      color: t.primaryLight,
     },
     trailing: {
       alignItems: 'flex-end',
@@ -312,7 +313,7 @@ function makeStyles(t: AppTheme) {
       marginLeft: SPACING.ELEMENT_GAP,
     },
     price: {
-      color: t.isDark ? '#fcd34d' : t.primary,
+      color: t.isDark ? t.warningText : t.primary,
       fontWeight: '800',
       fontSize: 16,
       marginBottom: 2,
@@ -328,7 +329,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 2,
     },
     honorText: {
-      color: '#052e1b',
+      color: t.onPrimary,
       fontWeight: '800',
       fontSize: 12,
     },

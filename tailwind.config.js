@@ -30,7 +30,7 @@ module.exports = {
           elevated: '#22262C',
         },
         text: {
-          primary: '#E6DED1',
+          primary: '#F1EBE3',
           secondary: '#929497',
           muted: '#61656B',
           inverse: '#31363F',
