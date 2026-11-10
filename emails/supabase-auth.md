@@ -25,7 +25,16 @@ the code large, plus a button for people on a computer.
 **Reset password does two jobs.** The Stripe webhook uses the same email
 (`resetPasswordForEmail`) to give people who just paid on bountyfinder.net a
 way into their new account. The copy works for both: "Here's your way in",
-plus a short note for new web posters.
+plus a short note for new web posters, plus a "Get the app" block: install
+Bounty, tap **Email me a code** on the sign-in screen, and use this same
+address (`{{ .Email }}`). Website-checkout accounts have no password, so that
+code is their one-step way into the app.
+
+**Email OTP Length must be 6.** The app's "You already have a Bounty account"
+screen promises a 6-digit code. Check Authentication → Providers → Email →
+Email OTP Length on each project (staging verified 6 on 2026-11-10; the app
+accepts 6–10, so a longer setting still signs in, but the copy would be
+wrong).
 
 ## Placeholders used
 

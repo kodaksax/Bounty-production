@@ -14,6 +14,26 @@ import {
 const MANAGE = ASSETS.manage
 const SITE = 'https://www.bountyfinder.net'
 
+// App stores. Same ids as supabase/functions/app-link and
+// supabase/functions/_shared/email-design-v2.ts.
+const APP_STORE = 'https://apps.apple.com/app/id6756679797'
+const PLAY_STORE = 'https://play.google.com/store/apps/details?id=app.bountyfinder.BOUNTYExpo'
+
+// "Get the app" block for people whose account website checkout created with
+// no password: the app's "Email me a code" is their one-step way in. This is
+// the markup a sender builds for APP_BLOCK; it mirrors getTheAppBlock() in
+// supabase/functions/_shared/email-design-v2.ts (keep the two in sync).
+// `email` must already be HTML-escaped.
+export const getTheApp = (email) =>
+  callout(
+    `Download Bounty from the ${link(APP_STORE, 'App Store')} or ${link(PLAY_STORE, 'Google Play')}. On the sign-in screen, tap ${strong('Email me a code')} and use this same address${email ? `, ${strong(email)}` : ''}. We'll email you a code to type in. No password needed.`,
+    'Get the app',
+    'neutral'
+  )
+const getTheAppText = (email) => `Get the app
+Download Bounty from the App Store (${APP_STORE}) or Google Play (${PLAY_STORE}).
+On the sign-in screen, tap "Email me a code" and use this same address${email ? `, ${email}` : ''}. We'll email you a code to type in. No password needed.`
+
 const posterFooter = (extraLine = '') =>
   footer({
     reason: `${extraLine}You're getting this because you have an active bounty on Bounty.`,
@@ -90,6 +110,10 @@ export const TEMPLATES = [
       PAY_LINE: '',
       HELP_LINE: 'Manage it on bountyfinder.net or in the Bounty app.',
       FOOTER_LINE: '',
+      // Sent only to posters with no app yet (send-notification-email has_app
+      // false). Empty for everyone else, so the block disappears.
+      APP_BLOCK: { html: true, fallback: '' },
+      APP_BLOCK_TEXT: '',
       CTA_URL: MANAGE,
       PREFERENCES_URL: SITE,
       POSTAL_LINE: '',
@@ -107,7 +131,8 @@ export const TEMPLATES = [
         'What happens next'
       ) +
       button('View your bounty', '{{{CTA_URL}}}') +
-      small('{{{HELP_LINE}}}', 18),
+      small('{{{HELP_LINE}}}', 18) +
+      '{{{APP_BLOCK}}}',
     footer: () => posterFooter('{{{FOOTER_LINE}}} '),
     text: `You're live.
 
@@ -126,9 +151,11 @@ View your bounty: {{{CTA_URL}}}
 {{{HELP_LINE}}}
 {{{FOOTER_LINE}}}
 
+{{{APP_BLOCK_TEXT}}}
+
 ${POSTER_TXT_FOOTER}`,
     samples: {
-      realistic: { BOUNTY_TITLE: 'Assemble an IKEA dresser', BOUNTY_TITLE_TEXT: 'Assemble an IKEA dresser', BOUNTY_REWARD: '$45', AUDIENCE_LINE: "We're letting people nearby know about it.", PAY_LINE: "That's when you pay. ", HELP_LINE: 'Use the button above to manage your bounty on the web.', CTA_URL: MANAGE + '?bounty=00000000-0000-4000-8000-000000000000', POSTAL_LINE: 'Bounty Inc. &middot; Postal address on file' },
+      realistic: { BOUNTY_TITLE: 'Assemble an IKEA dresser', BOUNTY_TITLE_TEXT: 'Assemble an IKEA dresser', BOUNTY_REWARD: '$45', AUDIENCE_LINE: "We're letting people nearby know about it.", PAY_LINE: "That's when you pay. ", HELP_LINE: 'Use the button above to manage your bounty on the web.', APP_BLOCK: getTheApp('jordan@example.com'), APP_BLOCK_TEXT: getTheAppText('jordan@example.com'), CTA_URL: MANAGE + '?bounty=00000000-0000-4000-8000-000000000000', POSTAL_LINE: 'Bounty Inc. &middot; Postal address on file' },
       edge: { BOUNTY_TITLE: LONG_TITLE, BOUNTY_TITLE_TEXT: LONG_TITLE_TEXT, BOUNTY_REWARD: '$10,000.00' },
     },
   },
@@ -1147,6 +1174,7 @@ ${AUTH_TXT_FOOTER}`,
       lead('Use the button to get into your Bounty account. If you asked to reset your password, you’ll choose a new one next.') +
       button('Continue to Bounty', CONFIRM) +
       callout('This is how you sign in to manage your bounty. Use the button above.', 'Just posted on bountyfinder.net?', 'success') +
+      getTheApp('{{ .Email }}') +
       small('This link works once and expires soon.', 16) +
       linkFallback +
       callout("Didn't ask for this? Ignore this email. Nothing changes unless you use the link.", 'Not you?', 'neutral'),
@@ -1157,6 +1185,8 @@ Use this link to get into your Bounty account. If you asked to reset your passwo
 ${CONFIRM}
 
 Just posted on bountyfinder.net? This is how you sign in to manage your bounty.
+
+${getTheAppText('{{ .Email }}')}
 
 This link works once and expires soon.
 

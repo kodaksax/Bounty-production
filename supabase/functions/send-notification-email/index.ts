@@ -34,7 +34,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { emailBountyCta } from '../_shared/web-links.ts'
-import { V2_TEMPLATES, buildNoticeSend, buildTeamAlertSend, isDesignV2Enabled } from '../_shared/email-design-v2.ts'
+import { V2_TEMPLATES, buildNoticeSend, buildTeamAlertSend, getTheAppBlock, isDesignV2Enabled } from '../_shared/email-design-v2.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -239,6 +239,10 @@ function buildTemplateSend(type: string, data: Record<string, unknown>): Templat
     const prefsUrl = Deno.env.get('NOTIFICATION_PREFERENCES_URL') || ''
     const postal = Deno.env.get('NOTIFICATION_POSTAL_ADDRESS') || ''
     const bountyId = str(data.bountyId)
+    // Posters with no app yet (often a website-checkout account with no
+    // password) get "Get the app → Email me a code with this address". Empty
+    // for app users, so the template's blank fallback hides the block.
+    const appBlock = data.has_app === true ? null : getTheAppBlock(str(data.recipientEmail))
 
     const raw: Record<string, string> = {
       BOUNTY_TITLE: escapeHtml(str(data.bountyTitle)),
@@ -258,6 +262,8 @@ function buildTemplateSend(type: string, data: Record<string, unknown>): Templat
       FOOTER_LINE: data.has_app === true
         ? 'You can manage this bounty in the Bounty app.'
         : 'You can manage this bounty on bountyfinder.net.',
+      APP_BLOCK: appBlock?.html ?? '',
+      APP_BLOCK_TEXT: appBlock?.text ?? '',
       CTA_URL: cta ? escapeHtml(cta.url) : '',
       PREFERENCES_URL: escapeHtml(prefsUrl),
       POSTAL_LINE: postal ? `Bounty · ${escapeHtml(postal)}` : '',
@@ -456,6 +462,8 @@ Deno.serve(async (req: Request) => {
         : buildTemplateSend(type, {
           ...data,
           has_app: usersWithApp.has(userId),
+          // Shown back to the recipient only ("use this same address").
+          recipientEmail: email,
         }) ?? buildNoticeTemplateSend(category, type, title, body, data)
       if (PROVIDER.name === 'resend' && PROVIDER.key) {
         const ok = templateSend
