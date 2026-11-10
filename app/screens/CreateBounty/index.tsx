@@ -30,6 +30,7 @@ import { useAuthContext } from 'hooks/use-auth-context';
 import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
 import { markPosterActivated } from 'lib/analytics/lifecycle';
+import { notifyBountyPublished } from 'lib/moments/publishSignal';
 import { analyticsService } from 'lib/services/analytics-service';
 import { markDraftAbandoned } from 'lib/storage/abandoned-draft';
 import { useStripe } from 'lib/stripe-context';
@@ -402,6 +403,9 @@ export function CreateBountyFlow({
         surface: meta.surface,
         composer_screen: composerScreenForStep(TOTAL_STEPS),
       });
+      // Releases the moments a poster's first bounty was holding back, and
+      // lets the notification ask follow right away (lib/moments/publishSignal.ts).
+      notifyBountyPublished(session?.user?.id);
       // Hand off to the confirmation screen rather than leaving the flow —
       // onComplete now fires from its Continue button, so the host screen
       // still navigates to the feed, just one screen later.
