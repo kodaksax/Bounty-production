@@ -60,6 +60,7 @@ import {
   buildCheckoutSessionParams,
   buildShortfallSessionParams,
   checkoutModeForSwitch,
+  checkoutReturnUrls,
   shortfallChargeCents,
   shortfallIdempotencyKey,
 } from './logic.ts'
@@ -543,12 +544,17 @@ Deno.serve(async (req: Request) => {
         existingCustomerId = profile?.stripe_customer_id ?? null
       }
 
-      const successUrl = sanitizeText(body?.successUrl ?? body?.success_url, 500)
-        || Deno.env.get('BOUNTY_CHECKOUT_SUCCESS_URL')
-        || 'https://www.bountyfinder.net/#post-success'
-      const cancelUrl = sanitizeText(body?.cancelUrl ?? body?.cancel_url, 500)
-        || Deno.env.get('BOUNTY_CHECKOUT_CANCEL_URL')
-        || 'https://www.bountyfinder.net/#post'
+      // Built here, never read from the body (success_url / cancel_url are
+      // ignored): see checkoutReturnUrls.
+      const { successUrl, cancelUrl } = checkoutReturnUrls({
+        origin: req.headers.get('Origin'),
+        source: sanitizeText(body?.source, 50) || 'web',
+        extraOrigins: (Deno.env.get('BOUNTY_CHECKOUT_ALLOWED_ORIGINS') ?? '')
+          .split(',')
+          .map((o: string) => o.trim())
+          .filter(Boolean),
+        supabaseUrl,
+      })
 
       // 2. Create the Session. Stripe carries only the REFERENCE.
       const sessionMetadata: Record<string, string> = {

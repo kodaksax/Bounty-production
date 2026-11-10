@@ -162,3 +162,43 @@ export function buildShortfallSessionParams(input: ShortfallSessionInput): Recor
 export function shortfallIdempotencyKey(requestId: string, cents: number, nowSeconds: number): string {
   return `shortfall_${requestId}_${cents}_${Math.floor(nowSeconds / 600)}`
 }
+
+// ── Where Stripe sends the customer back ──────────────────────────────────
+//
+// Never taken from the request: a caller could otherwise use our Checkout to
+// send someone to any site after they paid. The page is chosen here, on an
+// origin from an allowlist; the browser's Origin header only picks between
+// allowed sites (production, or the local site talking to Staging).
+
+export const PRODUCTION_SITE_ORIGINS = ['https://www.bountyfinder.net', 'https://bountyfinder.net']
+export const DEFAULT_SITE_ORIGIN = 'https://www.bountyfinder.net'
+const STAGING_PROJECT_REF = 'gwumwpoomwvkjyibdmpj'
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/
+
+export function isAllowedReturnOrigin(
+  origin: string | null | undefined,
+  opts: { extraOrigins?: string[]; supabaseUrl?: string | null } = {}
+): origin is string {
+  if (!origin) return false
+  if (PRODUCTION_SITE_ORIGINS.includes(origin)) return true
+  // Extra sites must be https; the configured list is the function's CORS list.
+  if ((opts.extraOrigins ?? []).includes(origin) && origin.startsWith('https://')) return true
+  // The website talks to Staging only from a local server (assets/app.js).
+  return String(opts.supabaseUrl ?? '').includes(STAGING_PROJECT_REF) && LOCAL_ORIGIN.test(origin)
+}
+
+export function checkoutReturnUrls(input: {
+  origin: string | null | undefined
+  source: string | null | undefined
+  extraOrigins?: string[]
+  supabaseUrl?: string | null
+}): { successUrl: string; cancelUrl: string } {
+  const base = isAllowedReturnOrigin(input.origin, input) ? input.origin : DEFAULT_SITE_ORIGIN
+  // /bounty's own Post a job tab comes back to itself; every other form to the
+  // homepage form, which reads ?checkout=cancelled to put the draft back.
+  const cancelUrl =
+    input.source === 'web_account'
+      ? `${base}/bounty?tab=post&checkout=cancelled`
+      : `${base}/#post?checkout=cancelled`
+  return { successUrl: `${base}/#post-success`, cancelUrl }
+}

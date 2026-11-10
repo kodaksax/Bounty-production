@@ -63,6 +63,7 @@ import {
   type Role,
   submittedCard,
   validateMessageText,
+  acceptFailure,
 } from './logic.ts'
 
 const DEFAULT_ALLOWED_ORIGINS = ['https://www.bountyfinder.net', 'https://bountyfinder.net']
@@ -707,14 +708,10 @@ Deno.serve(async (req: Request) => {
       // funding in the same transaction as the acceptance.
       const res = await callFunction('accept-bounty-request', { request_id: body.request_id })
       if (res.status !== 200) {
-        const msg =
-          res.status === 409 ? 'This application can’t be accepted any more — the bounty may already have a hunter.'
-          : res.status === 402 ? 'This bounty isn’t funded yet, so nobody can be accepted.'
-          : res.status === 403 || res.status === 404 ? 'We couldn’t find that application on your bounty.'
-          : 'We couldn’t accept this application. Please try again.'
-        return reply({ error: msg, code: `accept_${res.status}` }, res.status >= 400 ? res.status : 502)
+        const failed = acceptFailure(res.status, res.body)
+        return reply(failed.body, failed.httpStatus)
       }
-      return reply({ accepted: true, hunterPayoutReady: res.body?.hunterPayoutReady ?? null })
+      return reply({ ok: true, outcome: 'accepted', accepted: true, hunterPayoutReady: res.body?.hunterPayoutReady ?? null })
     }
 
     // ── POST /approve-release ────────────────────────────────────────────

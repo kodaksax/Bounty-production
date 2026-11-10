@@ -155,3 +155,16 @@ the account owner a confirm link. See `email-inbound/logic.ts`.
 - **A geocoded bounty older than 24 hours becomes findable but does not send
   a "just posted near you" push.** This is existing, deliberate behaviour of
   `fn_bounties_claim_nearby_notification`.
+
+### Return URLs, accept outcomes and "Card saved" (2026-11-09)
+
+- `bounty-checkout` builds Checkout's `success_url` / `cancel_url` itself and ignores
+  any sent in the request. The site is the request's `Origin` when it is
+  `https://www.bountyfinder.net`, `https://bountyfinder.net`, an https origin in
+  `BOUNTY_CHECKOUT_ALLOWED_ORIGINS`, or (on the Staging project only) a local
+  `http://localhost` / `http://127.0.0.1` server; otherwise `www.bountyfinder.net`.
+  `BOUNTY_CHECKOUT_SUCCESS_URL` / `BOUNTY_CHECKOUT_CANCEL_URL` are no longer read.
+- `web-account /accept` failures carry `outcome`: a saved card that couldn't be
+  charged is `card_failed` (402), like `poster-web`.
+- `poster-web` shows "Card saved" for an open pay-at-hire bounty with no payment
+  yet when the poster has a card on file, and "Paid when you hire" otherwise.

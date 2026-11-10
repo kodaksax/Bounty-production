@@ -60,18 +60,34 @@ export function explainBountyStatus(
 // ── Payment ───────────────────────────────────────────────────────────────
 
 export interface PaymentExplanation {
-  state: 'held' | 'releasing' | 'paid_out' | 'refunding' | 'refunded' | 'not_paid' | 'unknown'
+  state: 'held' | 'releasing' | 'paid_out' | 'refunding' | 'refunded' | 'not_paid' | 'card_saved' | 'pay_at_hire' | 'unknown'
   label: string
   explanation: string
 }
 
 export function explainPayment(
   payment: { status?: string | null; amount?: number | string | null } | null,
-  bounty: { amount?: number | string | null; funding_mode?: string | null; is_for_honor?: boolean | null }
+  bounty: { amount?: number | string | null; funding_mode?: string | null; is_for_honor?: boolean | null; status?: string | null },
+  poster: { hasSavedCard?: boolean } = {}
 ): PaymentExplanation {
   const amount = formatMoney(payment?.amount ?? bounty.amount)
   if (bounty.is_for_honor) {
     return { state: 'not_paid', label: 'No payment', explanation: 'This bounty is for honor, so no money is involved.' }
+  }
+  // Paid when the poster hires (card saved at post, or the app's wallet
+  // funding): before that there is no payment row, and nothing was charged.
+  if (!payment && bounty.funding_mode === 'at_accept' && bounty.status === 'open') {
+    return poster.hasSavedCard
+      ? {
+          state: 'card_saved',
+          label: 'Card saved',
+          explanation: `Card saved, you’ll be charged when you hire someone. Nothing has been charged yet, and only the part of ${amount} your Bounty balance doesn’t cover goes on the card.`,
+        }
+      : {
+          state: 'pay_at_hire',
+          label: 'Paid when you hire',
+          explanation: `Nothing has been charged yet. You’ll pay ${amount} when you hire someone.`,
+        }
   }
   switch (payment?.status) {
     case 'captured':

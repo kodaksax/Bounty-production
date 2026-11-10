@@ -2,6 +2,8 @@ import {
   buildCheckoutSessionParams,
   buildShortfallSessionParams,
   checkoutModeForSwitch,
+  checkoutReturnUrls,
+  isAllowedReturnOrigin,
   shortfallChargeCents,
   shortfallIdempotencyKey,
 } from '../../supabase/functions/bounty-checkout/logic';
@@ -162,3 +164,38 @@ describe('shortfall Checkout', () => {
     expect(shortfallIdempotencyKey('r', 900, 6000)).not.toBe(key);
   });
 });
+
+describe('checkoutReturnUrls: built on the server, never from the request', () => {
+  const PROD = 'https://xwlwqzzphmmhghiqvkeu.supabase.co'
+  const STAGING = 'https://gwumwpoomwvkjyibdmpj.supabase.co'
+
+  it('uses the production site the request came from', () => {
+    expect(checkoutReturnUrls({ origin: 'https://bountyfinder.net', source: 'web', supabaseUrl: PROD })).toEqual({
+      successUrl: 'https://bountyfinder.net/#post-success',
+      cancelUrl: 'https://bountyfinder.net/#post?checkout=cancelled',
+    })
+  })
+
+  it('sends /bounty posts back to their own tab when cancelled', () => {
+    expect(checkoutReturnUrls({ origin: 'https://www.bountyfinder.net', source: 'web_account', supabaseUrl: PROD }).cancelUrl)
+      .toBe('https://www.bountyfinder.net/bounty?tab=post&checkout=cancelled')
+  })
+
+  it('falls back to www.bountyfinder.net for any other origin', () => {
+    for (const origin of ['https://evil.example', 'http://www.bountyfinder.net', 'https://bountyfinder.net.evil.example', null, '']) {
+      expect(checkoutReturnUrls({ origin, source: 'web', supabaseUrl: PROD }).successUrl).toBe('https://www.bountyfinder.net/#post-success')
+    }
+  })
+
+  it('allows a local site only when this function runs on Staging', () => {
+    expect(isAllowedReturnOrigin('http://localhost:8788', { supabaseUrl: STAGING })).toBe(true)
+    expect(isAllowedReturnOrigin('http://127.0.0.1:5500', { supabaseUrl: STAGING })).toBe(true)
+    expect(isAllowedReturnOrigin('http://localhost:8788', { supabaseUrl: PROD })).toBe(false)
+    expect(isAllowedReturnOrigin('http://localhost.evil.example', { supabaseUrl: STAGING })).toBe(false)
+  })
+
+  it('allows extra https origins from the CORS list, never plain http', () => {
+    expect(isAllowedReturnOrigin('https://preview.bountyfinder.net', { extraOrigins: ['https://preview.bountyfinder.net'] })).toBe(true)
+    expect(isAllowedReturnOrigin('http://preview.example', { extraOrigins: ['http://preview.example'] })).toBe(false)
+  })
+})
