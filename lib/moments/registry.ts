@@ -124,6 +124,29 @@ export function trustPromptsAllowed(ctx: MomentContext): boolean {
   return ctx.hasPublishedBounty;
 }
 
+/** Metadata keys inactive_user_return is enqueued with for a returning poster (MomentsProvider). */
+export const POST_AGAIN_BOUNTY_ID_KEY = 'postAgainBountyId';
+export const POST_AGAIN_TITLE_KEY = 'postAgainTitle';
+
+/**
+ * The past bounty a returning poster's "Welcome back" offers to post again,
+ * or null to keep the general welcome. Needs a bounty recorded at enqueue time
+ * (her latest one that wasn't removed) and a published poster: hunters and
+ * 'both' keep the general copy, which is about new bounties near them.
+ */
+export function postAgainTarget(
+  ctx: MomentContext,
+  state: MomentState | null | undefined
+): { bountyId: string; title: string } | null {
+  const role = ctx.profile.primaryRole;
+  if (role === 'hunter' || role === 'both' || !ctx.hasPublishedBounty) return null;
+  const bountyId = state?.metadata?.[POST_AGAIN_BOUNTY_ID_KEY];
+  if (typeof bountyId !== 'string' || bountyId.length === 0) return null;
+  const rawTitle = state?.metadata?.[POST_AGAIN_TITLE_KEY];
+  const title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+  return { bountyId, title };
+}
+
 export const MOMENT_REGISTRY: MomentDefinition[] = [
   // ---------------------------------------------------------------------
   // STATE-DERIVED — fully wired
@@ -541,18 +564,37 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'retention',
     cooldownHours: 168,
     maxShownCount: 1,
-    // Enqueue from: app bootstrap, when daysSinceLastSession exceeds a
-    // retention threshold (e.g. 14 days) — that computation needs a
-    // last-session timestamp not currently tracked; see remaining work.
+    // Enqueued by MomentsProvider when last_session_at is 14+ days old
+    // (lib/moments/sessionTracking.ts). For a poster with a past bounty it
+    // carries that bounty (postAgainTarget) and offers "Post again" (P3),
+    // which opens the composer with the bounty copied in.
     isEligible: eligibleWhenEnqueued,
-    content: () => ({
-      icon: 'waving-hand',
-      title: 'Welcome back',
-      body: "Here's what's changed since you've been away — new bounties near you are waiting.",
-      primaryLabel: 'See what’s new',
-      secondaryLabel: 'Dismiss',
-    }),
+    content: (ctx, state) => {
+      const target = postAgainTarget(ctx, state);
+      if (target) {
+        return {
+          icon: 'replay',
+          title: 'Welcome back',
+          body: target.title
+            ? `Need “${target.title}” done again? Post it again with everything filled in, then check the price and post.`
+            : 'Need your last job done again? Post it again with everything filled in, then check the price and post.',
+          primaryLabel: 'Post again',
+          secondaryLabel: 'Not now',
+        };
+      }
+      return {
+        icon: 'waving-hand',
+        title: 'Welcome back',
+        body: "Here's what's changed since you've been away — new bounties near you are waiting.",
+        primaryLabel: 'See what’s new',
+        secondaryLabel: 'Dismiss',
+      };
+    },
     action: { type: 'navigate', route: '/tabs/bounty-app' },
+    resolveAction: (ctx, state) => {
+      const target = postAgainTarget(ctx, state);
+      return target ? { type: 'post_again', bountyId: target.bountyId } : null;
+    },
   },
   {
     type: 'feature_announcement',

@@ -23,6 +23,8 @@ import {
 import { AppState, type AppStateStatus } from 'react-native';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useAuthProfile } from '../hooks/useAuthProfile';
+import { fetchLatestPostedBounty } from '../hooks/useLatestPostedBounty';
+import { API_TIMEOUTS } from '../lib/config/network';
 import { hapticFeedback } from '../lib/haptic-feedback';
 import { backfillEventMoments } from '../lib/moments/backfill';
 import { useMomentsEligibilityFixEnabled } from '../lib/moments/eligibilityFixFlag';
@@ -33,7 +35,11 @@ import {
 } from '../lib/moments/engine';
 import { momentsService } from '../lib/moments/momentsService';
 import { referralService } from '../lib/moments/referral-service';
-import { MOMENT_REGISTRY } from '../lib/moments/registry';
+import {
+    MOMENT_REGISTRY,
+    POST_AGAIN_BOUNTY_ID_KEY,
+    POST_AGAIN_TITLE_KEY,
+} from '../lib/moments/registry';
 import {
     effectiveLastSessionAt,
     evaluateReturningUser,
@@ -53,7 +59,9 @@ import {
 import { analyticsService } from '../lib/services/analytics-service';
 import { locationService } from '../lib/services/location-service';
 import { notificationService } from '../lib/services/notification-service';
+import { startPostAgain } from '../lib/post-again/start-post-again';
 import { supabase } from '../lib/supabase';
+import { withTimeout } from '../lib/utils/withTimeout';
 
 interface MomentsContextValue {
   activeMoment: MomentDefinition | null;
@@ -111,6 +119,29 @@ function keepLocalAnswers(
     }
   }
   return merged ?? fetched;
+}
+
+/**
+ * Queues the "Welcome back" moment. For a poster with a past bounty it records
+ * her latest one, so the moment can offer "Post again" (registry.ts
+ * postAgainTarget). If that lookup fails, the general welcome is queued.
+ */
+async function enqueueReturnMoment(
+  userId: string,
+  daysSinceLastSession: number | null,
+  offerPostAgain: boolean
+): Promise<void> {
+  const metadata: Record<string, unknown> = { daysSinceLastSession };
+  if (offerPostAgain) {
+    const latest = await withTimeout(fetchLatestPostedBounty(userId), API_TIMEOUTS.DEFAULT).catch(
+      () => null
+    );
+    if (latest) {
+      metadata[POST_AGAIN_BOUNTY_ID_KEY] = latest.id;
+      metadata[POST_AGAIN_TITLE_KEY] = latest.title;
+    }
+  }
+  await momentsService.enqueue(userId, 'inactive_user_return', metadata);
 }
 
 /** The tab-shell key for the Post tab (the bounty composer). */
@@ -385,7 +416,12 @@ export function MomentsProvider({
     const lastSessionAt = effectiveLastSessionAt(requestUserId, profile?.last_session_at ?? null);
     const { isReturning, daysSinceLastSession } = evaluateReturningUser(lastSessionAt);
     if (isReturning) {
-      momentsService.enqueue(requestUserId, 'inactive_user_return', { daysSinceLastSession });
+      const role = profile?.primary_role;
+      void enqueueReturnMoment(
+        requestUserId,
+        daysSinceLastSession,
+        engagement.hasPublishedBounty && role !== 'hunter' && role !== 'both'
+      ).catch(err => console.error('[moments] inactive_user_return enqueue failed', err));
     }
     if (shouldRecordSession(lastSessionAt)) {
       const recordedAt = new Date().toISOString();
@@ -662,7 +698,7 @@ export function MomentsProvider({
       }
       if (prev?.type === next?.type) return prev;
       if (next) {
-        setActiveContent(next.content(ctx));
+        setActiveContent(next.content(ctx, states.get(next.type) ?? null));
       } else {
         setActiveContent(null);
       }
@@ -766,7 +802,11 @@ export function MomentsProvider({
     setActiveMoment(null);
     setActiveContent(null);
 
-    const action = (eligibilityFixEnabled && def.flaggedAction) || def.action;
+    const ctx = buildContext();
+    const action =
+      (ctx && def.resolveAction?.(ctx, states.get(def.type) ?? null)) ||
+      (eligibilityFixEnabled && def.flaggedAction) ||
+      def.action;
     if (action.type !== 'inline') {
       // Not resolved yet — the user still has to finish the destination
       // flow (e.g. Stripe Connect onboarding). Record that they actively
@@ -787,6 +827,10 @@ export function MomentsProvider({
       momentsService.markStarted(userId, def.type);
       if (action.type === 'composer') {
         onOpenComposerRef.current?.(action.entryPoint);
+      } else if (action.type === 'post_again') {
+        // Copies the bounty into the draft, then hands it to the tab shell,
+        // which opens the composer. It tells the poster itself if that fails.
+        void startPostAgain({ bountyId: action.bountyId, userId, source: 'moment_return' });
       } else {
         router.push(action.route as any);
       }
@@ -818,6 +862,8 @@ export function MomentsProvider({
     patchState,
     isPresentationTooRecent,
     eligibilityFixEnabled,
+    buildContext,
+    states,
   ]);
 
   const value = useMemo<MomentsContextValue>(

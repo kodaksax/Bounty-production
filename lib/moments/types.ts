@@ -157,7 +157,9 @@ export type MomentAction =
   /** Resolved to a real handler by MomentsProvider's handler map (e.g. request a permission in place). */
   | { type: 'inline'; handlerKey: string }
   /** Moves the tab shell to the Post tab, attributing the composer to `entryPoint`. */
-  | { type: 'composer'; entryPoint: string };
+  | { type: 'composer'; entryPoint: string }
+  /** Copies `bountyId` into the composer (lib/post-again/start-post-again.ts). */
+  | { type: 'post_again'; bountyId: string };
 
 export interface MomentDefinition {
   type: MomentType;
@@ -182,8 +184,14 @@ export interface MomentDefinition {
    * explicitly by the code that enqueued them instead, so they omit this.
    */
   checkCompleted?: (ctx: MomentContext) => boolean;
-  content: (ctx: MomentContext) => MomentContent;
+  /** `state` carries what the enqueue recorded (e.g. which bounty to post again). */
+  content: (ctx: MomentContext, state?: MomentState | null) => MomentContent;
   action: MomentAction;
+  /**
+   * For a moment whose target depends on its queued metadata: an action that
+   * replaces `action` (and `flaggedAction`) when it returns one.
+   */
+  resolveAction?: (ctx: MomentContext, state: MomentState | null) => MomentAction | null;
   /** Replaces `action` while the `moments-eligibility-fix` flag is on. */
   flaggedAction?: MomentAction;
 }

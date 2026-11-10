@@ -422,7 +422,7 @@ export type AnalyticsEvent =
   | 'home_post_card_tapped'
   // "Post again" (lib/post-again/start-post-again.ts): one tap copies a past
   // bounty into the composer. `source` is 'bounty_detail', 'my_bounties',
-  // 'home_card' or 'email'; carries bounty_id (the bounty copied). Fires on
+  // 'home_card', 'email' or 'moment_return'; carries bounty_id (the bounty copied). Fires on
   // the tap, before the copy loads. The resulting post is bounty_published
   // with publish_type 'republish' and republished_from_bounty_id. Retires no
   // event: there was no way to copy a bounty before.
