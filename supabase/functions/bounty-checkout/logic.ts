@@ -90,6 +90,23 @@ export function buildCheckoutSessionParams(input: CheckoutSessionInput): Record<
 // apply_deposit, and the page then retries the acceptance. Nothing here hires
 // anyone, and the amount always comes from the server.
 
+/**
+ * Retries in one window reuse one Checkout. Stripe only replays an idempotent
+ * request whose parameters are identical, so everything time-based in the session
+ * is derived from the window, not from "now" (2026-11-10: expires_at = now + 30 min
+ * made every retry inside the window fail with an idempotency error).
+ */
+export const SHORTFALL_WINDOW_SECONDS = 600
+
+function shortfallWindow(nowSeconds: number): number {
+  return Math.floor(nowSeconds / SHORTFALL_WINDOW_SECONDS)
+}
+
+/** Same for every request in a window, and always 30 to 40 minutes ahead (Stripe needs at least 30). */
+export function shortfallExpiresAt(nowSeconds: number): number {
+  return (shortfallWindow(nowSeconds) + 1) * SHORTFALL_WINDOW_SECONDS + 30 * 60
+}
+
 /** Stripe refuses a USD charge under this. The excess stays in the wallet. */
 export const STRIPE_MIN_CHARGE_CENTS = 50
 
@@ -142,6 +159,9 @@ export function buildShortfallSessionParams(input: ShortfallSessionInput): Recor
     client_reference_id: requestId,
     // Any flow_type but 'bounty_creation': the checkout handler must ignore this.
     metadata: { flow_type: 'bounty_shortfall', bounty_id: bountyId, request_id: requestId },
+    // "Pay with another card": a card settles at once, so the page waiting for the
+    // deposit isn't left polling a method that confirms later.
+    payment_method_types: ['card'],
     payment_intent_data: {
       metadata: {
         purpose: 'wallet_deposit',
@@ -150,7 +170,7 @@ export function buildShortfallSessionParams(input: ShortfallSessionInput): Recor
         request_id: requestId,
       },
     },
-    expires_at: nowSeconds + 30 * 60,
+    expires_at: shortfallExpiresAt(nowSeconds),
   }
 }
 
@@ -160,7 +180,7 @@ export function buildShortfallSessionParams(input: ShortfallSessionInput): Recor
  * amount, which changes if the balance moves.
  */
 export function shortfallIdempotencyKey(requestId: string, cents: number, nowSeconds: number): string {
-  return `shortfall_${requestId}_${cents}_${Math.floor(nowSeconds / 600)}`
+  return `shortfall_${requestId}_${cents}_${shortfallWindow(nowSeconds)}`
 }
 
 // ── Where Stripe sends the customer back ──────────────────────────────────
