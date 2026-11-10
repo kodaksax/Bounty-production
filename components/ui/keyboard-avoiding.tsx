@@ -28,7 +28,7 @@
  * hardware keyboards showing only the shortcut bar, and the keyboard's own
  * dismissal gesture from over-shifting the layout.
  */
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, type RefObject, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -37,6 +37,7 @@ import {
   Platform,
   ScrollView,
   TextInput,
+  type View,
   type EasingFunction,
   type HostInstance,
   type KeyboardEvent,
@@ -131,12 +132,13 @@ export function useKeyboardInset({ offset = 0, enabled = true }: KeyboardInsetOp
   offsetRef.current = offset;
 
   useEffect(() => {
-    // Android's window is `adjustResize` (Expo's default
-    // `softwareKeyboardLayoutMode: 'resize'`), so the OS already shrinks the
-    // app window by the keyboard and the layout reflows on its own — shifting
-    // again here would double-count and launch content off the top. Avoidance
-    // is an iOS concern, which is why the chat composer has always been
-    // configured `Platform.select({ ios: 'padding', android: undefined })`.
+    // iOS only. This hook was written on the premise that Android's
+    // `adjustResize` shrinks the window, which stopped being true once the
+    // app went edge-to-edge (forced since Expo SDK 54): an edge-to-edge
+    // window keeps its full height and the OS only reports IME insets. The
+    // window-height arithmetic below doesn't hold on Android either, so
+    // surfaces that need avoidance there measure it with
+    // `useAndroidKeyboardOverlap` instead (the post composer does).
     if (!enabled || Platform.OS !== 'ios') {
       inset.setValue(0);
       translateY.setValue(0);
@@ -186,6 +188,123 @@ export function useKeyboardInset({ offset = 0, enabled = true }: KeyboardInsetOp
   }, [enabled, inset, translateY]);
 
   return { inset, translateY, height, isVisible: height > 0 };
+}
+
+/**
+ * How far a frame whose bottom edge is at `frameBottom` reaches below a
+ * keyboard whose top edge is at `keyboardTop` (same coordinate space), in
+ * whole points. Never negative.
+ */
+export function keyboardOverlap(frameBottom: number, keyboardTop: number): number {
+  if (!Number.isFinite(frameBottom) || !Number.isFinite(keyboardTop)) return 0;
+  return Math.max(0, Math.round(frameBottom - keyboardTop));
+}
+
+/**
+ * The keyboard's top edge in root-surface coordinates, from an Android
+ * keyboard event. RN takes `screenY` from the window's visible display frame
+ * (ReactRootView.checkForKeyboardEvents), which an edge-to-edge window shares
+ * with the root surface.
+ */
+function androidKeyboardTop(event: KeyboardEvent | undefined): number | null {
+  const end = event?.endCoordinates;
+  if (!end) return null;
+  if (typeof end.screenY === 'number' && end.screenY > 0) return end.screenY;
+  if (typeof end.height === 'number' && end.height > 0) {
+    return Dimensions.get('screen').height - end.height;
+  }
+  return null;
+}
+
+/** The did* events arrive once the keyboard has landed; settle quickly. */
+const ANDROID_SETTLE_DURATION = 120;
+
+export interface AndroidKeyboardOverlap {
+  /** Animated overlap in points, for layout props (paddingBottom). */
+  inset: Animated.Value;
+  /** The overlap as a plain number. */
+  height: number;
+  isVisible: boolean;
+  /** Re-measure against the last keyboard frame. Call from the view's onLayout. */
+  remeasure: () => void;
+}
+
+/**
+ * How much of `ref`'s own frame the soft keyboard covers, on Android. Inert
+ * (always 0) on other platforms, where `useKeyboardInset` applies.
+ *
+ * Android is edge-to-edge (forced since Expo SDK 54), and an edge-to-edge
+ * window is not shrunk for the keyboard: `adjustResize` now only reports IME
+ * insets. Nothing reflows, so whatever sits at the bottom of the screen (a
+ * pinned Next button) ends up under the keyboard.
+ *
+ * Measured rather than derived from the keyboard's height. The overlap is
+ * the view's bottom edge minus the keyboard's top edge, both relative to the
+ * root surface: `measure`'s pageY leaves out the viewport offset that
+ * `measureInWindow` subtracts (the status bar, edge-to-edge), and the event's
+ * `screenY` is the visible frame's bottom. That also makes it self-correcting
+ * on a device that does still resize the window: the view's bottom lands at
+ * or above the keyboard's top, and this settles at 0 instead of
+ * double-counting.
+ *
+ * The measured view must not move with the padding this returns, so apply
+ * the inset to a child of it, not to the view itself.
+ */
+export function useAndroidKeyboardOverlap(
+  ref: RefObject<View | null>,
+  { enabled = true }: { enabled?: boolean } = {}
+): AndroidKeyboardOverlap {
+  const inset = useRef(new Animated.Value(0)).current;
+  const [height, setHeight] = useState(0);
+  const keyboardTopRef = useRef<number | null>(null);
+  const active = enabled && Platform.OS === 'android';
+
+  const apply = useCallback(
+    (next: number) => {
+      setHeight(prev => (prev === next ? prev : next));
+      Animated.timing(inset, {
+        toValue: next,
+        duration: ANDROID_SETTLE_DURATION,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    },
+    [inset]
+  );
+
+  const remeasure = useCallback(() => {
+    if (!active || keyboardTopRef.current == null) return;
+    const node = ref.current;
+    if (!node || typeof node.measure !== 'function') return;
+    node.measure((_x, _y, _width, frameHeight, _pageX, pageY) => {
+      const keyboardTop = keyboardTopRef.current;
+      // The keyboard went away while the measurement was in flight.
+      if (keyboardTop == null) return;
+      apply(keyboardOverlap(pageY + frameHeight, keyboardTop));
+    });
+  }, [active, apply, ref]);
+
+  useEffect(() => {
+    if (!active) {
+      keyboardTopRef.current = null;
+      inset.setValue(0);
+      setHeight(0);
+      return;
+    }
+    const subscriptions = [
+      Keyboard.addListener('keyboardDidShow', event => {
+        keyboardTopRef.current = androidKeyboardTop(event);
+        remeasure();
+      }),
+      Keyboard.addListener('keyboardDidHide', () => {
+        keyboardTopRef.current = null;
+        apply(0);
+      }),
+    ];
+    return () => subscriptions.forEach(s => s.remove());
+  }, [active, apply, inset, remeasure]);
+
+  return { inset, height, isVisible: height > 0, remeasure };
 }
 
 export interface KeyboardStickyViewProps {

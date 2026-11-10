@@ -22,7 +22,7 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
-import { Animated, Keyboard, View } from 'react-native';
+import { Animated, Keyboard, Platform, View } from 'react-native';
 
 // Matches jest.setup's Dimensions.get('window') mock, which both the flow's
 // measurement and useKeyboardInset's overlap read.
@@ -155,6 +155,10 @@ function createNodeMock() {
   return {
     measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => {
       if (measuredFrame) cb(0, measuredFrame.y, WINDOW_WIDTH, measuredFrame.height);
+    },
+    // Android's path (useAndroidKeyboardOverlap) reads pageY instead.
+    measure: (cb: (x: number, y: number, w: number, h: number, px: number, py: number) => void) => {
+      if (measuredFrame) cb(0, 0, WINDOW_WIDTH, measuredFrame.height, 0, measuredFrame.y);
     },
   };
 }
@@ -383,5 +387,34 @@ describe('CreateBountyFlow — keyboard inset under each host layout', () => {
 
     showKeyboard(336);
     expect(effectiveInset()).toBe(336 - 150);
+  });
+
+  describe('Android (edge-to-edge: the window is not resized for the keyboard)', () => {
+    const withAndroid = (run: () => void) => {
+      const os = Platform.OS;
+      Platform.OS = 'android';
+      try {
+        run();
+      } finally {
+        Platform.OS = os;
+      }
+    };
+
+    it('pads by how far the flow reaches under the keyboard, from keyboardDidShow', () => {
+      withAndroid(() => {
+        mockInsets = { top: 24, bottom: 48, left: 0, right: 0 };
+        render(<NeedHelpScreen activeScreen="postings" setActiveScreen={jest.fn()} />, { createNodeMock });
+        layOutFlow();
+        const flowBottom = measuredFrame!.y + measuredFrame!.height;
+
+        // iOS's event never arrives on Android; did* events do.
+        emit('keyboardDidShow', keyboardEvent(336));
+        expect(effectiveInset()).toBe(flowBottom - (WINDOW_HEIGHT - 336));
+        expect(effectiveInset()).toBeGreaterThan(0);
+
+        emit('keyboardDidHide', keyboardEvent(0));
+        expect(effectiveInset()).toBe(0);
+      });
+    });
   });
 });
