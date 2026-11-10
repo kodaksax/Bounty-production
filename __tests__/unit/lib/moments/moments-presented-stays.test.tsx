@@ -37,7 +37,10 @@ const mockProfile = {
   id_verification_status: 'verified',
   stripe_connect_charges_enabled: false,
   stripe_connect_payouts_enabled: false,
-  primary_role: 'poster',
+  // No role, not 'poster': an unpublished poster is held to post_first_bounty
+  // alone (registry.ts heldUntilFirstPost), and these tests need several
+  // moments queued at once. No role keeps the pre-hold rules.
+  primary_role: null,
   balance: 0,
   last_session_at: new Date().toISOString(),
 };

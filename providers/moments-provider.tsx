@@ -33,7 +33,8 @@ import {
 } from '../lib/moments/engine';
 import { momentsService } from '../lib/moments/momentsService';
 import { referralService } from '../lib/moments/referral-service';
-import { MOMENT_REGISTRY } from '../lib/moments/registry';
+import { hasPublishedThisRuntime, onBountyPublished } from '../lib/moments/publishSignal';
+import { FIRST_POST_MOMENT, isUnpublishedPoster, MOMENT_REGISTRY } from '../lib/moments/registry';
 import {
     effectiveLastSessionAt,
     evaluateReturningUser,
@@ -51,6 +52,7 @@ import {
     type MomentType,
 } from '../lib/moments/types';
 import { analyticsService } from '../lib/services/analytics-service';
+import { authProfileService } from '../lib/services/auth-profile-service';
 import { locationService } from '../lib/services/location-service';
 import { notificationService } from '../lib/services/notification-service';
 import { supabase } from '../lib/supabase';
@@ -111,6 +113,23 @@ function keepLocalAnswers(
     }
   }
   return merged ?? fetched;
+}
+
+/**
+ * The signed-in user's primary_role. The in-memory profile loses primary_role
+ * after any updateProfile write, which onboarding makes right after the role
+ * is picked, so fall back to the last role the auth service saw. Without this
+ * a brand-new poster reads as "no role" for her whole first session.
+ *
+ * Only 'poster' is recovered this way. Every existing rule already treats no
+ * role like a poster, so recovering it changes nothing but the first-post
+ * hold; recovering 'hunter' or 'both' would change what hunters see.
+ */
+function resolvePrimaryRole(
+  profileRole: 'poster' | 'hunter' | 'both' | null | undefined
+): 'poster' | 'hunter' | 'both' | null {
+  if (profileRole) return profileRole;
+  return authProfileService.getPrimaryRoleForAnalytics() === 'poster' ? 'poster' : null;
 }
 
 /** The tab-shell key for the Post tab (the bounty composer). */
@@ -345,8 +364,13 @@ export function MomentsProvider({
     if (userIdRef.current !== requestUserId) return;
     setNotifPermission(notifStatus);
     setLocPermission(locStatus.status);
-    setHasEngaged(engagement.hasEngaged);
-    setHasPublishedBounty(engagement.hasPublishedBounty);
+    // A publish this runtime saw counts even before its row is readable (a
+    // publish queued offline), so a refresh can't put a poster's held moments
+    // back on hold.
+    const publishedLocally = hasPublishedThisRuntime(requestUserId);
+    const hasPublished = engagement.hasPublishedBounty || publishedLocally;
+    setHasEngaged(engagement.hasEngaged || publishedLocally);
+    setHasPublishedBounty(hasPublished);
 
     // Backfill event-triggered moments for users who onboarded before this
     // wiring existed (new users get these enqueued directly in
@@ -384,7 +408,10 @@ export function MomentsProvider({
     // record of that write — see effectiveLastSessionAt.
     const lastSessionAt = effectiveLastSessionAt(requestUserId, profile?.last_session_at ?? null);
     const { isReturning, daysSinceLastSession } = evaluateReturningUser(lastSessionAt);
-    if (isReturning) {
+    // A poster who hasn't published yet is held to post_first_bounty, which
+    // already covers her return. Enqueuing here would leave a "Welcome back"
+    // waiting to surface after her first publish, long after she came back.
+    if (isReturning && !isUnpublishedPoster(resolvePrimaryRole(profile?.primary_role), hasPublished)) {
       momentsService.enqueue(requestUserId, 'inactive_user_return', { daysSinceLastSession });
     }
     if (shouldRecordSession(lastSessionAt)) {
@@ -474,6 +501,25 @@ export function MomentsProvider({
     []
   );
 
+  // A publish from the composer counts at once, not on the next refresh(): it
+  // releases a poster's held moments while she's still on the confirmation
+  // screen, which is when the notification ask is meant to arrive. The
+  // database trigger completes post_first_bounty server-side; this mirrors it
+  // locally so the queue doesn't offer it again in the meantime.
+  useEffect(() => {
+    if (!userId) return;
+    return onBountyPublished(publishedUserId => {
+      if (publishedUserId !== userIdRef.current || !isPrimary()) return;
+      setHasPublishedBounty(true);
+      setHasEngaged(true);
+      patchState(FIRST_POST_MOMENT, existing =>
+        existing.status === 'completed'
+          ? {}
+          : { status: 'completed', completedAt: new Date().toISOString() }
+      );
+    });
+  }, [userId, isPrimary, patchState]);
+
   // Re-evaluate whenever the app comes back to the foreground — catches
   // permission grants/denials and profile edits made outside a live session
   // (e.g. in OS Settings) without requiring a full remount.
@@ -507,7 +553,7 @@ export function MomentsProvider({
         stripeIdentityStatus: profile.stripe_identity_status ?? null,
         stripeConnectChargesEnabled: !!profile.stripe_connect_charges_enabled,
         stripeConnectPayoutsEnabled: !!profile.stripe_connect_payouts_enabled,
-        primaryRole: profile.primary_role ?? null,
+        primaryRole: resolvePrimaryRole(profile.primary_role),
         balance: profile.balance ?? 0,
       },
       permissions: {

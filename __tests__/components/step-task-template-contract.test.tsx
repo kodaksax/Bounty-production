@@ -192,9 +192,9 @@ describe('StepTask "What exactly, and when?" field', () => {
     expect(nextDisabled(getByLabelText)).toBe(true);
   });
 
-  it('counts down the characters still needed', () => {
+  it('counts down the letters still needed', () => {
     const { getByText } = renderStep({ title: 'Walk my dog', description: 'Saturday 9am' });
-    expect(getByText('8 more characters')).toBeTruthy();
+    expect(getByText('8 more letters')).toBeTruthy();
   });
 
   it('still requires a valid title', () => {

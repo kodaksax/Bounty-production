@@ -30,6 +30,7 @@ import { useAuthContext } from 'hooks/use-auth-context';
 import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
 import { markPosterActivated } from 'lib/analytics/lifecycle';
+import { notifyBountyPublished } from 'lib/moments/publishSignal';
 import { analyticsService } from 'lib/services/analytics-service';
 import { markDraftAbandoned } from 'lib/storage/abandoned-draft';
 import { useStripe } from 'lib/stripe-context';
@@ -45,10 +46,11 @@ import {
   Animated,
   AppState,
   Dimensions,
+  Platform,
   View,
 } from 'react-native';
 import { ScreenLoader } from '../../../components/ui/screen-loader';
-import { useKeyboardInset } from '../../../components/ui/keyboard-avoiding';
+import { useAndroidKeyboardOverlap, useKeyboardInset } from '../../../components/ui/keyboard-avoiding';
 import { useTabPager } from '../../../components/ui/tab-pager';
 
 interface CreateBountyFlowProps {
@@ -183,7 +185,14 @@ export function CreateBountyFlow({
       setKeyboardOffset(prev => (prev === below ? prev : below));
     });
   };
-  const { inset: keyboardInset } = useKeyboardInset({ offset: keyboardOffset });
+  const { inset: iosKeyboardInset } = useKeyboardInset({ offset: keyboardOffset });
+  // Android draws edge-to-edge and the window no longer shrinks for the
+  // keyboard, so there the overlap is measured off this same root instead.
+  // Without it every step's Next sat under the keyboard (Galaxy A23 replay,
+  // 2026-10-14).
+  const { inset: androidKeyboardInset, remeasure: remeasureAndroidKeyboard } =
+    useAndroidKeyboardOverlap(flowRootRef);
+  const keyboardInset = Platform.OS === 'android' ? androidKeyboardInset : iosKeyboardInset;
   // The authoritative copy of the in-progress detail edits. `detailDraft`
   // state drives rendering; this ref is what actually gets persisted. They
   // exist separately because the step screens patch and advance within a
@@ -402,6 +411,9 @@ export function CreateBountyFlow({
         surface: meta.surface,
         composer_screen: composerScreenForStep(TOTAL_STEPS),
       });
+      // Releases the moments a poster's first bounty was holding back, and
+      // lets the notification ask follow right away (lib/moments/publishSignal.ts).
+      notifyBountyPublished(session?.user?.id);
       // Hand off to the confirmation screen rather than leaving the flow —
       // onComplete now fires from its Continue button, so the host screen
       // still navigates to the feed, just one screen later.
@@ -911,7 +923,10 @@ export function CreateBountyFlow({
     <View
       ref={flowRootRef}
       testID="create-bounty-flow-root"
-      onLayout={measureKeyboardOffset}
+      onLayout={() => {
+        measureKeyboardOffset();
+        remeasureAndroidKeyboard();
+      }}
       style={{ flex: 1 }}
     >
     <Animated.View
