@@ -41,36 +41,40 @@ export const deviceService = {
             // Let's try to fetch if we have a device for this user with this name (simple heuristic)
             // A robust implementation would store a generated 'local_device_id' in SecureStore.
 
-            const { data: existingDevice } = await supabase
+            // maybeSingle, not single: on a device's first sign-in there is no
+            // row yet, and single() turns "no row" into a 406 response.
+            const { data: existingDevice, error: lookupError } = await supabase
                 .from('user_devices')
-                .select('*')
+                .select('id')
                 .eq('user_id', user.id)
                 .eq('device_name', deviceName)
                 .eq('is_active', true)
                 .order('last_active', { ascending: false })
                 .limit(1)
-                .single();
+                .maybeSingle();
 
+            // A failed read says nothing about whether the row exists; inserting
+            // anyway would add a duplicate on every flaky launch.
+            if (lookupError) throw lookupError;
+
+            const now = new Date().toISOString();
             if (existingDevice) {
-                // Update last active
-                await supabase
+                const { error } = await supabase
                     .from('user_devices')
-                    .update({
-                        last_active: new Date().toISOString(),
-                        is_active: true
-                    })
+                    .update({ last_active: now, is_active: true })
                     .eq('id', existingDevice.id);
+                if (error) throw error;
             } else {
-                // Create new
-                await supabase
+                const { error } = await supabase
                     .from('user_devices')
                     .insert({
                         user_id: user.id,
                         device_name: deviceName,
                         device_type: deviceType,
                         is_active: true,
-                        last_active: new Date().toISOString()
+                        last_active: now,
                     });
+                if (error) throw error;
             }
         } catch (error) {
             console.error('[DeviceService] Error registering device:', error);
@@ -136,14 +140,17 @@ export const deviceService = {
 
             const currentDeviceName = Device.modelName || `Unknown ${Platform.OS} Device`;
 
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from('user_devices')
                 .select('is_active')
                 .eq('user_id', user.id)
                 .eq('device_name', currentDeviceName)
                 .eq('is_active', true)
-                .single();
+                .limit(1)
+                .maybeSingle();
 
+            // A failed read is not a revocation (see the catch below).
+            if (error) return true;
             // If no active record found, return false (revoked)
             return !!data;
         } catch (error) {

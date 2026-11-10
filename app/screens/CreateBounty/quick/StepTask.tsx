@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
   Animated,
+  Keyboard,
+  type KeyboardEvent,
   type LayoutChangeEvent,
   Platform,
   ScrollView,
@@ -30,7 +32,12 @@ import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { InfoTooltip } from '../../../../components/ui/tooltip';
 import { trackTrustContentViewed } from '../../../../lib/analytics/trust-content';
-import { composerScreenForStep, type ComposerTelemetry, type MissingField } from '../composerTelemetry';
+import {
+  composerScreenForStep,
+  ctaVisibilityAboveKeyboard,
+  type ComposerTelemetry,
+  type MissingField,
+} from '../composerTelemetry';
 import { BlockedTapCapture } from './BlockedTapCapture';
 import { StepProgressRow, useStepEntrance } from './QuickStepLayout';
 import { SuggestionPlaceholder } from './SuggestionPlaceholder';
@@ -65,6 +72,10 @@ const FIELD_MARGIN = 12;
 // A blur followed by a focus (moving title → details) shouldn't unpin and
 // re-pin the footer for a frame in between.
 const BLUR_SETTLE_MS = 120;
+
+// keyboardDidShow can land while the flow root is still shrinking and the
+// footer is still pinning; measuring a beat later reads the settled layout.
+export const KEYBOARD_MEASURE_DELAY_MS = 80;
 
 interface Box {
   y: number;
@@ -119,7 +130,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const showPaymentPromise = usePaymentPromiseCopy();
   // Scales off the viewport width so the headline stays proportionate from
   // small phones up to tablets. 375 is the reference width.
-  const { width } = useWindowDimensions();
+  const { width, height: windowHeight } = useWindowDimensions();
   const scale = Math.min(Math.max(width / 375, 0.85), 1.3);
   const styles = useMemo(() => makeStyles(theme, scale), [theme, scale]);
   const entrance = useStepEntrance();
@@ -278,6 +289,46 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
     []
   );
 
+  // ---- post_keyboard_shown: is Next on screen once the keyboard is up? ----
+  // Whichever copy of the footer is rendered (in the card, or pinned above the
+  // keyboard while a field has focus) holds this ref.
+  const ctaRef = useRef<View | null>(null);
+  const windowHeightRef = useRef(windowHeight);
+  windowHeightRef.current = windowHeight;
+  useEffect(() => {
+    if (!telemetry) return;
+    let measureTimer: ReturnType<typeof setTimeout> | null = null;
+    const onShow = (e: KeyboardEvent) => {
+      const keyboardTop = e?.endCoordinates?.screenY;
+      const keyboardHeight = e?.endCoordinates?.height ?? 0;
+      if (typeof keyboardTop !== 'number') return;
+      if (measureTimer) clearTimeout(measureTimer);
+      measureTimer = setTimeout(() => {
+        measureTimer = null;
+        const node = ctaRef.current as unknown as {
+          measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void;
+        } | null;
+        if (!node?.measureInWindow) return;
+        node.measureInWindow((_x, y, _w, h) => {
+          const { visible, overlapPx } = ctaVisibilityAboveKeyboard({ y, height: h }, keyboardTop);
+          telemetry.keyboardShown({
+            step,
+            focusedField: focusedFieldRef.current,
+            ctaVisible: visible,
+            overlapPx,
+            keyboardHeight,
+            windowHeight: windowHeightRef.current,
+          });
+        });
+      }, KEYBOARD_MEASURE_DELAY_MS);
+    };
+    const subscription = Keyboard.addListener?.('keyboardDidShow', onShow);
+    return () => {
+      if (measureTimer) clearTimeout(measureTimer);
+      subscription?.remove?.();
+    };
+  }, [telemetry, step]);
+
   const focusField = (field: Field) => {
     (field === 'title' ? titleInputRef : detailInputRef).current?.focus();
     setTimeout(() => ensureFieldVisible(field), 0);
@@ -387,6 +438,8 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
       </Text>
       <BlockedTapCapture blocked={!canContinue} onBlockedTap={handleNextBlocked}>
         <TouchableOpacity
+          ref={ctaRef}
+          testID="step-task-next"
           onPress={handleNextPress}
           disabled={!canContinue}
           activeOpacity={0.85}

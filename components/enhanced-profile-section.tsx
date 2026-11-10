@@ -16,6 +16,7 @@ import { blockingService } from 'lib/services/blocking-service';
 import { MAX_PORTFOLIO_ITEMS, portfolioService } from 'lib/services/portfolio-service';
 import type { PortfolioItem } from 'lib/types';
 import { normalizeAuthProfile, type NormalizedProfile } from 'lib/utils/normalize-profile';
+import { isUuid } from 'lib/utils/is-uuid';
 import { MIN_RATING_SAMPLE } from 'lib/utils/trust-summary';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -247,7 +248,7 @@ export function EnhancedProfileSection({
     deleteItem,
     addItem,
     refresh,
-  } = usePortfolio(resolvedUserId, isOwnProfile);
+  } = usePortfolio(isUuid(resolvedUserId) ? resolvedUserId : null, isOwnProfile);
 
   const {
     pickAndUpload,
@@ -1001,7 +1002,7 @@ export function PortfolioSection({
     deleteItem,
     addItem,
     refresh,
-  } = usePortfolio(resolvedUserId, isOwnProfile);
+  } = usePortfolio(isUuid(resolvedUserId) ? resolvedUserId : null, isOwnProfile);
 
   const {
     pickAndUpload,

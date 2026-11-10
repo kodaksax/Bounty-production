@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PortfolioItem } from '../lib/types';
 import { portfolioService } from '../lib/services/portfolio-service';
 import { migrateLegacyPortfolioItems } from '../lib/services/portfolio-legacy-migration';
+import { isUuid } from '../lib/utils/is-uuid';
 
 interface UsePortfolioResult {
   items: PortfolioItem[];
@@ -17,13 +18,22 @@ interface UsePortfolioResult {
  * migration: it only makes sense to run for the signed-in user's own items,
  * never while a poster is viewing a hunter's profile (this hook is shared by
  * both call sites — see components/enhanced-profile-section.tsx).
+ *
+ * @param userId The profile owner's id. Until it is a real id (the signed-in
+ * user's profile can render before auth resolves) nothing is fetched and the
+ * list is empty; the hook fetches as soon as the id arrives.
  */
-export function usePortfolio(userId: string, isOwnProfile = false): UsePortfolioResult {
+export function usePortfolio(userId: string | null | undefined, isOwnProfile = false): UsePortfolioResult {
   const [items, setItems] = useState<PortfolioItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchItems = async () => {
+    if (!isUuid(userId)) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
