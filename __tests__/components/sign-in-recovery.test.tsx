@@ -166,8 +166,8 @@ describe('sign-in recovery after a failed attempt', () => {
 
     const utils = render(<SignInForm />);
     fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
-    fireEvent.press(utils.getByLabelText('Use email code'));
-    fireEvent.press(utils.getByLabelText('Send email code'));
+    // One tap: the email is already filled in, so this sends the code.
+    fireEvent.press(utils.getByLabelText('Email me a code'));
 
     await waitFor(() =>
       expect(signInWithOtp).toHaveBeenCalledWith({
@@ -195,8 +195,8 @@ describe('sign-in recovery after a failed attempt', () => {
 
     const utils = render(<SignInForm />);
     fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
-    fireEvent.press(utils.getByLabelText('Use email code'));
-    fireEvent.press(utils.getByLabelText('Send email code'));
+    // One tap: the email is already filled in, so this sends the code.
+    fireEvent.press(utils.getByLabelText('Email me a code'));
     await waitFor(() => expect(utils.getByLabelText('Email sign-in code')).toBeTruthy());
 
     fireEvent.changeText(utils.getByLabelText('Email sign-in code'), '12345678');
@@ -211,8 +211,8 @@ describe('sign-in recovery after a failed attempt', () => {
 
     const utils = render(<SignInForm />);
     fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
-    fireEvent.press(utils.getByLabelText('Use email code'));
-    fireEvent.press(utils.getByLabelText('Send email code'));
+    // One tap: the email is already filled in, so this sends the code.
+    fireEvent.press(utils.getByLabelText('Email me a code'));
     await waitFor(() => expect(utils.getByLabelText('Email sign-in code')).toBeTruthy());
 
     fireEvent.changeText(utils.getByLabelText('Email sign-in code'), '123');
@@ -228,8 +228,8 @@ describe('sign-in recovery after a failed attempt', () => {
 
     const utils = render(<SignInForm />);
     fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
-    fireEvent.press(utils.getByLabelText('Use email code'));
-    fireEvent.press(utils.getByLabelText('Send email code'));
+    // One tap: the email is already filled in, so this sends the code.
+    fireEvent.press(utils.getByLabelText('Email me a code'));
     await waitFor(() => expect(utils.getByLabelText('Email sign-in code')).toBeTruthy());
 
     fireEvent.changeText(utils.getByLabelText('Email sign-in code'), '123456');
@@ -237,6 +237,109 @@ describe('sign-in recovery after a failed attempt', () => {
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith('/auth/mfa-challenge')
     );
+  });
+
+  it('asks for the email first when "Email me a code" is tapped with it empty', () => {
+    const utils = render(<SignInForm />);
+
+    fireEvent.press(utils.getByLabelText('Email me a code'));
+
+    expect(signInWithOtp).not.toHaveBeenCalled();
+    expect(
+      utils.getByText('Enter your email, then tap "Email me a sign-in code".')
+    ).toBeTruthy();
+    // Now in code mode: the send button and the way back to password.
+    expect(utils.getByLabelText('Send email code')).toBeTruthy();
+    expect(utils.getByLabelText('Use password instead')).toBeTruthy();
+  });
+
+  it('reports auth_otp_sent from the sign-in form without the email address', async () => {
+    signInWithOtp.mockResolvedValue({ error: null });
+    const { analyticsService } = jest.requireMock('lib/services/analytics-service');
+    analyticsService.trackEvent.mockClear();
+
+    const utils = render(<SignInForm />);
+    fireEvent.changeText(utils.getByPlaceholderText('you@example.com'), 'a@b.test');
+    fireEvent.press(utils.getByLabelText('Email me a code'));
+
+    await waitFor(() =>
+      expect(analyticsService.trackEvent).toHaveBeenCalledWith('auth_otp_sent', {
+        method: 'email_otp',
+        source: 'sign_in_form',
+        is_resend: false,
+      })
+    );
+    expect(JSON.stringify(analyticsService.trackEvent.mock.calls)).not.toContain('a@b.test');
+  });
+
+  it('opens on the code field when sign-up handed over an existing account, and signs in', async () => {
+    verifyOtp.mockResolvedValue({
+      data: {
+        session: {
+          ...GOOD_SESSION.session,
+          user: { id: 'user-web', user_metadata: { source: 'bounty_checkout_web' } },
+        },
+      },
+      error: null,
+    });
+    mfaLevel.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null });
+    const { analyticsService } = jest.requireMock('lib/services/analytics-service');
+    analyticsService.trackEvent.mockClear();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const handoff = require('../../lib/auth/email-code-sign-in');
+    handoff.setEmailCodeHandoff({ email: 'poster@web.test', source: 'signup_existing_account' });
+
+    const utils = render(<SignInForm />);
+
+    // No password step, no second send: the code already went out.
+    expect(utils.getByText('Check your email')).toBeTruthy();
+    expect(utils.queryByPlaceholderText('Password')).toBeNull();
+    expect(signInWithOtp).not.toHaveBeenCalled();
+
+    fireEvent.changeText(utils.getByLabelText('Email sign-in code'), '654321');
+    fireEvent.press(utils.getByLabelText('Verify email code'));
+
+    await waitFor(() =>
+      expect(verifyOtp).toHaveBeenCalledWith({
+        email: 'poster@web.test',
+        token: '654321',
+        type: 'email',
+      })
+    );
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+    expect(analyticsService.trackEvent).toHaveBeenCalledWith('auth_otp_verified', {
+      method: 'email_otp',
+      source: 'signup_existing_account',
+      account_origin: 'web_checkout',
+    });
+    expect(JSON.stringify(analyticsService.trackEvent.mock.calls)).not.toContain('poster@web.test');
+    // Used up: the next visit to sign-in is an ordinary one.
+    expect(handoff.peekEmailCodeHandoff()).toBeNull();
+  });
+
+  it('keeps the handoff source when the person asks for a new code', async () => {
+    signInWithOtp.mockResolvedValue({ error: null });
+    const { analyticsService } = jest.requireMock('lib/services/analytics-service');
+    analyticsService.trackEvent.mockClear();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const handoff = require('../../lib/auth/email-code-sign-in');
+    handoff.setEmailCodeHandoff({ email: 'poster@web.test', source: 'signup_existing_account' });
+
+    const utils = render(<SignInForm />);
+    fireEvent.press(utils.getByText('Send a new code'));
+
+    await waitFor(() =>
+      expect(signInWithOtp).toHaveBeenCalledWith({
+        email: 'poster@web.test',
+        options: { shouldCreateUser: false },
+      })
+    );
+    expect(analyticsService.trackEvent).toHaveBeenCalledWith('auth_otp_sent', {
+      method: 'email_otp',
+      source: 'signup_existing_account',
+      is_resend: true,
+    });
+    handoff.clearEmailCodeHandoff();
   });
 
   it('gives a back control that leaves the auth flow', () => {

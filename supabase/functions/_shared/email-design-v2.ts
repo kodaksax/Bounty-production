@@ -212,6 +212,51 @@ function compact(raw: Record<string, string>): Record<string, string> {
 //   admin    — fn_notify_admins via send-notification-email (data.adminAlert)
 //   contact  — contact-support (a user's in-app message; reply-to is the user)
 
+// ---------------------------------------------------------------------------
+// "Get the app" block (APP_BLOCK / APP_BLOCK_TEXT on "Bounty v2 · Bounty posted").
+//
+// Website checkout creates the poster's account with no password. When that
+// person installs the app, "Email me a code" on the sign-in screen with this
+// same address is the one-step way in, so the "You're live" email says so to
+// posters who have no app yet. Mirrors getTheApp() in
+// scripts/emails/templates.mjs byte for byte (__tests__/unit/email-design-v2
+// .test.ts holds the two together).
+// ---------------------------------------------------------------------------
+
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6756679797'
+export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=app.bountyfinder.BOUNTYExpo'
+
+const APP_LINK_STYLE = 'color:#00742A;font-weight:600;text-decoration:underline;'
+const APP_STRONG = (t: string) => `<strong class="c-ink" style="color:#121A15;font-weight:700;">${t}</strong>`
+const APP_LINK = (href: string, t: string) => `<a href="${href}" target="_blank" class="c-link" style="${APP_LINK_STYLE}">${t}</a>`
+
+/** `email` is raw; it is escaped here for the HTML part. */
+export function getTheAppBlock(email: string): { html: string; text: string } {
+  const raw = String(email ?? '').trim()
+  const addr = raw ? `, ${APP_STRONG(escapeHtml(raw))}` : ''
+  const html =
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 24px;"><tr>
+` +
+    `<td class="c-tint-n" style="padding:16px 18px;background-color:#EFE9E1;border-radius:12px;">
+` +
+    `<p class="c-tint-n-t" style="margin:0 0 4px;font-family:${FONT};font-size:11px;line-height:16px;color:#3A403B;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;">Get the app</p>
+` +
+    `<p class="c-tint-n-t" style="margin:0;font-family:${FONT};font-size:15px;line-height:23px;color:#121A15;">` +
+    `Download Bounty from the ${APP_LINK(APP_STORE_URL, 'App Store')} or ${APP_LINK(PLAY_STORE_URL, 'Google Play')}. ` +
+    `On the sign-in screen, tap ${APP_STRONG('Email me a code')} and use this same address${addr}. ` +
+    `We'll email you a code to type in. No password needed.</p>
+` +
+    `</td></tr></table>`
+  const text =
+    `Get the app
+` +
+    `Download Bounty from the App Store (${APP_STORE_URL}) or Google Play (${PLAY_STORE_URL}).
+` +
+    `On the sign-in screen, tap "Email me a code" and use this same address${raw ? `, ${raw}` : ''}. ` +
+    `We'll email you a code to type in. No password needed.`
+  return { html, text }
+}
+
 export type TeamAlertKind = 'support' | 'admin' | 'contact'
 
 const FONT = "Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"

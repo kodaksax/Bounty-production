@@ -101,6 +101,13 @@ enable_signup = true
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
+# Email sign-in codes: signInWithOtp, then verifyOtp type "email" (sign-in
+# form, and sign-up's "You already have a Bounty account" screen, whose copy
+# promises a 6-digit code). This file only drives `supabase start`; hosted
+# projects set these in Dashboard > Authentication > Providers > Email
+# ("Email OTP Length", "Email OTP Expiration"), and they must match.
+otp_length = 6
+otp_expiry = 3600
 
 [functions]
 

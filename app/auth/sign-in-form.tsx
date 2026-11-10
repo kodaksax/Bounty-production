@@ -24,6 +24,15 @@ import { Button } from '../../components/ui/button';
 import { CaptchaChallenge } from '../../components/ui/captcha-challenge';
 import { GoogleLogo } from '../../components/ui/google-logo';
 import { useFormSubmission } from '../../hooks/useFormSubmission';
+import {
+    clearEmailCodeHandoff,
+    EMAIL_CODE_PATTERN,
+    emailCodeWaitMessage,
+    type EmailCodeSource,
+    peekEmailCodeHandoff,
+    requestEmailSignInCode,
+    verifyEmailSignInCode,
+} from '../../lib/auth/email-code-sign-in';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { capture as posthogCapture, identify as posthogIdentify } from '../../lib/posthog';
 import { ROUTES } from '../../lib/routes';
@@ -119,10 +128,15 @@ export function SignInForm() {
         : ROUTES.AUTH.MFA_CHALLENGE) as Href
     );
   };
-  const [identifier, setIdentifier] = useState(''); // email or username
+  // Sign-up hands over here after it already sent a code to an address that
+  // has an account (409 email_already_registered) — open straight on the
+  // code field instead of asking for a password the person may never have had.
+  const [codeHandoff] = useState(() => peekEmailCodeHandoff());
+  const emailCodeSourceRef = useRef<EmailCodeSource>(codeHandoff?.source ?? 'sign_in_form');
+  const [identifier, setIdentifier] = useState(codeHandoff?.email ?? ''); // email or username
   const [password, setPassword] = useState('');
-  const [emailCodeMode, setEmailCodeMode] = useState(false);
-  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [emailCodeMode, setEmailCodeMode] = useState(Boolean(codeHandoff));
+  const [emailCodeSent, setEmailCodeSent] = useState(Boolean(codeHandoff));
   const [emailCode, setEmailCode] = useState('');
   const [emailCodeLoading, setEmailCodeLoading] = useState(false);
   // Shown beside the code field: the shared banner sits above the email
@@ -640,6 +654,8 @@ export function SignInForm() {
   // Prefill the last-used email on mount (pure convenience — unrelated to
   // session persistence, which is always-on now).
   useEffect(() => {
+    // The handoff already carries the address the code went to.
+    if (codeHandoff) return;
     const loadSavedEmail = async () => {
       try {
         const savedEmail = await storage.getItem('lastUsedEmail');
@@ -651,6 +667,7 @@ export function SignInForm() {
       }
     };
     loadSavedEmail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Restore the persisted failed-attempt throttle on mount so a remount does
@@ -873,14 +890,10 @@ export function SignInForm() {
     setSocialAuthError(null);
     setEmailCodeError(null);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: false },
-      });
-      if (error) throw error;
+      await requestEmailSignInCode(email, emailCodeSourceRef.current, { isResend: emailCodeSent });
       setEmailCodeSent(true);
     } catch (error) {
-      const message = getUserFriendlyError(error).message;
+      const message = emailCodeWaitMessage(error) ?? getUserFriendlyError(error).message;
       if (emailCodeSent) setEmailCodeError(message);
       else setSocialAuthError(message);
     } finally {
@@ -892,7 +905,7 @@ export function SignInForm() {
     const email = identifier.trim().toLowerCase();
     // Supabase's email OTP length is a project setting (6–10 digits), so
     // don't hard-code 6 here or longer codes are truncated and rejected.
-    if (!/^\d{6,10}$/.test(emailCode.trim())) {
+    if (!EMAIL_CODE_PATTERN.test(emailCode.trim())) {
       setEmailCodeError('Enter the full code from your email.');
       return;
     }
@@ -900,13 +913,13 @@ export function SignInForm() {
     setSocialAuthError(null);
     setEmailCodeError(null);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email,
-        token: emailCode.trim(),
-        type: 'email',
-      });
-      if (error) throw error;
-      if (!data.session) throw new Error('No session was returned. Request a new code and try again.');
+      await verifyEmailSignInCode(email, emailCode.trim(), emailCodeSourceRef.current);
+      clearEmailCodeHandoff();
+      try {
+        await storage.setItem('lastUsedEmail', email);
+      } catch {
+        /* prefill is a convenience */
+      }
 
       const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       if (aalError) throw aalError;
@@ -1216,6 +1229,9 @@ export function SignInForm() {
                     setIdentifier(text);
                     setEmailCodeSent(false);
                     setEmailCode('');
+                    // A different address is a fresh sign-in, not the handoff's.
+                    clearEmailCodeHandoff();
+                    emailCodeSourceRef.current = 'sign_in_form';
                     if (fieldErrors.identifier) {
                       setFieldErrors(prev => ({ ...prev, identifier: '' }));
                     }
@@ -1343,6 +1359,13 @@ export function SignInForm() {
 
               {emailCodeMode && emailCodeSent && (
                 <View>
+                  <Text className="text-base font-semibold mb-1" style={{ color: theme.text }}>
+                    Check your email
+                  </Text>
+                  <Text className="text-sm mb-3" style={{ color: theme.textSecondary }}>
+                    We sent a sign-in code to {identifier.trim().toLowerCase()}. Type it here. It
+                    can take a minute to arrive, so check spam too.
+                  </Text>
                   <TextInput
                     autoFocus
                     value={emailCode}
@@ -1399,22 +1422,59 @@ export function SignInForm() {
                 </Button>
               )}
 
-              <TouchableOpacity
-                onPress={() => {
-                  setEmailCodeMode((mode) => !mode);
-                  setEmailCodeSent(false);
-                  setEmailCode('');
-                  setEmailCodeError(null);
-                  setSocialAuthError(null);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={emailCodeMode ? 'Use password instead' : 'Use email code'}
-                className="items-center py-2"
-              >
-                <Text style={{ color: theme.textSecondary }}>
-                  {emailCodeMode ? 'Use password instead' : 'Sign in with an email code'}
-                </Text>
-              </TouchableOpacity>
+              {emailCodeMode ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setEmailCodeMode(false);
+                    setEmailCodeSent(false);
+                    setEmailCode('');
+                    setEmailCodeError(null);
+                    setSocialAuthError(null);
+                    clearEmailCodeHandoff();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Use password instead"
+                  className="items-center py-2"
+                >
+                  <Text style={{ color: theme.textSecondary }}>Use password instead</Text>
+                </TouchableOpacity>
+              ) : (
+                // The way in for accounts with no password — most often the
+                // one website checkout created. Sits above Apple and Google,
+                // in plain words, and sends the code in the same tap when an
+                // email is already filled in.
+                <View>
+                  <Button
+                    // Same iOS stale-hit-frame guard as Sign In above.
+                    key={authError || socialAuthError ? 'email-code-after-error' : 'email-code'}
+                    variant="outline"
+                    onPress={() => {
+                      setEmailCodeMode(true);
+                      setEmailCodeSent(false);
+                      setEmailCode('');
+                      setEmailCodeError(null);
+                      setSocialAuthError(null);
+                      if (authError) resetError();
+                      if (validateEmail(identifier.trim().toLowerCase())) {
+                        setFieldErrors(prev => ({
+                          ...prev,
+                          identifier: 'Enter your email, then tap "Email me a sign-in code".',
+                        }));
+                        return;
+                      }
+                      void sendEmailCode();
+                    }}
+                    disabled={isSubmitting || emailCodeLoading}
+                    accessibilityLabel="Email me a code"
+                    accessibilityHint="We email you a code to sign in. No password needed."
+                  >
+                    Email me a code
+                  </Button>
+                  <Text className="text-xs text-center mt-2" style={{ color: theme.textSecondary }}>
+                    No password? We&apos;ll email you a code to sign in.
+                  </Text>
+                </View>
+              )}
 
               {Platform.OS === 'ios' && (
                 <View style={{ marginTop: 12 }}>

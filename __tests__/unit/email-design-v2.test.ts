@@ -1,5 +1,7 @@
+import { execFileSync } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
+import { pathToFileURL } from 'url'
 import {
   V2_TEMPLATES,
   TONES,
@@ -7,6 +9,7 @@ import {
   buildTeamAlertSend,
   clip,
   detailRowsHtml,
+  getTheAppBlock,
   isDesignV2Enabled,
   preheaderFrom,
   stampFor,
@@ -170,5 +173,42 @@ describe('contract with the Resend templates (emails/manifest.json)', () => {
     for (const k of Object.keys(buildNoticeSend({ ...full, cta: null }).variables)) expect(declared('bounty-v2-notice-info')).toContain(k)
     const team = buildTeamAlertSend({ kind: 'admin', title: 't', body: 'b', severity: 'high', alertType: 'x', details: [['k', 'v']] })
     for (const k of Object.keys(team.variables)) expect(declared('bounty-v2-team-alert')).toContain(k)
+  })
+})
+
+// Website-checkout accounts have no password; the "You're live" email tells
+// posters with no app to use "Email me a code" with the same address.
+describe('"Get the app" block (APP_BLOCK on bounty-v2-posted)', () => {
+  const manifest: Array<{ alias: string; variables: Array<{ key: string; html: boolean; fallbackValue: string }> }> = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '../../emails/manifest.json'), 'utf8')
+  )
+  const posted = manifest.find((t) => t.alias === 'bounty-v2-posted')!
+
+  test('the template declares both parts with a blank fallback, so app users see nothing', () => {
+    const block = posted.variables.find((v) => v.key === 'APP_BLOCK')!
+    const text = posted.variables.find((v) => v.key === 'APP_BLOCK_TEXT')!
+    expect(block).toMatchObject({ html: true, fallbackValue: ' ' })
+    expect(text).toMatchObject({ html: false, fallbackValue: ' ' })
+  })
+
+  test('names the button, the address and both stores, and escapes the address', () => {
+    const { html, text } = getTheAppBlock("o'neil+<x>@example.com")
+    expect(html).toContain('Email me a code')
+    expect(html).toContain('o&#39;neil+&lt;x&gt;@example.com')
+    expect(html).not.toContain('<x>')
+    expect(html).toContain('https://apps.apple.com/app/id6756679797')
+    expect(html).toContain('https://play.google.com/store/apps/details?id=app.bountyfinder.BOUNTYExpo')
+    expect(text).toContain('"Email me a code"')
+    expect(text).toContain("o'neil+<x>@example.com")
+  })
+
+  test("matches the build script's markup byte for byte", () => {
+    const script = pathToFileURL(path.join(__dirname, '../../scripts/emails/templates.mjs')).href
+    const fromScript = execFileSync(
+      process.execPath,
+      ['--input-type=module', '-e', `import(${JSON.stringify(script)}).then((m) => process.stdout.write(m.getTheApp('a@b.co')))`],
+      { encoding: 'utf8' }
+    )
+    expect(getTheAppBlock('a@b.co').html).toBe(fromScript)
   })
 })
