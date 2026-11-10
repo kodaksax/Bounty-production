@@ -742,7 +742,9 @@ Deno.serve(async (req: Request) => {
         supabaseAdmin.from('profiles').select('stripe_customer_id').eq('id', authedUserId).maybeSingle()
       )) as any
       const nowSeconds = Math.floor(Date.now() / 1000)
-      const session = await stripe.checkout.sessions.create(
+      let session: any
+      try {
+        session = await stripe.checkout.sessions.create(
         buildShortfallSessionParams({
           shortfallDollars: hire.shortfall,
           bountyTitle: String(hire.bounty.title ?? 'your bounty'),
@@ -760,7 +762,16 @@ Deno.serve(async (req: Request) => {
           nowSeconds,
         }) as any,
         { idempotencyKey: shortfallIdempotencyKey(requestId, shortfallChargeCents(hire.shortfall), nowSeconds) }
-      )
+        )
+      } catch (stripeErr: any) {
+        // Stripe's own text is for developers; the poster gets a plain answer.
+        console.error('[bounty-checkout] shortfall session failed', { requestId, type: stripeErr?.type, message: stripeErr?.message })
+        return jsonResponse(
+          { error: 'We couldn’t start checkout. Nothing was charged. Please try again.', code: 'stripe_session_failed' },
+          502,
+          corsHeaders
+        )
+      }
       return jsonResponse(
         { checkout_url: session.url, session_id: session.id, shortfall: hire.shortfall, amount_cents: session.amount_total },
         200,
