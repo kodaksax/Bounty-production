@@ -142,6 +142,7 @@ Deno.serve(async (req: Request) => {
       if (heldErr) console.error('[poster-web] held post lookup failed', { userId, code: heldErr.code })
       const heldPosts = ((held ?? []) as Json[]).map(summarizeHeldPost)
 
+      const savedCard = await hasSavedCard(admin, userId)
       const { data: rows, error } = await admin
         .from('bounties')
         .select('id, title, amount, status, work_type, location, created_at, accepted_by, funding_mode, is_for_honor')
@@ -183,7 +184,7 @@ Deno.serve(async (req: Request) => {
             pending_applicants: pendingApplicants,
             has_submission: hasSubmission,
             status_info: explainBountyStatus(b.status as string, { pendingApplicants, hasSubmission }),
-            payment: explainPayment((paymentBy.get(id) as Json) ?? null, b),
+            payment: explainPayment((paymentBy.get(id) as Json) ?? null, b, { hasSavedCard: savedCard }),
           }
         }),
         support_email: SUPPORT_EMAIL,
@@ -264,7 +265,7 @@ Deno.serve(async (req: Request) => {
           accepted_request_id: bounty.accepted_request_id ?? null,
           status_info: explainBountyStatus(bounty.status as string, { pendingApplicants, hasSubmission }),
         },
-        payment: explainPayment((payment as Json) ?? null, bounty),
+        payment: explainPayment((payment as Json) ?? null, bounty, { hasSavedCard: await hasSavedCard(admin, userId) }),
         applicants: requests.map((r) => ({
           request_id: r.id,
           status: r.status,
@@ -670,6 +671,17 @@ interface OwnedBounty {
   accepted_request_id: string | null
   funding_mode: string | null
   is_for_honor: boolean | null
+}
+
+// Whether the poster has a card on file, for "Card saved" before a hire. A
+// failed read says no, which still describes the money truthfully.
+async function hasSavedCard(admin: any, userId: string): Promise<boolean> {
+  const { count, error } = await admin
+    .from('payment_methods')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+  if (error) console.error('[poster-web] saved card lookup failed', { userId, code: error.code })
+  return !error && (count ?? 0) > 0
 }
 
 async function loadOwnedBounty(admin: any, bountyId: string, userId: string): Promise<OwnedBounty | null> {
