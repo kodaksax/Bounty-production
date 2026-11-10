@@ -42,6 +42,9 @@
 //   POST /bounty-checkout            - the Sintra integration point
 //   POST /bounty-checkout/create-session  - alias (back-compat)
 //   GET  /bounty-checkout/status?pending_bounty_id=... | ?session_id=cs_...
+//   GET  /bounty-checkout/config  which mode a post gets now, so the form's copy is true
+//   GET  /bounty-checkout/shortfall?request_id=...  (signed in) what hiring still needs
+//   POST /bounty-checkout/shortfall  { request_id } (signed in) Checkout for that amount
 //
 // This function NEVER creates an account, a bounty, or a payment record. Only
 // the signature-verified webhook does. See docs/payments/SINTRA_INTEGRATION.md.
@@ -52,7 +55,15 @@ declare const Deno: any
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // @ts-ignore: Allow runtime npm import for Deno/edge function.
 import Stripe from 'npm:stripe@14'
-import { buildCheckoutSessionParams, checkoutModeForSwitch } from './logic.ts'
+import { isUuid, webManageLink } from '../_shared/web-links.ts'
+import {
+  buildCheckoutSessionParams,
+  buildShortfallSessionParams,
+  checkoutModeForSwitch,
+  checkoutReturnUrls,
+  shortfallChargeCents,
+  shortfallIdempotencyKey,
+} from './logic.ts'
 
 // The public website calls this from a browser, so CORS has to allow its
 // origin. Prefer an explicit allowlist (BOUNTY_CHECKOUT_ALLOWED_ORIGINS,
@@ -340,6 +351,49 @@ async function newAccountCapReached(admin: any, authedUserId: string | null, ema
   }
 }
 
+// Resolves a hire the signed-in poster is trying to make: a 404 for anyone else's
+// request, and the wallet shortfall read as that poster, from the same function
+// the app uses. The bounty's own poster decides ownership; bounty_requests.poster_id
+// is client-written.
+async function loadShortfall(
+  admin: any,
+  supabaseUrl: string,
+  apiKey: string,
+  token: string,
+  userId: string,
+  requestId: string
+): Promise<
+  | { ok: false; status: number; body: Record<string, unknown> }
+  | { ok: true; shortfall: number; bounty: Record<string, any>; requestStatus: string }
+> {
+  const notFound = { ok: false as const, status: 404, body: { error: 'Not found', code: 'not_found' } }
+  if (!isUuid(requestId)) return notFound
+
+  const { data: request, error: reqErr } = (await withDbTimeout(
+    admin.from('bounty_requests').select('bounty_id, status').eq('id', requestId).maybeSingle()
+  )) as any
+  if (reqErr) throw reqErr
+  if (!request) return notFound
+
+  const { data: bounty, error: bountyErr } = (await withDbTimeout(
+    admin.from('bounties').select('id, title, status, poster_id, user_id').eq('id', request.bounty_id).maybeSingle()
+  )) as any
+  if (bountyErr) throw bountyErr
+  if (!bounty || (bounty.poster_id ?? bounty.user_id) !== userId) return notFound
+
+  const res = await withDbTimeout(
+    fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/fn_get_bounty_funding_requirement`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: apiKey, Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ p_bounty_id: bounty.id }),
+    })
+  )
+  if (!res.ok) throw new Error(`funding requirement failed: ${res.status}`)
+  const rows = await res.json()
+  const row = Array.isArray(rows) ? rows[0] : rows
+  return { ok: true, shortfall: Number(row?.shortfall ?? 0), bounty, requestStatus: String(request.status) }
+}
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = resolveCorsHeaders(req)
 
@@ -490,12 +544,17 @@ Deno.serve(async (req: Request) => {
         existingCustomerId = profile?.stripe_customer_id ?? null
       }
 
-      const successUrl = sanitizeText(body?.successUrl ?? body?.success_url, 500)
-        || Deno.env.get('BOUNTY_CHECKOUT_SUCCESS_URL')
-        || 'https://www.bountyfinder.net/#post-success'
-      const cancelUrl = sanitizeText(body?.cancelUrl ?? body?.cancel_url, 500)
-        || Deno.env.get('BOUNTY_CHECKOUT_CANCEL_URL')
-        || 'https://www.bountyfinder.net/#post'
+      // Built here, never read from the body (success_url / cancel_url are
+      // ignored): see checkoutReturnUrls.
+      const { successUrl, cancelUrl } = checkoutReturnUrls({
+        origin: req.headers.get('Origin'),
+        source: sanitizeText(body?.source, 50) || 'web',
+        extraOrigins: (Deno.env.get('BOUNTY_CHECKOUT_ALLOWED_ORIGINS') ?? '')
+          .split(',')
+          .map((o: string) => o.trim())
+          .filter(Boolean),
+        supabaseUrl,
+      })
 
       // 2. Create the Session. Stripe carries only the REFERENCE.
       const sessionMetadata: Record<string, string> = {
@@ -633,6 +692,91 @@ Deno.serve(async (req: Request) => {
       }
 
       return jsonResponse({ state: 'pending', submission_status: pendingRow.status }, 200, corsHeaders)
+    }
+
+    // GET /bounty-checkout/config: the same decision POST makes, for the form's
+    // button. Public and short-lived, since it only says what the form already shows.
+    if (req.method === 'GET' && subPath === '/config') {
+      const mode = checkoutModeForSwitch(await readWebCardAtPostEnabled(supabaseAdmin))
+      return new Response(JSON.stringify({ mode }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' },
+      })
+    }
+
+    // GET|POST /bounty-checkout/shortfall: paying what a saved card couldn't.
+    if (subPath === '/shortfall' && (req.method === 'GET' || req.method === 'POST')) {
+      if (!authedUserId) {
+        return jsonResponse({ error: 'Please sign in.', code: 'auth_required' }, 401, corsHeaders)
+      }
+      const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
+      const requestId = sanitizeText(body?.request_id ?? url.searchParams.get('request_id'), 64)
+      const hire = await loadShortfall(
+        supabaseAdmin,
+        supabaseUrl,
+        serviceRoleKey,
+        authHeader!.substring(7),
+        authedUserId,
+        requestId
+      )
+      if (!hire.ok) return jsonResponse(hire.body, hire.status, corsHeaders)
+
+      // Read-only: the page polls this after Stripe sends the poster back, since
+      // the deposit lands by webhook.
+      if (req.method === 'GET') {
+        return jsonResponse({ shortfall: hire.shortfall, covered: !(hire.shortfall > 0) }, 200, corsHeaders)
+      }
+
+      if (hire.requestStatus !== 'pending' || hire.bounty.status !== 'open') {
+        return jsonResponse(
+          { error: 'This application is no longer open, so nothing is needed.', code: 'not_open' },
+          409,
+          corsHeaders
+        )
+      }
+      if (!(hire.shortfall > 0)) {
+        return jsonResponse({ covered: true, shortfall: 0 }, 200, corsHeaders)
+      }
+
+      const { data: profile } = (await withDbTimeout(
+        supabaseAdmin.from('profiles').select('stripe_customer_id').eq('id', authedUserId).maybeSingle()
+      )) as any
+      const nowSeconds = Math.floor(Date.now() / 1000)
+      let session: any
+      try {
+        session = await stripe.checkout.sessions.create(
+        buildShortfallSessionParams({
+          shortfallDollars: hire.shortfall,
+          bountyTitle: String(hire.bounty.title ?? 'your bounty'),
+          posterId: authedUserId,
+          bountyId: hire.bounty.id,
+          requestId,
+          email: authedEmail,
+          existingCustomerId: profile?.stripe_customer_id ?? null,
+          returnUrl: webManageLink(Deno.env.get('WEB_MANAGE_BASE'), {
+            bountyId: hire.bounty.id,
+            requestId,
+            view: 'applicant',
+            campaign: 'shortfall_checkout',
+          }),
+          nowSeconds,
+        }) as any,
+        { idempotencyKey: shortfallIdempotencyKey(requestId, shortfallChargeCents(hire.shortfall), nowSeconds) }
+        )
+      } catch (stripeErr: any) {
+        // Stripe's own text is for developers; the poster gets a plain answer.
+        console.error('[bounty-checkout] shortfall session failed', { requestId, type: stripeErr?.type, message: stripeErr?.message })
+        return jsonResponse(
+          { error: 'We couldn’t start checkout. Nothing was charged. Please try again.', code: 'stripe_session_failed' },
+          502,
+          corsHeaders
+        )
+      }
+      return jsonResponse(
+        { checkout_url: session.url, session_id: session.id, shortfall: hire.shortfall, amount_cents: session.amount_total },
+        200,
+        corsHeaders
+      )
     }
 
     return jsonResponse({ error: 'Not found' }, 404, corsHeaders)

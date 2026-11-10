@@ -17,12 +17,12 @@ export function isUuid(value: unknown): value is string {
 
 /**
  * The platform fee percent, read exactly as bounty-payments and wallet read
- * it (platformFeePercentFromEnv in _shared/platform-fee.ts — default 8), so
+ * it (platformFeePercentFromEnv in _shared/platform-fee.ts — default 5), so
  * the amount shown is the amount released. Kept inline to stay
  * dependency-free; platform-fee-parity.test.ts asserts the two agree.
  */
 export function platformFeePercent(raw: string | undefined | null): number {
-  return Number(raw ?? '8')
+  return Number(raw ?? '5')
 }
 
 /**
@@ -439,4 +439,34 @@ export function validateMessageText(raw: unknown): { ok: true; text: string } | 
     return { ok: false, error: `Messages can be up to ${MAX_MESSAGE_LENGTH} characters.` }
   }
   return { ok: true, text }
+}
+
+// ── Accept ────────────────────────────────────────────────────────────────
+
+export type AcceptOutcome = 'card_failed' | 'not_funded' | 'conflict' | 'not_found' | 'retry'
+
+/**
+ * A failed accept-bounty-request call, as the website shows it. A saved card
+ * that couldn't be charged is its own outcome (as poster-web reports it), so
+ * the page can offer another card instead of calling the bounty unfunded.
+ */
+export function acceptFailure(status: number, body: any): {
+  httpStatus: number
+  body: { ok: false; outcome: AcceptOutcome; error: string; code: string }
+} {
+  const upstreamCode = typeof body?.code === 'string' ? body.code : ''
+  const make = (outcome: AcceptOutcome, error: string, code: string, httpStatus = status) => ({
+    httpStatus: httpStatus >= 400 ? httpStatus : 502,
+    body: { ok: false as const, outcome, error, code },
+  })
+  if (status === 402 && upstreamCode === 'card_charge_failed') {
+    return make('card_failed', 'Your saved card couldn’t be charged, so nobody has been hired yet. You can pay with another card to finish.', 'card_failed')
+  }
+  if (status === 402) return make('not_funded', 'This bounty isn’t funded yet, so nobody can be accepted.', 'accept_402')
+  if (status === 409 && upstreamCode === 'accept_in_progress') {
+    return make('retry', 'This acceptance is already going through. Wait a moment, then refresh.', 'accept_in_progress')
+  }
+  if (status === 409) return make('conflict', 'This application can’t be accepted any more — the bounty may already have a hunter.', 'accept_409')
+  if (status === 403 || status === 404) return make('not_found', 'We couldn’t find that application on your bounty.', `accept_${status}`)
+  return make('retry', 'We couldn’t accept this application. Please try again.', `accept_${status}`)
 }
