@@ -126,7 +126,7 @@ describe('payment-promise-copy', () => {
       const { getByText } = renderPay();
       expect(
         getByText(
-          `You pay $40 when you hire, and it's released when you approve the work. Bounty takes a ${PLATFORM_FEE_DISPLAY} service fee out of it, so the hunter takes home $36.80 — and they see that number before they apply.`
+          `You pay $40 when you hire, and it's released when you approve the work. Bounty takes a ${PLATFORM_FEE_DISPLAY} service fee out of it, so the hunter takes home $38.00 — and they see that number before they apply.`
         )
       ).toBeTruthy();
     });

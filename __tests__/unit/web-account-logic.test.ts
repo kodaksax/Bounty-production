@@ -31,7 +31,7 @@ const ctx = (over: Partial<CardContext> = {}): CardContext => ({
 
 describe('fee', () => {
   it('reads PLATFORM_FEE_PERCENT with the release endpoints’ default', () => {
-    expect(platformFeePercent(undefined)).toBe(8)
+    expect(platformFeePercent(undefined)).toBe(5)
     expect(platformFeePercent('10')).toBe(10)
   })
 
