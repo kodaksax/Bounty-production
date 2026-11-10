@@ -9,7 +9,12 @@
  * screens.
  */
 
-import { MOMENT_REGISTRY, trustPromptsAllowed } from './registry';
+import {
+  FIRST_POST_MOMENT,
+  heldUntilFirstPost,
+  MOMENT_REGISTRY,
+  trustPromptsAllowed,
+} from './registry';
 import type { MomentContext, MomentDefinition, MomentState, MomentType } from './types';
 import { MAX_MOMENT_SHOWS } from './types';
 
@@ -113,8 +118,13 @@ export function evaluateEligibleMoments(
   states: Map<MomentType, MomentState>,
   registry: MomentDefinition[] = MOMENT_REGISTRY
 ): MomentDefinition[] {
+  const holdForFirstPost = heldUntilFirstPost(ctx);
   const eligible = registry.filter(def => {
     const state = states.get(def.type) ?? null;
+    // A poster with no published bounty sees only the moment that leads to
+    // posting. The rest are skipped, not resolved, so they come back on their
+    // own rules once she has published.
+    if (holdForFirstPost && def.type !== FIRST_POST_MOMENT) return false;
     if (def.category === 'trust' && !trustPromptsAllowed(ctx)) return false;
     if (isRetired(def, state)) return false;
     if (goalAlreadyMet(def, ctx)) return false;
