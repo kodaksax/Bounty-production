@@ -71,7 +71,9 @@ export function FloatingTabBar({
       {
         key: "postings",
         icon: "post-add",
-        title: "Post",
+        // Words, not just the icon: "Post" alone didn't read as "post a job"
+        // to posters looking for it.
+        title: "Post a job",
         label: postDraftPending ? "Post a bounty, unfinished post saved" : "Post a new bounty",
       },
       showAdmin
@@ -168,6 +170,10 @@ export function FloatingTabBar({
                   style={[s.label, active && s.labelActive, isCenter && { color: theme.primary }]}
                   numberOfLines={1}
                   maxFontSizeMultiplier={LABEL_MAX_FONT_SCALE}
+                  // "Post a job" is the longest label; on a narrow phone it
+                  // shrinks a little rather than truncating.
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
                 >
                   {tab.title}
                 </Text>

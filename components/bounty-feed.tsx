@@ -9,6 +9,7 @@ import {
     sortByProgress,
     type MyBountyProgressItem,
 } from 'components/my-bounty-progress-banner';
+import { HomePostCard } from 'components/home-post-card';
 import { NotificationBell } from 'components/notifications/notification-bell';
 import {
     ActiveHuntersPill,
@@ -51,6 +52,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveHunters } from '../hooks/useActiveHunters';
 import { useFeedLocation } from '../hooks/useFeedLocation';
+import { useLatestPostedBounty } from '../hooks/useLatestPostedBounty';
 import { useForegroundRefresh } from '../hooks/useForegroundRefresh';
 import { useRefreshOnReturn } from '../hooks/useRouteFocus';
 import { useShowTestBounties } from '../hooks/useShowTestBounties';
@@ -62,6 +64,11 @@ import { pageTranslateX, useTabPager } from './ui/tab-pager';
 import { API_TIMEOUTS } from '../lib/config/network';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
 import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories';
+import {
+  HOME_POST_CARD_ENTRY_POINT,
+  shouldShowHomePostCard,
+  type PrimaryRole,
+} from '../lib/home/home-post-card';
 import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { searchBountiesNearby, type NearbyBounty } from '../lib/services/bounty-location-service';
@@ -125,6 +132,20 @@ interface BountyFeedProps {
   activeScreen: string;
   setActiveScreen: (screen: string) => void;
   currentUserId?: string;
+  /** profiles.primary_role — with the viewer's post history, decides the home post card. */
+  primaryRole?: PrimaryRole;
+  /**
+   * Opens the composer on the Post tab, reporting `entryPoint` as its
+   * entry_point. Without it the card falls back to switching tabs.
+   */
+  onOpenComposer?: (entryPoint: string) => void;
+  /**
+   * Starts the Post-again flow from one of the viewer's bounties. The home
+   * card's "Post again" row only shows when this is set (P3).
+   */
+  onPostAgain?: (bountyId: string) => void;
+  /** Opens the poster's own bounties (Inbox → My Bounties). */
+  onSeeMyPosts?: () => void;
 }
 
 const PAGE_SIZE = 10;
@@ -203,7 +224,15 @@ function nearbyToBounty(nb: NearbyBounty): Bounty {
 let bountyFeedMountCounter = 0;
 
 export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(
-  { activeScreen, setActiveScreen, currentUserId },
+  {
+    activeScreen,
+    setActiveScreen,
+    currentUserId,
+    primaryRole,
+    onOpenComposer,
+    onPostAgain,
+    onSeeMyPosts,
+  },
   ref
 ) {
   const router = useRouter();
@@ -290,6 +319,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const { location: userLocation, permission } = useLocation();
   const validUserId = useValidUserId();
+
+  // The "Post a job" card (components/home-post-card.tsx): for primary_role
+  // 'poster' or anyone who has posted. One row answers both "has posted" and
+  // which bounty "Post again" starts from. A poster gets the card straight
+  // away; anyone else only once the lookup finds a bounty of theirs, so a
+  // hunter who never posted sees no change.
+  const postCardUserId = validUserId ?? currentUserId;
+  const { state: latestPostedState, reload: reloadLatestPosted } =
+    useLatestPostedBounty(postCardUserId);
+  const latestPosted = latestPostedState.status === 'loaded' ? latestPostedState.bounty : null;
+  const hasPosted = latestPosted != null;
+  const showPostCard = !!postCardUserId && shouldShowHomePostCard({ primaryRole, hasPosted });
 
   // SBA-02: a hunter with a location (device fix or saved profile point) sees
   // in-person work within LOCAL_DEFAULT_RADIUS_MILES plus every online job,
@@ -1010,13 +1051,20 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         ),
         refreshActiveCount().catch(err => console.error('Failed to refresh active count:', err)),
         loadMyActiveBounties(),
+        reloadLatestPosted(),
       ]);
     } catch (error) {
       console.error('Error refreshing bounties:', error);
     } finally {
       setRefreshing(false);
     }
-  }, [loadBounties, loadUserApplications, refreshActiveCount, loadMyActiveBounties]);
+  }, [
+    loadBounties,
+    loadUserApplications,
+    refreshActiveCount,
+    loadMyActiveBounties,
+    reloadLatestPosted,
+  ]);
 
   // The tab shell stays mounted under anything opened over it (the root is a
   // stack), so coming back from a bounty you just applied to — or one of your
@@ -1028,6 +1076,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   useRefreshOnReturn(() => {
     loadUserApplications().catch(err => console.error('Failed to refresh user applications:', err));
     loadMyActiveBounties().catch(err => console.error('Failed to refresh active bounties:', err));
+    void reloadLatestPosted();
     bountyService
       .getOpenCount({ category: countCategory, includeTest: includeTestBounties })
       .then(setActiveCount)
@@ -1190,13 +1239,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         offsetRef.current = 0;
         setHasMore(true);
         loadBounties({ reset: true });
+        // Called after a publish: the new bounty becomes "Post again".
+        void reloadLatestPosted();
       },
       handleTabRepress: () => {
         bountyListRef.current?.scrollToOffset({ offset: 0, animated: true });
         onRefresh();
       },
     }),
-    [loadBounties, onRefresh]
+    [loadBounties, onRefresh, reloadLatestPosted]
   );
 
   useEffect(() => {
@@ -1582,273 +1633,316 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     </View>
   );
 
+  const openComposerFromPostCard = useCallback(() => {
+    if (onOpenComposer) onOpenComposer(HOME_POST_CARD_ENTRY_POINT);
+    else setActiveScreen('postings');
+  }, [onOpenComposer, setActiveScreen]);
+  const seeMyPostsFromPostCard = useCallback(() => {
+    if (onSeeMyPosts) onSeeMyPosts();
+    else setActiveScreen('messages');
+  }, [onSeeMyPosts, setActiveScreen]);
+  const postAgainFromPostCard = useMemo(
+    () =>
+      onPostAgain && latestPosted
+        ? {
+            bountyId: latestPosted.id,
+            title: latestPosted.title,
+            onPress: () => onPostAgain(latestPosted.id),
+          }
+        : null,
+    [onPostAgain, latestPosted]
+  );
+  const renderPostCard = (inset: boolean) =>
+    showPostCard ? (
+      <HomePostCard
+        onPostNew={openComposerFromPostCard}
+        postAgain={postAgainFromPostCard}
+        onSeeAllPosts={seeMyPostsFromPostCard}
+        impressionReady={activeScreen === 'bounty' && latestPostedState.status !== 'loading'}
+        primaryRole={primaryRole}
+        hasPosted={hasPosted}
+        layout={bountyFormat}
+        inset={inset}
+      />
+    ) : null;
+
   return (
     <View style={s.dashboardArea}>
-      {/* Search row — non-grid only (grid has its search inside the banner block
-          below). Carries three things on one line: search, the live
-          active-hunters pill, and the notification bell.
+      {/* "Post a job": the first thing on Home for posters (see
+          lib/home/home-post-card.ts). Above the search row and outside
+          feedArea, so the progress cards that float over feedArea's top can't
+          cover it. The grid layout has its own banner at the top and renders
+          the card just below it instead. */}
+      {bountyFormat !== 'grid' && renderPostCard(true)}
 
-          SearchBarRow owns the geometry because /tabs/search draws this same
-          row: tapping the field replaces the feed below it with results, and
-          the bar itself must not move or resize on the way there.
+      <View style={s.feedArea}>
+        {/* Search row — non-grid only (grid has its search inside the banner block
+            below). Carries three things on one line: search, the live
+            active-hunters pill, and the notification bell.
 
-          The pill shares this row rather than owning a line beneath it so the
-          "people are here right now" signal sits in the header chrome the eye
-          already lands on, and costs no vertical space above the cards.
+            SearchBarRow owns the geometry because /tabs/search draws this same
+            row: tapping the field replaces the feed below it with results, and
+            the bar itself must not move or resize on the way there.
 
-          Hidden below MIN_ACTIVE_HUNTERS_TO_SHOW as well as at null: the hook
-          returns null whenever the number isn't known (permission off, no fix
-          yet, RPC failed), and a near-empty count is worse than silence for
-          someone deciding whether to post. */}
-      {bountyFormat !== 'grid' && (
-        <SearchBarRow
-          accessibilityLabel="Open search"
-          onPress={() =>
-            router.push({
-              pathname: '/tabs/search',
-              // Hand the search screen the count this feed already fetched, so
-              // it can draw the identical pill without re-running the location
-              // query — and so the field it inherits is exactly this width.
-              params: showActiveHunters
-                ? { hunters: String(activeHuntersCount), radius: String(activeHuntersRadius) }
-                : {},
-            })
-          }
-          middle={
-            showActiveHunters ? (
-              <ActiveHuntersPill
-                count={activeHuntersCount as number}
-                radiusMiles={activeHuntersRadius}
-                testID="feed-active-hunters-caption"
-              />
-            ) : null
-          }
-          trailing={<NotificationBell />}
-        >
-          {/* Placeholder shortens when the pill is present so the three items
-              fit on one line without the search label truncating mid-word. */}
-          <Text
-            style={s.searchText}
-            numberOfLines={1}
-            maxFontSizeMultiplier={SEARCH_FIELD_MAX_FONT_SCALE}
+            The pill shares this row rather than owning a line beneath it so the
+            "people are here right now" signal sits in the header chrome the eye
+            already lands on, and costs no vertical space above the cards.
+
+            Hidden below MIN_ACTIVE_HUNTERS_TO_SHOW as well as at null: the hook
+            returns null whenever the number isn't known (permission off, no fix
+            yet, RPC failed), and a near-empty count is worse than silence for
+            someone deciding whether to post. */}
+        {bountyFormat !== 'grid' && (
+          <SearchBarRow
+            accessibilityLabel="Open search"
+            onPress={() =>
+              router.push({
+                pathname: '/tabs/search',
+                // Hand the search screen the count this feed already fetched, so
+                // it can draw the identical pill without re-running the location
+                // query — and so the field it inherits is exactly this width.
+                params: showActiveHunters
+                  ? { hunters: String(activeHuntersCount), radius: String(activeHuntersRadius) }
+                  : {},
+              })
+            }
+            middle={
+              showActiveHunters ? (
+                <ActiveHuntersPill
+                  count={activeHuntersCount as number}
+                  radiusMiles={activeHuntersRadius}
+                  testID="feed-active-hunters-caption"
+                />
+              ) : null
+            }
+            trailing={<NotificationBell />}
           >
-            {showActiveHunters ? 'Search bounties...' : 'Search bounties or users...'}
-          </Text>
-        </SearchBarRow>
-      )}
+            {/* Placeholder shortens when the pill is present so the three items
+                fit on one line without the search label truncating mid-word. */}
+            <Text
+              style={s.searchText}
+              numberOfLines={1}
+              maxFontSizeMultiplier={SEARCH_FIELD_MAX_FONT_SCALE}
+            >
+              {showActiveHunters ? 'Search bounties...' : 'Search bounties or users...'}
+            </Text>
+          </SearchBarRow>
+        )}
 
-      {/* Filter row — outside FlatList for non-grid; grid gets it inside listHeader */}
-      {bountyFormat !== 'grid' && renderFilterBar()}
+        {/* Filter row — outside FlatList for non-grid; grid gets it inside listHeader */}
+        {bountyFormat !== 'grid' && renderFilterBar()}
 
-      {/* New-bounties pill — the fallback for realtime INSERTs that couldn't be
-          rendered live (distance filter active, or the fetch failed). Sits
-          above the list so it works across all three feed layouts. */}
-      {newBountiesCount > 0 && (
-        <TouchableOpacity
-          style={s.newBountiesPill}
-          onPress={() => {
-            bountyListRef.current?.scrollToOffset?.({ offset: 0, animated: true });
-            onRefresh();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${newBountiesCount} new bounty${newBountiesCount === 1 ? '' : 'ies'} available, tap to refresh`}
-        >
-          <MaterialIcons name="arrow-upward" size={16} color="#ffffff" style={{ marginRight: 6 }} />
-          <Text style={s.newBountiesPillText}>
-            {newBountiesCount} new bount{newBountiesCount === 1 ? 'y' : 'ies'}
-          </Text>
-        </TouchableOpacity>
-      )}
+        {/* New-bounties pill — the fallback for realtime INSERTs that couldn't be
+            rendered live (distance filter active, or the fetch failed). Sits
+            above the list so it works across all three feed layouts. */}
+        {newBountiesCount > 0 && (
+          <TouchableOpacity
+            style={s.newBountiesPill}
+            onPress={() => {
+              bountyListRef.current?.scrollToOffset?.({ offset: 0, animated: true });
+              onRefresh();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`${newBountiesCount} new bounty${newBountiesCount === 1 ? '' : 'ies'} available, tap to refresh`}
+          >
+            <MaterialIcons name="arrow-upward" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+            <Text style={s.newBountiesPillText}>
+              {newBountiesCount} new bount{newBountiesCount === 1 ? 'y' : 'ies'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
-      {/* List area */}
-      {bountyFormat === 'grid' ? (
-        <View style={{ flex: 1, marginTop: -(insets.top + 8) }}>
-          <BountyGridFeed
-            bounties={filteredBounties}
-            bountyDistances={bountyDistances}
-            onScroll={handleGridScroll}
-            listHeader={
-              <View>
-                {/* Banner */}
-                <View
-                  style={[
-                    s.gridBanner,
-                    {
-                      // The minimized progress tab hangs from the top edge,
-                      // right where the title starts; push the title below it.
-                      paddingTop:
-                        insets.top +
-                        2 +
-                        (progressTabVisible && myActiveBounties.length > 0
-                          ? LARGE_TAB_HEIGHT + SPACING.COMPACT_GAP
-                          : 0),
-                    },
-                  ]}
-                  onLayout={e => setGridBannerHeight(e.nativeEvent.layout.height)}
-                >
-                  <LinearGradient
-                    colors={gridBannerGradient}
-                    start={GRID_BANNER_GRADIENT_START}
-                    end={GRID_BANNER_GRADIENT_END}
-                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-                  />
-                  <Text style={s.gridBannerTitle}>Find a Bounty</Text>
-                  <View style={s.gridBannerSubRow}>
-                    {/* Left half of a deliberate supply/demand pair: hunters
-                        here, open bounties in the badge opposite. Together they
-                        answer "is this market liquid enough to be worth
-                        posting?" on the highest-attention line in the layout,
-                        without costing any extra height.
+        {/* List area */}
+        {bountyFormat === 'grid' ? (
+          <View style={{ flex: 1, marginTop: -(insets.top + 8) }}>
+            <BountyGridFeed
+              bounties={filteredBounties}
+              bountyDistances={bountyDistances}
+              onScroll={handleGridScroll}
+              listHeader={
+                <View>
+                  {/* Banner */}
+                  <View
+                    style={[
+                      s.gridBanner,
+                      {
+                        // The minimized progress tab hangs from the top edge,
+                        // right where the title starts; push the title below it.
+                        paddingTop:
+                          insets.top +
+                          2 +
+                          (progressTabVisible && myActiveBounties.length > 0
+                            ? LARGE_TAB_HEIGHT + SPACING.COMPACT_GAP
+                            : 0),
+                      },
+                    ]}
+                    onLayout={e => setGridBannerHeight(e.nativeEvent.layout.height)}
+                  >
+                    <LinearGradient
+                      colors={gridBannerGradient}
+                      start={GRID_BANNER_GRADIENT_START}
+                      end={GRID_BANNER_GRADIENT_END}
+                      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                    />
+                    <Text style={s.gridBannerTitle}>Find a Bounty</Text>
+                    <View style={s.gridBannerSubRow}>
+                      {/* Left half of a deliberate supply/demand pair: hunters
+                          here, open bounties in the badge opposite. Together they
+                          answer "is this market liquid enough to be worth
+                          posting?" on the highest-attention line in the layout,
+                          without costing any extra height.
 
-                        Falls back to the original static subtitle whenever the
-                        count isn't known or is below MIN_ACTIVE_HUNTERS_TO_SHOW
-                        — same rule as the pill in the other layouts, so a quiet
-                        area reads as ordinary copy rather than a broken stat. */}
-                    {showActiveHunters ? (
-                      <View
-                        style={s.gridBannerHunters}
-                        accessibilityRole="text"
-                        accessibilityLabel={`${activeHuntersCount} active ${
-                          activeHuntersCount === 1 ? 'hunter' : 'hunters'
-                        } within ${activeHuntersRadius} miles of you`}
-                        testID="feed-active-hunters-banner"
-                      >
-                        <MaterialIcons
-                          name="people"
-                          size={14}
-                          color="rgba(255,255,255,0.9)"
-                          style={s.gridBannerHuntersIcon}
-                        />
-                        <Text style={s.gridBannerSubtitle} numberOfLines={1}>
-                          {activeHuntersCount} {activeHuntersCount === 1 ? 'hunter' : 'hunters'}{' '}
-                          nearby
+                          Falls back to the original static subtitle whenever the
+                          count isn't known or is below MIN_ACTIVE_HUNTERS_TO_SHOW
+                          — same rule as the pill in the other layouts, so a quiet
+                          area reads as ordinary copy rather than a broken stat. */}
+                      {showActiveHunters ? (
+                        <View
+                          style={s.gridBannerHunters}
+                          accessibilityRole="text"
+                          accessibilityLabel={`${activeHuntersCount} active ${
+                            activeHuntersCount === 1 ? 'hunter' : 'hunters'
+                          } within ${activeHuntersRadius} miles of you`}
+                          testID="feed-active-hunters-banner"
+                        >
+                          <MaterialIcons
+                            name="people"
+                            size={14}
+                            color="rgba(255,255,255,0.9)"
+                            style={s.gridBannerHuntersIcon}
+                          />
+                          <Text style={s.gridBannerSubtitle} numberOfLines={1}>
+                            {activeHuntersCount} {activeHuntersCount === 1 ? 'hunter' : 'hunters'}{' '}
+                            nearby
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={s.gridBannerSubtitle}>Explore tasks near you</Text>
+                      )}
+                      <View style={s.gridBannerCountBadge}>
+                        {/* Stable server count of open bounties in this category
+                            (independent of pagination). Falls back to the loaded
+                            count when the count query hasn't resolved / failed, or
+                            when a distance filter is active (that set comes from
+                            the nearby-search RPC, which has no total). */}
+                        <Text style={s.gridBannerCountText}>
+                          {distanceFilter !== 'off' || activeCount == null
+                            ? filteredBounties.length
+                            : activeCount}{' '}
+                          active
                         </Text>
                       </View>
-                    ) : (
-                      <Text style={s.gridBannerSubtitle}>Explore tasks near you</Text>
-                    )}
-                    <View style={s.gridBannerCountBadge}>
-                      {/* Stable server count of open bounties in this category
-                          (independent of pagination). Falls back to the loaded
-                          count when the count query hasn't resolved / failed, or
-                          when a distance filter is active (that set comes from
-                          the nearby-search RPC, which has no total). */}
-                      <Text style={s.gridBannerCountText}>
-                        {distanceFilter !== 'off' || activeCount == null
-                          ? filteredBounties.length
-                          : activeCount}{' '}
-                        active
-                      </Text>
+                    </View>
+                    <View style={s.gridBannerSearchWrapper}>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Open search"
+                        onPress={() => router.push('/tabs/search')}
+                        style={s.gridBannerSearchButton}
+                      >
+                        <MaterialIcons
+                          name="search"
+                          size={18}
+                          color="rgba(255,255,255,0.85)"
+                          style={s.searchIcon}
+                        />
+                        <Text style={s.gridBannerSearchText}>Search bounties or users...</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-                  <View style={s.gridBannerSearchWrapper}>
-                    <TouchableOpacity
-                      accessibilityRole="button"
-                      accessibilityLabel="Open search"
-                      onPress={() => router.push('/tabs/search')}
-                      style={s.gridBannerSearchButton}
-                    >
-                      <MaterialIcons
-                        name="search"
-                        size={18}
-                        color="rgba(255,255,255,0.85)"
-                        style={s.searchIcon}
-                      />
-                      <Text style={s.gridBannerSearchText}>Search bounties or users...</Text>
-                    </TouchableOpacity>
-                  </View>
+                  {/* The same single filter carousel used by the non-grid layouts
+                      (category chips + Distance), rendered here inside the grid
+                      FlatList's header. renderFilterBar deliberately uses a
+                      ScrollView (not a nested FlatList) so it works in this
+                      nested-list context without the gesture-recognizer conflict.
+                      Previously the grid branch inlined its own chip row against
+                      removed styles (s.chip/*), which broke the build and rendered
+                      unstyled chips with no Distance filter. */}
+                  {renderPostCard(false)}
+                  {renderFilterBar()}
                 </View>
-                {/* The same single filter carousel used by the non-grid layouts
-                    (category chips + Distance), rendered here inside the grid
-                    FlatList's header. renderFilterBar deliberately uses a
-                    ScrollView (not a nested FlatList) so it works in this
-                    nested-list context without the gesture-recognizer conflict.
-                    Previously the grid branch inlined its own chip row against
-                    removed styles (s.chip/*), which broke the build and rendered
-                    unstyled chips with no Distance filter. */}
-                {renderFilterBar()}
-              </View>
-            }
-          />
-        </View>
-      ) : (
-        <View style={{ flex: 1 }} onLayout={e => setListHeight(e.nativeEvent.layout.height)}>
-          <Animated.FlatList
-            ref={bountyListRef}
-            data={rankedFeedMeta.ordered}
-            keyExtractor={keyExtractor}
-            pagingEnabled={!isCompact}
-            snapToInterval={isCompact ? undefined : listHeight}
-            snapToAlignment="start"
-            decelerationRate="fast"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingTop: 0,
-              paddingBottom: 0,
-              paddingHorizontal: 0,
-            }}
-            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-              useNativeDriver: false,
-            })}
-            scrollEventThrottle={16}
-            onEndReachedThreshold={0.5}
-            onEndReached={handleEndReached}
-            ItemSeparatorComponent={ItemSeparator}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={theme.primary}
-              />
-            }
-            ListEmptyComponent={EmptyListComponent}
-            ListFooterComponent={ListFooterComponent}
-            renderItem={renderBountyItem}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={5}
-            windowSize={5}
-            initialNumToRender={3}
-          />
-        </View>
-      )}
+              }
+            />
+          </View>
+        ) : (
+          <View style={{ flex: 1 }} onLayout={e => setListHeight(e.nativeEvent.layout.height)}>
+            <Animated.FlatList
+              ref={bountyListRef}
+              data={rankedFeedMeta.ordered}
+              keyExtractor={keyExtractor}
+              pagingEnabled={!isCompact}
+              snapToInterval={isCompact ? undefined : listHeight}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{
+                paddingTop: 0,
+                paddingBottom: 0,
+                paddingHorizontal: 0,
+              }}
+              onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+                useNativeDriver: false,
+              })}
+              scrollEventThrottle={16}
+              onEndReachedThreshold={0.5}
+              onEndReached={handleEndReached}
+              ItemSeparatorComponent={ItemSeparator}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={theme.primary}
+                />
+              }
+              ListEmptyComponent={EmptyListComponent}
+              ListFooterComponent={ListFooterComponent}
+              renderItem={renderBountyItem}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={5}
+              windowSize={5}
+              initialNumToRender={3}
+            />
+          </View>
+        )}
 
-      <LinearGradient
-        colors={
-          [`${theme.background}00`, `${theme.background}CC`, theme.background] as [
-            string,
-            string,
-            string,
-          ]
-        }
-        style={s.bottomFade}
-        pointerEvents="none"
-      />
-
-      {/* Your bounties' progress — every layout (card, compact, grid). Floats
-          over the top of the feed (last child, so it layers above everything,
-          the grid's green banner and the fade included)
-          and can be swiped up out of the way, leaving a small tab. One card
-          per live bounty, paged sideways; tapping opens the poster's command
-          center for it. */}
-      {myActiveBounties.length > 0 && (
-        <MyBountyProgressCarousel
-          items={myActiveBounties}
-          // Grid only: the minimized tab hangs over the green banner, so it
-          // drops its frosted background to blend in and is drawn larger so it
-          // still stands out. White reads on the
-          // green; once the banner scrolls away, fall back to the text color.
-          transparentTab={bountyFormat === 'grid'}
-          largeTab={bountyFormat === 'grid'}
-          onTabVisibleChange={setProgressTabVisible}
-          tabContentColor={gridBannerCoversStatusBar ? '#ffffff' : theme.text}
-          onPressItem={bounty =>
-            router.push({
-              pathname: '/postings/[bountyId]',
-              params: { bountyId: String(bounty.id) },
-            } as never)
+        <LinearGradient
+          colors={
+            [`${theme.background}00`, `${theme.background}CC`, theme.background] as [
+              string,
+              string,
+              string,
+            ]
           }
+          style={s.bottomFade}
+          pointerEvents="none"
         />
-      )}
+
+        {/* Your bounties' progress — every layout (card, compact, grid). Floats
+            over the top of the feed (last child, so it layers above everything,
+            the grid's green banner and the fade included)
+            and can be swiped up out of the way, leaving a small tab. One card
+            per live bounty, paged sideways; tapping opens the poster's command
+            center for it. */}
+        {myActiveBounties.length > 0 && (
+          <MyBountyProgressCarousel
+            items={myActiveBounties}
+            // Grid only: the minimized tab hangs over the green banner, so it
+            // drops its frosted background to blend in and is drawn larger so it
+            // still stands out. White reads on the
+            // green; once the banner scrolls away, fall back to the text color.
+            transparentTab={bountyFormat === 'grid'}
+            largeTab={bountyFormat === 'grid'}
+            onTabVisibleChange={setProgressTabVisible}
+            tabContentColor={gridBannerCoversStatusBar ? '#ffffff' : theme.text}
+            onPressItem={bounty =>
+              router.push({
+                pathname: '/postings/[bountyId]',
+                params: { bountyId: String(bounty.id) },
+              } as never)
+            }
+          />
+        )}
+      </View>
     </View>
   );
 });
@@ -1858,6 +1952,11 @@ function makeStyles(t: AppTheme) {
     dashboardArea: {
       flex: 1,
       backgroundColor: t.background,
+    },
+    // Everything below the home post card. The progress cards position
+    // themselves over the top of this, not of the whole screen.
+    feedArea: {
+      flex: 1,
     },
     // Grid banner only — the shared SearchBarRow draws its own leading icon.
     searchIcon: { marginRight: SPACING.COMPACT_GAP },

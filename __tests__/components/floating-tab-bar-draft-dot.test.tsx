@@ -39,5 +39,7 @@ describe('FloatingTabBar — unfinished post dot', () => {
 
     expect(screen.queryByTestId('post-draft-dot')).toBeNull();
     expect(screen.getByLabelText('Post a new bounty')).toBeTruthy();
+    // The tab says what it does in words, not just an icon.
+    expect(screen.getByText('Post a job')).toBeTruthy();
   });
 });

@@ -410,6 +410,16 @@ export type AnalyticsEvent =
   // after a tab switch away from a draft (app/hooks/useResumeComposerPrompt.ts);
   // 'continued' there opens the composer on the Task step.
   | 'post_resume_prompt'
+  // The "Post a job" card at the top of the home feed
+  // (components/home-post-card.tsx), shown to primary_role 'poster' or anyone
+  // who has posted. `home_post_card_shown` fires once per app session, the
+  // first time the card is on screen with its content settled.
+  // `home_post_card_tapped.action` is 'post_new' (opens the composer with
+  // entry_point 'home_post_card'), 'post_again' (carries bounty_id) or
+  // 'see_all_posts'. Both carry primary_role, has_posted,
+  // post_again_available and layout. A new surface: it retires no event.
+  | 'home_post_card_shown'
+  | 'home_post_card_tapped'
   | 'post_step_completed'
   | 'post_step_abandoned'
   | 'post_title_typed'

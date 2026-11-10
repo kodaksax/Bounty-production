@@ -536,6 +536,20 @@ function BountyAppInner() {
   // every tab change.
   const feedActiveScreen = activeScreen === 'bounty' ? 'bounty' : 'elsewhere'
   const inboxInitialTab = pendingInitialTab ?? paramInitialTab
+  // The home post card's composer and "See all my posts" entries
+  // (components/home-post-card.tsx). openComposer is declared below with the
+  // Post tab; this reads it through a ref so the feed element doesn't depend
+  // on declaration order.
+  const openComposerRef = useRef<(entryPoint: string) => void>(() => {})
+  const openComposerFromFeed = useCallback((entryPoint: string) => openComposerRef.current(entryPoint), [])
+  const openMyPosts = useCallback(() => {
+    // The Inbox only moves when initialTab changes. 'myPostings' and
+    // 'requests' both open My Bounties, so alternating between them makes a
+    // second tap work after the poster switched the Inbox to My Work.
+    setPendingInitialTab(prev => (prev === 'myPostings' ? 'requests' : 'myPostings'))
+    setActiveScreen('messages')
+  }, [setActiveScreen])
+  const primaryRole = profile?.primary_role ?? null
   const feedPage = useMemo(
     () => (
       <BountyFeed
@@ -543,9 +557,14 @@ function BountyAppInner() {
         activeScreen={feedActiveScreen}
         setActiveScreen={setActiveScreen}
         currentUserId={currentUserId}
+        primaryRole={primaryRole}
+        onOpenComposer={openComposerFromFeed}
+        onSeeMyPosts={openMyPosts}
+        // onPostAgain stays unset until the Post-again flow (P3) lands; the
+        // card hides its "Post again" row without it.
       />
     ),
-    [feedActiveScreen, setActiveScreen, currentUserId]
+    [feedActiveScreen, setActiveScreen, currentUserId, primaryRole, openComposerFromFeed, openMyPosts]
   )
   const walletPage = useMemo(
     () => (
@@ -591,6 +610,7 @@ function BountyAppInner() {
     if (activeRef.current !== 'postings') setComposerEntryPoint(entryPoint)
     setActiveScreen('postings')
   }, [setActiveScreen])
+  openComposerRef.current = openComposer
   // Lasts for one visit: the next tap on the Post tab is just a tab tap.
   useEffect(() => {
     if (activeScreen !== 'postings' && barScreen !== 'postings') setComposerEntryPoint(undefined)
