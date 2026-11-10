@@ -20,7 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BottomNav } from 'components/ui/bottom-nav'
 import { ScreenLoader } from 'components/ui/screen-loader'
 import { FloatingTabBar } from 'components/ui/floating-tab-bar'
-import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, AppState, Keyboard, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native'
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native'
@@ -40,6 +40,7 @@ import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
 import { saveLastScreen } from '../../lib/storage/last-screen'
 import { parseBountyAppTabParams, parseBountyAppTabUrl } from '../../lib/navigation/bounty-app-tab'
+import { subscribeComposerRequests } from '../../lib/navigation/composer-request'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { useTopInsetOverlay } from '../../lib/context/TopInsetOverlayContext'
 
@@ -591,6 +592,23 @@ function BountyAppInner() {
     if (activeRef.current !== 'postings') setComposerEntryPoint(entryPoint)
     setActiveScreen('postings')
   }, [setActiveScreen])
+  // Screens pushed over the shell (Search's "Post this") send the poster to
+  // the composer through lib/navigation/composer-request.ts. Listened to only
+  // while focused, so the switch happens once the shell is back on screen.
+  // It jumps rather than scrolls: the shell's pager is re-laid out as it
+  // comes back into view, which snaps it to the committed tab, and an
+  // animated switch to a neighbour only commits after its scroll settles, so
+  // it lost that race and landed back on Home.
+  const openComposerFromElsewhere = useCallback((entryPoint: string) => {
+    if (activeRef.current === 'postings') return
+    setComposerEntryPoint(entryPoint)
+    mountAround('postings')
+    commitScreen('postings')
+    setPendingJump('postings')
+  }, [mountAround, commitScreen])
+  useFocusEffect(
+    useCallback(() => subscribeComposerRequests(openComposerFromElsewhere), [openComposerFromElsewhere])
+  )
   // Lasts for one visit: the next tap on the Post tab is just a tab tap.
   useEffect(() => {
     if (activeScreen !== 'postings' && barScreen !== 'postings') setComposerEntryPoint(undefined)
