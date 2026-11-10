@@ -109,7 +109,7 @@ export function AnimatedCard({
 
   if (pressable || expandable) {
     return (
-      <Pressable
+      <Pressable accessibilityRole="button"
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={handlePress}

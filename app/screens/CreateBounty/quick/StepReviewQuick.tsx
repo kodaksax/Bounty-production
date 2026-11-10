@@ -5,6 +5,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { QuickStepLayout } from './QuickStepLayout';
+import { withAlpha } from '../../../../lib/utils';
 
 interface StepReviewQuickProps {
   draft: BountyDraft;
@@ -160,7 +161,7 @@ function makeStyles(theme: AppTheme) {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.12)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.22) : withAlpha(theme.primary, 0.12),
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 16,
@@ -168,6 +169,6 @@ function makeStyles(theme: AppTheme) {
     rowText: { flex: 1 },
     rowLabel: { fontSize: 15, color: theme.textSecondary },
     rowValue: { marginTop: 3, fontSize: 17, fontWeight: '700', color: theme.text },
-    edit: { fontSize: 16, fontWeight: '600', color: theme.primary },
+    edit: { fontSize: 16, fontWeight: '600', color: theme.primaryLight },
   });
 }

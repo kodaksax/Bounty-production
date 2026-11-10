@@ -16,6 +16,7 @@ import type { UseConnectEligibilityResult } from '../hooks/use-connect-eligibili
 import type { UsePayoutMethodsResult } from '../hooks/use-payout-methods';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { withAlpha } from '../lib/utils';
 
 interface PayoutMethodsScreenProps {
   onBack: () => void;
@@ -54,7 +55,7 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
       const result = await openPayoutDashboard();
       if (!result.ok) {
         console.error('[payout-methods-screen] openPayoutDashboard failed', result.error);
-        Alert.alert('Error', result.error);
+        Alert.alert("Something went wrong", result.error);
       } else {
         console.log('[payout-methods-screen] refreshing Connect eligibility after dashboard return');
         await eligibility.refresh();
@@ -257,7 +258,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   dashboardButtonText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
   emptyState: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: t.surfaceSecondary,
-    borderRadius: 10, padding: 12,
+    borderRadius: 12, padding: 12,
   },
   emptyStateText: { flex: 1, fontSize: 13, color: t.textSecondary },
   methodRow: {
@@ -268,12 +269,12 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   methodHeaderRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   methodName: { fontSize: 15, fontWeight: '600', color: t.text },
   methodStatus: { fontSize: 12, color: t.textDisabled, marginTop: 2 },
-  defaultBadge: { backgroundColor: '#008E2A', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  defaultBadgeText: { fontSize: 10, fontWeight: '600', color: '#fff' },
-  instantBadge: { backgroundColor: 'rgba(34,197,94,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  instantBadgeText: { fontSize: 10, fontWeight: '600', color: '#008E2A' },
+  defaultBadge: { backgroundColor: t.primary, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  defaultBadgeText: { fontSize: 12, fontWeight: '600', color: '#fff' },
+  instantBadge: { backgroundColor: withAlpha(t.primary, 0.15), paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  instantBadgeText: { fontSize: 12, fontWeight: '600', color: t.primaryLight },
   ineligibleBadge: { backgroundColor: 'rgba(148,163,184,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  ineligibleBadgeText: { fontSize: 10, fontWeight: '600', color: t.textDisabled },
+  ineligibleBadgeText: { fontSize: 12, fontWeight: '600', color: t.textDisabled },
   paymentActivityLink: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: t.surface,
     borderRadius: 12, padding: 14, marginTop: 4,

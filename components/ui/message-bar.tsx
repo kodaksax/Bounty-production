@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 interface MessageBarProps {
   conversationId: string | null;
@@ -49,7 +50,7 @@ export function MessageBar({
       setMessageText('');
     } catch (err) {
       console.error('Error sending message:', err);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      Alert.alert("Couldn't send message", "Please try again.");
     } finally {
       setIsSending(false);
     }
@@ -59,7 +60,7 @@ export function MessageBar({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Quick Message</Text>
+      <Text style={styles.label}>Quick message</Text>
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
@@ -123,9 +124,7 @@ function makeStyles(theme: AppTheme) {
       textAlignVertical: 'top',
     },
     sendButton: {
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
       width: 48,
       height: 48,
       borderRadius: 24,
@@ -133,7 +132,7 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
     },
     sendButtonDisabled: {
-      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.border,
+      backgroundColor: theme.isDark ? withAlpha(theme.text, 0.1) : theme.border,
     },
   });
 }

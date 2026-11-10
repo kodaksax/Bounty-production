@@ -23,6 +23,7 @@ import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { getNetworkErrorMessage } from '../../lib/utils/network-connectivity';
+import { withAlpha } from '../../lib/utils';
 
 // Distinguishes this native Stripe Identity trust-badge flow from the Stripe
 // Connect payout onboarding, which emits the same identity_* events with
@@ -129,7 +130,7 @@ export default function VerificationLaunchScreen() {
 
         <View style={styles.tipsList}>
           <View style={styles.tipRow}>
-            <MaterialIcons name="wb-sunny" size={18} color="#fbbf24" accessibilityElementsHidden />
+            <MaterialIcons name="wb-sunny" size={18} color={theme.warningText} accessibilityElementsHidden />
             <Text style={styles.tipText}>Find a well-lit spot without glare on your ID</Text>
           </View>
           <View style={styles.tipRow}>
@@ -144,7 +145,7 @@ export default function VerificationLaunchScreen() {
 
         {errorMessage && (
           <View style={styles.errorBox}>
-            <MaterialIcons name="error-outline" size={18} color="#ef4444" accessibilityElementsHidden />
+            <MaterialIcons name="error-outline" size={18} color={theme.errorText} accessibilityElementsHidden />
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
         )}
@@ -160,7 +161,7 @@ export default function VerificationLaunchScreen() {
           <Text style={styles.primaryButtonText}>
             {isBusy ? 'Starting…' : errorMessage ? 'Try again' : 'Start verification'}
           </Text>
-          {!isBusy && <MaterialIcons name="arrow-forward" size={20} color="#052e1b" accessibilityElementsHidden />}
+          {!isBusy && <MaterialIcons name="arrow-forward" size={20} color={theme.onPrimary} accessibilityElementsHidden />}
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -220,27 +221,25 @@ function makeStyles(theme: AppTheme) {
     tipText: { flex: 1, fontSize: 13.5, color: theme.text },
     errorBox: {
       flexDirection: 'row',
-      backgroundColor: 'rgba(239,68,68,0.1)',
+      backgroundColor: withAlpha(theme.error, 0.1),
       borderRadius: 12,
       padding: SPACING.CARD_PADDING,
       marginBottom: SPACING.ELEMENT_GAP,
       gap: 10,
       alignItems: 'flex-start',
     },
-    errorText: { flex: 1, fontSize: 13, color: '#ef4444', lineHeight: 18 },
+    errorText: { flex: 1, fontSize: 13, color: theme.errorText, lineHeight: 18 },
     primaryButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       paddingVertical: SPACING.CARD_PADDING,
       borderRadius: 999,
       marginBottom: SPACING.SCREEN_HORIZONTAL,
       gap: SPACING.COMPACT_GAP,
     },
     buttonDisabled: { opacity: 0.5 },
-    primaryButtonText: { color: '#052e1b', fontSize: 18, fontWeight: 'bold' },
+    primaryButtonText: { color: theme.onPrimary, fontSize: 18, fontWeight: 'bold' },
   });
 }

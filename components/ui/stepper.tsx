@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 export interface StepperStage {
   id: string;
@@ -60,7 +61,7 @@ export function Stepper({ stages, activeIndex }: StepperProps) {
                     <MaterialIcons
                       name={stage.icon as any}
                       size={14}
-                      color={isActive ? '#fff' : theme.isDark ? 'rgba(31,174,73,0.45)' : 'rgba(0,142,42,0.4)'}
+                      color={isActive ? '#fff' : theme.isDark ? withAlpha(theme.primary, 0.45) : withAlpha(theme.primary, 0.4)}
                     />
                   ) : null}
                 </View>
@@ -124,10 +125,10 @@ function makeStyles(theme: AppTheme) {
       flex: 1,
     },
     connectorDone: {
-      backgroundColor: '#008E2A',
+      backgroundColor: theme.primary,
     },
     connectorPending: {
-      backgroundColor: theme.isDark ? 'rgba(31,174,73,0.2)' : 'rgba(0,142,42,0.2)',
+      backgroundColor: withAlpha(theme.primary, 0.2),
     },
     bubble: {
       width: 32,
@@ -138,7 +139,7 @@ function makeStyles(theme: AppTheme) {
       flexShrink: 0,
     },
     bubbleActive: {
-      backgroundColor: '#008E2A',
+      backgroundColor: theme.primary,
       shadowColor: '#008E2A',
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: 0.5,
@@ -146,28 +147,28 @@ function makeStyles(theme: AppTheme) {
       elevation: 4,
     },
     bubbleCompleted: {
-      backgroundColor: '#008E2A',
+      backgroundColor: theme.primary,
       opacity: 0.85,
     },
     bubblePending: {
       backgroundColor: 'transparent',
       borderWidth: 1.5,
-      borderColor: theme.isDark ? 'rgba(31,174,73,0.25)' : 'rgba(0,142,42,0.25)',
+      borderColor: withAlpha(theme.primary, 0.25),
     },
     label: {
       marginTop: 6,
-      fontSize: 10,
+      fontSize: 11,
       textAlign: 'center',
       lineHeight: 13,
       paddingHorizontal: 2,
     },
     labelActive: {
-      color: theme.isDark ? '#1FAE49' : '#008E2A',
+      color: theme.primaryLight,
       fontWeight: '700',
-      fontSize: 11,
+      fontSize: 12,
     },
     labelCompleted: {
-      color: theme.isDark ? 'rgba(31,174,73,0.7)' : 'rgba(0,142,42,0.7)',
+      color: withAlpha(theme.primary, 0.7),
       fontWeight: '500',
     },
     labelPending: {

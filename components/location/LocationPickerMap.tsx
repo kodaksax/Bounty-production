@@ -266,7 +266,7 @@ export function LocationPickerMap({
       {mode === 'full' && (
         <>
           {isNativeMapAvailable && (
-            <Text style={{ marginTop: 6, fontSize: 11, color: theme.textSecondary }}>
+            <Text style={{ marginTop: 6, fontSize: 12, color: theme.textSecondary }}>
               Drag the pin or tap the map to fine-tune the exact spot.
             </Text>
           )}
@@ -277,7 +277,7 @@ export function LocationPickerMap({
             placeholderTextColor={theme.textDisabled}
             style={{
               marginTop: 10, paddingHorizontal: 14, paddingVertical: 12,
-              borderRadius: 10, fontSize: 15,
+              borderRadius: 12, fontSize: 15,
               backgroundColor: theme.surfaceSecondary, color: theme.text,
             }}
             accessibilityLabel="Apartment or unit number"

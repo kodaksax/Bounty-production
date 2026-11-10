@@ -22,7 +22,7 @@ function Stars({ score, theme }: { score: number; theme: AppTheme }) {
           key={i}
           name={i < full ? 'star' : 'star-border'}
           size={14}
-          color={i < full ? '#fbbf24' : theme.textSecondary}
+          color={i < full ? theme.warningText : theme.textSecondary}
         />
       ))}
     </View>
@@ -148,7 +148,7 @@ function makeStyles(theme: AppTheme) {
       gap: 8,
     },
     reviewDate: {
-      fontSize: 11,
+      fontSize: 12,
       color: theme.textSecondary,
     },
     reviewComment: {
@@ -162,14 +162,14 @@ function makeStyles(theme: AppTheme) {
       fontStyle: 'italic',
     },
     provenance: {
-      fontSize: 11,
+      fontSize: 12,
       color: theme.textSecondary,
       marginTop: 6,
     },
     seeAllText: {
       fontSize: 13,
       fontWeight: '600',
-      color: theme.primary,
+      color: theme.primaryLight,
       marginTop: 4,
     },
   });

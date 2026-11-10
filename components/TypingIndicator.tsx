@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Animated, StyleSheet } from 'react-native';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 
 interface TypingIndicatorProps {
   userName?: string;
@@ -9,6 +11,8 @@ interface TypingIndicatorProps {
  * Animated typing indicator showing three bouncing dots
  */
 export function TypingIndicator({ userName = 'Someone' }: TypingIndicatorProps) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
@@ -59,7 +63,8 @@ export function TypingIndicator({ userName = 'Someone' }: TypingIndicatorProps) 
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -68,7 +73,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bubble: {
-    backgroundColor: '#2A2E35',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -88,7 +93,8 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 12,
-    color: '#929497',
+    color: theme.textSecondary,
     fontStyle: 'italic',
   },
 });
+}

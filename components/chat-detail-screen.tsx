@@ -14,6 +14,7 @@ import { useAuthContext } from '../hooks/use-auth-context'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useWallet } from '../lib/wallet-context'
 import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 
 interface Message extends ChatMessage {
   time: string
@@ -79,6 +80,7 @@ export function ChatDetailScreen({
   onBack,
   onNavigate,
 }: ChatDetailScreenProps) {
+  const { theme } = useAppThemeContext();
   const { session } = useAuthContext()
   const currentUserId = getCurrentUserId()
   const router = useRouter()
@@ -156,7 +158,7 @@ export function ChatDetailScreen({
   }, [conversation.id])
 
   return (
-    <View className="flex flex-col h-screen bg-[#1B1E24] text-white">
+    <View className="flex flex-col h-screen" style={{ backgroundColor: theme.background }}>
       {/* Header */}
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center">
@@ -171,7 +173,7 @@ export function ChatDetailScreen({
       {/* Chat Header */}
       <View className="px-4 py-2 flex-row items-center justify-between">
         <View className="flex-row items-center">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button"
   onPress={() => {
     // exit conversation first if possible
     if (typeof onBack === 'function') {
@@ -184,9 +186,9 @@ export function ChatDetailScreen({
   }}
   className="mr-1 p-2 touch-target-min"
 >
-  <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
+  <MaterialIcons name="arrow-back" size={24} color={theme.text} />
 </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             className="flex-row items-center"
             onPress={() => {
               if (otherUserId && !conversation.isGroup) {
@@ -217,11 +219,11 @@ export function ChatDetailScreen({
           </TouchableOpacity>
         </View>
         <View className="flex-row gap-3">
-          <TouchableOpacity className="text-white">
-            <MaterialIcons name="phone" size={24} color="#929497" />
+          <TouchableOpacity accessibilityRole="button">
+            <MaterialIcons name="phone" size={24} color={theme.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity className="text-white">
-            <MaterialIcons name="videocam" size={24} color="#929497" />
+          <TouchableOpacity accessibilityRole="button">
+            <MaterialIcons name="videocam" size={24} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>

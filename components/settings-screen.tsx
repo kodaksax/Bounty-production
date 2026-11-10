@@ -93,7 +93,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
       });
     } catch (e) {
       console.error('[Logout] Error:', e);
-      Alert.alert('Error', 'Failed to log out properly.');
+      Alert.alert("Couldn't log out properly", "Please try again.");
     }
   };
 
@@ -113,7 +113,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
             const { deleteUserAccount } = require('../lib/services/account-deletion-service');
             const currentUserId = authProfile?.id;
             if (!currentUserId) {
-              Alert.alert('Error', 'Unable to identify user account. Please sign in again.');
+              Alert.alert("Something went wrong", 'Unable to identify user account. Please sign in again.');
               return;
             }
             Alert.alert(
@@ -151,7 +151,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
                         result.message || 'Your account has been permanently deleted.'
                       );
                     } catch (e) {
-                      Alert.alert('Error', 'Failed to delete account. Please try again or contact support.');
+                      Alert.alert("Something went wrong", 'Failed to delete account. Please try again or contact support.');
                     }
                   },
                 },
@@ -415,7 +415,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
       gap: 6,
       paddingVertical: 10,
-      borderRadius: 10,
+      borderRadius: 12,
       backgroundColor: t.surfaceSecondary,
       borderWidth: 1,
       borderColor: t.border,

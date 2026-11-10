@@ -7,6 +7,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
 import { getValidAvatarUrl } from "../lib/utils/avatar-utils"
+import { withAlpha } from '../lib/utils';
 
 interface ArchivedBountyCardProps {
   id: string
@@ -129,7 +130,7 @@ function makeStyles(t: AppTheme) {
     },
     avatarFallbackText: {
       color: t.textSecondary,
-      fontSize: 9,
+      fontSize: 12,
       fontWeight: '600',
     },
     username: {
@@ -141,13 +142,13 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: t.surfaceSecondary,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 8,
       paddingVertical: 3,
       gap: 4,
     },
     archivedPillText: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
       color: t.textSecondary,
       textTransform: 'uppercase',
@@ -166,24 +167,24 @@ function makeStyles(t: AppTheme) {
       marginBottom: 10,
     },
     amountBadge: {
-      backgroundColor: t.isDark ? 'rgba(0,142,42,0.18)' : 'rgba(0,142,42,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.18) : withAlpha(t.primary, 0.1),
       borderRadius: 8,
       paddingHorizontal: 10,
       paddingVertical: 4,
     },
     amountBadgeText: {
-      color: t.primary,
+      color: t.primaryLight,
       fontWeight: '700',
       fontSize: 13,
     },
     honorBadge: {
-      backgroundColor: 'rgba(219,39,119,0.14)',
+      backgroundColor: t.primaryTint,
       borderRadius: 8,
       paddingHorizontal: 10,
       paddingVertical: 4,
     },
     honorBadgeText: {
-      color: '#db2777',
+      color: t.primaryLight,
       fontWeight: '700',
       fontSize: 12,
     },
@@ -195,7 +196,7 @@ function makeStyles(t: AppTheme) {
     },
     workTypeBadgeText: {
       color: t.textSecondary,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
       textTransform: 'uppercase',
       letterSpacing: 0.4,

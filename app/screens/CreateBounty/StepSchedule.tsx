@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getBottomNavBaseClearance, getBottomNavContentPadding } from '../../../lib/constants/navigation';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
+import { withAlpha } from '../../../lib/utils';
 
 interface StepScheduleProps {
   draft: BountyDraft;
@@ -227,9 +228,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
                   borderRadius: 24,
                   borderWidth: 1.5,
                   borderColor: active ? theme.primary : theme.border,
-                  backgroundColor: active
-                    ? (theme.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)')
-                    : theme.surfaceSecondary,
+                  backgroundColor: active ? (theme.isDark ? withAlpha(theme.primary, 0.15) : withAlpha(theme.primary, 0.1)) : theme.surfaceSecondary,
                 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Schedule: ${label}`}
@@ -261,7 +260,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
                 flexDirection: 'row',
                 alignItems: 'center',
                 backgroundColor: theme.surfaceSecondary,
-                borderRadius: 10,
+                borderRadius: 12,
                 padding: 14,
                 marginBottom: 10,
                 borderWidth: 1,
@@ -295,7 +294,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
                 flexDirection: 'row',
                 alignItems: 'center',
                 backgroundColor: theme.surfaceSecondary,
-                borderRadius: 10,
+                borderRadius: 12,
                 padding: 14,
                 marginBottom: 10,
                 borderWidth: 1,
@@ -329,7 +328,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
                 flexDirection: 'row',
                 alignItems: 'center',
                 backgroundColor: theme.surfaceSecondary,
-                borderRadius: 10,
+                borderRadius: 12,
                 padding: 14,
                 borderWidth: 1,
                 borderColor: draft.latestArrivalTime ? theme.primary : theme.border,
@@ -373,7 +372,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
               style={{
                 backgroundColor: theme.surfaceSecondary,
                 color: theme.text,
-                borderRadius: 10,
+                borderRadius: 12,
                 padding: 14,
                 fontSize: 15,
                 borderWidth: 1,
@@ -406,9 +405,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
                       borderRadius: 20,
                       borderWidth: 1.5,
                       borderColor: active ? theme.primary : theme.border,
-                      backgroundColor: active
-                        ? (theme.isDark ? 'rgba(0,142,42,0.15)' : 'rgba(0,142,42,0.1)')
-                        : theme.surfaceSecondary,
+                      backgroundColor: active ? (theme.isDark ? withAlpha(theme.primary, 0.15) : withAlpha(theme.primary, 0.1)) : theme.surfaceSecondary,
                     }}
                     accessibilityRole="button"
                     accessibilityLabel={`Duration: ${label}`}
@@ -430,18 +427,18 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
             style={{
               flexDirection: 'row',
               alignItems: 'flex-start',
-              backgroundColor: theme.isDark ? 'rgba(220,38,38,0.1)' : 'rgba(220,38,38,0.06)',
-              borderRadius: 10,
+              backgroundColor: theme.isDark ? withAlpha(theme.error, 0.1) : withAlpha(theme.error, 0.06),
+              borderRadius: 12,
               padding: 12,
               borderWidth: 1,
-              borderColor: theme.isDark ? 'rgba(220,38,38,0.3)' : 'rgba(220,38,38,0.2)',
+              borderColor: theme.isDark ? withAlpha(theme.error, 0.3) : withAlpha(theme.error, 0.2),
               gap: 8,
               marginBottom: 16,
             }}
           >
-            <MaterialIcons name="bolt" size={18} color="#dc2626" style={{ marginTop: 1 }} />
+            <MaterialIcons name="bolt" size={18} color={theme.errorText} style={{ marginTop: 1 }} />
             <Text style={{ flex: 1, fontSize: 13, color: theme.textSecondary, lineHeight: 18 }}>
-              <Text style={{ fontWeight: '700', color: '#dc2626' }}>ASAP</Text>
+              <Text style={{ fontWeight: '700', color: theme.errorText }}>ASAP</Text>
               {' '}lets hunters know you need help immediately — this will be surfaced at the top of the feed with an urgency badge.
             </Text>
           </View>
@@ -466,7 +463,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
             style={{
               flex: 1,
               paddingVertical: 12,
-              borderRadius: 10,
+              borderRadius: 12,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
@@ -484,7 +481,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
             style={{
               flex: 1,
               paddingVertical: 12,
-              borderRadius: 10,
+              borderRadius: 12,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
@@ -519,7 +516,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
                     : 'Latest Arrival'}
                 </Text>
                 <TouchableOpacity onPress={handleIOSPickerDone} accessibilityRole="button" accessibilityLabel="Done">
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: theme.primary }}>Done</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: theme.primaryLight }}>Done</Text>
                 </TouchableOpacity>
               </View>
               <DateTimePicker

@@ -12,6 +12,7 @@ import {
 import { addressAutocompleteService, type AddressSuggestion } from '../lib/services/address-autocomplete-service';
 import { sanitizeAddressText } from '../lib/utils/address-sanitization';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { withAlpha } from '../lib/utils';
 
 interface AddressAutocompleteProps extends Omit<TextInputProps, 'onChangeText'> {
   value: string;
@@ -219,7 +220,7 @@ export function AddressAutocomplete({
         />
         {isLoading && (
           <View className="absolute right-4 top-3">
-            <ActivityIndicator size="small" color="#1FAE49" />
+            <ActivityIndicator size="small" color={theme.primaryLight} />
           </View>
         )}
       </View>
@@ -231,7 +232,7 @@ export function AddressAutocomplete({
             <MaterialIcons
               name="warning"
               size={16}
-              color="rgba(251, 191, 36, 0.8)"
+              color={withAlpha(theme.warning, 0.8)}
               style={{ marginRight: 6, marginTop: 2 }}
             />
             <Text className="text-amber-200/80 text-xs flex-1">

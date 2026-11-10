@@ -461,7 +461,7 @@ const illustration = StyleSheet.create({
     position: 'absolute',
     width: 168,
     height: 76,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -566,7 +566,7 @@ function makeStyles(theme: AppTheme) {
       borderRadius: theme.radius.full,
     },
     proofBadgeText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       letterSpacing: 0.4,
       color: theme.foreground,
@@ -606,7 +606,7 @@ function makeStyles(theme: AppTheme) {
       marginRight: 2,
     },
     proofAvatarText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       color: theme.text,
     },
@@ -669,7 +669,7 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButton: {
       height: 56,
-      borderRadius: theme.radius.full,
+      borderRadius: theme.radius.lg,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -682,7 +682,7 @@ function makeStyles(theme: AppTheme) {
     },
     loginButton: {
       height: 56,
-      borderRadius: theme.radius.full,
+      borderRadius: theme.radius.lg,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1.5,

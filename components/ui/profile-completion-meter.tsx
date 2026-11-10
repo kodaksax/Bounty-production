@@ -82,7 +82,7 @@ function makeStyles(theme: AppTheme) {
     percent: {
       fontSize: 13,
       fontWeight: '700',
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     track: {
       height: 8,

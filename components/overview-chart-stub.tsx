@@ -1,15 +1,17 @@
 import React from 'react'
 import { Text, View } from 'react-native'
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 
 const data = [1200,2100,1800,2400,2700,1700,2900,3100,2400,2800,3200,3600]
 
 export function OverviewChart() {
+  const { theme } = useAppThemeContext();
   return (
     <View style={{ padding: 16 }}>
-      <Text style={{ color: '#454952', fontWeight: '600', marginBottom: 8 }}>Monthly Totals</Text>
+      <Text style={{ color: theme.textDisabled, fontWeight: '600', marginBottom: 8 }}>Monthly Totals</Text>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 160, gap: 8 }}>
         {data.map((val, i) => (
-          <View key={i} style={{ width: 18, height: (val / 3600) * 160, backgroundColor: '#008E2A', borderRadius: 4 }} />
+          <View key={i} style={{ width: 18, height: (val / 3600) * 160, backgroundColor: theme.primary, borderRadius: 4 }} />
         ))}
       </View>
     </View>

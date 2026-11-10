@@ -393,7 +393,7 @@ export default function EditProfileScreen() {
       {displayError && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error || saveError}</Text>
-          <TouchableOpacity onPress={() => setDismissedError(true)}>
+          <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => setDismissedError(true)}>
             <MaterialIcons name="close" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
@@ -681,8 +681,6 @@ function makeStyles(theme: AppTheme) {
     },
     saveButton: {
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       borderRadius: 16,
       paddingHorizontal: 16,
       paddingVertical: 6,
@@ -801,8 +799,6 @@ function makeStyles(theme: AppTheme) {
       height: 44,
       borderRadius: 22,
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       justifyContent: "center",
       alignItems: "center",
       borderWidth: 4,
@@ -855,13 +851,13 @@ function makeStyles(theme: AppTheme) {
       textAlignVertical: "top",
     },
     characterCounter: {
-      fontSize: 11,
+      fontSize: 12,
       color: theme.textSecondary,
       textAlign: "right",
       marginTop: 4,
     },
     helpText: {
-      fontSize: 11,
+      fontSize: 12,
       color: theme.primaryLight,
       marginTop: 4,
       fontStyle: "italic",

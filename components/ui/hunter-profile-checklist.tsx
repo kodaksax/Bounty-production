@@ -124,7 +124,7 @@ function makeStyles(theme: AppTheme) {
     count: {
       fontSize: 13,
       fontWeight: '600',
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     row: {
       flexDirection: 'row',

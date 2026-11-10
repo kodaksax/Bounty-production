@@ -2,6 +2,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useCountdown } from '../../hooks/useCountdown';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+
+/**
+ * Sits on a photo in both themes, so it can't follow theme.error: the dark
+ * theme's lighter red drops white text below AA. Card chip styles share it.
+ */
+export const URGENT_CHIP_FILL = 'rgba(163,58,51,0.92)';
 
 export interface CountdownBadgeProps {
   endDate?: string | null;
@@ -15,6 +23,8 @@ export interface CountdownBadgeProps {
  * themselves.
  */
 export function CountdownBadge({ endDate, size = 'sm', style }: CountdownBadgeProps) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { isWithin24h, isExpired, label } = useCountdown(endDate);
   if (!isWithin24h || isExpired) return null;
 
@@ -23,19 +33,20 @@ export function CountdownBadge({ endDate, size = 'sm', style }: CountdownBadgePr
       style={[styles.badge, size === 'md' && styles.badgeMd, style]}
       accessibilityLabel={`Deadline in ${label}`}
     >
-      <MaterialIcons name="timer" size={size === 'md' ? 12 : 10} color="#fff" />
+      <MaterialIcons name="timer" size={size === 'md' ? 12 : 10} color={theme.onPrimary} />
       <Text style={[styles.text, size === 'md' && styles.textMd]}>{label}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 3,
-    backgroundColor: 'rgba(220,38,38,0.92)',
+    backgroundColor: URGENT_CHIP_FILL,
     borderRadius: 999,
     paddingHorizontal: 7,
     paddingVertical: 3,
@@ -45,12 +56,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   text: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
-    color: '#fff',
+    color: theme.onPrimary,
     fontVariant: ['tabular-nums'],
   },
   textMd: {
-    fontSize: 11,
+    fontSize: 12,
   },
 });
+}

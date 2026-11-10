@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
 import type { AppTheme } from "../../lib/themes/types";
 import type { ScreenKey } from "./bottom-nav";
+import { withAlpha } from '../../lib/utils';
 
 /**
  * Floating pill tab bar — the compact, detached bar most iOS apps now use.
@@ -165,7 +166,7 @@ export function FloatingTabBar({
                   )}
                 </View>
                 <Text
-                  style={[s.label, active && s.labelActive, isCenter && { color: theme.primary }]}
+                  style={[s.label, active && s.labelActive, isCenter && { color: theme.primaryLight }]}
                   numberOfLines={1}
                   maxFontSizeMultiplier={LABEL_MAX_FONT_SCALE}
                 >
@@ -193,11 +194,11 @@ function makeStyles(t: AppTheme) {
       borderRadius: BAR_HEIGHT / 2,
       overflow: "hidden",
       padding: BAR_PADDING,
-      backgroundColor: t.isDark ? "rgba(27,30,36,0.82)" : "rgba(255,255,255,0.72)",
+      backgroundColor: t.isDark ? withAlpha(t.background, 0.82) : withAlpha(t.surfaceRaised, 0.92),
       borderWidth: StyleSheet.hairlineWidth * 2,
-      borderColor: t.isDark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.9)",
+      borderColor: t.isDark ? withAlpha(t.text, 0.14) : t.borderSubtle,
       shadowColor: "#000",
-      shadowOpacity: t.isDark ? 0.45 : 0.16,
+      shadowOpacity: t.isDark ? 0.45 : 0.1,
       shadowRadius: 18,
       shadowOffset: { width: 0, height: 8 },
       elevation: 10,
@@ -212,7 +213,7 @@ function makeStyles(t: AppTheme) {
       bottom: 0,
       left: 0,
       borderRadius: (BAR_HEIGHT - BAR_PADDING * 2) / 2,
-      backgroundColor: t.isDark ? "rgba(230,222,209,0.14)" : "rgba(49,54,63,0.08)",
+      backgroundColor: t.isDark ? withAlpha(t.text, 0.14) : "rgba(49,54,63,0.08)",
     },
     tab: {
       flex: 1,
@@ -221,7 +222,7 @@ function makeStyles(t: AppTheme) {
       gap: 2,
     },
     label: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "600",
       color: t.textSecondary,
     },
@@ -244,7 +245,7 @@ function makeStyles(t: AppTheme) {
     },
     badgeText: {
       color: "#FFFFFF",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     // Brand green, not the unread badge's red: it marks saved work to come

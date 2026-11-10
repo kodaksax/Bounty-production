@@ -141,7 +141,7 @@ function makeStyles(t: AppTheme) {
     },
     codeInput: {
       backgroundColor: t.surfaceSecondary,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 16,
       paddingVertical: 14,
       color: t.text,

@@ -1295,8 +1295,6 @@ function makeLayout(
         height: v(54),
         borderRadius: 999,
         backgroundColor: theme.primary,
-        borderBottomWidth: 4,
-        borderBottomColor: theme.primaryShade,
         shadowColor: theme.primary,
         shadowOpacity: 0.45,
         shadowRadius: 20,

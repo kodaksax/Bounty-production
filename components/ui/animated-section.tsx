@@ -4,6 +4,7 @@ import { Animated, LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity
 import { duration, easeInOut } from '../../lib/motion';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -79,10 +80,10 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: t.isDark ? 'rgba(0, 142, 42, 0.15)' : 'rgba(0, 142, 42, 0.06)',
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.15) : withAlpha(t.primary, 0.06),
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? '#454952' : 'rgba(0, 142, 42, 0.25)',
+      borderColor: t.isDark ? t.border : withAlpha(t.primary, 0.25),
       marginVertical: 8,
       overflow: 'hidden',
     },

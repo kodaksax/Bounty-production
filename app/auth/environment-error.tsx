@@ -50,7 +50,7 @@ export default function EnvironmentErrorScreen() {
         </Text>
         <Text style={styles.body}>Typical fix time: {SUPPORT_RESPONSE_TIMES.email}.</Text>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.primaryButton, isReloading && styles.buttonDisabled]}
           onPress={handleRetry}
           disabled={isReloading}
@@ -59,8 +59,8 @@ export default function EnvironmentErrorScreen() {
           <Text style={styles.primaryButtonText}>{isReloading ? 'Reloading…' : 'Try Again'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleContactSupport}>
-          <Text style={styles.secondaryButtonText}>Contact Support</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={handleContactSupport}>
+          <Text style={styles.secondaryButtonText}>Contact support</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#ffffff',
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     marginBottom: 12,
     textAlign: 'center',
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#ffffff',
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 24,
     width: '100%',

@@ -18,8 +18,14 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../../components/ui/branding-logo';
 import { markInitialNavigationDone } from '../../initial-navigation/initialNavigation';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../lib/themes/types';
+import { withAlpha } from '../../../lib/utils';
+import { useMemo } from 'react';
 
 export default function ConnectRefreshScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const { replacementId } = useLocalSearchParams<{ replacementId?: string }>();
   const insets = useSafeAreaInsets();
@@ -44,7 +50,7 @@ export default function ConnectRefreshScreen() {
 
       <View style={styles.content}>
         <View style={styles.iconCircle}>
-          <MaterialIcons name="link-off" size={64} color="#92400e" />
+          <MaterialIcons name="link-off" size={64} color={theme.warningText} />
         </View>
 
         <Text style={styles.title}>Onboarding Link Expired</Text>
@@ -54,7 +60,7 @@ export default function ConnectRefreshScreen() {
         </Text>
 
         <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={20} color="#929497" />
+          <MaterialIcons name="info-outline" size={20} color={theme.textSecondary} />
           <Text style={styles.infoText}>
             {
               "This happens automatically after the link's security window closes. It only takes a moment to get a new one."
@@ -62,19 +68,20 @@ export default function ConnectRefreshScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleRestartSetup}>
+        <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleRestartSetup}>
           <Text style={styles.primaryButtonText}>{replacementId ? 'Resume New Account Setup' : 'Return to Wallet'}</Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+          <MaterialIcons name="arrow-forward" size={20} color={theme.onPrimary} />
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008E2A',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
   },
   brandingHeader: {
@@ -92,7 +99,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#fde68a',
+    backgroundColor: theme.warningTint,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -105,13 +112,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: theme.onPrimary,
     marginBottom: 16,
     textAlign: 'center',
   },
   description: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.85)',
+    color: withAlpha(theme.onPrimary, 0.85),
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
@@ -120,18 +127,18 @@ const styles = StyleSheet.create({
   infoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(5,46,27,0.4)',
+    backgroundColor: theme.primaryTint,
     borderRadius: 12,
     padding: 16,
     width: '100%',
     marginBottom: 32,
     borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.3)',
+    borderColor: theme.primaryTint,
     gap: 12,
   },
   infoText: {
     flex: 1,
-    color: 'rgba(255,255,255,0.75)',
+    color: withAlpha(theme.onPrimary, 0.75),
     fontSize: 14,
     lineHeight: 20,
   },
@@ -139,7 +146,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#929497',
+    backgroundColor: theme.primary,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
@@ -147,8 +154,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryButtonText: {
-    color: '#052e1b',
+    color: theme.onPrimary,
     fontSize: 18,
     fontWeight: 'bold',
   },
 });
+}

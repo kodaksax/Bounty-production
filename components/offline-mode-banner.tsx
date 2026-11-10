@@ -8,7 +8,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOfflineMode } from '../hooks/useOfflineMode';
-import { theme } from '../lib/theme';
+import { theme as legacyTheme } from '../lib/theme';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 
 
 interface OfflineModeBannerProps {
@@ -39,6 +41,8 @@ interface OfflineModeBannerProps {
  * ```
  */
 export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBannerProps) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { isOnline, isChecking, queuedItemsCount, checkConnection } = useOfflineMode();
   const [fadeAnim] = React.useState(new Animated.Value(1));
 
@@ -65,7 +69,8 @@ export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBann
     return null;
   }
 
-  const backgroundColor = !isOnline ? '#f59e0b' : queuedItemsCount > 0 ? '#3b82f6' : '#008E2A';
+  const backgroundColor = !isOnline ? theme.warningTint : queuedItemsCount > 0 ? theme.infoTint : theme.successTint;
+  const contentColor = !isOnline ? theme.warningText : queuedItemsCount > 0 ? theme.infoText : theme.successText;
   const icon = !isOnline ? 'cloud-off' : isChecking ? 'sync' : 'cloud-done';
 
   return (
@@ -74,12 +79,12 @@ export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBann
         <MaterialIcons
           name={icon}
           size={20}
-          color="#fff"
+          color={contentColor}
           style={isChecking ? styles.spinningIcon : undefined}
         />
 
         <View style={styles.textContainer}>
-          <Text style={styles.title}>
+          <Text style={[styles.title, { color: contentColor }]}>
             {!isOnline
               ? 'No Internet Connection'
               : queuedItemsCount > 0
@@ -89,25 +94,25 @@ export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBann
           </Text>
 
           {showDetails && queuedItemsCount > 0 && (
-            <Text style={styles.subtitle}>
+            <Text style={[styles.subtitle, { color: contentColor }]}>
               {queuedItemsCount} {queuedItemsCount === 1 ? 'item' : 'items'} pending
             </Text>
           )}
 
           {showDetails && !isOnline && (
-            <Text style={styles.subtitle}>
+            <Text style={[styles.subtitle, { color: contentColor }]}>
               Changes will sync when you're back online
             </Text>
           )}
         </View>
 
         {isOnline && queuedItemsCount > 0 && !isChecking && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Refresh" accessibilityRole="button"
             onPress={checkConnection}
             style={styles.refreshButton}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="refresh" size={20} color="#fff" />
+            <MaterialIcons name="refresh" size={20} color={contentColor} />
           </TouchableOpacity>
         )}
       </View>
@@ -115,14 +120,15 @@ export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBann
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     width: '100%',
     paddingVertical: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    ...theme.shadows.lg,
+    ...legacyTheme.shadows.lg,
   },
 
   content: {
@@ -135,12 +141,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
   },
   subtitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 12,
     opacity: 0.9,
     marginTop: 2,
@@ -152,11 +158,14 @@ const styles = StyleSheet.create({
     // Add animation class if needed
   },
 });
+}
 
 /**
  * Compact version of the offline banner for use in specific screens
  */
 export function CompactOfflineBanner({ style }: { style?: any }) {
+  const { theme } = useAppThemeContext();
+  const compactStyles = React.useMemo(() => makeCompactStyles(theme), [theme]);
   const { isOnline, queuedItemsCount } = useOfflineMode();
 
   if (isOnline && queuedItemsCount === 0) {
@@ -168,7 +177,7 @@ export function CompactOfflineBanner({ style }: { style?: any }) {
       <MaterialIcons
         name={!isOnline ? 'cloud-off' : 'sync'}
         size={16}
-        color="#f59e0b"
+        color={theme.warningText}
       />
       <Text style={compactStyles.compactText}>
         {!isOnline
@@ -180,22 +189,24 @@ export function CompactOfflineBanner({ style }: { style?: any }) {
   );
 }
 
-const compactStyles = StyleSheet.create({
+function makeCompactStyles(theme: AppTheme) {
+  return StyleSheet.create({
   compactContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: '#fef3c7',
+    backgroundColor: theme.warningTint,
     borderRadius: 12,
     alignSelf: 'flex-start',
   },
   compactText: {
-    color: '#92400e',
+    color: theme.warningText,
     fontSize: 12,
     fontWeight: '600',
   },
 });
+}
 
 // (Intentional) compact styles already defined above; no duplicate export.

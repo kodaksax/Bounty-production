@@ -120,7 +120,7 @@ export default function VerificationOnboardingExplainerScreen() {
           accessibilityLabel="Continue to verification"
         >
           <Text style={styles.primaryButtonText}>Continue</Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#052e1b" accessibilityElementsHidden />
+          <MaterialIcons name="arrow-forward" size={20} color={theme.onPrimary} accessibilityElementsHidden />
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -214,13 +214,11 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
       paddingVertical: SPACING.CARD_PADDING,
       borderRadius: 999,
       marginBottom: SPACING.SCREEN_HORIZONTAL,
       gap: SPACING.COMPACT_GAP,
     },
-    primaryButtonText: { color: '#052e1b', fontSize: 18, fontWeight: 'bold' },
+    primaryButtonText: { color: theme.onPrimary, fontSize: 18, fontWeight: 'bold' },
   });
 }

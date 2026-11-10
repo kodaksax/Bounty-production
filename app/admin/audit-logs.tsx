@@ -24,6 +24,8 @@ import { AdminHeader } from '../../components/admin/AdminHeader';
 import { ROUTES } from '../../lib/routes';
 import { auditLogService } from '../../lib/services/audit-log-service';
 import type { AuditLogCategory, AuditLogEntry } from '../../lib/types-admin';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { withAlpha } from '../../lib/utils';
 
 type CategoryFilter = AuditLogCategory | 'all';
 type SeverityFilter = 'all' | 'info' | 'warning' | 'critical';
@@ -278,7 +280,7 @@ export default function AuditLogsScreen() {
             style={[
               styles.severityChip,
               severityFilter === sev && {
-                backgroundColor: sev === 'all' ? 'rgba(167,243,208,0.2)' : config.bg,
+                backgroundColor: sev === 'all' ? theme.primaryTint : config.bg,
               },
             ]}
             onPress={() => {
@@ -786,7 +788,7 @@ const makeStyles = (theme: AppTheme) =>
     alignItems: 'center',
   },
   criticalStat: {
-    backgroundColor: 'rgba(220,38,38,0.1)',
+    backgroundColor: withAlpha(theme.error, 0.1),
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 8,
@@ -971,7 +973,7 @@ const makeStyles = (theme: AppTheme) =>
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: withAlpha(theme.primary, 0.15),
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -1016,8 +1018,6 @@ const makeStyles = (theme: AppTheme) =>
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: theme.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.primaryShade,
     borderRadius: 10,
     marginTop: 8,
   },

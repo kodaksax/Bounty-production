@@ -1,6 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
+import { withAlpha } from '../lib/utils';
 
 interface PinnedMessageHeaderProps {
   text: string;
@@ -12,14 +15,16 @@ interface PinnedMessageHeaderProps {
  * Header showing the currently pinned message
  */
 export function PinnedMessageHeader({ text, onPress, onDismiss }: PinnedMessageHeaderProps) {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   return (
-    <TouchableOpacity 
+    <TouchableOpacity accessibilityRole="button" 
       style={styles.container}
       onPress={onPress}
       activeOpacity={0.8}
     >
       <View style={styles.content}>
-        <MaterialIcons name="push-pin" size={18} color="#fbbf24" />
+        <MaterialIcons name="push-pin" size={18} color={theme.warningText} />
         <View style={styles.textContainer}>
           <Text style={styles.label}>Pinned Message</Text>
           <Text style={styles.text} numberOfLines={1}>
@@ -28,25 +33,26 @@ export function PinnedMessageHeader({ text, onPress, onDismiss }: PinnedMessageH
         </View>
       </View>
       {onDismiss && (
-        <TouchableOpacity 
+        <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" 
           style={styles.dismissButton}
           onPress={(e) => {
             e.stopPropagation();
             onDismiss();
           }}
         >
-          <MaterialIcons name="close" size={20} color="#929497" />
+          <MaterialIcons name="close" size={20} color={theme.textSecondary} />
         </TouchableOpacity>
       )}
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(251, 191, 36, 0.15)', // amber tint
+    backgroundColor: withAlpha(theme.warning, 0.15), // amber tint
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(251, 191, 36, 0.3)',
+    borderBottomColor: withAlpha(theme.warning, 0.3),
     paddingVertical: 10,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -63,16 +69,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    fontSize: 11,
-    color: '#fbbf24',
+    fontSize: 12,
+    color: theme.warningText,
     fontWeight: '600',
     marginBottom: 2,
   },
   text: {
     fontSize: 14,
-    color: '#929497',
+    color: theme.textSecondary,
   },
   dismissButton: {
     padding: 4,
   },
 });
+}

@@ -203,7 +203,7 @@ function BountyMapViewInner({ category, height = '100%' }: BountyMapViewProps) {
             right: 12,
             bottom: 12,
             backgroundColor: theme.surface,
-            borderRadius: 14,
+            borderRadius: 12,
             padding: 14,
             borderWidth: 1,
             borderColor: theme.border,
@@ -230,7 +230,7 @@ function BountyMapViewInner({ category, height = '100%' }: BountyMapViewProps) {
             >
               {selected.title}
             </Text>
-            <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 15 }}>
+            <Text style={{ color: theme.primaryLight, fontWeight: '800', fontSize: 15 }}>
               {selected.is_for_honor ? 'Honor' : `$${Number(selected.amount).toFixed(0)}`}
             </Text>
           </View>

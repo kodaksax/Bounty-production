@@ -73,6 +73,8 @@ import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
+import { withAlpha } from '../../lib/utils';
+import { showToast } from '../../lib/toast';
 
 
 
@@ -748,7 +750,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               await loadMyBounties()
             } catch (err: any) {
               setError(err?.message || 'Failed to discard bounty')
-              Alert.alert('Error', err?.message || 'Failed to discard bounty. Please try again.')
+              Alert.alert("Something went wrong", err?.message || 'Failed to discard bounty. Please try again.')
             }
           },
         },
@@ -840,7 +842,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 console.warn('Failed to refresh in-progress bounties after withdrawal:', refreshError)
               }
 
-              Alert.alert("Success", "Your application has been withdrawn.")
+              showToast({ message: "Your application has been withdrawn." })
             } catch (err: any) {
               console.error("Error withdrawing application:", err)
               const friendly = getUserFriendlyError(err)
@@ -1171,7 +1173,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                         <View
                           style={{
                             marginLeft: 4,
-                            backgroundColor: isActive ? '#dc2626' : '#ef4444',
+                            backgroundColor: theme.error,
                             borderRadius: 8,
                             minWidth: 16,
                             height: 16,
@@ -1180,7 +1182,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                             paddingHorizontal: 3,
                           }}
                         >
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', lineHeight: 12 }}>
+                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', lineHeight: 12 }}>
                             {badgeCount > 99 ? '99+' : badgeCount}
                           </Text>
                         </View>
@@ -1199,7 +1201,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           {error && (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity style={styles.errorCloseButton} onPress={() => setError(null)}>
+                <TouchableOpacity accessibilityRole="button" style={styles.errorCloseButton} onPress={() => setError(null)}>
                   <Text style={styles.errorCloseText}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -1208,7 +1210,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           {/* Success message */}
           {postSuccess && (
             <View className="mx-4 mb-4 p-3 bg-[#008E2A]/70 rounded-lg">
-              <Text className="text-white text-sm">Bounty posted successfully!</Text>
+              <Text className="text-sm" style={{ color: theme.text }}>Bounty posted successfully!</Text>
             </View>
           )}
 
@@ -1528,7 +1530,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           >
             {/* Amount header row */}
             <View className="flex-row items-center justify-between mb-2 px-2">
-              <Text className="text-base font-medium" style={{ color: theme.text }}>Bounty Amount</Text>
+              <Text className="text-base font-medium" style={{ color: theme.text }}>Bounty amount</Text>
               <Text className="text-sm" style={{ color: theme.textSecondary }}>Current Balance: ${balance.toFixed(2)}</Text>
             </View>
 
@@ -1539,7 +1541,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   const selected = formData.amount === amt && !formData.isForHonor;
                   const lowBalance = !formData.isForHonor && formData.amount === amt && formData.amount > balance;
                   return (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       key={amt}
                       onPress={() => handleChooseAmount(amt)}
                       className={cn(
@@ -1566,7 +1568,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   const highlight = otherSelected || lowBalance;
                   const displayLabel = otherSelected ? `$${formData.amount}` : 'Other…';
                   return (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       onPress={() => setShowAddBountyAmount(true)}
                       className={cn(
                         "px-4 py-2 rounded-full border",
@@ -1624,7 +1626,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               })
               return (
                 <Animated.View style={{ transform: [{ translateX: shakeTranslate }] }}>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     ref={postButtonRef}
                     onPress={handlePress}
                     className={cn(
@@ -1632,7 +1634,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       lowBalance ? "border-amber-400 bg-amber-500/25" : ""
                     )}
                     style={!lowBalance ? {
-                      borderColor: requiredMissing ? 'rgba(248,113,113,0.7)' : theme.border,
+                      borderColor: requiredMissing ? withAlpha(theme.error, 0.7) : theme.border,
                       backgroundColor: requiredMissing ? theme.surface : theme.primary,
                     } : undefined}
                     activeOpacity={0.85}
@@ -1719,7 +1721,7 @@ function makeStyles(theme: AppTheme) {
     },
     translateY2: { transform: [{ translateY: 2 }] },
     titleText: { fontSize: 20, color: theme.text },
-    errorBox: { marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
+    errorBox: { marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: withAlpha(theme.error, 0.45), borderRadius: 8 },
     errorText: { color: theme.text, fontSize: 14 },
     errorCloseButton: { position: 'absolute', right: 8, top: 8, padding: 8 },
     errorCloseText: { color: theme.text, fontSize: 16 },

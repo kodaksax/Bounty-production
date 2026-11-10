@@ -32,6 +32,8 @@ import { messagingStrings } from "../../lib/strings/messaging"
 import { ChatSafetyWarning } from "../../components/chat-safety-warning"
 import { useChatSendProtection, useChatSendScope } from "../../hooks/use-chat-send-protection"
 import { detectOffPlatformRisk, latestIncomingRisk } from "../../lib/utils/off-platform-risk"
+import { withAlpha } from '../../lib/utils';
+import { showToast } from '../../lib/toast';
  
 /**
  * A non-message row interleaved into the thread by time — the bounty inbox
@@ -338,7 +340,7 @@ export function ChatDetailScreen({
   const handleCopy = async () => {
     if (!selectedMessageId) return
     await copyMessage(selectedMessageId)
-    Alert.alert('Copied', 'Message copied to clipboard')
+    showToast({ message: 'Message copied to clipboard' })
   }
 
   const handleReport = async () => {
@@ -361,10 +363,10 @@ export function ChatDetailScreen({
           onPress: async () => {
             const result = await blockingService.blockUser(otherUserId)
             if (result.success) {
-              Alert.alert('User Blocked', `${displayName} has been blocked.`)
+              showToast({ message: `${displayName} has been blocked.` })
               onBack?.()
             } else {
-              Alert.alert('Error', result.error || 'Failed to block user')
+              Alert.alert("Something went wrong", result.error || 'Failed to block user')
             }
           },
         },
@@ -776,14 +778,14 @@ function makeStyles(t: AppTheme) {
       marginHorizontal: 16,
       marginTop: 8,
       padding: 12,
-      backgroundColor: '#FEE2E2',
+      backgroundColor: t.errorTint,
       borderWidth: 1,
-      borderColor: '#FCA5A5',
+      borderColor: t.error,
       borderRadius: 8,
     },
     errorText: {
       fontSize: 13,
-      color: '#991B1B',
+      color: t.errorText,
     },
     keyboardAvoidingContainer: {
       flex: 1,
@@ -823,9 +825,11 @@ function makeStyles(t: AppTheme) {
     // a hairline light rim, and a soft drop shadow.
     glass: {
       overflow: 'hidden',
-      backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.55)',
+      // Light mode: solid white pill. (t.text is near-black in light mode, so
+      // tinting with it made the composer render dark.)
+      backgroundColor: t.isDark ? withAlpha(t.text, 0.08) : '#FFFFFF',
       borderWidth: StyleSheet.hairlineWidth * 2,
-      borderColor: t.isDark ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.9)',
+      borderColor: t.isDark ? withAlpha(t.text, 0.28) : withAlpha(t.text, 0.12),
       shadowColor: '#000',
       shadowOpacity: t.isDark ? 0.35 : 0.12,
       shadowRadius: 10,
@@ -881,7 +885,7 @@ function makeStyles(t: AppTheme) {
     replyLabel: {
       fontSize: 12,
       fontWeight: '700',
-      color: t.primary,
+      color: t.primaryLight,
     },
     replyPreview: {
       fontSize: 13,
