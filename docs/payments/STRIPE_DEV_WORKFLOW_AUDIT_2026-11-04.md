@@ -113,6 +113,11 @@ Severity: P0 money/trust now · P1 money path broken or latent loss · P2 ops/te
   checking the live env, so since then the app quotes 5% and deducts 8%. Docs
   disagree too (5%, 10%).
 - **Reproduce.** `SELECT round(100*(metadata->>'platform_fee')::numeric / ((metadata->>'platform_fee')::numeric + abs(amount)),1), count(*) FROM wallet_transactions WHERE type='release' AND metadata ? 'platform_fee' GROUP BY 1;`
+- **Decision changed (2026-11-09): 5%, from the hunter's side** (the poster pays the
+  listed price). Code defaults and the client constant are back to 5 (PR
+  `fix/platform-fee-5`). **The production `PLATFORM_FEE_PERCENT` secret is still 8**
+  and wins over every default until it is set to 5; set it when this ships.
+  The 2026-11-04 entry below is kept for the record.
 - **Decision (2026-11-04): 8%, no refund.** Done in code: `lib/constants/fees.ts`
   → 8 (FAQ, how-it-works, StepPay, payout and earnings screens all derive from
   it); server default `DEFAULT_PLATFORM_FEE_PERCENT = 8` in

@@ -584,6 +584,14 @@ export type AnalyticsEvent =
   // `query_length`, never the raw query text (PII risk).
   | 'bounty_list_viewed'
   | 'bounty_search'
+  // Search's "Need this done? Post it as a bounty" card, offered when a
+  // query of 3+ words reads like a job request (lib/utils/search-post-fallback.ts).
+  // `search_post_cta_shown` fires each time the card appears or switches
+  // between its zero-results and under-results forms; `search_post_cta_tapped`
+  // on "Post this". Both carry query_length, had_zero_results and
+  // entry_point ('search_fallback'), never the query text.
+  | 'search_post_cta_shown'
+  | 'search_post_cta_tapped'
   // Canonical hunter application funnel — application_started (Apply tapped) ->
   // application_submitted (insert succeeded) or application_failed.
   // Renamed from bounty_claim_started / bounty_claim_submitted / bounty_claim_failed

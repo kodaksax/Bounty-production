@@ -13,7 +13,8 @@ const read = (p: string) => readFileSync(join(root, p), 'utf8');
 const sql = read('supabase/migrations/20261019230000_posting_quality_rules.sql');
 const down = read('supabase/rollbacks/production/20261019230000_posting_quality_rules.down.sql');
 const weekly = read('scripts/ops/posting-quality-weekly.sql');
-const stepTask = read('app/screens/CreateBounty/quick/StepTask.tsx');
+// Step 1's copy module holds the composer's floor (StepTask imports it).
+const stepTaskCopy = read('app/screens/CreateBounty/quick/stepTaskCopy.ts');
 const manifest = JSON.parse(read('supabase/security/rls-manifest.json'));
 
 /** Body of a CREATE FUNCTION up to its closing dollar quote. */
@@ -50,7 +51,7 @@ describe('posting quality rules migration (SBA-03)', () => {
 
     it('needs 20 trimmed characters, the same bar as the composer', () => {
       expect(fn).toContain("char_length(btrim(COALESCE(NEW.description, ''), E' \\t\\r\\n')) < 20");
-      expect(stepTask).toContain('const MIN_DETAIL_LENGTH = 20;');
+      expect(stepTaskCopy).toContain('export const MIN_DETAIL_LENGTH = 20;');
     });
   });
 

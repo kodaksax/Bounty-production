@@ -205,12 +205,15 @@ describe('a new poster’s first sitting', () => {
 });
 
 describe('"Later" on a prompt the Post tap ran into', () => {
-  // A returning poster with notifications still unanswered, so
-  // enable_notifications is the one eligible prompt.
+  // A returning user with no role and notifications still unanswered, so
+  // enable_notifications is the one eligible prompt. (A declared poster with
+  // no bounty would be held to post_first_bounty — see
+  // moments-poster-first-hold.test.tsx.)
   beforeEach(() => {
     storage.set('@bounty_moments_session_count:user-1', '3');
     mockProfile = {
       ...mockProfile,
+      primary_role: null,
       avatar: 'a.png',
       about: 'bio',
       location: 'Austin, TX',

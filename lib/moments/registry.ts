@@ -41,7 +41,7 @@
  */
 
 import { referralService } from './referral-service';
-import type { MomentContext, MomentDefinition, MomentState } from './types';
+import type { MomentContext, MomentDefinition, MomentState, MomentType } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -124,6 +124,38 @@ export function trustPromptsAllowed(ctx: MomentContext): boolean {
   return ctx.hasPublishedBounty;
 }
 
+/** The one moment a poster sees before their first published bounty. */
+export const FIRST_POST_MOMENT: MomentType = 'post_first_bounty';
+
+/**
+ * Is this user a poster who hasn't published a bounty yet? Until they have,
+ * every moment except FIRST_POST_MOMENT is held (the engine applies this).
+ * On 14 Oct a new poster was sent through a profile photo, ID verification
+ * and the wallet before she reached the composer, ten minutes after picking
+ * Poster. Held moments are not dismissed or written anywhere: they are
+ * skipped, and come back under their own rules, in their normal priority
+ * order, once hasPublishedBounty is true.
+ *
+ * Only a declared 'poster'. 'hunter', 'both' and an unset role are unchanged
+ * (an unset role still gets the narrower trustPromptsAllowed hold above).
+ */
+export function heldUntilFirstPost(ctx: MomentContext): boolean {
+  return isUnpublishedPoster(ctx.profile.primaryRole, ctx.hasPublishedBounty);
+}
+
+/** heldUntilFirstPost's rule, for callers without a full MomentContext. */
+export function isUnpublishedPoster(
+  primaryRole: MomentContext['profile']['primaryRole'] | undefined,
+  hasPublishedBounty: boolean
+): boolean {
+  return primaryRole === 'poster' && !hasPublishedBounty;
+}
+
+/** A poster with a live bounty: the notification ask is about hearing from applicants. */
+function isPublishedPoster(ctx: MomentContext): boolean {
+  return ctx.profile.primaryRole === 'poster' && ctx.hasPublishedBounty;
+}
+
 export const MOMENT_REGISTRY: MomentDefinition[] = [
   // ---------------------------------------------------------------------
   // STATE-DERIVED — fully wired
@@ -136,18 +168,35 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     maxShownCount: 3,
     isEligible: ctx => hasClearedFirstSession(ctx) && ctx.permissions.notifications === 'undetermined',
     checkCompleted: ctx => ctx.permissions.notifications !== 'undetermined',
-    content: () => ({
-      icon: 'notifications-none',
-      title: 'Know the moment money is nearby',
-      body: "We'll only ping you for things that matter: a new bounty near you, an offer on your post, or a payout landing.",
-      benefits: [
-        'Hear about nearby bounties first',
-        'Never miss a message or offer',
-        'Off anytime in Settings',
-      ],
-      primaryLabel: 'Turn on notifications',
-      secondaryLabel: 'Not now',
-    }),
+    // Priority 10 already puts this first of the moments released by a
+    // poster's first publish (post_first_bounty is completed by then), so it
+    // is the prompt she sees right after publishing.
+    content: ctx =>
+      isPublishedPoster(ctx)
+        ? {
+            icon: 'notifications-none',
+            title: 'Hear when someone applies',
+            body: 'Your bounty is live. Turn on notifications so you hear when someone applies.',
+            benefits: [
+              'A ping when someone applies',
+              'Messages from hunters right away',
+              'Off anytime in Settings',
+            ],
+            primaryLabel: 'Turn on notifications',
+            secondaryLabel: 'Not now',
+          }
+        : {
+            icon: 'notifications-none',
+            title: 'Know the moment money is nearby',
+            body: "We'll only ping you for things that matter: a new bounty near you, an offer on your post, or a payout landing.",
+            benefits: [
+              'Hear about nearby bounties first',
+              'Never miss a message or offer',
+              'Off anytime in Settings',
+            ],
+            primaryLabel: 'Turn on notifications',
+            secondaryLabel: 'Not now',
+          },
     action: { type: 'inline', handlerKey: 'request_notifications' },
   },
   {

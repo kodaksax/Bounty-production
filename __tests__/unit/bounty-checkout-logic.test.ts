@@ -6,6 +6,7 @@ import {
   isAllowedReturnOrigin,
   shortfallChargeCents,
   shortfallIdempotencyKey,
+  shortfallExpiresAt,
 } from '../../supabase/functions/bounty-checkout/logic';
 
 const base = {
@@ -155,6 +156,27 @@ describe('shortfall Checkout', () => {
     const p = build({ existingCustomerId: 'cus_1' });
     expect(p.customer).toBe('cus_1');
     expect(p.customer_email).toBeUndefined();
+  });
+
+  it('REGRESSION: two requests in one window are identical, so Stripe can replay them', () => {
+    // 2026-11-10 on Staging: expires_at was now + 30 min, so a second "Pay with
+    // another card" in the same window failed with Stripe's idempotency error.
+    const first = build({ nowSeconds: 6000 });
+    const again = build({ nowSeconds: 6599 });
+    expect(again).toEqual(first);
+    expect(shortfallIdempotencyKey('r', 1250, 6599)).toBe(shortfallIdempotencyKey('r', 1250, 6000));
+  });
+
+  it('expires 30 to 40 minutes ahead, whatever the second', () => {
+    for (const now of [6000, 6001, 6300, 6599, 1794332959]) {
+      const ahead = shortfallExpiresAt(now) - now;
+      expect(ahead).toBeGreaterThan(30 * 60);
+      expect(ahead).toBeLessThanOrEqual(40 * 60);
+    }
+  });
+
+  it('is card only', () => {
+    expect(build().payment_method_types).toEqual(['card']);
   });
 
   it('reuses a session for a double-click, not after the window or if the amount moves', () => {
