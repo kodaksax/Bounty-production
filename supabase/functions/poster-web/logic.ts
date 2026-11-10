@@ -89,6 +89,17 @@ export function explainPayment(
           explanation: `Nothing has been charged yet. You’ll pay ${amount} when you hire someone.`,
         }
   }
+  // Hired: fn_accept_bounty_request moved the reward into escrow from the
+  // poster's balance in the same transaction as the acceptance, so it's held. A
+  // wallet-funded hire has no bounty_payments row, which used to fall through to
+  // "We can't show the payment" (found on Staging, 2026-11-10).
+  if (!payment && bounty.funding_mode === 'at_accept' && bounty.status === 'in_progress') {
+    return {
+      state: 'held',
+      label: `${amount} held safely`,
+      explanation: `You paid ${amount} when you hired. Bounty holds it. Your hunter is paid only after you confirm the job is done.`,
+    }
+  }
   switch (payment?.status) {
     case 'captured':
     case 'authorized':
