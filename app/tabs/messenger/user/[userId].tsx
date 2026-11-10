@@ -10,8 +10,10 @@ import { messageService } from '../../../../lib/services/message-service';
 import * as supabaseMessaging from '../../../../lib/services/supabase-messaging';
 import type { FullConversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 
 function UserConversationRoute() {
+  const { theme } = useAppThemeContext();
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
 
@@ -129,7 +131,7 @@ function UserConversationRoute() {
   if (error) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#1FAE49' }}>Unable to load conversation.</Text>
+        <Text style={{ color: theme.primaryLight }}>Unable to load conversation.</Text>
       </View>
     );
   }

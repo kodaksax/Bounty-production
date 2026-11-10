@@ -12,6 +12,7 @@ import {
   type MissingDetail,
 } from '../../../../lib/utils/bounty-completeness';
 import { QuickStepLayout } from './QuickStepLayout';
+import { withAlpha } from '../../../../lib/utils';
 
 /** Which optional detail a row edits — maps to the step screen to open. */
 export type DetailTarget = 'photos' | 'where' | 'when';
@@ -185,7 +186,7 @@ export function StepPostPublish({
     >
       {!isComplete && (
         <View style={styles.gapCallout}>
-          <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#fcd34d' : '#92400e'} />
+          <MaterialIcons name="info-outline" size={18} color={theme.warningText} />
           <Text style={styles.gapCalloutText}>
             Hunters can&apos;t see {describeMissingDetails(missing)} yet. Until you add{' '}
             {missing.length > 1 ? 'these' : 'this'}, your bounty shows a “Limited details” tag and
@@ -210,7 +211,7 @@ export function StepPostPublish({
                 <MaterialIcons
                   name={row.icon}
                   size={20}
-                  color={flagged ? (theme.isDark ? '#fcd34d' : '#92400e') : theme.primary}
+                  color={flagged ? (theme.warningText) : theme.primary}
                 />
               </View>
 
@@ -283,7 +284,7 @@ function makeStyles(theme: AppTheme) {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: theme.isDark ? 'rgba(0,142,42,0.22)' : 'rgba(0,142,42,0.12)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.22) : withAlpha(theme.primary, 0.12),
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 16,
@@ -291,21 +292,21 @@ function makeStyles(theme: AppTheme) {
     rowText: { flex: 1 },
     rowLabel: { fontSize: 15, color: theme.textSecondary },
     rowValue: { marginTop: 3, fontSize: 17, fontWeight: '700', color: theme.text },
-    rowValueFlagged: { color: theme.isDark ? '#fcd34d' : '#92400e' },
-    add: { fontSize: 16, fontWeight: '600', color: theme.primary },
-    addFlagged: { color: theme.isDark ? '#fcd34d' : '#92400e' },
+    rowValueFlagged: { color: theme.warningText },
+    add: { fontSize: 16, fontWeight: '600', color: theme.primaryLight },
+    addFlagged: { color: theme.warningText },
     iconCircleFlagged: {
-      backgroundColor: theme.isDark ? 'rgba(245,158,11,0.22)' : 'rgba(245,158,11,0.14)',
+      backgroundColor: theme.isDark ? withAlpha(theme.warning, 0.22) : withAlpha(theme.warning, 0.14),
     },
     gapCallout: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 10,
       padding: 14,
-      borderRadius: 14,
-      backgroundColor: theme.isDark ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.12)',
+      borderRadius: 12,
+      backgroundColor: theme.isDark ? withAlpha(theme.warning, 0.14) : withAlpha(theme.warning, 0.12),
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(245,158,11,0.32)' : 'rgba(245,158,11,0.28)',
+      borderColor: theme.isDark ? withAlpha(theme.warning, 0.32) : withAlpha(theme.warning, 0.28),
     },
     gapCalloutText: {
       flex: 1,

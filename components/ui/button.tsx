@@ -4,7 +4,7 @@ import { useHapticFeedback } from "lib/haptic-feedback"
 import { duration, easeOut, press } from "lib/motion"
 import { useAppThemeContext } from "lib/themes"
 import type { AppTheme } from "lib/themes/types"
-import { cn, withAlpha } from "lib/utils"
+import { cn } from "lib/utils"
 import * as React from "react"
 import { ActivityIndicator, Animated, Platform, StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
 
@@ -181,7 +181,6 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         >
           {typeof children === "string" ? (
             <Text
-              className="text-inherit font-inherit"
               style={[
                 buttonStyles.text,
                 buttonStyles[`${variant ?? "default"}Text` as keyof typeof buttonStyles],
@@ -210,15 +209,15 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
 Button.displayName = "Button"
 
 function makeButtonStyles(theme: AppTheme) {
-  const onBrand = '#fffef5'; // off-white text/spinner on filled brand-colored buttons
+  const onBrand = theme.onPrimary;
 
   const spinnerColor: Record<string, string> = {
     default: onBrand,
     destructive: onBrand,
-    outline: theme.primary,
-    secondary: theme.isDark ? onBrand : theme.text,
-    ghost: theme.primary,
-    link: theme.primary,
+    outline: theme.primaryLight,
+    secondary: theme.text,
+    ghost: theme.primaryLight,
+    link: theme.primaryLight,
   };
 
   const styles = StyleSheet.create({
@@ -231,36 +230,19 @@ function makeButtonStyles(theme: AppTheme) {
       paddingVertical: theme.spacing.md,
       minHeight: 48,
     },
-    // Filled buttons get a darker band along the bottom edge for a raised,
-    // pressable look (borderBottom* wins over the all-sides border).
     default: {
       backgroundColor: theme.primary,
-      borderWidth: 1,
-      borderColor: withAlpha(theme.primary, 0.6),
-      borderBottomWidth: 4,
-      borderBottomColor: theme.primaryShade,
-      ...theme.shadows.brand,
     },
     destructive: {
       backgroundColor: theme.error,
-      borderWidth: 1,
-      borderColor: withAlpha(theme.error, 0.6),
-      borderBottomWidth: 4,
-      borderBottomColor: theme.errorShade,
-      ...theme.shadows.sm,
     },
     outline: {
       backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      borderColor: withAlpha(theme.primary, 0.5),
+      borderWidth: 1,
+      borderColor: theme.border,
     },
     secondary: {
       backgroundColor: theme.surfaceSecondary,
-      borderWidth: 1,
-      borderColor: withAlpha(theme.primary, 0.3),
-      borderBottomWidth: 3,
-      borderBottomColor: theme.border,
-      ...theme.shadows.sm,
     },
     ghost: {
       backgroundColor: 'transparent',
@@ -301,7 +283,8 @@ function makeButtonStyles(theme: AppTheme) {
       borderColor: theme.primaryLight,
     },
     text: {
-      fontSize: theme.typography.fontSize.sm,
+      fontSize: 15,
+      lineHeight: 20,
       fontWeight: '600',
     },
     defaultText: {
@@ -311,16 +294,16 @@ function makeButtonStyles(theme: AppTheme) {
       color: onBrand,
     },
     outlineText: {
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     secondaryText: {
-      color: theme.isDark ? onBrand : theme.text,
+      color: theme.text,
     },
     ghostText: {
-      color: theme.primary,
+      color: theme.primaryLight,
     },
     linkText: {
-      color: theme.primary,
+      color: theme.primaryLight,
       textDecorationLine: 'underline',
     },
     disabledText: {

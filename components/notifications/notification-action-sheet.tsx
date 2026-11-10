@@ -28,6 +28,7 @@ import { TrustSafetyNotice } from '../ui/trust-safety-notice';
 import { useChatSendProtection, useChatSendScope } from '../../hooks/use-chat-send-protection';
 import { detectOffPlatformRisk } from '../../lib/utils/off-platform-risk';
 import { messagingStrings } from '../../lib/strings/messaging';
+import { withAlpha } from '../../lib/utils';
 
 interface NotificationActionSheetProps {
   notification: Notification | null;
@@ -179,7 +180,7 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
 
               {category === 'marketplace' && !bundled && notification.data?.requestId ? (
                 <View style={s.actionRow}>
-                  <TouchableOpacity style={[s.actionButton, s.declineButton]} onPress={handleDecline} disabled={!!busy}>
+                  <TouchableOpacity accessibilityRole="button" style={[s.actionButton, s.declineButton]} onPress={handleDecline} disabled={!!busy}>
                     {busy === 'decline' ? <ActivityIndicator color={theme.error} /> : <Text style={s.declineText}>Decline</Text>}
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -221,12 +222,12 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
               ) : null}
 
               {category === 'payments' ? (
-                <TouchableOpacity style={[s.actionButton, s.primaryButton, s.fullWidth]} onPress={handleWithdraw}>
+                <TouchableOpacity accessibilityRole="button" style={[s.actionButton, s.primaryButton, s.fullWidth]} onPress={handleWithdraw}>
                   <Text style={s.primaryText}>Manage Payouts</Text>
                 </TouchableOpacity>
               ) : null}
 
-              <TouchableOpacity style={s.viewButton} onPress={handleView}>
+              <TouchableOpacity accessibilityRole="button" style={s.viewButton} onPress={handleView}>
                 <Text style={s.viewText}>{viewButtonLabel}</Text>
                 <MaterialIcons name="chevron-right" size={18} color={theme.textSecondary} />
               </TouchableOpacity>
@@ -287,7 +288,7 @@ function makeStyles(t: AppTheme) {
     },
     fullWidth: { flex: undefined, marginBottom: 12 },
     declineButton: {
-      backgroundColor: t.isDark ? 'rgba(239,68,68,0.16)' : 'rgba(239,68,68,0.1)',
+      backgroundColor: t.isDark ? withAlpha(t.error, 0.16) : withAlpha(t.error, 0.1),
     },
     declineText: { color: t.error, fontWeight: '700', fontSize: 15 },
     acceptButton: { backgroundColor: t.primary },
@@ -320,8 +321,6 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
     },
     sendButtonDisabled: { opacity: 0.5 },
     viewButton: {

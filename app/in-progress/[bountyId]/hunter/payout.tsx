@@ -26,23 +26,14 @@ import type { Bounty, BountyRequest } from '../../../../lib/services/database.ty
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
 import { useWallet } from '../../../../lib/wallet-context';
-
-type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
-
-interface StageInfo {
-  id: HunterStage;
-  label: string;
-  icon: string;
-}
-
-const HUNTER_STAGES: StageInfo[] = [
-  { id: 'apply', label: 'Apply for work', icon: 'work' },
-  { id: 'work_in_progress', label: 'Work in progress', icon: 'trending-up' },
-  { id: 'review_verify', label: 'Review & verify', icon: 'rate-review' },
-  { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
-];
+import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../../lib/themes/types';
+import { withAlpha } from '../../../../lib/utils';
+import { HunterStageTimeline, type HunterStage } from '../../../../components/hunter-stage-timeline';
 
 export default function HunterPayoutScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   // Push notifications can open this screen with nothing under it; fall
@@ -171,7 +162,7 @@ export default function HunterPayoutScreen() {
               ]);
             } catch (err) {
               console.error('Error archiving bounty:', err);
-              Alert.alert('Error', describeBountyUpdateError(err));
+              Alert.alert("Something went wrong", describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }
@@ -226,7 +217,7 @@ export default function HunterPayoutScreen() {
               ]);
             } catch (err) {
               console.error('Error deleting bounty:', err);
-              Alert.alert('Error', describeBountyUpdateError(err));
+              Alert.alert("Something went wrong", describeBountyUpdateError(err));
             } finally {
               setIsProcessing(false);
             }
@@ -250,16 +241,16 @@ export default function HunterPayoutScreen() {
   if (error || !bounty || !request) {
     return (
       <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
-        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+        <MaterialIcons name="error-outline" size={48} color={theme.errorText} />
         <Text style={styles.errorText}>{error || 'Data not found'}</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.retryButton}
           onPress={() => routeBountyId && loadData(routeBountyId)}
         >
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
-          <Text style={styles.backButtonText}>Go Back</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={goBack}>
+          <Text style={styles.backButtonText}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -269,10 +260,10 @@ export default function HunterPayoutScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={goBack}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={styles.backIcon} onPress={goBack}>
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payout</Text>
+        <Text style={styles.headerTitle}>Payment</Text>
       </View>
 
       <ScrollView
@@ -291,49 +282,7 @@ export default function HunterPayoutScreen() {
         </View>
 
         {/* Timeline */}
-        <View style={styles.timelineContainer}>
-          <Text style={styles.sectionTitle}>Progress Timeline</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.timeline}
-          >
-            {HUNTER_STAGES.map((stage, index) => {
-              const isActive = stage.id === currentStage;
-              const stageIndex = HUNTER_STAGES.findIndex((s) => s.id === stage.id);
-              const currentIndex = HUNTER_STAGES.findIndex((s) => s.id === currentStage);
-              const isCompleted = stageIndex < currentIndex;
-              const isAccessible = stageIndex <= currentIndex;
-
-              return (
-                <View
-                  key={stage.id}
-                  style={[
-                    styles.stageItem,
-                    isActive && styles.stageItemActive,
-                    isCompleted && styles.stageItemCompleted,
-                    !isAccessible && styles.stageItemLocked,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.stageIcon,
-                      isActive && styles.stageIconActive,
-                      isCompleted && styles.stageIconCompleted,
-                    ]}
-                  >
-                    <MaterialIcons
-                      name={stage.icon as any}
-                      size={24}
-                      color={isActive || isCompleted ? '#fff' : '#1FAE49'}
-                    />
-                  </View>
-                  <Text style={styles.stageLabel}>{stage.label}</Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-        </View>
+        <HunterStageTimeline currentStage={currentStage} />
 
         {/* Payout Status */}
         {!bounty.is_for_honor && (
@@ -341,8 +290,8 @@ export default function HunterPayoutScreen() {
         )}
         {!isPaidOut ? (
           <View style={styles.waitingPanel}>
-            <MaterialIcons name="hourglass-empty" size={32} color="#fbbf24" />
-            <Text style={styles.waitingTitle}>Waiting for Payout Release</Text>
+            <MaterialIcons name="hourglass-empty" size={32} color={theme.warningText} />
+            <Text style={styles.waitingTitle}>Waiting for approval</Text>
             <Text style={styles.waitingText}>
               {bounty.is_for_honor
                 ? "Your work is with the poster for review. You'll be notified as soon as they approve it — nothing to do until then."
@@ -357,21 +306,21 @@ export default function HunterPayoutScreen() {
                 <MaterialIcons
                   name={reviewDeadline.overdue ? 'support-agent' : 'schedule'}
                   size={16}
-                  color="#fbbf24"
+                  color={theme.warningText}
                 />
                 <Text style={styles.deadlineText}>{reviewDeadline.message}</Text>
               </View>
             )}
             <View style={styles.statusBadge}>
-              <MaterialIcons name="pending" size={16} color="#fbbf24" />
-              <Text style={styles.statusText}>Payout Pending</Text>
+              <MaterialIcons name="pending" size={16} color={theme.warningText} />
+              <Text style={styles.statusText}>Waiting on the poster</Text>
             </View>
           </View>
         ) : (
           <>
             {/* Success Panel */}
             <View style={styles.successPanel}>
-              <MaterialIcons name="check-circle" size={48} color="#008E2A" />
+              <MaterialIcons name="check-circle" size={48} color={theme.primaryLight} />
               <Text style={styles.successTitle}>
                 {bounty.is_for_honor ? 'Completed for Honor' : 'Bounty Completed'}
               </Text>
@@ -382,16 +331,16 @@ export default function HunterPayoutScreen() {
               </Text>
               {!bounty.is_for_honor && (
                 <View style={styles.payoutAmountCard}>
-                  <Text style={styles.payoutLabel}>Net bounty amount</Text>
+                  <Text style={styles.payoutLabel}>Your earnings</Text>
                   <Text style={styles.payoutAmount}>
                     ${calculateHunterEarnings(bounty.amount).net.toFixed(2)}
                   </Text>
-                  <Text style={styles.payoutSubtext}>Availability depends on payment status</Text>
+                  <Text style={styles.payoutSubtext}>Check Wallet for when it’s available</Text>
                 </View>
               )}
               {bounty.is_for_honor && (
                 <View style={styles.honorCard}>
-                  <MaterialIcons name="favorite" size={32} color="#ec4899" />
+                  <MaterialIcons name="favorite" size={32} color={theme.primaryLight} />
                   <Text style={styles.honorTitle}>Completed for Honor</Text>
                   <Text style={styles.honorText}>
                     Thank you for contributing to the community!
@@ -408,7 +357,7 @@ export default function HunterPayoutScreen() {
             {/* Current Balance */}
             {!bounty.is_for_honor && (
               <View style={styles.balanceCard}>
-                <Text style={styles.balanceLabel}>Current Wallet Balance</Text>
+                <Text style={styles.balanceLabel}>Wallet balance</Text>
                 <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
               </View>
             )}
@@ -417,8 +366,8 @@ export default function HunterPayoutScreen() {
             {!bounty.is_for_honor && (
               <View style={styles.receiptCard}>
                 <View style={styles.receiptHeader}>
-                  <MaterialIcons name="receipt" size={24} color="#1FAE49" />
-                  <Text style={styles.receiptTitle}>Transaction Receipt</Text>
+                  <MaterialIcons name="receipt" size={24} color={theme.primaryLight} />
+                  <Text style={styles.receiptTitle}>Receipt</Text>
                 </View>
                 <View style={styles.receiptDivider} />
                 <View style={styles.receiptRow}>
@@ -450,7 +399,7 @@ export default function HunterPayoutScreen() {
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Status</Text>
                   <View style={styles.statusPill}>
-                    <MaterialIcons name="check-circle" size={16} color="#008E2A" />
+                    <MaterialIcons name="check-circle" size={16} color={theme.primaryLight} />
                     <Text style={styles.statusPillText}>Completed</Text>
                   </View>
                 </View>
@@ -459,20 +408,20 @@ export default function HunterPayoutScreen() {
 
             {/* Actions */}
             <View style={styles.actionsContainer}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.actionButton, styles.archiveButton]}
                 onPress={handleArchive}
                 disabled={isProcessing}
               >
-                <MaterialIcons name="archive" size={20} color="#fff" />
+                <MaterialIcons name="archive" size={20} color={theme.onPrimary} />
                 <Text style={styles.actionButtonText}>Archive</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.actionButton, styles.deleteButton]}
                 onPress={handleDelete}
                 disabled={isProcessing}
               >
-                <MaterialIcons name="delete" size={20} color="#fff" />
+                <MaterialIcons name="delete" size={20} color={theme.onPrimary} />
                 <Text style={styles.actionButtonText}>Delete</Text>
               </TouchableOpacity>
             </View>
@@ -483,38 +432,37 @@ export default function HunterPayoutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
     gap: 16,
   },
   errorText: {
-    color: '#ef4444',
+    color: theme.errorText,
     fontSize: 16,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -523,7 +471,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 16,
   },
   header: {
@@ -532,13 +480,13 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
+    borderBottomColor: withAlpha(theme.primary, 0.1),
   },
   backIcon: {
     padding: 4,
   },
   headerTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 20,
     fontWeight: '600',
   },
@@ -550,94 +498,46 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   bountyInfoCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.3)',
+    borderColor: theme.borderSubtle,
     gap: 8,
   },
   bountyTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
   },
   bountyAmount: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 20,
     fontWeight: '700',
   },
-  timelineContainer: {
-    gap: 12,
-  },
   sectionTitle: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  timeline: {
-    gap: 16,
-    paddingVertical: 8,
-  },
-  stageItem: {
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
-    borderWidth: 1,
-    borderColor: 'transparent',
-    minWidth: 120,
-  },
-  stageItemActive: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderColor: '#008E2A',
-    borderWidth: 2,
-  },
-  stageItemCompleted: {
-    backgroundColor: '#454952',
-    borderColor: '#008E2A',
-  },
-  stageItemLocked: {
-    opacity: 0.5,
-  },
-  stageIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  stageIconActive: {
-    backgroundColor: '#008E2A',
-  },
-  stageIconCompleted: {
-    backgroundColor: '#008E2A',
-  },
-  stageLabel: {
-    color: '#1FAE49',
-    fontSize: 12,
-    textAlign: 'center',
-  },
   waitingPanel: {
-    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+    backgroundColor: withAlpha(theme.warning, 0.15),
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+    borderColor: withAlpha(theme.warning, 0.3),
   },
   waitingTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
   },
   waitingText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -646,14 +546,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    borderRadius: 10,
+    backgroundColor: withAlpha(theme.warning, 0.1),
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   deadlineText: {
     flex: 1,
-    color: '#fde68a',
+    color: theme.warningText,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -661,39 +561,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(251, 191, 36, 0.2)',
+    backgroundColor: withAlpha(theme.warning, 0.2),
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     marginTop: 8,
   },
   statusText: {
-    color: '#fbbf24',
+    color: theme.warningText,
     fontSize: 12,
     fontWeight: '600',
   },
   successPanel: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: withAlpha(theme.text, 0.05),
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: withAlpha(theme.text, 0.1),
   },
   successTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 20,
     fontWeight: '600',
   },
   successText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
   },
   payoutAmountCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -702,22 +602,22 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   payoutLabel: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 32,
     fontWeight: '700',
   },
   payoutSubtext: {
-    color: 'rgba(255,254,245,0.7)',
+    color: withAlpha(theme.text, 0.7),
     fontSize: 12,
   },
   honorCard: {
-    backgroundColor: 'rgba(236, 72, 153, 0.15)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -726,30 +626,30 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   honorTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '600',
   },
   honorText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: withAlpha(theme.text, 0.8),
     fontSize: 14,
     textAlign: 'center',
   },
   balanceCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     gap: 8,
   },
   balanceLabel: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   balanceAmount: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 24,
     fontWeight: '700',
   },
@@ -767,27 +667,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   archiveButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
   },
   deleteButton: {
-    backgroundColor: '#ef4444',
-    borderBottomWidth: 4,
-    borderBottomColor: '#933730',
+    backgroundColor: theme.error,
   },
   actionButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
   receiptCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
   },
   receiptHeader: {
     flexDirection: 'row',
@@ -795,13 +691,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   receiptTitle: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 16,
     fontWeight: '600',
   },
   receiptDivider: {
     height: 1,
-    backgroundColor: 'rgba(31, 174, 73, 0.2)',
+    backgroundColor: theme.surface,
   },
   receiptRow: {
     flexDirection: 'row',
@@ -809,11 +705,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   receiptLabel: {
-    color: 'rgba(255,254,245,0.7)',
+    color: withAlpha(theme.text, 0.7),
     fontSize: 14,
   },
   receiptValue: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '500',
     maxWidth: '60%',
@@ -823,14 +719,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#454952',
+    backgroundColor: theme.surfaceSecondary,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 12,
     fontWeight: '600',
   },
 });
+}

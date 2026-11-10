@@ -18,6 +18,7 @@ import { disputeService } from '../lib/services/dispute-service'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import type { LocalDisputeEvidence } from '../lib/types'
+import { withAlpha } from '../lib/utils';
 
 /** Pinned footer (12pt padding + 48pt button + 12pt padding) plus breathing room. */
 const FOOTER_CLEARANCE = 88
@@ -198,11 +199,11 @@ export function WorkflowDisputeModal({
                 resetState()
                 onDisputeCreated(dispute.id)
               } else {
-                Alert.alert('Error', 'Failed to create dispute. Please try again.')
+                Alert.alert("Couldn't create dispute", "Please try again.")
               }
             } catch (err) {
               console.error('Error creating workflow dispute:', err)
-              Alert.alert('Error', 'Something went wrong. Please try again.')
+              Alert.alert("Something went wrong", 'Something went wrong. Please try again.')
             } finally {
               setIsSubmitting(false)
             }
@@ -218,7 +219,7 @@ export function WorkflowDisputeModal({
   const renderInfoStep = () => (
     <View style={styles.stepContent}>
       <View style={styles.iconContainer}>
-        <MaterialIcons name="gavel" size={48} color="#f59e0b" />
+        <MaterialIcons name="gavel" size={48} color={theme.warningText} />
       </View>
       <Text style={styles.stepTitle}>Raise a Dispute</Text>
       <Text style={styles.stepDescription}>
@@ -248,7 +249,7 @@ export function WorkflowDisputeModal({
       </View>
 
       <View style={styles.warningBox}>
-        <MaterialIcons name="warning" size={20} color="#f59e0b" />
+        <MaterialIcons name="warning" size={20} color={theme.warningText} />
         <Text style={styles.warningText}>
           Disputes should only be raised for legitimate concerns. Frivolous disputes may affect your account standing.
         </Text>
@@ -263,7 +264,7 @@ export function WorkflowDisputeModal({
 
       <View style={styles.reasonsList}>
         {DISPUTE_REASONS.map((reason) => (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             key={reason}
             style={[
               styles.reasonOption,
@@ -274,7 +275,7 @@ export function WorkflowDisputeModal({
             <MaterialIcons
               name={selectedReason === reason ? 'radio-button-checked' : 'radio-button-unchecked'}
               size={20}
-              color={selectedReason === reason ? '#008E2A' : accentColor}
+              color={selectedReason === reason ? theme.primaryLight : accentColor}
             />
             <Text style={styles.reasonOptionText}>{reason}</Text>
           </TouchableOpacity>
@@ -316,7 +317,7 @@ export function WorkflowDisputeModal({
           value={textEvidence}
           onChangeText={setTextEvidence}
         />
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Add" accessibilityRole="button"
           style={[styles.addButton, !textEvidence.trim() && styles.addButtonDisabled]}
           onPress={handleAddTextEvidence}
           disabled={!textEvidence.trim()}
@@ -337,7 +338,7 @@ export function WorkflowDisputeModal({
           autoCapitalize="none"
           keyboardType="url"
         />
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Add" accessibilityRole="button"
           style={[styles.addButton, !linkEvidence.trim() && styles.addButtonDisabled]}
           onPress={handleAddLinkEvidence}
           disabled={!linkEvidence.trim()}
@@ -347,7 +348,7 @@ export function WorkflowDisputeModal({
       </View>
 
       {/* File upload */}
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.uploadButton}
         onPress={() => pickAttachment()}
       >
@@ -375,8 +376,8 @@ export function WorkflowDisputeModal({
                  item.type === 'link' ? item.content :
                  item.description || 'File attached'}
               </Text>
-              <TouchableOpacity onPress={() => handleRemoveEvidence(item.id)}>
-                <MaterialIcons name="close" size={18} color="#ef4444" />
+              <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => handleRemoveEvidence(item.id)}>
+                <MaterialIcons name="close" size={18} color={theme.errorText} />
               </TouchableOpacity>
             </View>
           ))}
@@ -388,7 +389,7 @@ export function WorkflowDisputeModal({
   const renderConfirmStep = () => (
     <View style={styles.stepContent}>
       <View style={styles.iconContainer}>
-        <MaterialIcons name="warning" size={48} color="#f59e0b" />
+        <MaterialIcons name="warning" size={48} color={theme.warningText} />
       </View>
       <Text style={styles.stepTitle}>Confirm Dispute Submission</Text>
 
@@ -409,7 +410,7 @@ export function WorkflowDisputeModal({
       </View>
 
       <View style={styles.warningBox}>
-        <MaterialIcons name="warning" size={20} color="#f59e0b" />
+        <MaterialIcons name="warning" size={20} color={theme.warningText} />
         <Text style={styles.warningText}>
           Submitting a dispute will notify the other party and freeze the bounty for admin review. Both parties will be able to submit evidence and communicate within the dispute.
         </Text>
@@ -444,10 +445,10 @@ export function WorkflowDisputeModal({
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+          <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={handleClose} style={styles.closeButton}>
             <MaterialIcons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Raise Dispute</Text>
+          <Text style={styles.headerTitle}>Open a dispute</Text>
           <View style={styles.stepIndicator}>
             <Text style={styles.stepIndicatorText}>
               {currentStepIndex + 1}/{STEPS.length}
@@ -475,7 +476,7 @@ export function WorkflowDisputeModal({
         {/* Footer buttons */}
         <View style={[styles.footer, { paddingBottom: 12 }]}>
           {currentStepIndex > 0 && (
-            <TouchableOpacity style={styles.backBtn} onPress={goBack}>
+            <TouchableOpacity accessibilityRole="button" style={styles.backBtn} onPress={goBack}>
               <MaterialIcons name="arrow-back" size={20} color={accentColor} />
               <Text style={styles.backBtnText}>Back</Text>
             </TouchableOpacity>
@@ -484,7 +485,7 @@ export function WorkflowDisputeModal({
           <View style={{ flex: 1 }} />
 
           {currentStep === 'confirm' ? (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
               onPress={handleSubmit}
               disabled={isSubmitting}
@@ -499,7 +500,7 @@ export function WorkflowDisputeModal({
               )}
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[
                 styles.nextBtn,
                 currentStep === 'reason' && !canProceedFromReason && styles.nextBtnDisabled,
@@ -547,13 +548,13 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '600',
     },
     stepIndicator: {
-      backgroundColor: 'rgba(245, 158, 11, 0.2)',
+      backgroundColor: withAlpha(theme.warning, 0.2),
       paddingHorizontal: 10,
       paddingVertical: 4,
       borderRadius: 12,
     },
     stepIndicatorText: {
-      color: '#f59e0b',
+      color: theme.warningText,
       fontSize: 12,
       fontWeight: '600',
     },
@@ -563,8 +564,8 @@ function makeStyles(theme: AppTheme) {
     },
     progressFill: {
       height: '100%',
-      backgroundColor: '#f59e0b',
-      borderRadius: 2,
+      backgroundColor: theme.warning,
+      borderRadius: 4,
     },
     scrollView: {
       flex: 1,
@@ -581,7 +582,7 @@ function makeStyles(theme: AppTheme) {
     },
     stepTitle: {
       color: theme.text,
-      fontSize: 22,
+      fontSize: 24,
       fontWeight: '700',
       textAlign: 'center',
     },
@@ -592,11 +593,11 @@ function makeStyles(theme: AppTheme) {
       lineHeight: 20,
     },
     bountyCard: {
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : 'rgba(0, 142, 42, 0.08)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.2) : withAlpha(theme.primary, 0.08),
       borderRadius: 12,
       padding: 16,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(31, 174, 73, 0.3)' : theme.primary,
+      borderColor: theme.isDark ? withAlpha(theme.primary, 0.3) : theme.primary,
     },
     bountyTitleText: {
       color: theme.text,
@@ -604,7 +605,7 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '600',
     },
     infoBox: {
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.15)' : 'rgba(0, 142, 42, 0.08)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.15) : withAlpha(theme.primary, 0.08),
       borderRadius: 12,
       padding: 16,
       gap: 12,
@@ -622,17 +623,17 @@ function makeStyles(theme: AppTheme) {
     },
     warningBox: {
       flexDirection: 'row',
-      backgroundColor: theme.isDark ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)',
+      backgroundColor: theme.isDark ? withAlpha(theme.warning, 0.15) : withAlpha(theme.warning, 0.1),
       borderRadius: 12,
       padding: 14,
       gap: 12,
       alignItems: 'flex-start',
       borderWidth: 1,
-      borderColor: 'rgba(245, 158, 11, 0.3)',
+      borderColor: withAlpha(theme.warning, 0.3),
     },
     warningText: {
       flex: 1,
-      color: theme.isDark ? '#fbbf24' : '#92400e',
+      color: theme.warningText,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -643,15 +644,15 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.1)' : 'rgba(0, 142, 42, 0.06)',
-      borderRadius: 10,
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.1) : withAlpha(theme.primary, 0.06),
+      borderRadius: 12,
       padding: 14,
       borderWidth: 1,
       borderColor: 'transparent',
     },
     reasonOptionSelected: {
       backgroundColor: theme.surfaceSecondary,
-      borderColor: '#008E2A',
+      borderColor: theme.primary,
     },
     reasonOptionText: {
       flex: 1,
@@ -678,11 +679,11 @@ function makeStyles(theme: AppTheme) {
     },
     charCount: {
       color: theme.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
       textAlign: 'right',
     },
     charCountValid: {
-      color: '#008E2A',
+      color: theme.primaryLight,
     },
     evidenceInputRow: {
       flexDirection: 'row',
@@ -691,7 +692,7 @@ function makeStyles(theme: AppTheme) {
     },
     textInput: {
       backgroundColor: inputBg,
-      borderRadius: 10,
+      borderRadius: 12,
       padding: 12,
       color: theme.text,
       fontSize: 14,
@@ -699,9 +700,7 @@ function makeStyles(theme: AppTheme) {
       borderColor: inputBorder,
     },
     addButton: {
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
       width: 40,
       height: 40,
       borderRadius: 20,
@@ -716,11 +715,11 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.3)' : 'rgba(0, 142, 42, 0.1)',
-      borderRadius: 10,
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.3) : withAlpha(theme.primary, 0.1),
+      borderRadius: 12,
       padding: 14,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(31, 174, 73, 0.3)' : theme.primary,
+      borderColor: theme.isDark ? withAlpha(theme.primary, 0.3) : theme.primary,
       borderStyle: 'dashed',
     },
     uploadButtonText: {
@@ -741,11 +740,11 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : 'rgba(0, 142, 42, 0.08)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.2) : withAlpha(theme.primary, 0.08),
       borderRadius: 8,
       padding: 10,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(31, 174, 73, 0.15)' : theme.primary,
+      borderColor: theme.isDark ? withAlpha(theme.primary, 0.15) : theme.primary,
     },
     evidenceItemText: {
       flex: 1,
@@ -753,16 +752,16 @@ function makeStyles(theme: AppTheme) {
       fontSize: 13,
     },
     summaryCard: {
-      backgroundColor: theme.isDark ? 'rgba(0, 142, 42, 0.2)' : 'rgba(0, 142, 42, 0.08)',
+      backgroundColor: theme.isDark ? withAlpha(theme.primary, 0.2) : withAlpha(theme.primary, 0.08),
       borderRadius: 12,
       padding: 16,
       gap: 8,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(31, 174, 73, 0.3)' : theme.primary,
+      borderColor: theme.isDark ? withAlpha(theme.primary, 0.3) : theme.primary,
     },
     summaryLabel: {
       color: accentColor,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -798,12 +797,10 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
       paddingVertical: 12,
       paddingHorizontal: 20,
-      borderRadius: 10,
+      borderRadius: 12,
     },
     nextBtnDisabled: {
       backgroundColor: theme.border,
@@ -817,13 +814,13 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      backgroundColor: '#f59e0b',
+      backgroundColor: theme.warning,
       paddingVertical: 12,
       paddingHorizontal: 24,
-      borderRadius: 10,
+      borderRadius: 12,
     },
     submitBtnDisabled: {
-      backgroundColor: 'rgba(245, 158, 11, 0.4)',
+      backgroundColor: withAlpha(theme.warning, 0.4),
     },
     submitBtnText: {
       color: '#fff',

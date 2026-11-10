@@ -12,6 +12,7 @@
  */
 
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import { lightTheme } from 'lib/themes/lightTheme';
 import type { AppTheme } from 'lib/themes/types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -256,14 +257,15 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
       paddingVertical: 32,
     },
+    // On qrPlate, which stays white in both themes.
     qrUnavailableTitle: {
-      color: '#454952',
+      color: lightTheme.text,
       fontSize: 13,
       textAlign: 'center',
       marginBottom: 8,
     },
     qrUnavailableSubtitle: {
-      color: '#61656B',
+      color: lightTheme.textSecondary,
       fontSize: 12,
       textAlign: 'center',
     },
@@ -291,7 +293,7 @@ function makeStyles(t: AppTheme) {
     },
     codeInput: {
       backgroundColor: t.surfaceSecondary,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 16,
       paddingVertical: 14,
       color: t.text,

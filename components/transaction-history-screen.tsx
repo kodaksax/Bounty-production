@@ -15,6 +15,7 @@ import { BrandingLogo } from "./ui/branding-logo"
 import { EmptyState } from "./ui/empty-state"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
 import { describeSettlement, type SettlementState } from "../lib/utils/settlement-vocabulary"
+import { withAlpha } from '../lib/utils';
 
 // Constants for transaction display
 const DEFAULT_TITLE = 'Transaction'
@@ -142,13 +143,13 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       case "bounty_posted":
         return <MaterialIcons name="gps-fixed" size={24} color={theme.text} />
       case "bounty_completed":
-        return <MaterialIcons name="check-circle" size={20} color="#60a5fa" />
+        return <MaterialIcons name="check-circle" size={20} color={theme.infoText} />
       case "bounty_received":
         return <MaterialIcons name="credit-card" size={20} color="#a78bfa" />
       case "escrow":
-        return <MaterialIcons name="lock" size={20} color="#f59e0b" />
+        return <MaterialIcons name="lock" size={20} color={theme.warningText} />
       case "release":
-        return <MaterialIcons name="lock-open" size={20} color="#008E2A" />
+        return <MaterialIcons name="lock-open" size={20} color={theme.primaryLight} />
       case "refund":
         return <MaterialIcons name="refresh" size={20} color="#6366f1" />
     }
@@ -194,7 +195,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           : theme.textSecondary
 
     return (
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         key={transaction.id}
         style={s.transactionCard}
         onPress={() => setSelectedTransaction(transaction)}
@@ -316,7 +317,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8 }}
         style={{ maxHeight: 70 }}
       >
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{
             paddingHorizontal: 18,
             paddingVertical: 10,
@@ -335,7 +336,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}>All Transactions</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{
             paddingHorizontal: 18,
             paddingVertical: 10,
@@ -355,7 +356,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}>Deposits</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{
             paddingHorizontal: 18,
             paddingVertical: 10,
@@ -375,7 +376,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}>Withdrawals</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{
             paddingHorizontal: 18,
             paddingVertical: 10,
@@ -400,7 +401,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       {error && (
         <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg">
           <Text style={{ color: '#fff', fontSize: 14 }}>{error}</Text>
-          <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
+          <TouchableOpacity accessibilityRole="button" style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
             <Text style={{ color: '#fff', fontSize: 16 }}>✕</Text>
           </TouchableOpacity>
         </View>
@@ -450,7 +451,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
               <RefreshControl
                 refreshing={isRefreshing}
                 onRefresh={handleRefresh}
-                tintColor="#1FAE49"
+                tintColor={theme.primaryLight}
                 colors={['#1FAE49']}
               />
             }
@@ -524,7 +525,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   },
   transactionCard: {
     backgroundColor: t.surface,
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
@@ -603,21 +604,21 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   escrowBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(245,158,11,0.8)',
+    backgroundColor: withAlpha(t.warning, 0.8),
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   disputeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239,68,68,0.8)',
+    backgroundColor: withAlpha(t.error, 0.8),
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#ffffff',
     fontWeight: '700',
     marginLeft: 4,

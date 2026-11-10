@@ -182,6 +182,6 @@ function makeStyles(theme: AppTheme) {
       marginTop: SPACING.SECTION_GAP,
       gap: 8,
     },
-    retryButtonText: { color: theme.primary, fontSize: 15, fontWeight: '600' },
+    retryButtonText: { color: theme.primaryLight, fontSize: 15, fontWeight: '600' },
   });
 }

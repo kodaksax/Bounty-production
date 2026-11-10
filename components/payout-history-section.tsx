@@ -185,7 +185,7 @@ function makeStyles(t: AppTheme) {
     },
     sourceNote: {
       color: t.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
     },
     row: {
       flexDirection: 'row',
@@ -220,12 +220,12 @@ function makeStyles(t: AppTheme) {
     },
     rowId: {
       color: t.textSecondary,
-      fontSize: 10,
+      fontSize: 12,
       opacity: 0.7,
     },
     driftText: {
       color: t.warning,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 2,
     },
     mutedText: {
@@ -239,7 +239,7 @@ function makeStyles(t: AppTheme) {
       gap: 12,
     },
     retryText: {
-      color: t.primary,
+      color: t.primaryLight,
       fontSize: 13,
       fontWeight: '700',
     },

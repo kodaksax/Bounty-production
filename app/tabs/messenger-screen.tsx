@@ -182,7 +182,7 @@ export function MessengerScreen({
                   conversation.backingConversationIds.map((id) => deleteConversation(id))
                 )
               } catch {
-                Alert.alert("Error", "Failed to delete conversation")
+                Alert.alert("Couldn't delete conversation", "Please try again.")
               }
             },
           },
@@ -492,7 +492,7 @@ const UserResultItem = React.memo(function UserResultItem({
       <Avatar className="h-12 w-12" style={{ marginRight: theme.spacing.md }}>
         <AvatarImage src={user.avatar} alt={displayName} />
         <AvatarFallback style={{ backgroundColor: theme.surfaceSecondary }}>
-          <Text style={{ color: theme.primary, fontSize: 15, fontWeight: "700" }}>
+          <Text style={{ color: theme.primaryLight, fontSize: 15, fontWeight: "700" }}>
             {generateInitials(user.username, user.name) || "?"}
           </Text>
         </AvatarFallback>

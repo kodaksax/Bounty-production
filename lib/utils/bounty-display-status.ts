@@ -95,18 +95,28 @@ export const BOUNTY_DISPLAY_STATUS_LABELS: Record<BountyDisplayStatus, string> =
   deleted: 'REMOVED',
 };
 
-/** Badge background color shown on the card for each display status. */
-export const BOUNTY_DISPLAY_STATUS_COLORS: Record<BountyDisplayStatus, string> = {
-  review_needed: '#fbbf24', // amber-400
-  submitted_for_review: '#38bdf8', // sky-400
-  deadline_passed: '#61656B', // gray-500, same treatment as archived
-  applied: '#3b82f6', // blue-500
-  rejected: '#ef4444', // red-500
-  open: '#008E2A', // emerald-600
-  in_progress: '#fbbf24', // amber-400
-  completed: '#6366f1', // indigo-500
-  archived: '#61656B', // gray-500
-  cancelled: '#ef4444', // red-500
-  cancellation_requested: '#f97316', // orange-500
-  deleted: '#61656B', // gray-500, same treatment as archived
+/** Meaning of each status, which the theme turns into readable colours. */
+export const BOUNTY_DISPLAY_STATUS_TONES: Record<
+  BountyDisplayStatus,
+  'success' | 'warning' | 'error' | 'info' | 'neutral'
+> = {
+  review_needed: 'warning',
+  submitted_for_review: 'info',
+  deadline_passed: 'neutral',
+  applied: 'info',
+  rejected: 'error',
+  open: 'success',
+  in_progress: 'info',
+  completed: 'success',
+  archived: 'neutral',
+  cancelled: 'error',
+  cancellation_requested: 'warning',
+  deleted: 'neutral',
 };
+
+/** "IN PROGRESS" as it should read on a pill: "In progress". */
+export function formatBountyStatusLabel(status: BountyDisplayStatus): string {
+  const label = BOUNTY_DISPLAY_STATUS_LABELS[status].toLowerCase();
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+

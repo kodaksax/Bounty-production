@@ -827,20 +827,20 @@ function makeStyles(theme: AppTheme) {
     // theme (like the face of a physical card), so its accent text below is
     // fixed-light rather than theme-derived to guarantee contrast against it.
     previewCard: {
-      backgroundColor: '#1B1E24',
-      borderRadius: 18,
+      backgroundColor: theme.background,
+      borderRadius: 16,
       padding: 16,
       marginBottom: 24,
       ...theme.shadows.sm,
     },
     previewLogosRow: { flexDirection: 'row', marginBottom: 12 },
-    brandLogoPrimary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#ef4444' },
-    brandLogoSecondary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#f59e0b', marginLeft: -10 },
-    previewNumber: { color: '#fff', fontSize: 18, letterSpacing: 2, fontWeight: '600', marginBottom: 20 },
+    brandLogoPrimary: { height: 32, width: 32, borderRadius: 16, backgroundColor: theme.error },
+    brandLogoSecondary: { height: 32, width: 32, borderRadius: 16, backgroundColor: theme.warning, marginLeft: -10 },
+    previewNumber: { color: theme.text, fontSize: 18, letterSpacing: 2, fontWeight: '600', marginBottom: 20 },
     previewFooterRow: { flexDirection: 'row', justifyContent: 'space-between' },
     previewMetaBlock: {},
-    previewMetaLabel: { color: '#1FAE49', fontSize: 11, marginBottom: 4 },
-    previewMetaValue: { color: '#fff', fontSize: 14, fontWeight: '600' },
+    previewMetaLabel: { color: theme.primaryLight, fontSize: 12, marginBottom: 4 },
+    previewMetaValue: { color: theme.text, fontSize: 14, fontWeight: '600' },
     formFieldBlock: { marginBottom: 18 },
     fieldLabel: { color: theme.textSecondary, fontSize: 13, marginBottom: 6, fontWeight: '500' },
     textInput: {
@@ -852,7 +852,7 @@ function makeStyles(theme: AppTheme) {
       fontSize: 15,
     },
     textInputError: { borderWidth: 1, borderColor: theme.error },
-    errorText: { color: theme.error, fontSize: 11, marginTop: 6 },
+    errorText: { color: theme.error, fontSize: 12, marginTop: 6 },
     inlineRow: { flexDirection: 'row', gap: 16 },
     inlineHalf: { flex: 1 },
     primaryButton: {
@@ -867,7 +867,7 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButtonDisabled: { opacity: 0.55 },
     primaryButtonText: { color: theme.background, fontSize: 16, fontWeight: '600' },
-    inlineErrorBanner: { marginTop: 10, padding: 10, backgroundColor: withAlpha(theme.error, theme.isDark ? 0.18 : 0.1), borderRadius: 10 },
+    inlineErrorBanner: { marginTop: 10, padding: 10, backgroundColor: withAlpha(theme.error, theme.isDark ? 0.18 : 0.1), borderRadius: 12 },
     inlineErrorText: { color: theme.error, textAlign: 'center', fontSize: 13 },
   });
 }

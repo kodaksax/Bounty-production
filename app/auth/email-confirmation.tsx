@@ -83,7 +83,7 @@ export default function EmailConfirmationScreen() {
           ]}
         >
           <View style={styles.iconCircle}>
-            <MaterialIcons name="mark-email-read" size={64} color="#008E2A" />
+            <MaterialIcons name="mark-email-read" size={64} color={theme.primaryLight} />
           </View>
         </Animated.View>
 
@@ -146,7 +146,7 @@ export default function EmailConfirmationScreen() {
 
       {/* Action Button */}
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
+        <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleGoToSignIn}>
           <Text style={styles.primaryButtonText}>Go to Sign In</Text>
           <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
         </TouchableOpacity>
@@ -217,7 +217,7 @@ function makeStyles(theme: AppTheme) {
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: '#008E2A',
+      backgroundColor: theme.primary,
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 12,
@@ -270,9 +270,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
       paddingVertical: 16,
       borderRadius: 999,
       gap: 8,

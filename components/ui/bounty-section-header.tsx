@@ -75,7 +75,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
       backgroundColor: t.surfaceSecondary,
     },
-    countText: { fontSize: 11, fontWeight: '800', color: t.textSecondary },
+    countText: { fontSize: 12, fontWeight: '800', color: t.textSecondary },
     countTextUrgent: { color: '#22262C' },
     rule: { flex: 1, height: 1, backgroundColor: t.border, marginLeft: 4 },
   });

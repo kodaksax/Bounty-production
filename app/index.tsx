@@ -392,12 +392,12 @@ function ConnectionInterrupted({ onRetry }: { onRetry: () => void }) {
       <Text style={[indexStyles.offlineText, { color: theme.textSecondary }]}>
         We could not restore your session. Check your connection and try again.
       </Text>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={[indexStyles.retryButton, { backgroundColor: theme.primary, borderBottomColor: theme.primaryShade }]}
         activeOpacity={press.opacity}
         onPress={onRetry}
       >
-        <Text style={indexStyles.retryButtonText}>Retry</Text>
+        <Text style={indexStyles.retryButtonText}>Try again</Text>
       </TouchableOpacity>
     </View>
   );
@@ -423,7 +423,7 @@ const indexStyles = StyleSheet.create({
   retryButton: {
     alignItems: 'center',
     borderBottomWidth: 4,
-    borderRadius: 6,
+    borderRadius: 8,
     marginTop: 24,
     minWidth: 112,
     paddingHorizontal: 20,

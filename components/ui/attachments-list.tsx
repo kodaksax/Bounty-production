@@ -3,6 +3,10 @@ import type { Attachment } from 'lib/types';
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AttachmentViewerModal } from '../attachment-viewer-modal';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
+import { useMemo } from 'react';
 
 interface AttachmentsListProps {
   attachments: Attachment[];
@@ -15,6 +19,8 @@ interface AttachmentsListProps {
  * Includes integrated viewer modal for viewing and downloading attachments.
  */
 export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsListProps) {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
 
@@ -67,7 +73,7 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
         accessibilityLabel={`Attachment: ${item.name}, ${sizeText}`}
       >
         <View style={styles.iconContainer}>
-          <MaterialIcons name={icon as any} size={24} color="#008E2A" />
+          <MaterialIcons name={icon as any} size={24} color={theme.primaryLight} />
         </View>
         <View style={styles.attachmentInfo}>
           <Text style={styles.attachmentName} numberOfLines={1}>
@@ -81,7 +87,7 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
           </View>
         )}
         {item.status === 'failed' && (
-          <MaterialIcons name="error-outline" size={20} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={20} color={theme.errorText} />
         )}
       </TouchableOpacity>
     );
@@ -108,12 +114,13 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     gap: 8,
   },
   label: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -127,14 +134,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     padding: 16,
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
+    backgroundColor: withAlpha(theme.primary, 0.1),
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.1)',
+    borderColor: withAlpha(theme.primary, 0.1),
     borderStyle: 'dashed',
   },
   emptyText: {
-    color: 'rgba(31,174,73,0.6)',
+    color: withAlpha(theme.primary, 0.6),
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -143,16 +150,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 12,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: withAlpha(theme.primary, 0.2),
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: withAlpha(theme.primary, 0.2),
   },
   iconContainer: {
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: '#454952',
+    backgroundColor: theme.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -160,24 +167,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   attachmentName: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '500',
   },
   attachmentSize: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     marginTop: 2,
   },
   statusContainer: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: '#454952',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 4,
   },
   statusText: {
-    color: '#1FAE49',
-    fontSize: 10,
+    color: theme.primaryLight,
+    fontSize: 12,
     fontWeight: '600',
   },
 });
+}

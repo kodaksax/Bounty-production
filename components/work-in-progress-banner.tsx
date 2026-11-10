@@ -1,12 +1,18 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
+import { withAlpha } from '../lib/utils';
+import { useMemo } from 'react';
 
 interface Props {
   message?: string;
 }
 
 export default function WorkInProgressBanner({ message }: Props) {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -26,7 +32,7 @@ export default function WorkInProgressBanner({ message }: Props) {
       <View style={styles.iconRow}>
         <Animated.View style={[styles.pulse, { transform: [{ scale }], opacity }]} />
         <View style={styles.iconInner}>
-          <MaterialIcons name="hourglass-top" size={22} color="#fff" />
+          <MaterialIcons name="hourglass-top" size={22} color={theme.text} />
         </View>
         <View style={styles.textCol}>
           <Text style={styles.title}>Work in progress</Text>
@@ -37,13 +43,14 @@ export default function WorkInProgressBanner({ message }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+    backgroundColor: withAlpha(theme.warning, 0.12),
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.22)',
+    borderColor: withAlpha(theme.warning, 0.22),
     marginBottom: 16,
   },
   iconRow: {
@@ -56,13 +63,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#f59e0b',
+    backgroundColor: theme.warning,
   },
   iconInner: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#f59e0b',
+    backgroundColor: theme.warning,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -71,14 +78,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: '#fff',
+    color: theme.text,
     fontWeight: '700',
     fontSize: 14,
     marginBottom: 2,
   },
   message: {
-    color: '#fff',
+    color: theme.text,
     opacity: 0.9,
     fontSize: 12,
   },
 });
+}

@@ -19,7 +19,7 @@ type PaymentMethodType = 'card' | 'bank_account'
 
 // Text color placed on top of the bright brand-green primary fill, matching
 // the dark-on-green convention used across onboarding/wallet.
-const ON_PRIMARY_TEXT = '#052e1b'
+const ON_PRIMARY_TEXT = '#FFFFFF'
 
 interface PaymentMethodsModalProps {
   isOpen: boolean
@@ -372,7 +372,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                         loading={isRetrying}
                         accessibilityLabel="Retry loading payment methods"
                       >
-                        Retry
+                        Try again
                       </Button>
                     </View>
                   </View>
@@ -557,7 +557,7 @@ const rowStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 14,
     marginBottom: 12,
     minHeight: 72,
@@ -572,8 +572,8 @@ const rowStyles = StyleSheet.create({
   info: { flex: 1, marginLeft: 14 },
   titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   title: { fontWeight: '600', fontSize: 16, flexShrink: 1 },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  badgeText: { fontSize: 10, fontWeight: '700', color: ON_PRIMARY_TEXT, letterSpacing: 0.3 },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  badgeText: { fontSize: 12, fontWeight: '700', color: ON_PRIMARY_TEXT, letterSpacing: 0.3 },
   subtitle: { fontSize: 13, marginTop: 3 },
   removeButton: {
     padding: 10,

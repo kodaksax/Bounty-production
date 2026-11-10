@@ -180,7 +180,7 @@ export function EditPostingModal({
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.title}>Edit Posting</Text>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button"
                 onPress={handleClose}
                 disabled={isSubmitting}
                 style={styles.closeButton}
@@ -240,7 +240,7 @@ export function EditPostingModal({
 
               {/* For Honor toggle */}
               {canToggleForHonor && (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.toggleRow}
                   onPress={() =>
                     setFormData({ ...formData, isForHonor: !formData.isForHonor })
@@ -248,7 +248,7 @@ export function EditPostingModal({
                   disabled={isSubmitting}
                 >
                   <View style={styles.toggleLeft}>
-                    <MaterialIcons name="favorite" size={20} color="#008E2A" />
+                    <MaterialIcons name="favorite" size={20} color={theme.primaryLight} />
                     <Text style={styles.toggleLabel}>For Honor</Text>
                   </View>
                   <View
@@ -311,7 +311,7 @@ export function EditPostingModal({
               )}
 
               {/* Actions */}
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.saveButton}
                 onPress={handleSave}
                 disabled={isSubmitting}
@@ -323,7 +323,7 @@ export function EditPostingModal({
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.cancelButton}
                 onPress={handleClose}
                 disabled={isSubmitting}
@@ -428,7 +428,7 @@ function makeStyles(theme: AppTheme) {
       justifyContent: "center",
     },
     toggleActive: {
-      backgroundColor: "#008E2A",
+      backgroundColor: theme.primary,
     },
     toggleThumb: {
       width: 24,
@@ -442,7 +442,7 @@ function makeStyles(theme: AppTheme) {
     errorBanner: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: "#dc2626",
+      backgroundColor: theme.error,
       padding: 12,
       borderRadius: 8,
       marginBottom: 16,
@@ -454,9 +454,7 @@ function makeStyles(theme: AppTheme) {
       fontSize: 14,
     },
     saveButton: {
-      backgroundColor: "#008E2A",
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: theme.primary,
       padding: 16,
       borderRadius: 12,
       alignItems: "center",

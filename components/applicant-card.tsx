@@ -17,6 +17,7 @@ import { isHighRiskTrustTier } from '../lib/utils/trust-tier';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import TextGuard from './ui/TextGuard';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
+import { withAlpha } from '../lib/utils';
 
 interface ApplicantCardProps {
   request: BountyRequestWithDetails;
@@ -354,7 +355,7 @@ export const ApplicantCard = memo(function ApplicantCard({
             buried under bounty details the poster already knows. */}
         {request.message ? (
           <View style={s.pitchSection}>
-            <MaterialIcons name="format-quote" size={16} color={theme.isDark ? '#1FAE49' : theme.primary} />
+            <MaterialIcons name="format-quote" size={16} color={theme.isDark ? theme.primaryLight : theme.primary} />
             <Text style={s.pitchText}>{request.message}</Text>
           </View>
         ) : null}
@@ -464,7 +465,7 @@ function makeStyles(t: AppTheme) {
       padding: 16,
       marginBottom: 12,
       borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.2) : t.border,
     },
     header: {
       flexDirection: 'row',
@@ -478,16 +479,16 @@ function makeStyles(t: AppTheme) {
       width: 48,
       height: 48,
       borderWidth: 2,
-      borderColor: t.isDark ? '#1FAE49' : t.primary,
+      borderColor: t.primary,
       borderRadius: 24,
     },
     avatarLoading: {
-      backgroundColor: t.isDark ? '#00571A' : 'rgba(0,142,42,0.12)',
+      backgroundColor: t.isDark ? t.primary : withAlpha(t.primary, 0.12),
       justifyContent: 'center',
       alignItems: 'center',
     },
     avatarFallback: {
-      backgroundColor: t.isDark ? '#00571A' : 'rgba(0,142,42,0.12)',
+      backgroundColor: t.isDark ? t.primary : withAlpha(t.primary, 0.12),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -543,7 +544,7 @@ function makeStyles(t: AppTheme) {
     },
     viewProfileText: {
       color: t.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '500',
     },
     skillsSection: {
@@ -551,7 +552,7 @@ function makeStyles(t: AppTheme) {
     },
     skillsLabel: {
       color: t.textSecondary,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       textTransform: 'uppercase',
       letterSpacing: 0.4,
@@ -588,7 +589,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 12,
       paddingLeft: 10,
       borderLeftWidth: 2,
-      borderLeftColor: t.isDark ? '#1FAE49' : t.primary,
+      borderLeftColor: t.primary,
     },
     pitchText: {
       flex: 1,
@@ -604,7 +605,7 @@ function makeStyles(t: AppTheme) {
       marginBottom: 16,
       paddingTop: 12,
       borderTopWidth: 1,
-      borderTopColor: t.isDark ? 'rgba(31,174,73,0.15)' : t.border,
+      borderTopColor: t.isDark ? withAlpha(t.primary, 0.15) : t.border,
     },
     bountyContextText: {
       flex: 1,
@@ -612,24 +613,24 @@ function makeStyles(t: AppTheme) {
       fontSize: 12,
     },
     bountyContextAmount: {
-      color: t.isDark ? '#1FAE49' : t.primary,
+      color: t.isDark ? t.primaryLight : t.primary,
       fontWeight: '600',
       fontSize: 13,
     },
     // Unique color — kept as designed
     honorBadgeSmall: {
-      backgroundColor: '#ef4444',
+      backgroundColor: t.error,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 3,
       paddingHorizontal: 6,
       paddingVertical: 2,
-      borderRadius: 5,
+      borderRadius: 4,
     },
     honorTextSmall: {
       color: '#fff',
       fontWeight: '600',
-      fontSize: 10,
+      fontSize: 12,
     },
     actions: {
       gap: 10,
@@ -660,7 +661,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'center',
       gap: 6,
       paddingVertical: 10,
-      borderRadius: 10,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: t.border,
       backgroundColor: t.surfaceSecondary,
@@ -685,9 +686,7 @@ function makeStyles(t: AppTheme) {
     },
     // Unique colors — kept as designed
     rejectButton: {
-      backgroundColor: '#dc2626',
-      borderBottomWidth: 4,
-      borderBottomColor: '#933730',
+      backgroundColor: t.error,
     },
     infoButton: {
       backgroundColor: t.surface,
@@ -695,9 +694,7 @@ function makeStyles(t: AppTheme) {
       borderColor: t.primary,
     },
     acceptButton: {
-      backgroundColor: '#008E2A',
-      borderBottomWidth: 4,
-      borderBottomColor: '#00701F',
+      backgroundColor: t.primary,
     },
     buttonText: {
       color: '#fff',
@@ -705,13 +702,13 @@ function makeStyles(t: AppTheme) {
       fontSize: 14,
     },
     infoButtonText: {
-      color: t.primary,
+      color: t.primaryLight,
     },
     statusBadge: {
       marginTop: 12,
       paddingTop: 12,
       borderTopWidth: 1,
-      borderTopColor: t.isDark ? 'rgba(31,174,73,0.2)' : t.border,
+      borderTopColor: t.isDark ? withAlpha(t.primary, 0.2) : t.border,
     },
     statusText: {
       textAlign: 'center',
@@ -719,10 +716,10 @@ function makeStyles(t: AppTheme) {
       fontSize: 14,
     },
     statusAccepted: {
-      color: '#008E2A',
+      color: t.primaryLight,
     },
     statusRejected: {
-      color: '#dc2626',
+      color: t.errorText,
     },
   });
 }

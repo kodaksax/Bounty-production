@@ -44,6 +44,13 @@ it and `/decline` drops it. Signing in alone does nothing, so a stranger can't p
 as someone just because the owner clicked an unexplained sign-in email. Holds lapse
 after 7 days.
 
+When a saved card can't pay at acceptance, `poster-web` returns outcome `card_failed`.
+The page calls `POST /bounty-checkout/shortfall { request_id }` and sends the poster to
+the returned `checkout_url`, which pays the shortfall as a wallet deposit. Stripe
+returns to the dashboard with `funding=returned`. The deposit lands by webhook, so the
+page polls `GET /bounty-checkout/shortfall?request_id=` until `covered`, then accepts
+again.
+
 `send-notification-email` now includes the Resend-template code that was
 deployed by hand on 2026-10-02 (v34) but never committed. Without it, this
 deploy would have removed the "You're live" template.
@@ -148,3 +155,16 @@ the account owner a confirm link. See `email-inbound/logic.ts`.
 - **A geocoded bounty older than 24 hours becomes findable but does not send
   a "just posted near you" push.** This is existing, deliberate behaviour of
   `fn_bounties_claim_nearby_notification`.
+
+### Return URLs, accept outcomes and "Card saved" (2026-11-09)
+
+- `bounty-checkout` builds Checkout's `success_url` / `cancel_url` itself and ignores
+  any sent in the request. The site is the request's `Origin` when it is
+  `https://www.bountyfinder.net`, `https://bountyfinder.net`, an https origin in
+  `BOUNTY_CHECKOUT_ALLOWED_ORIGINS`, or (on the Staging project only) a local
+  `http://localhost` / `http://127.0.0.1` server; otherwise `www.bountyfinder.net`.
+  `BOUNTY_CHECKOUT_SUCCESS_URL` / `BOUNTY_CHECKOUT_CANCEL_URL` are no longer read.
+- `web-account /accept` failures carry `outcome`: a saved card that couldn't be
+  charged is `card_failed` (402), like `poster-web`.
+- `poster-web` shows "Card saved" for an open pay-at-hire bounty with no payment
+  yet when the poster has a card on file, and "Paid when you hire" otherwise.

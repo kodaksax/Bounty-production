@@ -75,7 +75,7 @@ export function ApproxLocationMap({ approxLatitude, approxLongitude, neighborhoo
           }}
         >
           <MaterialIcons name="place" size={12} color={theme.primary} />
-          <Text style={{ marginLeft: 4, fontSize: 11, fontWeight: '600', color: theme.text }}>{neighborhood}</Text>
+          <Text style={{ marginLeft: 4, fontSize: 12, fontWeight: '600', color: theme.text }}>{neighborhood}</Text>
         </View>
       )}
     </View>

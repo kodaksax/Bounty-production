@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, Animated } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SPACING, SIZING, TYPOGRAPHY, A11Y } from '../../lib/constants/accessibility';
 import { Button } from './button';
@@ -84,7 +84,7 @@ export function EmptyState({
   const { theme } = useAppThemeContext();
   const styles = React.useMemo(() => makeStyles(theme), [theme]);
 
-  const { prefersReducedMotion, createSpring, createTiming } = useAccessibleAnimation();
+  const { prefersReducedMotion, createSpring } = useAccessibleAnimation();
   const { style: contentAnimStyle, animateIn: animateContentIn } = useFadeSlideAnimation('up', 14);
 
   const iconScale = React.useRef(new Animated.Value(prefersReducedMotion ? 1 : 0)).current;
@@ -97,28 +97,10 @@ export function EmptyState({
       return;
     }
 
-    let floatAnimation: Animated.CompositeAnimation | undefined;
-    let floatTimeout: ReturnType<typeof setTimeout> | undefined;
-
     Animated.sequence([
-      createSpring(iconScale, 1.1, { tension: 40, friction: 3 }),
+      createSpring(iconScale, 1.04, { tension: 40, friction: 6 }),
       createSpring(iconScale, 1, { tension: 50, friction: 7 }),
     ]).start();
-
-    floatTimeout = setTimeout(() => {
-      floatAnimation = Animated.loop(
-        Animated.sequence([
-          createTiming(iconScale, 1.05, 2000, Easing.inOut(Easing.ease)),
-          createTiming(iconScale, 1, 2000, Easing.inOut(Easing.ease)),
-        ])
-      );
-      floatAnimation.start();
-    }, 550);
-
-    return () => {
-      if (floatTimeout) clearTimeout(floatTimeout);
-      floatAnimation?.stop();
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefersReducedMotion]);
 
@@ -303,7 +285,7 @@ function makeStyles(theme: AppTheme) {
     featurePanel: {
       alignSelf: 'stretch',
       backgroundColor: theme.surfaceSecondary,
-      borderRadius: 14,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.border,
       paddingVertical: 12,

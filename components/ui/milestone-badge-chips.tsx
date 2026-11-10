@@ -122,7 +122,7 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       paddingHorizontal: 10,
       paddingVertical: 5,
-      borderRadius: 14,
+      borderRadius: 12,
       borderWidth: 1,
       gap: 5,
     },
@@ -131,11 +131,11 @@ function makeStyles(theme: AppTheme) {
       borderColor: theme.border,
     },
     chipLabel: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
     },
     chipLabelUnearned: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       color: theme.textSecondary,
     },

@@ -62,6 +62,8 @@ import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
 import { hapticFeedback } from '../../lib/haptic-feedback'
+import { withAlpha } from '../../lib/utils';
+import { showToast } from '../../lib/toast';
 
 interface InboxScreenProps {
   onBack?: () => void
@@ -539,7 +541,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               await loadMyBounties()
             } catch (err: any) {
               setError(err?.message || 'Failed to discard bounty')
-              Alert.alert('Error', err?.message || 'Failed to discard bounty. Please try again.')
+              Alert.alert("Something went wrong", err?.message || 'Failed to discard bounty. Please try again.')
             }
           },
         },
@@ -631,7 +633,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                 console.warn('Failed to refresh in-progress bounties after withdrawal:', refreshError)
               }
 
-              Alert.alert("Success", "Your application has been withdrawn.")
+              showToast({ message: "Your application has been withdrawn." })
             } catch (err: any) {
               console.error("Error withdrawing application:", err)
               const friendly = getUserFriendlyError(err)
@@ -688,7 +690,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
               await loadMyBounties()
             } catch (err) {
               console.error('Error archiving bounty:', err)
-              Alert.alert('Error', describeBountyUpdateError(err))
+              Alert.alert("Something went wrong", describeBountyUpdateError(err))
             }
           },
         },
@@ -848,7 +850,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
           text: 'Hide from list',
           style: 'destructive',
           onPress: () => {
-            handleHideInProgressBounty(b).catch(() => Alert.alert('Error', 'Failed to hide bounty. Please try again.'))
+            handleHideInProgressBounty(b).catch(() => Alert.alert("Couldn't hide bounty", "Please try again."))
           },
         })
       }
@@ -1221,7 +1223,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       {error && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.errorCloseButton} onPress={() => setError(null)} accessibilityLabel="Dismiss error">
+          <TouchableOpacity accessibilityRole="button" style={styles.errorCloseButton} onPress={() => setError(null)} accessibilityLabel="Dismiss error">
             <Text style={styles.errorCloseText}>✕</Text>
           </TouchableOpacity>
         </View>
@@ -1409,7 +1411,7 @@ function makeStyles(theme: AppTheme) {
     },
     headerBadgeText: {
       color: '#fff',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '700',
       lineHeight: 12,
     },
@@ -1479,7 +1481,7 @@ function makeStyles(theme: AppTheme) {
     },
     segmentBadgeText: {
       color: '#fff',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '800',
     },
     chips: {
@@ -1518,13 +1520,13 @@ function makeStyles(theme: AppTheme) {
       height: 18,
       paddingHorizontal: 4,
       borderRadius: 9,
-      backgroundColor: '#f59e0b',
+      backgroundColor: theme.warning,
       alignItems: 'center',
       justifyContent: 'center',
     },
     chipCountText: {
       color: '#22262C',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '800',
     },
     // Rows carry their own horizontal padding, as in Messages.
@@ -1536,7 +1538,7 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: theme.textDisabled,
       opacity: 0.6,
     },
-    errorBox: { marginHorizontal: 16, marginBottom: 8, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
+    errorBox: { marginHorizontal: 16, marginBottom: 8, padding: 12, backgroundColor: withAlpha(theme.error, 0.45), borderRadius: 8 },
     errorText: { color: theme.text, fontSize: 14 },
     errorCloseButton: { position: 'absolute', right: 8, top: 8, padding: 8 },
     errorCloseText: { color: theme.text, fontSize: 16 },

@@ -18,6 +18,7 @@ import React, { useState, useMemo } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
 import { ROUTES } from '../../../lib/routes';
+import { withAlpha } from '../../../lib/utils';
 
 type FeedbackType = 'bug' | 'feature' | 'improvement' | 'other';
 type Priority = 'low' | 'medium' | 'high' | 'critical';
@@ -312,7 +313,7 @@ const makeStyles = (theme: AppTheme) =>
     borderColor: 'transparent',
   },
   typeCardActive: {
-    backgroundColor: 'rgba(34,38,44,0.8)',
+    backgroundColor: withAlpha(theme.surface, 0.8),
   },
   typeLabel: {
     fontSize: 13,
@@ -384,8 +385,6 @@ const makeStyles = (theme: AppTheme) =>
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.primaryShade,
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,

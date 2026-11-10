@@ -6,6 +6,7 @@ import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native
 import { BrandingLogo } from "components/ui/branding-logo"
 import { InfoTooltip } from "components/ui/tooltip"
 import { useHapticFeedback } from '../lib/haptic-feedback'
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 
 interface AddBountyAmountScreenProps {
   onBack: () => void
@@ -14,6 +15,7 @@ interface AddBountyAmountScreenProps {
 }
 
 export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }: AddBountyAmountScreenProps) {
+  const { theme } = useAppThemeContext();
   const [amount, setAmount] = useState<string>(initialAmount.toString())
   const [isForHonor, setIsForHonor] = useState<boolean>(false)
   const [animateAmount] = useState<Animated.Value>(new Animated.Value(1))
@@ -287,7 +289,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.headerButton}>
+        <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={onBack} style={styles.headerButton}>
           <MaterialIcons name="close" size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
@@ -317,11 +319,11 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               title="What are Honor Bounties?"
               content="Honor bounties are non-paid tasks that help build reputation in the community. People complete them to gain experience, help others, and build their profile rating. Great for simple tasks or community support."
               iconSize={16}
-              iconColor="#008E2A"
+              iconColor={theme.primaryLight}
             />
           </View>
         </View>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={() => setIsForHonor(!isForHonor)}
           style={[
             styles.toggle,
@@ -349,7 +351,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       <View style={styles.keypadContainer}>
         <View style={styles.keypadGrid}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={num}
               style={styles.keypadButton}
               onPress={() => handleNumberPress(num)}
@@ -357,19 +359,19 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               <Text style={styles.keypadButtonText}>{num}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.keypadButton}
             onPress={handleDecimalPress}
           >
             <Text style={styles.keypadButtonText}>.</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.keypadButton}
             onPress={() => handleNumberPress(0)}
           >
             <Text style={styles.keypadButtonText}>0</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.keypadButton}
             onPress={handleDeletePress}
           >
@@ -380,7 +382,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
 
       {/* Add Button */}
       <View style={styles.bottomButtonContainer}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[
             styles.bottomButton,
             Number.parseFloat(amount) > 0 || isForHonor

@@ -11,7 +11,9 @@ import {
   View,
 } from "react-native"
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
-import { theme } from '../../lib/theme'
+import { theme as legacyTheme } from '../../lib/theme'
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 
 interface InputProps extends TextInputProps {
@@ -66,6 +68,8 @@ const Input = React.forwardRef<TextInput, InputProps>(
     onBlur,
     ...props
   }, ref) => {
+  const { theme } = useAppThemeContext();
+  const inputStyles = React.useMemo(() => makeInputStyles(theme), [theme]);
     const [isFocused, setIsFocused] = React.useState(false)
     const borderAnim = React.useRef(new Animated.Value(0)).current
     const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false)
@@ -109,15 +113,15 @@ const Input = React.forwardRef<TextInput, InputProps>(
 
     // Determine border color based on state
     const getBorderColor = () => {
-      if (error) return '#ef4444' // red-500
-      if (isValid) return '#008E2A' // emerald-500
-      if (isFocused) return '#008E2A' // emerald-600
-      return variant === 'outline' ? '#3b82f6' : '#D8D2C4'
+      if (error) return theme.error
+      if (isValid) return theme.primary
+      if (isFocused) return theme.primary
+      return theme.border
     }
 
     const animatedBorderColor = borderAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: ['#D8D2C4', '#008E2A'],
+      outputRange: [theme.border, theme.primary],
     })
 
     // Generate unique ID for accessibility
@@ -144,8 +148,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             error && inputStyles.errorBorder,
             isValid && inputStyles.validBorder,
             {
-              borderColor: error ? '#ef4444' : isValid ? '#008E2A' :
-                prefersReducedMotion ? getBorderColor() : animatedBorderColor
+              borderColor: error ? theme.error : isValid ? theme.primary : prefersReducedMotion ? getBorderColor() : animatedBorderColor
             },
           ]}
         >
@@ -153,7 +156,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name={leftIcon}
               size={20}
-              color={error ? '#ef4444' : isFocused ? '#008E2A' : '#929497'}
+              color={error ? theme.errorText : isFocused ? theme.primaryLight : theme.textSecondary}
               style={inputStyles.leftIcon}
             />
           )}
@@ -166,7 +169,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
               style
             ]}
             ref={ref}
-            placeholderTextColor="#929497"
+            placeholderTextColor={theme.textSecondary}
             onFocus={handleFocus}
             onBlur={handleBlur}
             accessible={true}
@@ -188,7 +191,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
               <MaterialIcons
                 name={rightIcon}
                 size={20}
-                color={error ? '#ef4444' : isFocused ? '#008E2A' : '#929497'}
+                color={error ? theme.errorText : isFocused ? theme.primaryLight : theme.textSecondary}
               />
             </TouchableOpacity>
           )}
@@ -197,7 +200,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name={rightIcon}
               size={20}
-              color={error ? '#ef4444' : isFocused ? '#008E2A' : '#929497'}
+              color={error ? theme.errorText : isFocused ? theme.primaryLight : theme.textSecondary}
               style={inputStyles.rightIcon}
               accessibilityElementsHidden={true}
             />
@@ -207,7 +210,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name="check-circle"
               size={20}
-              color="#008E2A"
+              color={theme.primaryLight}
               style={inputStyles.rightIcon}
               accessibilityLabel="Valid input"
             />
@@ -216,7 +219,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
 
         {error && (
           <View style={inputStyles.errorContainer}>
-            <MaterialIcons name="error-outline" size={14} color="#ef4444" />
+            <MaterialIcons name="error-outline" size={14} color={theme.errorText} />
             <Text
               style={inputStyles.errorText}
               nativeID={errorId}
@@ -241,25 +244,26 @@ const Input = React.forwardRef<TextInput, InputProps>(
 )
 Input.displayName = "Input"
 
-const inputStyles = StyleSheet.create({
+function makeInputStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     marginBottom: SPACING.ELEMENT_GAP,
   },
   label: {
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: '600',
-    color: '#454952', // gray-700
+    color: theme.textSecondary,
     marginBottom: SPACING.COMPACT_GAP / 2,
   },
   labelError: {
-    color: '#ef4444',
+    color: theme.errorText,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: 1.5,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.surfaceSecondary,
     overflow: 'hidden',
   },
   base: {
@@ -268,7 +272,7 @@ const inputStyles = StyleSheet.create({
     paddingHorizontal: SPACING.ELEMENT_GAP,
     paddingVertical: SPACING.COMPACT_GAP,
     fontSize: TYPOGRAPHY.SIZE_BODY,
-    color: '#2A2E35', // gray-800
+    color: theme.text,
   },
   inputWithLeftIcon: {
     paddingLeft: SPACING.COMPACT_GAP,
@@ -277,26 +281,26 @@ const inputStyles = StyleSheet.create({
     paddingRight: SPACING.COMPACT_GAP,
   },
   default: {
-    borderColor: '#D8D2C4',
+    borderColor: theme.border,
   },
   outline: {
     borderWidth: 2,
-    borderColor: '#3b82f6',
+    borderColor: theme.info,
   },
   filled: {
-    backgroundColor: '#f3f4f6', // gray-100
+    backgroundColor: theme.surfaceSecondary,
     borderColor: 'transparent',
   },
   focused: {
-    borderColor: '#008E2A', // emerald-600
-    ...theme.shadows.sm,
+    borderColor: theme.primary, // emerald-600
+    ...legacyTheme.shadows.sm,
   },
 
   errorBorder: {
-    borderColor: '#ef4444',
+    borderColor: theme.error,
   },
   validBorder: {
-    borderColor: '#008E2A',
+    borderColor: theme.primary,
   },
   leftIcon: {
     marginLeft: SPACING.ELEMENT_GAP,
@@ -320,13 +324,14 @@ const inputStyles = StyleSheet.create({
   },
   errorText: {
     fontSize: TYPOGRAPHY.SIZE_SMALL,
-    color: '#ef4444',
+    color: theme.errorText,
   },
   helperText: {
     fontSize: TYPOGRAPHY.SIZE_SMALL,
-    color: '#61656B', // gray-500
+    color: theme.textSecondary,
     marginTop: SPACING.COMPACT_GAP / 2,
   },
 })
+}
 
 export { Input }

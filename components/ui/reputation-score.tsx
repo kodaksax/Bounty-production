@@ -2,6 +2,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 interface ReputationScoreProps {
   averageRating: number;
@@ -85,6 +88,8 @@ export function ReputationScore({
   size = 'medium',
   variant = 'default',
 }: ReputationScoreProps) {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [showModal, setShowModal] = useState(false);
   const { triggerHaptic } = useHapticFeedback();
   
@@ -108,15 +113,15 @@ export function ReputationScore({
     for (let i = 0; i < 5; i++) {
       if (i < fullStars) {
         stars.push(
-          <MaterialIcons key={i} name="star" size={starSize} color="#fbbf24" />
+          <MaterialIcons key={i} name="star" size={starSize} color={theme.warningText} />
         );
       } else if (i === fullStars && hasHalfStar) {
         stars.push(
-          <MaterialIcons key={i} name="star-half" size={starSize} color="#fbbf24" />
+          <MaterialIcons key={i} name="star-half" size={starSize} color={theme.warningText} />
         );
       } else {
         stars.push(
-          <MaterialIcons key={i} name="star-border" size={starSize} color="rgba(251, 191, 36, 0.3)" />
+          <MaterialIcons key={i} name="star-border" size={starSize} color={withAlpha(theme.warning, 0.3)} />
         );
       }
     }
@@ -165,7 +170,7 @@ export function ReputationScore({
       {variant === 'card' && completedJobs > 0 && (
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <MaterialIcons name="check-circle" size={14} color="#1FAE49" />
+            <MaterialIcons name="check-circle" size={14} color={theme.primaryLight} />
             <Text style={styles.statText}>{completedJobs} completed</Text>
           </View>
         </View>
@@ -174,7 +179,7 @@ export function ReputationScore({
       {/* Info icon for tap hint */}
       {showDetails && (
         <View style={styles.infoHint}>
-          <MaterialIcons name="info-outline" size={12} color="#1FAE49" style={{ opacity: 0.6 }} />
+          <MaterialIcons name="info-outline" size={12} color={theme.primaryLight} style={{ opacity: 0.6 }} />
         </View>
       )}
     </View>
@@ -203,11 +208,11 @@ export function ReputationScore({
         accessible={true}
         accessibilityLabel="Reputation score details"
       >
-        <Pressable 
+        <Pressable accessibilityRole="button" 
           style={styles.modalOverlay}
           onPress={() => setShowModal(false)}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalContent} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Reputation Score</Text>
               <View style={styles.modalScoreDisplay}>
@@ -283,6 +288,8 @@ export function ReputationScoreCompact({
   averageRating: number; 
   ratingCount: number 
 }) {
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   // Memoize reputation calculation
   const reputation = useMemo(
     () => getReputationLevel(averageRating, ratingCount),
@@ -291,7 +298,7 @@ export function ReputationScoreCompact({
   
   return (
     <View style={styles.compactInline}>
-      <MaterialIcons name="star" size={14} color="#fbbf24" />
+      <MaterialIcons name="star" size={14} color={theme.warningText} />
       <Text style={styles.compactScore}>
         {ratingCount > 0 ? averageRating.toFixed(1) : '—'}
       </Text>
@@ -300,9 +307,10 @@ export function ReputationScoreCompact({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(5, 95, 70, 0.3)',
+    backgroundColor: theme.primaryTint,
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',
@@ -322,7 +330,7 @@ const styles = StyleSheet.create({
   },
   scoreValue: {
     fontWeight: '800',
-    color: '#fff',
+    color: theme.text,
     marginBottom: 4,
   },
   starsRow: {
@@ -331,7 +339,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   ratingCount: {
-    color: '#929497',
+    color: theme.textSecondary,
   },
   levelBadge: {
     flexDirection: 'row',
@@ -356,7 +364,7 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 12,
-    color: '#929497',
+    color: theme.textSecondary,
   },
   infoHint: {
     position: 'absolute',
@@ -371,7 +379,7 @@ const styles = StyleSheet.create({
   compactScore: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text,
   },
   compactDot: {
     width: 6,
@@ -386,7 +394,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#22262C',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -399,7 +407,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#929497',
+    color: theme.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 12,
@@ -410,7 +418,7 @@ const styles = StyleSheet.create({
   modalScore: {
     fontSize: 48,
     fontWeight: '800',
-    color: '#fff',
+    color: theme.text,
   },
   modalStars: {
     flexDirection: 'row',
@@ -432,7 +440,7 @@ const styles = StyleSheet.create({
   },
   modalLevelDescription: {
     fontSize: 12,
-    color: '#2A2E35',
+    color: theme.text,
     lineHeight: 18,
     flex: 1,
   },
@@ -448,15 +456,15 @@ const styles = StyleSheet.create({
   modalStatValue: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#fff',
+    color: theme.text,
   },
   modalStatLabel: {
     fontSize: 12,
-    color: '#929497',
+    color: theme.textSecondary,
     marginTop: 2,
   },
   infoBox: {
-    backgroundColor: 'rgba(6, 78, 59, 0.5)',
+    backgroundColor: theme.primaryTint,
     borderRadius: 12,
     padding: 12,
     marginBottom: 20,
@@ -464,25 +472,24 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1FAE49',
+    color: theme.primaryLight,
     marginBottom: 6,
   },
   infoText: {
     fontSize: 12,
-    color: '#2A2E35',
+    color: theme.text,
     lineHeight: 18,
   },
   closeButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
   },
   closeButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
 });
+}

@@ -57,7 +57,7 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'dark',
+  defaultTheme = 'system',
 }: ThemeProviderProps) {
   const mode: ThemeMode =
     defaultTheme === 'light' ? 'light' :

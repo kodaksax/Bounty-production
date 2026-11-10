@@ -30,23 +30,14 @@ import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 // The completion-message field lives in this list's header, so the list is
 // what has to inset for the keyboard.
 import { keyboardAwareListProps } from '../../../../components/ui/keyboard-avoiding';
-
-type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
-
-interface StageInfo {
-  id: HunterStage;
-  label: string;
-  icon: string;
-}
-
-const HUNTER_STAGES: StageInfo[] = [
-  { id: 'apply', label: 'Apply for work', icon: 'work' },
-  { id: 'work_in_progress', label: 'Work in progress', icon: 'trending-up' },
-  { id: 'review_verify', label: 'Review & verify', icon: 'rate-review' },
-  { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
-];
+import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../../lib/themes/types';
+import { withAlpha } from '../../../../lib/utils';
+import { HunterStageTimeline, type HunterStage } from '../../../../components/hunter-stage-timeline';
 
 export default function HunterReviewAndVerifyScreen() {
+  const { theme } = useAppThemeContext();
+  const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   // Push notifications can open this screen with nothing under it; fall
@@ -303,7 +294,7 @@ export default function HunterReviewAndVerifyScreen() {
         );
       } catch (err) {
         console.error('Error requesting review:', err);
-        Alert.alert('Error', 'Failed to request review. Please try again.');
+        Alert.alert("Couldn't request review", "Please try again.");
       } finally {
         setIsSubmitting(false);
       }
@@ -356,7 +347,7 @@ export default function HunterReviewAndVerifyScreen() {
         <MaterialIcons
           name={item.type === 'image' ? 'image' : 'insert-drive-file'}
           size={32}
-          color="#1FAE49"
+          color={theme.primaryLight}
         />
       </View>
       <View style={styles.proofInfo}>
@@ -365,11 +356,11 @@ export default function HunterReviewAndVerifyScreen() {
         </Text>
         <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
       </View>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button"
         style={styles.removeButton}
         onPress={() => handleRemoveProof(item.id)}
       >
-        <MaterialIcons name="close" size={20} color="#ef4444" />
+        <MaterialIcons name="close" size={20} color={theme.errorText} />
       </TouchableOpacity>
     </View>
   );
@@ -385,16 +376,16 @@ export default function HunterReviewAndVerifyScreen() {
   if (error || !bounty || !request) {
     return (
       <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
-        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+        <MaterialIcons name="error-outline" size={48} color={theme.errorText} />
         <Text style={styles.errorText}>{error || 'Data not found'}</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.retryButton}
           onPress={() => routeBountyId && loadData(routeBountyId)}
         >
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>Try again</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
-          <Text style={styles.backButtonText}>Go Back</Text>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={goBack}>
+          <Text style={styles.backButtonText}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -404,10 +395,10 @@ export default function HunterReviewAndVerifyScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={goBack}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={styles.backIcon} onPress={goBack}>
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Review & Verify</Text>
+        <Text style={styles.headerTitle}>Submit your work</Text>
       </View>
 
       <FlatList
@@ -425,7 +416,7 @@ export default function HunterReviewAndVerifyScreen() {
                 {bounty.title}
               </Text>
               <View style={styles.timerContainer}>
-                <Text style={styles.timerLabel}>Time Spent in Review</Text>
+                <Text style={styles.timerLabel}>Time on this task</Text>
                 <Text style={styles.timerValue}>{formatTime(timeElapsed)}</Text>
                 <Text style={styles.timerHint}>Track your time on this task</Text>
               </View>
@@ -433,65 +424,19 @@ export default function HunterReviewAndVerifyScreen() {
                 <Text style={styles.bountyAmount}>
                   {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
                 </Text>
-                <View style={styles.distanceInfo}>
-                  <MaterialIcons name="near-me" size={16} color="#1FAE49" />
-                  <Text style={styles.distanceText}>0 mi</Text>
-                </View>
               </View>
             </View>
 
             {/* Timeline */}
-            <View style={styles.timelineContainer}>
-              <Text style={styles.sectionTitle}>Progress Timeline</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.timeline}
-              >
-                {HUNTER_STAGES.map((stage) => {
-                  const isActive = stage.id === currentStage;
-                  const stageIndex = HUNTER_STAGES.findIndex((s) => s.id === stage.id);
-                  const currentIndex = HUNTER_STAGES.findIndex((s) => s.id === currentStage);
-                  const isCompleted = stageIndex < currentIndex;
-                  const isAccessible = stageIndex <= currentIndex;
-
-                  return (
-                    <View
-                      key={stage.id}
-                      style={[
-                        styles.stageItem,
-                        isActive && styles.stageItemActive,
-                        isCompleted && styles.stageItemCompleted,
-                        !isAccessible && styles.stageItemLocked,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.stageIcon,
-                          isActive && styles.stageIconActive,
-                          isCompleted && styles.stageIconCompleted,
-                        ]}
-                      >
-                        <MaterialIcons
-                          name={stage.icon as any}
-                          size={24}
-                          color={isActive || isCompleted ? '#fff' : '#1FAE49'}
-                        />
-                      </View>
-                      <Text style={styles.stageLabel}>{stage.label}</Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            </View>
+            <HunterStageTimeline currentStage={currentStage} />
 
             {/* Message Input */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Message (cont):</Text>
+              <Text style={styles.sectionTitle}>Notes for the poster</Text>
               <TextInput
                 style={styles.messageTextArea}
                 placeholder="Describe your completed work..."
-                placeholderTextColor="rgba(255,254,245,0.4)"
+                placeholderTextColor={withAlpha(theme.text, 0.4)}
                 value={messageText}
                 onChangeText={setMessageText}
                 multiline
@@ -502,7 +447,7 @@ export default function HunterReviewAndVerifyScreen() {
               {/* Conversation quick action: use loaded conversation if present */}
               <View style={{ marginTop: 12 }}>
                 {conversation ? (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
                     onPress={() => {
                       try {
@@ -513,11 +458,11 @@ export default function HunterReviewAndVerifyScreen() {
                       }
                     }}
                   >
-                    <MaterialIcons name="chat" size={18} color="#fff" />
-                    <Text style={styles.addProofText}>Open Conversation</Text>
+                    <MaterialIcons name="chat" size={18} color={theme.text} />
+                    <Text style={styles.addProofText}>Open conversation</Text>
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
                     onPress={async () => {
                       try {
@@ -538,8 +483,8 @@ export default function HunterReviewAndVerifyScreen() {
                       }
                     }}
                   >
-                    <MaterialIcons name="chat-bubble-outline" size={18} color="#fff" />
-                    <Text style={styles.addProofText}>Message Poster</Text>
+                    <MaterialIcons name="chat-bubble-outline" size={18} color={theme.text} />
+                    <Text style={styles.addProofText}>Message the poster</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -549,12 +494,12 @@ export default function HunterReviewAndVerifyScreen() {
         ListEmptyComponent={() => (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Proof of Completion</Text>
+              <Text style={styles.sectionTitle}>Proof of your work</Text>
               <Text style={styles.sectionSubtitle}>
                 Attach images or files showing your completed work
               </Text>
               <View style={styles.emptyProof}>
-                <MaterialIcons name="attachment" size={48} color="#1FAE49" />
+                <MaterialIcons name="attachment" size={48} color={theme.primaryLight} />
                 <Text style={styles.emptyProofText}>No proof attached yet</Text>
               </View>
             </View>
@@ -566,15 +511,15 @@ export default function HunterReviewAndVerifyScreen() {
             {hasActiveDispute && (
               <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute." />
             )}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.addProofButton, (hasActiveDispute || isUploadingProof || isPickingProof) && styles.submitButtonDisabled]}
               onPress={handleAddProof}
               disabled={hasActiveDispute || isUploadingProof || isPickingProof}
             >
               {isUploadingProof || isPickingProof ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={theme.text} />
               ) : (
-                <MaterialIcons name={hasActiveDispute ? 'lock' : 'add'} size={20} color="#fff" />
+                <MaterialIcons name={hasActiveDispute ? 'lock' : 'add'} size={20} color={theme.text} />
               )}
               <Text style={styles.addProofText}>
                 {hasActiveDispute
@@ -587,13 +532,13 @@ export default function HunterReviewAndVerifyScreen() {
               </Text>
             </TouchableOpacity>
             <View style={{ height: 12 }} />
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.submitButton, (isSubmitting || hasActiveDispute || isUploadingProof || isPickingProof) && styles.submitButtonDisabled]}
               onPress={handleRequestReview}
               disabled={isSubmitting || hasActiveDispute || isUploadingProof || isPickingProof}
             >
               {isSubmitting ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={theme.onPrimary} />
               ) : (
                 <Text style={styles.submitButtonText}>
                   {hasActiveDispute
@@ -607,20 +552,20 @@ export default function HunterReviewAndVerifyScreen() {
             <View style={{ height: 12 }} />
             {/* Raise Dispute / View Dispute Button */}
             {hasActiveDispute ? (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.disputeButton}
                 onPress={() => (router as any).push(`/dispute/${activeDisputeId}`)}
               >
-                <MaterialIcons name="gavel" size={18} color="#f59e0b" />
-                <Text style={styles.disputeButtonText}>View Active Dispute</Text>
+                <MaterialIcons name="gavel" size={18} color={theme.warningText} />
+                <Text style={styles.disputeButtonText}>View dispute</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.disputeButton}
                 onPress={() => setShowDisputeModal(true)}
               >
-                <MaterialIcons name="gavel" size={18} color="#f59e0b" />
-                <Text style={styles.disputeButtonText}>Raise Dispute</Text>
+                <MaterialIcons name="gavel" size={18} color={theme.warningText} />
+                <Text style={styles.disputeButtonText}>Open a dispute</Text>
               </TouchableOpacity>
             )}
 
@@ -652,38 +597,37 @@ export default function HunterReviewAndVerifyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1B1E24',
+    backgroundColor: theme.background,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
     gap: 16,
   },
   errorText: {
-    color: '#ef4444',
+    color: theme.errorText,
     fontSize: 16,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -692,7 +636,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 16,
   },
   header: {
@@ -701,13 +645,13 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(31, 174, 73, 0.1)',
+    borderBottomColor: withAlpha(theme.primary, 0.1),
   },
   backIcon: {
     padding: 4,
   },
   headerTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 20,
     fontWeight: '600',
   },
@@ -719,15 +663,15 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   bountyInfoCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.3)',
+    borderColor: theme.borderSubtle,
     gap: 12,
   },
   bountyTitle: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '600',
   },
@@ -737,19 +681,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   timerLabel: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   timerValue: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 48,
     fontWeight: '700',
   },
   timerHint: {
-    color: 'rgba(255,254,245,0.6)',
-    fontSize: 11,
+    color: withAlpha(theme.text, 0.6),
+    fontSize: 12,
   },
   amountRow: {
     flexDirection: 'row',
@@ -757,90 +701,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bountyAmount: {
-    color: '#008E2A',
+    color: theme.primaryLight,
     fontSize: 20,
     fontWeight: '700',
   },
-  distanceInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  distanceText: {
-    color: '#1FAE49',
-    fontSize: 14,
-  },
-  timelineContainer: {
-    gap: 12,
-  },
   sectionTitle: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  timeline: {
-    gap: 16,
-    paddingVertical: 8,
-  },
-  stageItem: {
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
-    borderWidth: 1,
-    borderColor: 'transparent',
-    minWidth: 120,
-  },
-  stageItemActive: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderColor: '#008E2A',
-    borderWidth: 2,
-  },
-  stageItemCompleted: {
-    backgroundColor: '#454952',
-    borderColor: '#008E2A',
-  },
-  stageItemLocked: {
-    opacity: 0.5,
-  },
-  stageIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  stageIconActive: {
-    backgroundColor: '#008E2A',
-  },
-  stageIconCompleted: {
-    backgroundColor: '#008E2A',
-  },
-  stageLabel: {
-    color: '#1FAE49',
-    fontSize: 12,
-    textAlign: 'center',
-  },
   section: {
     gap: 12,
   },
   sectionSubtitle: {
-    color: 'rgba(255,254,245,0.7)',
+    color: withAlpha(theme.text, 0.7),
     fontSize: 13,
   },
   messageTextArea: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 12,
     padding: 12,
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     minHeight: 100,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
   },
   messageInputContainer: {
     flexDirection: 'row',
@@ -849,20 +736,18 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     flex: 1,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 12,
     padding: 12,
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     minHeight: 48,
     maxHeight: 120,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
   },
   sendButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -870,7 +755,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: 'rgba(0, 142, 42, 0.5)',
+    backgroundColor: withAlpha(theme.primary, 0.5),
   },
   proofList: {
     gap: 12,
@@ -878,18 +763,18 @@ const styles = StyleSheet.create({
   proofItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 12,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
   },
   proofIcon: {
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: withAlpha(theme.primary, 0.3),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -898,12 +783,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   proofName: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '500',
   },
   proofSize: {
-    color: '#1FAE49',
+    color: theme.primaryLight,
     fontSize: 12,
   },
   removeButton: {
@@ -913,14 +798,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
     gap: 12,
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: 'rgba(31, 174, 73, 0.2)',
+    borderColor: theme.borderSubtle,
     borderStyle: 'dashed',
   },
   emptyProofText: {
-    color: 'rgba(255,254,245,0.6)',
+    color: withAlpha(theme.text, 0.6),
     fontSize: 14,
   },
   addProofButton: {
@@ -928,21 +813,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: withAlpha(theme.text, 0.1),
     paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#008E2A',
+    borderColor: theme.border,
   },
   addProofText: {
-    color: '#fff',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
   },
   submitButton: {
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -956,10 +840,10 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   submitButtonDisabled: {
-    backgroundColor: 'rgba(0, 142, 42, 0.5)',
+    backgroundColor: withAlpha(theme.primary, 0.5),
   },
   submitButtonText: {
-    color: '#fff',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -970,13 +854,14 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: withAlpha(theme.warning, 0.15),
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: withAlpha(theme.warning, 0.3),
   },
   disputeButtonText: {
-    color: '#f59e0b',
+    color: theme.warningText,
     fontSize: 14,
     fontWeight: '600',
   },
 });
+}

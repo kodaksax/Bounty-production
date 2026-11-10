@@ -80,7 +80,7 @@ export function ConversationListRow({
             {fallbackIcon ? (
               <MaterialIcons name={fallbackIcon} size={20} color={theme.primary} />
             ) : (
-              <Text style={{ color: theme.primary, fontSize: 15, fontWeight: '700' }}>
+              <Text style={{ color: theme.primaryLight, fontSize: 15, fontWeight: '700' }}>
                 {initials || '?'}
               </Text>
             )}

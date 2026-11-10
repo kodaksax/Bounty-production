@@ -1,9 +1,9 @@
 // Raw palette — import from darkTheme/lightTheme for themed tokens.
 // Nothing in this file should be used directly in screens.
 //
-// Source: "Bounty Color Refresh" design — #008E2A leads every scheme.
-// Light mode uses the 01 Complementary harmony (green lead + berry contrast
-// on warm cream); dark mode uses the proposed warm graphite ramp.
+// Brand: #008E2A leads every scheme, on the warm creams #D7CBBD and #F1EBE3.
+// Light mode puts #F1EBE3 on the page with white cards and #D7CBBD on lines
+// and warm fills. Dark mode uses the warm graphite ramp with #F1EBE3 text.
 
 export const palette = {
   // ── Brand green (#008E2A lead) ───────────────────────────────────────────
@@ -11,9 +11,9 @@ export const palette = {
     950: '#002E0E',
     900: '#00410F',
     800: '#00571A',   // support — featured cards, deep fills
-    700: '#00701F',   // lead-deep — links, active tab, text on tint (light)
+    700: '#00701F',   // lead-deep — green text on light surfaces
     600: '#008E2A',   // LEAD — CTAs, primary buttons, active states
-    500: '#1FAE49',   // lead on dark — highlight text / success (dark)
+    500: '#1FAE49',   // green text on dark surfaces
     400: '#4CC46F',
     300: '#1FAE49',   // accent-on-dark (kept equal to 500 for one bright green)
     200: '#B5E3C2',
@@ -28,13 +28,13 @@ export const palette = {
     900: '#22262C',   // dark surface
     800: '#2A2E35',   // dark surfaceSecondary
     700: '#454952',   // dark border
-    600: '#61656B',   // light textSecondary / dark textDisabled
-    500: '#929497',   // light textDisabled / dark textSecondary
-    400: '#929497',
-    300: '#D8D2C4',   // light border
-    200: '#E6DED1',   // light background
-    100: '#F4F1EC',   // light surfaceSecondary
-    50:  '#F4F1EC',
+    600: '#5A5E65',   // light textSecondary (AA on #F1EBE3 and #E9E1D6)
+    500: '#929497',   // light textDisabled
+    400: '#A3A29C',   // dark textSecondary (AA on every dark surface)
+    300: '#D7CBBD',   // brand cream — light border and warm fills
+    200: '#F1EBE3',   // brand light cream — light background
+    100: '#E9E1D6',   // light surfaceSecondary, visible on white and on the page
+    50:  '#FBF8F3',   // light surfaceRaised — tab bar, search bar
   },
 
   // ── Berry (complementary contrast, light mode) ───────────────────────────
@@ -46,7 +46,8 @@ export const palette = {
   },
 
   ink:     '#31363F', // light-mode text
-  cream:   '#E6DED1', // dark-mode text
+  cream:   '#F1EBE3', // dark-mode text
+  brandCream: '#D7CBBD', // the crosshair on dark surfaces
 
   // ── Semantic (retuned to sit with the muted palette) ─────────────────────
   white:   '#FFFFFF',

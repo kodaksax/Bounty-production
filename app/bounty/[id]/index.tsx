@@ -206,11 +206,9 @@ function makeStyles(t: AppTheme) {
     body: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
     primaryBtn: {
       backgroundColor: t.primary,
-      borderBottomWidth: 4,
-      borderBottomColor: t.primaryShade,
       paddingHorizontal: 24,
       paddingVertical: 12,
-      borderRadius: 10,
+      borderRadius: 12,
       marginTop: 8,
       minHeight: 44,
       justifyContent: 'center',

@@ -66,7 +66,7 @@ const submitReport = async (
     }
   } catch (error) {
     console.error('Error submitting report:', error);
-    Alert.alert('Error', 'An unexpected error occurred. Please try again.', [
+    Alert.alert("Something went wrong", 'An unexpected error occurred. Please try again.', [
       { text: 'OK', onPress: onComplete }
     ]);
   }

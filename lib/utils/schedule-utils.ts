@@ -312,3 +312,12 @@ export function schedulePresetToDates(preset: 'today' | 'tomorrow' | 'this_week'
   end.setHours(23, 59, 59, 0);
   return { startDate: start.toISOString(), endDate: end.toISOString() };
 }
+
+/** MaterialIcons glyph for a schedule chip, matched to how soon it is. */
+export function scheduleChipIcon(
+  variant: 'urgent' | 'warning' | 'normal' | 'muted'
+): 'bolt' | 'schedule' | 'event' {
+  if (variant === 'urgent') return 'bolt';
+  if (variant === 'warning') return 'schedule';
+  return 'event';
+}

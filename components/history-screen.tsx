@@ -99,11 +99,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
             styles.statusBadge,
             {
               backgroundColor:
-                item.status === "completed" 
-                  ? "#6366f1" 
-                  : item.status === "archived"
-                  ? "#61656B"
-                  : "#ef4444", // deleted = red
+                item.status === "completed" ? "#6366f1" : item.status === "archived" ? "#61656B" : theme.error, // deleted = red
             },
           ]}
         >
@@ -153,7 +149,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
       <View style={styles.itemFooter}>
         {item.is_for_honor ? (
           <View style={styles.honorBadge}>
-            <MaterialIcons name="favorite" size={12} color="#052e1b" />
+            <MaterialIcons name="favorite" size={12} color={theme.onPrimary} />
             <Text style={styles.honorText}>For Honor</Text>
           </View>
         ) : (
@@ -200,7 +196,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" onPress={onBack} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>History</Text>
@@ -225,7 +221,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#008E2A"
+              tintColor={theme.primaryLight}
             />
           }
           ListEmptyComponent={
@@ -290,7 +286,7 @@ function makeStyles(theme: AppTheme) {
     },
     statusText: {
       color: "#fff",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.5,
     },
@@ -328,7 +324,7 @@ function makeStyles(theme: AppTheme) {
     amount: {
       fontSize: 18,
       fontWeight: "800",
-      color: "#fcd34d",
+      color: theme.warningText,
     },
     honorBadge: {
       flexDirection: "row",
@@ -340,7 +336,7 @@ function makeStyles(theme: AppTheme) {
       gap: 4,
     },
     honorText: {
-      color: "#052e1b",
+      color: theme.onPrimary,
       fontWeight: "800",
       fontSize: 12,
     },
@@ -354,15 +350,15 @@ function makeStyles(theme: AppTheme) {
       fontWeight: "800",
     },
     positiveAmount: {
-      color: "#008E2A",
+      color: theme.primaryLight,
     },
     negativeAmount: {
-      color: "#ef4444",
+      color: theme.errorText,
     },
     disputeBadge: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: "#dc2626",
+      backgroundColor: theme.error,
       borderRadius: 12,
       paddingHorizontal: 8,
       paddingVertical: 4,
@@ -370,7 +366,7 @@ function makeStyles(theme: AppTheme) {
     },
     disputeText: {
       color: "#fff",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     emptyContainer: {

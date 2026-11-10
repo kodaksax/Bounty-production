@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { withAlpha } from '../lib/utils';
 
 interface OfflineStatusBadgeProps {
   onPress?: () => void;
@@ -26,7 +27,7 @@ export function OfflineStatusBadge({ onPress }: OfflineStatusBadgeProps) {
 
   return (
     <>
-      <TouchableOpacity 
+      <TouchableOpacity accessibilityRole="button" 
         onPress={() => { setShowModal(true); onPress?.(); }}
         style={[s.container, { backgroundColor }]}
         activeOpacity={0.7}
@@ -49,7 +50,7 @@ export function OfflineStatusBadge({ onPress }: OfflineStatusBadgeProps) {
           <View style={s.modalContainer}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Offline Queue</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
+              <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button" onPress={() => setShowModal(false)}>
                 <MaterialIcons name="close" size={20} color={theme.text} />
               </TouchableOpacity>
             </View>
@@ -74,11 +75,11 @@ export function OfflineStatusBadge({ onPress }: OfflineStatusBadgeProps) {
                     </View>
 
                     <View style={s.itemActions}>
-                      <TouchableOpacity style={s.actionBtn} onPress={() => retryItem(item.id)}>
+                      <TouchableOpacity accessibilityLabel="Refresh" accessibilityRole="button" style={s.actionBtn} onPress={() => retryItem(item.id)}>
                         <MaterialIcons name="refresh" size={18} color={theme.text} />
                       </TouchableOpacity>
-                      <TouchableOpacity style={[s.actionBtn, { marginLeft: 8 }]} onPress={() => removeItem(item.id)}>
-                        <MaterialIcons name="delete" size={18} color="#b91c1c" />
+                      <TouchableOpacity accessibilityLabel="Delete" accessibilityRole="button" style={[s.actionBtn, { marginLeft: 8 }]} onPress={() => removeItem(item.id)}>
+                        <MaterialIcons name="delete" size={18} color={theme.errorText} />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -87,10 +88,10 @@ export function OfflineStatusBadge({ onPress }: OfflineStatusBadgeProps) {
             </ScrollView>
 
             <View style={s.modalFooter}>
-              <TouchableOpacity style={s.clearBtn} onPress={async () => { await clearFailedItems(); }}>
+              <TouchableOpacity accessibilityRole="button" style={s.clearBtn} onPress={async () => { await clearFailedItems(); }}>
                 <Text style={s.clearText}>Clear Failed</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.closeBtn} onPress={() => setShowModal(false)}>
+              <TouchableOpacity accessibilityRole="button" style={s.closeBtn} onPress={() => setShowModal(false)}>
                 <Text style={s.closeText}>Done</Text>
               </TouchableOpacity>
             </View>
@@ -172,7 +173,7 @@ function makeStyles(t: AppTheme) {
     },
     itemError: {
       marginTop: 4,
-      color: '#b91c1c',     // semantic red — preserved
+      color: t.errorText,     // semantic red — preserved
       fontSize: 12,
     },
     itemActions: {
@@ -182,7 +183,7 @@ function makeStyles(t: AppTheme) {
     actionBtn: {
       backgroundColor: t.surfaceSecondary,
       padding: 6,
-      borderRadius: 6,
+      borderRadius: 8,
     },
     modalFooter: {
       marginTop: 12,
@@ -195,11 +196,11 @@ function makeStyles(t: AppTheme) {
     clearBtn: {
       paddingHorizontal: 12,
       paddingVertical: 8,
-      backgroundColor: 'rgba(239,68,68,0.12)',  // semantic red tint — preserved
+      backgroundColor: withAlpha(t.error, 0.12),  // semantic red tint — preserved
       borderRadius: 8,
     },
     clearText: {
-      color: '#b91c1c',     // semantic red — preserved
+      color: t.errorText,     // semantic red — preserved
       fontWeight: '600',
     },
     closeBtn: {

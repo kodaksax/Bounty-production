@@ -46,6 +46,7 @@ import { TrustSafetyNotice } from './ui/trust-safety-notice'
 import { trustSafetyStrings } from '../lib/strings/trust-safety'
 import { getApplicationSafetyMessage } from '../lib/utils/bounty-lifecycle'
 import { detectOffPlatformRisk } from '../lib/utils/off-platform-risk'
+import { withAlpha } from '../lib/utils';
 
 // Alert defer delay to allow React to process state updates before showing alert
 const ALERT_DEFER_DELAY = 100;
@@ -424,7 +425,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     try {
       let uri = attachment.remoteUri || attachment.uri;
       if (!uri) {
-        Alert.alert('Error', 'Attachment not available');
+        Alert.alert("Something went wrong", 'Attachment not available');
         return;
       }
 
@@ -445,7 +446,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       setViewerVisible(true)
     } catch (error) {
       console.error('Error preparing attachment for viewer:', error)
-      Alert.alert('Error', 'Failed to open attachment')
+      Alert.alert("Couldn't open attachment", "Please try again.")
     }
   };
 
@@ -513,7 +514,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
     if (!currentUserId || !bounty.id) {
       claimFailed('validation')
-      Alert.alert('Error', 'Unable to apply. Please try again.')
+      Alert.alert("Couldn't apply", "Please try again.")
       return
     }
 
@@ -647,7 +648,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               } catch (checkErr) {
                 setIsApplying(false)
                 console.error('Error checking application existence:', checkErr)
-                Alert.alert('Error', 'Unable to verify application status. Please try again.')
+                Alert.alert("Couldn't verify application status", "Please try again.")
               }
             }
           },
@@ -690,7 +691,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
             } catch (checkErr) {
               setIsApplying(false)
               console.error('Error checking application existence:', checkErr)
-              Alert.alert('Error', 'Unable to verify application status. Please try again.')
+              Alert.alert("Couldn't verify application status", "Please try again.")
             }
           } },
           { text: 'Retry', onPress: () => handleApplyForBounty() },
@@ -775,7 +776,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                       scrollEventThrottle={16}
                     >
                       {imageAttachments.map(att => (
-                        <TouchableOpacity
+                        <TouchableOpacity accessibilityRole="button"
                           key={att.id}
                           activeOpacity={0.95}
                           onPress={() => handleAttachmentOpen(att)}
@@ -790,12 +791,12 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                       ))}
                     </ScrollView>
                     {currentImageIndex > 0 && (
-                      <TouchableOpacity style={[styles.carouselArrow, styles.carouselArrowLeft]} onPress={goToPrev}>
+                      <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={[styles.carouselArrow, styles.carouselArrowLeft]} onPress={goToPrev}>
                         <MaterialIcons name="chevron-left" size={28} color="#fff" />
                       </TouchableOpacity>
                     )}
                     {currentImageIndex < imageAttachments.length - 1 && (
-                      <TouchableOpacity style={[styles.carouselArrow, styles.carouselArrowRight]} onPress={goToNext}>
+                      <TouchableOpacity accessibilityRole="button" style={[styles.carouselArrow, styles.carouselArrowRight]} onPress={goToNext}>
                         <MaterialIcons name="chevron-right" size={28} color="#fff" />
                       </TouchableOpacity>
                     )}
@@ -810,7 +811,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                 ) : null}
                 <View style={styles.cardContent}>
                   {/* User info - Clickable to navigate to profile */}
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={styles.userInfo}
                     onPress={() => {
                       if (posterId) {
@@ -867,7 +868,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     </View>
                     {bounty.work_type === 'online' ? (
                       <View style={styles.onlineBadge}>
-                        <MaterialIcons name="wifi" size={14} color="#008E2A" />
+                        <MaterialIcons name="wifi" size={14} color={theme.primaryLight} />
                         <Text style={styles.onlineText}>Online</Text>
                       </View>
                     ) : bounty.distance === null ? (
@@ -931,10 +932,10 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                         <View key={index} style={[styles.detailRow, index === array.length - 1 && { marginBottom: 0 }]}>
                           <MaterialIcons name={detail.icon} size={16} color={detail.color} />
                           <View style={styles.detailContent}>
-                            <Text style={[styles.detailLabel, detail.urgent && { color: '#fbbf24' }]}>
+                            <Text style={[styles.detailLabel, detail.urgent && { color: theme.warningText }]}>
                               {detail.label}
                             </Text>
-                            <Text style={[styles.detailValue, detail.urgent && { color: '#fbbf24', fontWeight: '600' }]}>
+                            <Text style={[styles.detailValue, detail.urgent && { color: theme.warningText, fontWeight: '600' }]}>
                               {detail.value}
                             </Text>
                           </View>
@@ -957,7 +958,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                           {otherAttachments.map((attachment) => {
                             const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown'
                             return (
-                              <TouchableOpacity
+                              <TouchableOpacity accessibilityRole="button"
                                 key={attachment.id}
                                 style={styles.attachmentItem}
                                 onPress={() => handleAttachmentOpen(attachment)}
@@ -1010,7 +1011,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               {!hasApplied && detectOffPlatformRisk(applicationMessage) && (
                 <TrustSafetyNotice message={trustSafetyStrings.profile} urgent />
               )}
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[
                   styles.acceptButton,
                   (hasApplied || isApplying) && styles.acceptButtonDisabled
@@ -1199,13 +1200,13 @@ function makeStyles(theme: AppTheme) {
     color: theme.isDark ? '#ffffff' : theme.primary,
   },
   priceContainer: {
-    backgroundColor: theme.isDark ? '#00571A80' : 'rgba(0,142,42,0.08)',
+    backgroundColor: theme.isDark ? '#00571A80' : withAlpha(theme.primary, 0.08),
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   priceText: {
-    color: theme.isDark ? '#1FAE49' : theme.primary,
+    color: theme.isDark ? theme.primaryLight : theme.primary,
     fontWeight: 'bold',
   },
   distanceText: {
@@ -1215,7 +1216,7 @@ function makeStyles(theme: AppTheme) {
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.isDark ? '#2A2E35' : 'rgba(0,142,42,0.08)',
+    backgroundColor: theme.isDark ? theme.surfaceSecondary : withAlpha(theme.primary, 0.08),
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -1224,7 +1225,7 @@ function makeStyles(theme: AppTheme) {
   categoryPill: {
     marginTop: 8,
     alignSelf: 'flex-start',
-    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,142,42,0.08)',
+    backgroundColor: theme.isDark ? withAlpha(theme.text, 0.06) : withAlpha(theme.primary, 0.08),
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1244,7 +1245,7 @@ function makeStyles(theme: AppTheme) {
     gap: 4,
   },
   honorText: {
-    color: '#052e1b',
+    color: theme.onPrimary,
     fontWeight: '800',
     fontSize: 13,
   },
@@ -1320,7 +1321,7 @@ function makeStyles(theme: AppTheme) {
   attachmentIcon: {
     width: 40,
     height: 40,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: theme.border,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1376,7 +1377,7 @@ function makeStyles(theme: AppTheme) {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: withAlpha(theme.text, 0.55),
   },
   carouselDotActive: {
     backgroundColor: '#fff',
@@ -1395,9 +1396,7 @@ function makeStyles(theme: AppTheme) {
   acceptButton: {
     width: '100%',
     paddingVertical: 16,
-    backgroundColor: '#008E2A',
-    borderBottomWidth: 4,
-    borderBottomColor: '#00701F',
+    backgroundColor: theme.primary,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1408,7 +1407,7 @@ function makeStyles(theme: AppTheme) {
     elevation: 6,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#008E2A',
+    backgroundColor: theme.primary,
     opacity: 0.6,
   },
   acceptButtonText: {
@@ -1418,7 +1417,7 @@ function makeStyles(theme: AppTheme) {
   },
   messageInput: {
     backgroundColor: theme.surfaceSecondary,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.border,
     color: theme.text,

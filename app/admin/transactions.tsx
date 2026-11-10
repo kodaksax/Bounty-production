@@ -315,7 +315,7 @@ function RefLink({
     >
       <MaterialIcons name={icon} size={14} color={theme.textSecondary} />
       <Text style={{ fontSize: 12, color: theme.textSecondary }}>{prefix}:</Text>
-      <Text style={{ fontSize: 12, color: theme.primary, flex: 1 }} numberOfLines={1}>
+      <Text style={{ fontSize: 12, color: theme.primaryLight, flex: 1 }} numberOfLines={1}>
         {label}
       </Text>
       <MaterialIcons name="chevron-right" size={14} color={theme.primary} />

@@ -15,6 +15,7 @@ import {
 import { theme as legacyTheme } from "../../lib/theme";
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { withAlpha } from '../../lib/utils';
 
 
 export type ScreenKey = "messages" | "wallet" | "bounty" | "postings" | "profile" | "admin";
@@ -241,7 +242,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons
                 name="admin-panel-settings"
-                color={activeScreen === "admin" ? "#00dc50" : theme.text}
+                color={activeScreen === "admin" ? theme.primaryLight : theme.text}
                 size={NAV_ICON_SIZE}
               />
               <Text
@@ -307,7 +308,7 @@ function makeStyles(
       borderTopRightRadius: 28,
       ...legacyTheme.shadows.lg,
       borderWidth: 1,
-      borderColor: "rgba(0, 142, 42, 0.25)",
+      borderColor: withAlpha(theme.primary, 0.25),
     },
     sideSection: {
       flex: 1,
@@ -346,7 +347,7 @@ function makeStyles(
       marginTop: -BOTTOM_NAV_ITEM_LIFT,
     },
     navLabel: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
       marginTop: 3,
       color: theme.textSecondary,
@@ -365,7 +366,7 @@ function makeStyles(
       position: 'absolute',
       top: -6,
       right: -8,
-      backgroundColor: '#ef4444',
+      backgroundColor: theme.error,
       borderRadius: 10,
       minWidth: 18,
       height: 18,
@@ -377,7 +378,7 @@ function makeStyles(
     },
     badgeText: {
       color: '#ffffff',
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: '700',
       lineHeight: 13,
     },
@@ -395,7 +396,7 @@ function makeStyles(
     centerButton: {
       height: centerButtonSize,
       width: centerButtonSize,
-      backgroundColor: "rgba(0, 142, 42, 0.15)",
+      backgroundColor: withAlpha(theme.primary, 0.15),
       borderWidth: 2.5,
       borderColor: theme.primary,
       borderRadius: centerButtonSize / 2,

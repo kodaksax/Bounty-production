@@ -154,7 +154,7 @@ function makeStyles(t: AppTheme) {
       fontWeight: '700',
     },
     totalValue: {
-      color: t.primary,
+      color: t.primaryLight,
       fontSize: 20,
       fontWeight: '800',
     },

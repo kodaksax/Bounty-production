@@ -16,6 +16,7 @@ import {
   releaseRoute,
   submittedCard,
   validateMessageText,
+  acceptFailure,
 } from '../../supabase/functions/web-account/logic'
 
 const ctx = (over: Partial<CardContext> = {}): CardContext => ({
@@ -226,5 +227,25 @@ describe('messages', () => {
     expect(validateMessageText('   ').ok).toBe(false)
     expect(validateMessageText('x'.repeat(2001)).ok).toBe(false)
     expect(validateMessageText(42).ok).toBe(false)
+  })
+})
+
+describe('acceptFailure', () => {
+  it('reports a saved card that could not be charged as card_failed', () => {
+    const r = acceptFailure(402, { code: 'card_charge_failed', fallback: 'top_up' })
+    expect(r.httpStatus).toBe(402)
+    expect(r.body).toMatchObject({ ok: false, outcome: 'card_failed', code: 'card_failed' })
+    expect(r.body.error).toMatch(/saved card couldn’t be charged/)
+  })
+  it('keeps other 402s as not funded', () => {
+    expect(acceptFailure(402, { details: 'insufficient_funds_for_escrow' }).body.outcome).toBe('not_funded')
+    expect(acceptFailure(402, null).body.code).toBe('accept_402')
+  })
+  it('maps the rest without losing status', () => {
+    expect(acceptFailure(409, { code: 'accept_in_progress' }).body.outcome).toBe('retry')
+    expect(acceptFailure(409, {}).body.outcome).toBe('conflict')
+    expect(acceptFailure(404, {}).body.outcome).toBe('not_found')
+    expect(acceptFailure(503, {}).httpStatus).toBe(503)
+    expect(acceptFailure(200, {}).httpStatus).toBe(502)
   })
 })
