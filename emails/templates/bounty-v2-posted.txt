@@ -15,6 +15,8 @@ View your bounty: {{{CTA_URL}}}
 {{{HELP_LINE}}}
 {{{FOOTER_LINE}}}
 
+{{{APP_BLOCK_TEXT}}}
+
 —
 Bounty · Got a task? Drop a bounty.
 You're getting this because you have an active bounty on Bounty.

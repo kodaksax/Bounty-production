@@ -26,6 +26,11 @@ import {
   ONBOARDING_TOTAL_STEPS,
   OnboardingProgressDots,
 } from '../../components/onboarding/OnboardingProgressDots';
+import {
+  emailCodeWaitMessage,
+  requestEmailSignInCode,
+  setEmailCodeHandoff,
+} from '../../lib/auth/email-code-sign-in';
 import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
@@ -241,6 +246,12 @@ export function SignUpForm() {
   // form would now fail with "email already registered", so the form is
   // replaced by a single explicit action instead of a generic error.
   const [accountCreatedNeedsSignIn, setAccountCreatedNeedsSignIn] = useState(false);
+  // Set when register answers 409 for the email: the address already has an
+  // account. Often website checkout made it with no password, so "sign in
+  // instead" is a dead end; this state offers a code by email instead.
+  const [existingAccountEmail, setExistingAccountEmail] = useState<string | null>(null);
+  const [emailCodeSending, setEmailCodeSending] = useState(false);
+  const [emailCodeSendError, setEmailCodeSendError] = useState<string | null>(null);
 
   const passwordRef = useRef<TextInput>(null);
 
@@ -444,9 +455,13 @@ export function SignUpForm() {
         if (registerRes.status === 409) {
           const errLower = String(backendMessage).toLowerCase();
           if (errLower.includes('email')) {
-            setAuthError(
-              'This email is already registered. Please sign in instead or use password reset.'
-            );
+            analyticsService.trackEvent('auth_existing_account_detected', {
+              method: 'email',
+              source: 'sign_up_form',
+            });
+            setPassword('');
+            setEmailCodeSendError(null);
+            setExistingAccountEmail(normalizedEmail);
             return;
           }
           if (errLower.includes('username')) {
@@ -640,6 +655,99 @@ export function SignUpForm() {
   const handleGoToSignIn = () => {
     router.replace(ROUTES.AUTH.SIGN_IN as Href);
   };
+
+  // One tap: send the code, then open sign-in on the code field for this
+  // address. The email travels in memory, never in the URL (see
+  // lib/auth/email-code-sign-in.ts).
+  const handleEmailMeACode = async () => {
+    if (!existingAccountEmail || emailCodeSending) return;
+    hapticFeedback.light();
+    setEmailCodeSending(true);
+    setEmailCodeSendError(null);
+    try {
+      await requestEmailSignInCode(existingAccountEmail, 'signup_existing_account');
+      setEmailCodeHandoff({ email: existingAccountEmail, source: 'signup_existing_account' });
+      try {
+        await storage.setItem('lastUsedEmail', existingAccountEmail);
+      } catch {
+        /* prefill is a convenience */
+      }
+      router.replace(ROUTES.AUTH.SIGN_IN as Href);
+    } catch (err) {
+      setEmailCodeSendError(emailCodeWaitMessage(err) ?? parseAuthError(err).userMessage);
+    } finally {
+      setEmailCodeSending(false);
+    }
+  };
+
+  if (existingAccountEmail) {
+    return (
+      <View
+        className="flex-1 justify-center px-8"
+        style={{ backgroundColor: theme.background }}
+      >
+        <MaterialIcons name="mark-email-read" size={56} color={theme.primary} style={{ alignSelf: 'center' }} />
+        <Text
+          className="text-xl font-bold mt-4 text-center"
+          style={{ color: theme.text }}
+          accessibilityRole="header"
+        >
+          You already have a Bounty account.
+        </Text>
+        <Text
+          className="text-base mt-3 text-center"
+          style={{ color: theme.textSecondary, lineHeight: 22 }}
+        >
+          We&apos;ll email you a 6-digit code to sign in.
+        </Text>
+        <Text
+          className="text-base mt-1 text-center font-semibold"
+          style={{ color: theme.text }}
+        >
+          {existingAccountEmail}
+        </Text>
+        {emailCodeSendError ? (
+          <View
+            style={[styles.errorBanner, { marginTop: 16 }]}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
+            <Text style={styles.errorBannerText}>{emailCodeSendError}</Text>
+          </View>
+        ) : null}
+        <View className="w-full mt-8">
+          <TouchableOpacity
+            onPress={handleEmailMeACode}
+            disabled={emailCodeSending}
+            className="items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.primary, height: 56, opacity: emailCodeSending ? 0.7 : 1 }}
+            accessibilityRole="button"
+            accessibilityLabel="Email me a code"
+            accessibilityState={{ disabled: emailCodeSending, busy: emailCodeSending }}
+          >
+            {emailCodeSending ? (
+              <ActivityIndicator color={theme.background} />
+            ) : (
+              <Text style={{ color: theme.background, fontSize: 18, fontWeight: '700' }}>
+                Email me a code
+              </Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              setExistingAccountEmail(null);
+              setEmailCodeSendError(null);
+            }}
+            className="items-center py-4 mt-2"
+            accessibilityRole="button"
+            accessibilityLabel="Use a different email"
+          >
+            <Text style={{ color: theme.textSecondary }}>Use a different email</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   // Account created, but no session. Re-submitting the form is guaranteed to
   // fail from here ("Email already registered"), so replace it with the one
