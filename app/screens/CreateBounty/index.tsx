@@ -46,10 +46,11 @@ import {
   Animated,
   AppState,
   Dimensions,
+  Platform,
   View,
 } from 'react-native';
 import { ScreenLoader } from '../../../components/ui/screen-loader';
-import { useKeyboardInset } from '../../../components/ui/keyboard-avoiding';
+import { useAndroidKeyboardOverlap, useKeyboardInset } from '../../../components/ui/keyboard-avoiding';
 import { useTabPager } from '../../../components/ui/tab-pager';
 
 interface CreateBountyFlowProps {
@@ -184,7 +185,14 @@ export function CreateBountyFlow({
       setKeyboardOffset(prev => (prev === below ? prev : below));
     });
   };
-  const { inset: keyboardInset } = useKeyboardInset({ offset: keyboardOffset });
+  const { inset: iosKeyboardInset } = useKeyboardInset({ offset: keyboardOffset });
+  // Android draws edge-to-edge and the window no longer shrinks for the
+  // keyboard, so there the overlap is measured off this same root instead.
+  // Without it every step's Next sat under the keyboard (Galaxy A23 replay,
+  // 2026-10-14).
+  const { inset: androidKeyboardInset, remeasure: remeasureAndroidKeyboard } =
+    useAndroidKeyboardOverlap(flowRootRef);
+  const keyboardInset = Platform.OS === 'android' ? androidKeyboardInset : iosKeyboardInset;
   // The authoritative copy of the in-progress detail edits. `detailDraft`
   // state drives rendering; this ref is what actually gets persisted. They
   // exist separately because the step screens patch and advance within a
@@ -915,7 +923,10 @@ export function CreateBountyFlow({
     <View
       ref={flowRootRef}
       testID="create-bounty-flow-root"
-      onLayout={measureKeyboardOffset}
+      onLayout={() => {
+        measureKeyboardOffset();
+        remeasureAndroidKeyboard();
+      }}
       style={{ flex: 1 }}
     >
     <Animated.View

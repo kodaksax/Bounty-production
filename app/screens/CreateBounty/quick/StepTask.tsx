@@ -1,9 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { BountyRequirementsEditor } from '../../../../components/bounty-requirements-editor';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Animated,
+  type LayoutChangeEvent,
   Platform,
   ScrollView,
   StyleSheet,
@@ -34,6 +36,12 @@ import { StepProgressRow, useStepEntrance } from './QuickStepLayout';
 import { SuggestionPlaceholder } from './SuggestionPlaceholder';
 import { withAlpha } from '../../../../lib/utils';
 import { findTaskTemplateByTitle, TASK_TEMPLATES, type TaskTemplate } from './taskTemplates';
+import {
+  MAX_TITLE_LENGTH as MAX_LENGTH,
+  MIN_DETAIL_LENGTH,
+  stepTaskBlockedNotice,
+  stepTaskHint,
+} from './stepTaskCopy';
 
 // Cycled in the empty field to show the kind of answer that works here. These
 // are examples only — none of them is ever written into the draft.
@@ -49,9 +57,19 @@ const SUGGESTIONS = [
 // Placeholder for a title the poster typed themselves.
 const CUSTOM_DETAIL_EXAMPLE = 'Two boxes from my car up to the 3rd floor, Sunday after 2pm';
 
-// Mirrors lib/utils/bounty-validation.ts validateDescription, which the server
-// also enforces for in-person bounties (20261019230000_posting_quality_rules).
-const MIN_DETAIL_LENGTH = 20;
+type Field = 'title' | 'description';
+
+// Room kept between a focused field and the edges of what's visible.
+const FIELD_MARGIN = 12;
+
+// A blur followed by a focus (moving title → details) shouldn't unpin and
+// re-pin the footer for a frame in between.
+const BLUR_SETTLE_MS = 120;
+
+interface Box {
+  y: number;
+  height: number;
+}
 
 interface StepTaskProps {
   draft: BountyDraft;
@@ -76,10 +94,6 @@ interface StepTaskProps {
   totalSteps: number;
 }
 
-// validateTitle caps titles at 120 characters — enforce it in the input so the
-// poster can't compose something the service will reject at publish time.
-const MAX_LENGTH = 120;
-
 /**
  * Step 1 — a green hero with the question, a raised card holding the title
  * field, a required "What exactly, and when?" field (saved as the bounty's
@@ -90,8 +104,15 @@ const MAX_LENGTH = 120;
  * the details have at least 20 characters, for templates and typed titles
  * alike.
  *
- * Unlike the later steps this doesn't use QuickStepLayout: the CTA lives in
- * the card next to the field instead of being pinned to the bottom.
+ * Unlike the later steps this doesn't use QuickStepLayout: at rest the CTA
+ * lives in the card next to the fields. While a field is focused it moves to
+ * a bar pinned to the bottom of the step, which the flow root keeps just
+ * above the keyboard, and the focused field is kept scrolled into view. In
+ * the card it sat below the fold as soon as the keyboard opened, and posters
+ * on small Android screens typed for minutes without ever seeing it.
+ *
+ * A tap on the disabled Next moves focus to the first field still missing
+ * and says, in words, what it needs.
  */
 export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintStatusBar = true, topInset = 0, telemetry, step, totalSteps }: StepTaskProps) {
   const { theme } = useAppThemeContext();
@@ -104,7 +125,14 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
   const entrance = useStepEntrance();
   const [touched, setTouched] = useState(false);
   const [detailTouched, setDetailTouched] = useState(false);
+  const titleInputRef = useRef<TextInput>(null);
   const detailInputRef = useRef<TextInput>(null);
+  // Which field has focus. Drives the pinned footer.
+  const [focusedField, setFocusedField] = useState<Field | null>(null);
+  const focusedFieldRef = useRef<Field | null>(null);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set by a tap on the disabled Next; cleared once Next is enabled.
+  const [blockedTapped, setBlockedTapped] = useState(false);
 
   // RootFrame (app/_layout.tsx) reserves the status-bar strip above all app
   // content in the screen colour. Hand it the hero's green, translated with
@@ -170,8 +198,116 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
     onNext();
   };
 
+  // ---- keeping the focused field in view ----
+  // Positions are in the scroll content's coordinates: the card is a direct
+  // child of the content, the fields' boxes are relative to the card.
+  const scrollRef = useRef<ScrollView>(null);
+  const geometryRef = useRef<{
+    cardY: number;
+    title: Box | null;
+    description: Box | null;
+    viewport: number;
+    scrollY: number;
+  }>({ cardY: 0, title: null, description: null, viewport: 0, scrollY: 0 });
+
+  // Scrolls only as far as needed. A field taller than the space left above
+  // the keyboard keeps its end (where the caret is) in view.
+  const ensureFieldVisible = useCallback((field: Field) => {
+    const g = geometryRef.current;
+    const box = g[field];
+    if (!box || g.viewport <= 0) return;
+    const top = g.cardY + box.y - FIELD_MARGIN;
+    const bottom = g.cardY + box.y + box.height + FIELD_MARGIN;
+    let target: number | null = null;
+    if (bottom - top > g.viewport) target = bottom - g.viewport;
+    else if (top < g.scrollY) target = top;
+    else if (bottom > g.scrollY + g.viewport) target = bottom - g.viewport;
+    if (target === null) return;
+    const y = Math.max(0, Math.round(target));
+    if (Math.abs(y - g.scrollY) < 1) return;
+    scrollRef.current?.scrollTo({ y, animated: true });
+  }, []);
+
+  const ensureFocusedVisible = useCallback(() => {
+    const field = focusedFieldRef.current;
+    if (field) ensureFieldVisible(field);
+  }, [ensureFieldVisible]);
+
+  // The viewport shrinks as the keyboard opens and the footer pins, so check
+  // again whenever it changes, and whenever a focused field grows a line.
+  const handleScrollLayout = (e: LayoutChangeEvent) => {
+    geometryRef.current.viewport = e.nativeEvent.layout.height;
+    ensureFocusedVisible();
+  };
+  const handleCardLayout = (e: LayoutChangeEvent) => {
+    geometryRef.current.cardY = e.nativeEvent.layout.y;
+  };
+  const fieldLayout = (field: Field) => (e: LayoutChangeEvent) => {
+    const { y, height } = e.nativeEvent.layout;
+    geometryRef.current[field] = { y, height };
+    if (focusedFieldRef.current === field) ensureFieldVisible(field);
+  };
+
+  const handleFieldFocus = (field: Field) => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    focusedFieldRef.current = field;
+    setFocusedField(field);
+    onFieldFocus?.(field);
+    setTimeout(() => ensureFieldVisible(field), 0);
+  };
+
+  const handleFieldBlur = (field: Field) => {
+    if (field === 'title') setTouched(true);
+    else setDetailTouched(true);
+    if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    blurTimerRef.current = setTimeout(() => {
+      blurTimerRef.current = null;
+      if (focusedFieldRef.current !== field) return;
+      focusedFieldRef.current = null;
+      setFocusedField(null);
+    }, BLUR_SETTLE_MS);
+  };
+
+  useEffect(
+    () => () => {
+      if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    },
+    []
+  );
+
+  const focusField = (field: Field) => {
+    (field === 'title' ? titleInputRef : detailInputRef).current?.focus();
+    setTimeout(() => ensureFieldVisible(field), 0);
+  };
+  const focusDetail = () => focusField('description');
+
+  // ---- the disabled Next ----
+  // Contact details can be in either field; go to the one that has them.
+  const contactField: Field = validateContactInfo(draft.title) ? 'title' : 'description';
+  const blockedTarget: Field | null =
+    missingField === 'title'
+      ? 'title'
+      : missingField === 'description'
+        ? 'description'
+        : missingField === 'contact'
+          ? contactField
+          : null;
+  const copyInput = { title: draft.title || '', detail, missingField };
+  const blockedNotice = blockedTapped && !canContinue ? stepTaskBlockedNotice(copyInput) : null;
+
+  useEffect(() => {
+    if (canContinue) setBlockedTapped(false);
+  }, [canContinue]);
+
   const handleNextBlocked = () => {
     telemetry?.nextTapped({ step, draft, blocked: true, missingField });
+    setBlockedTapped(true);
+    if (blockedTarget) focusField(blockedTarget);
+    const notice = stepTaskBlockedNotice(copyInput);
+    if (notice) AccessibilityInfo.announceForAccessibility?.(notice);
   };
 
   const titleErrorShown = touched && !!error && !isEmpty;
@@ -191,20 +327,10 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
     if (detailLengthShown) telemetry.validationShown({ step, title, field: 'description', rule: 'min_length' });
   }, [telemetry, step, draft.title, titleErrorShown, contactErrorShown, detailLengthShown]);
 
-  // Templates sit below the card, so bring the card back into view first.
-  const scrollRef = useRef<ScrollView>(null);
-  const focusDetail = () => {
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-    detailInputRef.current?.focus();
-  };
-
-  let cardHint = 'Location and reward come next';
-  if (length > 90) cardHint = `${length}/${MAX_LENGTH}`;
-  else if (detailLength === 0) cardHint = 'Add what and when to continue';
-  else if (detailLength < MIN_DETAIL_LENGTH) {
-    const remaining = MIN_DETAIL_LENGTH - detailLength;
-    cardHint = `${remaining} more character${remaining === 1 ? '' : 's'}`;
-  }
+  const cardHint = blockedNotice ?? stepTaskHint(copyInput);
+  // While a field is focused the footer is pinned to the bottom of the step,
+  // which the flow root holds just above the keyboard.
+  const footerPinned = focusedField !== null;
 
   const composerScreen = composerScreenForStep(step);
 
@@ -244,21 +370,62 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
       composer_screen: composerScreen,
     });
     // Stay on this step: the template names the job, the poster still has to
-    // say what exactly and when. Any details already typed are kept.
+    // say what exactly and when. Any details already typed are kept. The
+    // template rows sit below the card, so this also scrolls back up to the
+    // field, and focusing it pins Next above the keyboard.
     focusDetail();
   };
+
+  const footer = (
+    <>
+      <Text
+        style={[styles.cardHint, blockedNotice ? styles.cardHintBlocked : null]}
+        accessibilityLiveRegion="polite"
+        testID="step-task-hint"
+      >
+        {cardHint}
+      </Text>
+      <BlockedTapCapture blocked={!canContinue} onBlockedTap={handleNextBlocked}>
+        <TouchableOpacity
+          onPress={handleNextPress}
+          disabled={!canContinue}
+          activeOpacity={0.85}
+          style={[styles.nextButton, canContinue ? styles.nextButtonEnabled : null]}
+          accessibilityRole="button"
+          accessibilityLabel="Next"
+          accessibilityState={{ disabled: !canContinue }}
+        >
+          <Text style={[styles.nextLabel, canContinue ? styles.nextLabelEnabled : null]}>
+            Next
+          </Text>
+          <MaterialIcons
+            name="arrow-forward"
+            size={18}
+            color={canContinue ? '#ffffff' : theme.textSecondary}
+          />
+        </TouchableOpacity>
+      </BlockedTapCapture>
+    </>
+  );
 
   return (
     <Animated.View style={[styles.root, entrance]}>
       <Animated.ScrollView
         ref={scrollRef}
+        testID="step-task-scroll"
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        // Not on web: react-native-web's 'on-drag' blurs the focused input on
+        // any scroll, including the scrollTo that brings that input into view.
+        keyboardDismissMode={Platform.select({ ios: 'interactive', android: 'on-drag', default: 'none' })}
         showsVerticalScrollIndicator={false}
+        onLayout={handleScrollLayout}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: true,
+          listener: (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+            geometryRef.current.scrollY = e.nativeEvent.contentOffset.y;
+          },
         })}
         scrollEventThrottle={16}
       >
@@ -281,13 +448,14 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
         </View>
 
         {/* Raised card overlapping the hero's bottom edge */}
-        <View style={styles.card}>
-          <View>
+        <View style={styles.card} onLayout={handleCardLayout} testID="step-task-card">
+          <View onLayout={fieldLayout('title')} testID="step-task-title-block">
             <TextInput
+              ref={titleInputRef}
               value={draft.title}
               onChangeText={handleChange}
-              onFocus={() => onFieldFocus?.('title')}
-              onBlur={() => setTouched(true)}
+              onFocus={() => handleFieldFocus('title')}
+              onBlur={() => handleFieldBlur('title')}
               onSubmitEditing={focusDetail}
               multiline
               submitBehavior="blurAndSubmit"
@@ -309,7 +477,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
           {touched && error && !isEmpty ? <Text style={styles.error}>{error}</Text> : null}
 
           {/* Required detail — becomes the bounty description. */}
-          <View style={styles.detailBlock}>
+          <View style={styles.detailBlock} onLayout={fieldLayout('description')} testID="step-task-detail-block">
             <Text style={styles.detailLabel}>
               What exactly, and when?
             </Text>
@@ -317,8 +485,8 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
               ref={detailInputRef}
               value={detail}
               onChangeText={handleDetailChange}
-              onFocus={() => onFieldFocus?.('description')}
-              onBlur={() => setDetailTouched(true)}
+              onFocus={() => handleFieldFocus('description')}
+              onBlur={() => handleFieldBlur('description')}
               onSubmitEditing={canContinue ? onNext : undefined}
               placeholder={detailExample}
               placeholderTextColor={theme.textDisabled}
@@ -337,29 +505,7 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
             <Text style={styles.error}>{detailError}</Text>
           ) : null}
 
-          <View style={styles.cardFooter}>
-            <Text style={styles.cardHint}>{cardHint}</Text>
-            <BlockedTapCapture blocked={!canContinue} onBlockedTap={telemetry ? handleNextBlocked : undefined}>
-              <TouchableOpacity
-                onPress={handleNextPress}
-                disabled={!canContinue}
-                activeOpacity={0.85}
-                style={[styles.nextButton, canContinue ? styles.nextButtonEnabled : null]}
-                accessibilityRole="button"
-                accessibilityLabel="Next"
-                accessibilityState={{ disabled: !canContinue }}
-              >
-                <Text style={[styles.nextLabel, canContinue ? styles.nextLabelEnabled : null]}>
-                  Next
-                </Text>
-                <MaterialIcons
-                  name="arrow-forward"
-                  size={18}
-                  color={canContinue ? '#ffffff' : theme.textSecondary}
-                />
-              </TouchableOpacity>
-            </BlockedTapCapture>
-          </View>
+          {footerPinned ? null : <View style={styles.cardFooter}>{footer}</View>}
         </View>
 
         {/* Templates */}
@@ -398,6 +544,13 @@ export function StepTask({ draft, onUpdate, onNext, onFieldFocus, onClose, tintS
           ))}
         </View>
       </Animated.ScrollView>
+
+      {/* Outside the scroll body, so it stays put above the keyboard. */}
+      {footerPinned ? (
+        <View style={styles.pinnedFooter} testID="step-task-pinned-footer">
+          {footer}
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -504,6 +657,22 @@ function makeStyles(theme: AppTheme, scale: number) {
       marginRight: 12,
       fontSize: 13,
       color: theme.textSecondary,
+    },
+    // After a tap on the disabled Next: the same line, louder.
+    cardHintBlocked: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    pinnedFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      backgroundColor: theme.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
     },
     nextButton: {
       flexDirection: 'row',

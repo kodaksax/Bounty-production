@@ -193,9 +193,18 @@ describe('explainPayment — accurate, plain English', () => {
     expect(p.explanation).toMatch(/^Card saved, you’ll be charged when you hire someone\./)
     expect(p.explanation).not.toMatch(/\bpaid\b/)
     expect(explainPayment(null, b).state).toBe('pay_at_hire')
-    expect(explainPayment(null, { ...b, status: 'in_progress' }, { hasSavedCard: true }).state).toBe('unknown')
     expect(explainPayment({ status: 'captured', amount: 40 }, b, { hasSavedCard: true }).state).toBe('held')
     expect(explainPayment(null, { ...b, is_for_honor: true }, { hasSavedCard: true }).state).toBe('not_paid')
+  })
+
+  it('REGRESSION: a wallet-funded hire says the money is held, not "we can’t show the payment"', () => {
+    // Staging, 2026-11-10: hired through the balance, there's no bounty_payments
+    // row, and the in-progress bounty read "Payment details … Contact us".
+    const hired = { amount: 25, funding_mode: 'at_accept', status: 'in_progress' }
+    const p = explainPayment(null, hired, { hasSavedCard: true })
+    expect(p).toMatchObject({ state: 'held', label: '$25 held safely' })
+    expect(p.explanation).toMatch(/paid only after you confirm/)
+    expect(explainPayment(null, { ...hired, status: 'completed' }).state).toBe('unknown')
   })
 
   test('a web-posted bounty: paid up front and held until the poster confirms', () => {

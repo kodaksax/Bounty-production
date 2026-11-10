@@ -17,12 +17,12 @@ export function isUuid(value: unknown): value is string {
 
 /**
  * The platform fee percent, read exactly as bounty-payments and wallet read
- * it (platformFeePercentFromEnv in _shared/platform-fee.ts — default 8), so
+ * it (platformFeePercentFromEnv in _shared/platform-fee.ts — default 5), so
  * the amount shown is the amount released. Kept inline to stay
  * dependency-free; platform-fee-parity.test.ts asserts the two agree.
  */
 export function platformFeePercent(raw: string | undefined | null): number {
-  return Number(raw ?? '8')
+  return Number(raw ?? '5')
 }
 
 /**

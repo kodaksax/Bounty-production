@@ -190,8 +190,10 @@ describe('post_next_tapped on Task (step 1)', () => {
   });
 
   it('sends nothing without telemetry (a preloaded, off-screen flow)', () => {
-    const { getByLabelText, queryByTestId } = render(<StepTaskHarness initial={{ title: 'Walk my dog' }} />);
-    expect(queryByTestId(BLOCKED_TAP)).toBeNull();
+    const { getByLabelText, getByTestId } = render(<StepTaskHarness initial={{ title: 'Walk my dog' }} />);
+    // The blocked tap still guides the poster to the missing field; it just
+    // isn't reported.
+    fireEvent.press(getByTestId(BLOCKED_TAP));
     fireEvent.changeText(getByLabelText(DETAIL_LABEL), 'x');
     expect(eventsNamed('post_next_tapped')).toEqual([]);
     expect(eventsNamed('post_detail_typed')).toEqual([]);

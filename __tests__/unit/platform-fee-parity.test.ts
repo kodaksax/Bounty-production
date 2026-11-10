@@ -23,11 +23,11 @@ import {
 } from '../../supabase/functions/_shared/platform-fee';
 import { hunterNetCents, platformFeePercent } from '../../supabase/functions/web-account/logic';
 
-describe('one fee rate everywhere (owner decision 2026-11-04: 8%)', () => {
-  // Production deducted 8% (PLATFORM_FEE_PERCENT secret) from 2026-07-12 while
-  // the app quoted 5%. The rate users are shown must be the rate deducted.
-  it('client constant, server default and web receipt default are all 8', () => {
-    expect(PLATFORM_FEE_PERCENT).toBe(8);
+describe('one fee rate everywhere (decision 2026-11-09: 5%)', () => {
+  // Production deducted 8% (PLATFORM_FEE_PERCENT secret) from 2026-07-12. The
+  // rate users are shown must be the rate deducted, so the secret moves to 5 too.
+  it('client constant, server default and web receipt default are all 5', () => {
+    expect(PLATFORM_FEE_PERCENT).toBe(5);
     expect(DEFAULT_PLATFORM_FEE_PERCENT).toBe(PLATFORM_FEE_PERCENT);
     expect(platformFeePercentFromEnv(undefined)).toBe(PLATFORM_FEE_PERCENT);
     expect(platformFeePercent(undefined)).toBe(PLATFORM_FEE_PERCENT);
