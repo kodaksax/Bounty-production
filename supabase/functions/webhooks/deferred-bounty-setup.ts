@@ -22,6 +22,8 @@
  *     the post on the dashboard; it goes live when the owner confirms it there.
  */
 
+import { ensureSolePaymentMethodDefault } from '../_shared/sole-payment-method-default.ts';
+
 // deno-lint-ignore no-explicit-any
 type AnyClient = any;
 
@@ -353,6 +355,10 @@ export async function handleDeferredBountySetup(params: DeferredSetupParams): Pr
     )
   )) as { error: unknown };
   if (upsertErr) throw upsertErr;
+
+  // The row above is already the default when it is on the profile's customer;
+  // this also sets Stripe's default when it is the only method. Non-fatal.
+  await ensureSolePaymentMethodDefault({ supabase, stripe, userId: posterId, logTag: 'webhooks' });
 
   // ── The bounty ───────────────────────────────────────────────────────────
   const { data: rpcRows, error: rpcErr } = (await withDbTimeout(

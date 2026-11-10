@@ -3,7 +3,9 @@ import {
   buildShortfallSessionParams,
   checkoutModeForSwitch,
   checkoutReturnUrls,
+  customerSafeForUnverifiedCaller,
   isAllowedReturnOrigin,
+  planCheckoutCustomer,
   shortfallChargeCents,
   shortfallIdempotencyKey,
   shortfallExpiresAt,
@@ -14,7 +16,8 @@ const base = {
   title: 'Walk my cat',
   description: 'A long enough description',
   email: 'a@example.com',
-  existingCustomerId: null,
+  // A new poster: Checkout creates the customer and offers to save the card.
+  customerPlan: { customerId: null, ownCustomer: false, createCustomer: true, offerSave: true },
   successUrl: 'https://x.test/done',
   cancelUrl: 'https://x.test/back',
   pendingBountyId: 'p1',
@@ -56,6 +59,7 @@ describe('payment mode', () => {
       ],
       customer_email: 'a@example.com',
       customer_creation: 'always',
+      saved_payment_method_options: { payment_method_save: 'enabled' },
       success_url: 'https://x.test/done?session_id={CHECKOUT_SESSION_ID}&pending_bounty_id=p1',
       cancel_url: 'https://x.test/back',
       client_reference_id: 'p1',
@@ -63,6 +67,136 @@ describe('payment mode', () => {
       payment_intent_data: { metadata: { ...base.metadata, purpose: 'bounty_escrow_checkout' } },
       expires_at: 2800,
     });
+  });
+});
+
+describe('planCheckoutCustomer: one Stripe customer per person', () => {
+  const plan = (o: Partial<Parameters<typeof planCheckoutCustomer>[0]>) =>
+    planCheckoutCustomer({
+      signedIn: false,
+      profileCustomerId: null,
+      emailMatchesAccount: false,
+      customerSafeForStranger: false,
+      ...o,
+    });
+
+  it('a signed-in poster pays on their own customer and may save the card', () => {
+    expect(plan({ signedIn: true, profileCustomerId: 'cus_app' })).toEqual({
+      customerId: 'cus_app',
+      ownCustomer: true,
+      createCustomer: false,
+      offerSave: true,
+    });
+  });
+
+  it('a signed-in poster with no customer gets one made by Checkout (stored by the webhook)', () => {
+    expect(plan({ signedIn: true })).toEqual({
+      customerId: null,
+      ownCustomer: false,
+      createCustomer: true,
+      offerSave: true,
+    });
+  });
+
+  it('a new email gets a customer and the save option', () => {
+    expect(plan({})).toMatchObject({ customerId: null, createCustomer: true, offerSave: true });
+  });
+
+  it("an existing app user posting signed out is charged on that user's existing customer", () => {
+    expect(
+      plan({ emailMatchesAccount: true, profileCustomerId: 'cus_app', customerSafeForStranger: true })
+    ).toEqual({ customerId: 'cus_app', ownCustomer: false, createCustomer: false, offerSave: false });
+  });
+
+  it('a typed email that matches an account is never offered save', () => {
+    for (const o of [
+      { emailMatchesAccount: true },
+      { emailMatchesAccount: true, profileCustomerId: 'cus_app', customerSafeForStranger: true },
+      { emailMatchesAccount: true, profileCustomerId: 'cus_app', customerSafeForStranger: false },
+    ]) {
+      expect(plan(o).offerSave).toBe(false);
+      expect(plan(o).ownCustomer).toBe(false);
+    }
+  });
+
+  it('a matched customer that would show a stranger anything becomes a guest payment, not a second customer', () => {
+    expect(
+      plan({ emailMatchesAccount: true, profileCustomerId: 'cus_app', customerSafeForStranger: false })
+    ).toEqual({ customerId: null, ownCustomer: false, createCustomer: false, offerSave: false });
+  });
+
+  it('a matched account without a customer gets one, with no save offered', () => {
+    expect(plan({ emailMatchesAccount: true })).toEqual({
+      customerId: null,
+      ownCustomer: false,
+      createCustomer: true,
+      offerSave: false,
+    });
+  });
+});
+
+describe('customerSafeForUnverifiedCaller', () => {
+  const blank = { id: 'cus_1', name: null, phone: null, address: null, shipping: null };
+  it('is safe only for a live customer with nothing Checkout would show', () => {
+    expect(customerSafeForUnverifiedCaller(blank, 0)).toBe(true);
+  });
+  it.each([
+    ['a card Checkout redisplays', blank, 1],
+    ['an unknown card count', blank, null],
+    ['a name', { ...blank, name: 'Ada' }, 0],
+    ['a phone', { ...blank, phone: '+1555' }, 0],
+    ['an address', { ...blank, address: { postal_code: '20001' } }, 0],
+    ['a shipping address', { ...blank, shipping: { name: 'Ada' } }, 0],
+    ['a deleted customer', { id: 'cus_1', deleted: true }, 0],
+    ['no customer', null, 0],
+  ])('is unsafe with %s', (_label, customer, count) => {
+    expect(customerSafeForUnverifiedCaller(customer as any, count as any)).toBe(false);
+  });
+});
+
+describe('payment mode, by customer plan', () => {
+  const pay = (customerPlan: any) =>
+    buildCheckoutSessionParams({ ...base, customerPlan, mode: 'payment' }) as Record<string, any>;
+
+  it("charges a signed-in poster's own customer, shows their cards (app cards too), and offers save", () => {
+    const p = pay({ customerId: 'cus_app', ownCustomer: true, createCustomer: false, offerSave: true });
+    expect(p.customer).toBe('cus_app');
+    expect(p.customer_email).toBeUndefined();
+    expect(p.customer_creation).toBeUndefined();
+    expect(p.saved_payment_method_options).toEqual({
+      payment_method_save: 'enabled',
+      allow_redisplay_filters: ['always', 'unspecified'],
+    });
+  });
+
+  it("charges a matched account's customer without save or redisplay options", () => {
+    const p = pay({ customerId: 'cus_app', ownCustomer: false, createCustomer: false, offerSave: false });
+    expect(p.customer).toBe('cus_app');
+    expect(p.saved_payment_method_options).toBeUndefined();
+    // Never sets up the card for later on its own: only Stripe's checkbox does.
+    expect(p.payment_intent_data.setup_future_usage).toBeUndefined();
+  });
+
+  it('a guest payment creates no customer', () => {
+    const p = pay({ customerId: null, ownCustomer: false, createCustomer: false, offerSave: false });
+    expect(p.customer).toBeUndefined();
+    expect(p.customer_email).toBe('a@example.com');
+    expect(p.customer_creation).toBe('if_required');
+    expect(p.saved_payment_method_options).toBeUndefined();
+  });
+
+  it('a matched account without a customer gets one with save disabled', () => {
+    const p = pay({ customerId: null, ownCustomer: false, createCustomer: true, offerSave: false });
+    expect(p.customer_creation).toBe('always');
+    expect(p.saved_payment_method_options).toBeUndefined();
+  });
+
+  it('never saves a card without the consent checkbox', () => {
+    for (const offerSave of [true, false]) {
+      const p = pay({ customerId: null, ownCustomer: false, createCustomer: true, offerSave });
+      expect(p.payment_intent_data.setup_future_usage).toBeUndefined();
+      expect(p.setup_future_usage).toBeUndefined();
+    }
   });
 });
 
@@ -91,9 +225,20 @@ describe('setup mode', () => {
   });
 
   it('keeps a signed-in caller on their own customer', () => {
-    const p = setup({ existingCustomerId: 'cus_1' });
+    const p = setup({
+      customerPlan: { customerId: 'cus_1', ownCustomer: true, createCustomer: false, offerSave: true },
+    });
     expect(p.customer).toBe('cus_1');
     expect(p.customer_email).toBeUndefined();
+  });
+
+  it("never puts a signed-out card on a matched account's customer", () => {
+    const p = setup({
+      customerPlan: { customerId: 'cus_theirs', ownCustomer: false, createCustomer: false, offerSave: false },
+    });
+    expect(p.customer).toBeUndefined();
+    expect(p.customer_email).toBe('a@example.com');
+    expect(p.saved_payment_method_options).toBeUndefined();
   });
 });
 

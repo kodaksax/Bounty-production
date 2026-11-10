@@ -22,9 +22,14 @@
  * 10. Non-USD currency: settledUsd=null, RPC uses pending amount
  * 11. recordCheckoutFailure insert error → throws so Stripe retries
  * 12. fn_create_bounty_from_pending transient error → throws (no failure row)
+ * 13. After the bounty: Checkout's customer is linked to the profile (the real
+ *     linkCheckoutCustomerAndCard), and never when the bounty failed
+ * 14. Source contract: the deployed index.ts makes the same calls, in order
  */
 
-export {};
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { linkCheckoutCustomerAndCard } from '../../supabase/functions/webhooks/checkout-customer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Minimal types mirroring the Stripe SDK shapes used by the handler
@@ -60,6 +65,8 @@ function makeSupabase(overrides: {
       maybeSingle: jest.fn().mockResolvedValue(
         overrides.findAlreadyResult ?? { data: null }
       ),
+      update: jest.fn().mockReturnThis(),
+      is: jest.fn().mockResolvedValue(overrides.profileUpdateResult ?? { error: null }),
       insert: jest.fn().mockResolvedValue(
         overrides.insertResult ?? { error: null }
       ),
@@ -129,6 +136,7 @@ interface HandlerResult {
   action: 'skipped' | 'processed' | 'terminal_failure';
   bountyId?: string;
   newlyCreated?: boolean;
+  customerLinked?: boolean;
 }
 
 async function handleCheckoutSession(opts: {
@@ -243,9 +251,11 @@ async function handleCheckoutSession(opts: {
   }
 
   let chargeId: string | null = null;
+  let checkoutIntent: any = null;
   if (paymentIntentId) {
     try {
-      const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['payment_method'] });
+      checkoutIntent = pi;
       chargeId = (pi.latest_charge as string) ?? null;
     } catch {
       // non-fatal
@@ -279,10 +289,18 @@ async function handleCheckoutSession(opts: {
   }
 
   const created = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+  const link = await linkCheckoutCustomerAndCard({
+    supabase,
+    stripe,
+    posterId,
+    session,
+    paymentIntent: checkoutIntent,
+  });
   return {
     action: 'processed',
     bountyId: (created as any)?.bounty_id,
     newlyCreated: (created as any)?.created,
+    customerLinked: link.linked,
   };
 }
 
@@ -666,5 +684,90 @@ describe('checkout.session.completed / async_payment_succeeded handler', () => {
     // from() may be called for the de-dup check; only the insert is forbidden
     const insertFn = supabase.from('checkout_processing_failures').insert;
     expect(insertFn).not.toHaveBeenCalled();
+  });
+
+  // ── 13. One customer per person: link Checkout's customer after the bounty ─
+  it("stores Checkout's customer on a profile that has none, after the bounty exists", async () => {
+    const session = makeSession({
+      metadata: {
+        flow_type: 'bounty_creation',
+        pending_bounty_id: 'pending-1',
+        customer_email: 'payer@example.com',
+        supabase_user_id: 'user-abc',
+      },
+    });
+    const supabase = makeSupabase();
+    const builder = supabase.from('profiles');
+    builder.maybeSingle
+      .mockResolvedValueOnce({ data: { stripe_customer_id: null }, error: null })
+      .mockResolvedValueOnce({ data: { stripe_customer_id: 'cus_test_1' }, error: null });
+    const stripe = makeStripe();
+
+    const result = await handleCheckoutSession({
+      eventType: 'checkout.session.completed',
+      session,
+      supabase,
+      stripe,
+      eventId,
+    });
+
+    expect(result).toMatchObject({ action: 'processed', customerLinked: true });
+    expect(builder.update).toHaveBeenCalledWith({ stripe_customer_id: 'cus_test_1' });
+    expect(builder.is).toHaveBeenCalledWith('stripe_customer_id', null);
+    // The card it was paid with is read, to mirror it if the poster saved it.
+    expect(stripe.paymentIntents.retrieve).toHaveBeenCalledWith('pi_test_1', {
+      expand: ['payment_method'],
+    });
+  });
+
+  it('does not link anything when the bounty could not be created', async () => {
+    const supabase = makeSupabase({ rpcResult: { data: null, error: new Error('DB overloaded') } });
+    await expect(
+      handleCheckoutSession({
+        eventType: 'checkout.session.completed',
+        session: makeSession({
+          metadata: {
+            flow_type: 'bounty_creation',
+            pending_bounty_id: 'pending-1',
+            customer_email: 'payer@example.com',
+            supabase_user_id: 'user-abc',
+          },
+        }),
+        supabase,
+        stripe: makeStripe(),
+        eventId,
+      })
+    ).rejects.toThrow('DB overloaded');
+    expect(supabase.from('profiles').update).not.toHaveBeenCalled();
+  });
+});
+
+// ── 14. The deployed handler matches this mirror ──────────────────────────────
+describe('webhooks/index.ts source contract', () => {
+  const src = readFileSync(
+    join(__dirname, '../../supabase/functions/webhooks/index.ts'),
+    'utf8'
+  );
+  const checkoutCase = src.slice(src.indexOf("case 'checkout.session.completed':"));
+  const setupCase = src.slice(
+    src.indexOf("case 'setup_intent.succeeded':"),
+    src.indexOf("case 'setup_intent.setup_failed':")
+  );
+
+  it('links the checkout customer only after fn_create_bounty_from_pending succeeds', () => {
+    const rpcAt = checkoutCase.indexOf("'fn_create_bounty_from_pending'");
+    const throwAt = checkoutCase.indexOf('throw rpcErr;', rpcAt);
+    const linkAt = checkoutCase.indexOf('linkCheckoutCustomerAndCard({');
+    expect(rpcAt).toBeGreaterThan(-1);
+    expect(linkAt).toBeGreaterThan(throwAt);
+    expect(throwAt).toBeGreaterThan(rpcAt);
+  });
+
+  it('reads the checkout PaymentIntent with its payment method', () => {
+    expect(checkoutCase).toMatch(/paymentIntents\.retrieve\(paymentIntentId, \{\s*expand: \['payment_method'\]/);
+  });
+
+  it('applies the sole-card default when the app saves a card', () => {
+    expect(setupCase).toContain('ensureSolePaymentMethodDefault({');
   });
 });
