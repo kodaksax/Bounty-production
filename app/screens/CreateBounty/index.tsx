@@ -84,6 +84,12 @@ interface CreateBountyFlowProps {
    * preloaded flow the poster never opens leaves no trace. Defaults to true.
    */
   isActive?: boolean;
+  /**
+   * Step to open on instead of step 1. Set only for "Post again", whose draft
+   * arrives complete, so the poster lands on Compensation to check the price
+   * and post. Back still walks to steps 2 and 1. Read once, at mount.
+   */
+  startStep?: 1 | 2 | 3;
 }
 
 /**
@@ -138,8 +144,12 @@ export function CreateBountyFlow({
   deliberateTap = false,
   topInset = 0,
   isActive = true,
+  startStep,
 }: CreateBountyFlowProps) {
-  const [currentStep, setCurrentStep] = useState(1);
+  // Snapshotted like deliberateTapRef: a later prop change can't move a flow
+  // that is already open.
+  const startStepRef = useRef<number>(startStep ?? 1);
+  const [currentStep, setCurrentStep] = useState(startStepRef.current);
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
   // it slides in from.
   const [stepDirection, setStepDirection] = useState(1);
@@ -234,7 +244,7 @@ export function CreateBountyFlow({
   const resumedDraftRef = useRef(false);
   // Mirrors `currentStep` for use inside cleanup/callbacks that would
   // otherwise close over a stale value.
-  const currentStepRef = useRef(1);
+  const currentStepRef = useRef(startStepRef.current);
 
   // "Graveyard" funnel bookkeeping (post_flow_started/post_step_completed/
   // post_step_abandoned/bounty_published — see analytics-service.ts).
@@ -362,6 +372,7 @@ export function CreateBountyFlow({
     // "Bounty Posted!" alert would be a redundant second one.
     suppressSuccessAlert: true,
     onPublished: (bountyId, meta) => {
+      const republishedFrom = (publishedDraftRef.current ?? draft).republishedFrom || undefined;
       const { seconds: secondsTotal, capped: secondsCapped } = capSeconds(
         flowTimerRef.current.elapsedSeconds()
       );
@@ -374,12 +385,14 @@ export function CreateBountyFlow({
         surface: meta.surface,
         composer_screen: composerScreenForStep(TOTAL_STEPS),
         bounty_id: bountyId,
-        // Always 'new': this create flow is the only bounty_published site,
-        // every call mints a fresh bounty id, and the app has no relist or
-        // boost path ("repost" opens this same empty composer). No bounty_id
-        // was published twice in the 30 days to 2026-09-28. A future relist or
-        // boost path must send 'republish' / 'boost'.
-        publish_type: 'new',
+        // This create flow is the only bounty_published site and every call
+        // mints a fresh bounty id. 'republish' means the draft was copied from
+        // a past bounty by "Post again" (lib/post-again/start-post-again.ts),
+        // even if the poster then changed it; republished_from_bounty_id is
+        // that bounty. Everything else is 'new'. A future boost path must
+        // send 'boost'.
+        publish_type: republishedFrom ? 'republish' : 'new',
+        republished_from_bounty_id: republishedFrom,
         amount: meta.amountDollars,
         amount_cents: meta.amountCents,
         is_for_honor: meta.isForHonor,
@@ -639,7 +652,10 @@ export function CreateBountyFlow({
   useEffect(() => {
     if (isLoading || !isActive || flowMountedRef.current) return;
     flowMountedRef.current = true;
-    resumedDraftRef.current = Boolean(draft.title?.trim());
+    // A Post-again draft was put there by the tap that opened the composer;
+    // it isn't a draft the poster came back to.
+    const openedByPostAgain = startStepRef.current !== 1 && Boolean(draft.republishedFrom);
+    resumedDraftRef.current = Boolean(draft.title?.trim()) && !openedByPostAgain;
     flowTimerRef.current.start();
     stepTimerRef.current.start();
     stepBackgroundMsRef.current = 0;
@@ -672,6 +688,8 @@ export function CreateBountyFlow({
         });
       }
     }
+    // Tapping "Post again" is as deliberate a start as typing a title.
+    if (openedByPostAgain) markComposerStarted('post_again');
     // `draft` is read only for the one-time snapshot above; listing it would
     // only re-run an effect that has already latched.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -693,7 +711,8 @@ export function CreateBountyFlow({
    * compose.
    *
    * So `post_started` now means: the poster typed, focused the title field,
-   * advanced a step, tapped "Continue your post", or tried to publish.
+   * advanced a step, tapped "Continue your post", opened the composer with
+   * "Post again", or tried to publish.
    * Mount, focus, re-render, back navigation and app resume cannot reach it
    * — none of them call this.
    *
@@ -701,7 +720,7 @@ export function CreateBountyFlow({
    * stays auditable rather than becoming another unexaminable default.
    */
   const markComposerStarted = (
-    trigger: 'field_focus' | 'draft_edit' | 'step_advance' | 'resume' | 'publish'
+    trigger: 'field_focus' | 'draft_edit' | 'step_advance' | 'resume' | 'post_again' | 'publish'
   ) => {
     if (composerStartedRef.current) return;
     composerStartedRef.current = true;

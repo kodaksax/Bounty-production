@@ -27,7 +27,7 @@ import { useFormSubmission } from '../../hooks/useFormSubmission';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { capture as posthogCapture, identify as posthogIdentify } from '../../lib/posthog';
 import { ROUTES } from '../../lib/routes';
-import { safeManageRedirect } from '../../lib/navigation/manage-route';
+import { safePostLoginRedirect } from '../../lib/navigation/post-login-redirect';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { storage } from '../../lib/storage';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
@@ -104,7 +104,7 @@ export function SignInForm() {
   useScreenBackground(theme.background);
   const router = useRouter();
   const { redirect_to: redirectToParam } = useLocalSearchParams<{ redirect_to?: string | string[] }>();
-  const postLoginTarget = safeManageRedirect(redirectToParam);
+  const postLoginTarget = safePostLoginRedirect(redirectToParam);
   const navigateToApp = () => {
     if (postLoginTarget) {
       router.replace(postLoginTarget as Href);

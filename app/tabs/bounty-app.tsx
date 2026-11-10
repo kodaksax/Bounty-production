@@ -29,6 +29,9 @@ import { useAuthContext } from '../../hooks/use-auth-context'
 import { useTabBackToFeed } from '../../hooks/useTabBackToFeed'
 import { useConversations } from '../../hooks/useConversations'
 import { useBountyDraftInProgress } from '../hooks/useBountyDraft'
+import type { PostAgainRequest } from '../../lib/post-again/handoff'
+import { subscribePostAgainRequests, takePostAgainRequest } from '../../lib/post-again/handoff'
+import { startPostAgain } from '../../lib/post-again/start-post-again'
 import { useAdmin } from '../../lib/admin-context'
 import { ROUTES } from '../../lib/routes'
 import { screenNameForBountyAppTab } from '../../lib/analytics/screen-name'
@@ -542,6 +545,11 @@ function BountyAppInner() {
   // on declaration order.
   const openComposerRef = useRef<(entryPoint: string) => void>(() => {})
   const openComposerFromFeed = useCallback((entryPoint: string) => openComposerRef.current(entryPoint), [])
+  // The card's "Post again" row. startPostAgain saves the draft and hands the
+  // request back to this shell (below), which opens the composer.
+  const postAgainFromHome = useCallback((bountyId: string) => {
+    void startPostAgain({ bountyId, userId: currentUserId, source: 'home_card' })
+  }, [currentUserId])
   const openMyPosts = useCallback(() => {
     // The Inbox only moves when initialTab changes. 'myPostings' and
     // 'requests' both open My Bounties, so alternating between them makes a
@@ -560,11 +568,10 @@ function BountyAppInner() {
         primaryRole={primaryRole}
         onOpenComposer={openComposerFromFeed}
         onSeeMyPosts={openMyPosts}
-        // onPostAgain stays unset until the Post-again flow (P3) lands; the
-        // card hides its "Post again" row without it.
+        onPostAgain={postAgainFromHome}
       />
     ),
-    [feedActiveScreen, setActiveScreen, currentUserId, primaryRole, openComposerFromFeed, openMyPosts]
+    [feedActiveScreen, setActiveScreen, currentUserId, primaryRole, openComposerFromFeed, openMyPosts, postAgainFromHome]
   )
   const walletPage = useMemo(
     () => (
@@ -611,6 +618,25 @@ function BountyAppInner() {
     setActiveScreen('postings')
   }, [setActiveScreen])
   openComposerRef.current = openComposer
+  // "Post again" from any surface (lib/post-again/handoff.ts): its draft is
+  // saved, so remount the composer on it and open the Post tab. A request
+  // made before this shell mounted (the email link, on a cold start) is taken
+  // once the user is known.
+  const [postAgainRequest, setPostAgainRequest] = useState<PostAgainRequest | null>(null)
+  useEffect(() => {
+    if (!currentUserId) return
+    const apply = (request: PostAgainRequest | null) => {
+      if (!request) return
+      setPostAgainRequest(request)
+      openComposer('post_again')
+    }
+    apply(takePostAgainRequest(currentUserId))
+    return subscribePostAgainRequests(() => apply(takePostAgainRequest(currentUserId)))
+  }, [currentUserId, openComposer])
+  const composerPostAgain = useMemo(
+    () => (postAgainRequest ? { nonce: postAgainRequest.nonce, startStep: postAgainRequest.startStep } : null),
+    [postAgainRequest]
+  )
   // Lasts for one visit: the next tap on the Post tab is just a tab tap.
   useEffect(() => {
     if (activeScreen !== 'postings' && barScreen !== 'postings') setComposerEntryPoint(undefined)
@@ -624,9 +650,10 @@ function BountyAppInner() {
         setShowBottomNav={setShowBottomNav}
         isActive={postIsActive}
         entryPoint={composerEntryPoint}
+        postAgain={composerPostAgain}
       />
     ),
-    [setActiveScreen, refreshFeed, postIsActive, composerEntryPoint]
+    [setActiveScreen, refreshFeed, postIsActive, composerEntryPoint, composerPostAgain]
   )
   const pageFor = (key: string): React.ReactNode => {
     switch (key) {

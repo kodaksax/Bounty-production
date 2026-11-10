@@ -77,6 +77,11 @@ interface BountyConversationRowProps {
   onLongPress?: () => void;
   /** Shows a trash button on the bounty line. Omit when the bounty can't be deleted. */
   onDelete?: () => void;
+  /**
+   * Poster side: shows a "Post again" button on the bounty line, which copies
+   * this bounty into the composer (lib/post-again/start-post-again.ts).
+   */
+  onPostAgain?: () => void;
   /** Poster side: "About 4 mi away" for an in-person applicant (SBA-02). Omit when unknown. */
   distanceLabel?: string | null;
 }
@@ -93,6 +98,7 @@ export function BountyConversationRow({
   onPress,
   onLongPress,
   onDelete,
+  onPostAgain,
   distanceLabel,
 }: BountyConversationRowProps) {
   const { theme } = useAppThemeContext();
@@ -134,6 +140,28 @@ export function BountyConversationRow({
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>
               {bountyTitle}
             </Text>
+            {onPostAgain && (
+              <TouchableOpacity
+                onPress={onPostAgain}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={`Post again: ${bountyTitle}`}
+                testID="inbox-row-post-again"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: theme.primary,
+                }}
+              >
+                <MaterialIcons name="replay" size={14} color={theme.primary} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: theme.primary }}>Post again</Text>
+              </TouchableOpacity>
+            )}
             {onDelete && (
               <TouchableOpacity
                 onPress={onDelete}

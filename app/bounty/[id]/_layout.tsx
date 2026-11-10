@@ -22,6 +22,7 @@ export default function BountyLayout() {
       <Stack.Screen name="cancel" />
       <Stack.Screen name="cancellation-response" />
       <Stack.Screen name="dispute" />
+      <Stack.Screen name="post-again" />
     </Stack>
   );
 }

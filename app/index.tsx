@@ -9,7 +9,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useAppBootstrap } from '../hooks/useAppBootstrap';
 import { bountyAppTabPath, type BountyAppTab } from '../lib/navigation/bounty-app-tab';
-import { safeManageRedirect } from '../lib/navigation/manage-route';
+import { safePostLoginRedirect } from '../lib/navigation/post-login-redirect';
 import { holdDeepLinks, takeDeferredTabLink } from '../lib/navigation/deferred-deep-link';
 import { ROUTES } from '../lib/routes';
 import { getRestorableLastScreen } from '../lib/storage/last-screen';
@@ -45,8 +45,8 @@ import { markInitialNavigationDone } from './initial-navigation/initialNavigatio
 function safeRedirectTarget(raw: unknown): string | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (typeof value !== 'string' || !value) return null;
-  const manageTarget = safeManageRedirect(value);
-  if (manageTarget) return manageTarget;
+  const emailTarget = safePostLoginRedirect(value);
+  if (emailTarget) return emailTarget;
   if (!value.startsWith('/tabs/')) return null;
   if (value.includes('//') || value.includes('\\') || value.includes(':')) return null;
   return value;
@@ -229,7 +229,11 @@ export default function Index() {
         const returning = await hasDeviceSignedInBefore();
         if (cancelled) return;
 
-        if (!returning) {
+        // An email link (Post again, the poster dashboard) is only ever sent
+        // to someone with an account, so on a device they haven't used it
+        // goes to sign-in, which then resumes the link, not the welcome
+        // flow, which would drop it.
+        if (!returning && !safePostLoginRedirect(redirectToParam)) {
           if (__DEV__) {
             console.log('[index] First-time device — routing to onboarding welcome');
           }

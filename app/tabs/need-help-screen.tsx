@@ -25,6 +25,12 @@ interface NeedHelpScreenProps {
    * tab itself sent the poster here. Becomes the composer's `entry_point`.
    */
   entryPoint?: string
+  /**
+   * A "Post again" for this visit (lib/post-again/handoff.ts). Its draft is
+   * already saved; a new `nonce` remounts the composer so it reads that draft,
+   * opening on `startStep`. The remount is the same one leaving the tab does.
+   */
+  postAgain?: { nonce: number; startStep: 1 | 2 | 3 } | null
 }
 
 /**
@@ -36,7 +42,7 @@ interface NeedHelpScreenProps {
  * flow owns the full screen so its progress bar sits at the top, matching the
  * design; there is deliberately no branding/wallet header here.
  */
-export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav, isActive = true, entryPoint = "need_help_tab" }: NeedHelpScreenProps) {
+export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav, isActive = true, entryPoint = "need_help_tab", postAgain = null }: NeedHelpScreenProps) {
   const insets = useSafeAreaInsets()
   const { theme } = useAppThemeContext()
 
@@ -49,11 +55,25 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
   // runs once the shell reports the Post tab no longer settled, i.e. after
   // the slide away, so the fresh mount never competes with the animation.
   const [flowKey, setFlowKey] = useState(0)
+  // The Post-again request already used up by an earlier flow instance. The
+  // instance a request mounts opens on its step; every one after it (the
+  // remount on leaving the tab) starts at step 1 again.
+  const [spentPostAgainNonce, setSpentPostAgainNonce] = useState<number | null>(null)
+  const postAgainRef = useRef(postAgain)
+  postAgainRef.current = postAgain
   const wasActiveRef = useRef(isActive)
   useEffect(() => {
-    if (wasActiveRef.current && !isActive) setFlowKey((k) => k + 1)
+    if (wasActiveRef.current && !isActive) {
+      setFlowKey((k) => k + 1)
+      setSpentPostAgainNonce(postAgainRef.current?.nonce ?? null)
+    }
     wasActiveRef.current = isActive
   }, [isActive])
+  // The request's nonce is part of the key, so the remount happens in the same
+  // render the request arrives in. Done from an effect instead, the old
+  // instance could go active for a render first and log a composer open.
+  const livePostAgain = postAgain && postAgain.nonce !== spentPostAgainNonce ? postAgain : null
+  const flowInstanceKey = `${flowKey}:${postAgain?.nonce ?? 0}`
 
   return (
     <View
@@ -67,8 +87,9 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
       }}
     >
       <CreateBountyFlow
-        key={flowKey}
+        key={flowInstanceKey}
         entryPoint={entryPoint}
+        startStep={livePostAgain?.startStep}
         // Every flow instance here only becomes active when the poster
         // navigates to the Post tab (tab bar, swipe or an in-app CTA), and
         // CreateBountyFlow fires nothing while inactive — so whenever this

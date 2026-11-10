@@ -288,10 +288,10 @@ const ACTIONS: Record<BountyActionKey, BountyLifecycleAction> = {
   leave_review: { key: 'leave_review', label: 'Leave a review', icon: 'star', tone: 'primary' },
   apply: { key: 'apply', label: 'Apply for this bounty', icon: 'send', tone: 'primary' },
   find_bounties: { key: 'find_bounties', label: 'Find bounties', icon: 'search', tone: 'primary' },
-  // Nothing in the app re-opens a closed bounty in place — this opens the
-  // composer for a new one, so the label says so rather than implying the old
-  // posting comes back.
-  repost: { key: 'repost', label: 'Post a new bounty', icon: 'add-circle-outline', tone: 'primary' },
+  // "Post again": copies this bounty into the composer as a NEW posting
+  // (lib/post-again/start-post-again.ts). Nothing re-opens a closed bounty in
+  // place; the old one stays as it ended.
+  repost: { key: 'repost', label: 'Post again', icon: 'replay', tone: 'primary' },
   share: { key: 'share', label: 'Share bounty', icon: 'share', tone: 'neutral' },
   edit: { key: 'edit', label: 'Edit details', icon: 'edit', tone: 'neutral' },
   delete: { key: 'delete', label: 'Delete posting', icon: 'delete', tone: 'danger' },
@@ -681,7 +681,7 @@ function resolvePoster(args: {
         tone: 'positive',
         stageIndex: 3,
         primaryAction: action('leave_review'),
-        secondaryActions: [action('view_payout'), action('repost', 'Post another bounty')],
+        secondaryActions: [action('view_payout'), action('repost')],
       });
 
     case 'cancelled':

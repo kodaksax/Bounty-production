@@ -26,7 +26,7 @@ import { useTwoFactorAuth } from '../../hooks/use-two-factor-auth';
 import { clearAllSessionData } from '../../lib/auth-session-storage';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { ROUTES } from '../../lib/routes';
-import { safeManageRedirect } from '../../lib/navigation/manage-route';
+import { safePostLoginRedirect } from '../../lib/navigation/post-login-redirect';
 import { PROJECT_STORAGE_KEY, supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
@@ -35,7 +35,7 @@ export default function MfaChallengeScreen() {
   useScreenBackground('#097959ff');
   const router = useRouter();
   const { redirect_to: redirectToParam } = useLocalSearchParams<{ redirect_to?: string | string[] }>();
-  const postLoginTarget = safeManageRedirect(redirectToParam);
+  const postLoginTarget = safePostLoginRedirect(redirectToParam);
   const navigateToApp = () => {
     router.replace(
       (postLoginTarget

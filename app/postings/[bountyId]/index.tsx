@@ -63,6 +63,7 @@ import { formatPublicLocation } from '../../../lib/utils/public-location';
 import { getTrustTierLabel } from '../../../lib/utils/trust-tier';
 import { shareBounty } from '../../../lib/utils/share-utils';
 import { bountyAppTabPath } from '../../../lib/navigation/bounty-app-tab';
+import { startPostAgain } from '../../../lib/post-again/start-post-again';
 import {
   BountyRefundFailedError,
   canPosterCancelBounty,
@@ -78,8 +79,6 @@ import { useWallet } from '../../../lib/wallet-context';
 
 /** Inbox → My Bounties, where applications are reviewed. */
 const REQUESTS_ROUTE = bountyAppTabPath('messages', 'requests');
-/** The post-a-bounty flow. */
-const POST_BOUNTY_ROUTE = bountyAppTabPath('postings');
 
 export default function BountyDashboard() {
   const { bountyId, openEdit } = useLocalSearchParams<{ bountyId?: string; openEdit?: string }>();
@@ -300,6 +299,24 @@ export default function BountyDashboard() {
     ]);
   }, [bounty, runCancel]);
 
+  // "Post again", for every status: copy this bounty into the composer and
+  // go to it. The tab shell opens the composer on the last step once the
+  // draft is saved; this screen only has to get out of the way.
+  const handlePostAgain = useCallback(async () => {
+    if (!routeBountyId) return;
+    setBusyAction('repost');
+    try {
+      const result = await startPostAgain({
+        bountyId: routeBountyId,
+        userId: currentUserId,
+        source: 'bounty_detail',
+      });
+      if (result === 'opened') router.dismissTo(bountyAppTabPath('postings') as never);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [routeBountyId, currentUserId, router]);
+
   const handlers = useMemo((): Partial<Record<BountyActionKey, () => void>> => {
     if (!bounty || !routeBountyId) return {};
     const map: Partial<Record<BountyActionKey, () => void>> = {
@@ -330,7 +347,7 @@ export default function BountyDashboard() {
           pathname: '/postings/[bountyId]/payout',
           params: { bountyId: routeBountyId },
         } as never),
-      repost: () => router.push(POST_BOUNTY_ROUTE as never),
+      repost: () => void handlePostAgain(),
       // No cancel_bounty for the poster: cancellation REQUESTS are hunter-only
       // (see describeHunter in lib/utils/bounty-lifecycle.ts). A poster with an
       // unaccepted bounty deletes it (refunded on the spot); once a hunter is
@@ -355,7 +372,7 @@ export default function BountyDashboard() {
       map.delete = () => void handleCancelAndRefund();
     }
     return map;
-  }, [bounty, routeBountyId, canEditTerms, explainEditLocked, handleMessage, handleCancelAndRefund, router]);
+  }, [bounty, routeBountyId, canEditTerms, explainEditLocked, handleMessage, handleCancelAndRefund, handlePostAgain, router]);
 
   // Edit and cancel live in the Manage row rather than behind the panel's
   // "More actions" disclosure, where posters couldn't find them.
@@ -434,6 +451,30 @@ export default function BountyDashboard() {
   const cancelLabel =
     state.secondaryActions.find(a => a.key === 'delete')?.label ??
     (bounty.is_for_honor ? 'Cancel bounty' : 'Cancel and refund');
+  // The status panel already offers Post again once a bounty is over
+  // (cancelled, completed, expired, archived). For a live one, the hero card
+  // carries it, so every status has it exactly once.
+  const panelOffersPostAgain =
+    state.primaryAction?.key === 'repost' || state.secondaryActions.some(a => a.key === 'repost');
+  const postAgainButton = panelOffersPostAgain ? null : (
+    <TouchableOpacity
+      style={s.outlineBtn}
+      onPress={handlePostAgain}
+      disabled={busyAction === 'repost'}
+      accessibilityRole="button"
+      accessibilityLabel="Post again"
+      accessibilityHint="Starts a new post with this one's details filled in"
+      accessibilityState={{ disabled: busyAction === 'repost', busy: busyAction === 'repost' }}
+      testID="bounty-post-again"
+    >
+      {busyAction === 'repost' ? (
+        <ActivityIndicator size="small" color={theme.text} />
+      ) : (
+        <MaterialIcons name="replay" size={16} color={theme.text} />
+      )}
+      <Text style={s.outlineBtnText}>Post again</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
@@ -553,6 +594,7 @@ export default function BountyDashboard() {
                 )}
                 <Text style={[s.outlineBtnText, { color: theme.error }]}>{cancelLabel}</Text>
               </TouchableOpacity>
+              {postAgainButton}
             </View>
           ) : bounty.status === 'in_progress' || bounty.status === 'cancellation_requested' ? (
             <View style={s.manageNote} testID="bounty-manage-locked">
@@ -561,6 +603,9 @@ export default function BountyDashboard() {
                 {`${hunterName} is working on this, so it can't be edited or cancelled. Message them, or use Report a problem if something's wrong.`}
               </Text>
             </View>
+          ) : null}
+          {!canPosterCancelBounty(bounty) && postAgainButton ? (
+            <View style={s.manageRow}>{postAgainButton}</View>
           ) : null}
         </View>
 

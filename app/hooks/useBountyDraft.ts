@@ -68,6 +68,22 @@ export async function readBountyDraftInProgress(userId?: string): Promise<Bounty
 }
 
 /**
+ * Replaces `userId`'s saved draft with `draft`, from outside the composer
+ * ("Post again" fills it from a past bounty). The composer only reads storage
+ * when it mounts, so the caller must remount it afterwards; the tab shell does
+ * that when it receives the post-again request (lib/post-again/handoff.ts).
+ */
+export async function replaceBountyDraftForUser(userId: string, draft: BountyDraft): Promise<void> {
+  const draftKey = getDraftKey(userId);
+  await storage.setItem(draftKey, JSON.stringify(draft));
+  const inProgress = isBountyDraftInProgress(draft);
+  notifyDraftPresence(draftKey, inProgress);
+  // Same reminder rule as an edit in the composer: it follows the last change.
+  if (inProgress) scheduleDraftReminderSoon(userId, draft);
+  else void cancelDraftReminder(userId);
+}
+
+/**
  * Whether `userId` has an unfinished post saved — read from storage once, then
  * kept current by the composer's saves and clears. Read-only: it never loads
  * or writes the draft itself.
@@ -143,6 +159,11 @@ export interface BountyDraft {
   // review step; 'standard'/false when never touched.
   trustTier?: TrustTier;
   requiresIdVerified?: boolean;
+  // The bounty this draft was copied from by "Post again"
+  // (app/services/postAgain.ts). Only feeds bounty_published's
+  // publish_type: 'republish'; it never reaches the bounty row
+  // (createBounty maps fields explicitly). Cleared with the draft.
+  republishedFrom?: string;
 }
 
 const defaultDraft: BountyDraft = {

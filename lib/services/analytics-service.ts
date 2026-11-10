@@ -420,6 +420,13 @@ export type AnalyticsEvent =
   // post_again_available and layout. A new surface: it retires no event.
   | 'home_post_card_shown'
   | 'home_post_card_tapped'
+  // "Post again" (lib/post-again/start-post-again.ts): one tap copies a past
+  // bounty into the composer. `source` is 'bounty_detail', 'my_bounties',
+  // 'home_card' or 'email'; carries bounty_id (the bounty copied). Fires on
+  // the tap, before the copy loads. The resulting post is bounty_published
+  // with publish_type 'republish' and republished_from_bounty_id. Retires no
+  // event: there was no way to copy a bounty before.
+  | 'post_again_tapped'
   | 'post_step_completed'
   | 'post_step_abandoned'
   | 'post_title_typed'

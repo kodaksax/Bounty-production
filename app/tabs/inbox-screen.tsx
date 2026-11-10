@@ -62,6 +62,7 @@ import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
 import { hapticFeedback } from '../../lib/haptic-feedback'
+import { startPostAgain } from '../../lib/post-again/start-post-again'
 
 interface InboxScreenProps {
   onBack?: () => void
@@ -834,6 +835,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const tabBadge = (tabId: InboxTab) =>
     tabId === 'inProgress' ? inProgressAttentionCount : myPostingsAttentionCount
 
+  // "Post again": copies the bounty into the composer and opens it on the
+  // last step. The tab shell switches to the Post tab once the draft is saved.
+  const handlePostAgain = React.useCallback((b: Bounty) => {
+    void startPostAgain({ bountyId: String(b.id), userId: currentUserId, source: 'my_bounties' })
+  }, [currentUserId])
+
   const handleRowLongPress = React.useCallback((row: InboxRow) => {
     const b = row.bounty
     const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = []
@@ -859,10 +866,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       if (b.status === 'open' && !b.accepted_by) buttons.push({ text: 'Delete posting', style: 'destructive', onPress: () => handleDeleteBounty(b) })
       if (b.status === 'cancelled') buttons.push({ text: 'Discard', style: 'destructive', onPress: () => handleDiscardCancelledBounty(b) })
       if (b.status === 'completed') buttons.push({ text: 'Archive', onPress: () => handleArchiveBounty(b) })
+      // Any status: a live bounty can be copied as well as a finished one.
+      buttons.push({ text: 'Post again', onPress: () => handlePostAgain(b) })
     }
     if (buttons.length === 0) return
     Alert.alert(b.title, undefined, [...buttons, { text: 'Cancel', style: 'cancel' }])
-  }, [requestStatusByBounty, bountiesWithPendingRequestsSet, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, handleArchiveBounty, handleHideInProgressBounty, handleWithdrawApplication])
+  }, [requestStatusByBounty, bountiesWithPendingRequestsSet, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, handleArchiveBounty, handleHideInProgressBounty, handleWithdrawApplication, handlePostAgain])
 
   // Full-width line between conversations.
   const RowSeparator = React.useCallback(() => <View style={styles.rowSeparator} />, [styles])
@@ -900,9 +909,19 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             ? () => handleDeleteBounty(b)
             : undefined
         }
+        // On every finished posting, whatever it ended as (completed,
+        // cancelled, archived), and on one whose deadline passed with nobody
+        // hired (its lifecycle already says "post it again"). Live ones offer
+        // it on long-press.
+        onPostAgain={
+          row.role === 'poster' &&
+          (row.lifecycle.group === 'past' || row.lifecycle.primaryAction?.key === 'repost')
+            ? () => handlePostAgain(b)
+            : undefined
+        }
       />
     )
-  }, [openThread, handleRowLongPress, handleDeleteBounty, toggleNotNearby])
+  }, [openThread, handleRowLongPress, handleDeleteBounty, handlePostAgain, toggleNotNearby])
 
   const listContentPadding = useMemo(
     () => ({ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }),
