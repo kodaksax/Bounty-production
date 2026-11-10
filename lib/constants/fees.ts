@@ -2,14 +2,18 @@
  * Platform fee — the single client-side source of truth.
  *
  * This MUST equal the rate the server deducts: the `PLATFORM_FEE_PERCENT`
- * function secret (8 in production since 2026-07-12), whose default is
+ * function secret (8 in production since 2026-07-12; to be set to 5, see below), whose default is
  * DEFAULT_PLATFORM_FEE_PERCENT in supabase/functions/_shared/platform-fee.ts,
  * read by wallet (v1 release), bounty-payments (v2/v3 release) and
  * web-account (receipts). platform-fee-parity.test.ts asserts the defaults match.
  *
  * 2026-11-04: production deducted 8% from 2026-07-12 while this file said 5%
  * (it was "aligned to the server default" on 09-05 without checking the live
- * secret). The owner confirmed 8% as the rate. Before changing this number,
+ * secret). The owner confirmed 8% as the rate.
+ *
+ * 2026-11-09: decision changed to 5%, taken from the hunter's side (the poster
+ * pays the listed price). This only takes effect in production once the
+ * PLATFORM_FEE_PERCENT secret is set to 5 as well. Before changing this number,
  * check the live secret, not the code default.
  *
  * Before this file existed the client kept its own constant at 10% and the
@@ -24,13 +28,13 @@
  * env can be tuned without a client release.
  */
 
-/** Platform service fee, as a percent (8 = 8%). Mirrors the PLATFORM_FEE_PERCENT secret. */
-export const PLATFORM_FEE_PERCENT = 8;
+/** Platform service fee, as a percent (5 = 5%). Mirrors the PLATFORM_FEE_PERCENT secret. */
+export const PLATFORM_FEE_PERCENT = 5;
 
-/** Same fee expressed as a rate (0.08). */
+/** Same fee expressed as a rate (0.05). */
 export const PLATFORM_FEE_RATE = PLATFORM_FEE_PERCENT / 100;
 
-/** "8%" — for display. Avoids "8.0%" for whole numbers. */
+/** "5%" — for display. Avoids "8.0%" for whole numbers. */
 export const PLATFORM_FEE_DISPLAY = `${
   Number.isInteger(PLATFORM_FEE_PERCENT)
     ? PLATFORM_FEE_PERCENT

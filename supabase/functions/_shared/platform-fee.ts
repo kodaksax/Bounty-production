@@ -19,13 +19,14 @@
 /**
  * Platform fee percent used when the PLATFORM_FEE_PERCENT secret is unset.
  *
- * 8% is the business rate (owner decision 2026-11-04). Production has charged
- * 8% via the PLATFORM_FEE_PERCENT secret since 2026-07-12 while this default,
- * and the client's displayed rate, still said 5%. Keep in lockstep with
+ * 5%, taken from the hunter's side (decision 2026-11-09, replacing the 8% of
+ * 2026-11-04). Production charged 8% via the PLATFORM_FEE_PERCENT secret from
+ * 2026-07-12; that secret must be set to 5 too, or it wins over this default.
+ * Keep in lockstep with
  * PLATFORM_FEE_PERCENT in lib/constants/fees.ts (asserted by
  * __tests__/unit/platform-fee-parity.test.ts).
  */
-export const DEFAULT_PLATFORM_FEE_PERCENT = 8;
+export const DEFAULT_PLATFORM_FEE_PERCENT = 5;
 
 /** The fee percent from the PLATFORM_FEE_PERCENT secret, or the default. */
 export function platformFeePercentFromEnv(raw: string | undefined | null): number {
