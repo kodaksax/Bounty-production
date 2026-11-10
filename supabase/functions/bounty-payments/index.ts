@@ -36,6 +36,7 @@ import {
 import { authorizeRelease } from '../_shared/release-authorization.ts';
 import { reserveAccountOperation, finishAccountOperation, isDefinitiveStripeRejection } from '../_shared/connect-account-operations.ts';
 import { summarizeRefundCoverage } from '../_shared/refund-reflection.ts';
+import { planAdminSettlement } from '../_shared/admin-settlement.ts';
 
 declare const Deno: any;
 
@@ -1712,6 +1713,196 @@ Deno.serve(async (req: Request) => {
         },
         409
       );
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // POST /bounty-payments/admin-settle — run the Stripe step of an admin
+    // disposition recorded by admin_set_bounty_status() (or a reviewed ops
+    // script) on bounty_payments.metadata.admin_disposition.
+    //
+    // Takes only bountyId. The payee and the amount come from the row the
+    // database wrote under its own checks; planAdminSettlement() refuses
+    // anything that doesn't match it. Refund and transfer use the same Stripe
+    // calls as /cancel and /release, and the transfer uses /release's
+    // idempotency key, so the two routes can never both pay.
+    // ───────────────────────────────────────────────────────────────────────
+    if (req.method === 'POST' && subPath === '/admin-settle') {
+      const body = await req.json().catch(() => ({}));
+      const bountyId = sanitizeText(body?.bountyId ?? body?.bounty_id);
+      if (!bountyId) {
+        return reply({ error: 'bountyId is required.', code: 'bounty_id_required' }, 400);
+      }
+      const roles = (user as any).app_metadata?.roles;
+      const callerIsAdmin =
+        (user as any).app_metadata?.role === 'admin' ||
+        (Array.isArray(roles) ? roles.includes('admin') : roles === 'admin');
+
+      const { data: bp, error: bpErr } = (await withDbTimeout(
+        supabaseAdmin
+          .from('bounty_payments')
+          .select('*')
+          .eq('bounty_id', bountyId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      )) as any;
+      if (bpErr) {
+        return reply({ error: 'Failed to load payment.', code: 'payment_load_failed', retryable: true }, 500);
+      }
+
+      const plan = planAdminSettlement({ callerId: userId, callerIsAdmin, payment: bp ?? null });
+      if (!plan.ok) {
+        return reply({ error: plan.error, code: plan.code }, plan.status);
+      }
+
+      // Append-only audit of each Stripe attempt, next to the disposition row
+      // admin_set_bounty_status() already wrote. Never blocks the response.
+      const audit = async (result: 'success' | 'failure', extra: Record<string, unknown>) => {
+        try {
+          await supabaseAdmin.from('admin_action_log').insert({
+            admin_user_id: userId,
+            action_type: 'bounty_status_disposition',
+            target_user_id: bp.poster_id,
+            amount: plan.amount,
+            reason: `admin-settle: ${plan.action}`,
+            result,
+            metadata: { bounty_id: bountyId, bounty_payment_id: bp.id, stage: 'stripe', action: plan.action, request_id: requestId, ...extra },
+          });
+        } catch (auditErr) {
+          console.error('[bounty-payments] admin-settle audit insert failed', { requestId, bountyId, auditErr });
+        }
+      };
+
+      if (plan.action === 'refund') {
+        let refunds: any[];
+        try {
+          refunds = await listPaymentIntentRefunds(stripe, plan.paymentIntentId);
+        } catch (_e) {
+          await audit('failure', { code: 'refund_lookup_failed' });
+          return reply({ error: 'Could not verify existing refunds. Try again.', code: 'refund_lookup_failed', retryable: true }, 502);
+        }
+        let coverage = summarizeRefundCoverage(plan.amount, refunds);
+        if (coverage.remainingCents > 0) {
+          try {
+            const refund = await stripe.refunds.create(
+              {
+                payment_intent: plan.paymentIntentId,
+                amount: coverage.remainingCents,
+                reason: 'requested_by_customer',
+                metadata: { bounty_id: bountyId, admin_id: userId, disposition: 'refund_poster', request_id: requestId },
+              },
+              { idempotencyKey: `bounty_admin_refund_${bp.id}` }
+            );
+            refunds = [...refunds, refund];
+            coverage = summarizeRefundCoverage(plan.amount, refunds);
+          } catch (refundErr: any) {
+            console.error('[bounty-payments] admin-settle refund failed', { requestId, bountyId, refundErr });
+            await audit('failure', { code: 'refund_failed', stripe_code: refundErr?.code ?? null });
+            return reply({ error: 'Refund could not be processed. Try again.', code: 'refund_failed', retryable: true }, 502);
+          }
+        }
+        if (!coverage.status) {
+          await audit('failure', { code: 'refund_not_complete' });
+          return reply({ error: 'The full refund has not been accepted yet. Try again.', code: 'refund_failed', retryable: true }, 502);
+        }
+        const { error: updErr } = (await withDbTimeout(
+          supabaseAdmin
+            .from('bounty_payments')
+            .update({ status: coverage.status, stripe_refund_id: coverage.stripeRefundId, updated_at: new Date().toISOString() })
+            .eq('id', bp.id)
+            .eq('status', 'refund_pending')
+        )) as any;
+        await audit(updErr ? 'failure' : 'success', { refund_id: coverage.stripeRefundId, row_update_failed: !!updErr });
+        return reply({
+          refunded: true,
+          status: coverage.status,
+          refundId: coverage.stripeRefundId,
+          ...(updErr ? { warning: 'record_update_failed' } : {}),
+        });
+      }
+
+      // plan.action === 'transfer'
+      const { data: hunterProfile, error: hunterErr } = (await withDbTimeout(
+        supabaseAdmin
+          .from('profiles')
+          .select('stripe_connect_account_id, stripe_connect_payouts_enabled')
+          .eq('id', plan.hunterId)
+          .maybeSingle()
+      )) as any;
+      if (hunterErr) {
+        return reply({ error: 'Failed to load hunter payout profile.', code: 'hunter_profile_load_failed', retryable: true }, 500);
+      }
+      if (!hunterProfile?.stripe_connect_account_id) {
+        return reply({ error: 'The hunter has not completed payout onboarding yet.', code: 'hunter_not_onboarded' }, 400);
+      }
+      if (hunterProfile.stripe_connect_payouts_enabled !== true) {
+        return reply({ error: 'The hunter cannot receive payouts yet.', code: 'hunter_payouts_disabled' }, 400);
+      }
+      let chargeId: string | null = bp.stripe_charge_id ?? null;
+      if (!chargeId && bp.stripe_payment_intent_id) {
+        try {
+          const pi = await stripe.paymentIntents.retrieve(bp.stripe_payment_intent_id);
+          if (pi.status === 'succeeded') chargeId = (pi.latest_charge as string) ?? null;
+        } catch (_piErr) {
+          /* handled by the guard below */
+        }
+      }
+      if (!chargeId) {
+        return reply({ error: 'Could not resolve the settled charge for this bounty.', code: 'no_charge' }, 409);
+      }
+      const { platformFee, hunterAmount, hunterCents } = splitPlatformFeeDollars(plan.amount, PLATFORM_FEE_PERCENT);
+      if (hunterCents <= 0) {
+        return reply({ error: 'Computed hunter payout is not positive.', code: 'invalid_payout' }, 400);
+      }
+      let accountOperation: string;
+      try {
+        accountOperation = await reserveAccountOperation(
+          supabaseAdmin, plan.hunterId, hunterProfile.stripe_connect_account_id,
+          'bounty_release_v2', `admin_settle:${bp.id}:${requestId}`
+        );
+      } catch {
+        return reply({ error: 'Hunter payout account changed or is busy.', code: 'account_operation_blocked' }, 409);
+      }
+      let transfer: any;
+      try {
+        transfer = await stripe.transfers.create(
+          {
+            amount: hunterCents,
+            currency: 'usd',
+            destination: hunterProfile.stripe_connect_account_id,
+            source_transaction: chargeId,
+            transfer_group: bp.transfer_group ?? `bounty_${bountyId}`,
+            metadata: { bounty_id: bountyId, hunter_id: plan.hunterId, poster_id: bp.poster_id, admin_id: userId, disposition: 'pay_out_to_hunter', request_id: requestId },
+          },
+          // Same key as /release: one payment, one transfer, whichever route asks.
+          { idempotencyKey: `bounty_release_${bp.id}` }
+        );
+      } catch (transferErr: any) {
+        if (isDefinitiveStripeRejection(transferErr)) await finishAccountOperation(supabaseAdmin, accountOperation);
+        console.error('[bounty-payments] admin-settle transfer failed', { requestId, bountyId, transferErr });
+        await audit('failure', { code: 'transfer_failed', stripe_code: transferErr?.code ?? null });
+        return reply({ error: 'The transfer to the hunter failed. The money is still held.', code: 'transfer_failed', retryable: true }, 502);
+      }
+      const { error: updErr } = (await withDbTimeout(
+        supabaseAdmin
+          .from('bounty_payments')
+          .update({
+            stripe_transfer_id: transfer.id,
+            platform_fee_amount: platformFee,
+            status: 'release_pending',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', bp.id)
+          .in('status', ['captured'])
+      )) as any;
+      if (updErr) {
+        console.error('[bounty-payments] CRITICAL: admin-settle transfer created but row update failed', { requestId, bountyId, transferId: transfer.id, updErr });
+        await audit('failure', { code: 'record_update_failed', transfer_id: transfer.id });
+        return reply({ error: 'Stripe accepted the transfer but its record could not be saved. Contact support before retrying.', code: 'record_update_failed', transferId: transfer.id, retryable: false }, 500);
+      }
+      await finishAccountOperation(supabaseAdmin, accountOperation);
+      await audit('success', { transfer_id: transfer.id, hunter_amount: hunterAmount, platform_fee: platformFee });
+      return reply({ transferId: transfer.id, hunterId: plan.hunterId, amount: plan.amount, platformFee, hunterAmount, status: 'release_pending' });
     }
 
     return reply({ error: 'Not found', code: 'not_found' }, 404);
