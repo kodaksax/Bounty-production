@@ -10,8 +10,10 @@ import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
+    Pressable,
     ScrollView,
     Text,
     TextInput,
@@ -902,6 +904,8 @@ export function SignInForm() {
   };
 
   const verifyEmailCode = async () => {
+    if (emailCodeLoading) return;
+    Keyboard.dismiss();
     const email = identifier.trim().toLowerCase();
     // Supabase's email OTP length is a project setting (6–10 digits), so
     // don't hard-code 6 here or longer codes are truncated and rejected.
@@ -1378,6 +1382,9 @@ export function SignInForm() {
                     maxLength={10}
                     editable={!emailCodeLoading}
                     autoComplete="one-time-code"
+                    textContentType={Platform.OS === 'ios' ? 'oneTimeCode' : undefined}
+                    returnKeyType="done"
+                    onSubmitEditing={() => void verifyEmailCode()}
                     accessibilityLabel="Email sign-in code"
                     className="w-full rounded px-3 py-3"
                     style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
@@ -1390,17 +1397,49 @@ export function SignInForm() {
                 </View>
               )}
 
-              {emailCodeMode ? (
-                <Button
-                  // Fresh native view per step. Reusing the Send button's view
-                  // after the code field mounts above it left iOS hit-testing
-                  // the old frame: Verify drew in place but never got the tap.
-                  key={emailCodeSent ? 'verify-email-code' : 'send-email-code'}
-                  onPress={emailCodeSent ? verifyEmailCode : sendEmailCode}
-                  loading={emailCodeLoading}
-                  accessibilityLabel={emailCodeSent ? 'Verify email code' : 'Send email code'}
+              {emailCodeMode && emailCodeSent ? (
+                // Plain Pressable, not the animated <Button>. Verify mounts
+                // with the code field, whose autoFocus raises the keyboard and
+                // makes the KeyboardAvoidingView shift the layout. The shared
+                // Button's native-driven transform kept hit-testing its old
+                // frame after that shift, so taps missed and only dismissing the
+                // keyboard (Enter) brought it back. No native-driven transform
+                // here, so the hit frame follows the layout.
+                <Pressable
+                  key="verify-email-code"
+                  onPress={() => void verifyEmailCode()}
+                  disabled={emailCodeLoading}
+                  accessibilityRole="button"
+                  accessibilityLabel="Verify email code"
+                  accessibilityState={{ disabled: emailCodeLoading, busy: emailCodeLoading || undefined }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  style={({ pressed }) => ({
+                    minHeight: 48,
+                    borderRadius: theme.radius.lg,
+                    paddingHorizontal: theme.spacing.xl,
+                    paddingVertical: theme.spacing.md,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: theme.primary,
+                    opacity: emailCodeLoading ? 0.5 : pressed ? 0.85 : 1,
+                  })}
                 >
-                  {emailCodeSent ? 'Verify code' : 'Email me a sign-in code'}
+                  {emailCodeLoading ? (
+                    <ActivityIndicator size="small" color={theme.onPrimary} />
+                  ) : (
+                    <Text style={{ color: theme.onPrimary, fontSize: 15, lineHeight: 20, fontWeight: '600' }}>
+                      Verify code
+                    </Text>
+                  )}
+                </Pressable>
+              ) : emailCodeMode ? (
+                <Button
+                  key="send-email-code"
+                  onPress={sendEmailCode}
+                  loading={emailCodeLoading}
+                  accessibilityLabel="Send email code"
+                >
+                  Email me a sign-in code
                 </Button>
               ) : (
                 <Button
