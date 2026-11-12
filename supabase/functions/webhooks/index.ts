@@ -26,6 +26,8 @@ import {
 } from '../_shared/stripe-dispute.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
 import { handleDeferredBountySetup } from './deferred-bounty-setup.ts';
+import { linkCheckoutCustomerAndCard } from './checkout-customer.ts';
+import { ensureSolePaymentMethodDefault } from '../_shared/sole-payment-method-default.ts';
 import {
   bountyPaymentRefundUpdate,
   liveRefunds,
@@ -2234,6 +2236,14 @@ Deno.serve(async (req: Request) => {
               console.log(
                 `[webhooks] Payment method ${setupPaymentMethodId} saved for user ${setupUserId}`
               );
+              // A sole card is the default, here and on Stripe: hiring charges
+              // only the is_default card. Non-fatal.
+              await ensureSolePaymentMethodDefault({
+                supabase,
+                stripe,
+                userId: setupUserId,
+                logTag: 'webhooks',
+              });
             }
           } catch (pmErr: any) {
             console.error(
@@ -4230,9 +4240,14 @@ Deno.serve(async (req: Request) => {
         // rows and bails when metadata.user_id is absent, and a checkout PI
         // carries neither.
         let chargeId: string | null = null;
+        // Kept for linkCheckoutCustomerAndCard below: the card it was paid with.
+        let checkoutIntent: Stripe.PaymentIntent | null = null;
         if (paymentIntentId) {
           try {
-            const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+            const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+              expand: ['payment_method'],
+            });
+            checkoutIntent = pi;
             chargeId = (pi.latest_charge as string) ?? null;
           } catch (piErr) {
             console.error('[webhooks] Could not read charge id off the intent (non-fatal)', {
@@ -4295,6 +4310,17 @@ Deno.serve(async (req: Request) => {
         }
 
         const created = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+
+        // After the bounty, and non-fatal: store Checkout's customer on the
+        // profile when it has none, and mirror a card the poster chose to save.
+        const customerLink = await linkCheckoutCustomerAndCard({
+          supabase,
+          stripe,
+          posterId,
+          session,
+          paymentIntent: checkoutIntent,
+        });
+
         console.log('[webhooks] bounty_creation checkout processed', {
           sessionId: session.id,
           pendingBountyId,
@@ -4302,6 +4328,9 @@ Deno.serve(async (req: Request) => {
           bountyId: created?.bounty_id,
           bountyPaymentId: created?.bounty_payment_id,
           newlyCreated: created?.created,
+          customerLinked: customerLink.linked,
+          customerSplit: customerLink.split,
+          savedCard: !!customerLink.savedCardId,
         });
         break;
       }

@@ -21,6 +21,7 @@ declare const Deno: any;
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // @ts-ignore: Allow runtime URL import for Deno/edge function.
 import Stripe from 'npm:stripe@14';
+import { ensureSolePaymentMethodDefault } from '../_shared/sole-payment-method-default.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -845,6 +846,17 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // A first and only method becomes the default. Non-fatal.
+      if (linkedBanks.length > 0) {
+        const sole = await ensureSolePaymentMethodDefault({
+          supabase: supabaseAdmin,
+          stripe,
+          userId,
+          logTag: 'payments',
+        });
+        if (sole?.eligible) linkedBanks.forEach(b => (b.is_default = b.stripe_payment_method_id === sole.paymentMethodId));
+      }
+
       return jsonResponse({ linkedBanks });
     }
 
@@ -1098,6 +1110,9 @@ Deno.serve(async (req: Request) => {
       } catch (dbErr) {
         console.warn('[payments] Failed to delete payment_methods row', { userId, dbErr });
       }
+
+      // Removing one of two leaves a sole method, which becomes the default.
+      await ensureSolePaymentMethodDefault({ supabase: supabaseAdmin, stripe, userId, logTag: 'payments' });
 
       return jsonResponse({ success: true });
     }

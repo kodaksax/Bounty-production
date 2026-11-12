@@ -12,13 +12,93 @@ export function checkoutModeForSwitch(enabled: unknown): CheckoutMode {
   return enabled === true ? 'setup' : 'payment'
 }
 
+// ── Which Stripe customer a website post uses ────────────────────────────
+//
+// One person, one Stripe customer. Before this, every website post made a new
+// customer (customer_creation 'always') and nothing stored it on the profile, so
+// a poster who later saved a card in the app ended up with two.
+//
+// The public form is signed out, so its email is only typed, and typing an
+// address proves nothing. Handing a signed-out visitor someone's customer would
+// let Checkout show that person's saved cards (and their name), and a card saved
+// there would land on a stranger's account. So:
+//
+//   signed in (verified token)   their customer; offer to save; show their cards
+//   no account for the email     Checkout creates the customer; offer to save;
+//                                the webhook stores it on the new profile
+//   signed out, account matches:
+//     no customer yet            Checkout creates one, no save offered; the
+//                                webhook stores it on the profile
+//     customer a stranger can't  charge it, no save offered, no cards shown
+//     learn anything from
+//     anything else              a guest payment: no customer is created, so
+//                                there is still only one
+//
+// "A stranger can't learn anything from it" is customerSafeForUnverifiedCaller.
+
+export interface CheckoutCustomerPlan {
+  /** Passed as `customer`. Null: Checkout uses customer_email. */
+  customerId: string | null
+  /** The caller proved they own customerId (a signed-in session). */
+  ownCustomer: boolean
+  /** With no customerId: make a Stripe customer (else a guest payment). */
+  createCustomer: boolean
+  /** Show Stripe's "save for next time" checkbox. Never for a typed email that matches an account. */
+  offerSave: boolean
+}
+
+export function planCheckoutCustomer(input: {
+  signedIn: boolean
+  /** profiles.stripe_customer_id of the signed-in caller, or of the account the email matches. */
+  profileCustomerId: string | null
+  /** Signed out: the typed email belongs to an existing account. */
+  emailMatchesAccount: boolean
+  /** Signed out and matched: the result of customerSafeForUnverifiedCaller. */
+  customerSafeForStranger: boolean
+}): CheckoutCustomerPlan {
+  const { signedIn, profileCustomerId, emailMatchesAccount, customerSafeForStranger } = input
+
+  if (signedIn) {
+    return profileCustomerId
+      ? { customerId: profileCustomerId, ownCustomer: true, createCustomer: false, offerSave: true }
+      : { customerId: null, ownCustomer: false, createCustomer: true, offerSave: true }
+  }
+  if (!emailMatchesAccount) {
+    return { customerId: null, ownCustomer: false, createCustomer: true, offerSave: true }
+  }
+  if (!profileCustomerId) {
+    return { customerId: null, ownCustomer: false, createCustomer: true, offerSave: false }
+  }
+  if (customerSafeForStranger) {
+    return { customerId: profileCustomerId, ownCustomer: false, createCustomer: false, offerSave: false }
+  }
+  return { customerId: null, ownCustomer: false, createCustomer: false, offerSave: false }
+}
+
+/**
+ * Whether Checkout, opened on this customer by someone who only typed its email,
+ * would show them nothing they didn't type. Checkout shows saved cards whose
+ * allow_redisplay is 'always' (its default filter), and can prefill the
+ * customer's name and address. Pass the customer object and how many 'always'
+ * cards it has; anything unknown counts as unsafe.
+ */
+export function customerSafeForUnverifiedCaller(
+  customer: Record<string, any> | null | undefined,
+  redisplayableCount: number | null
+): boolean {
+  if (!customer || customer.deleted) return false
+  if (redisplayableCount === null || redisplayableCount > 0) return false
+  if (customer.name || customer.phone || customer.address || customer.shipping) return false
+  return true
+}
+
 export interface CheckoutSessionInput {
   mode: CheckoutMode
   amount: number
   title: string
   description: string
   email: string
-  existingCustomerId: string | null
+  customerPlan: CheckoutCustomerPlan
   successUrl: string
   cancelUrl: string
   pendingBountyId: string
@@ -27,7 +107,7 @@ export interface CheckoutSessionInput {
 }
 
 export function buildCheckoutSessionParams(input: CheckoutSessionInput): Record<string, unknown> {
-  const { mode, amount, title, description, email, existingCustomerId } = input
+  const { mode, amount, title, description, email, customerPlan } = input
   const { successUrl, cancelUrl, pendingBountyId, metadata, nowSeconds } = input
 
   const shared = {
@@ -42,9 +122,13 @@ export function buildCheckoutSessionParams(input: CheckoutSessionInput): Record<
     return {
       mode: 'setup',
       payment_method_types: ['card'],
-      // A signed-out poster gets no customer here. The webhook creates one and
-      // attaches the card once it knows which account the card belongs to.
-      ...(existingCustomerId ? { customer: existingCustomerId } : { customer_email: email }),
+      // A signed-out poster gets no customer here, even one whose email matches:
+      // this mode saves the card, and a typed address must not put a card on
+      // someone's customer. The webhook creates one and attaches the card once
+      // it knows which account the card belongs to.
+      ...(customerPlan.ownCustomer && customerPlan.customerId
+        ? { customer: customerPlan.customerId }
+        : { customer_email: email }),
       // Agreement to the later off-session charge, shown beside the button.
       custom_text: {
         submit: {
@@ -73,9 +157,24 @@ export function buildCheckoutSessionParams(input: CheckoutSessionInput): Record<
         },
       },
     ],
-    ...(existingCustomerId
-      ? { customer: existingCustomerId }
-      : { customer_email: email, customer_creation: 'always' as const }),
+    ...(customerPlan.customerId
+      ? { customer: customerPlan.customerId }
+      : {
+          customer_email: email,
+          customer_creation: customerPlan.createCustomer ? ('always' as const) : ('if_required' as const),
+        }),
+    // Stripe's own consent checkbox: the card is saved only if it's ticked
+    // (allow_redisplay 'always'). Without it nothing is attached to a customer.
+    // The poster's existing cards are shown only on their own customer;
+    // 'unspecified' covers cards saved in the app, which never set the field.
+    ...(customerPlan.offerSave || customerPlan.ownCustomer
+      ? {
+          saved_payment_method_options: {
+            payment_method_save: customerPlan.offerSave ? 'enabled' : 'disabled',
+            ...(customerPlan.ownCustomer ? { allow_redisplay_filters: ['always', 'unspecified'] } : {}),
+          },
+        }
+      : {}),
     ...shared,
     payment_intent_data: {
       metadata: { ...metadata, purpose: 'bounty_escrow_checkout' },

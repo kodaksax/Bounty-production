@@ -129,6 +129,19 @@ export type AnalyticsEvent =
   // before any request was made. Previously invisible — the user experiences
   // it as "the Sign In button stopped working".
   | 'auth_signin_blocked'
+  // Email-code (OTP) sign-in for accounts that already exist — mainly the ones
+  // website checkout creates with no password (user_metadata.source =
+  // 'bounty_checkout_web'). See lib/auth/email-code-sign-in.ts. All carry
+  // `method` and `source`; none carries the email address.
+  //   detected → sign-up got 409 email_already_registered
+  //   sent     → Supabase accepted signInWithOtp
+  //   verified → verifyOtp returned a session (`account_origin` says whether
+  //              website checkout made the account)
+  //   failed   → send or verify was rejected (`stage`, `error_code`)
+  | 'auth_existing_account_detected'
+  | 'auth_otp_sent'
+  | 'auth_otp_verified'
+  | 'auth_otp_failed'
   // Onboarding funnel — see app/onboarding/*. Fired in order for a fresh
   // signup: welcome_viewed -> role_selected -> auth_started -> auth_completed
   // -> style_step_viewed -> (style_selected)* -> profile_step_viewed ->

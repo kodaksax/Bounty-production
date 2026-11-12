@@ -16,10 +16,14 @@ jest.mock('lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: (...a: unknown[]) => trackEvent(...a) },
 }));
 
+const signInWithOtp = jest.fn();
 jest.mock('lib/supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
-    auth: { signInWithPassword: jest.fn() },
+    auth: {
+      signInWithPassword: jest.fn(),
+      signInWithOtp: (...a: unknown[]) => signInWithOtp(...a),
+    },
     from: () => ({ select: () => ({ eq: () => ({ single: jest.fn() }) }) }),
   },
 }));
@@ -144,6 +148,125 @@ describe('sign-up failure analytics', () => {
         expect.objectContaining({ method: 'email', status: 500, reason: 'server_error' })
       )
     );
+  });
+});
+
+// Website checkout creates the poster's account with no password. When they
+// later try to sign up in the app, register answers 409 for the email. That
+// used to be a dead end ("sign in instead" — with what password?). It now
+// offers one button that emails a code and opens sign-in on the code field.
+describe('sign-up with an email that already has an account', () => {
+  const conflict = () =>
+    jest.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      text: async () => JSON.stringify({ error: 'Email already registered' }),
+    });
+
+  beforeEach(() => {
+    trackEvent.mockClear();
+    mockReplace.mockClear();
+    signInWithOtp.mockReset();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('../../lib/auth/email-code-sign-in').clearEmailCodeHandoff();
+  });
+
+  it('replaces the dead-end error with a code offer and reports the detection', async () => {
+    (global as any).fetch = conflict();
+
+    const utils = render(<SignUpForm />);
+    fillValidForm(utils);
+    fireEvent.press(utils.getByLabelText('Create account'));
+
+    await waitFor(() => expect(utils.getByText('You already have a Bounty account.')).toBeTruthy());
+    expect(utils.getByText("We'll email you a 6-digit code to sign in.")).toBeTruthy();
+    expect(utils.getByText('new@user.test')).toBeTruthy();
+    expect(utils.queryByText(/Please sign in instead or use password reset/)).toBeNull();
+    expect(trackEvent).toHaveBeenCalledWith('auth_existing_account_detected', {
+      method: 'email',
+      source: 'sign_up_form',
+    });
+  });
+
+  it('sends the code with one tap, then opens sign-in on the code step for that address', async () => {
+    (global as any).fetch = conflict();
+    signInWithOtp.mockResolvedValue({ error: null });
+
+    const utils = render(<SignUpForm />);
+    fillValidForm(utils);
+    fireEvent.press(utils.getByLabelText('Create account'));
+    await waitFor(() => expect(utils.getByLabelText('Email me a code')).toBeTruthy());
+
+    fireEvent.press(utils.getByLabelText('Email me a code'));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/auth/sign-in-form'));
+    expect(signInWithOtp).toHaveBeenCalledTimes(1);
+    expect(signInWithOtp).toHaveBeenCalledWith({
+      email: 'new@user.test',
+      // Never make a second, empty account from this screen.
+      options: { shouldCreateUser: false },
+    });
+    expect(trackEvent).toHaveBeenCalledWith('auth_otp_sent', {
+      method: 'email_otp',
+      source: 'signup_existing_account',
+      is_resend: false,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { peekEmailCodeHandoff } = require('../../lib/auth/email-code-sign-in');
+    expect(peekEmailCodeHandoff()).toEqual(
+      expect.objectContaining({ email: 'new@user.test', source: 'signup_existing_account' })
+    );
+    // The address goes to sign-in in memory, never in route params or events.
+    expect(JSON.stringify(mockReplace.mock.calls)).not.toContain('new@user.test');
+    expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('new@user.test');
+  });
+
+  it('stays on the offer and says why when the code cannot be sent', async () => {
+    (global as any).fetch = conflict();
+    signInWithOtp.mockResolvedValue({
+      error: { message: 'For security purposes, you can only request this after 42 seconds.', status: 429, code: 'over_email_send_rate_limit' },
+    });
+
+    const utils = render(<SignUpForm />);
+    fillValidForm(utils);
+    fireEvent.press(utils.getByLabelText('Create account'));
+    await waitFor(() => expect(utils.getByLabelText('Email me a code')).toBeTruthy());
+
+    fireEvent.press(utils.getByLabelText('Email me a code'));
+
+    await waitFor(() =>
+      expect(trackEvent).toHaveBeenCalledWith(
+        'auth_otp_failed',
+        expect.objectContaining({
+          method: 'email_otp',
+          source: 'signup_existing_account',
+          stage: 'send',
+          error_code: 'over_email_send_rate_limit',
+        })
+      )
+    );
+    expect(mockReplace).not.toHaveBeenCalledWith('/auth/sign-in-form');
+    expect(utils.getByText('You already have a Bounty account.')).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        utils.getByText('We just sent a code. You can ask for another in 42 seconds.')
+      ).toBeTruthy()
+    );
+  });
+
+  it('lets the person go back and use a different email', async () => {
+    (global as any).fetch = conflict();
+
+    const utils = render(<SignUpForm />);
+    fillValidForm(utils);
+    fireEvent.press(utils.getByLabelText('Create account'));
+    await waitFor(() => expect(utils.getByLabelText('Use a different email')).toBeTruthy());
+
+    fireEvent.press(utils.getByLabelText('Use a different email'));
+
+    expect(utils.queryByText('You already have a Bounty account.')).toBeNull();
+    expect(utils.getByLabelText('Create account')).toBeTruthy();
   });
 });
 

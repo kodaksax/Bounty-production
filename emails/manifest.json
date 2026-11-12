@@ -16,7 +16,7 @@
     "preheader": "We'll email you as people apply. You choose who does it.",
     "replyTo": null,
     "stamp": "Live",
-    "bytes": 13564,
+    "bytes": 13607,
     "variables": [
       {
         "key": "BOUNTY_TITLE",
@@ -56,6 +56,18 @@
       },
       {
         "key": "FOOTER_LINE",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": false
+      },
+      {
+        "key": "APP_BLOCK",
+        "type": "string",
+        "fallbackValue": " ",
+        "html": true
+      },
+      {
+        "key": "APP_BLOCK_TEXT",
         "type": "string",
         "fallbackValue": " ",
         "html": false
@@ -1379,7 +1391,7 @@
     "preheader": "Sign in to your account. If you asked to reset your password, you’ll choose a new one next.",
     "replyTo": null,
     "stamp": "Account access",
-    "bytes": 11219,
+    "bytes": 12517,
     "variables": [],
     "samples": [
       "realistic"
