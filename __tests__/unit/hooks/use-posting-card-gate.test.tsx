@@ -1,10 +1,11 @@
 // SBA-05, option B: hooks/usePostingCardGate.
 //
 // Invariants under test:
-//   * the decision (needsCardAtPost) asks only a first-time poster the server
-//     says needs a card, and never when a card is saved, the balance covers
-//     the reward, iOS has Apple Pay ready, on web, for $0/for-honor, or under
-//     Stripe-native funding;
+//   * the decision (needsCardAtPost) asks only a poster the server says needs
+//     a card, and never when a card is saved, on web, for $0/for-honor, or
+//     under Stripe-native funding;
+//   * a wallet balance that covers the reward and iOS Apple Pay do NOT exempt:
+//     neither leaves a card on file, and the card is the scam deterrent;
 //   * it fails open: no server answer means publish;
 //   * when a card is needed, nothing is published until one exists, and the
 //     publish then happens once, with no extra tap;
@@ -104,13 +105,11 @@ describe('needsCardAtPost', () => {
     platform: 'android' as const,
     amount: 40,
     isForHonor: false,
-    balance: 0,
     hasCard: false,
-    applePayReady: false,
     stripeNativeFunding: false,
   };
 
-  it('asks a first-time poster with no card, no balance and no Apple Pay', () => {
+  it('asks a poster the server says needs a card, when none is saved', () => {
     expect(needsCardAtPost(base)).toBe(true);
     expect(needsCardAtPost({ ...base, platform: 'ios' })).toBe(true);
   });
@@ -119,8 +118,6 @@ describe('needsCardAtPost', () => {
     ['the server did not answer', { requirement: null }],
     ['the server says no', { requirement: NOT_REQUIRED }],
     ['a card is already saved', { hasCard: true }],
-    ['the balance covers the reward', { balance: 40 }],
-    ['iOS has Apple Pay ready', { platform: 'ios', applePayReady: true }],
     ['web (Stripe is stubbed)', { platform: 'web' }],
     ['for honor', { isForHonor: true }],
     ['$0', { amount: 0 }],
@@ -129,13 +126,6 @@ describe('needsCardAtPost', () => {
     expect(needsCardAtPost({ ...base, ...override })).toBe(false);
   });
 
-  it('Apple Pay only exempts on iOS', () => {
-    expect(needsCardAtPost({ ...base, platform: 'android', applePayReady: true })).toBe(true);
-  });
-
-  it('a balance one cent short still asks', () => {
-    expect(needsCardAtPost({ ...base, balance: 39.99 })).toBe(true);
-  });
 });
 
 describe('usePostingCardGate', () => {
@@ -149,15 +139,16 @@ describe('usePostingCardGate', () => {
     expect(result.current.showCardSheet).toBe(false);
   });
 
-  it('publishes at once when the balance covers the reward', () => {
+  it('still asks when the wallet balance covers the reward', async () => {
     mockBalance = 50;
     const { result } = setup();
     const proceed = jest.fn();
     act(() => result.current.requestPublish(PAYMENT, proceed));
-    expect(proceed).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.showCardSheet).toBe(true));
+    expect(proceed).not.toHaveBeenCalled();
   });
 
-  it('publishes at once on iOS with Apple Pay ready', async () => {
+  it('still asks on iOS with Apple Pay ready', async () => {
     RN.Platform.OS = 'ios';
     mockApplePayAvailable.mockResolvedValue(true);
     const { result } = setup();
@@ -165,7 +156,8 @@ describe('usePostingCardGate', () => {
     await act(async () => {});
     const proceed = jest.fn();
     act(() => result.current.requestPublish(PAYMENT, proceed));
-    expect(proceed).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.showCardSheet).toBe(true));
+    expect(proceed).not.toHaveBeenCalled();
   });
 
   it('fails open when the server does not answer', async () => {
