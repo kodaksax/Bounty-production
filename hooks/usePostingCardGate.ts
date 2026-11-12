@@ -1,6 +1,7 @@
 /**
- * SBA-05, option B: a first-time poster saves a card before "Post Bounty", so
- * that hiring later is one tap ("Pay $X & hire" with the saved card).
+ * SBA-05, option B: a poster saves a card before "Post Bounty". The card is a
+ * scam deterrent (a real payment method stands behind every paid post) and
+ * makes hiring later one tap ("Pay $X & hire" with the saved card).
  *
  * Nothing is charged here. Paid app bounties are still 'at_accept': the money
  * moves inside fn_accept_bounty_request when the poster hires. Saving the card
@@ -12,11 +13,13 @@
  * (fn_get_posting_card_requirement -> fn_is_first_time_poster). This hook adds
  * only what the server can't see from here (needsCardAtPost):
  *   * a card already saved (the live Stripe list, not the DB mirror);
- *   * a wallet balance that already covers the reward: hiring is already one
- *     tap ("Confirm & hire");
- *   * iOS with Apple Pay ready (product decision, 2026-10-19);
  *   * web, where Stripe is stubbed and no card can be saved;
  *   * for-honor / $0, and v2/v3 Stripe-native funding (charged at post).
+ *
+ * A wallet balance that covers the reward and iOS Apple Pay used to exempt
+ * the poster too (2026-10-19). Both were removed: neither leaves a payment
+ * method on file, so they defeated the card as a scam deterrent. Apple Pay
+ * readiness is still read, for analytics only.
  *
  * FAILS OPEN
  * ----------
@@ -31,7 +34,6 @@ import { analyticsService } from 'lib/services/analytics-service';
 import { applePayService } from 'lib/services/apple-pay-service';
 import { useStripe } from 'lib/stripe-context';
 import { shouldUseStripeNativeFunding } from 'lib/utils/payment-architecture';
-import { useWallet } from 'lib/wallet-context';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
@@ -41,9 +43,7 @@ export interface CardAtPostInput {
   platform: typeof Platform.OS;
   amount: number;
   isForHonor: boolean;
-  balance: number;
   hasCard: boolean;
-  applePayReady: boolean;
   stripeNativeFunding: boolean;
 }
 
@@ -54,8 +54,6 @@ export function needsCardAtPost(input: CardAtPostInput): boolean {
   if (input.platform === 'web') return false;
   if (input.stripeNativeFunding) return false;
   if (input.hasCard) return false;
-  if (input.balance >= input.amount) return false;
-  if (input.platform === 'ios' && input.applePayReady) return false;
   return true;
 }
 
@@ -112,7 +110,6 @@ export function usePostingCardGate({
   composerScreen?: string;
 }): PostingCardGate {
   const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
-  const { balance } = useWallet();
   const hasCard = paymentMethods.some((m) => m.type === 'card');
 
   const [requirement, setRequirement] = useState<PostingCardRequirement | null>(null);
@@ -177,12 +174,10 @@ export function usePostingCardGate({
         platform: Platform.OS,
         amount: payment.amount,
         isForHonor: payment.isForHonor,
-        balance,
         hasCard,
-        applePayReady,
         stripeNativeFunding: shouldUseStripeNativeFunding(),
       }),
-    [balance, hasCard, applePayReady]
+    [hasCard]
   );
 
   const eventProps = useCallback(
@@ -268,9 +263,7 @@ export function usePostingCardGate({
         !(payment.amount > 0) ||
         Platform.OS === 'web' ||
         shouldUseStripeNativeFunding() ||
-        hasCard ||
-        balance >= payment.amount ||
-        (Platform.OS === 'ios' && applePayReady);
+        hasCard;
       if (exempt) {
         proceed(payment);
         return;
@@ -302,7 +295,7 @@ export function usePostingCardGate({
         if (mountedRef.current) setDecideToken((n) => n + 1);
       });
     },
-    [hasCard, balance, applePayReady, requirement, loadPaymentMethods]
+    [hasCard, requirement, loadPaymentMethods]
   );
 
   const onCardSheetClose = useCallback(() => {
@@ -321,9 +314,7 @@ export function usePostingCardGate({
     platform: Platform.OS,
     amount,
     isForHonor,
-    balance,
     hasCard,
-    applePayReady,
     stripeNativeFunding: shouldUseStripeNativeFunding(),
   });
 
