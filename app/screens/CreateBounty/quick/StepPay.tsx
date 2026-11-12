@@ -224,9 +224,9 @@ export function StepPay({
       });
     }
 
-    // Publishes at once unless this is a first-time poster with no card, no
-    // balance to cover it and no Apple Pay; then the card sheet opens first and
-    // publishing continues as soon as a card is saved.
+    // Publishes at once unless the server says a card is required and none is
+    // saved; then the card sheet opens first and publishing continues as soon
+    // as a card is saved.
     cardGate.requestPublish({ amount, isForHonor }, onNext);
   };
 
