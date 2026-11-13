@@ -78,6 +78,9 @@ const NON_RETRYABLE_CODES = new Set([
   // fails identically; it becomes valid on its own once the in-flight payout
   // settles (1-2 business days), so this is not a bare-Retry situation.
   'withdrawal_already_in_progress',
+  // Server-side attempt limit / failed-attempt lockout; the response says how
+  // long to wait. See supabase/functions/_shared/withdrawal-guard.ts.
+  'withdrawal_rate_limited',
 ]);
 
 /**

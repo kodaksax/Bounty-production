@@ -37,6 +37,14 @@ import {
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
 import {
+  WITHDRAWAL_GUARDED_ROUTES,
+  blockedWithdrawalResponseBody,
+  clientIpFromHeaders,
+  finishWithdrawalAttempt,
+  loadWithdrawalGuardLimits,
+  reserveWithdrawalAttempt,
+} from '../_shared/withdrawal-guard.ts';
+import {
   reserveAccountOperation,
   finishAccountOperation,
   hasNonzeroStripeBalance,
@@ -1503,7 +1511,36 @@ function legacyTransferRetiredResponse() {
 // bank account, never a linked card — see docs/withdrawals/13-instant-cash-out.md.
 const INSTANT_CASHOUT_ENABLED = Deno.env.get('INSTANT_CASHOUT_ENABLED') === 'true';
 
+const WITHDRAWAL_GUARD_LIMITS = loadWithdrawalGuardLimits();
+
+// Context the request handler fills in when it reserves a withdrawal attempt,
+// so the outer wrapper can record the outcome whichever of the handler's many
+// return paths produced the response.
+interface WithdrawalGuardContext {
+  supabase: SupabaseClient | null;
+  attemptId: string | null;
+}
+
 Deno.serve(async (req: Request) => {
+  const guard: WithdrawalGuardContext = { supabase: null, attemptId: null };
+  let response: Response | undefined;
+  try {
+    response = await handleConnectRequest(req, guard);
+    return response;
+  } finally {
+    if (guard.supabase && guard.attemptId) {
+      await finishWithdrawalAttempt(
+        guard.supabase,
+        guard.attemptId,
+        // A throw that escaped the handler is a platform fault (5xx), not a
+        // user failure, so it must not count toward the lockout.
+        response ?? new Response(null, { status: 500 })
+      );
+    }
+  }
+});
+
+async function handleConnectRequest(req: Request, guard: WithdrawalGuardContext): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -1580,6 +1617,25 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Invalid or expired token' }, 401);
   }
   const userId = user.id;
+
+  // Rate limit + failed-attempt lockout on every route that moves money out.
+  // Runs before the body is parsed or Stripe is called, so a blocked caller
+  // costs one DB round trip and learns nothing about their account state.
+  if (req.method === 'POST' && WITHDRAWAL_GUARDED_ROUTES.has(subPath)) {
+    const decision = await reserveWithdrawalAttempt(
+      supabase,
+      { userId, route: subPath, ip: clientIpFromHeaders(req.headers) },
+      WITHDRAWAL_GUARD_LIMITS
+    );
+    if (!decision.allowed) {
+      const blocked = blockedWithdrawalResponseBody(decision);
+      const res = jsonResponse(blocked.body, blocked.status, requestId);
+      if (blocked.retryAfter !== null) res.headers.set('Retry-After', String(blocked.retryAfter));
+      return res;
+    }
+    guard.supabase = supabase;
+    guard.attemptId = decision.attemptId;
+  }
 
   try {
     // Account-link callbacks must be HTTPS (Stripe rejects anything else in
@@ -4442,7 +4498,7 @@ Deno.serve(async (req: Request) => {
       mapped.status
     );
   }
-});
+}
 
 /**
  * Returns the HTML document that is loaded inside a React Native WebView to

@@ -56,7 +56,10 @@ const REQUEST_ERROR_MESSAGES: Record<string, string> = {
 // screen offers no "Try Again". For withdrawal_already_in_progress the request
 // becomes valid again on its own once the in-flight payout settles; offering a
 // button that is guaranteed to fail reads as a broken app.
-const NO_RETRY_ERROR_CODES = new Set(['withdrawal_already_in_progress']);
+// withdrawal_rate_limited: the server's message carries the wait time (it is
+// deliberately not in REQUEST_ERROR_MESSAGES so that copy is shown as-is), and
+// retrying before then is guaranteed to be rejected again.
+const NO_RETRY_ERROR_CODES = new Set(['withdrawal_already_in_progress', 'withdrawal_rate_limited']);
 
 // Codes that are a decline, not a failure. Nothing went wrong and no money
 // moved, so the harsher "Withdrawal Failed" framing would misrepresent it.
