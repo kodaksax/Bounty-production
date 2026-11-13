@@ -85,6 +85,11 @@ function replacementHarness() {
       return query;
     }),
     rpc: jest.fn(async (name: string, args: any) => {
+      // Withdrawal rate limiter (withdrawal-guard.test.ts covers it); always
+      // allow here so these tests exercise account-replacement safety only.
+      if (name === 'reserve_withdrawal_attempt') {
+        return { data: [{ allowed: true, attempt_id: 'attempt', reason: null, retry_after_seconds: 0 }], error: null };
+      }
       if (name === 'reserve_connect_account_operation') {
         if (operationActive || walletRow?.status === 'pending' || replacement.state === 'pending' || profile.stripe_connect_account_id !== args.p_account_id) {
           return { data: null, error: { message: 'busy or stale' } };
@@ -134,6 +139,7 @@ function replacementHarness() {
       if (specifier.includes('connect-account-operations')) return operations;
       if (specifier.includes('payout-audit')) return { writePayoutAudit: jest.fn() };
       if (specifier.includes('payout-state')) return require('../../supabase/functions/_shared/payout-state');
+      if (specifier.includes('withdrawal-guard')) return require('../../supabase/functions/_shared/withdrawal-guard');
       return {};
     },
     Deno: {

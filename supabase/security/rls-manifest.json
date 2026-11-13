@@ -28,6 +28,10 @@
     "ratings": "trg_ratings_guard"
   },
   "protected": {
+    "withdrawal_attempts": {
+      "policies": [],
+      "grants": { "anon": [], "authenticated": [] }
+    },
     "bounty_proofs": {
       "policies": [],
       "grants": { "anon": [], "authenticated": [] },
@@ -465,6 +469,7 @@
     }
   },
   "functions": [
+    { "signature": "reserve_withdrawal_attempt(uuid,text,text,integer,integer,integer,integer,integer,integer,integer,integer,integer)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_score_and_dispatch_bounty_notification(uuid,uuid[],smallint,text,text,jsonb)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_dispatch_bounty_targeting(uuid,text)", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
     { "signature": "fn_notify_zip_matched_bounty()", "forbid_execute": ["anon", "authenticated", "PUBLIC"] },
