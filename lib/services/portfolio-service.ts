@@ -1,5 +1,6 @@
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { supabase } from '../supabase';
+import { isUuid } from '../utils/is-uuid';
 import type { PortfolioItem } from '../types';
 import { attachmentService } from './attachment-service';
 
@@ -56,7 +57,9 @@ export const portfolioService = {
   /**
    * Get portfolio items for a user, in display order.
    */
-  getItems: async (userId: string): Promise<PortfolioItem[]> => {
+  getItems: async (userId: string | null | undefined): Promise<PortfolioItem[]> => {
+    // No request without a real id: a placeholder is a 400, not "no items".
+    if (!isUuid(userId)) return [];
     const { data, error } = await supabase
       .from('portfolio_items')
       .select('*')
@@ -198,7 +201,8 @@ export const portfolioService = {
   /**
    * Get count of portfolio items for a user
    */
-  getItemCount: async (userId: string): Promise<number> => {
+  getItemCount: async (userId: string | null | undefined): Promise<number> => {
+    if (!isUuid(userId)) return 0;
     const { count, error } = await supabase
       .from('portfolio_items')
       .select('*', { count: 'exact', head: true })

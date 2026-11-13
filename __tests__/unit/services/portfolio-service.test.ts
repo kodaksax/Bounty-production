@@ -79,7 +79,7 @@ describe('portfolio-service', () => {
     it('returns empty array for a user with no items', async () => {
       mockFrom.mockReturnValue(makeQueryBuilder({ data: [], error: null }));
 
-      const items = await portfolioService.getItems('test-user');
+      const items = await portfolioService.getItems('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f');
 
       expect(items).toEqual([]);
       expect(mockFrom).toHaveBeenCalledWith('portfolio_items');
@@ -89,23 +89,23 @@ describe('portfolio-service', () => {
       mockFrom.mockReturnValue(
         makeQueryBuilder({
           data: [
-            { id: '1', user_id: 'test-user', type: 'image', url: 'url1', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 0, created_at: '2024-01-01T00:00:00Z' },
-            { id: '2', user_id: 'test-user', type: 'image', url: 'url2', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 1, created_at: '2024-01-02T00:00:00Z' },
+            { id: '1', user_id: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f', type: 'image', url: 'url1', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 0, created_at: '2024-01-01T00:00:00Z' },
+            { id: '2', user_id: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f', type: 'image', url: 'url2', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 1, created_at: '2024-01-02T00:00:00Z' },
           ],
           error: null,
         })
       );
 
-      const items = await portfolioService.getItems('test-user');
+      const items = await portfolioService.getItems('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f');
 
       expect(items.map((i) => i.id)).toEqual(['1', '2']);
-      expect(items[0].userId).toBe('test-user');
+      expect(items[0].userId).toBe('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f');
     });
 
     it('returns empty array (not throw) on a query error', async () => {
       mockFrom.mockReturnValue(makeQueryBuilder({ data: null, error: { message: 'boom' } }));
 
-      const items = await portfolioService.getItems('test-user');
+      const items = await portfolioService.getItems('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f');
 
       expect(items).toEqual([]);
     });
@@ -121,7 +121,7 @@ describe('portfolio-service', () => {
             Promise.resolve({
               data: {
                 id: 'p1',
-                user_id: 'test-user',
+                user_id: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f',
                 type: 'image',
                 url: 'https://example.com/image.jpg',
                 thumbnail_url: null,
@@ -143,13 +143,13 @@ describe('portfolio-service', () => {
       });
 
       const item = await portfolioService.addItem({
-        userId: 'test-user',
+        userId: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f',
         type: 'image',
         url: 'https://example.com/image.jpg',
       });
 
       expect(item.id).toBe('p1');
-      expect(item.userId).toBe('test-user');
+      expect(item.userId).toBe('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f');
       expect(item.url).toBe('https://example.com/image.jpg');
     });
 
@@ -157,7 +157,7 @@ describe('portfolio-service', () => {
       mockFrom.mockReturnValue(makeQueryBuilder({ count: MAX_PORTFOLIO_ITEMS, error: null }));
 
       await expect(
-        portfolioService.addItem({ userId: 'test-user', type: 'image', url: 'url' })
+        portfolioService.addItem({ userId: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f', type: 'image', url: 'url' })
       ).rejects.toThrow(`Maximum of ${MAX_PORTFOLIO_ITEMS} portfolio items allowed`);
     });
   });
@@ -166,14 +166,14 @@ describe('portfolio-service', () => {
     it('returns 0 / true for a user with no items', async () => {
       mockFrom.mockReturnValue(makeQueryBuilder({ count: 0, error: null }));
 
-      expect(await portfolioService.getItemCount('test-user')).toBe(0);
-      expect(await portfolioService.canAddItem('test-user')).toBe(true);
+      expect(await portfolioService.getItemCount('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f')).toBe(0);
+      expect(await portfolioService.canAddItem('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f')).toBe(true);
     });
 
     it('returns false once at the max', async () => {
       mockFrom.mockReturnValue(makeQueryBuilder({ count: MAX_PORTFOLIO_ITEMS, error: null }));
 
-      expect(await portfolioService.canAddItem('test-user')).toBe(false);
+      expect(await portfolioService.canAddItem('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f')).toBe(false);
     });
   });
 
@@ -185,7 +185,7 @@ describe('portfolio-service', () => {
           Promise.resolve({
             data: {
               id: 'p1',
-              user_id: 'test-user',
+              user_id: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f',
               type: 'image',
               url: 'https://x.supabase.co/storage/v1/object/public/portfolio_pictures/test-user/p1.jpg',
               thumbnail_url: null,
@@ -230,14 +230,14 @@ describe('portfolio-service', () => {
     it('calls the reorder_portfolio_items RPC once and returns items in the new order', async () => {
       mockRpc.mockResolvedValue({
         data: [
-          { id: 'c', user_id: 'test-user', type: 'image', url: 'url3', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 0, created_at: '2024-01-03T00:00:00Z' },
-          { id: 'a', user_id: 'test-user', type: 'image', url: 'url1', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 1, created_at: '2024-01-01T00:00:00Z' },
-          { id: 'b', user_id: 'test-user', type: 'image', url: 'url2', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 2, created_at: '2024-01-02T00:00:00Z' },
+          { id: 'c', user_id: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f', type: 'image', url: 'url3', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 0, created_at: '2024-01-03T00:00:00Z' },
+          { id: 'a', user_id: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f', type: 'image', url: 'url1', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 1, created_at: '2024-01-01T00:00:00Z' },
+          { id: 'b', user_id: '0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f', type: 'image', url: 'url2', thumbnail_url: null, title: null, description: null, category: null, file_name: null, mime_type: null, size_bytes: null, position: 2, created_at: '2024-01-02T00:00:00Z' },
         ],
         error: null,
       });
 
-      const reordered = await portfolioService.reorderItems('test-user', ['c', 'a', 'b']);
+      const reordered = await portfolioService.reorderItems('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f', ['c', 'a', 'b']);
 
       expect(mockRpc).toHaveBeenCalledTimes(1);
       expect(mockRpc).toHaveBeenCalledWith('reorder_portfolio_items', { p_item_ids: ['c', 'a', 'b'] });
@@ -247,7 +247,7 @@ describe('portfolio-service', () => {
     it('throws and does not swallow an error from the RPC', async () => {
       mockRpc.mockResolvedValue({ data: null, error: { message: 'db down' } });
 
-      await expect(portfolioService.reorderItems('test-user', ['c', 'a', 'b'])).rejects.toThrow('db down');
+      await expect(portfolioService.reorderItems('0b7a6f0e-5c1d-4e2a-9f3b-1a2b3c4d5e6f', ['c', 'a', 'b'])).rejects.toThrow('db down');
     });
   });
 });

@@ -7,6 +7,7 @@ import { generateVideoThumbnail, MAX_PORTFOLIO_ITEMS, portfolioService } from '.
 import type { PortfolioItem } from '../lib/types'
 import { cacheDirectory, copyTo, readAsBase64 } from '../lib/utils/fs-utils'
 import { processImage } from '../lib/utils/image-utils'
+import { isUuid } from '../lib/utils/is-uuid'
 
 export interface PortfolioUploadState {
   isPicking: boolean
@@ -46,6 +47,9 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
       // entire flow attributes uploads to the same user even if the
       // `userId` prop changes during the async work.
       const currentUserId = userId
+      // The profile can render before auth resolves, with a placeholder id.
+      // Nothing can be saved against it, so don't open the picker yet.
+      if (!isUuid(currentUserId)) return null
       // Check if user can add more items before picking
       const canAdd = await portfolioService.canAddItem(currentUserId)
       if (!canAdd) {

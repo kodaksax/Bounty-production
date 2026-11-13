@@ -801,6 +801,9 @@ export function CreateBountyFlow({
       step_name: STEP_TITLES[currentStep - 1],
       variant: POST_FLOW_VARIANT,
       deliberate_entry: deliberateTapRef.current,
+      // Same value bounty_started/post_abandoned carry: fixed when the flow
+      // opened, so a preloaded Post tab reports why the poster came.
+      entry_point: entryPointRef.current,
     });
 
     const resumeJump = resumeJumpRef.current;
@@ -870,6 +873,7 @@ export function CreateBountyFlow({
         variant: POST_FLOW_VARIANT,
         deliberate_entry: deliberateTapRef.current,
         composer_started: composerStartedRef.current,
+        entry_point: entryPointRef.current,
         // Which field the exit happened on (see postStepFields.ts). 'none'
         // rather than null so "never touched a field" is a breakdown value.
         last_field: lastFieldRef.current ?? 'none',
