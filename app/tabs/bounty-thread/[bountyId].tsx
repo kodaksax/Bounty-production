@@ -86,6 +86,16 @@ function BountyThreadScreen() {
     counterpartId: role === 'poster' ? params.with ?? null : null,
   });
   const { bounty, request, submission, counterpart, events, hasActiveDispute, dispute, cancellation } = thread;
+  // The bounty's real pending-offer count (the job page and Inbox count the
+  // same rows), replacing a hard-coded 1. If that read failed, this thread's
+  // own pending offer is the one thing known for sure, so it never says 0
+  // while an offer is on screen. The bounty_requests realtime subscription
+  // reloads it after any accept, pass or withdrawal.
+  const thisOfferPending = role === 'poster' && request?.status === 'pending';
+  const posterOfferCount =
+    role !== 'poster'
+      ? 0
+      : Math.max(thread.pendingOfferCount ?? 0, thisOfferPending ? 1 : 0);
 
   const [busyEventId, setBusyEventId] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
@@ -382,14 +392,14 @@ function BountyThreadScreen() {
       requestRejectionSource: (request as any)?.rejection_source ?? null,
       submissionStatus: submission?.status ?? null,
       submissionIsMine: !!submission && String(submission.hunter_id) === String(viewerId),
-      applicationCount: role === 'poster' && request?.status === 'pending' ? 1 : 0,
+      applicationCount: posterOfferCount,
       hasDispute: hasActiveDispute,
       hasCancellationRequest: cancellation?.status === 'pending',
       cancellationRequestedByRole: cancellation?.requesterType ?? null,
       otherPartyName: counterpart?.name ?? null,
       submittedAt: submission?.submitted_at ?? null,
     });
-  }, [bounty, role, viewerId, request, submission, hasActiveDispute, cancellation, counterpart?.name]);
+  }, [bounty, role, viewerId, request, submission, hasActiveDispute, cancellation, counterpart?.name, posterOfferCount]);
 
   // The pay-at-accept gate takes over the screen while open, exactly as on
   // the old Requests list.

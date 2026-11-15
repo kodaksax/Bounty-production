@@ -182,9 +182,15 @@ export default function HunterFlowIndex() {
       // cancelling anything outright.
       cancel_bounty: () =>
         router.push({ pathname: '/bounty/[id]/cancel', params: { id: routeBountyId } } as never),
-      contact_support: () => router.push('/tabs/need-help-screen' as never),
+      // The real support form, not /tabs/need-help-screen (the Post-a-Bounty
+      // composer), with the job attached so support knows which one.
+      contact_support: () =>
+        router.push({
+          pathname: '/support/contact',
+          params: { bountyId: routeBountyId, bountyTitle: bounty?.title ?? '' },
+        } as never),
     };
-  }, [routeBountyId, handleMessage, handleDiscardApplication, router]);
+  }, [routeBountyId, bounty?.title, handleMessage, handleDiscardApplication, router]);
 
   const goBack = useCallback(() => {
     if (router.canGoBack()) router.back();

@@ -73,6 +73,8 @@ export default function ReviewAndVerifyScreen() {
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [isViewerVisible, setIsViewerVisible] = useState(false);
   const [isRequestingRevision, setIsRequestingRevision] = useState(false);
+  // Set from the moment a release is confirmed until approveAndRelease settles.
+  const approvingRef = useRef(false);
   const { releaseFunds } = useWallet();
   const ratingPromptLoggedRef = useRef(false);
 
@@ -415,8 +417,38 @@ export default function ReviewAndVerifyScreen() {
     }
   };
 
+  // Approving releases the payment and cannot be undone, so it is confirmed
+  // first, in the same words as PosterReviewModal's payout step. It used to
+  // run on one tap of "Approve and continue to payment". This screen is still
+  // reachable from lib/navigation/manage-route.ts; the job page itself now
+  // opens PosterReviewModal instead.
   const handleNext = () => {
-    handleApprove();
+    if (!bounty || approvingRef.current) return;
+    const forHonor = Boolean(bounty.is_for_honor);
+    const amount = Number(bounty.amount ?? 0);
+    const name = hunterProfile?.username || 'the hunter';
+    const amountText = amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+    Alert.alert(
+      forHonor ? 'Mark this job complete?' : 'Complete and release payment?',
+      forHonor
+        ? 'Completing this bounty will mark the work as finished for honor and alert the hunter. Once you continue, this action cannot be undone.'
+        : `This will mark the bounty as completed and release ${amountText} to ${name}. Once you continue, this action cannot be undone.`,
+      [
+        { text: 'Back to review', style: 'cancel' },
+        {
+          text: forHonor ? 'Mark complete' : 'Release payment',
+          // A double tap can stack two of these dialogs; only the first
+          // confirmation runs, until it has finished.
+          onPress: () => {
+            if (approvingRef.current) return;
+            approvingRef.current = true;
+            void handleApprove().finally(() => {
+              approvingRef.current = false;
+            });
+          },
+        },
+      ]
+    );
   };
 
   const formatFileSize = (bytes?: number) => {

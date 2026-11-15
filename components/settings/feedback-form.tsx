@@ -32,6 +32,8 @@ export interface FeedbackFormProps {
   /** Allow attaching an optional screenshot (bug reports only). */
   allowScreenshot?: boolean;
   submitLabel?: string;
+  /** Pre-fills the first field, e.g. naming the job a support message is about. */
+  initialSubject?: string;
   /**
    * Submit handler. Should resolve to a result describing success/failure so the
    * form can surface confirmation or an inline error with a retry option.
@@ -54,13 +56,14 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   descriptionPlaceholder,
   allowScreenshot = false,
   submitLabel = 'Submit',
+  initialSubject,
   onSubmit,
   onCancel,
   onSuccess,
 }) => {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(initialSubject ?? '');
   const [description, setDescription] = useState('');
   const [screenshotUri, setScreenshotUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

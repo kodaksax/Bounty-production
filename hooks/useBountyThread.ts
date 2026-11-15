@@ -72,6 +72,11 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
   const [dispute, setDispute] = useState<BountyDispute | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [counterpart, setCounterpart] = useState<BountyThreadCounterpart | null>(null);
+  // Poster side, open bounty: how many pending offers the WHOLE bounty has, so
+  // the banner says "3 hunters applied" rather than counting only this
+  // thread's hunter. Same definition as the job page and the Inbox (pending
+  // bounty_requests). Null when not applicable or the read failed.
+  const [pendingOfferCount, setPendingOfferCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loadSeq = useRef(0);
@@ -96,7 +101,8 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
 
       // The application between this hunter and this bounty.
       const hunterId = role === 'poster' ? otherId : String(viewerId || '');
-      const [reqs, sub, cancel, disp, convs, profile] = await Promise.all([
+      const countsOffers = role === 'poster' && b.status === 'open';
+      const [reqs, sub, cancel, disp, convs, profile, pendingOffers] = await Promise.all([
         hunterId
           ? bountyRequestService
               .getAllWithDetails({ bountyId: String(b.id), userId: hunterId })
@@ -109,6 +115,12 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
           ? supabaseMessaging.fetchConversations(String(viewerId)).catch(() => [] as Conversation[])
           : Promise.resolve([] as Conversation[]),
         otherId ? userProfileService.getProfile(otherId).catch(() => null) : Promise.resolve(null),
+        countsOffers
+          ? bountyRequestService
+              .getAll({ bountyId: String(b.id), status: 'pending' })
+              .then(list => (Array.isArray(list) ? list.length : null))
+              .catch(() => null)
+          : Promise.resolve(null),
       ]);
       if (stale()) return;
 
@@ -116,6 +128,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
         r => String((r as any).hunter_id ?? (r as any).user_id) === hunterId
       );
       setRequest(mine ?? null);
+      setPendingOfferCount(pendingOffers);
       setSubmission(sub);
       setCancellation(cancel);
       setDispute(disp);
@@ -260,6 +273,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
     conversation,
     setConversation,
     counterpart,
+    pendingOfferCount,
     events,
     loading,
     error,

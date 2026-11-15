@@ -54,6 +54,12 @@ interface PosterReviewModalProps {
   // full bounty row (this component doesn't fetch one), so it's supplied
   // rather than re-derived here.
   architecture?: 'v1' | 'v2' | 'v3';
+  /**
+   * Open straight on the rating step: a completed job's "Leave a review".
+   * The caller checks ratingsService.hasRated first. This never shows the
+   * approve/payout step, so it cannot release anything.
+   */
+  startOnRating?: boolean;
   onClose: () => void;
   onComplete: () => void;
 }
@@ -243,6 +249,7 @@ export function PosterReviewModal({
   bountyAmount,
   isForHonor,
   architecture,
+  startOnRating = false,
   onClose,
   onComplete,
 }: PosterReviewModalProps) {
@@ -341,6 +348,10 @@ export function PosterReviewModal({
     checkExistingRating();
     return () => { mounted = false; };
   }, [visible, submission, hunterId, bountyId]);
+
+  useEffect(() => {
+    if (visible && startOnRating) setShowRatingForm(true);
+  }, [visible, startOnRating]);
 
   useEffect(() => {
     if (showRatingForm && !ratingPromptLoggedRef.current) {
@@ -551,6 +562,55 @@ export function PosterReviewModal({
 
   if (!visible) return null;
 
+  // Shared by the normal flow (after approval) and startOnRating (a completed
+  // job's "Leave a review", which may have no submission row to show).
+  const ratingForm = (
+    <KeyboardAwareScrollView
+      style={s.scrollView}
+      contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
+    >
+      <View style={s.ratingFormContainer}>
+        <MaterialIcons name="star" size={64} color={theme.warningText} />
+        <Text style={s.ratingTitle}>Rate {hunterName}</Text>
+        <Text style={s.ratingSubtitle}>How would you rate their work on this bounty?</Text>
+        <View style={s.ratingStarsContainer}>
+          <RatingStars rating={rating} onRatingChange={setRating} size="large" />
+        </View>
+        <TextInput
+          style={s.commentInput}
+          placeholder="Add an optional comment (visible to hunter)..."
+          placeholderTextColor={theme.textDisabled}
+          value={ratingComment}
+          onChangeText={setRatingComment}
+          multiline
+          numberOfLines={4}
+          maxLength={500}
+          textAlignVertical="top"
+        />
+        <TouchableOpacity accessibilityRole="button"
+          style={[s.primaryButton, isProcessing && s.buttonDisabled]}
+          onPress={handleSubmitRating}
+          disabled={isProcessing || rating === 0}
+        >
+          {isProcessing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={s.buttonText}>Complete Bounty & Rate Hunter</Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={s.skipRatingButton}
+          onPress={handleSkipRating}
+          disabled={isProcessing}
+          accessibilityRole="button"
+          accessibilityLabel="Skip rating for now"
+        >
+          <Text style={s.skipRatingText}>Skip for now</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAwareScrollView>
+  );
+
   return (
     <>
       <Modal
@@ -584,6 +644,8 @@ export function PosterReviewModal({
               <ActivityIndicator size="large" color={theme.primaryLight} />
               <Text style={s.loadingText}>Loading submission...</Text>
             </View>
+          ) : startOnRating && showRatingForm ? (
+            ratingForm
           ) : !submission ? (
             <View style={s.emptyContainer}>
               <MaterialIcons name="inbox" size={64} color={accentColor} />
@@ -640,50 +702,7 @@ export function PosterReviewModal({
               </View>
             </ScrollView>
           ) : showRatingForm ? (
-            <KeyboardAwareScrollView
-              style={s.scrollView}
-              contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
-            >
-              <View style={s.ratingFormContainer}>
-                <MaterialIcons name="star" size={64} color={theme.warningText} />
-                <Text style={s.ratingTitle}>Rate {hunterName}</Text>
-                <Text style={s.ratingSubtitle}>How would you rate their work on this bounty?</Text>
-                <View style={s.ratingStarsContainer}>
-                  <RatingStars rating={rating} onRatingChange={setRating} size="large" />
-                </View>
-                <TextInput
-                  style={s.commentInput}
-                  placeholder="Add an optional comment (visible to hunter)..."
-                  placeholderTextColor={theme.textDisabled}
-                  value={ratingComment}
-                  onChangeText={setRatingComment}
-                  multiline
-                  numberOfLines={4}
-                  maxLength={500}
-                  textAlignVertical="top"
-                />
-                <TouchableOpacity accessibilityRole="button"
-                  style={[s.primaryButton, isProcessing && s.buttonDisabled]}
-                  onPress={handleSubmitRating}
-                  disabled={isProcessing || rating === 0}
-                >
-                  {isProcessing ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={s.buttonText}>Complete Bounty & Rate Hunter</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.skipRatingButton}
-                  onPress={handleSkipRating}
-                  disabled={isProcessing}
-                  accessibilityRole="button"
-                  accessibilityLabel="Skip rating for now"
-                >
-                  <Text style={s.skipRatingText}>Skip for now</Text>
-                </TouchableOpacity>
-              </View>
-            </KeyboardAwareScrollView>
+            ratingForm
           ) : showRevisionForm ? (
             <KeyboardAwareScrollView
               style={s.scrollView}

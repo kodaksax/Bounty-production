@@ -42,6 +42,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditPostingModal } from '../../../components/edit-posting-modal';
 import { NotFoundScreen } from '../../../components/not-found-screen';
+import { PosterReviewModal } from '../../../components/poster-review-modal';
 import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
 import { Stepper } from '../../../components/ui/stepper';
@@ -50,15 +51,21 @@ import { formatExactAddress, useBountyExactLocation } from '../../../hooks/useBo
 import { useBountyLifecycle } from '../../../hooks/useBountyLifecycle';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
+import { getBountyFundingRequirement } from '../../../lib/services/bounty-funding-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { messageService } from '../../../lib/services/message-service';
+import { ratingsService } from '../../../lib/services/ratings';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { getBountyStages } from '../../../lib/utils/bounty-lifecycle';
 import type { BountyActionKey } from '../../../lib/utils/bounty-lifecycle';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
-import { bountyHoldsUnreleasedEscrow } from '../../../lib/utils/payment-architecture';
+import {
+  bountyHoldsUnreleasedEscrow,
+  isPhase2Bounty,
+  isV3Bounty,
+} from '../../../lib/utils/payment-architecture';
 import { formatPublicLocation } from '../../../lib/utils/public-location';
 import { getTrustTierLabel } from '../../../lib/utils/trust-tier';
 import { shareBounty } from '../../../lib/utils/share-utils';
@@ -82,7 +89,11 @@ const REQUESTS_ROUTE = bountyAppTabPath('messages', 'requests');
 const POST_BOUNTY_ROUTE = bountyAppTabPath('postings');
 
 export default function BountyDashboard() {
-  const { bountyId, openEdit } = useLocalSearchParams<{ bountyId?: string; openEdit?: string }>();
+  const { bountyId, openEdit, openReview } = useLocalSearchParams<{
+    bountyId?: string;
+    openEdit?: string;
+    openReview?: string;
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // `isAuthLoading` matters here: on a cold start the session restores after
@@ -129,6 +140,53 @@ export default function BountyDashboard() {
   // having to find the edit action themselves. Guarded to fire once per
   // mount — the modal is user-closeable and shouldn't reopen on its own.
   const autoOpenEditHandledRef = React.useRef(false);
+  // The completion review and the rating step both live in PosterReviewModal
+  // (the same one the chat uses). It replaced pushing review-and-verify, whose
+  // "Approve and continue to payment" released the money on one tap, and
+  // pushing the payout receipt for "Leave a review", which has no rating UI.
+  const [showReview, setShowReview] = useState(false);
+  const [reviewStartsOnRating, setReviewStartsOnRating] = useState(false);
+  // rating_reminder notifications deep-link here with ?openReview=true.
+  const autoOpenReviewHandledRef = React.useRef(false);
+
+  // Never name the poster as the one who gets paid: the other party is only
+  // ever the hired hunter, and anything else falls back to a neutral phrase.
+  const hunterName =
+    (otherParty.id && String(otherParty.id) !== String(currentUserId) && otherParty.name) || 'your hunter';
+
+  // ── Has this poster actually been charged? ───────────────────────────────
+  // Only asked while the poster can still take the job down (open, nobody
+  // hired). It is the same server read the take-down confirmation uses
+  // (readOpenJobMoney → planCancelRefund), so the Payment card, the button
+  // label and the confirmation all agree. It reads only; nothing here moves
+  // money. bountyHoldsUnreleasedEscrow is a delete guard that counts every
+  // open paid bounty as held, so it cannot say whether a pay-when-you-choose
+  // (at_accept) job has been charged.
+  const checksCharge =
+    !!bounty &&
+    role === 'poster' &&
+    canPosterCancelBounty(bounty) &&
+    !bounty.is_for_honor &&
+    Number(bounty.amount) > 0;
+  const [chargeRead, setChargeRead] = useState<OpenJobCharge | null>(null);
+  React.useEffect(() => {
+    if (!checksCharge || !bounty) {
+      setChargeRead(null);
+      return;
+    }
+    let cancelled = false;
+    readOpenJobMoney(bounty)
+      .then(({ charge }) => {
+        if (!cancelled) setChargeRead(charge);
+      })
+      .catch(() => {
+        if (!cancelled) setChargeRead('unknown');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [checksCharge, bounty]);
+  const openJobCharge: OpenJobCharge | null = !checksCharge ? null : chargeRead ?? 'checking';
 
   React.useEffect(() => {
     pushColor(theme.background);
@@ -200,6 +258,52 @@ export default function BountyDashboard() {
     }
   }, [bounty, otherParty.id, router]);
 
+  // Approving the work goes through PosterReviewModal's own "Complete and
+  // release payment?" warning and slide-to-confirm before approveAndRelease.
+  const handleReviewSubmission = useCallback(() => {
+    if (!bounty?.accepted_by) {
+      Alert.alert('No hunter yet', 'There is no submitted work to review on this bounty.');
+      return;
+    }
+    setReviewStartsOnRating(false);
+    setShowReview(true);
+  }, [bounty?.accepted_by]);
+
+  // "Leave a review" opens the rating step of the same modal. A poster who
+  // already rated this hunter for this job is told so rather than asked again.
+  const handleLeaveReview = useCallback(async () => {
+    if (!bounty) return;
+    const hunterId = bounty.accepted_by ? String(bounty.accepted_by) : otherParty.id;
+    if (!hunterId || !currentUserId) {
+      Alert.alert(
+        "Couldn't open the review",
+        "We couldn't tell who did this job. Pull down to refresh, then try again."
+      );
+      return;
+    }
+    setBusyAction('leave_review');
+    let alreadyRated: boolean;
+    try {
+      alreadyRated = await ratingsService.hasRated(String(currentUserId), String(bounty.id), hunterId);
+    } catch {
+      Alert.alert("Couldn't open the review", 'Check your connection and try again.');
+      return;
+    } finally {
+      setBusyAction(null);
+    }
+    if (alreadyRated) {
+      Alert.alert('Already reviewed', `You've already left a review for ${hunterName}. Thank you!`);
+      return;
+    }
+    setReviewStartsOnRating(true);
+    setShowReview(true);
+  }, [bounty, otherParty.id, currentUserId, hunterName]);
+
+  const closeReview = useCallback(() => {
+    setShowReview(false);
+    setReviewStartsOnRating(false);
+  }, []);
+
   const handleSaveEdit = useCallback(
     async (updates: Partial<Bounty>) => {
       if (updates.requirements_payload !== undefined) {
@@ -254,7 +358,10 @@ export default function BountyDashboard() {
       try {
         const resolvedPlan = await cancelAndRefundBounty(target, { refundEscrow }, plan);
         markBountyRemovedLocally(target.id);
-        Alert.alert('Bounty cancelled', describeCancelRefundDone(resolvedPlan), [
+        // Matches the button: a refund means it was cancelled and refunded;
+        // otherwise the job was simply taken down.
+        const doneTitle = resolvedPlan.destination ? 'Bounty cancelled' : 'Job taken down';
+        Alert.alert(doneTitle, describeCancelRefundDone(resolvedPlan), [
           { text: 'OK', onPress: goBack },
         ]);
       } catch (err) {
@@ -284,16 +391,19 @@ export default function BountyDashboard() {
   const handleCancelAndRefund = useCallback(async () => {
     if (!bounty || !canPosterCancelBounty(bounty) || cancellingRef.current) return;
     setBusyAction('delete');
+    // Re-read on every tap: the take-down acts on this fresh plan, never on
+    // what the screen showed when it loaded.
     let plan: CancelRefundPlan;
+    let charge: OpenJobCharge;
     try {
-      plan = await planCancelRefund(bounty);
+      ({ plan, charge } = await readOpenJobMoney(bounty));
     } catch {
       setBusyAction(null);
       Alert.alert("Can't cancel right now", "We couldn't check what's held for this bounty. Check your connection and try again.");
       return;
     }
     setBusyAction(null);
-    const copy = describeCancelRefund(bounty, plan);
+    const copy = describeTakeDown(bounty, plan, charge);
     Alert.alert(copy.title, copy.message, [
       { text: 'Keep it', style: 'cancel' },
       { text: copy.confirmLabel, style: 'destructive', onPress: () => void runCancel(bounty, plan) },
@@ -315,21 +425,13 @@ export default function BountyDashboard() {
           location: bounty.location,
         }),
       review_applications: () => router.push(REQUESTS_ROUTE as never),
-      review_submission: () =>
-        router.push({
-          pathname: '/postings/[bountyId]/review-and-verify',
-          params: { bountyId: routeBountyId },
-        } as never),
+      review_submission: handleReviewSubmission,
       view_payout: () =>
         router.push({
           pathname: '/postings/[bountyId]/payout',
           params: { bountyId: routeBountyId },
         } as never),
-      leave_review: () =>
-        router.push({
-          pathname: '/postings/[bountyId]/payout',
-          params: { bountyId: routeBountyId },
-        } as never),
+      leave_review: () => void handleLeaveReview(),
       repost: () => router.push(POST_BOUNTY_ROUTE as never),
       // No cancel_bounty for the poster: cancellation REQUESTS are hunter-only
       // (see describeHunter in lib/utils/bounty-lifecycle.ts). A poster with an
@@ -345,7 +447,13 @@ export default function BountyDashboard() {
         router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
       view_dispute: () =>
         router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
-      contact_support: () => router.push('/tabs/need-help-screen' as never),
+      // The real support form (not /tabs/need-help-screen, which is the
+      // Post-a-Bounty composer), with this job attached.
+      contact_support: () =>
+        router.push({
+          pathname: '/support/contact',
+          params: { bountyId: routeBountyId, bountyTitle: bounty.title ?? '' },
+        } as never),
     };
 
     // Open and nobody hired: the poster can edit (or hear why not) and cancel,
@@ -355,7 +463,29 @@ export default function BountyDashboard() {
       map.delete = () => void handleCancelAndRefund();
     }
     return map;
-  }, [bounty, routeBountyId, canEditTerms, explainEditLocked, handleMessage, handleCancelAndRefund, router]);
+  }, [
+    bounty,
+    routeBountyId,
+    canEditTerms,
+    explainEditLocked,
+    handleMessage,
+    handleCancelAndRefund,
+    handleReviewSubmission,
+    handleLeaveReview,
+    router,
+  ]);
+
+  // A rating_reminder lands here with ?openReview=true: once the bounty is
+  // loaded and reviewing is actually the thing to do, open the rating step.
+  React.useEffect(() => {
+    if (openReview !== 'true' || autoOpenReviewHandledRef.current) return;
+    if (isLoading || !bounty || role !== 'poster' || !state) return;
+    autoOpenReviewHandledRef.current = true;
+    const offersReview =
+      state.primaryAction?.key === 'leave_review' ||
+      state.secondaryActions.some(a => a.key === 'leave_review');
+    if (offersReview) void handleLeaveReview();
+  }, [openReview, isLoading, bounty, role, state, handleLeaveReview]);
 
   // Edit and cancel live in the Manage row rather than behind the panel's
   // "More actions" disclosure, where posters couldn't find them.
@@ -425,15 +555,21 @@ export default function BountyDashboard() {
   const description = bounty.description ?? '';
   const descriptionPreview =
     description.length > 180 ? `${description.substring(0, 180)}…` : description;
-  const escrowHeld = bountyHoldsUnreleasedEscrow(bounty as any);
+  // While the job is open and unhired the server says whether money is held;
+  // after that, the existing status-based answer stands.
+  const escrowHeld = openJobCharge ? openJobCharge === 'held' : bountyHoldsUnreleasedEscrow(bounty as any);
   // formatCategoryLabel returns null for a bounty with no category.
   const categoryLabel = formatCategoryLabel((bounty as any).category);
-  const hunterName = otherParty.name || 'your hunter';
-  // Same label the lifecycle gives this action ("Cancel and refund", or
-  // "Cancel bounty" for for-honor).
-  const cancelLabel =
-    state.secondaryActions.find(a => a.key === 'delete')?.label ??
-    (bounty.is_for_honor ? 'Cancel bounty' : 'Cancel and refund');
+  // "Refund" only when money was actually collected. Otherwise taking the job
+  // down is all that happens; the confirmation still re-checks on tap.
+  const cancelLabel = openJobCharge === 'held' ? 'Cancel and refund' : 'Take this job down';
+  const payment = describePaymentLine({
+    openJobCharge,
+    escrowHeld,
+    completed: bounty.status === 'completed',
+    hired: !!bounty.accepted_by,
+    hunterName,
+  });
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
@@ -606,7 +742,7 @@ export default function BountyDashboard() {
             </View>
             <Text style={s.cardBody}>
               {applicationCount > 0
-                ? `Review who applied and choose the hunter you want. You're charged only when you accept.`
+                ? describeApplicationsLine(openJobCharge)
                 : `Hunters who apply show up here. Sharing the bounty gets it in front of more of them.`}
             </Text>
             {applicationCount > 0 && (
@@ -710,19 +846,22 @@ export default function BountyDashboard() {
               <Text style={s.cardBody}>Bounty reward</Text>
               <Text style={s.paymentAmount}>${bounty.amount}</Text>
             </View>
-            <View style={s.paymentStateRow}>
+            <View style={s.paymentStateRow} testID="bounty-payment-state">
               <MaterialIcons
-                name={escrowHeld ? 'lock' : bounty.status === 'completed' ? 'check-circle' : 'account-balance-wallet'}
+                name={payment.icon}
                 size={16}
-                color={escrowHeld ? theme.warning : theme.success}
+                color={
+                  escrowHeld
+                    ? theme.warning
+                    : payment.icon === 'hourglass-empty' || payment.icon === 'help-outline'
+                      ? theme.textSecondary
+                      : theme.success
+                }
               />
-              <Text style={s.cardBodyMuted}>
-                {escrowHeld
-                  ? `Held safely in escrow. It's released to ${hunterName} only when you approve the work.`
-                  : bounty.status === 'completed'
-                    ? `Released to ${hunterName}.`
-                    : "You'll be charged when you accept a hunter, and the money is held in escrow until you approve the work."}
-              </Text>
+              <View style={s.paymentStateText}>
+                {payment.headline ? <Text style={s.cardBody}>{payment.headline}</Text> : null}
+                <Text style={s.cardBodyMuted}>{payment.detail}</Text>
+              </View>
             </View>
           </View>
         )}
@@ -771,8 +910,138 @@ export default function BountyDashboard() {
           onSave={handleSaveEdit}
         />
       )}
+
+      {!!bounty.accepted_by && (
+        <PosterReviewModal
+          visible={showReview}
+          bountyId={String(bounty.id)}
+          hunterId={String(bounty.accepted_by)}
+          hunterName={hunterName}
+          bountyAmount={Number(bounty.amount) || 0}
+          isForHonor={!!bounty.is_for_honor}
+          architecture={isV3Bounty(bounty as any) ? 'v3' : isPhase2Bounty(bounty as any) ? 'v2' : 'v1'}
+          startOnRating={reviewStartsOnRating}
+          onClose={closeReview}
+          onComplete={() => {
+            closeReview();
+            void refresh();
+          }}
+        />
+      )}
     </SafeAreaView>
   );
+}
+
+/** Whether a still-open, unhired job has charged the poster, per the server. */
+type OpenJobCharge = 'held' | 'not_charged' | 'checking' | 'unknown';
+
+/**
+ * What to tell the poster about money on an open, unhired job.
+ *
+ * `plan` is planCancelRefund's answer, unchanged, and is the only thing a
+ * take-down ever acts on. `charge` is for wording only. When
+ * fn_get_bounty_funding_requirement can't be read, getBountyFundingRequirement
+ * answers "already funded" (so a take-down still tries the refund rather than
+ * stranding money), which would make an unpaid pay-when-you-choose job look
+ * paid. So for an at_accept job a "held" answer is re-read: a real reply
+ * echoes the job's own funding_mode, while that fallback says 'at_post'.
+ * Anything not confirmed is 'unknown', never 'held'.
+ */
+async function readOpenJobMoney(
+  bounty: Bounty
+): Promise<{ plan: CancelRefundPlan; charge: Exclude<OpenJobCharge, 'checking'> }> {
+  const plan = await planCancelRefund(bounty);
+  if (!plan.destination || plan.refundAmount <= 0) return { plan, charge: 'not_charged' };
+  if (bounty.funding_mode !== 'at_accept') return { plan, charge: 'held' };
+  const req = await getBountyFundingRequirement(bounty.id);
+  const confirmed = req.fundingMode === 'at_accept' && req.alreadyFunded;
+  return { plan, charge: confirmed ? 'held' : 'unknown' };
+}
+
+/**
+ * The take-down confirmation. "Cancel and refund?" only when the charge is
+ * confirmed; otherwise it says "Take this job down?", matching the button.
+ * The plan it confirms, and so what happens, is unchanged either way.
+ */
+function describeTakeDown(
+  bounty: Pick<Bounty, 'is_for_honor'>,
+  plan: CancelRefundPlan,
+  charge: OpenJobCharge
+): { title: string; message: string; confirmLabel: string } {
+  const base = describeCancelRefund(bounty, plan);
+  const refunds = !!plan.destination && plan.refundAmount > 0;
+  if (refunds && charge === 'held') return base;
+  if (refunds) {
+    const where = plan.destination === 'wallet' ? 'your Bounty balance' : 'your original payment method';
+    const amount = `$${plan.refundAmount % 1 === 0 ? plan.refundAmount.toFixed(0) : plan.refundAmount.toFixed(2)}`;
+    return {
+      title: 'Take this job down?',
+      message: `It comes off the feed right away, and this can't be undone. We couldn't confirm whether you've been charged for it. If you were, ${amount} goes back to ${where}.`,
+      confirmLabel: 'Take it down',
+    };
+  }
+  return { title: 'Take this job down?', message: base.message, confirmLabel: 'Take it down' };
+}
+
+/** The Applications card's line: only says how paying works when it's known. */
+function describeApplicationsLine(charge: OpenJobCharge | null): string {
+  const lead = 'Review who applied and choose the hunter you want.';
+  if (charge === 'not_charged') return `${lead} You're charged only when you accept.`;
+  if (charge === 'held') return `${lead} You've already paid for this job.`;
+  return lead;
+}
+
+/**
+ * The Payment card's status line. Says money is held only when it is:
+ * held per the server for an open job, or per the bounty's own escrow state
+ * once a hunter is hired. Never names the poster as the one who gets paid.
+ */
+function describePaymentLine(args: {
+  openJobCharge: OpenJobCharge | null;
+  escrowHeld: boolean;
+  completed: boolean;
+  hired: boolean;
+  hunterName: string;
+}): {
+  icon: 'lock' | 'check-circle' | 'account-balance-wallet' | 'hourglass-empty' | 'help-outline';
+  headline: string | null;
+  detail: string;
+} {
+  const { openJobCharge, escrowHeld, completed, hired, hunterName } = args;
+  if (openJobCharge === 'not_charged') {
+    return {
+      icon: 'account-balance-wallet',
+      headline: "You haven't paid anything yet.",
+      detail: 'You only pay when you choose someone.',
+    };
+  }
+  if (openJobCharge === 'checking') {
+    return { icon: 'hourglass-empty', headline: null, detail: 'Checking your payment…' };
+  }
+  if (openJobCharge === 'unknown') {
+    return {
+      icon: 'help-outline',
+      headline: null,
+      detail: "We couldn't check your payment just now. Pull down to refresh.",
+    };
+  }
+  if (escrowHeld) {
+    return {
+      icon: 'lock',
+      headline: null,
+      detail: hired
+        ? `Held safely in escrow. It's released to ${hunterName} only when you approve the work.`
+        : "Held safely in escrow. It's released to the hunter you choose, only when you approve their work.",
+    };
+  }
+  if (completed) {
+    return { icon: 'check-circle', headline: null, detail: `Released to ${hunterName}.` };
+  }
+  return {
+    icon: 'account-balance-wallet',
+    headline: null,
+    detail: "You'll be charged when you accept a hunter, and the money is held in escrow until you approve the work.",
+  };
 }
 
 /**
@@ -1011,6 +1280,7 @@ function makeStyles(t: AppTheme) {
     proofRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     paymentAmount: { color: t.text, fontSize: 18, fontWeight: '800' },
     paymentStateRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    paymentStateText: { flex: 1, gap: 2 },
 
     detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 4 },
   });

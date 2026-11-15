@@ -276,3 +276,20 @@ describe('resolveNotificationDeepLink: draft_reminder', () => {
     expect(categoryForNotificationType('draft_reminder')).toBe('marketplace');
   });
 });
+
+// Senior-first poster audit (2026-11-14), fix 6: the poster's "rate your
+// hunter" reminder lands on their job screen with the rating step open. The
+// job screen's "Leave a review" used to push the payout receipt, which has no
+// rating UI.
+describe('resolveNotificationDeepLink: rating_reminder', () => {
+  test('opens the poster job screen on the rating step', () => {
+    const action = resolveNotificationDeepLink({ type: 'rating_reminder', data: { bountyId: 'abc-123' } });
+    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123?openReview=true' });
+  });
+
+  test('never routes to the payout receipt', () => {
+    const action = resolveNotificationDeepLink({ type: 'rating_reminder', data: { bounty_id: 'abc-123' } });
+    expect(action.kind === 'route' && action.path).not.toMatch(/payout/);
+    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123?openReview=true' });
+  });
+});
