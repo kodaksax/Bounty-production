@@ -43,12 +43,18 @@ export interface BountyCompactItemProps {
   rankScore?: number
   /** Set only on the first row of a dormant/honor section. */
   sectionLabel?: 'dormant' | 'honor'
+  /**
+   * Replaces opening the worker-facing detail dialog (with its Apply button).
+   * The Profile history passes it for the viewer's own bounties, which open
+   * the poster's management screen instead.
+   */
+  onPress?: () => void
 }
 
 function BountyCompactItemComponent({
   id, title, username, price, distance, location, description,
   isForHonor, user_id, work_type, poster_avatar, incomplete, missingSummary,
-  category, createdAt, position, rankingVariant, rankScore, sectionLabel
+  category, createdAt, position, rankingVariant, rankScore, sectionLabel, onPress
 }: BountyCompactItemProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -83,8 +89,9 @@ function BountyCompactItemComponent({
 
   const handleBountyPress = useCallback(() => {
     triggerHaptic('light')
+    if (onPress) { onPress(); return }
     openFrom(() => setShowDetail(true))
-  }, [triggerHaptic, openFrom])
+  }, [triggerHaptic, openFrom, onPress])
 
   const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : `, ${formatBountyWhere(distance, location) ?? 'location to be determined'}`}${incomplete ? `, limited details${missingSummary ? `, ${missingSummary}` : ''}` : ''}`
 
@@ -97,7 +104,7 @@ function BountyCompactItemComponent({
         onPress={handleBountyPress}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        accessibilityHint="Tap to view bounty details and apply"
+        accessibilityHint={onPress ? 'Opens your bounty' : 'Tap to view bounty details and apply'}
       >
         {/* Leading avatar */}
         <TouchableOpacity
@@ -198,7 +205,8 @@ export const BountyCompactItem = React.memo(BountyCompactItemComponent, (prev, n
   prev.position === next.position &&
   prev.rankingVariant === next.rankingVariant &&
   prev.rankScore === next.rankScore &&
-  prev.sectionLabel === next.sectionLabel
+  prev.sectionLabel === next.sectionLabel &&
+  prev.onPress === next.onPress
 )
 
 function makeStyles(t: AppTheme) {

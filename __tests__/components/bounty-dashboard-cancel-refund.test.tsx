@@ -7,6 +7,11 @@
  * 2026-10-27 regression: both actions sat behind the status panel's collapsed
  * "More actions", so posters could not find them. They now render in the hero
  * card's Manage row without any disclosure.
+ *
+ * 2026-11-15 (senior-first audit, fix 8): the label now follows the server's
+ * answer to "was anything charged?" (planCancelRefund, read on load). These
+ * cases have money held, so it reads "Cancel and refund"; the unfunded
+ * "Take this job down" wording is covered in bounty-dashboard-senior-fixes.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
@@ -32,6 +37,12 @@ jest.mock('expo-image', () => ({ Image: () => null }));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: mockBack, canGoBack: () => true }),
+  // The first focus only; returning to the page is covered in
+  // bounty-dashboard-senior-fixes.test.tsx.
+  useFocusEffect: (cb: () => void) => {
+    const { useEffect } = require('react');
+    useEffect(() => cb(), [cb]);
+  },
 }));
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');
@@ -89,6 +100,8 @@ jest.mock('../../lib/services/message-service', () => ({
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn().mockResolvedValue([]) },
 }));
+// Mounted for completion review / rating; covered in its own suites.
+jest.mock('../../components/poster-review-modal', () => ({ PosterReviewModal: () => null }));
 // The editor itself is covered elsewhere; here only whether it opens matters.
 jest.mock('../../components/edit-posting-modal', () => {
   const { Text } = require('react-native');
@@ -136,12 +149,12 @@ describe('BountyDashboard — Cancel and refund', () => {
   it.each([
     ['light', lightTheme],
     ['dark', darkTheme],
-  ])('sits next to Edit details on an open, unhired bounty, with no disclosure to open (%s theme)', (_n, theme) => {
+  ])('sits next to Edit details on an open, unhired bounty, with no disclosure to open (%s theme)', async (_n, theme) => {
     mockTheme = theme;
     render(<BountyDashboard />);
     expect(screen.getByTestId('bounty-manage-actions')).toBeTruthy();
     expect(screen.getByLabelText('Edit details')).toBeTruthy();
-    expect(screen.getByLabelText('Cancel and refund')).toBeTruthy();
+    expect(await screen.findByLabelText('Cancel and refund')).toBeTruthy();
     // Not duplicated under the status panel's "More actions".
     if (screen.queryByLabelText('More actions')) fireEvent.press(screen.getByLabelText('More actions'));
     expect(screen.getAllByLabelText('Edit details')).toHaveLength(1);
@@ -154,10 +167,10 @@ describe('BountyDashboard — Cancel and refund', () => {
     expect(screen.getByText('edit-modal-open')).toBeTruthy();
   });
 
-  it('is still offered once hunters have applied; Edit explains why the terms are locked', () => {
+  it('is still offered once hunters have applied; Edit explains why the terms are locked', async () => {
     mockApplicationCount = 2;
     render(<BountyDashboard />);
-    expect(screen.getByLabelText('Cancel and refund')).toBeTruthy();
+    expect(await screen.findByLabelText('Cancel and refund')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('Edit details'));
     expect(screen.queryByText('edit-modal-open')).toBeNull();
     expect(lastAlert().title).toBe('Details are locked');
@@ -206,6 +219,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     let finish: (v: unknown) => void = () => {};
     mockCancel.mockImplementation(() => new Promise(r => (finish = r)));
     render(<BountyDashboard />);
+    await screen.findByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
@@ -223,6 +237,7 @@ describe('BountyDashboard — Cancel and refund', () => {
 
   it('confirms in the app with the refund amount and destination, then cancels', async () => {
     render(<BountyDashboard />);
+    await screen.findByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
@@ -249,6 +264,7 @@ describe('BountyDashboard — Cancel and refund', () => {
 
   it('"Keep it" does nothing', async () => {
     render(<BountyDashboard />);
+    await screen.findByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
@@ -263,6 +279,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     const { BountyRefundFailedError } = jest.requireActual('../../lib/services/bounty-cancel-refund');
     mockCancel.mockRejectedValue(new BountyRefundFailedError(new Error('owner_refund_in_progress')));
     render(<BountyDashboard />);
+    await screen.findByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
@@ -283,12 +300,12 @@ describe('BountyDashboard — Cancel and refund', () => {
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
   });
 
-  it('says "Cancel bounty" with no refund promise for a for-honor bounty', async () => {
+  it('says "Take this job down" with no refund promise for a for-honor bounty', async () => {
     mockBounty = { ...mockBounty, is_for_honor: true, amount: 0 };
     mockPlan.mockResolvedValue({ refundAmount: 0, destination: null });
     render(<BountyDashboard />);
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('Cancel bounty'));
+      fireEvent.press(screen.getByLabelText('Take this job down'));
     });
     await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
     expect(lastAlert().message).toContain('no money is involved');

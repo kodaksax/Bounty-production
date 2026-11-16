@@ -858,7 +858,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       const canEdit =
         b.status === 'open' && !b.accepted_by && !isBountyDeadlinePassed(b) && !bountiesWithPendingRequestsSet.has(String(b.id))
       if (canEdit) buttons.push({ text: 'Edit posting', onPress: () => handleEditBounty(b) })
-      if (b.status === 'open' && !b.accepted_by) buttons.push({ text: 'Delete posting', style: 'destructive', onPress: () => handleDeleteBounty(b) })
+      // Not from an applicant's row (see onDelete in renderRow).
+      if (b.status === 'open' && !b.accepted_by && !row.application) buttons.push({ text: 'Delete posting', style: 'destructive', onPress: () => handleDeleteBounty(b) })
       if (b.status === 'cancelled') buttons.push({ text: 'Discard', style: 'destructive', onPress: () => handleDiscardCancelledBounty(b) })
       if (b.status === 'completed') buttons.push({ text: 'Archive', onPress: () => handleArchiveBounty(b) })
     }
@@ -896,9 +897,12 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
         distanceLabel={app ? formatApplicantDistance(app.distance_mi) : null}
         onPress={() => openThread(b.id, row.role, row.role === 'poster' ? row.person?.id ?? null : null)}
         onLongPress={() => handleRowLongPress(row)}
-        // Same rule as the long-press "Delete posting" option.
+        // Same rule as the long-press "Delete posting" option. Never on an
+        // applicant's row: the trash there deleted the whole job, and every
+        // other application with it, from what looks like that one person's
+        // row. Taking a job down lives on its own screen and its own row.
         onDelete={
-          row.role === 'poster' && b.status === 'open' && !b.accepted_by
+          row.role === 'poster' && !app && b.status === 'open' && !b.accepted_by
             ? () => handleDeleteBounty(b)
             : undefined
         }

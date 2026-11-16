@@ -54,6 +54,12 @@ interface PosterReviewModalProps {
   // full bounty row (this component doesn't fetch one), so it's supplied
   // rather than re-derived here.
   architecture?: 'v1' | 'v2' | 'v3';
+  /**
+   * Open straight on the rating step: a completed job's "Leave a review".
+   * The caller checks ratingsService.hasRated first. This never shows the
+   * approve/payout step, so it cannot release anything.
+   */
+  startOnRating?: boolean;
   onClose: () => void;
   onComplete: () => void;
 }
@@ -96,6 +102,10 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
   // from the track's left edge to the handle's right edge with no gap.
   const handleOffset = useRef(new Animated.Value(SLIDER_HANDLE_WIDTH + SLIDER_HANDLE_INSET));
   const accessibilityLabelText = isProcessing ? 'Processing payout' : label;
+  // Screen readers (VoiceOver, TalkBack, Switch/Voice Control) confirm with
+  // the 'activate' action below, a double tap: no drag is needed, so the hint
+  // must not say there is one.
+  const accessibilityHintText = 'Double tap to confirm. This cannot be undone.';
 
   // Maximum translate: leave SLIDER_HANDLE_INSET gap on the right so the
   // handle stops symmetrically with its left-edge inset.
@@ -216,8 +226,9 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
           accessible
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabelText}
-          accessibilityHint="Double tap then drag to the end to confirm payout"
-          accessibilityActions={[{ name: 'activate', label: 'Confirm payout' }]}
+          accessibilityHint={accessibilityHintText}
+          accessibilityState={{ disabled: disabled || isProcessing, busy: isProcessing }}
+          accessibilityActions={[{ name: 'activate', label: label }]}
           onAccessibilityAction={(event) => {
             if (event.nativeEvent.actionName === 'activate' && !disabled && !isProcessing && !hasConfirmedRef.current) {
               runConfirm();
@@ -243,6 +254,7 @@ export function PosterReviewModal({
   bountyAmount,
   isForHonor,
   architecture,
+  startOnRating = false,
   onClose,
   onComplete,
 }: PosterReviewModalProps) {
@@ -266,6 +278,17 @@ export function PosterReviewModal({
   const [showPayoutWarning, setShowPayoutWarning] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
+  // A failed load is not "No submission yet": it says so and offers a retry.
+  const [loadFailed, setLoadFailed] = useState(false);
+  // Set once approveAndRelease succeeds in this sheet. The rating step then
+  // says what just happened, and closing the sheet any way at all still tells
+  // the caller to refresh (onComplete), so the page behind it can't keep
+  // offering "Review & release payment" for a job that was just approved.
+  const [approvedHere, setApprovedHere] = useState(false);
+  // isProcessing is React state, so two taps inside one render could both
+  // pass it. This ref blocks a second rating or revision send while one is
+  // in flight.
+  const sendingRef = useRef(false);
   const ratingPromptLoggedRef = useRef(false);
 
   const formattedPayoutAmount = useMemo(() => {
@@ -280,7 +303,7 @@ export function PosterReviewModal({
 
   useEffect(() => {
     if (visible) { loadSubmission(); }
-  }, [visible, bountyId]);
+  }, [visible, bountyId, hunterId]);
 
   useEffect(() => {
     let mounted = true;
@@ -312,6 +335,9 @@ export function PosterReviewModal({
       setIsProcessing(false);
       setSubmission(null);
       setHunterProfile(null);
+      setLoadFailed(false);
+      setApprovedHere(false);
+      sendingRef.current = false;
       ratingPromptLoggedRef.current = false;
     }
   }, [visible]);
@@ -343,6 +369,10 @@ export function PosterReviewModal({
   }, [visible, submission, hunterId, bountyId]);
 
   useEffect(() => {
+    if (visible && startOnRating) setShowRatingForm(true);
+  }, [visible, startOnRating]);
+
+  useEffect(() => {
     if (showRatingForm && !ratingPromptLoggedRef.current) {
       ratingPromptLoggedRef.current = true;
       void analyticsService
@@ -354,11 +384,14 @@ export function PosterReviewModal({
   const loadSubmission = async () => {
     try {
       setIsLoading(true);
-      const data = await completionService.getSubmission(bountyId);
+      setLoadFailed(false);
+      const data = await completionService.getSubmissionForReview(bountyId, hunterId);
       setSubmission(data);
     } catch (err) {
       console.error('Error loading submission:', err);
-      Alert.alert("Couldn't load submission", "Please try again.");
+      // Shown inline with a retry (see render). The rating-only sheet doesn't
+      // need the submission at all, so it carries on without one.
+      setLoadFailed(true);
     } finally {
       setIsLoading(false);
     }
@@ -388,19 +421,28 @@ export function PosterReviewModal({
         // so the insert was rejected and the failure logged to console.
       });
 
+      // `false` usually means the release wasn't confirmed and the work was
+      // left unapproved (approveAndRelease never approves before a release
+      // succeeds), but it can also mean the release went through and only the
+      // approval failed. Neither case is "work approved", and neither is a
+      // confirmed "nothing was paid", so the copy claims neither.
       if (!ok) {
-        Alert.alert('Payment Issue', 'Work approved but payment release failed. Please contact support.');
+        Alert.alert(paymentNotConfirmedTitle(isForHonor), paymentNotConfirmedMessage(isForHonor));
         setShowPayoutWarning(true);
         return false;
       }
 
       triggerHaptic('success');
+      setApprovedHere(true);
       setShowPayoutWarning(false);
       setShowRatingForm(true);
       return true;
     } catch (err) {
       console.error('Error approving completion:', err);
-      Alert.alert("Couldn't approve completion", "Please try again.");
+      // approveAndRelease re-throws errors that carry a reason the poster can
+      // act on (no payout account, session expired), so show it.
+      const reason = err instanceof Error && err.message ? `${err.message}\n\n` : '';
+      Alert.alert(paymentNotConfirmedTitle(isForHonor), `${reason}${paymentNotConfirmedMessage(isForHonor)}`);
       setShowPayoutWarning(true);
       return false;
     } finally {
@@ -409,11 +451,12 @@ export function PosterReviewModal({
   };
 
   const handleRequestRevision = async () => {
-    if (!submission) return;
+    if (!submission || sendingRef.current) return;
     if (!revisionFeedback.trim()) {
       Alert.alert('Add Feedback', 'Please provide feedback for the revision request.');
       return;
     }
+    sendingRef.current = true;
     try {
       setIsProcessing(true);
       await completionService.requestRevision(submission.id!, revisionFeedback.trim());
@@ -422,19 +465,37 @@ export function PosterReviewModal({
       ]);
     } catch (err) {
       console.error('Error requesting revision:', err);
-      Alert.alert("Couldn't request revision", "Please try again.");
+      // The typed feedback stays in the box, so trying again is one tap.
+      Alert.alert("Couldn't send your feedback", "It wasn't sent to the hunter. Check your connection and try again.");
     } finally {
+      sendingRef.current = false;
       setIsProcessing(false);
     }
+  };
+
+  // Closing after an approval in this sheet always tells the caller to
+  // refresh, whichever way the sheet is closed.
+  const closeSheet = () => {
+    onClose();
+    if (approvedHere) onComplete();
   };
 
   const handleHeaderClose = () => {
     if (showRevisionForm) { setShowRevisionForm(false); return; }
     if (showPayoutWarning) { setShowPayoutWarning(false); return; }
-    onClose();
+    closeSheet();
+  };
+
+  // Android's back button: steps back like the header arrow, and is ignored
+  // while a release or rating is being sent so it can't drop the poster out
+  // mid-request without knowing how it ended.
+  const handleRequestClose = () => {
+    if (isProcessing) return;
+    handleHeaderClose();
   };
 
   const handleSubmitRating = async () => {
+    if (sendingRef.current) return;
     if (rating === 0) { Alert.alert('Add Rating', 'Please provide a star rating.'); return; }
     const targetHunterId = hunterId || submission?.hunter_id || '';
     if (!targetHunterId) {
@@ -442,6 +503,7 @@ export function PosterReviewModal({
       return;
     }
     const trimmedComment = ratingComment.trim();
+    sendingRef.current = true;
     try {
       setIsProcessing(true);
       await completionService.submitRating({
@@ -464,17 +526,31 @@ export function PosterReviewModal({
           .trackEvent('review_submitted', { bountyId: String(bountyId), role: 'poster' })
           .catch(() => {});
       }
+      // Says only what this step did: it saved a review. It used to add
+      // "Payment has been released." even from a completed job's "Leave a
+      // review", where this sheet releases nothing (and a v3 release is still
+      // settling when the rating step first appears).
       Alert.alert(
-        'Bounty Complete!',
-        `${displayHunterName} has been rated ${rating} stars. ${!isForHonor ? 'Payment has been released.' : 'Thank you for your feedback!'}`,
+        'Thanks for your review',
+        `You rated ${displayHunterName} ${rating} ${rating === 1 ? 'star' : 'stars'}.`,
         [{ text: 'OK', onPress: () => { onClose(); onComplete(); } }]
       );
     } catch (err) {
       console.error('Error submitting rating:', err);
-      Alert.alert('Rating Error', 'Failed to submit rating, but the bounty has been completed successfully.', [
-        { text: 'OK', onPress: () => { onClose(); onComplete(); } },
-      ]);
+      // The stars and comment stay on screen, so "Try again" is one tap. It
+      // used to close the sheet and throw them away.
+      Alert.alert(
+        "Couldn't save your review",
+        approvedHere
+          ? 'Your approval of the work already went through. Only the review was not saved. Check your connection and try again.'
+          : 'Your review was not saved. Check your connection and try again.',
+        [
+          { text: 'Not now', style: 'cancel', onPress: () => { onClose(); onComplete(); } },
+          { text: 'Try again', onPress: () => { void handleSubmitRating(); } },
+        ]
+      );
     } finally {
+      sendingRef.current = false;
       setIsProcessing(false);
     }
   };
@@ -551,13 +627,87 @@ export function PosterReviewModal({
 
   if (!visible) return null;
 
+  // Shared by the normal flow (after approval) and startOnRating (a completed
+  // job's "Leave a review", which may have no submission row to show).
+  const ratingForm = (
+    <KeyboardAwareScrollView
+      style={s.scrollView}
+      contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
+    >
+      <View style={s.ratingFormContainer}>
+        {approvedHere && (
+          // The release's only confirmation used to be a haptic. Announced
+          // to screen readers as the step changes.
+          <View
+            style={s.approvedBanner}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            testID="review-approved-banner"
+          >
+            <MaterialIcons name="check-circle" size={20} color={theme.success} />
+            <Text style={s.approvedBannerText}>
+              {isForHonor
+                ? `Work approved. ${displayHunterName} has been told the job is complete.`
+                : architecture === 'v1' || architecture === 'v2'
+                  ? `Work approved. ${formattedPayoutAmount} has been released to ${displayHunterName}.`
+                  : `Work approved. Your ${formattedPayoutAmount} payment to ${displayHunterName} is being processed.`}
+            </Text>
+          </View>
+        )}
+        <MaterialIcons name="star" size={64} color={theme.warningText} />
+        <Text style={s.ratingTitle}>Rate {hunterName}</Text>
+        <Text style={s.ratingSubtitle}>How would you rate their work on this bounty?</Text>
+        <View style={s.ratingStarsContainer}>
+          <RatingStars rating={rating} onRatingChange={setRating} size="large" />
+        </View>
+        <TextInput
+          style={s.commentInput}
+          placeholder="Add an optional comment (visible to hunter)..."
+          placeholderTextColor={theme.textDisabled}
+          value={ratingComment}
+          onChangeText={setRatingComment}
+          multiline
+          numberOfLines={4}
+          maxLength={500}
+          textAlignVertical="top"
+        />
+        {/* "Submit review", not "Complete Bounty & Rate Hunter": by this step
+            the job is already complete, and the old label read as one more
+            irreversible step. Dimmed until a star is chosen. */}
+        <TouchableOpacity accessibilityRole="button"
+          style={[s.primaryButton, (isProcessing || rating === 0) && s.buttonDisabled]}
+          onPress={handleSubmitRating}
+          disabled={isProcessing || rating === 0}
+          accessibilityLabel={isProcessing ? 'Sending your review' : 'Submit review'}
+          accessibilityHint={rating === 0 ? 'Choose a star rating first' : undefined}
+          accessibilityState={{ disabled: isProcessing || rating === 0, busy: isProcessing }}
+        >
+          {isProcessing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={s.buttonText}>Submit review</Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={s.skipRatingButton}
+          onPress={handleSkipRating}
+          disabled={isProcessing}
+          accessibilityRole="button"
+          accessibilityLabel="Skip rating for now"
+        >
+          <Text style={s.skipRatingText}>Skip for now</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAwareScrollView>
+  );
+
   return (
     <>
       <Modal
         visible={visible}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={onClose}
+        onRequestClose={handleRequestClose}
       >
         <View style={[s.container, { paddingTop: insets.top }]}>
           {/* Header */}
@@ -565,7 +715,9 @@ export function PosterReviewModal({
             <TouchableOpacity accessibilityRole="button"
               style={s.closeButton}
               onPress={handleHeaderClose}
-              accessibilityLabel={showRevisionForm || showPayoutWarning ? 'Back to previous step' : 'Close review modal'}
+              disabled={isProcessing}
+              accessibilityLabel={showRevisionForm || showPayoutWarning ? 'Back to previous step' : 'Close'}
+              accessibilityState={{ disabled: isProcessing }}
             >
               <MaterialIcons
                 name={(showRevisionForm || showPayoutWarning) ? 'arrow-back' : 'close'}
@@ -573,16 +725,39 @@ export function PosterReviewModal({
                 color={theme.text}
               />
             </TouchableOpacity>
-            <Text style={s.headerTitle}>
-              {showRevisionForm ? 'Request Changes' : showPayoutWarning ? 'Confirm Payout' : 'Review Submission'}
+            <Text style={s.headerTitle} accessibilityRole="header">
+              {showRevisionForm
+                ? 'Request Changes'
+                : showPayoutWarning
+                  ? 'Confirm Payout'
+                  : showRatingForm || startOnRating
+                    ? 'Leave a review'
+                    : 'Review Submission'}
             </Text>
-            <View style={{ width: 24 }} />
+            <View style={s.headerSpacer} />
           </View>
 
           {isLoading ? (
-            <View style={s.loadingContainer}>
+            <View style={s.loadingContainer} accessibilityLiveRegion="polite">
               <ActivityIndicator size="large" color={theme.primaryLight} />
-              <Text style={s.loadingText}>Loading submission...</Text>
+              <Text style={s.loadingText}>{startOnRating ? 'Opening your review…' : 'Loading the submitted work…'}</Text>
+            </View>
+          ) : startOnRating && showRatingForm ? (
+            ratingForm
+          ) : loadFailed ? (
+            <View style={s.emptyContainer} accessibilityRole="alert" testID="review-load-failed">
+              <MaterialIcons name="cloud-off" size={64} color={theme.textSecondary} />
+              <Text style={s.emptyText}>{"Couldn't load the submitted work"}</Text>
+              <Text style={s.emptySubtext}>
+                {"Check your connection and try again. Opening this screen doesn't approve or pay anything."}
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={s.retryButton}
+                onPress={() => { void loadSubmission(); }}
+              >
+                <Text style={s.buttonText}>Try again</Text>
+              </TouchableOpacity>
             </View>
           ) : !submission ? (
             <View style={s.emptyContainer}>
@@ -622,7 +797,13 @@ export function PosterReviewModal({
               </View>
 
               <SlideToConfirm
-                label={isProcessing ? 'Processing payout…' : 'Slide to confirm payout'}
+                label={
+                  isProcessing
+                    ? 'Processing payout…'
+                    : isForHonor
+                      ? 'Slide to mark complete'
+                      : 'Slide to confirm payout'
+                }
                 onConfirmed={() => { handleApprove(); }}
                 disabled={isProcessing}
                 isProcessing={isProcessing}
@@ -640,50 +821,7 @@ export function PosterReviewModal({
               </View>
             </ScrollView>
           ) : showRatingForm ? (
-            <KeyboardAwareScrollView
-              style={s.scrollView}
-              contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
-            >
-              <View style={s.ratingFormContainer}>
-                <MaterialIcons name="star" size={64} color={theme.warningText} />
-                <Text style={s.ratingTitle}>Rate {hunterName}</Text>
-                <Text style={s.ratingSubtitle}>How would you rate their work on this bounty?</Text>
-                <View style={s.ratingStarsContainer}>
-                  <RatingStars rating={rating} onRatingChange={setRating} size="large" />
-                </View>
-                <TextInput
-                  style={s.commentInput}
-                  placeholder="Add an optional comment (visible to hunter)..."
-                  placeholderTextColor={theme.textDisabled}
-                  value={ratingComment}
-                  onChangeText={setRatingComment}
-                  multiline
-                  numberOfLines={4}
-                  maxLength={500}
-                  textAlignVertical="top"
-                />
-                <TouchableOpacity accessibilityRole="button"
-                  style={[s.primaryButton, isProcessing && s.buttonDisabled]}
-                  onPress={handleSubmitRating}
-                  disabled={isProcessing || rating === 0}
-                >
-                  {isProcessing ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={s.buttonText}>Complete Bounty & Rate Hunter</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.skipRatingButton}
-                  onPress={handleSkipRating}
-                  disabled={isProcessing}
-                  accessibilityRole="button"
-                  accessibilityLabel="Skip rating for now"
-                >
-                  <Text style={s.skipRatingText}>Skip for now</Text>
-                </TouchableOpacity>
-              </View>
-            </KeyboardAwareScrollView>
+            ratingForm
           ) : showRevisionForm ? (
             <KeyboardAwareScrollView
               style={s.scrollView}
@@ -818,6 +956,22 @@ export function PosterReviewModal({
   );
 }
 
+/**
+ * A release or approval that didn't confirm. It never says "approved" and
+ * never says "nothing was paid": approveAndRelease's false/throw covers both
+ * "release didn't happen" and "release went through, approval didn't". So the
+ * poster is sent to check the job before trying again.
+ */
+export function paymentNotConfirmedTitle(isForHonor: boolean): string {
+  return isForHonor ? "Couldn't mark this complete" : "Payment not confirmed";
+}
+
+export function paymentNotConfirmedMessage(isForHonor: boolean): string {
+  return isForHonor
+    ? "We couldn't confirm the job was marked complete. Check your connection and try again."
+    : "We couldn't confirm the payment went through. Before trying again, close this and check the job's Payment section. If you're unsure, contact support.";
+}
+
 function makeSliderStyles(t: AppTheme) {
   return StyleSheet.create({
     sliderWrapper: {
@@ -878,12 +1032,48 @@ function makeStyles(t: AppTheme) {
       borderBottomWidth: 1,
       borderBottomColor: t.isDark ? withAlpha(t.primary, 0.1) : t.border,
     },
+    // 44x44: the minimum comfortable target (it was 32x32).
     closeButton: {
-      padding: 4,
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerSpacer: {
+      width: 44,
     },
     headerTitle: {
+      flex: 1,
+      textAlign: 'center',
       color: t.text,
       fontSize: 18,
+      fontWeight: '600',
+    },
+    retryButton: {
+      backgroundColor: t.primary,
+      paddingVertical: 14,
+      paddingHorizontal: 32,
+      borderRadius: 12,
+      minHeight: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    approvedBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      alignSelf: 'stretch',
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: withAlpha(t.success, 0.12),
+      borderWidth: 1,
+      borderColor: withAlpha(t.success, 0.4),
+    },
+    approvedBannerText: {
+      flex: 1,
+      color: t.text,
+      fontSize: 15,
+      lineHeight: 21,
       fontWeight: '600',
     },
     scrollView: {
@@ -1112,10 +1302,12 @@ function makeStyles(t: AppTheme) {
     skipRatingButton: {
       paddingVertical: 12,
       paddingHorizontal: 16,
+      minHeight: 44,
+      justifyContent: 'center',
     },
     skipRatingText: {
       color: t.textSecondary,
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: '600',
     },
     revisionFormContainer: {
@@ -1209,9 +1401,12 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
       letterSpacing: 0.2,
     },
+    // The one line that says this can't be undone: full-contrast text at a
+    // readable size, not 12px secondary grey.
     warningFootnote: {
-      color: t.textSecondary,
-      fontSize: 12,
+      color: t.text,
+      fontSize: 15,
+      fontWeight: '600',
       textAlign: 'center',
     },
     warningActions: {
@@ -1225,14 +1420,15 @@ function makeStyles(t: AppTheme) {
       gap: 6,
       paddingHorizontal: 18,
       paddingVertical: 10,
+      minHeight: 44,
       borderRadius: 999,
       borderWidth: 1,
       borderColor: t.isDark ? withAlpha(t.primary, 0.35) : t.border,
       backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : t.surfaceSecondary,
     },
     warningCancelText: {
-      color: t.textSecondary,
-      fontSize: 13,
+      color: t.text,
+      fontSize: 15,
       fontWeight: '600',
       letterSpacing: 0.3,
     },

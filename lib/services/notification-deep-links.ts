@@ -80,12 +80,13 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'application_pending_reminder' && bountyId) {
         return { kind: 'route', path: `/postings/${bountyId}` };
       }
-      // Poster-facing "you never rated your hunter" nudge: go to the poster's
-      // own bounty management screen, where my-posting-expandable.tsx's
-      // review button re-opens PosterReviewModal straight onto the rating
-      // step (it re-shows automatically for an approved, unrated submission).
+      // Poster-facing "you never rated your hunter" nudge: the poster's own
+      // bounty screen with ?openReview=true, which opens PosterReviewModal on
+      // its rating step (unless this hunter was already rated for this job).
+      // Its "Leave a review" button used to push the payout receipt, which has
+      // no rating UI.
       if (ctx.type === 'rating_reminder' && bountyId) {
-        return { kind: 'route', path: `/postings/${bountyId}` };
+        return { kind: 'route', path: `/postings/${bountyId}?openReview=true` };
       }
       // Hunter-facing "Please rate the poster" (completion / rating_prompt,
       // enqueued on approval by handle_completion_review_notification): the

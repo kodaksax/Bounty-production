@@ -4,6 +4,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
+const STAR_HIT_SLOP = { top: 8, bottom: 8, left: 2, right: 2 } as const;
+
 interface RatingStarsProps {
   rating: number;
   onRatingChange?: (rating: number) => void;
@@ -50,8 +52,12 @@ export function RatingStars({
           return (
             <StarComponent
               key={value}
+              style={readonly ? undefined : styles.interactiveStar}
               onPress={readonly ? undefined : () => handleStarPress(value)}
               disabled={readonly}
+              // Keep interactive targets at least 44px tall. Horizontal slop
+              // stays inside the 4px gap so neighboring stars never overlap.
+              hitSlop={readonly ? undefined : STAR_HIT_SLOP}
               accessibilityRole={readonly ? undefined : 'button'}
               accessibilityLabel={`${value} star${value > 1 ? 's' : ''}`}
               accessibilityState={readonly ? undefined : { selected: isFilled }}
@@ -90,6 +96,10 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
+    },
+    interactiveStar: {
+      minHeight: 44,
+      justifyContent: 'center',
     },
     hint: {
       color: theme.textSecondary,

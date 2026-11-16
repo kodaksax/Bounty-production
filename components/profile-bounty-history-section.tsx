@@ -1,5 +1,7 @@
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useAuthContext } from '../hooks/use-auth-context';
 import { bountyService } from 'lib/services/bounty-service';
 import type { Bounty } from 'lib/services/database.types';
 import { formatPublicLocation } from 'lib/utils/public-location';
@@ -27,6 +29,12 @@ export function ProfileBountyHistorySection({
   const [bounties, setBounties] = useState<Bounty[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  // Ownership is decided by the signed-in user's id against the bounty's
+  // poster id, never by isOwnProfile or a display name. /postings/[bountyId]
+  // re-checks it and redirects anyone else, so this only picks the screen.
+  const { session } = useAuthContext();
+  const currentUserId = session?.user?.id ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -74,21 +82,36 @@ export function ProfileBountyHistorySection({
           </Text>
         </View>
       ) : (
-        bounties.map((bounty) => (
-          <BountyCompactItem
-            key={String(bounty.id)}
-            id={bounty.id}
-            title={bounty.title}
-            username={bounty.username}
-            price={bounty.amount}
-            distance={bounty.distance ?? null}
-            location={formatPublicLocation(bounty) ?? undefined}
-            isForHonor={bounty.is_for_honor}
-            user_id={bounty.poster_id || bounty.user_id}
-            work_type={bounty.work_type}
-            poster_avatar={bounty.poster_avatar}
-          />
-        ))
+        bounties.map((bounty) => {
+          const posterId = bounty.poster_id || bounty.user_id;
+          const isMine = !!currentUserId && !!posterId && String(posterId) === String(currentUserId);
+          return (
+            <BountyCompactItem
+              key={String(bounty.id)}
+              id={bounty.id}
+              title={bounty.title}
+              username={bounty.username}
+              price={bounty.amount}
+              distance={bounty.distance ?? null}
+              location={formatPublicLocation(bounty) ?? undefined}
+              isForHonor={bounty.is_for_honor}
+              user_id={bounty.poster_id || bounty.user_id}
+              work_type={bounty.work_type}
+              poster_avatar={bounty.poster_avatar}
+              // Your own job opens its management screen, not the worker-facing
+              // detail dialog with "Apply for Bounty".
+              onPress={
+                isMine
+                  ? () =>
+                      router.push({
+                        pathname: '/postings/[bountyId]',
+                        params: { bountyId: String(bounty.id) },
+                      } as never)
+                  : undefined
+              }
+            />
+          );
+        })
       )}
     </View>
   );

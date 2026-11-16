@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { ThemedButton } from 'components/themed/ThemedButton';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -32,6 +32,8 @@ export interface FeedbackFormProps {
   /** Allow attaching an optional screenshot (bug reports only). */
   allowScreenshot?: boolean;
   submitLabel?: string;
+  /** Pre-fills the first field, e.g. naming the job a support message is about. */
+  initialSubject?: string;
   /**
    * Submit handler. Should resolve to a result describing success/failure so the
    * form can surface confirmation or an inline error with a retry option.
@@ -54,17 +56,23 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   descriptionPlaceholder,
   allowScreenshot = false,
   submitLabel = 'Submit',
+  initialSubject,
   onSubmit,
   onCancel,
   onSuccess,
 }) => {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(initialSubject ?? '');
   const [description, setDescription] = useState('');
   const [screenshotUri, setScreenshotUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `submitting` is state, so a fast double tap could pass it twice. The
+  // second call then hit feedbackService's duplicate check and showed
+  // "Duplicate submission ignored" as an error while the first was still
+  // sending (and re-enabled the button).
+  const submittingRef = useRef(false);
 
   const canSubmit = subject.trim().length > 0 && description.trim().length > 0 && !submitting;
 
@@ -90,7 +98,8 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -114,6 +123,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       console.error('[FeedbackForm] Submission error:', e);
       setError('Something went wrong. Please try again.');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -180,12 +190,20 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       )}
 
       {error && (
-        <View style={s.errorCard}>
+        // Announced when it appears: a failed send must not look like silence.
+        <View
+          style={s.errorCard}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+          testID="feedback-form-error"
+        >
           <Text style={s.errorText}>{error}</Text>
           <TouchableOpacity
             onPress={handleSubmit}
+            disabled={submitting}
             accessibilityRole="button"
             accessibilityLabel="Retry submission"
+            accessibilityState={{ disabled: submitting, busy: submitting }}
             style={s.retryButton}
           >
             <Text style={s.retryButtonText}>Try again</Text>
@@ -200,7 +218,9 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
           loading={submitting}
           onPress={handleSubmit}
           disabled={!canSubmit}
-          accessibilityLabel={submitLabel}
+          accessibilityRole="button"
+          accessibilityLabel={submitting ? 'Sending' : submitLabel}
+          accessibilityState={{ disabled: !canSubmit, busy: submitting }}
         />
         {onCancel && (
           <ThemedButton
@@ -218,8 +238,11 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
+    // Readability floor for the support / bug / feature forms: 14px labels,
+    // 16px input text, 44px+ inputs.
     label: {
-      fontSize: 12,
+      fontSize: 14,
+      fontWeight: '600',
       color: t.textSecondary,
       marginBottom: 6,
     },
@@ -230,8 +253,9 @@ function makeStyles(t: AppTheme) {
       borderColor: t.border,
       paddingHorizontal: 12,
       paddingVertical: 10,
+      minHeight: 48,
       color: t.text,
-      fontSize: 14,
+      fontSize: 16,
       marginBottom: 16,
     },
     textArea: {
@@ -281,21 +305,27 @@ function makeStyles(t: AppTheme) {
       padding: 12,
       marginBottom: 16,
     },
+    // Full-contrast text: t.error on its own tint measured 3.6:1 (light) and
+    // 4.0:1 (dark), under the 4.5:1 body-text minimum. The red border and
+    // tint still mark it as an error, and it is announced as an alert.
     errorText: {
-      color: t.error,
-      fontSize: 12,
+      color: t.text,
+      fontSize: 14,
+      lineHeight: 20,
       flex: 1,
       marginRight: 12,
     },
     retryButton: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      minHeight: 44,
+      justifyContent: 'center',
       borderRadius: 8,
       backgroundColor: t.error,
     },
     retryButtonText: {
       color: '#ffffff',
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: '600',
     },
   });
