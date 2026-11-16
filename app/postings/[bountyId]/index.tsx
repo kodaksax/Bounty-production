@@ -26,7 +26,7 @@
  */
 import { MaterialIcons } from '@expo/vector-icons';
 import { saveStructuredBountyEdit } from '../../../lib/services/bounty-requirements-service';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -169,12 +169,19 @@ export default function BountyDashboard() {
     !bounty.is_for_honor &&
     Number(bounty.amount) > 0;
   const [chargeRead, setChargeRead] = useState<OpenJobCharge | null>(null);
+  // Bumped by the Payment card's "Check again" so a failed read can be retried
+  // without knowing about pull-to-refresh.
+  const [chargeReadAttempt, setChargeReadAttempt] = useState(0);
   React.useEffect(() => {
     if (!checksCharge || !bounty) {
       setChargeRead(null);
       return;
     }
     let cancelled = false;
+    // Every re-read starts from "Checking…" rather than showing the previous
+    // answer as current: after a hire elsewhere, "You haven't paid" would be
+    // stale.
+    setChargeRead(null);
     readOpenJobMoney(bounty)
       .then(({ charge }) => {
         if (!cancelled) setChargeRead(charge);
@@ -185,8 +192,9 @@ export default function BountyDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [checksCharge, bounty]);
+  }, [checksCharge, bounty, chargeReadAttempt]);
   const openJobCharge: OpenJobCharge | null = !checksCharge ? null : chargeRead ?? 'checking';
+  const retryChargeRead = useCallback(() => setChargeReadAttempt(n => n + 1), []);
 
   React.useEffect(() => {
     pushColor(theme.background);
@@ -222,6 +230,26 @@ export default function BountyDashboard() {
       setIsRefreshing(false);
     }
   }, [refresh]);
+
+  // Coming back from Requests (an offer accepted), a chat, Contact support or
+  // the edit screen: re-read quietly so the page doesn't keep showing the
+  // state it had when the poster left (e.g. "You haven't paid anything yet"
+  // for a job they just hired someone on). The first focus is the initial
+  // load, which useBountyLifecycle already does.
+  // Read through a ref so a new `refresh` identity (auth restoring) doesn't
+  // count as a focus and fire an extra load.
+  const hasFocusedOnceRef = React.useRef(false);
+  const refreshRef = React.useRef(refresh);
+  refreshRef.current = refresh;
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnceRef.current) {
+        hasFocusedOnceRef.current = true;
+        return;
+      }
+      void refreshRef.current();
+    }, [])
+  );
 
   const goBack = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -388,8 +416,12 @@ export default function BountyDashboard() {
     [refundEscrow, goBack, refresh]
   );
 
+  // A quick second tap on "Take this job down" used to start a second money
+  // read and stack a second confirmation behind the first.
+  const takeDownCheckRef = React.useRef(false);
   const handleCancelAndRefund = useCallback(async () => {
-    if (!bounty || !canPosterCancelBounty(bounty) || cancellingRef.current) return;
+    if (!bounty || !canPosterCancelBounty(bounty) || cancellingRef.current || takeDownCheckRef.current) return;
+    takeDownCheckRef.current = true;
     setBusyAction('delete');
     // Re-read on every tap: the take-down acts on this fresh plan, never on
     // what the screen showed when it loaded.
@@ -399,10 +431,16 @@ export default function BountyDashboard() {
       ({ plan, charge } = await readOpenJobMoney(bounty));
     } catch {
       setBusyAction(null);
-      Alert.alert("Can't cancel right now", "We couldn't check what's held for this bounty. Check your connection and try again.");
+      takeDownCheckRef.current = false;
+      Alert.alert(
+        "Can't take this job down right now",
+        "We couldn't check what's been paid for this job, so nothing was changed. Check your connection and try again."
+      );
       return;
     }
     setBusyAction(null);
+    // The confirmation below is modal, so the guard can drop once it shows.
+    takeDownCheckRef.current = false;
     const copy = describeTakeDown(bounty, plan, charge);
     Alert.alert(copy.title, copy.message, [
       { text: 'Keep it', style: 'cancel' },
@@ -846,7 +884,9 @@ export default function BountyDashboard() {
               <Text style={s.cardBody}>Bounty reward</Text>
               <Text style={s.paymentAmount}>${bounty.amount}</Text>
             </View>
-            <View style={s.paymentStateRow} testID="bounty-payment-state">
+            {/* Live region: "Checking your payment…" changing to the answer
+                is announced by TalkBack rather than happening silently. */}
+            <View style={s.paymentStateRow} testID="bounty-payment-state" accessibilityLiveRegion="polite">
               <MaterialIcons
                 name={payment.icon}
                 size={16}
@@ -863,6 +903,18 @@ export default function BountyDashboard() {
                 <Text style={s.cardBodyMuted}>{payment.detail}</Text>
               </View>
             </View>
+            {openJobCharge === 'unknown' && (
+              <TouchableOpacity
+                style={[s.outlineBtn, s.selfStart]}
+                onPress={retryChargeRead}
+                accessibilityRole="button"
+                accessibilityLabel="Check payment again"
+                testID="bounty-payment-retry"
+              >
+                <MaterialIcons name="refresh" size={16} color={theme.text} />
+                <Text style={s.outlineBtnText}>Check again</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -921,7 +973,12 @@ export default function BountyDashboard() {
           isForHonor={!!bounty.is_for_honor}
           architecture={isV3Bounty(bounty as any) ? 'v3' : isPhase2Bounty(bounty as any) ? 'v2' : 'v1'}
           startOnRating={reviewStartsOnRating}
-          onClose={closeReview}
+          // Re-read on any close: after a release that didn't confirm, the
+          // modal tells the poster to check this page's Payment section.
+          onClose={() => {
+            closeReview();
+            void refresh();
+          }}
           onComplete={() => {
             closeReview();
             void refresh();
@@ -1022,7 +1079,7 @@ function describePaymentLine(args: {
     return {
       icon: 'help-outline',
       headline: null,
-      detail: "We couldn't check your payment just now. Pull down to refresh.",
+      detail: "We couldn't check your payment just now. Tap Check again, or pull down to refresh.",
     };
   }
   if (escrowHeld) {
@@ -1228,7 +1285,8 @@ function makeStyles(t: AppTheme) {
     countPill: {
       backgroundColor: t.warning,
       minWidth: 24,
-      height: 24,
+      // minHeight, not height: a fixed 24px clipped the count at large text sizes.
+      minHeight: 24,
       borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
@@ -1260,6 +1318,7 @@ function makeStyles(t: AppTheme) {
     outlineBtnText: { color: t.text, fontSize: 13, fontWeight: '600' },
     dimmedBtn: { opacity: 0.6 },
     dangerBtn: { borderColor: t.error },
+    selfStart: { alignSelf: 'flex-start' },
     manageRow: {
       flexDirection: 'row',
       gap: 8,

@@ -37,6 +37,12 @@ jest.mock('expo-image', () => ({ Image: () => null }));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: mockBack, canGoBack: () => true }),
+  // The first focus only; returning to the page is covered in
+  // bounty-dashboard-senior-fixes.test.tsx.
+  useFocusEffect: (cb: () => void) => {
+    const { useEffect } = require('react');
+    useEffect(() => cb(), [cb]);
+  },
 }));
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');

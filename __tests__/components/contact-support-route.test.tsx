@@ -4,7 +4,7 @@
  * composer. It now opens /support/contact: the real ContactSupportScreen
  * form, carrying the job, and closable like any other screen.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
@@ -83,6 +83,78 @@ describe('/support/contact', () => {
     render(<ContactSupportRoute />);
     fireEvent.press(screen.getByLabelText('Back'));
     expect(mockReplace).toHaveBeenCalledWith('/tabs/bounty-app');
+  });
+});
+
+describe('QA pass 2: sending, failing and retrying (2026-11-15)', () => {
+  const fill = () => {
+    mockParams = { bountyId: 'b1', bountyTitle: 'Remove old furniture from my garage' };
+    render(<ContactSupportRoute />);
+    fireEvent.changeText(screen.getByLabelText('Details'), 'The helper never showed up.');
+  };
+
+  it('a double tap sends one message and never shows "Duplicate submission ignored"', async () => {
+    let resolveSend: (v: unknown) => void = () => {};
+    mockSubmit.mockReturnValue(new Promise(r => { resolveSend = r; }));
+    fill();
+    // Both taps land before React re-renders the button as disabled: the
+    // case `submitting` state alone can't stop.
+    const send = screen.getByLabelText('Send Message');
+    act(() => {
+      fireEvent.press(send);
+      fireEvent.press(send);
+    });
+    await act(async () => {
+      resolveSend({ success: true });
+    });
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/duplicate/i)).toBeNull();
+    expect(screen.queryByTestId('feedback-form-error')).toBeNull();
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Thank you!', expect.any(String), expect.any(Array)));
+  });
+
+  it('while sending, the button says so to screen readers', async () => {
+    mockSubmit.mockReturnValue(new Promise(() => {}));
+    fill();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Send Message'));
+    });
+    const sending = screen.getByLabelText('Sending');
+    expect(sending.props.accessibilityState).toEqual(expect.objectContaining({ busy: true }));
+  });
+
+  it('a failed send says so (announced), keeps what was typed, shows no "Thank you", and retries', async () => {
+    mockSubmit
+      .mockResolvedValueOnce({ success: false, error: 'Could not send your message. Please try again.' })
+      .mockResolvedValueOnce({ success: true });
+    fill();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Send Message'));
+    });
+    const error = await screen.findByTestId('feedback-form-error');
+    expect(error.props.accessibilityRole).toBe('alert');
+    expect(error.props.accessibilityLiveRegion).toBe('polite');
+    expect(screen.getByText('Could not send your message. Please try again.')).toBeTruthy();
+    expect(Alert.alert).not.toHaveBeenCalledWith('Thank you!', expect.anything(), expect.anything());
+    expect(screen.getByLabelText('Details').props.value).toBe('The helper never showed up.');
+    expect(mockBack).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Retry submission'));
+    });
+    await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(2));
+    expect(mockSubmit.mock.calls[1][0].message).toContain('Job ID: b1');
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Thank you!', expect.any(String), expect.any(Array)));
+  });
+
+  it('a thrown error is also a failure, not a success', async () => {
+    mockSubmit.mockRejectedValueOnce(new Error('offline'));
+    fill();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Send Message'));
+    });
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 });
 

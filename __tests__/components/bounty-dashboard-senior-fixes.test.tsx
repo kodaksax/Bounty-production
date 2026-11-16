@@ -42,9 +42,18 @@ const mockApproveAndRelease = jest.fn();
 const mockRefresh = jest.fn();
 
 jest.mock('expo-image', () => ({ Image: () => null }));
+// The latest focus callback, so a test can "come back" to the page.
+let mockFocusCallback: (() => void) | null = null;
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn(), canGoBack: () => true }),
+  useFocusEffect: (cb: () => void) => {
+    const { useEffect } = require('react');
+    useEffect(() => {
+      mockFocusCallback = cb;
+      cb();
+    }, [cb]);
+  },
 }));
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');
@@ -100,11 +109,14 @@ jest.mock('../../components/edit-posting-modal', () => ({ EditPostingModal: () =
 // Stands in for the real modal (covered in poster-review-modal-start-on-rating
 // .test.tsx); here only whether it opens, and how, matters.
 jest.mock('../../components/poster-review-modal', () => {
-  const { Text } = require('react-native');
+  const { Text, TouchableOpacity } = require('react-native');
   return {
     PosterReviewModal: (p: any) =>
       p.visible ? (
-        <Text testID="poster-review-modal">{`review:${p.bountyId}:${p.hunterId}:${p.startOnRating ? 'rating' : 'review'}`}</Text>
+        <>
+          <Text testID="poster-review-modal">{`review:${p.bountyId}:${p.hunterId}:${p.startOnRating ? 'rating' : 'review'}`}</Text>
+          <TouchableOpacity testID="poster-review-modal-close" onPress={p.onClose} />
+        </>
       ) : null,
   };
 });
@@ -444,5 +456,90 @@ describe('C: Applications card', () => {
     mockPlan.mockReturnValue(new Promise(() => {}));
     render(<BountyDashboard />);
     expect(screen.getByText('Review who applied and choose the hunter you want.')).toBeTruthy();
+  });
+});
+
+describe('QA pass 2: resilience (2026-11-15)', () => {
+  it('coming back to the page re-reads it; the first focus does not double the initial load', async () => {
+    render(<BountyDashboard />);
+    await screen.findByText("You haven't paid anything yet.");
+    expect(mockRefresh).not.toHaveBeenCalled();
+    // e.g. back from Requests after accepting an offer.
+    await act(async () => {
+      mockFocusCallback?.();
+    });
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed payment read offers "Check again", which re-reads and shows the real answer', async () => {
+    mockPlan.mockRejectedValueOnce(new Error('offline'));
+    render(<BountyDashboard />);
+    expect(await screen.findByText(/couldn't check your payment/i)).toBeTruthy();
+    const retry = screen.getByLabelText('Check payment again');
+    expect(retry.props.accessibilityRole ?? 'button').toBe('button');
+    await act(async () => {
+      fireEvent.press(retry);
+    });
+    expect(await screen.findByText("You haven't paid anything yet.")).toBeTruthy();
+    expect(screen.queryByLabelText('Check payment again')).toBeNull();
+    expect(mockPlan).toHaveBeenCalledTimes(2);
+  });
+
+  it('"Check again" only appears when the read failed', async () => {
+    render(<BountyDashboard />);
+    await screen.findByText("You haven't paid anything yet.");
+    expect(screen.queryByLabelText('Check payment again')).toBeNull();
+  });
+
+  it('a double tap on "Take this job down" reads once and shows one confirmation', async () => {
+    let resolvePlan: (v: unknown) => void = () => {};
+    render(<BountyDashboard />);
+    await screen.findByText("You haven't paid anything yet.");
+    mockPlan.mockClear();
+    mockPlan.mockReturnValue(new Promise(r => { resolvePlan = r; }));
+    const button = screen.getByLabelText('Take this job down');
+    fireEvent.press(button);
+    fireEvent.press(button);
+    await act(async () => {
+      resolvePlan({ refundAmount: 0, destination: null });
+    });
+    expect(mockPlan).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledTimes(1));
+    expect(lastAlert().title).toBe('Take this job down?');
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it('a failed take-down check says nothing changed and does not cancel', async () => {
+    render(<BountyDashboard />);
+    await screen.findByText("You haven't paid anything yet.");
+    mockPlan.mockRejectedValue(new Error('offline'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Take this job down'));
+    });
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    expect(lastAlert().title).toBe("Can't take this job down right now");
+    expect(lastAlert().message).toContain('nothing was changed');
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it('closing the review sheet any way re-reads the page, so it never shows a stale "Review & release"', async () => {
+    mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
+    mockLifecycleArgs = { submissionStatus: 'pending' };
+    render(<BountyDashboard />);
+    const primary = resolveBountyLifecycle({ bounty: mockBounty, role: 'poster', submissionStatus: 'pending' } as any)
+      .primaryAction!.label;
+    fireEvent.press(screen.getByLabelText(primary));
+    expect(screen.getByTestId('poster-review-modal')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('poster-review-modal-close'));
+    });
+    expect(screen.queryByTestId('poster-review-modal')).toBeNull();
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('the payment status line is a polite live region (announced when "Checking…" resolves)', async () => {
+    render(<BountyDashboard />);
+    await screen.findByText("You haven't paid anything yet.");
+    expect(screen.getByTestId('bounty-payment-state').props.accessibilityLiveRegion).toBe('polite');
   });
 });

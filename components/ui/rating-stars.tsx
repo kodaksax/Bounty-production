@@ -4,6 +4,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
+const STAR_HIT_SLOP = { top: 8, bottom: 8, left: 2, right: 2 } as const;
+
 interface RatingStarsProps {
   rating: number;
   onRatingChange?: (rating: number) => void;
@@ -52,6 +54,10 @@ export function RatingStars({
               key={value}
               onPress={readonly ? undefined : () => handleStarPress(value)}
               disabled={readonly}
+              // Taller tap area without moving anything: a large star is
+              // 32px, under the 44px a less steady finger needs. Horizontal
+              // slop stays inside the 4px gap so neighbours never overlap.
+              hitSlop={readonly ? undefined : STAR_HIT_SLOP}
               accessibilityRole={readonly ? undefined : 'button'}
               accessibilityLabel={`${value} star${value > 1 ? 's' : ''}`}
               accessibilityState={readonly ? undefined : { selected: isFilled }}
