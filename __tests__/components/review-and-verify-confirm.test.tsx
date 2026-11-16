@@ -106,7 +106,7 @@ describe('review-and-verify approval', () => {
     await tapApprove();
     const back = lastAlert().buttons.find((b: any) => b.style === 'cancel');
     expect(back.text).toBe('Back to review');
-    expect(back.onPress).toBeUndefined();
+    expect(back.onPress).toEqual(expect.any(Function));
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
   });
 
@@ -122,20 +122,51 @@ describe('review-and-verify approval', () => {
     );
   });
 
-  it('two stacked confirmations (a double tap) release only once', async () => {
+  it('blocks another dialog and ignores a stale confirmation after approval settles', async () => {
     let finish: (v: boolean) => void = () => {};
     mockApproveAndRelease.mockImplementation(() => new Promise(r => (finish = r)));
-    await tapApprove();
-    const first = lastAlert().buttons.find((b: any) => b.text === 'Release payment');
-    // The second tap's dialog, opened before the first was answered.
-    const second = first;
+    render(<ReviewAndVerifyScreen />);
+    const button = await screen.findByText('Approve and continue to payment');
+    await waitFor(() => expect(screen.getByText('ana_hunts')).toBeTruthy());
     await act(async () => {
-      first.onPress();
-      second.onPress();
+      fireEvent.press(button);
+      fireEvent.press(button);
+    });
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+
+    const staleConfirmation = lastAlert().buttons.find((b: any) => b.text === 'Release payment');
+    await act(async () => {
+      staleConfirmation.onPress();
     });
     expect(mockApproveAndRelease).toHaveBeenCalledTimes(1);
     await act(async () => {
       finish(true);
     });
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      // A confirmation callback already queued by the native dialog must
+      // remain consumed after the first approval has settled.
+      staleConfirmation.onPress();
+    });
+    expect(mockApproveAndRelease).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows another confirmation after cancellation or a retryable failure', async () => {
+    await tapApprove();
+    const cancel = lastAlert().buttons.find((b: any) => b.style === 'cancel');
+    await act(async () => {
+      cancel.onPress();
+    });
+    fireEvent.press(screen.getByText('Approve and continue to payment'));
+    expect(Alert.alert).toHaveBeenCalledTimes(2);
+
+    mockApproveAndRelease.mockResolvedValue(false);
+    const retry = lastAlert().buttons.find((b: any) => b.text === 'Release payment');
+    await act(async () => {
+      retry.onPress();
+    });
+    await waitFor(() => expect(mockApproveAndRelease).toHaveBeenCalledTimes(1));
+    fireEvent.press(screen.getByText('Approve and continue to payment'));
+    expect(Alert.alert).toHaveBeenCalledTimes(4);
   });
 });

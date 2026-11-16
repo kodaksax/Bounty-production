@@ -42,7 +42,7 @@ const mockCancel = jest.fn();
 const mockFundingRequirement = jest.fn();
 const mockHasRated = jest.fn();
 const mockApproveAndRelease = jest.fn();
-const mockGetSubmission = jest.fn();
+const mockGetSubmissionForReview = jest.fn();
 const mockSubmitRating = jest.fn();
 
 jest.mock('expo-image', () => ({ Image: () => null }));
@@ -99,7 +99,7 @@ jest.mock('../../lib/services/completion-approval', () => ({
 }));
 jest.mock('../../lib/services/completion-service', () => ({
   completionService: {
-    getSubmission: (...a: unknown[]) => mockGetSubmission(...a),
+    getSubmissionForReview: (...a: unknown[]) => mockGetSubmissionForReview(...a),
     submitRating: (...a: unknown[]) => mockSubmitRating(...a),
     approveSubmission: jest.fn(),
     requestRevision: jest.fn(),
@@ -225,7 +225,7 @@ beforeEach(() => {
   mockRefreshCount = 0;
   mockHasRated.mockResolvedValue(false);
   mockSubmitRating.mockResolvedValue(undefined);
-  mockGetSubmission.mockResolvedValue(PENDING_SUBMISSION);
+  mockGetSubmissionForReview.mockResolvedValue(PENDING_SUBMISSION);
 });
 
 afterEach(() => {
@@ -293,6 +293,7 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
     // ── 6. Open the review: nothing is released by opening it ─────────────
     fireEvent.press(await screen.findByLabelText(review));
     expect(await screen.findByText('Proceed to Payout')).toBeTruthy();
+    expect(mockGetSubmissionForReview).toHaveBeenCalledWith('b1', 'hunter-1');
     // The hunter's message, in the sheet (the page's Submitted work card has it too).
     expect(screen.getAllByText('All cleared out.').length).toBeGreaterThanOrEqual(2);
     expect(mockApproveAndRelease).not.toHaveBeenCalled();

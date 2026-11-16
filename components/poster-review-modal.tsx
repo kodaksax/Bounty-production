@@ -303,7 +303,7 @@ export function PosterReviewModal({
 
   useEffect(() => {
     if (visible) { loadSubmission(); }
-  }, [visible, bountyId]);
+  }, [visible, bountyId, hunterId]);
 
   useEffect(() => {
     let mounted = true;
@@ -385,7 +385,7 @@ export function PosterReviewModal({
     try {
       setIsLoading(true);
       setLoadFailed(false);
-      const data = await completionService.getSubmission(bountyId);
+      const data = await completionService.getSubmissionForReview(bountyId, hunterId);
       setSubmission(data);
     } catch (err) {
       console.error('Error loading submission:', err);

@@ -52,11 +52,11 @@ export function RatingStars({
           return (
             <StarComponent
               key={value}
+              style={readonly ? undefined : styles.interactiveStar}
               onPress={readonly ? undefined : () => handleStarPress(value)}
               disabled={readonly}
-              // Taller tap area without moving anything: a large star is
-              // 32px, under the 44px a less steady finger needs. Horizontal
-              // slop stays inside the 4px gap so neighbours never overlap.
+              // Keep interactive targets at least 44px tall. Horizontal slop
+              // stays inside the 4px gap so neighboring stars never overlap.
               hitSlop={readonly ? undefined : STAR_HIT_SLOP}
               accessibilityRole={readonly ? undefined : 'button'}
               accessibilityLabel={`${value} star${value > 1 ? 's' : ''}`}
@@ -96,6 +96,10 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
+    },
+    interactiveStar: {
+      minHeight: 44,
+      justifyContent: 'center',
     },
     hint: {
       color: theme.textSecondary,

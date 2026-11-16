@@ -15,7 +15,7 @@ import React from 'react';
 import { Alert } from 'react-native';
 import { lightTheme } from '../../lib/themes/lightTheme';
 
-const mockGetSubmission = jest.fn();
+const mockGetSubmissionForReview = jest.fn();
 const mockSubmitRating = jest.fn();
 const mockApproveAndRelease = jest.fn();
 const mockHasRated = jest.fn();
@@ -34,7 +34,7 @@ jest.mock('../../lib/services/completion-approval', () => ({
 }));
 jest.mock('../../lib/services/completion-service', () => ({
   completionService: {
-    getSubmission: (...a: unknown[]) => mockGetSubmission(...a),
+    getSubmissionForReview: (...a: unknown[]) => mockGetSubmissionForReview(...a),
     submitRating: (...a: unknown[]) => mockSubmitRating(...a),
     approveSubmission: jest.fn(),
     requestRevision: jest.fn(),
@@ -116,9 +116,10 @@ beforeEach(() => {
 
 describe('PosterReviewModal from the job page', () => {
   it('review: opening and "Proceed to Payout" release nothing; the irreversible-payout step comes first', async () => {
-    mockGetSubmission.mockResolvedValue(PENDING);
+    mockGetSubmissionForReview.mockResolvedValue(PENDING);
     renderModal();
     expect(await screen.findByText('Proceed to Payout')).toBeTruthy();
+    expect(mockGetSubmissionForReview).toHaveBeenCalledWith('b1', 'hunter-1');
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
 
     fireEvent.press(screen.getByText('Proceed to Payout'));
@@ -129,7 +130,7 @@ describe('PosterReviewModal from the job page', () => {
   });
 
   it('startOnRating: opens on the rating step even with no submission, and submits the rating once', async () => {
-    mockGetSubmission.mockResolvedValue(null);
+    mockGetSubmissionForReview.mockResolvedValue(null);
     const onComplete = jest.fn();
     renderModal({ startOnRating: true, onComplete });
     expect(await screen.findByText('Rate ana_hunts')).toBeTruthy();
@@ -148,7 +149,7 @@ describe('PosterReviewModal from the job page', () => {
   });
 
   it('startOnRating keeps "Skip for now"', async () => {
-    mockGetSubmission.mockResolvedValue(null);
+    mockGetSubmissionForReview.mockResolvedValue(null);
     const onClose = jest.fn();
     renderModal({ startOnRating: true, onClose });
     fireEvent.press(await screen.findByLabelText('Skip rating for now'));
@@ -157,7 +158,7 @@ describe('PosterReviewModal from the job page', () => {
   });
 
   it('without startOnRating and no submission, it is unchanged ("No submission yet")', async () => {
-    mockGetSubmission.mockResolvedValue(null);
+    mockGetSubmissionForReview.mockResolvedValue(null);
     renderModal();
     expect(await screen.findByText('No submission yet')).toBeTruthy();
     expect(screen.queryByText('Rate ana_hunts')).toBeNull();
@@ -181,7 +182,7 @@ function lastAlertCall(): [string, string, any[]] {
 
 describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
   beforeEach(() => {
-    mockGetSubmission.mockResolvedValue(PENDING);
+    mockGetSubmissionForReview.mockResolvedValue(PENDING);
   });
 
   it('the slide-to-confirm has a non-drag alternative that confirms exactly once, with an accurate hint', async () => {
@@ -274,8 +275,8 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
   });
 
   it('a failed load says so with a retry, never "No submission yet"', async () => {
-    mockGetSubmission.mockReset();
-    mockGetSubmission.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(PENDING);
+    mockGetSubmissionForReview.mockReset();
+    mockGetSubmissionForReview.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(PENDING);
     renderModal();
     expect(await screen.findByText("Couldn't load the submitted work")).toBeTruthy();
     expect(screen.queryByText('No submission yet')).toBeNull();
@@ -284,12 +285,13 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
       fireEvent.press(screen.getByText('Try again'));
     });
     expect(await screen.findByText('Proceed to Payout')).toBeTruthy();
-    expect(mockGetSubmission).toHaveBeenCalledTimes(2);
+    expect(mockGetSubmissionForReview).toHaveBeenNthCalledWith(1, 'b1', 'hunter-1');
+    expect(mockGetSubmissionForReview).toHaveBeenNthCalledWith(2, 'b1', 'hunter-1');
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
   });
 
   it('the rating-only sheet ignores a failed submission load', async () => {
-    mockGetSubmission.mockRejectedValue(new Error('offline'));
+    mockGetSubmissionForReview.mockRejectedValue(new Error('offline'));
     renderModal({ startOnRating: true });
     expect(await screen.findByText('Rate ana_hunts')).toBeTruthy();
     expect(screen.queryByText("Couldn't load the submitted work")).toBeNull();
@@ -298,7 +300,7 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
   });
 
   it('a failed review save keeps the form and offers "Try again", which resends', async () => {
-    mockGetSubmission.mockResolvedValue(null);
+    mockGetSubmissionForReview.mockResolvedValue(null);
     mockSubmitRating.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(undefined);
     const onClose = jest.fn();
     renderModal({ startOnRating: true, onClose });
@@ -320,7 +322,7 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
   });
 
   it('a saved review claims nothing about payment', async () => {
-    mockGetSubmission.mockResolvedValue(null);
+    mockGetSubmissionForReview.mockResolvedValue(null);
     renderModal({ startOnRating: true });
     fireEvent.press(await screen.findByLabelText('Give 5 stars'));
     await act(async () => {
@@ -334,7 +336,7 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
   });
 
   it('a double tap on "Submit review" sends one review', async () => {
-    mockGetSubmission.mockResolvedValue(null);
+    mockGetSubmissionForReview.mockResolvedValue(null);
     let resolveRating: () => void = () => {};
     mockSubmitRating.mockReturnValue(new Promise<void>(r => { resolveRating = r; }));
     renderModal({ startOnRating: true });
@@ -352,7 +354,7 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
   });
 
   it('"Submit review" is announced as disabled until a star is chosen', async () => {
-    mockGetSubmission.mockResolvedValue(null);
+    mockGetSubmissionForReview.mockResolvedValue(null);
     renderModal({ startOnRating: true });
     const submit = await screen.findByLabelText('Submit review');
     expect(submit.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));

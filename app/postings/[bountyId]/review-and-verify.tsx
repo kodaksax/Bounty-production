@@ -73,7 +73,7 @@ export default function ReviewAndVerifyScreen() {
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [isViewerVisible, setIsViewerVisible] = useState(false);
   const [isRequestingRevision, setIsRequestingRevision] = useState(false);
-  // Set from the moment a release is confirmed until approveAndRelease settles.
+  // Reserve the confirmation while its dialog is open, and consume it on success.
   const approvingRef = useRef(false);
   const { releaseFunds } = useWallet();
   const ratingPromptLoggedRef = useRef(false);
@@ -302,7 +302,7 @@ export default function ReviewAndVerifyScreen() {
     setRating(value);
   };
 
-  const handleApprove = async () => {
+  const handleApprove = async (): Promise<boolean> => {
     // Rating is optional -- approving and releasing payment must never
     // depend on it. A poster who skips (rating stays 0) still gets a
     // rating_reminder notification ~24h later if they never come back to
@@ -317,14 +317,14 @@ export default function ReviewAndVerifyScreen() {
         'Submission Required',
         "Load the hunter's pending completion submission before approving."
       );
-      return;
+      return false;
     }
     if (String(reviewSubmission.hunter_id) !== String(hunterProfile.id)) {
       Alert.alert(
         'Submission Mismatch',
         'The completion submission does not belong to the accepted hunter.'
       );
-      return;
+      return false;
     }
 
     try {
@@ -353,7 +353,7 @@ export default function ReviewAndVerifyScreen() {
 
       if (!ok) {
         Alert.alert("Something went wrong", 'Failed to release funds or approve work. Please contact support.');
-        return;
+        return false;
       }
 
       // Rating is optional and submitted only after approval/payout already
@@ -406,12 +406,14 @@ export default function ReviewAndVerifyScreen() {
           },
         },
       ]);
+      return true;
     } catch (err) {
       console.error('Error approving completion:', err);
       Alert.alert(
         "Something went wrong",
         err instanceof Error ? err.message : 'Failed to approve work. Please try again.'
       );
+      return false;
     } finally {
       setIsRequestingRevision(false);
     }
@@ -424,6 +426,8 @@ export default function ReviewAndVerifyScreen() {
   // opens PosterReviewModal instead.
   const handleNext = () => {
     if (!bounty || approvingRef.current) return;
+    approvingRef.current = true;
+    let confirmationAnswered = false;
     const forHonor = Boolean(bounty.is_for_honor);
     const amount = Number(bounty.amount ?? 0);
     const name = hunterProfile?.username || 'the hunter';
@@ -434,17 +438,27 @@ export default function ReviewAndVerifyScreen() {
         ? 'Completing this bounty will mark the work as finished for honor and alert the hunter. Once you continue, this action cannot be undone.'
         : `This will mark the bounty as completed and release ${amountText} to ${name}. Once you continue, this action cannot be undone.`,
       [
-        { text: 'Back to review', style: 'cancel' },
+        {
+          text: 'Back to review',
+          style: 'cancel',
+          onPress: () => {
+            confirmationAnswered = true;
+            approvingRef.current = false;
+          },
+        },
         {
           text: forHonor ? 'Mark complete' : 'Release payment',
-          // A double tap can stack two of these dialogs; only the first
-          // confirmation runs, until it has finished.
           onPress: () => {
-            if (approvingRef.current) return;
-            approvingRef.current = true;
-            void handleApprove().finally(() => {
-              approvingRef.current = false;
-            });
+            if (confirmationAnswered) return;
+            confirmationAnswered = true;
+            void handleApprove().then(
+              approved => {
+                if (!approved) approvingRef.current = false;
+              },
+              () => {
+                approvingRef.current = false;
+              }
+            );
           },
         },
       ]
