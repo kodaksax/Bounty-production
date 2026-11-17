@@ -46,10 +46,10 @@ import { fundingSourceLine, paymentPromiseStrings } from 'lib/strings/payment-pr
 import { trustSafetyStrings } from 'lib/strings/trust-safety';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
-import { getUserFriendlyError } from 'lib/utils/error-messages';
+import { getUserFriendlyError, type UserFriendlyError } from 'lib/utils/error-messages';
 import { describePaymentFailure } from 'lib/utils/payment-failure-message';
 import type { DepositResult } from 'hooks/use-wallet-deposit';
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -80,7 +80,16 @@ export function chargeAmountForShortfall(shortfall: number): number {
   return Number(Math.max(shortfall, MIN_SHORTFALL_CHARGE).toFixed(2));
 }
 
-const clamp = (value: number, min: number, max: number) =>
+/** Shown only when this sheet's own check of saved cards fails. */
+export const SAVED_CARDS_UNAVAILABLE: UserFriendlyError = {
+  type: 'network',
+  title: "Couldn't load your saved cards",
+  message: 'Nothing has been charged. Check your connection, then tap Try again.',
+  action: 'Try again',
+  retryable: true,
+};
+
+const clamp =(value: number, min: number, max: number) =>
   Math.round(Math.min(max, Math.max(min, value)));
 
 /**
@@ -153,7 +162,6 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     setShowPaymentMethodsModal,
     primaryCardPaymentMethod,
     stripeLoading,
-    stripeError,
     loadPaymentMethods,
     payWithCard,
     payWithApplePay,
@@ -173,6 +181,36 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   const busy = isProcessing || settling || paymentPending;
   // The native Payment Sheet; web stubs Stripe, so it keeps the card modal.
   const sheetAvailable = Platform.OS === 'ios' || Platform.OS === 'android';
+
+  // --- Saved cards ----------------------------------------------------------
+  // StripeProvider loads saved cards app-wide, in the background, at sign-in
+  // and on every token refresh, and keeps the last failure in a shared `error`
+  // until a later load succeeds — which can be an hour later, on another
+  // screen. Showing that here told posters "Connection failed" on a sheet
+  // where nothing had been tried, even when their balance covered the hire
+  // and no card was involved at all. So the sheet reports only what happens
+  // on it: when a card is needed it re-checks saved cards itself, and only a
+  // failure of that check (or of a payment the poster starts) is shown.
+  const [savedCardsFailed, setSavedCardsFailed] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const refreshSavedCards = useCallback(() => {
+    setSavedCardsFailed(false);
+    loadPaymentMethods().catch(() => {
+      if (mountedRef.current) setSavedCardsFailed(true);
+    });
+  }, [loadPaymentMethods]);
+  useEffect(() => {
+    if (needsPayment) refreshSavedCards();
+    // Once per sheet, and again only if a shortfall appears; refreshSavedCards
+    // changes identity with every StripeProvider render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsPayment]);
 
   // --- Deposit outcome -> gate --------------------------------------------
   // payWithCard/payWithApplePay return a definitive outcome for every exit
@@ -433,17 +471,21 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             </View>
           )}
 
-          {/* Anything that is not a payment decline (session expired, payment
-              methods failed to load). A decline is explained above instead,
-              and is never "retried" onto the card that was just declined. */}
-          {!failureCopy && (error || stripeError) && (
+          {/* A payment the poster started that failed for a reason other than
+              a decline (e.g. session expired). A decline is explained above
+              instead, and is never "retried" onto the card just declined. */}
+          {!failureCopy && error && (
+            <ErrorBanner error={getUserFriendlyError(error)} onDismiss={() => setError(null)} />
+          )}
+
+          {/* This sheet's own check of saved cards failed. Paying still works
+              (a new card, or the payment sheet), so this says exactly that
+              and nothing more. */}
+          {!failureCopy && !error && needsPayment && savedCardsFailed && !stripeLoading && (
             <ErrorBanner
-              error={getUserFriendlyError(error || stripeError)}
-              onDismiss={() => {
-                setError(null);
-                if (stripeError) loadPaymentMethods().catch(() => {});
-              }}
-              onAction={stripeError ? () => loadPaymentMethods() : undefined}
+              error={SAVED_CARDS_UNAVAILABLE}
+              onDismiss={() => setSavedCardsFailed(false)}
+              onAction={refreshSavedCards}
             />
           )}
 
