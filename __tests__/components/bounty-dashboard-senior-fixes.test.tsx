@@ -8,7 +8,7 @@
  *     An unhired pay-when-you-choose job says "You haven't paid anything yet",
  *     and the poster is never named as the one who gets paid.
  *  3. "Review & release payment" opens PosterReviewModal, with its own
- *     warning and slide-to-confirm, instead of review-and-verify's one-tap
+ *     warning and two-step pay confirmation, instead of review-and-verify's one-tap
  *     release. Nothing is released by opening it.
  *  6. "Leave a review" opens the rating step, not the payout receipt, and not
  *     twice for the same hunter. A rating_reminder (?openReview=true) does the same.
