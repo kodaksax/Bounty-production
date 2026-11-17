@@ -20,16 +20,24 @@ describe('manage app handoff route', () => {
     expect(safeManageRedirect('//example.com/manage')).toBeNull()
   })
 
-  test('routes applicant links to the poster activity list', () => {
+  test("routes applicant links to that job's page, where every offer for it is listed", () => {
     expect(manageDestinationPath({ bounty: BOUNTY, applicant: APPLICANT, view: 'applicant' })).toBe(
+      `/postings/${BOUNTY}`
+    )
+  })
+
+  test('falls back to the cross-job list for an applicant link without a job', () => {
+    expect(manageDestinationPath({ applicant: APPLICANT, view: 'applicant' })).toBe(
       '/tabs/bounty-app?tab=messages&initialTab=myPostings'
     )
   })
 
   test('routes help and completion links to their matching app surfaces', () => {
     expect(manageDestinationPath({ bounty: BOUNTY, view: 'help' })).toBe('/legal/how-it-works')
+    // One review flow: the job page opens PosterReviewModal, never the
+    // retired review-and-verify screen.
     expect(manageDestinationPath({ bounty: BOUNTY, view: 'complete' })).toBe(
-      `/postings/${BOUNTY}/review-and-verify`
+      `/postings/${BOUNTY}?openReview=work`
     )
   })
 

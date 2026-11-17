@@ -205,11 +205,15 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       // bounties this client just removed, so a query that raced the mutation
       // cannot put them back when the screen remounts after a tab switch.
       const activeBounties = filterManagementBounties(mine)
+      // Offers first, then the jobs: publishing the jobs before their offers
+      // rendered every open job as "No one has applied yet" until the offers
+      // arrived (a senior persona read that and concluded nobody had offered,
+      // 16 Nov). loadRequestsForMyBounties never throws; a failed offers read
+      // still shows the jobs.
+      await loadRequestsForMyBounties(activeBounties)
       setMyBounties(activeBounties)
       setMyBountiesLoadedFor(currentUserId)
       setIsLoading((prev) => ({ ...prev, myBounties: false }))
-      // Load related requests
-      await loadRequestsForMyBounties(activeBounties)
     } catch (e: any) {
       console.error('Error loading my bounties:', e)
       setError('Failed to load your bounties')

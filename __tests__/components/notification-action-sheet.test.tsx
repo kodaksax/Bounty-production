@@ -211,7 +211,7 @@ describe('NotificationActionSheet', () => {
       mockRejectRequest.mockReset();
     });
 
-    it('sends Accept through the Requests tab instead of accepting inline (funding confirmation lives there)', () => {
+    it("sends the poster to the job's own page to compare offers, never accepting inline (the pay sheet lives there)", () => {
       const onClose = jest.fn();
       const { getByText } = render(
         <NotificationActionSheet notification={applicationNotification} currentUserId="poster-id" onClose={onClose} />
@@ -219,11 +219,24 @@ describe('NotificationActionSheet', () => {
 
       expect(getByText('View Requests')).toBeTruthy();
 
-      fireEvent.press(getByText('Review & Accept'));
+      fireEvent.press(getByText('See who offered'));
 
       expect(mockAcceptRequest).not.toHaveBeenCalled();
       expect(onClose).toHaveBeenCalledTimes(1);
-      expect(push).toHaveBeenCalledWith('/tabs/bounty-app?tab=messages&initialTab=requests');
+      expect(push).toHaveBeenCalledWith('/postings/b1');
+    });
+
+    it('asks before declining, and declines nothing if the poster keeps the offer', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const { getByText } = render(
+        <NotificationActionSheet notification={applicationNotification} currentUserId="poster-id" onClose={jest.fn()} />
+      );
+      fireEvent.press(getByText('Not this time'));
+      expect(mockRejectRequest).not.toHaveBeenCalled();
+      const [title, , buttons] = alertSpy.mock.calls[0] as any[];
+      expect(title).toBe('Not this time?');
+      expect(buttons.find((b: any) => b.style === 'cancel').text).toBe('Keep the offer');
+      jest.restoreAllMocks();
     });
 
     it('tells the poster when a decline fails instead of failing silently', async () => {
@@ -234,8 +247,10 @@ describe('NotificationActionSheet', () => {
         <NotificationActionSheet notification={applicationNotification} currentUserId="poster-id" onClose={jest.fn()} />
       );
 
+      fireEvent.press(getByText('Not this time'));
+      const confirm = (alertSpy.mock.calls[0] as any[])[2].find((b: any) => b.style === 'destructive');
       await act(async () => {
-        fireEvent.press(getByText('Decline'));
+        confirm.onPress();
       });
 
       expect(mockRejectRequest).toHaveBeenCalledWith('req-1');

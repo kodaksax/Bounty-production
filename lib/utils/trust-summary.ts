@@ -50,6 +50,30 @@ export function formatHunterTrustSummary(input: HunterTrustInput): string {
   return parts.join(' · ');
 }
 
+/**
+ * The same facts as formatHunterTrustSummary, in plain words for a poster
+ * choosing someone: "3 jobs done on Bounty", "★ 4.9 from 4 reviews",
+ * "New to Bounty". The rating obeys the same MIN_RATING_SAMPLE rule: below it
+ * there is no rating line at all rather than an average built on noise.
+ */
+export function formatPlainHelperTrust(input: HunterTrustInput): { jobs: string; rating: string | null } {
+  const hunterCompleted = Math.max(0, Number(input.hunterCompleted) || 0);
+  const ratingCount = Math.max(0, Number(input.ratingCount) || 0);
+  const averageRating = input.averageRating;
+  const jobs =
+    hunterCompleted > 0
+      ? `${hunterCompleted} job${hunterCompleted === 1 ? '' : 's'} done on Bounty`
+      : 'New to Bounty';
+  const rating =
+    ratingCount >= MIN_RATING_SAMPLE &&
+    typeof averageRating === 'number' &&
+    Number.isFinite(averageRating) &&
+    averageRating > 0
+      ? `★ ${averageRating.toFixed(1)} from ${ratingCount} reviews`
+      : null;
+  return { jobs, rating };
+}
+
 export interface PosterTrustInput {
   /** Bounties this user POSTED that reached 'completed' (get_profile_activity_stats.bounties_completed). */
   bountiesCompleted?: number | null;

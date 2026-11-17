@@ -159,16 +159,24 @@ describe('QA pass 2: sending, failing and retrying (2026-11-15)', () => {
 });
 
 describe('job screens route "Contact support" to the form', () => {
-  // The lifecycle's contact_support handlers on both job screens. A source
-  // check, so a future edit can't quietly point either back at the composer.
-  it.each([
-    'app/postings/[bountyId]/index.tsx',
-    'app/in-progress/[bountyId]/hunter/index.tsx',
-  ])('%s', file => {
-    const src = fs.readFileSync(path.join(__dirname, '../../', file), 'utf8');
+  // A source check, so a future edit can't quietly point either screen back
+  // at the composer. The hunter page uses the lifecycle's contact_support
+  // handler; the poster page reaches support through Get help (openSupport).
+  it('app/in-progress/[bountyId]/hunter/index.tsx', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../', 'app/in-progress/[bountyId]/hunter/index.tsx'), 'utf8');
     const handler = src.slice(src.indexOf('contact_support:'), src.indexOf('contact_support:') + 300);
     expect(handler).toContain("pathname: '/support/contact'");
     expect(handler).toContain('bountyId: routeBountyId');
     expect(handler).not.toContain('need-help-screen');
+  });
+
+  it('app/postings/[bountyId]/index.tsx', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../', 'app/postings/[bountyId]/index.tsx'), 'utf8');
+    const start = src.indexOf('const openSupport = useCallback(');
+    expect(start).toBeGreaterThan(-1);
+    const handler = src.slice(start, start + 500);
+    expect(handler).toContain("pathname: '/support/contact'");
+    expect(handler).toContain('bountyId: routeBountyId');
+    expect(src).not.toContain('need-help-screen');
   });
 });

@@ -34,6 +34,9 @@ jest.mock('../../lib/services/bounty-request-service', () => ({ bountyRequestSer
 jest.mock('../../lib/services/supabase-messaging', () => ({}));
 jest.mock('../../lib/utils/hunter-hidden-bounties', () => ({ hideBountyForHunter: jest.fn() }));
 jest.mock('../../lib/toast', () => ({ showToast: jest.fn() }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
 jest.mock('../../components/accept-funding-gate', () => ({ AcceptFundingGate: () => null }));
 jest.mock('../../components/bounty-inbox/interactive-message-card', () => ({ InteractiveMessageCard: () => null }));
 jest.mock('../../components/bounty-inbox/submit-work-sheet', () => ({ SubmitWorkSheet: () => null }));

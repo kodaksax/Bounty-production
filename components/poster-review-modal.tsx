@@ -1,5 +1,6 @@
 // components/poster-review-modal.tsx - Modal for poster to review hunter's submission
 import { MaterialIcons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { userProfileService } from 'lib/services/userProfile';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -101,7 +102,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
   // fillWidth = translateX + (inset + handle width) so the fill always covers
   // from the track's left edge to the handle's right edge with no gap.
   const handleOffset = useRef(new Animated.Value(SLIDER_HANDLE_WIDTH + SLIDER_HANDLE_INSET));
-  const accessibilityLabelText = isProcessing ? 'Processing payout' : label;
+  const accessibilityLabelText = isProcessing ? 'Sending payment' : label;
   // Screen readers (VoiceOver, TalkBack, Switch/Voice Control) confirm with
   // the 'activate' action below, a double tap: no drag is needed, so the hint
   // must not say there is one.
@@ -299,7 +300,8 @@ export function PosterReviewModal({
     }
   }, [bountyAmount]);
 
-  const displayHunterName = hunterProfile?.username || hunterName || submission?.hunter_id || 'Hunter';
+  // Never a raw user id: an unknown name reads as "the person you chose".
+  const displayHunterName = hunterProfile?.username || hunterName || 'the person you chose';
 
   useEffect(() => {
     if (visible) { loadSubmission(); }
@@ -460,13 +462,13 @@ export function PosterReviewModal({
     try {
       setIsProcessing(true);
       await completionService.requestRevision(submission.id!, revisionFeedback.trim());
-      Alert.alert('Revision Requested', 'The hunter has been notified of your feedback and can resubmit.', [
+      Alert.alert(`Sent to ${displayHunterName}`, `${displayHunterName} has your message. They can finish the job and send it back to you. Nothing has been paid.`, [
         { text: 'OK', onPress: () => { onClose(); onComplete(); } },
       ]);
     } catch (err) {
       console.error('Error requesting revision:', err);
       // The typed feedback stays in the box, so trying again is one tap.
-      Alert.alert("Couldn't send your feedback", "It wasn't sent to the hunter. Check your connection and try again.");
+      Alert.alert("Couldn't send your message", `It wasn't sent to ${displayHunterName}. Check your connection and try again.`);
     } finally {
       sendingRef.current = false;
       setIsProcessing(false);
@@ -600,6 +602,27 @@ export function PosterReviewModal({
 
   const renderProofItem = ({ item }: { item: ProofItem }) => {
     const displayName = item.name || 'Attachment';
+    // Photos are shown large, so the poster can see the work without opening
+    // anything; a tap still opens the full-screen viewer to zoom in.
+    const previewUri = item.type === 'image' ? item.uri || (item as any).url || (item as any).remoteUri : undefined;
+    if (previewUri) {
+      return (
+        <TouchableOpacity
+          style={s.proofPhoto}
+          onPress={() => handleAttachmentPress(item)}
+          activeOpacity={0.9}
+          accessibilityRole="imagebutton"
+          accessibilityLabel={`Photo they sent: ${displayName}. Tap to see it bigger.`}
+          testID="review-proof-photo"
+        >
+          <ExpoImage source={{ uri: previewUri }} style={s.proofPhotoImage} contentFit="cover" />
+          <View style={s.proofPhotoCaption}>
+            <MaterialIcons name="zoom-in" size={20} color={theme.text} />
+            <Text style={s.proofName}>Tap to see it bigger</Text>
+          </View>
+        </TouchableOpacity>
+      );
+    }
     return (
       <TouchableOpacity
         style={s.proofItem}
@@ -656,13 +679,13 @@ export function PosterReviewModal({
         )}
         <MaterialIcons name="star" size={64} color={theme.warningText} />
         <Text style={s.ratingTitle}>Rate {hunterName}</Text>
-        <Text style={s.ratingSubtitle}>How would you rate their work on this bounty?</Text>
+        <Text style={s.ratingSubtitle}>{`How did ${displayHunterName} do? Your stars help other people choose.`}</Text>
         <View style={s.ratingStarsContainer}>
           <RatingStars rating={rating} onRatingChange={setRating} size="large" />
         </View>
         <TextInput
           style={s.commentInput}
-          placeholder="Add an optional comment (visible to hunter)..."
+          placeholder={`Add a comment if you like (${displayHunterName} can see it)`}
           placeholderTextColor={theme.textDisabled}
           value={ratingComment}
           onChangeText={setRatingComment}
@@ -727,12 +750,12 @@ export function PosterReviewModal({
             </TouchableOpacity>
             <Text style={s.headerTitle} accessibilityRole="header">
               {showRevisionForm
-                ? 'Request Changes'
+                ? 'Ask to finish something'
                 : showPayoutWarning
-                  ? 'Confirm Payout'
+                  ? isForHonor ? 'Mark as done' : 'Approve and pay'
                   : showRatingForm || startOnRating
                     ? 'Leave a review'
-                    : 'Review Submission'}
+                    : 'Check the work'}
             </Text>
             <View style={s.headerSpacer} />
           </View>
@@ -762,8 +785,8 @@ export function PosterReviewModal({
           ) : !submission ? (
             <View style={s.emptyContainer}>
               <MaterialIcons name="inbox" size={64} color={accentColor} />
-              <Text style={s.emptyText}>No submission yet</Text>
-              <Text style={s.emptySubtext}>Waiting for {displayHunterName} to submit their work.</Text>
+              <Text style={s.emptyText}>Nothing to check yet</Text>
+              <Text style={s.emptySubtext}>{`${displayHunterName} hasn't said the job is done yet.`}</Text>
             </View>
           ) : showPayoutWarning ? (
             <ScrollView
@@ -781,28 +804,30 @@ export function PosterReviewModal({
                 <View style={s.warningIcon}>
                   <MaterialIcons name="warning" size={28} color={theme.warningText} />
                 </View>
-                <Text style={s.warningTitle}>Complete and release payment?</Text>
+                <Text style={s.warningTitle}>
+                  {isForHonor ? 'Mark this job as done?' : `Pay ${displayHunterName} ${formattedPayoutAmount}?`}
+                </Text>
                 <Text style={s.warningDescription}>
                   {isForHonor
-                    ? 'Completing this bounty will mark the work as finished for honor and alert the hunter.'
-                    : `This will mark the bounty as completed and release ${formattedPayoutAmount} to ${displayHunterName}.`}
+                    ? `This tells ${displayHunterName} the job is finished. No money is involved.`
+                    : `Only approve if the job is finished. Approving marks the job as done and releases ${formattedPayoutAmount} to ${displayHunterName}.`}
                 </Text>
                 {!isForHonor && bountyAmount > 0 && (
                   <View style={s.warningAmountChip}>
                     <MaterialIcons name="account-balance-wallet" size={16} color={theme.warningText} />
-                    <Text style={s.warningAmountText}>{formattedPayoutAmount} escrow release</Text>
+                    <Text style={s.warningAmountText}>{`${formattedPayoutAmount} goes to ${displayHunterName}`}</Text>
                   </View>
                 )}
-                <Text style={s.warningFootnote}>Once you continue, this action cannot be undone.</Text>
+                <Text style={s.warningFootnote}>Once you approve, this cannot be undone.</Text>
               </View>
 
               <SlideToConfirm
                 label={
                   isProcessing
-                    ? 'Processing payout…'
+                    ? 'Sending payment…'
                     : isForHonor
                       ? 'Slide to mark complete'
-                      : 'Slide to confirm payout'
+                      : 'Slide to approve and pay'
                 }
                 onConfirmed={() => { handleApprove(); }}
                 disabled={isProcessing}
@@ -829,11 +854,11 @@ export function PosterReviewModal({
             >
               <View style={s.revisionFormContainer}>
                 <MaterialIcons name="feedback" size={64} color={theme.warningText} />
-                <Text style={s.revisionTitle}>Request Changes</Text>
-                <Text style={s.revisionSubtitle}>Explain what needs to be improved or changed.</Text>
+                <Text style={s.revisionTitle}>Ask to finish something</Text>
+                <Text style={s.revisionSubtitle}>{`Tell ${displayHunterName} what still needs doing. Nothing is paid until you approve.`}</Text>
                 <TextInput
                   style={s.feedbackInput}
-                  placeholder="Describe the changes needed..."
+                  placeholder="For example: the old sofa is still in the garage"
                   placeholderTextColor={theme.textDisabled}
                   value={revisionFeedback}
                   onChangeText={setRevisionFeedback}
@@ -854,7 +879,7 @@ export function PosterReviewModal({
                     {isProcessing ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Text style={s.buttonText}>Send Feedback</Text>
+                      <Text style={s.buttonText}>Send to them</Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -887,20 +912,20 @@ export function PosterReviewModal({
                     )}
                   </View>
                   <Text style={s.submittedText}>
-                    Submitted {new Date(submission.submitted_at!).toLocaleDateString()}
+                    Said it was done on {new Date(submission.submitted_at!).toLocaleDateString()}
                   </Text>
                 </View>
               </View>
 
               <View style={s.section}>
-                <Text style={s.sectionTitle}>Message from Hunter</Text>
+                <Text style={s.sectionTitle}>{`Message from ${displayHunterName}`}</Text>
                 <View style={s.messageBox}>
                   <Text style={s.messageText}>{submission.message}</Text>
                 </View>
               </View>
 
               <View style={s.section}>
-                <Text style={s.sectionTitle}>Proof of Completion</Text>
+                <Text style={s.sectionTitle}>Photos and files they sent</Text>
                 {submission.proof_items && submission.proof_items.length > 0 ? (
                   <FlatList
                     data={submission.proof_items}
@@ -911,7 +936,7 @@ export function PosterReviewModal({
                   />
                 ) : (
                   <View style={s.emptyProof}>
-                    <Text style={s.emptyProofText}>No proof attached</Text>
+                    <Text style={s.emptyProofText}>{`${displayHunterName} didn't add a photo. You can ask for one before approving.`}</Text>
                   </View>
                 )}
               </View>
@@ -924,7 +949,7 @@ export function PosterReviewModal({
                   disabled={isProcessing}
                 >
                   <MaterialIcons name="feedback" size={20} color="#fff" />
-                  <Text style={s.rejectButtonText}>Request Changes</Text>
+                  <Text style={s.rejectButtonText}>Ask to finish something</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity accessibilityRole="button"
@@ -937,7 +962,7 @@ export function PosterReviewModal({
                   ) : (
                     <>
                       <MaterialIcons name="check-circle" size={20} color="#fff" />
-                      <Text style={s.approveButtonText}>Proceed to Payout</Text>
+                      <Text style={s.approveButtonText}>{isForHonor ? 'Mark as done' : `Approve and pay ${formattedPayoutAmount}`}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -1148,7 +1173,7 @@ function makeStyles(t: AppTheme) {
     },
     submittedText: {
       color: t.isDark ? t.primaryLight : t.primary,
-      fontSize: 13,
+      fontSize: 15,
       marginTop: 4,
     },
     section: {
@@ -1156,7 +1181,7 @@ function makeStyles(t: AppTheme) {
     },
     sectionTitle: {
       color: t.isDark ? t.primaryLight : t.primary,
-      fontSize: 14,
+      fontSize: 17,
       fontWeight: '600',
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -1170,11 +1195,26 @@ function makeStyles(t: AppTheme) {
     },
     messageText: {
       color: t.text,
-      fontSize: 15,
+      fontSize: 17,
       lineHeight: 22,
     },
     proofList: {
       gap: 12,
+    },
+    proofPhoto: {
+      borderRadius: 14,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surfaceSecondary,
+    },
+    proofPhotoImage: { width: '100%', height: 240 },
+    proofPhotoCaption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 12,
     },
     proofItem: {
       flexDirection: 'row',
@@ -1381,7 +1421,7 @@ function makeStyles(t: AppTheme) {
     },
     warningDescription: {
       color: t.textSecondary,
-      fontSize: 15,
+      fontSize: 17,
       textAlign: 'center',
       lineHeight: 22,
     },
@@ -1397,7 +1437,7 @@ function makeStyles(t: AppTheme) {
     },
     warningAmountText: {
       color: t.warningText,
-      fontSize: 13,
+      fontSize: 15,
       fontWeight: '600',
       letterSpacing: 0.2,
     },

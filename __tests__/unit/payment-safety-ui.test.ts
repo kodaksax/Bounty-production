@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import vm from 'vm';
 import ts from 'typescript';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 
@@ -9,87 +8,43 @@ const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
 const payoutSource = read('app/postings/[bountyId]/payout.tsx');
 const payoutAst = ts.createSourceFile('payout.tsx', payoutSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
-function findNode(predicate: (node: ts.Node) => boolean): ts.Node {
-  let found: ts.Node | undefined;
+// 2026-11-16 (second-pass senior audit): the payout page used to release
+// money from a switch + button, and complete unpaid ("for honor") jobs from a
+// "Mark as complete" button, both WITHOUT approving the helper's submission.
+// Any job that isn't completed is now handed to the job page's one review
+// flow (PosterReviewModal: "cannot be undone" + slide-to-confirm, and "Slide to
+// mark complete" for unpaid jobs). These pin that the payout page can no
+// longer change a job's state or move money at all.
+function hasCall(name: string): boolean {
+  let found = false;
   const visit = (node: ts.Node) => {
-    if (predicate(node)) found = node;
-    if (!found) ts.forEachChild(node, visit);
+    if (found) return;
+    if (ts.isCallExpression(node) && node.expression.getText(payoutAst).endsWith(name)) found = true;
+    ts.forEachChild(node, visit);
   };
   visit(payoutAst);
-  if (!found) throw new Error('Expected payout control was not found');
   return found;
 }
 
-// Execute the actual handler in isolation: no native modules or payment SDKs
-// are needed to prove the unpaid completion path cannot mutate paid bounties.
-function completionHarness(isForHonor: unknown) {
-  const declaration = findNode(
-    node => ts.isVariableDeclaration(node) && node.name.getText(payoutAst) === 'handleMarkComplete'
-  ) as ts.VariableDeclaration;
-  const handler = ts.transpileModule(`(${declaration.initializer!.getText(payoutAst)})`, {
-    compilerOptions: { target: ts.ScriptTarget.ES2020 },
-  }).outputText;
-  const context = {
-    bounty: { id: 'bounty-1', title: 'Test bounty', amount: 100, is_for_honor: isForHonor },
-    bountyId: 'bounty-1',
-    Alert: { alert: jest.fn() },
-    bountyService: { update: jest.fn().mockResolvedValue({ status: 'completed' }) },
-    analyticsService: { trackEvent: jest.fn().mockResolvedValue(undefined) },
-    getHoursSinceClaimed: jest.fn().mockResolvedValue(1),
-    logTransaction: jest.fn().mockResolvedValue(undefined),
-    setIsProcessing: jest.fn(),
-    setShowSuccessAnimation: jest.fn(),
-    setTimeout: jest.fn(),
-    router: { replace: jest.fn() },
-    trustSafetyStrings,
-  };
-  return { context, complete: vm.runInNewContext(handler, context) as () => Promise<void> };
-}
-
 describe('poster completion payment safety', () => {
-  it.each([false, undefined, null, 'true', 1])(
-    'rejects non-honor completion (%s) before confirmation or mutation',
-    async honor => {
-      const { context, complete } = completionHarness(honor);
-      await complete();
-      expect(context.Alert.alert).toHaveBeenCalledTimes(1);
-      expect(context.Alert.alert).toHaveBeenCalledWith('Use Payout Release', trustSafetyStrings.paidCompletion);
-      expect(context.bountyService.update).not.toHaveBeenCalled();
-      expect(context.logTransaction).not.toHaveBeenCalled();
-      expect(context.setIsProcessing).not.toHaveBeenCalled();
+  it('the payout page has no release or completion path of its own', () => {
+    for (const call of ['releaseFunds', 'releaseBountyPayment', 'approveAndRelease', 'logTransaction']) {
+      expect(hasCall(call)).toBe(false);
     }
-  );
-
-  it('preserves confirmed honor completion and its zero-value history record', async () => {
-    const { context, complete } = completionHarness(true);
-    await complete();
-    expect(context.Alert.alert.mock.calls[0][0]).toBe('Mark as Complete');
-    expect(context.bountyService.update).not.toHaveBeenCalled();
-    const buttons = context.Alert.alert.mock.calls[0][2];
-    await buttons.find((button: { text: string }) => button.text === 'Confirm').onPress();
-    expect(context.bountyService.update).toHaveBeenCalledWith('bounty-1', {
-      status: 'completed',
-      completed_at: expect.any(String),
-    });
-    expect(context.logTransaction).toHaveBeenCalledWith({
-      type: 'bounty_completed',
-      amount: 0,
-      details: { title: 'Test bounty', status: 'completed_for_honor', bounty_id: 'bounty-1' },
-    });
-    expect(context.setIsProcessing).toHaveBeenLastCalledWith(false);
+    expect(payoutSource).not.toContain('handleMarkComplete');
+    expect(payoutSource).not.toContain('handleReleasePayout');
+    expect(payoutSource).not.toMatch(/status:\s*'completed'/);
   });
 
-  it('renders the manual completion button only behind the explicit honor guard', () => {
-    const attribute = findNode(
-      node => ts.isJsxAttribute(node) && node.name.getText(payoutAst) === 'onPress' &&
-        node.initializer?.getText(payoutAst) === '{handleMarkComplete}'
-    );
-    let parent = attribute.parent;
-    while (parent && !ts.isBinaryExpression(parent)) parent = parent.parent;
-    expect(parent && ts.isBinaryExpression(parent) && parent.operatorToken.kind).toBe(ts.SyntaxKind.AmpersandAmpersandToken);
-    expect(parent && ts.isBinaryExpression(parent) && parent.left.getText(payoutAst)).toBe('bounty.is_for_honor === true');
-    expect(payoutSource).toContain('onPress={handleReleasePayout}');
-    expect(payoutSource).toContain('{trustSafetyStrings.paidCompletion}');
+  it('hands every unfinished job to the job page review before rendering anything', () => {
+    expect(payoutSource).toContain("if (data.status !== 'completed')");
+    expect(payoutSource).toContain("openReview: 'work'");
+  });
+
+  it('unpaid jobs are completed through the review sheet, behind its own confirmation', () => {
+    const modal = read('components/poster-review-modal.tsx');
+    expect(modal).toContain("'Slide to mark complete'");
+    expect(modal).toContain('Once you approve, this cannot be undone.');
   });
 });
 

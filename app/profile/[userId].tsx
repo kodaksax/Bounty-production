@@ -240,8 +240,10 @@ export default function UserProfileScreen() {
         // "New to Bounty" was previously a hardcoded "Member since 2024",
         // which was simply false for any account created before or after 2024.
         if (profile.joinDate) {
-          const joinDate = new Date(profile.joinDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-          profileSkills.push({ id: 'joined', icon: 'favorite', text: `Joined ${joinDate}` });
+          // Month and year only: the full date ('Joined September 10, 2026') was
+          // cut off inside the chip (senior audits, 14 and 16 Nov).
+          const joinDate = new Date(profile.joinDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+          profileSkills.push({ id: 'joined', icon: 'event', text: `Joined ${joinDate}` });
         } else {
           profileSkills.push({ id: 'joined', icon: 'favorite', text: 'New to Bounty' });
         }

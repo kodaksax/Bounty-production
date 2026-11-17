@@ -10,7 +10,7 @@ const DB_CODES = [
 describe('getDisputeReasonOptions', () => {
   it('offers the poster "Hunter hasn\'t responded" while no work is submitted (T22)', () => {
     const options = getDisputeReasonOptions('poster', { workSubmitted: false });
-    expect(options[0]).toMatchObject({ code: 'hunter_unresponsive', label: "Hunter hasn't responded" });
+    expect(options[0]).toMatchObject({ code: 'hunter_unresponsive', label: "They haven't replied or turned up" });
     expect(options.map((o) => o.code)).not.toContain('work_quality');
   });
 

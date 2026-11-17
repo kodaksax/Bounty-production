@@ -122,12 +122,28 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     });
     void notificationService.markAsRead([notification.id]).catch(() => {});
     onClose();
-    router.push(POSTER_REQUESTS_PATH as any);
+    // The job's own page lists every offer for it, with who each person is,
+    // so the poster compares before choosing. Without a job id, the list.
+    const bountyId = getNotificationBountyId(notification.data);
+    router.push((bountyId ? `/postings/${bountyId}` : POSTER_REQUESTS_PATH) as any);
   };
 
-  const handleDecline = async () => {
+  // Declining removes the offer for good, so it is confirmed like every other
+  // decline in the app; it used to happen on one tap from the sheet.
+  const handleDecline = () => {
     const requestId = notification?.data?.requestId;
     if (!requestId) return;
+    Alert.alert(
+      'Not this time?',
+      "This person's offer will be removed. Your job stays open, and any other offers stay as they are.",
+      [
+        { text: 'Keep the offer', style: 'cancel' },
+        { text: 'Remove offer', style: 'destructive', onPress: () => void runDecline(requestId) },
+      ]
+    );
+  };
+
+  const runDecline = async (requestId: string | number) => {
     setBusy('decline');
     try {
       await bountyRequestService.rejectRequest(requestId);
@@ -181,16 +197,16 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
               {category === 'marketplace' && !bundled && notification.data?.requestId ? (
                 <View style={s.actionRow}>
                   <TouchableOpacity accessibilityRole="button" style={[s.actionButton, s.declineButton]} onPress={handleDecline} disabled={!!busy}>
-                    {busy === 'decline' ? <ActivityIndicator color={theme.error} /> : <Text style={s.declineText}>Decline</Text>}
+                    {busy === 'decline' ? <ActivityIndicator color={theme.error} /> : <Text style={s.declineText}>Not this time</Text>}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[s.actionButton, s.acceptButton]}
                     onPress={handleAccept}
                     disabled={!!busy}
                     accessibilityRole="button"
-                    accessibilityHint="Opens your requests to review and accept this hunter"
+                    accessibilityHint="Opens your job, where you can see everyone who offered and choose one"
                   >
-                    <Text style={s.acceptText}>Review & Accept</Text>
+                    <Text style={s.acceptText}>See who offered</Text>
                   </TouchableOpacity>
                 </View>
               ) : null}

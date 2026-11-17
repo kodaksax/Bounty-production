@@ -1,5 +1,5 @@
 // components/applicant-card.tsx - Applicant card with explicit confirmation for accept/reject
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -12,7 +12,7 @@ import { formatApplicantDistance } from '../lib/utils/applicant-distance';
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { deriveCoarseVerificationStatus } from '../lib/utils/normalize-profile';
 import { getRelevantSkills } from '../lib/utils/skill-match';
-import { formatHunterTrustSummary } from '../lib/utils/trust-summary';
+import { formatHunterTrustSummary, formatPlainHelperTrust } from '../lib/utils/trust-summary';
 import { isHighRiskTrustTier } from '../lib/utils/trust-tier';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import TextGuard from './ui/TextGuard';
@@ -21,8 +21,20 @@ import { withAlpha } from '../lib/utils';
 
 interface ApplicantCardProps {
   request: BountyRequestWithDetails;
-  onAccept: (requestId: string | number) => Promise<void>;
-  onReject: (requestId: string | number) => Promise<void>;
+  onAccept: (requestId: string | number) => Promise<unknown>;
+  onReject: (requestId: string | number) => Promise<unknown>;
+  /**
+   * 'job_page' is the poster's own job page: the job is already on screen, so
+   * the "Applying to" row is dropped, and the card uses the plain words the
+   * rest of that page uses.
+   */
+  variant?: 'default' | 'job_page';
+  /**
+   * Show this card's own "Choose …?" confirmation before onAccept. Turn it off
+   * only when the caller's next step is itself a confirmation (the pay sheet
+   * for a pay-when-you-choose job), so the poster answers one question, not two.
+   */
+  confirmBeforeAccept?: boolean;
   onRequestMoreInfo?: (requestId: string | number) => void;
   /** True while the "Ask a question" conversation is being opened. */
   isAskingQuestion?: boolean;
@@ -41,7 +53,10 @@ export const ApplicantCard = memo(function ApplicantCard({
   isAskingQuestion = false,
   isAskQuestionDisabled = false,
   referrerOverride,
+  variant = 'default',
+  confirmBeforeAccept = true,
 }: ApplicantCardProps) {
+  const onJobPage = variant === 'job_page';
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
@@ -136,6 +151,16 @@ export const ApplicantCard = memo(function ApplicantCard({
       }),
     [request.profile]
   );
+  // Same facts and the same small-sample rule, in the job page's words.
+  const plainTrust = useMemo(
+    () =>
+      formatPlainHelperTrust({
+        hunterCompleted: request.profile?.hunterCompleted,
+        averageRating: request.profile?.averageRating,
+        ratingCount: request.profile?.ratingCount,
+      }),
+    [request.profile]
+  );
 
   // Row 3: up to 3 of the hunter's self-reported skills that share a word
   // with this specific bounty. Omitted entirely when nothing matches --
@@ -162,37 +187,48 @@ export const ApplicantCard = memo(function ApplicantCard({
   // applied (SBA-02). Nothing when it isn't known (online job, no location).
   const distanceLabel = formatApplicantDistance(request.distance_mi);
 
-  const applicantName = request.profile?.username || 'this hunter';
+  const applicantName = request.profile?.username || (onJobPage ? 'this person' : 'this hunter');
   const isForHonor = !!request.bounty?.is_for_honor;
   const amount = typeof request.bounty?.amount === 'number' ? request.bounty.amount : 0;
+  const amountText = `$${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2)}`;
 
   const handleAccept = () => {
-    // Accepting is the moment money moves under pay-at-accept, so the
-    // confirmation says so plainly instead of the old generic "are you sure":
-    // a poster should never be surprised by a charge they just authorised.
+    if (!confirmBeforeAccept) {
+      void runAccept();
+      return;
+    }
+    // This dialog never says money is "held now": for a pay-when-you-choose
+    // job nothing has been charged yet (the pay sheet that follows shows the
+    // exact amount), and for a job paid up front it was charged when posted.
+    const fundingMode = (request.bounty as { funding_mode?: string | null } | undefined)?.funding_mode;
     const moneyLine =
       isForHonor || amount <= 0
-        ? 'This bounty is for honor, so no payment is taken.'
-        : `$${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2)} is held in escrow now and released to them only when you approve the finished work.`;
+        ? 'No payment is involved in this job.'
+        : fundingMode === 'at_accept'
+          ? `Next you'll see exactly what you pay (${amountText}) before anything is charged. ${applicantName} is paid only after you approve the finished work.`
+          : `You already paid ${amountText} when you posted this job. Bounty keeps holding it, and ${applicantName} is paid only after you approve the finished work.`;
 
     Alert.alert(
       `Choose ${applicantName}?`,
-      `Once acceptance succeeds, they can start work and the other applicants are declined. ${moneyLine}\n\n${trustSafetyStrings.posterHire}`,
+      `${applicantName} can start once this goes through, and the other offers will be closed. ${moneyLine}\n\n${trustSafetyStrings.posterHire}`,
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Choose hunter', style: 'default', onPress: runAccept },
+        { text: 'Not now', style: 'cancel' },
+        { text: `Choose ${applicantName}`, style: 'default', onPress: runAccept },
       ],
       { cancelable: true }
     );
   };
 
   const handleReject = () => {
+    // Declining removes the offer; it never touches the job itself.
     Alert.alert(
-      'Decline this application?',
-      `${applicantName} is told they weren't selected. Your bounty stays open for other hunters.`,
+      onJobPage ? 'Not this time?' : 'Decline this application?',
+      onJobPage
+        ? `${applicantName}'s offer will be removed. Your job stays open, and everyone else's offers stay as they are.`
+        : `${applicantName}'s application will be removed. Your bounty stays open for other hunters.`,
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Decline', style: 'destructive', onPress: runReject },
+        { text: onJobPage ? 'Keep the offer' : 'Cancel', style: 'cancel' },
+        { text: onJobPage ? 'Remove offer' : 'Decline', style: 'destructive', onPress: runReject },
       ],
       { cancelable: true }
     );
@@ -222,7 +258,11 @@ export const ApplicantCard = memo(function ApplicantCard({
         pathname: '/profile/[userId]',
         params: {
           userId: String(id),
-          referrer: finalRef,
+          // On the job page, no referrer: the profile's back button then
+          // simply goes back, to the offers the poster was comparing. With a
+          // referrer it resets to the tab root and re-navigates, which landed
+          // a senior persona on Home instead (16 Nov swarm).
+          ...(onJobPage ? {} : { referrer: finalRef }),
           source: 'applicant_card',
           isApplicant: 'true',
           ...(bountyId != null ? { bountyId: String(bountyId) } : {}),
@@ -237,7 +277,7 @@ export const ApplicantCard = memo(function ApplicantCard({
         }
       }, NAVIGATION_LOADING_TIMEOUT_MS);
     }
-  }, [request, router, referrerOverride, referrerValue]);
+  }, [request, router, referrerOverride, referrerValue, onJobPage]);
 
   const profileId = (request as any).hunter_id || (request as any).user_id;
   const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar || request.profile?.avatar_url);
@@ -251,8 +291,20 @@ export const ApplicantCard = memo(function ApplicantCard({
           onPress={handleProfilePress}
           disabled={!profileId || isNavigatingToProfile}
           accessibilityRole="button"
-          accessibilityLabel={`View ${request.profile?.username || 'applicant'}'s profile`}
-          accessibilityHint="Opens the applicant's profile page"
+          accessibilityLabel={
+            onJobPage
+              ? [
+                  applicantName,
+                  isIdentityVerified ? 'ID checked by Bounty' : null,
+                  plainTrust.jobs,
+                  plainTrust.rating,
+                  distanceLabel,
+                ]
+                  .filter(Boolean)
+                  .join('. ')
+              : `View ${request.profile?.username || 'applicant'}'s profile`
+          }
+          accessibilityHint={onJobPage ? 'Opens their profile' : "Opens the applicant's profile page"}
         >
           <View style={s.avatarContainer}>
             {isNavigatingToProfile ? (
@@ -288,7 +340,16 @@ export const ApplicantCard = memo(function ApplicantCard({
                 />
               )}
             </View>
-            <Text style={s.trustSummary}>{trustSummary}</Text>
+            {onJobPage ? (
+              <>
+                <Text style={s.trustSummary} testID="applicant-jobs-done">{plainTrust.jobs}</Text>
+                {plainTrust.rating ? (
+                  <Text style={s.trustSummary} testID="applicant-rating">{plainTrust.rating}</Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={s.trustSummary}>{trustSummary}</Text>
+            )}
             {distanceLabel && (
               <View style={s.distanceRow} testID="applicant-distance">
                 <MaterialIcons name="place" size={13} color={theme.textSecondary} />
@@ -303,7 +364,7 @@ export const ApplicantCard = memo(function ApplicantCard({
             )}
           </View>
 
-          {profileId ? (
+          {profileId && !onJobPage ? (
             <View style={s.viewProfileHint}>
               <Text style={s.viewProfileText}>View profile</Text>
               <MaterialIcons name="chevron-right" size={18} color={theme.textSecondary} />
@@ -360,25 +421,51 @@ export const ApplicantCard = memo(function ApplicantCard({
           </View>
         ) : null}
 
+        {onJobPage && profileId ? (
+          <TouchableOpacity
+            style={[s.secondaryAction, s.viewProfileButton]}
+            onPress={handleProfilePress}
+            disabled={isNavigatingToProfile}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${applicantName}'s profile and reviews`}
+            accessibilityHint="See their reviews and past jobs. You can come straight back here."
+            testID="applicant-view-profile"
+          >
+            {isNavigatingToProfile ? (
+              <ActivityIndicator size="small" color={theme.text} />
+            ) : (
+              <MaterialIcons name="person-search" size={20} color={theme.text} />
+            )}
+            <Text style={[s.secondaryActionText, { color: theme.text }]}>View profile and reviews</Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Condensed bounty context. This card also renders in the poster's
             cross-bounty "Requests" list, so which bounty an application is
             for still needs to be legible -- just not as its own prominent
             section repeating what the poster is usually already looking at. */}
-        <View style={s.bountyContextRow}>
-          <Text style={s.bountyContextText} numberOfLines={1}>
-            Applying to: {request.bounty?.title || 'Untitled Bounty'}
-          </Text>
-          {isForHonor ? (
-            <View style={s.honorBadgeSmall}>
-              <MaterialIcons name="favorite" size={10} color="#fff" />
-              <Text style={s.honorTextSmall}>Honor</Text>
+        {onJobPage ? (
+          !isForHonor && amount > 0 ? (
+            <View style={s.bountyContextRow}>
+              <Text style={s.bountyContextText}>Your price</Text>
+              <Text style={s.bountyContextAmount}>{amountText}</Text>
             </View>
-          ) : amount > 0 ? (
-            <Text style={s.bountyContextAmount}>
-              ${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2)}
+          ) : null
+        ) : (
+          <View style={s.bountyContextRow}>
+            <Text style={s.bountyContextText} numberOfLines={1}>
+              Applying to: {request.bounty?.title || 'Untitled Bounty'}
             </Text>
-          ) : null}
-        </View>
+            {isForHonor ? (
+              <View style={s.honorBadgeSmall}>
+                <MaterialIcons name="favorite" size={10} color="#fff" />
+                <Text style={s.honorTextSmall}>Honor</Text>
+              </View>
+            ) : amount > 0 ? (
+              <Text style={s.bountyContextAmount}>{amountText}</Text>
+            ) : null}
+          </View>
+        )}
 
         {/* Actions. Choosing a hunter is the decision this screen exists for,
             so it is a full-width primary; declining is a quieter secondary
@@ -389,15 +476,25 @@ export const ApplicantCard = memo(function ApplicantCard({
             onPress={handleAccept}
             disabled={isProcessing || request.status !== 'pending'}
             accessibilityRole="button"
-            accessibilityLabel={`Choose ${applicantName} for this bounty`}
-            accessibilityHint="Starts the bounty with this hunter and declines the others"
+            accessibilityLabel={onJobPage ? `Choose ${applicantName}` : `Choose ${applicantName} for this bounty`}
+            accessibilityHint={
+              onJobPage
+                ? "Shows what you'll pay before anything happens"
+                : 'Starts the bounty with this hunter and declines the others'
+            }
+            accessibilityState={{ busy: isProcessing && actionType === 'accept' }}
           >
             {isProcessing && actionType === 'accept' ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                {onJobPage ? <Text style={s.primaryActionText}>Choosing {applicantName}…</Text> : null}
+              </>
             ) : (
               <>
-                <MaterialIcons name="check-circle" size={18} color="#fff" />
-                <Text style={s.primaryActionText}>Choose this hunter</Text>
+                <MaterialIcons name="check-circle" size={20} color="#fff" />
+                <Text style={s.primaryActionText}>
+                  {onJobPage ? `Choose ${applicantName}` : 'Choose this hunter'}
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -426,15 +523,19 @@ export const ApplicantCard = memo(function ApplicantCard({
               onPress={handleReject}
               disabled={isProcessing || request.status !== 'pending'}
               accessibilityRole="button"
-              accessibilityLabel={`Decline ${applicantName}'s application`}
-              accessibilityHint="Removes this application; your bounty stays open"
+              accessibilityLabel={onJobPage ? `Not this time: remove ${applicantName}'s offer` : `Decline ${applicantName}'s application`}
+              accessibilityHint={
+                onJobPage ? 'Removes this offer. Your job stays open.' : 'Removes this application; your bounty stays open'
+              }
             >
               {isProcessing && actionType === 'reject' ? (
                 <ActivityIndicator size="small" color={theme.textSecondary} />
               ) : (
                 <>
-                  <MaterialIcons name="close" size={16} color={theme.error} />
-                  <Text style={[s.secondaryActionText, { color: theme.error }]}>Decline</Text>
+                  <MaterialIcons name="close" size={18} color={onJobPage ? theme.textSecondary : theme.error} />
+                  <Text style={[s.secondaryActionText, !onJobPage && { color: theme.error }]}>
+                    {onJobPage ? 'Not this time' : 'Decline'}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -476,11 +577,11 @@ function makeStyles(t: AppTheme) {
       position: 'relative',
     },
     avatar: {
-      width: 48,
-      height: 48,
+      width: 56,
+      height: 56,
       borderWidth: 2,
       borderColor: t.primary,
-      borderRadius: 24,
+      borderRadius: 28,
     },
     avatarLoading: {
       backgroundColor: t.isDark ? t.primary : withAlpha(t.primary, 0.12),
@@ -509,12 +610,12 @@ function makeStyles(t: AppTheme) {
     },
     applicantName: {
       color: t.text,
-      fontSize: 16,
-      fontWeight: '600',
+      fontSize: 18,
+      fontWeight: '700',
     },
     trustSummary: {
       color: t.textSecondary,
-      fontSize: 13,
+      fontSize: 15,
     },
     distanceRow: {
       flexDirection: 'row',
@@ -524,7 +625,7 @@ function makeStyles(t: AppTheme) {
     },
     distanceText: {
       color: t.textSecondary,
-      fontSize: 12,
+      fontSize: 15,
     },
     idStatusRow: {
       flexDirection: 'row',
@@ -534,7 +635,7 @@ function makeStyles(t: AppTheme) {
     },
     idStatusText: {
       color: t.textSecondary,
-      fontSize: 12,
+      fontSize: 14,
     },
     viewProfileHint: {
       flexDirection: 'row',
@@ -544,7 +645,7 @@ function makeStyles(t: AppTheme) {
     },
     viewProfileText: {
       color: t.textSecondary,
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: '500',
     },
     skillsSection: {
@@ -552,7 +653,7 @@ function makeStyles(t: AppTheme) {
     },
     skillsLabel: {
       color: t.textSecondary,
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: '600',
       textTransform: 'uppercase',
       letterSpacing: 0.4,
@@ -573,13 +674,13 @@ function makeStyles(t: AppTheme) {
     },
     skillChipText: {
       color: t.text,
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: '500',
     },
     qualificationNote: {
       color: t.textSecondary,
-      fontSize: 12,
-      lineHeight: 17,
+      fontSize: 14,
+      lineHeight: 20,
       marginTop: 5,
     },
     pitchSection: {
@@ -594,9 +695,9 @@ function makeStyles(t: AppTheme) {
     pitchText: {
       flex: 1,
       color: t.text,
-      fontSize: 14,
-      lineHeight: 20,
-      fontStyle: 'italic',
+      fontSize: 17,
+      lineHeight: 25,
+      fontStyle: 'normal',
     },
     bountyContextRow: {
       flexDirection: 'row',
@@ -610,12 +711,12 @@ function makeStyles(t: AppTheme) {
     bountyContextText: {
       flex: 1,
       color: t.textSecondary,
-      fontSize: 12,
+      fontSize: 15,
     },
     bountyContextAmount: {
       color: t.isDark ? t.primaryLight : t.primary,
       fontWeight: '600',
-      fontSize: 13,
+      fontSize: 18,
     },
     // Unique color — kept as designed
     honorBadgeSmall: {
@@ -643,11 +744,11 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.primary,
       paddingVertical: 14,
       borderRadius: 12,
-      minHeight: 48,
+      minHeight: 56,
     },
     primaryActionText: {
       color: '#ffffff',
-      fontSize: 15,
+      fontSize: 18,
       fontWeight: '700',
     },
     secondaryRow: {
@@ -665,15 +766,19 @@ function makeStyles(t: AppTheme) {
       borderWidth: 1,
       borderColor: t.border,
       backgroundColor: t.surfaceSecondary,
-      minHeight: 44,
+      minHeight: 48,
     },
     secondaryActionText: {
       color: t.textSecondary,
-      fontSize: 13,
+      fontSize: 16,
       fontWeight: '600',
     },
     actionDisabled: {
       opacity: 0.5,
+    },
+    viewProfileButton: {
+      flex: 0,
+      marginBottom: 12,
     },
     button: {
       flex: 1,

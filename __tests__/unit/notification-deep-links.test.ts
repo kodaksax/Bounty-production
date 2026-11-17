@@ -40,12 +40,12 @@ describe('resolveNotificationDeepLink: bounty_quality_nudge', () => {
 });
 
 describe('resolveNotificationDeepLink: application', () => {
-  test('routes a new application to the poster Requests tab where Accept/Decline live', () => {
+  test("routes a new offer to that job's page, where every offer for it can be compared", () => {
     const action = resolveNotificationDeepLink({
       type: 'application',
       data: { bountyId: 'abc-123' },
     });
-    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?tab=messages&initialTab=requests' });
+    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123' });
   });
 
   test('routes the pending-application reminder to the same screen', () => {
@@ -146,15 +146,12 @@ describe('resolveNotificationDeepLink: bounty_nearby (regression guard)', () => 
 });
 
 describe('resolveNotificationDeepLink: application (GitHub #809)', () => {
-  test('sends the poster to the Requests tab where applications are accepted or declined', () => {
+  test("sends the poster to the job's own page, where its offers are accepted or declined", () => {
     const action = resolveNotificationDeepLink({
       type: 'application',
       data: { bountyId: 'abc-123', hunterId: 'h-1' },
     });
-    expect(action).toEqual({
-      kind: 'route',
-      path: '/tabs/bounty-app?tab=messages&initialTab=requests',
-    });
+    expect(action).toEqual({ kind: 'route', path: '/postings/abc-123' });
   });
 
   test('still routes a bundled application notification that carries no bountyId', () => {

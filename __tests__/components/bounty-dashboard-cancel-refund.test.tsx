@@ -110,6 +110,27 @@ jest.mock('../../components/edit-posting-modal', () => {
   };
 });
 
+// The offers section's hire hooks (pay sheet, accept, decline) have their
+// own suites; here the page only needs its offers list and gate state.
+jest.mock('../../hooks/usePosterJobOffers', () => ({
+  usePosterJobOffers: () => ({
+    offers: [],
+    loadState: 'ready',
+    reload: jest.fn(),
+    gate: { active: false },
+    choose: jest.fn().mockResolvedValue({ accepted: false, reason: 'declined_payment' }),
+    pass: jest.fn(),
+    ask: jest.fn(),
+    askingRequestId: null,
+    isAskBusy: false,
+  }),
+}));
+jest.mock('../../lib/services/poster-job-activity', () => {
+  const empty = { offers: null, hiredAt: null, lastHelperMessageAt: null, lastPosterMessageAt: null, messagesKnown: false };
+  return { EMPTY_POSTER_JOB_ACTIVITY: empty, getPosterJobActivity: jest.fn().mockResolvedValue(empty) };
+});
+jest.mock('../../components/accept-funding-gate', () => ({ AcceptFundingGate: () => null }));
+
 import BountyDashboard from '../../app/postings/[bountyId]/index';
 
 /** The buttons of the most recent Alert.alert call. */
@@ -174,7 +195,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     fireEvent.press(screen.getByLabelText('Edit details'));
     expect(screen.queryByText('edit-modal-open')).toBeNull();
     expect(lastAlert().title).toBe('Details are locked');
-    expect(lastAlert().message).toContain('2 hunters have applied on these terms');
+    expect(lastAlert().message).toContain('2 people have offered to help on these details');
   });
 
   it('?openEdit=true opens the editor on an editable bounty', () => {
@@ -188,7 +209,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     mockBounty = { ...mockBounty, status: 'in_progress', accepted_by: 'hunter-1' };
     render(<BountyDashboard />);
     expect(screen.queryByText('edit-modal-open')).toBeNull();
-    expect(lastAlert().title).toBe("Can't edit this bounty");
+    expect(lastAlert().title).toBe("Can't change this job");
   });
 
   it('a hired bounty says why it cannot be edited or cancelled instead of offering either', () => {
@@ -258,7 +279,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     expect(depsArg.refundEscrow).toBe(mockRefundEscrow);
     expect(planArg).toEqual({ refundAmount: 40, destination: 'wallet' });
     expect(mockMarkRemoved).toHaveBeenCalledWith('b1');
-    expect(lastAlert().title).toBe('Bounty cancelled');
+    expect(lastAlert().title).toBe('Job cancelled');
     expect(lastAlert().message).toContain('$40 is on its way back to your Bounty balance');
   });
 

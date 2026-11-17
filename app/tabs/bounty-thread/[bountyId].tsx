@@ -32,6 +32,8 @@ import { InteractiveMessageCard } from '../../../components/bounty-inbox/interac
 import { StatusBadge } from '../../../components/bounty-inbox/status-badge';
 import { SubmitWorkSheet } from '../../../components/bounty-inbox/submit-work-sheet';
 import { PosterReviewModal } from '../../../components/poster-review-modal';
+import { GetHelpSheet, type HelpRoute } from '../../../components/poster-job/get-help-sheet';
+import { HireConfirmation } from '../../../components/poster-job/hire-confirmation';
 import { WorkflowDisputeModal } from '../../../components/workflow-dispute-modal';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useAcceptFunding } from '../../../hooks/useAcceptFunding';
@@ -55,6 +57,7 @@ import type {
 } from '../../../lib/utils/bounty-thread-events';
 import { hideBountyForHunter } from '../../../lib/utils/hunter-hidden-bounties';
 import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
+import { derivePosterMoney, describePosterMoney } from '../../../lib/utils/poster-plain-copy';
 import { useWallet } from '../../../lib/wallet-context';
 import { ChatDetailScreen, type ChatTimelineItem } from '../chat-detail-screen';
 import { withAlpha } from '../../../lib/utils';
@@ -102,6 +105,9 @@ function BountyThreadScreen() {
   const [showReview, setShowReview] = useState(false);
   const [showDispute, setShowDispute] = useState(false);
   const [startingChat, setStartingChat] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  // Set only from a server-confirmed hire (useAcceptRequest's outcome).
+  const [hiredName, setHiredName] = useState<string | null>(null);
 
   // ---- Accept / reject (poster) — the same hooks the Requests list used ----
   const { refreshFromApi } = useWallet();
@@ -236,7 +242,8 @@ function BountyThreadScreen() {
             markEngaged('accept');
             setBusyEventId(event.id);
             try {
-              await handleAcceptRequest(request.id);
+              const outcome = await handleAcceptRequest(request.id);
+              if (outcome?.accepted) setHiredName(outcome.hunterName || counterpartName);
             } finally {
               setBusyEventId(null);
               reload();
@@ -401,6 +408,71 @@ function BountyThreadScreen() {
     });
   }, [bounty, role, viewerId, request, submission, hasActiveDispute, cancellation, counterpart?.name, posterOfferCount]);
 
+  // Where the poster's money is, for the help sheet. While the job is open and
+  // nobody is chosen, this screen has no server read of whether a
+  // pay-when-you-choose job was charged, so it says nothing rather than guess;
+  // the job page answers that one.
+  const posterMoneyLine = useMemo(() => {
+    if (role !== 'poster' || !bounty) return null;
+    if (bounty.status === 'open' && !bounty.accepted_by) return null;
+    const money = derivePosterMoney({ bounty: bounty as any, openJobCharge: null });
+    return describePosterMoney({
+      money,
+      amount: Number(bounty.amount) || 0,
+      helperName: counterpart?.name ?? null,
+      status: lifecycle?.status ?? 'in_progress',
+      hired: !!bounty.accepted_by,
+      hasDispute: hasActiveDispute,
+      hasCancellationRequest: cancellation?.status === 'pending',
+      offerCount: 0,
+    });
+  }, [role, bounty, counterpart?.name, lifecycle?.status, hasActiveDispute, cancellation?.status]);
+
+  const onPosterHelpRoute = useCallback(
+    (route: HelpRoute) => {
+      setShowHelp(false);
+      if (!bounty) return;
+      const id = String(bounty.id);
+      const goToReport = (reason?: string) =>
+        router.push({ pathname: '/bounty/[id]/dispute', params: reason ? { id, reason } : { id } } as never);
+      switch (route) {
+        case 'message':
+          if (!thread.conversation) void startChat();
+          return;
+        case 'no_show':
+          goToReport('hunter_unresponsive');
+          return;
+        case 'missed_time':
+          goToReport('missed_deadline');
+          return;
+        case 'work_quality':
+          goToReport('work_quality');
+          return;
+        case 'cancel_hired':
+          goToReport('other');
+          return;
+        case 'see_report':
+          openDispute();
+          return;
+        case 'ask_to_finish':
+          setShowReview(true);
+          return;
+        case 'cancel_open':
+          // The job page owns taking a job down (it re-checks the money first).
+          router.push({ pathname: '/postings/[bountyId]', params: { bountyId: id } } as never);
+          return;
+        case 'assist':
+        case 'support':
+          router.push({
+            pathname: '/support/contact',
+            params: { bountyId: id, bountyTitle: bounty.title ?? '', ...(route === 'assist' ? { topic: 'assist' } : {}) },
+          } as never);
+          return;
+      }
+    },
+    [bounty, router, thread.conversation, startChat, openDispute]
+  );
+
   // The pay-at-accept gate takes over the screen while open, exactly as on
   // the old Requests list.
   if (acceptFundingGate.active) {
@@ -440,18 +512,25 @@ function BountyThreadScreen() {
             so the chip says where those actions live. */}
         <ToolChip
           icon={role === 'poster' ? 'tune' : 'visibility'}
-          label={role === 'poster' ? 'Manage bounty' : 'Bounty details'}
+          label={role === 'poster' ? 'Job details' : 'Bounty details'}
           onPress={() => router.push(`/bounty/${bounty.id}` as never)}
           theme={theme}
         />
-        <ToolChip
-          icon={hasActiveDispute ? 'gavel' : 'report-problem'}
-          label={disputeLabel}
-          tone="danger"
-          dimmed={!hasHunter && !hasActiveDispute}
-          onPress={openDispute}
-          theme={theme}
-        />
+        {role === 'poster' ? (
+          // A red "Raise dispute" before anyone was hired read as an accusation
+          // and a dead end. "Get help" opens the same help sheet as the job
+          // page, with only the options that apply now.
+          <ToolChip icon="support-agent" label="Get help" onPress={() => setShowHelp(true)} theme={theme} />
+        ) : (
+          <ToolChip
+            icon={hasActiveDispute ? 'gavel' : 'report-problem'}
+            label={disputeLabel}
+            tone="danger"
+            dimmed={!hasHunter && !hasActiveDispute}
+            onPress={openDispute}
+            theme={theme}
+          />
+        )}
         {role === 'hunter' && (
           <ToolChip
             icon={cancelPending ? 'hourglass-empty' : 'cancel'}
@@ -506,7 +585,7 @@ function BountyThreadScreen() {
             onPress={() => router.push(`/bounty/${bounty.id}` as never)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel={role === 'poster' ? 'Manage bounty' : 'View bounty details'}
+            accessibilityLabel={role === 'poster' ? 'Job details' : 'View bounty details'}
           >
             <MaterialIcons name="info-outline" size={22} color={theme.text} />
           </TouchableOpacity>
@@ -551,6 +630,36 @@ function BountyThreadScreen() {
             setShowReview(false);
             reload();
           }}
+        />
+      )}
+
+      {role === 'poster' && (
+        <GetHelpSheet
+          visible={showHelp}
+          onClose={() => setShowHelp(false)}
+          onRoute={onPosterHelpRoute}
+          helperName={bounty.accepted_by ? counterpart?.name ?? null : null}
+          hired={!!bounty.accepted_by && bounty.status !== 'completed'}
+          canTakeDown={bounty.status === 'open' && !bounty.accepted_by}
+          awaitingApproval={bounty.status === 'in_progress' && submission?.status === 'pending'}
+          hasDispute={hasActiveDispute && !!dispute}
+          completed={bounty.status === 'completed'}
+          moneyLine={posterMoneyLine}
+        />
+      )}
+
+      {role === 'poster' && (
+        <HireConfirmation
+          visible={!!hiredName}
+          helperName={hiredName ?? ''}
+          isForHonor={!!bounty.is_for_honor}
+          doneLabel="Back to the chat"
+          onMessage={() => {
+            setHiredName(null);
+            if (!thread.conversation) void startChat();
+          }}
+          onDone={() => setHiredName(null)}
+          isOpeningMessage={startingChat}
         />
       )}
 

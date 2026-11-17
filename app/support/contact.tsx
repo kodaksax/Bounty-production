@@ -18,7 +18,7 @@ function firstParam(value: string | string[] | undefined): string | null {
 }
 
 export default function ContactSupportRoute() {
-  const params = useLocalSearchParams<{ bountyId?: string; bountyTitle?: string }>();
+  const params = useLocalSearchParams<{ bountyId?: string; bountyTitle?: string; topic?: string }>();
   const router = useRouter();
 
   const goBack = useCallback(() => {
@@ -31,6 +31,7 @@ export default function ContactSupportRoute() {
       onBack={goBack}
       bountyId={firstParam(params.bountyId)}
       bountyTitle={firstParam(params.bountyTitle)}
+      topic={firstParam(params.topic) === 'assist' ? 'assist' : undefined}
     />
   );
 }

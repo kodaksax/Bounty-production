@@ -11,13 +11,17 @@
  * Nothing here moves money: approveAndRelease, cancelAndRefundBounty and
  * submitRating are jest mocks. The tests assert WHEN the page would call them.
  *
- * Steps covered elsewhere (other screens, already unit-tested on this branch):
+ * 2026-11-16 (second pass): the offers are on the job page itself, rendered
+ * by the REAL ApplicantCard. Choosing someone goes through usePosterJobOffers,
+ * mocked here only at its boundary: its `choose` stands in for the pay sheet
+ * plus fn_accept_bounty_request and returns the outcome the real hook returns.
+ * "You've chosen …" must appear only for an accepted outcome.
+ *
+ * Steps covered elsewhere:
  *  - Profile → own job opens /postings/<id>: profile-bounty-history-ownership.test.tsx
  *  - Inbox applicant rows have no delete: inbox-applicant-row-delete.test.tsx
- *  - The chat's offer banner count, and after a pass: bounty-thread-offer-count.test.tsx,
- *    hooks/use-bounty-thread-offer-count.test.tsx
- *  - Accepting an offer (pay-at-accept gate) is the existing Requests flow; it
- *    is represented here only by its outcome on the server.
+ *  - The chat's offer banner count: bounty-thread-offer-count.test.tsx
+ *  - The pay sheet and acceptance transaction: use-accept-request-funding.test.tsx
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import React from 'react';
@@ -49,6 +53,8 @@ jest.mock('expo-image', () => ({ Image: () => null }));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ bountyId: 'b1' }),
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn(), canGoBack: () => true }),
+  usePathname: () => '/postings/b1',
+  useGlobalSearchParams: () => ({}),
   useFocusEffect: (cb: () => void) => {
     const { useEffect } = require('react');
     useEffect(() => {
@@ -167,6 +173,31 @@ jest.mock('../../hooks/useBountyLifecycle', () => {
   RN.PanResponder = RN.PanResponder ?? { create: () => ({ panHandlers: {} }) };
 }
 
+// The offers on this job, and the hire boundary. mockChoose stands in for the
+// pay sheet + fn_accept_bounty_request and resolves like useAcceptRequest.
+let mockOffers: any[] = [];
+const mockChoose = jest.fn();
+const mockPass = jest.fn();
+const mockAsk = jest.fn();
+jest.mock('../../hooks/usePosterJobOffers', () => ({
+  usePosterJobOffers: () => ({
+    offers: mockOffers,
+    loadState: 'ready',
+    reload: jest.fn(),
+    gate: { active: false },
+    choose: (...a: unknown[]) => mockChoose(...a),
+    pass: (...a: unknown[]) => mockPass(...a),
+    ask: (...a: unknown[]) => mockAsk(...a),
+    askingRequestId: null,
+    isAskBusy: false,
+  }),
+}));
+jest.mock('../../lib/services/poster-job-activity', () => {
+  const empty = { offers: null, hiredAt: null, lastHelperMessageAt: null, lastPosterMessageAt: null, messagesKnown: false };
+  return { EMPTY_POSTER_JOB_ACTIVITY: empty, getPosterJobActivity: jest.fn().mockResolvedValue(empty) };
+});
+jest.mock('../../components/accept-funding-gate', () => ({ AcceptFundingGate: () => null }));
+
 import BountyDashboard from '../../app/postings/[bountyId]/index';
 
 const BASE = {
@@ -180,6 +211,24 @@ const BASE = {
   created_at: new Date().toISOString(),
 };
 const HUNTER = { id: 'hunter-1', name: 'ana_hunts', avatar: null };
+
+function offer(id: string, hunterId: string, username: string, profile: Record<string, unknown>, message: string) {
+  return {
+    id,
+    bounty_id: 'b1',
+    hunter_id: hunterId,
+    status: 'pending',
+    message,
+    created_at: new Date().toISOString(),
+    profile: { username, ...profile },
+    bounty: { ...BASE, funding_mode: 'at_accept' },
+  };
+}
+const THREE_OFFERS = [
+  offer('r1', 'hunter-1', 'ana_hunts', { hunterCompleted: 4, averageRating: 4.8, ratingCount: 5, stripe_identity_status: 'verified' }, 'I have a van and can come Saturday.'),
+  offer('r2', 'hunter-2', 'ben_fixes', { hunterCompleted: 1, averageRating: 5, ratingCount: 1 }, 'Happy to help this week.'),
+  offer('r3', 'hunter-3', 'cara_helps', {}, 'I can lift heavy things.'),
+];
 const NO_ONE = { id: null, name: null, avatar: null };
 const PENDING_SUBMISSION = {
   id: 's1',
@@ -208,18 +257,14 @@ async function serverChangesAndPosterReturns(next: Partial<ServerSnapshot>) {
   });
 }
 
-function primaryLabel(): string {
-  const { resolveBountyLifecycle } = jest.requireActual('../../lib/utils/bounty-lifecycle');
-  return resolveBountyLifecycle({
-    bounty: mockServer.bounty,
-    role: 'poster',
-    applicationCount: mockServer.applicationCount,
-    ...mockServer.args,
-  }).primaryAction.label;
-}
+const UNPAID_WITH_OFFERS =
+  "You haven't paid anything yet. When you choose someone, you'll see the exact amount before you pay.";
+// "Approve and pay $60.00", or "Mark as done" for an unpaid job.
+const APPROVE_BUTTON = /^(Approve and pay \$\d|Mark as done$)/;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockOffers = [];
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   mockFocusCallback = null;
   mockRefreshCount = 0;
@@ -241,6 +286,7 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
       applicationCount: 3,
       submission: null,
     };
+    mockOffers = THREE_OFFERS;
     // A real server reply: nothing funded yet.
     mockPlan.mockResolvedValue({ refundAmount: 0, destination: null });
     mockFundingRequirement.mockResolvedValue({ bountyId: 'b1', fundingMode: 'at_accept', alreadyFunded: false });
@@ -249,69 +295,114 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
   it('walks the whole job, releasing only after the explicit confirmation', async () => {
     render(<BountyDashboard />);
 
-    // ── 1. Open, 3 applicants, nothing paid ────────────────────────────────
-    expect(await screen.findByText("You haven't paid anything yet.")).toBeTruthy();
-    expect(
-      screen.getByText("Review who applied and choose the hunter you want. You're charged only when you accept.")
-    ).toBeTruthy();
-    expect(screen.getByLabelText('3 applications waiting for review')).toBeTruthy();
+    // ── 1. Open, 3 offers, nothing paid ────────────────────────────────────
+    expect(await screen.findByText(UNPAID_WITH_OFFERS)).toBeTruthy();
+    expect(screen.getAllByText('3 people offered to help').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByLabelText('Take this job down')).toBeTruthy();
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
 
-    // ── 2. Review applicants: the Applications card opens Requests ────────
-    fireEvent.press(screen.getByLabelText('3 applications waiting for review'));
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toMatch(/requests/i);
+    // ── 2. All three offers on this page, with what is known about each ────
+    fireEvent.press(screen.getByLabelText('Compare the 3 offers'));
+    expect(mockPush).not.toHaveBeenCalled();
+    const offers = screen.getByTestId('poster-offers');
+    expect(within(offers).getByText('ana_hunts')).toBeTruthy();
+    expect(within(offers).getByText('4 jobs done on Bounty')).toBeTruthy();
+    expect(within(offers).getByText('★ 4.8 from 5 reviews')).toBeTruthy();
+    expect(within(offers).getByText('I have a van and can come Saturday.')).toBeTruthy();
+    // One review is too few to show an average (MIN_RATING_SAMPLE).
+    expect(within(offers).getByText('1 job done on Bounty')).toBeTruthy();
+    expect(within(offers).queryByText(/★ 5\.0/)).toBeNull();
+    expect(within(offers).getByText('New to Bounty')).toBeTruthy();
+    expect(within(offers).getAllByLabelText(/^View .*'s profile and reviews$/).length).toBe(3);
+    // No marketplace jargon on the cards.
+    expect(within(offers).queryByText(/hunter|bounty applicant|escrow/i)).toBeNull();
 
-    // ── 3. Declined one elsewhere: the count follows on return ────────────
-    await serverChangesAndPosterReturns({ applicationCount: 2 });
-    expect(await screen.findByLabelText('2 applications waiting for review')).toBeTruthy();
-
-    // ── 4. Accepted ana_hunts elsewhere (charged at accept) ───────────────
-    await serverChangesAndPosterReturns({
-      bounty: { ...mockServer.bounty, status: 'in_progress', accepted_by: 'hunter-1' },
-      otherParty: HUNTER,
-      applicationCount: 0,
+    // ── 3. "Not this time" asks first, and removes only that offer ────────
+    fireEvent.press(within(offers).getByLabelText("Not this time: remove cara_helps's offer"));
+    expect(lastAlert().title).toBe('Not this time?');
+    expect(lastAlert().message).toContain('Your job stays open');
+    expect(mockPass).not.toHaveBeenCalled();
+    mockPass.mockResolvedValue(true);
+    await act(async () => {
+      lastAlert().buttons.find((b: any) => b.style === 'destructive').onPress();
     });
-    // The page re-read: no stale "You haven't paid", no take-down, the
-    // money is now described as held for the hired hunter.
+    expect(mockPass).toHaveBeenCalledWith('r3');
+    expect(mockCancel).not.toHaveBeenCalled();
+    mockOffers = THREE_OFFERS.slice(0, 2);
+    await serverChangesAndPosterReturns({ applicationCount: 2 });
+    expect(await screen.findByLabelText('Compare the 2 offers')).toBeTruthy();
+
+    // ── 4. Choosing someone: no confirmation screen until the server says yes
+    mockChoose.mockResolvedValueOnce({ accepted: false, reason: 'declined_payment' });
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Choose ana_hunts'));
+    });
+    expect(mockChoose).toHaveBeenCalledWith('r1');
+    expect(screen.queryByTestId('hire-confirmation')).toBeNull();
+
+    mockChoose.mockImplementationOnce(async () => {
+      // The acceptance transaction: hired, and the job charged at accept.
+      mockServer = {
+        ...mockServer,
+        bounty: { ...mockServer.bounty, status: 'in_progress', accepted_by: 'hunter-1' },
+        otherParty: HUNTER,
+        applicationCount: 0,
+      };
+      mockOffers = [];
+      return { accepted: true, bountyId: 'b1', hunterId: 'hunter-1', hunterName: 'ana_hunts', conversationId: 'conv-1' };
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Choose ana_hunts'));
+    });
+    expect(await screen.findByTestId('hire-confirmation')).toBeTruthy();
+    expect(screen.getByText("You've chosen ana_hunts")).toBeTruthy();
+    expect(screen.getByText('Agree on a day and time for the work.')).toBeTruthy();
+    expect(within(screen.getByTestId('hire-confirmation')).getByLabelText('Message ana_hunts')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('hire-confirmation-done'));
+    expect(screen.queryByTestId('hire-confirmation')).toBeNull();
+
+    // The page re-read: no stale "You haven't paid", no take-down, the money
+    // is held for the person chosen, and they are shown as doing the job.
     expect(
-      await screen.findByText("Held safely in escrow. It's released to ana_hunts only when you approve the work.")
+      await screen.findByText('Bounty is holding your $60. ana_hunts is paid only after you approve the work.')
     ).toBeTruthy();
-    expect(screen.queryByText("You haven't paid anything yet.")).toBeNull();
+    expect(screen.queryByText(/haven't paid anything/)).toBeNull();
     expect(screen.queryByLabelText('Take this job down')).toBeNull();
     expect(screen.getByTestId('bounty-manage-locked')).toBeTruthy();
+    expect(screen.getByTestId('poster-helper-card')).toBeTruthy();
+    expect(screen.getByText('ana_hunts is doing the job')).toBeTruthy();
 
     // ── 5. The hunter submits ──────────────────────────────────────────────
     await serverChangesAndPosterReturns({
       args: { submissionStatus: 'pending', submittedAt: PENDING_SUBMISSION.submitted_at },
       submission: PENDING_SUBMISSION,
     });
-    const review = primaryLabel();
-    expect(review).toBe('Review & release payment');
+    const review = 'Check the work';
 
     // ── 6. Open the review: nothing is released by opening it ─────────────
     fireEvent.press(await screen.findByLabelText(review));
-    expect(await screen.findByText('Proceed to Payout')).toBeTruthy();
+    expect(await screen.findByText(APPROVE_BUTTON)).toBeTruthy();
     expect(mockGetSubmissionForReview).toHaveBeenCalledWith('b1', 'hunter-1');
     // The hunter's message, in the sheet (the page's Submitted work card has it too).
     expect(screen.getAllByText('All cleared out.').length).toBeGreaterThanOrEqual(2);
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
 
     // ── 7. The irreversible step, then backing out of it ──────────────────
-    fireEvent.press(screen.getByText('Proceed to Payout'));
-    expect(screen.getByText('Complete and release payment?')).toBeTruthy();
-    expect(screen.getByText('This will mark the bounty as completed and release $60.00 to ana_hunts.')).toBeTruthy();
-    expect(screen.getByText('Once you continue, this action cannot be undone.')).toBeTruthy();
+    fireEvent.press(screen.getByText(APPROVE_BUTTON));
+    expect(screen.getByText('Pay ana_hunts $60.00?')).toBeTruthy();
+    expect(
+      screen.getByText('Only approve if the job is finished. Approving marks the job as done and releases $60.00 to ana_hunts.')
+    ).toBeTruthy();
+    expect(screen.getByText('Once you approve, this cannot be undone.')).toBeTruthy();
     fireEvent.press(screen.getByText('Back to review'));
-    expect(screen.getByText('Proceed to Payout')).toBeTruthy();
+    expect(screen.getByText(APPROVE_BUTTON)).toBeTruthy();
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
 
     // ── 8. Explicit confirmation releases, exactly once ───────────────────
     mockApproveAndRelease.mockResolvedValue(true);
-    fireEvent.press(screen.getByText('Proceed to Payout'));
+    fireEvent.press(screen.getByText(APPROVE_BUTTON));
     await act(async () => {
-      fireEvent(screen.getByLabelText('Slide to confirm payout'), 'accessibilityAction', {
+      fireEvent(screen.getByLabelText('Slide to approve and pay'), 'accessibilityAction', {
         nativeEvent: { actionName: 'activate' },
       });
     });
@@ -346,20 +437,52 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
     });
     expect(mockRefreshCount).toBeGreaterThan(refreshesBefore);
     expect(screen.queryByText('Rate ana_hunts')).toBeNull();
-    expect(await screen.findByText('Released to ana_hunts.')).toBeTruthy();
+    expect(await screen.findByText('Released to ana_hunts')).toBeTruthy();
+    expect(screen.getByText('Your $60 was released to ana_hunts.')).toBeTruthy();
     expect(within(screen.getByTestId('bounty-payment-state')).queryByText(/escrow/i)).toBeNull();
 
     // ── 11. Leave a review again: already done, nothing reopens ───────────
     mockHasRated.mockResolvedValue(true);
     await act(async () => {
-      if (screen.queryByLabelText('More actions')) fireEvent.press(screen.getByLabelText('More actions'));
-      fireEvent.press(screen.getByLabelText('Leave a review'));
+      fireEvent.press(screen.getByLabelText('Leave a review for ana_hunts'));
     });
     expect(lastAlert().title).toBe('Already reviewed');
     expect(screen.queryByText('Rate ana_hunts')).toBeNull();
     // Only the one release, ever.
     expect(mockApproveAndRelease).toHaveBeenCalledTimes(1);
     expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it('while a hire is being confirmed, the page says so instead of still showing the offers (16 Nov swarm)', async () => {
+    let finish: (v: unknown) => void = () => {};
+    mockChoose.mockReturnValueOnce(new Promise(r => (finish = r)));
+    render(<BountyDashboard />);
+    await screen.findByText(UNPAID_WITH_OFFERS);
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Choose ana_hunts'));
+    });
+    expect(screen.getByTestId('poster-choosing')).toBeTruthy();
+    expect(screen.getByText('Choosing ana_hunts…')).toBeTruthy();
+    // Nothing on screen still says the job is waiting on the poster.
+    expect(screen.queryByText('3 people offered to help')).toBeNull();
+    expect(screen.queryByLabelText('Compare the 3 offers')).toBeNull();
+    await act(async () => {
+      finish({ accepted: true, bountyId: 'b1', hunterId: 'hunter-1', hunterName: 'ana_hunts', conversationId: null });
+    });
+    expect(screen.queryByTestId('poster-choosing')).toBeNull();
+    expect(screen.getByText("You've chosen ana_hunts")).toBeTruthy();
+  });
+
+  it('a hire that does not go through leaves the "Choosing" screen and shows no confirmation', async () => {
+    mockChoose.mockResolvedValueOnce({ accepted: false, reason: 'failed' });
+    render(<BountyDashboard />);
+    await screen.findByText(UNPAID_WITH_OFFERS);
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Choose ana_hunts'));
+    });
+    expect(screen.queryByTestId('poster-choosing')).toBeNull();
+    expect(screen.queryByTestId('hire-confirmation')).toBeNull();
+    expect(screen.getByLabelText('Compare the 3 offers')).toBeTruthy();
   });
 
   it('a release that does not confirm is never shown as paid, and the page re-reads on close', async () => {
@@ -373,10 +496,10 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
     };
     mockApproveAndRelease.mockResolvedValue(false);
     render(<BountyDashboard />);
-    fireEvent.press(await screen.findByLabelText('Review & release payment'));
-    fireEvent.press(await screen.findByText('Proceed to Payout'));
+    fireEvent.press(await screen.findByLabelText('Check the work'));
+    fireEvent.press(await screen.findByText(APPROVE_BUTTON));
     await act(async () => {
-      fireEvent(screen.getByLabelText('Slide to confirm payout'), 'accessibilityAction', {
+      fireEvent(screen.getByLabelText('Slide to approve and pay'), 'accessibilityAction', {
         nativeEvent: { actionName: 'activate' },
       });
     });
@@ -391,7 +514,7 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
     });
     expect(mockRefreshCount).toBe(refreshesBefore + 1);
     // Still awaiting review: the job page did not move on by itself.
-    expect(screen.getByLabelText('Review & release payment')).toBeTruthy();
+    expect(screen.getByLabelText('Check the work')).toBeTruthy();
   });
 });
 
@@ -410,11 +533,10 @@ describe('Funded job (paid up front): open with money held → take-down kept be
   it('says the money is held, and "Keep it" changes nothing', async () => {
     render(<BountyDashboard />);
     expect(
-      await screen.findByText("Held safely in escrow. It's released to the hunter you choose, only when you approve their work.")
+      await screen.findByText("You've already paid $60. Bounty holds it until you approve the finished work.")
     ).toBeTruthy();
-    expect(
-      screen.getByText("Review who applied and choose the hunter you want. You've already paid for this job.")
-    ).toBeTruthy();
+    expect(screen.getByText('Held by Bounty')).toBeTruthy();
+    expect(screen.queryByText(/haven't paid/)).toBeNull();
     const cancel = screen.getByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(cancel);
@@ -430,16 +552,16 @@ describe('Funded job (paid up front): open with money held → take-down kept be
 
   it('a failed money read on return shows "Check again", never a stale answer', async () => {
     render(<BountyDashboard />);
-    await screen.findByText(/Held safely in escrow/);
+    await screen.findByText(/already paid \$60/);
     mockPlan.mockRejectedValueOnce(new Error('offline'));
     await serverChangesAndPosterReturns({});
     expect(await screen.findByText(/couldn't check your payment/i)).toBeTruthy();
-    expect(screen.queryByText(/Held safely in escrow/)).toBeNull();
+    expect(screen.queryByText(/already paid|held by bounty/i)).toBeNull();
     expect(screen.getByLabelText('Take this job down')).toBeTruthy();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Check payment again'));
     });
-    expect(await screen.findByText(/Held safely in escrow/)).toBeTruthy();
+    expect(await screen.findByText(/already paid \$60/)).toBeTruthy();
   });
 });
 
@@ -455,8 +577,8 @@ describe('For-honor job: no money anywhere in the flow', () => {
     render(<BountyDashboard />);
     expect(screen.queryByTestId('bounty-payment-state')).toBeNull();
     expect(mockPlan).not.toHaveBeenCalled();
-    fireEvent.press(await screen.findByLabelText(primaryLabel()));
-    fireEvent.press(await screen.findByText('Proceed to Payout'));
+    fireEvent.press(await screen.findByLabelText('Check the work'));
+    fireEvent.press(await screen.findByText(APPROVE_BUTTON));
     expect(screen.getByLabelText('Slide to mark complete')).toBeTruthy();
     expect(screen.queryByText(/escrow release/)).toBeNull();
   });
