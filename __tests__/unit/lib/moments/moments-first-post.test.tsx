@@ -250,3 +250,15 @@ describe('"Later" on a prompt the Post tap ran into', () => {
     expect(onContinueTo).not.toHaveBeenCalled();
   });
 });
+
+// Home has loaded her jobs and none of them needs her, so the session prompt
+// gate is open (lib/moments/sessionPromptGate.ts). Suites that exercise the
+// gate itself live in moments-session-prompt-gate.test.tsx.
+import {
+  reportHomeJobs as mockGateReportHomeJobs,
+  resetPromptGateForTests as mockGateReset,
+} from '../../../../lib/moments/sessionPromptGate';
+beforeEach(() => {
+  mockGateReset();
+  mockGateReportHomeJobs('user-1', { needsYou: false });
+});

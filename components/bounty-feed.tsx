@@ -69,6 +69,8 @@ import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { bountyService } from '../lib/services/bounty-service';
 import { completionService } from '../lib/services/completion-service';
 import { getPendingOfferCounts } from '../lib/services/poster-job-activity';
+import { markHomeJobsLoading, reportHomeJobs } from '../lib/moments/sessionPromptGate';
+import { readPosterJobsAttention } from '../lib/poster-jobs/needs-you';
 import type { Bounty } from '../lib/services/database.types';
 import { bountyDistanceMiles } from '../lib/utils/bounty-distance';
 import { storage } from '../lib/storage';
@@ -290,7 +292,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const bountyListRef = useRef<FlatList>(null);
   const offsetRef = useRef(0);
 
-  const { location: userLocation, permission } = useLocation();
+  const { location: userLocation, permission, requestPermission: requestLocationPermission } = useLocation();
   const validUserId = useValidUserId();
 
   // SBA-02: a hunter with a location (device fix or saved profile point) sees
@@ -733,6 +735,31 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       });
       return sortByProgress(items);
     });
+
+    // Tell the session prompt gate her jobs are on screen and whether one of
+    // them needs her (lib/poster-jobs/needs-you.ts). Only a complete read
+    // counts: if the offers or submissions failed, prompts keep waiting
+    // rather than read "unknown" as "nothing needs you".
+    if (!offerCounts || !latestSubmissions) return;
+    try {
+      const attention = await withTimeout(
+        readPosterJobsAttention({
+          userId: uid,
+          bounties: live,
+          offerCounts,
+          latestSubmissions: latestSubmissions as Map<
+            string,
+            { status?: string | null; submitted_at?: string | null }
+          >,
+        }),
+        API_TIMEOUTS.DEFAULT
+      );
+      reportHomeJobs(uid, { needsYou: attention.needsYou });
+    } catch (error) {
+      logger.warning('feed.my_active_bounties.attention_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }, [validUserId, currentUserId]);
 
   // The realtime handler below is bound once per mount, so it reads the
@@ -778,6 +805,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // A pick from the Distance sheet. "Any distance" is remembered and turns the
   // local default off; any radius clears that. A pick equal to the resulting
   // default is stored as "no override", so For You reads as active again.
+  // The OS location dialog can still be shown (never answered, or Android's
+  // "ask again").
+  const canAskForLocation =
+    !!permission && !permission.granted && (permission.status === 'undetermined' || permission.canAskAgain);
   const pickDistance = useCallback(
     (value: DistanceFilterValue) => {
       const pick = applyDistancePick({ value, hasLocation: hasFeedLocation });
@@ -788,8 +819,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         } catch {}
       })();
       selectOnlyFilter({ distance: pick.override });
+      // Browsing nearby is where the feed needs location: picking a radius
+      // is the ask, with the reason already shown under the options. Only
+      // while the OS can still show its dialog; never on its own.
+      if (value !== DISTANCE_OFF && !hasFeedLocation && canAskForLocation) {
+        void requestLocationPermission();
+      }
     },
-    [hasFeedLocation, selectOnlyFilter]
+    [hasFeedLocation, selectOnlyFilter, canAskForLocation, requestLocationPermission]
   );
 
   // "For You" is the default state (which includes the local radius for a
@@ -1240,6 +1277,21 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // up on focus and dropped back on the next reset — a spurious, confusing
   // change in the number of bounties shown. Initial load, pull-to-refresh, and
   // the foreground-resume effect are the real (re)load triggers.
+  // Her own jobs load once per signed-in user as soon as the shell mounts,
+  // whatever tab she lands on: no prompt may open until they have (the
+  // session prompt gate waits on this), and a poster who lands on Post must
+  // not be held back until she visits Home.
+  const homeJobsLoadedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    const uid = validUserId ?? currentUserId;
+    if (!uid || homeJobsLoadedForRef.current === uid) return;
+    homeJobsLoadedForRef.current = uid;
+    markHomeJobsLoading(uid);
+    if (activeScreen !== 'bounty') loadMyActiveBounties();
+    // Once per user; the effect below covers visits to the bounty tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validUserId, currentUserId, loadMyActiveBounties]);
+
   useEffect(() => {
     if (activeScreen === 'bounty') {
       loadUserApplications();
@@ -1540,7 +1592,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 hint={
                   hasFeedLocation
                     ? undefined
-                    : 'Location access is off, so distance filters may not match what’s actually near you.'
+                    : canAskForLocation
+                      ? 'Pick a distance and we’ll ask to use your location, so we can show jobs near you.'
+                      : 'Location access is off, so distance filters may not match what’s actually near you.'
                 }
                 testID="feed-distance-filter"
               />

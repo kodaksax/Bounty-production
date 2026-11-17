@@ -48,6 +48,13 @@ import {
 } from 'app/hooks/useResumeComposerPrompt';
 import { analyticsService } from 'lib/services/analytics-service';
 import { getDraftAbandonedAt, markDraftAbandoned } from 'lib/storage/abandoned-draft';
+import {
+  beginPromptSession,
+  promptGateState,
+  reportHomeJobs,
+  resetPromptGateForTests,
+  tryClaimPrompt,
+} from 'lib/moments/sessionPromptGate';
 
 const trackEvent = analyticsService.trackEvent as jest.Mock;
 let appStateListener: ((next: string) => void) | null = null;
@@ -69,8 +76,12 @@ async function settle() {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   mockStore.clear();
+  // Session 1, Home has loaded her jobs, none needs her: the gate is open.
+  resetPromptGateForTests();
+  await beginPromptSession(USER, 1);
+  reportHomeJobs(USER, { needsYou: false });
   trackEvent.mockClear();
   appStateListener = null;
   jest.spyOn(AppState, 'addEventListener').mockImplementation(((_type: string, listener: any) => {
@@ -168,6 +179,46 @@ describe('useResumeComposerPrompt', () => {
     act(() => appStateListener?.('active'));
     await waitFor(() => expect(result.current.draftTitle).toBe('Mount my TV'));
     now.mockRestore();
+  });
+});
+
+describe('useResumeComposerPrompt and the session prompt gate', () => {
+  beforeEach(() => {
+    resetPromptGateForTests();
+  });
+
+  it('waits until Home has loaded her jobs, then shows', async () => {
+    await beginPromptSession(USER, 1);
+    await seedAbandonedDraft();
+    const { result } = renderHook(() => useResumeComposerPrompt(USER, 'bounty'));
+    await settle();
+    expect(result.current.draftTitle).toBeNull();
+
+    act(() => reportHomeJobs(USER, { needsYou: false }));
+    await waitFor(() => expect(result.current.draftTitle).toBe('Mount my TV'));
+    // It was the session's one prompt.
+    expect(promptGateState(USER)).toBe('closed');
+  });
+
+  it('is held for the session when one of her jobs needs her', async () => {
+    await beginPromptSession(USER, 1);
+    await seedAbandonedDraft();
+    const { result } = renderHook(() => useResumeComposerPrompt(USER, 'bounty'));
+    act(() => reportHomeJobs(USER, { needsYou: true }));
+    await settle();
+    expect(result.current.draftTitle).toBeNull();
+    // Not answered, so it can still come back another session.
+    expect(await getDraftAbandonedAt(USER)).not.toBeNull();
+  });
+
+  it('does not show once something else used the session prompt', async () => {
+    await beginPromptSession(USER, 1);
+    reportHomeJobs(USER, { needsYou: false });
+    expect(tryClaimPrompt(USER, 'moment')).toBe(true);
+    await seedAbandonedDraft();
+    const { result } = renderHook(() => useResumeComposerPrompt(USER, 'bounty'));
+    await settle();
+    expect(result.current.draftTitle).toBeNull();
   });
 });
 

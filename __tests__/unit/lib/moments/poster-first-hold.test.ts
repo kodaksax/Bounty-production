@@ -93,12 +93,10 @@ describe('a poster with no published bounty', () => {
 
   it.each([
     'add_profile_photo',
-    'complete_profile',
     'identity_verification',
     'fund_wallet',
     'large_payout_eligible',
     'enable_notifications',
-    'enable_location',
     'inactive_user_return',
   ] as MomentType[])('holds %s, which shows once she has published', type => {
     const states = everythingEnqueued();
@@ -172,7 +170,6 @@ describe('after her first publish', () => {
       expect.arrayContaining([
         'enable_notifications',
         'fund_wallet',
-        'complete_profile',
         'identity_verification',
       ])
     );
@@ -215,7 +212,12 @@ describe('who the hold applies to', () => {
 });
 
 describe('hunters are unchanged', () => {
-  /** What the engine picked for these roles before the hold existed. */
+  /**
+   * What the engine picked for these roles before the hold existed, less the
+   * sign-in sheets every role lost on 2026-11-17 (complete_profile and
+   * enable_location left the queue; identity_verification asks only on the
+   * Wallet, and this is Home).
+   */
   const HUNTER_BEFORE: Record<'hunter' | 'both', MomentType[]> = {
     hunter: [
       'large_payout_eligible',
@@ -224,11 +226,8 @@ describe('hunters are unchanged', () => {
       'fund_wallet',
       'add_profile_photo',
       'rate_completed_bounty',
-      'complete_profile',
       'bounty_completed_followup',
       'dispute_resolved_followup',
-      'enable_location',
-      'identity_verification',
       'stripe_connect_onboarding',
       'inactive_user_return',
       'feature_announcement',

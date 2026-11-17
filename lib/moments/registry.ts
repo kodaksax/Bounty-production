@@ -11,9 +11,18 @@
  * evaluation" means in practice: adding a new moment is adding one entry
  * here, never scattering an `if` into an unrelated screen.
  *
+ * Not here any more (they were sheets that met a returning user at sign-in):
+ *  - complete_profile is a dismissible card on Profile
+ *    (components/profile-completion-card.tsx).
+ *  - enable_location is asked where a feature needs it: the feed's Distance
+ *    filter and the composer's location step, each with its reason first.
+ * Every moment also goes through the session prompt gate
+ * (lib/moments/sessionPromptGate.ts): one per session, none before Home has
+ * loaded the user's jobs, none while one of them needs her.
+ *
  * Three groups:
  *  - STATE-DERIVED moments (identity_verification, stripe_connect_onboarding,
- *    enable_notifications, enable_location, complete_profile): eligibility
+ *    enable_notifications): eligibility
  *    is a pure function of MomentContext (profile + permission snapshot)
  *    and needs no explicit trigger — it's re-evaluated every time
  *    MomentsProvider refreshes.
@@ -42,13 +51,6 @@
 
 import { referralService } from './referral-service';
 import type { MomentContext, MomentDefinition, MomentState, MomentType } from './types';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function accountAgeDays(ctx: MomentContext): number {
-  if (!ctx.accountCreatedAt) return 0;
-  return (Date.now() - new Date(ctx.accountCreatedAt).getTime()) / DAY_MS;
-}
 
 /** Event-triggered moments share this eligibility rule: only show once explicitly enqueued and not yet resolved. */
 function eligibleWhenEnqueued(ctx: MomentContext, state: MomentState | null): boolean {
@@ -99,15 +101,6 @@ function hasClearedFirstSession(ctx: MomentContext): boolean {
  * to protect against for passive, out-of-context nudging.
  */
 const WALLET_RELEVANT_SCREENS = new Set(['wallet']);
-/**
- * Balance (in dollars — profiles.balance is NUMERIC, not cents) above which
- * an unverified account is enough of a trust/safety concern that verifying
- * is worth surfacing regardless of session count. Mirrors the $100 "high-
- * value account" threshold hooks/use-two-factor-auth.ts already uses to
- * prompt 2FA enrollment, applied here in dollars since MomentContext's
- * balance field isn't in cents.
- */
-const HIGH_VALUE_BALANCE_THRESHOLD = 100;
 
 /**
  * Trust/ID prompts (every `category: 'trust'` moment — the engine applies
@@ -226,72 +219,18 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     action: { type: 'navigate', route: '/profile/edit' },
   },
   {
-    type: 'complete_profile',
-    priority: 30,
-    category: 'profile',
-    cooldownHours: 96,
-    maxShownCount: 2,
-    isEligible: ctx =>
-      hasClearedFirstSession(ctx) &&
-      accountAgeDays(ctx) >= 1 &&
-      (!ctx.profile.hasBio || !ctx.profile.hasLocation),
-    checkCompleted: ctx => ctx.profile.hasBio && ctx.profile.hasLocation,
-    content: () => ({
-      icon: 'person-outline',
-      title: 'Finish setting up your profile',
-      body: 'A bio and location help us match you with the right bounties nearby, and help others trust who they’re dealing with.',
-      benefits: ['Better bounty matching', 'Shows up in local search'],
-      primaryLabel: 'Complete profile',
-      secondaryLabel: 'Maybe later',
-      estimatedMinutes: 2,
-    }),
-    action: { type: 'navigate', route: '/profile/edit' },
-  },
-  {
-    type: 'enable_location',
-    priority: 40,
-    category: 'engagement',
-    cooldownHours: 72,
-    maxShownCount: 3,
-    // Onboarding already asks for location (app/onboarding/location.tsx), so
-    // this is the second ask. Skip it once that one left an answer: an OS
-    // grant/denial (permission no longer 'undetermined'), or a location
-    // saved to the profile — which on web can exist while the browser still
-    // reports 'undetermined'. Only someone who skipped both gets asked again.
-    // Not added to checkCompleted: a saved location isn't a permission
-    // grant, and moment_completed for this type reports `granted`.
-    isEligible: ctx =>
-      hasClearedFirstSession(ctx) &&
-      ctx.permissions.location === 'undetermined' &&
-      !ctx.profile.hasLocation,
-    checkCompleted: ctx => ctx.permissions.location !== 'undetermined',
-    content: () => ({
-      icon: 'location-on',
-      title: 'See what’s actually near you',
-      body: 'Turn on location to see real distances to nearby bounties instead of browsing everything citywide.',
-      benefits: [
-        'Real distances, not guesses',
-        'Only your area is stored — never your exact address',
-      ],
-      primaryLabel: 'Use my location',
-      secondaryLabel: 'Not now',
-    }),
-    action: { type: 'inline', handlerKey: 'request_location' },
-  },
-  {
     type: 'identity_verification',
     priority: 50,
     category: 'trust',
     cooldownHours: 96,
     maxShownCount: 3,
-    // Never right after onboarding, unless there's a strong reason: the
-    // user is somewhere verification actually unlocks something right now
-    // (wallet/payouts — VERIFICATION_RELEVANT_SCREENS), or their balance has
-    // grown enough that verifying is a real trust/safety concern rather
-    // than a nice-to-have (HIGH_VALUE_BALANCE_THRESHOLD). Either of those is
-    // shown to a brand-new user in their very first session. Absent a
-    // strong reason, this waits for a later session like every other
-    // passive activation prompt (MIN_SESSIONS_FOR_ACTIVATION_PROMPT).
+    // Asked where it's needed, never at sign-in: only while the user is on
+    // the Wallet, where payouts happen and being verified actually matters
+    // (WALLET_RELEVANT_SCREENS). What verification unlocks is unchanged;
+    // applying to an ID-required bounty still asks at that moment
+    // (app/bounty/[id]/public.tsx). It used to also fire on any screen from
+    // a user's second session, or anywhere once the balance passed $100,
+    // which put it on Home straight after sign-in.
     // All of this sits behind trustPromptsAllowed (applied by the engine):
     // a poster sees none of it before their first published bounty.
     // 'rejected' (legacy) / 'requires_input' (Stripe Identity) are included
@@ -305,13 +244,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
         ctx.profile.stripeIdentityStatus !== 'processing' &&
         ctx.profile.idVerificationStatus !== 'pending';
       if (!needsVerification) return false;
-
-      const hasStrongReason =
-        (ctx.activeScreen != null && WALLET_RELEVANT_SCREENS.has(ctx.activeScreen)) ||
-        ctx.profile.balance >= HIGH_VALUE_BALANCE_THRESHOLD;
-      if (hasStrongReason) return true;
-
-      return ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT;
+      return ctx.activeScreen != null && WALLET_RELEVANT_SCREENS.has(ctx.activeScreen);
     },
     checkCompleted: ctx =>
       ctx.profile.stripeIdentityStatus === 'processing' ||

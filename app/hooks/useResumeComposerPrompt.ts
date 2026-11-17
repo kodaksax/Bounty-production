@@ -13,6 +13,10 @@
  *
  * Observed through post_resume_prompt with surface 'app_open' (action shown /
  * continued / dismissed), then bounty_published.
+ *
+ * It shares the session prompt gate with MomentSheet: at most one of the two
+ * per session, neither before Home shows her jobs, neither while a job needs
+ * her.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +24,7 @@ import { AppState } from 'react-native';
 import { readBountyDraftInProgress } from 'app/hooks/useBountyDraft';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { clearDraftAbandoned, getDraftAbandonedAt } from '../../lib/storage/abandoned-draft';
+import { claimPromptWhenDecided } from '../../lib/moments/sessionPromptGate';
 
 /** Background time after which coming back counts as a new app open. */
 export const SESSION_GAP_MS = 30 * 60 * 1000;
@@ -109,6 +114,15 @@ export function useResumeComposerPrompt(
         return;
       }
       if (cancelled || activeScreenRef.current === POST_SCREEN) return;
+      // This sheet is the session's one prompt too: it waits until Home has
+      // loaded her jobs, and stays away for the session when one of them
+      // needs her (lib/moments/sessionPromptGate.ts).
+      const claimed = await claimPromptWhenDecided(
+        userId,
+        'resume_draft',
+        () => !cancelled && activeScreenRef.current !== POST_SCREEN
+      );
+      if (!claimed || cancelled) return;
       setDraftTitle(draft.title.trim());
       analyticsService.trackEvent('post_resume_prompt', {
         surface: PROMPT_SURFACE,
