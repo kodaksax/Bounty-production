@@ -8,13 +8,17 @@
 //   magiclink / email  -> Resend template "Sign In Code" (alias sign-in-code)
 //   everything else    -> inline Bounty-styled email with the same code + link
 //
-// Why the button links to bountyfinder.net instead of straight to
-// supabase.co/auth/v1/verify (2026-11-18): mail scanners (Gmail's included)
-// open links in incoming mail. A GET on /verify consumes the one-time token, so
-// a scanner that gets there first leaves the user with "Email link is invalid
-// or has expired". The bountyfinder.net landing page is static and does
-// nothing until the person clicks "Continue", and the app verifies the token
-// itself (verifyOtp), so a scanner fetching the link uses nothing up.
+// Where the button goes depends on where the code was requested:
+//
+//   In the app (redirect_to is bountyexpo-workspace://…):
+//     https://<project>.supabase.co/functions/v1/open-app?token_hash=…&type=…
+//     An https link, so Gmail keeps it (Gmail strips custom-scheme links). On
+//     a phone it forwards to the app, which verifies the token itself
+//     (verifyOtp). Nothing spends the token until the app does, so mail link
+//     scanners cannot use it up. See supabase/functions/open-app.
+//
+//   On the website (redirect_to is https://…):
+//     Supabase's own /auth/v1/verify link, exactly as before this hook.
 //
 // Auth: Standard Webhooks signature with SEND_EMAIL_HOOK_SECRET (the
 // "v1,whsec_..." value generated when the hook is created). Deploy with
@@ -26,21 +30,8 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const HOOK_SECRET = (Deno.env.get('SEND_EMAIL_HOOK_SECRET') ?? '').replace('v1,whsec_', '')
 const FROM = Deno.env.get('AUTH_FROM_EMAIL') || 'Bounty <notifications@bountyfinder.app>'
 const REPLY_TO = 'support@bountyfinder.app'
-// Two landing paths, chosen by where the code was requested:
-//   /auth/open/     requested in the app. Claimed by the app as a universal
-//                   link (iOS AASA, Android App Links), so on a phone with Bounty
-//                   installed, tapping the button opens the app and signs in
-//                   directly (app/auth/open.tsx). Without the app, or on a
-//                   computer, the same URL loads the web confirm page.
-//   /auth/confirm/  requested on the website. Never claimed by the app, so
-//                   someone mid-checkout on bountyfinder.net stays in the
-//                   browser they started in.
-const SITE = (Deno.env.get('AUTH_LINK_ORIGIN') || 'https://www.bountyfinder.net').replace(/\/+$/, '')
+const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '')
 const APP_SCHEME = 'bountyexpo-workspace://'
-
-function landingPage(redirectTo: string): string {
-  return redirectTo.startsWith(APP_SCHEME) ? `${SITE}/auth/open/` : `${SITE}/auth/confirm/`
-}
 const SIGN_IN_TEMPLATE_ID = 'd8b727d3-9f33-46e4-9ce2-2c6e8d85a726' // "Sign In Code"
 
 type EmailData = {
@@ -64,15 +55,38 @@ const VERIFY_TYPE: Record<string, string> = {
   email_change: 'email_change',
 }
 
-function confirmUrl(tokenHash: string, actionType: string, redirectTo: string, siteUrl: string): string | null {
+type EmailLink = { url: string; opensApp: boolean }
+
+function emailLink(tokenHash: string, actionType: string, redirectTo: string, siteUrl: string): EmailLink | null {
   const type = VERIFY_TYPE[actionType]
-  if (!type || !tokenHash) return null
+  if (!type || !tokenHash || !SUPABASE_URL) return null
   const redirect = (redirectTo || siteUrl || '').trim()
-  const url = new URL(landingPage(redirect))
-  url.searchParams.set('token_hash', tokenHash)
+
+  if (redirect.startsWith(APP_SCHEME)) {
+    const url = new URL(`${SUPABASE_URL}/functions/v1/open-app`)
+    url.searchParams.set('token_hash', tokenHash)
+    url.searchParams.set('type', type)
+    return { url: url.toString(), opensApp: true }
+  }
+
+  const url = new URL(`${SUPABASE_URL}/auth/v1/verify`)
+  url.searchParams.set('token', tokenHash)
   url.searchParams.set('type', type)
   if (redirect) url.searchParams.set('redirect_to', redirect)
-  return url.toString()
+  return { url: url.toString(), opensApp: false }
+}
+
+// Button copy for the sign-in template. Fixed strings only (inserted
+// unescaped by Resend), never anything from the payload.
+const SIGN_IN_BUTTON = {
+  app: {
+    label: 'Open in the Bounty app',
+    hint: 'On your phone? Tap the button to open Bounty and sign in. On a computer? Type the code into Bounty.',
+  },
+  web: {
+    label: 'Sign in to Bounty',
+    hint: 'On a computer instead? Use the button to sign in.',
+  },
 }
 
 function escapeHtml(s: string): string {
@@ -156,18 +170,27 @@ async function resend(body: Record<string, unknown>, idempotencyKey: string): Pr
 }
 
 async function sendOne(to: string, actionType: string, code: string, tokenHash: string, d: EmailData, idemKey: string): Promise<void> {
-  const link = confirmUrl(tokenHash, actionType, d.redirect_to, d.site_url)
-  const inline = inlineEmail(actionType, code, link)
+  const link = emailLink(tokenHash, actionType, d.redirect_to, d.site_url)
+  const inline = inlineEmail(actionType, code, link?.url ?? null)
 
   if ((actionType === 'magiclink' || actionType === 'email') && link) {
+    const button = link.opensApp ? SIGN_IN_BUTTON.app : SIGN_IN_BUTTON.web
     const resp = await resend({
       from: FROM,
       to: [to],
       reply_to: REPLY_TO,
       subject: `Your Bounty sign-in code: ${code}`,
-      // `link` is built by URL(), so it is fully percent-encoded and cannot
+      // `link.url` is built by URL(), so it is fully percent-encoded and cannot
       // contain < > or ". Passed raw so the plain-text part shows a clean URL.
-      template: { id: SIGN_IN_TEMPLATE_ID, variables: { CODE: code.replace(/\D/g, ''), SIGN_IN_URL: link } },
+      template: {
+        id: SIGN_IN_TEMPLATE_ID,
+        variables: {
+          CODE: code.replace(/\D/g, ''),
+          SIGN_IN_URL: link.url,
+          BUTTON_LABEL: button.label,
+          BUTTON_HINT: button.hint,
+        },
+      },
     }, `${idemKey}/tpl`)
     if (resp.ok) return
     const errBody = await resp.text().catch(() => '')

@@ -293,3 +293,10 @@ verify_jwt = false
 # would fail to send.
 [functions.send-auth-email]
 verify_jwt = false
+
+# open-app: the button in emailed sign-in codes requested in the app. Opened
+# from a mail client by someone who is not signed in, so it carries no JWT.
+# It only redirects to the app's fixed callback with a validated token_hash and
+# never spends the token itself.
+[functions.open-app]
+verify_jwt = false

@@ -283,15 +283,15 @@ describe('redactAuthUrl', () => {
   });
 });
 
-// Universal link minted by supabase/functions/send-auth-email for a sign-in
-// code requested in the app; app/auth/open.tsx hands it to the callback screen.
-describe('send-auth-email universal links', () => {
-  const OPEN_LINK =
-    'https://www.bountyfinder.net/auth/open/?token_hash=9fc3837e92fcab473b97&type=magiclink' +
-    '&redirect_to=bountyexpo-workspace%3A%2F%2Fauth';
+// Where supabase/functions/open-app forwards the "Open in the Bounty app"
+// button from an emailed sign-in code. The app's existing /auth/callback
+// screen must read it as-is: no app change ships with that flow.
+describe('open-app redirect target', () => {
+  const OPEN_APP_TARGET =
+    'bountyexpo-workspace://auth/callback?token_hash=9fc3837e92fcab473b97&type=magiclink';
 
   it('parses a sign-in link as a magiclink token_hash', () => {
-    expect(parseAuthLink(OPEN_LINK)).toEqual({
+    expect(parseAuthLink(OPEN_APP_TARGET)).toEqual({
       kind: 'token_hash',
       tokenHash: '9fc3837e92fcab473b97',
       type: 'magiclink',
@@ -299,11 +299,11 @@ describe('send-auth-email universal links', () => {
   });
 
   it('is not mistaken for a recovery link', () => {
-    expect(isRecoveryLink(parseAuthLink(OPEN_LINK))).toBe(false);
+    expect(isRecoveryLink(parseAuthLink(OPEN_APP_TARGET))).toBe(false);
   });
 
   it('keeps recovery links routed to the password screen', () => {
-    const link = parseAuthLink(OPEN_LINK.replace('type=magiclink', 'type=recovery'));
+    const link = parseAuthLink(OPEN_APP_TARGET.replace('type=magiclink', 'type=recovery'));
     expect(isRecoveryLink(link)).toBe(true);
   });
 });
