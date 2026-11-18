@@ -178,6 +178,62 @@ describe('consumeAuthLink', () => {
     });
   });
 
+  describe('a sign-in email button tapped twice', () => {
+    const SIGN_IN_LINK: ParsedAuthLink = { kind: 'token_hash', tokenHash: 'th', type: 'magiclink' };
+    const EXPIRED = { data: NO_SESSION, error: { message: 'Email link is invalid or has expired', status: 403 } };
+    const signedIn = () =>
+      supabase.auth.getSession.mockResolvedValue({ data: { session: { access_token: 'at' } }, error: null });
+
+    it('treats the repeat as already signed in while the session holds', async () => {
+      supabase.auth.verifyOtp.mockResolvedValueOnce({ data: SESSION, error: null });
+      await expect(consumeAuthLink(SIGN_IN_LINK)).resolves.toEqual({ status: 'established', type: 'magiclink' });
+
+      supabase.auth.verifyOtp.mockResolvedValueOnce(EXPIRED);
+      signedIn();
+      await expect(consumeAuthLink(SIGN_IN_LINK)).resolves.toEqual({
+        status: 'already_established',
+        type: 'magiclink',
+      });
+    });
+
+    it('still says expired when nobody is signed in (signed out, or another phone)', async () => {
+      supabase.auth.verifyOtp.mockResolvedValueOnce(EXPIRED);
+      await expect(consumeAuthLink(SIGN_IN_LINK)).resolves.toEqual({ status: 'expired' });
+    });
+
+    it('handles the same repeat arriving as a redirect error', async () => {
+      signedIn();
+      await expect(
+        consumeAuthLink({ kind: 'error', code: 'expired', type: 'magiclink' })
+      ).resolves.toEqual({ status: 'already_established', type: 'magiclink' });
+    });
+
+    it('does not hide an outage or a malformed link behind a live session', async () => {
+      signedIn();
+      supabase.auth.verifyOtp.mockResolvedValueOnce({ data: NO_SESSION, error: { message: 'boom', status: 503 } });
+      await expect(consumeAuthLink(SIGN_IN_LINK)).resolves.toEqual({ status: 'failed' });
+      await expect(
+        consumeAuthLink({ kind: 'error', code: 'invalid', type: 'magiclink' })
+      ).resolves.toEqual({ status: 'invalid' });
+    });
+
+    it('does not extend to signup or email-change confirmations', async () => {
+      signedIn();
+      for (const type of ['signup', 'email_change', 'invite'] as const) {
+        supabase.auth.verifyOtp.mockResolvedValueOnce(EXPIRED);
+        await expect(consumeAuthLink({ kind: 'token_hash', tokenHash: 'th', type })).resolves.toEqual({
+          status: 'expired',
+        });
+      }
+    });
+
+    it('does not mark a sign-in as recovery', async () => {
+      supabase.auth.verifyOtp.mockResolvedValueOnce({ data: SESSION, error: null });
+      await consumeAuthLink(SIGN_IN_LINK);
+      expect(hasConsumedRecoveryLink()).toBe(false);
+    });
+  });
+
   describe('Supabase errors', () => {
     it('classifies an expired-token error as expired', async () => {
       supabase.auth.setSession.mockResolvedValue({

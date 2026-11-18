@@ -68,6 +68,28 @@ function classifyAuthError(error: { message?: string; status?: number } | null):
   return 'failed';
 }
 
+/**
+ * Link types whose only purpose is to sign someone in. Once one is used, the
+ * session it created is the whole result, so a second tap on the same email
+ * button (Supabase: "expired") while that session holds is a success, not an
+ * error. Deliberately excludes recovery (tracked above, because a recovery
+ * session must lead to "set a new password") and signup / invite /
+ * email_change (an existing session does not prove *that* confirmation
+ * happened).
+ */
+const SIGN_IN_LINK_TYPES: ReadonlySet<AuthLinkType> = new Set<AuthLinkType>(['magiclink', 'email']);
+
+async function signInLinkAlreadyUsed(
+  type: AuthLinkType | null,
+  failure: 'expired' | 'invalid' | 'failed' | 'used' | 'unknown'
+): Promise<boolean> {
+  if (!type || !SIGN_IN_LINK_TYPES.has(type)) return false;
+  // Only "already used / expired". A malformed link or an outage is still
+  // reported as such, even to someone who happens to be signed in.
+  if (failure !== 'expired' && failure !== 'used') return false;
+  return hasLiveSession();
+}
+
 async function hasLiveSession(): Promise<boolean> {
   try {
     const { data } = await supabase.auth.getSession();
@@ -91,6 +113,9 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
     // the session that first tap created, the user is exactly where they need
     // to be and an error screen would be a lie.
     if (recoveryLinkConsumed && (await hasLiveSession())) {
+      return { status: 'already_established', type: link.type };
+    }
+    if (await signInLinkAlreadyUsed(link.type, link.code)) {
       return { status: 'already_established', type: link.type };
     }
     if (link.code === 'expired' || link.code === 'used') return { status: 'expired' };
@@ -133,7 +158,14 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
       if (recoveryLinkConsumed && (await hasLiveSession())) {
         return { status: 'already_established', type: link.type };
       }
-      return { status: classifyAuthError(error) };
+      const failure = classifyAuthError(error);
+      // A sign-in button tapped twice: the first tap signed them in, so the
+      // second is "you're already in", not "link expired" (seen in production
+      // 2026-11-18: login at 22:20:17, same link re-tapped 22:20:26 → otp_expired).
+      if (await signInLinkAlreadyUsed(link.type, failure)) {
+        return { status: 'already_established', type: link.type };
+      }
+      return { status: failure };
     }
 
     if (!sessionCreated) {
