@@ -62,18 +62,28 @@ Deno.serve((req) => {
     // person in on the website instead: Supabase's /verify spends the token
     // and redirects to bountyfinder.net with the session.
     //
-    // Only on a real click. /verify spends the token on the first GET, and the
-    // emailed code shares that token, so a mail security scanner fetching this
-    // link (Microsoft Safe Links, Mimecast, ... all present desktop user
-    // agents) would kill both the button and the code. Browsers send
-    // Sec-Fetch-User: ?1 only for user-activated navigations; automated
-    // fetchers do not.
-    const userClick = req.headers.get('sec-fetch-user') === '?1'
+    // Only for a page opened in a real browser. /verify spends the token on
+    // the first GET, and the emailed code shares that token, so a mail
+    // security scanner fetching this link (desktop user agents) would kill
+    // both the button and the code. Real browsers mark top-level page loads
+    // with Sec-Fetch-Mode: navigate plus Sec-Fetch-Site; plain HTTP fetchers
+    // (most link scanners) send no Sec-Fetch headers at all.
+    //
+    // Sec-Fetch-User: ?1 (user activation) would be stricter, but Safari does
+    // not send it for links opened from mail: production 2026-11-18, macOS
+    // Safari 18.6 sent mode=navigate, site=cross-site and no Sec-Fetch-User.
+    // Residual risk: scanners that drive a full headless browser. Still far
+    // narrower than Supabase's default link, which /verify-spends on any GET.
+    const secFetchUser = req.headers.get('sec-fetch-user')
+    const secFetchMode = req.headers.get('sec-fetch-mode')
+    const secFetchSite = req.headers.get('sec-fetch-site')
+    const userClick = secFetchUser === '?1' || (secFetchMode === 'navigate' && !!secFetchSite)
     console.log('[open-app] desktop', {
       type,
       userClick,
-      secFetchSite: req.headers.get('sec-fetch-site'),
-      secFetchMode: req.headers.get('sec-fetch-mode'),
+      secFetchUser,
+      secFetchSite,
+      secFetchMode,
     })
     if (type === 'magiclink' && userClick && req.method === 'GET' && SUPABASE_URL) {
       const verify = new URL(`${SUPABASE_URL}/auth/v1/verify`)
