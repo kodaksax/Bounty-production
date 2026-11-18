@@ -69,7 +69,12 @@ import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { bountyService } from '../lib/services/bounty-service';
 import { completionService } from '../lib/services/completion-service';
 import { getPendingOfferCounts } from '../lib/services/poster-job-activity';
-import { markHomeJobsLoading, reportHomeJobs } from '../lib/moments/sessionPromptGate';
+import {
+  beginPromptSession,
+  markHomeJobsLoading,
+  reportHomeJobs,
+  usePromptGateSession,
+} from '../lib/moments/sessionPromptGate';
 import { readPosterJobsAttention } from '../lib/poster-jobs/needs-you';
 import type { Bounty } from '../lib/services/database.types';
 import { bountyDistanceMiles } from '../lib/utils/bounty-distance';
@@ -294,6 +299,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const { location: userLocation, permission, requestPermission: requestLocationPermission } = useLocation();
   const validUserId = useValidUserId();
+  const promptSession = usePromptGateSession(validUserId ?? currentUserId);
+  const promptSessionRef = useRef(promptSession);
+  promptSessionRef.current = promptSession;
+  const activeScreenRef = useRef(activeScreen);
+  activeScreenRef.current = activeScreen;
 
   // SBA-02: a hunter with a location (device fix or saved profile point) sees
   // in-person work within LOCAL_DEFAULT_RADIUS_MILES plus every online job,
@@ -655,6 +665,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setMyActiveBounties([]);
       return;
     }
+    const session = promptSessionRef.current;
+    if (session !== null) await beginPromptSession(uid, session);
     let rows: Bounty[] = [];
     try {
       // Every live bounty, not a newest-first slice: the cards are ordered by
@@ -663,7 +675,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         const batch = await withTimeout(
           bountyService.getAll({
             userId: uid,
-            statuses: ['open', 'in_progress'],
+            statuses: ['open', 'in_progress', 'cancellation_requested'],
             limit: MY_ACTIVE_BOUNTIES_PAGE_SIZE,
             offset: page * MY_ACTIVE_BOUNTIES_PAGE_SIZE,
             throwOnError: true,
@@ -686,14 +698,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     const live = rows.filter(
       b => b.status === 'in_progress' || (b.status === 'open' && !isBountyDeadlinePassed(b))
     );
-    const inProgressIds = live.filter(b => b.status === 'in_progress').map(b => String(b.id));
+    const attentionInProgressIds = rows
+      .filter(b => b.status === 'in_progress' || b.status === 'cancellation_requested')
+      .map(b => String(b.id));
 
     // null = the lookup failed; those bounties keep whatever stage they had.
     let latestSubmissions: Map<string, { status?: string }> | null = new Map();
-    if (inProgressIds.length > 0) {
+    if (attentionInProgressIds.length > 0) {
       try {
         latestSubmissions = await withTimeout(
-          completionService.getLatestSubmissionsForBounties(inProgressIds, { throwOnError: true }),
+          completionService.getLatestSubmissionsForBounties(
+            attentionInProgressIds,
+            { throwOnError: true }
+          ),
           API_TIMEOUTS.DEFAULT
         );
       } catch (error) {
@@ -703,10 +720,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         });
       }
     }
-
     // Pending offers per open job, so the card can say "3 people offered".
     // null = the read failed; those cards keep the count they had.
-    const openIds = live.filter(b => b.status === 'open').map(b => String(b.id));
+    const openIds = rows.filter(b => b.status === 'open').map(b => String(b.id));
     let offerCounts: Map<string, number> | null = new Map();
     if (openIds.length > 0) {
       try {
@@ -718,7 +734,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         });
       }
     }
-
     setMyActiveBounties(prev => {
       const priorStages = new Map(prev.map(item => [String(item.bounty.id), item.stage]));
       const priorCounts = new Map(prev.map(item => [String(item.bounty.id), item.offerCount]));
@@ -740,12 +755,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     // them needs her (lib/poster-jobs/needs-you.ts). Only a complete read
     // counts: if the offers or submissions failed, prompts keep waiting
     // rather than read "unknown" as "nothing needs you".
-    if (!offerCounts || !latestSubmissions) return;
+    if (!offerCounts || !latestSubmissions || session === null) return;
     try {
       const attention = await withTimeout(
         readPosterJobsAttention({
           userId: uid,
-          bounties: live,
+          bounties: rows,
           offerCounts,
           latestSubmissions: latestSubmissions as Map<
             string,
@@ -754,7 +769,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         }),
         API_TIMEOUTS.DEFAULT
       );
-      reportHomeJobs(uid, { needsYou: attention.needsYou });
+      reportHomeJobs(uid, { needsYou: attention.needsYou }, session);
     } catch (error) {
       logger.warning('feed.my_active_bounties.attention_failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -1277,27 +1292,24 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // up on focus and dropped back on the next reset — a spurious, confusing
   // change in the number of bounties shown. Initial load, pull-to-refresh, and
   // the foreground-resume effect are the real (re)load triggers.
-  // Her own jobs load once per signed-in user as soon as the shell mounts,
-  // whatever tab she lands on: no prompt may open until they have (the
-  // session prompt gate waits on this), and a poster who lands on Post must
-  // not be held back until she visits Home.
-  const homeJobsLoadedForRef = useRef<string | null>(null);
+  // Reload attention at every initialized session, whichever tab is visible.
+  // The session is initialized before the read starts so an older in-flight
+  // result cannot satisfy the new session's gate.
   useEffect(() => {
     const uid = validUserId ?? currentUserId;
-    if (!uid || homeJobsLoadedForRef.current === uid) return;
-    homeJobsLoadedForRef.current = uid;
+    if (!uid || promptSession === null) return;
     markHomeJobsLoading(uid);
-    if (activeScreen !== 'bounty') loadMyActiveBounties();
-    // Once per user; the effect below covers visits to the bounty tab.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validUserId, currentUserId, loadMyActiveBounties]);
+    if (activeScreenRef.current !== 'bounty') loadMyActiveBounties();
+  }, [validUserId, currentUserId, promptSession, loadMyActiveBounties]);
 
   useEffect(() => {
     if (activeScreen === 'bounty') {
       loadUserApplications();
-      loadMyActiveBounties();
     }
-  }, [activeScreen, loadUserApplications, loadMyActiveBounties]);
+  }, [activeScreen, loadUserApplications]);
+  useEffect(() => {
+    if (activeScreen === 'bounty' && promptSession !== null) loadMyActiveBounties();
+  }, [activeScreen, promptSession, loadMyActiveBounties]);
 
   // Silently reload feed data when the app returns from the background.
   // Requests started before backgrounding can be dropped by the OS and

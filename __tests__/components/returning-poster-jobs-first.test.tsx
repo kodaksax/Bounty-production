@@ -177,6 +177,7 @@ jest.mock('../../hooks/useValidUserId', () => ({ useValidUserId: () => 'user-123
 // AsyncStorage that keeps what is written, as on a device: the session count
 // and the prompt gate's closed-session record live here.
 const mockAsyncStore = new Map<string, string>();
+let mockPendingCancellations: any[] = [];
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(async (key: string) => mockAsyncStore.get(key) ?? null),
   setItem: jest.fn(async (key: string, value: string) => {
@@ -321,7 +322,11 @@ jest.mock('../../lib/supabase', () => {
     unsubscribe: jest.fn(),
   };
   const builder = (table: string): any => {
-    const result = { data: [], error: null, count: table === 'bounties' ? 1 : 0 };
+    const result = {
+      data: table === 'bounty_cancellations' ? mockPendingCancellations : [],
+      error: null,
+      count: table === 'bounties' ? 1 : 0,
+    };
     const b: any = new Proxy(
       {},
       {
@@ -356,6 +361,7 @@ let momentsService: any;
 let analyticsService: any;
 let resetPromptGateForTests: () => void;
 let resetSessionRecordsForTests: () => void;
+let promptGateState: (userId: string) => string;
 
 const MY_JOB = {
   id: 'job-1',
@@ -410,12 +416,14 @@ describe('a returning poster reaches her job first', () => {
     ({ momentsService } = require('../../lib/moments/momentsService'));
     ({ analyticsService } = require('../../lib/services/analytics-service'));
     ({ resetPromptGateForTests } = require('../../lib/moments/sessionPromptGate'));
+    ({ promptGateState } = require('../../lib/moments/sessionPromptGate'));
     ({ resetSessionRecordsForTests } = require('../../lib/moments/sessionTracking'));
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockAsyncStore.clear();
+    mockPendingCancellations = [];
     mockLocationPermission = { granted: false };
     resetPromptGateForTests();
     resetSessionRecordsForTests();
@@ -452,6 +460,37 @@ describe('a returning poster reaches her job first', () => {
       momentType: 'enable_notifications',
       reason: 'jobs_need_you',
     });
+  });
+
+  it('holds prompts for expired and cancellation-requested jobs on a non-Home tab', async () => {
+    const expired = { ...MY_JOB, id: 'expired-job', end_date: '2020-01-01T00:00:00Z' };
+    const cancellationRequested = {
+      ...MY_JOB,
+      id: 'cancellation-job',
+      status: 'cancellation_requested',
+    };
+    bountyService.getAll.mockImplementation((params: any) =>
+      Promise.resolve(params?.userId ? [expired, cancellationRequested] : [])
+    );
+    mockPendingCancellations = [
+      {
+        bounty_id: 'cancellation-job',
+        status: 'pending',
+        requester_type: 'hunter',
+        created_at: '2026-11-18T00:00:00Z',
+      },
+    ];
+    getPendingOfferCounts.mockResolvedValue(new Map());
+    const screen = renderHome('wallet');
+
+    await waitFor(() => expect(promptGateState('user-123')).toBe('closed'));
+    expect(screen.queryByTestId('job-card')).toBeNull();
+    expect(bountyService.getAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-123',
+        statuses: ['open', 'in_progress', 'cancellation_requested'],
+      })
+    );
   });
 
   it('opens her job page from the card in one tap', async () => {

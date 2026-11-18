@@ -39,9 +39,11 @@ export function isProfileCardSnoozed(dismissedAt: string | null, now: number = D
 export function ProfileCompletionCard({
   userId,
   profile,
+  isActive,
 }: {
   userId: string;
   profile: { about?: string | null; location?: string | null };
+  isActive: boolean;
 }) {
   const router = useRouter();
   const { theme } = useAppThemeContext();
@@ -65,7 +67,7 @@ export function ProfileCompletionCard({
     };
   }, [userId]);
 
-  const shown = needed && snoozed === false;
+  const shown = isActive && needed && snoozed === false;
   useEffect(() => {
     if (shown) analyticsService.trackEvent('profile_completion_card_shown', {});
   }, [shown]);

@@ -14,6 +14,7 @@ import {
   beginPromptSession,
   claimPromptWhenDecided,
   markHomeJobsLoading,
+  markPromptSessionPending,
   promptGateClosedBy,
   promptGateState,
   reportHomeJobs,
@@ -72,6 +73,23 @@ describe('session prompt gate', () => {
     expect(promptGateState(U)).toBe('waiting');
     reportHomeJobs(U, { needsYou: false });
     expect(tryClaimPrompt(U, 'moment')).toBe(true);
+  });
+
+  it('waits for the new session and ignores an old attention report during an app-open transition', async () => {
+    await beginPromptSession(U, 3);
+    reportHomeJobs(U, { needsYou: false }, 3);
+
+    markPromptSessionPending(U);
+    expect(promptGateState(U)).toBe('waiting');
+    reportHomeJobs(U, { needsYou: false }, 3);
+    expect(promptGateState(U)).toBe('waiting');
+
+    await beginPromptSession(U, 4);
+    expect(promptGateState(U)).toBe('waiting');
+    reportHomeJobs(U, { needsYou: false }, 3);
+    expect(promptGateState(U)).toBe('waiting');
+    reportHomeJobs(U, { needsYou: false }, 4);
+    expect(promptGateState(U)).toBe('open');
   });
 
   it('remembers a used session across an app restart inside that session', async () => {

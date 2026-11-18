@@ -32,6 +32,7 @@ const CLOSED_SESSION_KEY_PREFIX = '@bounty_prompt_gate_closed_session:';
 interface UserGate {
   homeJobsReady: boolean;
   session: number | null;
+  sessionTransitionPending: boolean;
   closedForSession: number | null;
   closedBy: PromptCloseReason | null;
 }
@@ -44,7 +45,13 @@ const pendingBegins = new Map<string, Promise<void>>();
 function gateFor(userId: string): UserGate {
   let gate = gates.get(userId);
   if (!gate) {
-    gate = { homeJobsReady: false, session: null, closedForSession: null, closedBy: null };
+    gate = {
+      homeJobsReady: false,
+      session: null,
+      sessionTransitionPending: false,
+      closedForSession: null,
+      closedBy: null,
+    };
     gates.set(userId, gate);
   }
   return gate;
@@ -65,8 +72,26 @@ function close(userId: string, gate: UserGate, reason: PromptCloseReason) {
 export function promptGateState(userId: string | null | undefined): PromptGateState {
   if (!userId) return 'waiting';
   const gate = gates.get(userId);
-  if (!gate || gate.session == null || !gate.homeJobsReady) return 'waiting';
+  if (!gate || gate.session == null || gate.sessionTransitionPending || !gate.homeJobsReady)
+    return 'waiting';
   return gate.closedForSession === gate.session ? 'closed' : 'open';
+}
+
+/** Current initialized session, or null until one has begun. */
+export function promptGateSession(userId: string | null | undefined): number | null {
+  if (!userId) return null;
+  return gates.get(userId)?.session ?? null;
+}
+
+/**
+ * An app-open boundary has occurred; don't use the prior session's decision
+ * while the provider initializes the new session.
+ */
+export function markPromptSessionPending(userId: string): void {
+  const gate = gateFor(userId);
+  gate.sessionTransitionPending = true;
+  gate.homeJobsReady = false;
+  notify();
 }
 
 /** Why the gate closed this session, for analytics. */
@@ -100,6 +125,7 @@ export function beginPromptSession(userId: string, session: number): Promise<voi
     // Home to load her jobs again rather than trusting the last report.
     if (current.session != null) current.homeJobsReady = false;
     current.session = session;
+    current.sessionTransitionPending = false;
     if (persisted === session) {
       current.closedForSession = session;
       current.closedBy = current.closedBy ?? 'moment';
@@ -127,8 +153,17 @@ export function markHomeJobsLoading(userId: string): void {
  * read; on a failed read keep waiting, since "unknown" must not mean "nothing
  * needs you". `needsYou` closes the gate for the rest of this session.
  */
-export function reportHomeJobs(userId: string, result: { needsYou: boolean }): void {
+export function reportHomeJobs(
+  userId: string,
+  result: { needsYou: boolean },
+  session?: number
+): void {
   const gate = gateFor(userId);
+  if (
+    gate.sessionTransitionPending ||
+    (session !== undefined && (gate.session == null || gate.session !== session))
+  )
+    return;
   const wasReady = gate.homeJobsReady;
   const wasClosed = gate.closedForSession != null && gate.closedForSession === gate.session;
   gate.homeJobsReady = true;
@@ -219,6 +254,22 @@ export function usePromptGateState(userId: string | null | undefined): PromptGat
     return subscribePromptGate(update);
   }, [userId]);
   return state;
+}
+
+/** React view of the initialized session for one user. */
+export function usePromptGateSession(userId: string | null | undefined): number | null {
+  const [snapshot, setSnapshot] = useState(() => ({
+    userId,
+    session: promptGateSession(userId),
+  }));
+  const session =
+    snapshot.userId === userId ? snapshot.session : promptGateSession(userId);
+  useEffect(() => {
+    const update = () => setSnapshot({ userId, session: promptGateSession(userId) });
+    update();
+    return subscribePromptGate(update);
+  }, [userId]);
+  return session;
 }
 
 /** Test-only. */

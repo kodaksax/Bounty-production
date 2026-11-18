@@ -177,6 +177,33 @@ describe('useResumeComposerPrompt', () => {
     act(() => appStateListener?.('background'));
     now.mockReturnValue(1_000_000 + 3 * SESSION_GAP_MS);
     act(() => appStateListener?.('active'));
+    await settle();
+    expect(result.current.draftTitle).toBeNull();
+    await beginPromptSession(USER, 2);
+    reportHomeJobs(USER, { needsYou: false }, 2);
+    await waitFor(() => expect(result.current.draftTitle).toBe('Mount my TV'));
+    now.mockRestore();
+  });
+
+  it('waits for the new prompt session after a long background return', async () => {
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    await seedAbandonedDraft();
+    const { result } = renderHook(() => useResumeComposerPrompt(USER, 'bounty'));
+    await settle();
+    expect(result.current.draftTitle).toBe('Mount my TV');
+
+    act(() => appStateListener?.('background'));
+    now.mockReturnValue(1_000_000 + SESSION_GAP_MS);
+    act(() => appStateListener?.('active'));
+    expect(promptGateState(USER)).toBe('waiting');
+
+    await beginPromptSession(USER, 2);
+    reportHomeJobs(USER, { needsYou: false }, 1);
+    await settle();
+    expect(result.current.draftTitle).toBeNull();
+
+    reportHomeJobs(USER, { needsYou: false }, 2);
     await waitFor(() => expect(result.current.draftTitle).toBe('Mount my TV'));
     now.mockRestore();
   });

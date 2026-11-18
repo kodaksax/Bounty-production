@@ -36,7 +36,13 @@ import type { AppTheme } from '../../lib/themes/types';
 import { withAlpha } from '../../lib/utils';
 
 // Update the ProfileScreen component to include real-time statistics
-export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
+export function ProfileScreen({
+  onBack,
+  isActive = true,
+}: {
+  onBack?: () => void;
+  isActive?: boolean;
+} = {}) {
   const router = useRouter();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -352,6 +358,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             <ProfileCompletionCard
               userId={profileUuid}
               profile={{ about: authProfile.about, location: authProfile.location }}
+              isActive={isActive}
             />
           )}
           {/* Poster-only accounts: entry point for users who skipped or were

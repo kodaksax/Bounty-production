@@ -24,7 +24,10 @@ import { AppState } from 'react-native';
 import { readBountyDraftInProgress } from 'app/hooks/useBountyDraft';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { clearDraftAbandoned, getDraftAbandonedAt } from '../../lib/storage/abandoned-draft';
-import { claimPromptWhenDecided } from '../../lib/moments/sessionPromptGate';
+import {
+  claimPromptWhenDecided,
+  markPromptSessionPending,
+} from '../../lib/moments/sessionPromptGate';
 
 /** Background time after which coming back counts as a new app open. */
 export const SESSION_GAP_MS = 30 * 60 * 1000;
@@ -93,7 +96,14 @@ export function useResumeComposerPrompt(
   const activeScreenRef = useRef(activeScreen);
   activeScreenRef.current = activeScreen;
 
-  useEffect(() => subscribeToAppOpens(() => setOpen(openSeq)), []);
+  useEffect(
+    () =>
+      subscribeToAppOpens(() => {
+        if (userId) markPromptSessionPending(userId);
+        setOpen(openSeq);
+      }),
+    [userId]
+  );
 
   useEffect(() => {
     setDraftTitle(null);

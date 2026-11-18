@@ -25,6 +25,7 @@ import {
   ProfileCompletionCard,
   profileNeedsCompleting,
 } from '../../../components/profile-completion-card';
+import { analyticsService } from '../../../lib/services/analytics-service';
 
 const DAY = 24 * 3600_000;
 
@@ -42,7 +43,7 @@ describe('profile completion card', () => {
 
   it('shows on Profile and opens the profile editor', async () => {
     const { findByTestId, getByText } = render(
-      <ProfileCompletionCard userId="u1" profile={{ about: null, location: null }} />
+      <ProfileCompletionCard userId="u1" profile={{ about: null, location: null }} isActive />
     );
     await findByTestId('profile-completion-card');
     fireEvent.press(getByText('Complete profile'));
@@ -51,7 +52,7 @@ describe('profile completion card', () => {
 
   it('hides when dismissed and stays hidden for a week', async () => {
     const { findByTestId, queryByTestId, getByLabelText } = render(
-      <ProfileCompletionCard userId="u1" profile={{ about: null, location: null }} />
+      <ProfileCompletionCard userId="u1" profile={{ about: null, location: null }} isActive />
     );
     await findByTestId('profile-completion-card');
     await act(async () => {
@@ -71,9 +72,29 @@ describe('profile completion card', () => {
 
   it('never shows for a finished profile', async () => {
     const { queryByTestId } = render(
-      <ProfileCompletionCard userId="u1" profile={{ about: 'Retired teacher', location: 'Austin, TX' }} />
+      <ProfileCompletionCard
+        userId="u1"
+        profile={{ about: 'Retired teacher', location: 'Austin, TX' }}
+        isActive
+      />
     );
     await act(async () => {});
     expect(queryByTestId('profile-completion-card')).toBeNull();
+  });
+
+  it('does not track an impression until Profile is visible', async () => {
+    const trackEvent = analyticsService.trackEvent as jest.Mock;
+    const view = render(
+      <ProfileCompletionCard userId="u1" profile={{ about: null, location: null }} isActive={false} />
+    );
+    await act(async () => {});
+    expect(view.queryByTestId('profile-completion-card')).toBeNull();
+    expect(trackEvent).not.toHaveBeenCalledWith('profile_completion_card_shown', {});
+
+    view.rerender(
+      <ProfileCompletionCard userId="u1" profile={{ about: null, location: null }} isActive />
+    );
+    await view.findByTestId('profile-completion-card');
+    expect(trackEvent).toHaveBeenCalledWith('profile_completion_card_shown', {});
   });
 });
