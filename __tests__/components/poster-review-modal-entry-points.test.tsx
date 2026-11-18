@@ -13,7 +13,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
-import { Alert } from 'react-native';
+import { AccessibilityInfo, Alert } from 'react-native';
 import { lightTheme } from '../../lib/themes/lightTheme';
 
 const mockGetSubmissionForReview = jest.fn();
@@ -76,7 +76,10 @@ const PENDING = {
   submitted_at: new Date().toISOString(),
 };
 
-function renderModal(props: Partial<React.ComponentProps<typeof PosterReviewModal>> = {}) {
+function renderModal(
+  props: Partial<React.ComponentProps<typeof PosterReviewModal>> = {},
+  options: { createNodeMock?: (element: { props: { children?: React.ReactNode } }) => unknown } = {}
+) {
   return render(
     <PosterReviewModal
       visible
@@ -89,7 +92,8 @@ function renderModal(props: Partial<React.ComponentProps<typeof PosterReviewModa
       onClose={jest.fn()}
       onComplete={jest.fn()}
       {...props}
-    />
+    />,
+    options
   );
 }
 
@@ -178,6 +182,23 @@ function lastAlertCall(): [string, string, any[]] {
 describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
   beforeEach(() => {
     mockGetSubmissionForReview.mockResolvedValue(PENDING);
+  });
+
+  it('moves screen-reader focus to the payment confirmation question', async () => {
+    const confirmationQuestionHostNode = {};
+    renderModal({}, {
+      createNodeMock: element =>
+        element.props.children === 'Pay ana_hunts $60.00?' ? confirmationQuestionHostNode : {},
+    });
+    await openPayoutStep();
+    fireEvent.press(screen.getByLabelText('Approve and pay $60.00'));
+
+    await waitFor(() => {
+      expect(AccessibilityInfo.sendAccessibilityEvent).toHaveBeenCalledWith(
+        confirmationQuestionHostNode,
+        'focus'
+      );
+    });
   });
 
   it('approve-and-pay is two labelled buttons; only "Yes, pay" releases, exactly once', async () => {
