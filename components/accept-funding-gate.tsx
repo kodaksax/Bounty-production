@@ -163,6 +163,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     primaryCardPaymentMethod,
     stripeLoading,
     loadPaymentMethods,
+    clearStripeError,
     payWithCard,
     payWithApplePay,
     payWithPaymentSheet,
@@ -199,12 +200,13 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
       mountedRef.current = false;
     };
   }, []);
-  const refreshSavedCards = useCallback(() => {
+  const refreshSavedCards = useCallback((resetFailureGuard = false) => {
+    if (resetFailureGuard) clearStripeError();
     setSavedCardsFailed(false);
     loadPaymentMethods().catch(() => {
       if (mountedRef.current) setSavedCardsFailed(true);
     });
-  }, [loadPaymentMethods]);
+  }, [clearStripeError, loadPaymentMethods]);
   useEffect(() => {
     if (needsPayment) refreshSavedCards();
     // Once per sheet, and again only if a shortfall appears; refreshSavedCards
@@ -485,7 +487,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             <ErrorBanner
               error={SAVED_CARDS_UNAVAILABLE}
               onDismiss={() => setSavedCardsFailed(false)}
-              onAction={refreshSavedCards}
+              onAction={() => refreshSavedCards(true)}
             />
           )}
 

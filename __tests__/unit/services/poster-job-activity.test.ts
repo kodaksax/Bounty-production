@@ -65,10 +65,10 @@ it("reads a zone-less accepted_at as UTC, not the phone's local time", async () 
   expect(new Date(a.hiredAt!).toISOString()).toBe('2026-11-12T09:00:00.000Z');
 });
 
-it('no conversation yet is a known "no messages"', async () => {
+it('no visible conversation history is unknown', async () => {
   mockTables.conversations = () => ({ data: [], error: null });
   const a = await getPosterJobActivity({ bountyId: 'b1', posterId: 'p1', helperId: 'h1' });
-  expect(a.messagesKnown).toBe(true);
+  expect(a.messagesKnown).toBe(false);
   expect(a.lastHelperMessageAt).toBeNull();
 });
 

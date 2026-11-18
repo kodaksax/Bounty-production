@@ -36,6 +36,7 @@ const mockSetSuccessInfo = jest.fn();
 const mockSetError = jest.fn();
 const mockSetShowPaymentMethodsModal = jest.fn();
 const mockLoadPaymentMethods = jest.fn().mockResolvedValue(undefined);
+const mockClearStripeError = jest.fn();
 
 type DepositState = {
   isProcessing: boolean;
@@ -74,6 +75,7 @@ jest.mock('hooks/use-wallet-deposit', () => ({
     setSuccessInfo: mockSetSuccessInfo,
     setShowPaymentMethodsModal: mockSetShowPaymentMethodsModal,
     loadPaymentMethods: mockLoadPaymentMethods,
+    clearStripeError: mockClearStripeError,
     payWithCard: (...a: unknown[]) => mockPayWithCard(...a),
     payWithApplePay: (...a: unknown[]) => mockPayWithApplePay(...a),
     payWithPaymentSheet: (...a: unknown[]) => mockPayWithPaymentSheet(...a),
@@ -597,6 +599,7 @@ describe('AcceptFundingGate', () => {
         expect(queryByText(/^banner/)).toBeNull();
         expect(queryByText(/Connection failed/)).toBeNull();
         expect(mockLoadPaymentMethods).not.toHaveBeenCalled();
+        expect(mockClearStripeError).not.toHaveBeenCalled();
       });
 
       test('is not shown when a card is needed; the sheet re-checks saved cards itself', async () => {
@@ -604,6 +607,7 @@ describe('AcceptFundingGate', () => {
         const { queryByText } = render(<AcceptFundingGate gate={makeGate()} />);
 
         await waitFor(() => expect(mockLoadPaymentMethods).toHaveBeenCalledTimes(1));
+        expect(mockClearStripeError).not.toHaveBeenCalled();
         expect(queryByText(/^banner/)).toBeNull();
         expect(queryByText(/Connection failed/)).toBeNull();
       });
@@ -622,6 +626,7 @@ describe('AcceptFundingGate', () => {
         expect(queryByText(/Connection failed|Something Went Wrong/)).toBeNull();
 
         fireEvent.press(getByText('banner-action'));
+        expect(mockClearStripeError).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(mockLoadPaymentMethods).toHaveBeenCalledTimes(2));
         await waitFor(() => expect(queryByText(/^banner/)).toBeNull());
       });

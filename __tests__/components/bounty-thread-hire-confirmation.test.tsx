@@ -7,7 +7,7 @@
  * server-confirmed acceptance. And the poster's red "Raise dispute" chip is
  * a neutral "Get help" that opens the same help sheet as the job page.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import React from 'react';
 import { lightTheme } from '../../lib/themes/lightTheme';
 
@@ -154,5 +154,20 @@ describe("the poster's chat tools", () => {
     render(<BountyThreadRoute />);
     fireEvent.press(screen.getByLabelText('Get help'));
     expect(screen.queryByTestId('get-help-money')).toBeNull();
+  });
+
+  it('does not identify a rejected applicant as the hired helper', () => {
+    mockThread.bounty = {
+      ...mockThread.bounty,
+      status: 'in_progress',
+      accepted_by: 'h2',
+      funding_mode: 'at_post',
+    };
+    render(<BountyThreadRoute />);
+    fireEvent.press(screen.getByLabelText('Get help'));
+
+    const helpSheet = within(screen.getByTestId('get-help-sheet'));
+    expect(helpSheet.queryByTestId('get-help-message')).toBeNull();
+    expect(helpSheet.queryByText(/Ana/)).toBeNull();
   });
 });

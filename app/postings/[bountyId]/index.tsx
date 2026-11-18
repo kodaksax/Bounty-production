@@ -847,7 +847,6 @@ export default function BountyDashboard() {
   const showOffers = bounty.status === 'open' && !isHired;
   const completed = bounty.status === 'completed';
   const paymentStatus = describePaymentStatus(money, helperLabel);
-  const paySheetConfirms = bounty.funding_mode === 'at_accept' && !isForHonor && amount > 0;
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
@@ -938,7 +937,6 @@ export default function BountyDashboard() {
             <JobOffersSection
               offers={offersApi.offers}
               loadState={offersApi.loadState}
-              paySheetConfirms={paySheetConfirms}
               onChoose={chooseOffer}
               onPass={offersApi.pass}
               onAsk={id => void offersApi.ask(id)}

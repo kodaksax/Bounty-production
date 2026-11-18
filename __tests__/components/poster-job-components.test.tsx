@@ -34,6 +34,7 @@ jest.mock('../../components/ui/avatar', () => {
 import { ApplicantCard } from '../../components/applicant-card';
 import { buildHelpRows, GetHelpSheet, type GetHelpContext } from '../../components/poster-job/get-help-sheet';
 import { HireConfirmation } from '../../components/poster-job/hire-confirmation';
+import { JobOffersSection } from '../../components/poster-job/job-offers-section';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -169,6 +170,30 @@ const request = (bountyOver: Record<string, unknown> = {}, profileOver: Record<s
   }) as any;
 
 describe('ApplicantCard on the job page', () => {
+  it('keeps explicit confirmation before choosing from pay-at-accept offers', async () => {
+    const onChoose = jest.fn().mockResolvedValue(undefined);
+    render(
+      <JobOffersSection
+        offers={[request()]}
+        loadState="ready"
+        onChoose={onChoose}
+        onPass={jest.fn().mockResolvedValue(undefined)}
+        onAsk={jest.fn()}
+        onRetry={jest.fn()}
+        askingRequestId={null}
+        isAskBusy={false}
+      />
+    );
+
+    fireEvent.press(screen.getByLabelText('Choose Marcus'));
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Choose Marcus?',
+      expect.any(String),
+      expect.any(Array),
+    );
+    expect(onChoose).not.toHaveBeenCalled();
+  });
+
   it('shows who they are in plain words, with a profile button', () => {
     render(<ApplicantCard request={request()} variant="job_page" onAccept={jest.fn()} onReject={jest.fn()} />);
     expect(screen.getByText('6 jobs done on Bounty')).toBeTruthy();

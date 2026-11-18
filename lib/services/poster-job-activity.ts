@@ -114,14 +114,14 @@ async function readMessageTimes(
   bountyId: string,
   posterId: string,
   helperId: string
-): Promise<{ lastHelper: string | null; lastPoster: string | null }> {
+): Promise<{ lastHelper: string | null; lastPoster: string | null } | null> {
   const { data: conversations, error: convError } = await supabase
     .from('conversations')
     .select('id')
     .eq('bounty_id', bountyId);
   if (convError) throw convError;
   const ids = (conversations ?? []).map((c: any) => String(c.id)).filter(Boolean);
-  if (ids.length === 0) return { lastHelper: null, lastPoster: null };
+  if (ids.length === 0) return null;
 
   const [helper, poster] = await Promise.all([
     latestFrom(ids, helperId),

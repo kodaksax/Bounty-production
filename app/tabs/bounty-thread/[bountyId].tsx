@@ -180,6 +180,12 @@ function BountyThreadScreen() {
   }, [events]);
 
   const counterpartName = counterpart?.name ?? (role === 'poster' ? 'Your hunter' : 'The poster');
+  const assignedHelper =
+    role === 'poster' &&
+    !!bounty?.accepted_by &&
+    String(bounty.accepted_by) === String(counterpart?.id)
+      ? counterpart
+      : null;
   const isAcceptedHunter =
     role === 'hunter' && !!bounty?.accepted_by && String(bounty.accepted_by) === String(viewerId);
   const hasHunter = !!bounty?.accepted_by && (role === 'hunter' ? isAcceptedHunter : true);
@@ -419,14 +425,14 @@ function BountyThreadScreen() {
     return describePosterMoney({
       money,
       amount: Number(bounty.amount) || 0,
-      helperName: counterpart?.name ?? null,
+      helperName: assignedHelper?.name ?? null,
       status: lifecycle?.status ?? 'in_progress',
       hired: !!bounty.accepted_by,
       hasDispute: hasActiveDispute,
       hasCancellationRequest: cancellation?.status === 'pending',
       offerCount: 0,
     });
-  }, [role, bounty, counterpart?.name, lifecycle?.status, hasActiveDispute, cancellation?.status]);
+  }, [role, bounty, assignedHelper?.name, lifecycle?.status, hasActiveDispute, cancellation?.status]);
 
   const onPosterHelpRoute = useCallback(
     (route: HelpRoute) => {
@@ -620,8 +626,8 @@ function BountyThreadScreen() {
         <PosterReviewModal
           visible={showReview}
           bountyId={String(bounty.id)}
-          hunterId={String(bounty.accepted_by || counterpart?.id || '')}
-          hunterName={counterpartName}
+          hunterId={String(bounty.accepted_by || assignedHelper?.id || '')}
+          hunterName={assignedHelper?.name ?? 'Your hunter'}
           bountyAmount={bounty.amount || 0}
           isForHonor={!!bounty.is_for_honor}
           architecture={isV3Bounty(bounty) ? 'v3' : isPhase2Bounty(bounty) ? 'v2' : 'v1'}
@@ -638,7 +644,7 @@ function BountyThreadScreen() {
           visible={showHelp}
           onClose={() => setShowHelp(false)}
           onRoute={onPosterHelpRoute}
-          helperName={bounty.accepted_by ? counterpart?.name ?? null : null}
+          helperName={assignedHelper?.name ?? null}
           hired={!!bounty.accepted_by && bounty.status !== 'completed'}
           canTakeDown={bounty.status === 'open' && !bounty.accepted_by}
           awaitingApproval={bounty.status === 'in_progress' && submission?.status === 'pending'}

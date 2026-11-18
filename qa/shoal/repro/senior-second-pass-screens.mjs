@@ -20,12 +20,27 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { derivePassword, poolAccount } from '../bin/lib/accounts.mjs';
+import {
+  assertSafeTarget,
+  expectedRefForAppEnv,
+  loadConfig,
+  printEvidence,
+  resolveEnv,
+} from '../bin/lib/env.mjs';
 
 const BASE = process.env.BOUNTY_SHOAL_URL || 'http://localhost:8090';
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(BASE)) {
   console.error('refusing: this walkthrough only targets the locally served staging export');
   process.exit(2);
 }
+const config = loadConfig();
+const target = { ...resolveEnv(config, 'staging'), url: BASE };
+printEvidence(
+  await assertSafeTarget(config, target, {
+    requiredSupabaseRef: expectedRefForAppEnv('staging'),
+    requireStripeTestKey: true,
+  }),
+);
 const args = process.argv.slice(2);
 const opt = name => {
   const i = args.indexOf('--' + name);

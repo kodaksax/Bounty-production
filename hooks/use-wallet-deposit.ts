@@ -140,6 +140,7 @@ export function useWalletDeposit() {
     isLoading: stripeLoading,
     error: stripeError,
     loadPaymentMethods,
+    clearError: clearStripeError,
   } = useStripe();
   const { session } = useAuthContext();
   const cardPaymentMethods = paymentMethods.filter(method => method.type === 'card');
@@ -419,6 +420,7 @@ Platform.OS === 'ios'
     stripeLoading,
     stripeError,
     loadPaymentMethods,
+    clearStripeError,
     payWithCard,
     payWithApplePay,
     payWithPaymentSheet,

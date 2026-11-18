@@ -18,8 +18,6 @@ import type { OffersLoadState } from '../../hooks/usePosterJobOffers';
 interface Props {
   offers: BountyRequestWithDetails[];
   loadState: OffersLoadState;
-  /** True for a pay-when-you-choose job: the pay sheet is the confirmation. */
-  paySheetConfirms: boolean;
   onChoose: (requestId: string | number) => Promise<unknown>;
   onPass: (requestId: string | number) => Promise<unknown>;
   onAsk: (requestId: string | number) => void;
@@ -31,7 +29,6 @@ interface Props {
 export function JobOffersSection({
   offers,
   loadState,
-  paySheetConfirms,
   onChoose,
   onPass,
   onAsk,
@@ -85,7 +82,7 @@ export function JobOffersSection({
               key={String(r.id)}
               request={r}
               variant="job_page"
-              confirmBeforeAccept={!paySheetConfirms}
+              confirmBeforeAccept
               onAccept={onChoose}
               onReject={onPass}
               onRequestMoreInfo={onAsk}
