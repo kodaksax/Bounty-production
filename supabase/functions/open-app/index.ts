@@ -7,8 +7,8 @@
 //
 // Why it exists (2026-11-18): Gmail strips links that are not http(s), so an
 // email button pointing straight at bountyexpo-workspace://… does nothing in
-// Gmail. This https link survives, and on a phone it 302s to the app's own
-// scheme, where app/auth/callback.tsx (reached via /auth/callback) verifies
+// Gmail. This https link survives, and on an iPhone it 302s to the app's own
+// scheme (on Android it goes through a tap-to-continue page; see below), where app/auth/callback.tsx (reached via /auth/callback) verifies
 // the token_hash with verifyOtp and signs the person in.
 //
 // Safe for mail link scanners: this function never touches the token. Only
@@ -31,6 +31,9 @@ const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '')
 // Where a sign-in link opened on a computer lands, signed in. Must be in the
 // project's Auth redirect allowlist (it is: the website's own sign-in uses it).
 const WEB_SIGN_IN_URL = Deno.env.get('WEB_SIGN_IN_URL') || 'https://www.bountyfinder.net/bounty'
+// Tap-to-continue page on the website (assets/auth-landing.js). It accepts
+// redirect_to=bountyexpo-workspace://… and verifies only on a real tap.
+const ANDROID_LANDING = 'https://www.bountyfinder.net/auth/open/'
 const TYPES = new Set(['magiclink', 'signup', 'invite', 'recovery', 'email_change'])
 const TOKEN_HASH_RE = /^[A-Za-z0-9_-]{8,200}$/
 
@@ -96,6 +99,28 @@ Deno.serve((req) => {
       })
     }
     return text(200, 'This button opens the Bounty app on your phone.\n\nOpen this email on the phone that has Bounty installed and tap the button there, or type the 6-digit code from the email into Bounty.')
+  }
+
+  // Android: Chrome will not leave the browser for an app's own scheme at the
+  // end of a redirect chain unless that chain began with a tap inside the
+  // browser. Gmail opens the button through google.com/url, whose script
+  // redirect is not a tap, so a 302 straight to bountyexpo-workspace:// was
+  // silently dropped and left a blank google.com tab (production 2026-11-18,
+  // Samsung, Chrome 157). Send Android to the website's tap-to-continue page
+  // instead: its Continue tap is the gesture, /verify then redirects to
+  // bountyexpo-workspace://auth/callback#access_token=…, which Chrome opens,
+  // and app/auth/callback.tsx reads the session from the fragment (the same
+  // path password-reset links already take). The page spends the token only
+  // on that tap, so link scanners still use nothing up.
+  if (/Android/i.test(ua)) {
+    const page = new URL(ANDROID_LANDING)
+    page.searchParams.set('token_hash', tokenHash)
+    page.searchParams.set('type', type)
+    page.searchParams.set('redirect_to', APP_CALLBACK)
+    return new Response(null, {
+      status: 302,
+      headers: { Location: page.toString(), 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' },
+    })
   }
 
   const target = `${APP_CALLBACK}?token_hash=${encodeURIComponent(tokenHash)}&type=${type}`
