@@ -120,6 +120,23 @@
         },
         {
           "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.bountyfinder.net",
+              "pathPrefix": "/auth/open"
+            },
+            {
+              "scheme": "https",
+              "host": "bountyfinder.net",
+              "pathPrefix": "/auth/open"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
           "data": [
             {
               "scheme": "app.bountyfinder.BOUNTYExpo"
