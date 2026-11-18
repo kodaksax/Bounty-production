@@ -249,6 +249,20 @@ function lastAlert() {
   return { title, message, buttons: buttons ?? [] };
 }
 
+/**
+ * Tap "Choose <name>", check the confirmation asks first (nothing is chosen
+ * yet), then confirm it.
+ */
+async function chooseAndConfirm(name: string) {
+  const callsBefore = mockChoose.mock.calls.length;
+  fireEvent.press(screen.getByLabelText(`Choose ${name}`));
+  expect(lastAlert().title).toBe(`Choose ${name}?`);
+  expect(mockChoose.mock.calls.length).toBe(callsBefore);
+  await act(async () => {
+    lastAlert().buttons.find((b: any) => b.text === `Choose ${name}`).onPress();
+  });
+}
+
 /** Another screen changed the job; the poster comes back to this page. */
 async function serverChangesAndPosterReturns(next: Partial<ServerSnapshot>) {
   mockServer = { ...mockServer, ...next };
@@ -334,9 +348,7 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
 
     // ── 4. Choosing someone: no confirmation screen until the server says yes
     mockChoose.mockResolvedValueOnce({ accepted: false, reason: 'declined_payment' });
-    await act(async () => {
-      fireEvent.press(screen.getByLabelText('Choose ana_hunts'));
-    });
+    await chooseAndConfirm('ana_hunts');
     expect(mockChoose).toHaveBeenCalledWith('r1');
     expect(screen.queryByTestId('hire-confirmation')).toBeNull();
 
@@ -351,9 +363,7 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
       mockOffers = [];
       return { accepted: true, bountyId: 'b1', hunterId: 'hunter-1', hunterName: 'ana_hunts', conversationId: 'conv-1' };
     });
-    await act(async () => {
-      fireEvent.press(screen.getByLabelText('Choose ana_hunts'));
-    });
+    await chooseAndConfirm('ana_hunts');
     expect(await screen.findByTestId('hire-confirmation')).toBeTruthy();
     expect(screen.getByText("You've chosen ana_hunts")).toBeTruthy();
     expect(screen.getByText('Agree on a day and time for the work.')).toBeTruthy();
@@ -458,9 +468,7 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
     mockChoose.mockReturnValueOnce(new Promise(r => (finish = r)));
     render(<BountyDashboard />);
     await screen.findByText(UNPAID_WITH_OFFERS);
-    await act(async () => {
-      fireEvent.press(screen.getByLabelText('Choose ana_hunts'));
-    });
+    await chooseAndConfirm('ana_hunts');
     expect(screen.getByTestId('poster-choosing')).toBeTruthy();
     expect(screen.getByText('Choosing ana_hunts…')).toBeTruthy();
     // Nothing on screen still says the job is waiting on the poster.
@@ -477,9 +485,7 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
     mockChoose.mockResolvedValueOnce({ accepted: false, reason: 'failed' });
     render(<BountyDashboard />);
     await screen.findByText(UNPAID_WITH_OFFERS);
-    await act(async () => {
-      fireEvent.press(screen.getByLabelText('Choose ana_hunts'));
-    });
+    await chooseAndConfirm('ana_hunts');
     expect(screen.queryByTestId('poster-choosing')).toBeNull();
     expect(screen.queryByTestId('hire-confirmation')).toBeNull();
     expect(screen.getByLabelText('Compare the 3 offers')).toBeTruthy();

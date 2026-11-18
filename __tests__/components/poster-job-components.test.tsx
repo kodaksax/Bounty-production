@@ -190,6 +190,7 @@ describe('ApplicantCard on the job page', () => {
       'Choose Marcus?',
       expect.any(String),
       expect.any(Array),
+      { cancelable: true },
     );
     expect(onChoose).not.toHaveBeenCalled();
   });
