@@ -229,11 +229,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return () => safeCleanup(sub);
   }, []);
 
-  // Setup notification listeners and request permissions on mount
+  // Setup notification listeners and register the push token on mount.
+  // Registers only when permission is already granted: it never shows the OS
+  // dialog, because that met a returning user at sign-in before Home. The
+  // asks are onboarding (hooks/useCompleteOnboarding.ts), the deferred
+  // sign-up registration (providers/auth-provider.tsx) and the
+  // enable_notifications moment, which is the one ask for everyone else.
   useEffect(() => {
-    // Request permissions and register token
     notificationService
-      .requestPermissionsAndRegisterToken()
+      .requestPermissionsAndRegisterToken({ prompt: false })
       .then(token => {
         if (__DEV__) {
           console.log(
@@ -343,8 +347,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     // Refetch for the newly signed-in user and re-register the push token so
     // the device's token isn't left associated with the previous user.
+    // Without prompting, as on mount: an account that already granted
+    // permission registers here; one that hasn't is asked by the moment.
     fetchNotifications();
-    notificationService.requestPermissionsAndRegisterToken().catch(error => {
+    notificationService.requestPermissionsAndRegisterToken({ prompt: false }).catch(error => {
       if (__DEV__) {
         console.warn('[NotificationContext] re-registration on user change failed:', error);
       }

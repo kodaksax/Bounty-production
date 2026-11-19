@@ -5,6 +5,10 @@
  * moment as a bottom sheet. Purely presentational: all decisions about
  * *which* moment and *when* live in lib/moments/engine.ts + the provider —
  * this component just shows content.spec and calls accept()/dismiss().
+ *
+ * Always closable: the close button, Android back and a backdrop tap all
+ * count as "Later" (the moment may return after a week, up to its cap). No
+ * one should be stuck on a sheet they don't want to answer.
  */
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
@@ -16,7 +20,7 @@ import { useMoments } from '../../providers/moments-provider';
 import { AppModal } from '../ui/app-modal';
 
 export function MomentSheet() {
-  const { activeMoment, activeContent, accept, dismiss } = useMoments();
+  const { activeMoment, activeContent, accept, dismiss, decline } = useMoments();
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -36,13 +40,25 @@ export function MomentSheet() {
   return (
     <AppModal
       visible={visible}
-      // Moment dismissals must represent an explicit choice. Native back,
-      // backdrop presses, and lifecycle transitions must not write one.
-      onRequestClose={() => undefined}
-      dismissable={false}
+      // Back and the backdrop are "Later", same as the close button. A tap
+      // in the first moments after it opens is ignored by the provider (a
+      // double-tap carried over from something else), never written.
+      onRequestClose={dismiss}
+      dismissable
       variant="sheet"
     >
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]} accessibilityViewIsModal>
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={dismiss}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          accessibilityHint="Closes this for now. You can do it later."
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          testID="moment-sheet-close"
+        >
+          <MaterialIcons name="close" size={24} color={theme.textSecondary} />
+        </TouchableOpacity>
         {content.icon && (
           <View style={styles.iconCircle}>
             <MaterialIcons name={content.icon as any} size={32} color={theme.primary} />
@@ -91,6 +107,18 @@ export function MomentSheet() {
             <Text style={styles.secondaryButtonText}>{content.secondaryLabel}</Text>
           </TouchableOpacity>
         )}
+
+        {content.declineLabel && (
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={decline}
+            accessibilityRole="button"
+            accessibilityLabel={content.declineLabel}
+            testID="moment-sheet-decline"
+          >
+            <Text style={styles.declineButtonText}>{content.declineLabel}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </AppModal>
   );
@@ -108,6 +136,17 @@ function makeStyles(theme: AppTheme) {
       borderColor: theme.border,
       borderBottomWidth: 0,
     },
+    closeButton: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1,
+    },
     iconCircle: {
       width: 56,
       height: 56,
@@ -124,6 +163,8 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '700',
       color: theme.text,
       marginBottom: 8,
+      // Clear of the close button when there's no icon above the title.
+      paddingRight: 40,
     },
     body: {
       fontSize: 14,
@@ -175,6 +216,11 @@ function makeStyles(theme: AppTheme) {
       color: theme.textSecondary,
       fontSize: 14,
       fontWeight: '500',
+    },
+    declineButtonText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      textDecorationLine: 'underline',
     },
   });
 }

@@ -1,9 +1,9 @@
 /**
  * Unit tests for the identity_verification moment's eligibility rule
  * (lib/moments/registry.ts) — the "Verify Your Identity" prompt's display
- * logic. Covers: not nagging brand-new users right after onboarding, the
- * "strong reason" overrides (payout-relevant screen, high balance), the
- * returning-user fallback, and rejected-resubmission handling.
+ * logic. It is asked where it's needed (the Wallet), never at sign-in: not on
+ * Home for a returning user, and not on Home because of a high balance.
+ * Also covers rejected-resubmission handling.
  */
 
 import { MOMENT_REGISTRY } from '../../../../lib/moments/registry';
@@ -59,9 +59,11 @@ describe('identity_verification moment', () => {
     expect(identityVerification.isEligible(ctx, null)).toBe(false);
   });
 
-  it('shows a returning user (session >= 2) on a neutral screen', () => {
-    const ctx = makeContext({ sessionCount: 2, activeScreen: 'bounty' });
-    expect(identityVerification.isEligible(ctx, null)).toBe(true);
+  it('does NOT show a returning user (session >= 2) on Home or any other non-wallet screen', () => {
+    for (const activeScreen of ['bounty', 'postings', 'messages', 'profile', null]) {
+      const ctx = makeContext({ sessionCount: 5, activeScreen });
+      expect(identityVerification.isEligible(ctx, null)).toBe(false);
+    }
   });
 
   it('shows even a session-1 user once they reach a payout-relevant screen (strong reason)', () => {
@@ -69,20 +71,11 @@ describe('identity_verification moment', () => {
     expect(identityVerification.isEligible(ctx, null)).toBe(true);
   });
 
-  it('shows even a session-1 user once their balance crosses the high-value threshold (strong reason)', () => {
+  it('does not show on Home because of a high balance (that put it on Home at sign-in)', () => {
     const ctx = makeContext({
-      sessionCount: 1,
+      sessionCount: 3,
       activeScreen: 'bounty',
       profile: { ...makeContext().profile, balance: 150 },
-    });
-    expect(identityVerification.isEligible(ctx, null)).toBe(true);
-  });
-
-  it('does not treat a balance just under the threshold as a strong reason', () => {
-    const ctx = makeContext({
-      sessionCount: 1,
-      activeScreen: 'bounty',
-      profile: { ...makeContext().profile, balance: 99.99 },
     });
     expect(identityVerification.isEligible(ctx, null)).toBe(false);
   });
@@ -90,6 +83,7 @@ describe('identity_verification moment', () => {
   it('treats a rejected submission the same as unverified for eligibility', () => {
     const ctx = makeContext({
       sessionCount: 2,
+      activeScreen: 'wallet',
       profile: { ...makeContext().profile, idVerificationStatus: 'rejected' },
     });
     expect(identityVerification.isEligible(ctx, null)).toBe(true);

@@ -2,8 +2,8 @@
  * SBA-06 eligibility rules (lib/moments/registry.ts + engine.ts):
  *  - a poster (or a user with no role yet) sees no trust/ID prompt until they
  *    have published a bounty; hunters keep the rules each moment defines;
- *  - location is asked once — enable_location stays quiet when onboarding
- *    already left a saved location or an answered permission;
+ *  - location is never a sheet: enable_location left the queue and is asked
+ *    where a feature needs it (feed Distance filter, composer location);
  *  - the session boundary uses this runtime's own record of a session write,
  *    since the in-memory profile is never re-read after it.
  */
@@ -17,8 +17,6 @@ import {
   shouldRecordSession,
 } from '../../../../lib/moments/sessionTracking';
 import type { MomentContext } from '../../../../lib/moments/types';
-
-const enableLocation = MOMENT_REGISTRY.find(m => m.type === 'enable_location')!;
 
 function makeContext(overrides: Partial<MomentContext> = {}): MomentContext {
   return {
@@ -80,32 +78,11 @@ describe('trust/ID prompts before the first published bounty', () => {
   });
 });
 
-describe('enable_location is the second ask, so it only asks someone who skipped the first', () => {
-  const unanswered = (hasLocation: boolean) =>
-    makeContext({
-      sessionCount: 2,
-      activeScreen: 'bounty',
-      permissions: { notifications: 'granted', location: 'undetermined' },
-      profile: { ...makeContext().profile, hasLocation },
-    });
-
-  it('stays quiet when onboarding saved a location (e.g. web, where the browser still says undetermined)', () => {
-    expect(enableLocation.isEligible(unanswered(true), null)).toBe(false);
-  });
-
-  it('asks a user who skipped both the permission and the location', () => {
-    expect(enableLocation.isEligible(unanswered(false), null)).toBe(true);
-  });
-
-  it('stays quiet once the OS permission has been answered either way', () => {
-    for (const location of ['granted', 'denied'] as const) {
-      const ctx = makeContext({
-        sessionCount: 2,
-        permissions: { notifications: 'granted', location },
-        profile: { ...makeContext().profile, hasLocation: false },
-      });
-      expect(enableLocation.isEligible(ctx, null)).toBe(false);
-    }
+describe('sheets that used to meet a returning user at sign-in', () => {
+  it('enable_location and complete_profile are no longer moments', () => {
+    const types = MOMENT_REGISTRY.map(m => m.type);
+    expect(types).not.toContain('enable_location');
+    expect(types).not.toContain('complete_profile');
   });
 });
 

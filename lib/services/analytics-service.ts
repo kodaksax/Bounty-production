@@ -259,6 +259,11 @@ export type AnalyticsEvent =
   | 'moment_accepted'
   | 'moment_completed'
   | 'moment_skipped'
+  // The complete_profile moment as a card on Profile
+  // (components/profile-completion-card.tsx).
+  | 'profile_completion_card_shown'
+  | 'profile_completion_card_tapped'
+  | 'profile_completion_card_dismissed'
   | 'moment_expired'
   // Identity verification (Stripe Connect KYC).
   //

@@ -9,6 +9,7 @@ import { RecentReviewsSection } from "components/recent-reviews-section";
 import { SkillsetChips } from "components/skillset-chips";
 import { BrandingLogo } from "components/ui/branding-logo";
 import { HunterProfileChecklist } from "components/ui/hunter-profile-checklist";
+import { ProfileCompletionCard } from "components/profile-completion-card";
 import { MilestoneBadgeChips } from "components/ui/milestone-badge-chips";
 import { ProfileCompletionMeter } from "components/ui/profile-completion-meter";
 import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
@@ -35,7 +36,13 @@ import type { AppTheme } from '../../lib/themes/types';
 import { withAlpha } from '../../lib/utils';
 
 // Update the ProfileScreen component to include real-time statistics
-export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
+export function ProfileScreen({
+  onBack,
+  isActive = true,
+}: {
+  onBack?: () => void;
+  isActive?: boolean;
+} = {}) {
   const router = useRouter();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -344,6 +351,16 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             }}
           />
           {showHunterChecklist && <HunterProfileChecklist input={hunterChecklistInput} />}
+          {/* Was the complete_profile sheet at sign-in; now a card here that
+              can be hidden for a week. Same rule as the completion meter
+              below for when the hunter checklist owns these nudges. */}
+          {isOwnProfile && authProfile && profileUuid && (!showHunterChecklist || hunterChecklistComplete) && (
+            <ProfileCompletionCard
+              userId={profileUuid}
+              profile={{ about: authProfile.about, location: authProfile.location }}
+              isActive={isActive}
+            />
+          )}
           {/* Poster-only accounts: entry point for users who skipped or were
               rejected to complete ID verification later. Hidden once status
               is processing/verified. */}
