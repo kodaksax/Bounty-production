@@ -34,6 +34,8 @@ export interface FeedbackFormProps {
   submitLabel?: string;
   /** Pre-fills the first field, e.g. naming the job a support message is about. */
   initialSubject?: string;
+  /** Pre-fills the details box, e.g. a ready-written request for help. */
+  initialDescription?: string;
   /**
    * Submit handler. Should resolve to a result describing success/failure so the
    * form can surface confirmation or an inline error with a retry option.
@@ -57,6 +59,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   allowScreenshot = false,
   submitLabel = 'Submit',
   initialSubject,
+  initialDescription,
   onSubmit,
   onCancel,
   onSuccess,
@@ -64,7 +67,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [subject, setSubject] = useState(initialSubject ?? '');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(initialDescription ?? '');
   const [screenshotUri, setScreenshotUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

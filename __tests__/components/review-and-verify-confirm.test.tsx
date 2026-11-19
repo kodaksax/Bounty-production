@@ -1,172 +1,73 @@
 /**
- * Senior-first poster audit (2026-11-14), fix 3: review-and-verify's
- * "Approve and continue to payment" released the money on one tap. The job
- * page no longer links here (it opens PosterReviewModal), but the screen is
- * still reachable from lib/navigation/manage-route.ts, so it now asks first
- * in the same words as PosterReviewModal. approveAndRelease is untouched and
- * runs only after that confirmation.
+ * app/postings/[bountyId]/review-and-verify used to be a second review screen
+ * whose "Approve and continue to payment" released money (first with no
+ * confirmation, later behind an Alert). There is now one review flow,
+ * PosterReviewModal on the job page, and this route only forwards old links
+ * there with ?openReview=work. These tests pin that it can never release
+ * anything itself.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
-import { Alert } from 'react-native';
-import { lightTheme } from '../../lib/themes/lightTheme';
 
-const mockApproveAndRelease = jest.fn();
+const mockReplace = jest.fn();
+let mockParams: Record<string, string | undefined> = { bountyId: 'b-1' };
 
-jest.mock('expo-image', () => ({ Image: () => null }));
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ bountyId: 'b1' }),
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({ replace: mockReplace, push: jest.fn(), back: jest.fn() }),
+  useLocalSearchParams: () => mockParams,
 }));
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-}));
-jest.mock('../../lib/themes/AppThemeContext', () => ({ useAppThemeContext: () => ({ theme: lightTheme }) }));
-jest.mock('../../lib/wallet-context', () => ({ useWallet: () => ({ releaseFunds: jest.fn() }) }));
-jest.mock('../../lib/utils/data-utils', () => ({ getCurrentUserId: () => 'poster-1' }));
-jest.mock('../../components/attachment-viewer-modal', () => ({ AttachmentViewerModal: () => null }));
-jest.mock('../../lib/services/analytics-service', () => ({
-  analyticsService: { trackEvent: jest.fn().mockResolvedValue(undefined) },
-}));
-jest.mock('../../lib/services/bounty-service', () => ({
-  bountyService: {
-    getById: jest.fn().mockResolvedValue({
-      id: 'b1',
-      title: 'Clear the garage',
-      amount: 60,
-      is_for_honor: false,
-      status: 'in_progress',
-      poster_id: 'poster-1',
-      accepted_by: 'hunter-1',
-    }),
-  },
-}));
-jest.mock('../../lib/services/bounty-request-service', () => ({
-  bountyRequestService: { getAll: jest.fn().mockResolvedValue([]) },
-}));
-jest.mock('../../lib/services/profile-service', () => ({
-  profileService: { getById: jest.fn().mockResolvedValue({ id: 'hunter-1', username: 'ana_hunts' }) },
-}));
-jest.mock('../../lib/services/ratings', () => ({
-  ratingsService: { getAggregatedStats: jest.fn().mockResolvedValue({ averageRating: 0, ratingCount: 0 }) },
-}));
-jest.mock('../../lib/services/completion-service', () => ({
-  completionService: {
-    getSubmissionForReview: jest.fn().mockResolvedValue({
-      id: 's1',
-      bounty_id: 'b1',
-      hunter_id: 'hunter-1',
-      status: 'pending',
-      proof_items: [],
-    }),
-    approveSubmission: jest.fn(),
-    submitRating: jest.fn(),
-    requestRevision: jest.fn(),
-  },
-}));
-jest.mock('../../lib/services/completion-approval', () => ({
-  approveAndRelease: (...a: unknown[]) => mockApproveAndRelease(...a),
-}));
-
-import ReviewAndVerifyScreen from '../../app/postings/[bountyId]/review-and-verify';
-
-function lastAlert() {
-  const calls = (Alert.alert as jest.Mock).mock.calls;
-  const [title, message, buttons] = calls[calls.length - 1];
-  return { title, message, buttons: buttons ?? [] };
-}
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  mockApproveAndRelease.mockResolvedValue(true);
+jest.mock('../../components/ui/screen-loader', () => {
+  const { Text } = require('react-native');
+  return { ScreenLoader: ({ label }: { label?: string }) => <Text>{label}</Text> };
 });
 
-describe('review-and-verify approval', () => {
-  async function tapApprove() {
-    render(<ReviewAndVerifyScreen />);
-    const button = await screen.findByText('Approve and continue to payment');
-    // Wait until the hunter's pending submission has loaded and enabled it.
-    await waitFor(() => expect(screen.getByText('ana_hunts')).toBeTruthy());
-    await act(async () => {
-      fireEvent.press(button);
-    });
-  }
+import ReviewAndVerifyRedirect from '../../app/postings/[bountyId]/review-and-verify';
 
-  it('asks before releasing, and one tap releases nothing', async () => {
-    await tapApprove();
-    expect(mockApproveAndRelease).not.toHaveBeenCalled();
-    const confirm = lastAlert();
-    expect(confirm.title).toBe('Complete and release payment?');
-    expect(confirm.message).toContain('release $60.00 to ana_hunts');
-    expect(confirm.message).toContain('cannot be undone');
+beforeEach(() => {
+  mockReplace.mockClear();
+  mockParams = { bountyId: 'b-1' };
+});
+
+describe('review-and-verify (retired) forwards to the one review flow', () => {
+  it('replaces itself with the job page, asking it to open the work review', () => {
+    const screen = render(<ReviewAndVerifyRedirect />);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/postings/[bountyId]',
+      params: { bountyId: 'b-1', openReview: 'work' },
+    });
+    expect(screen.getByText('Opening the work to check…')).toBeTruthy();
   });
 
-  it('"Back to review" releases nothing', async () => {
-    await tapApprove();
-    const back = lastAlert().buttons.find((b: any) => b.style === 'cancel');
-    expect(back.text).toBe('Back to review');
-    expect(back.onPress).toEqual(expect.any(Function));
-    expect(mockApproveAndRelease).not.toHaveBeenCalled();
+  it('goes home when the link has no job id', () => {
+    mockParams = {};
+    render(<ReviewAndVerifyRedirect />);
+    expect(mockReplace).toHaveBeenCalledWith('/tabs/bounty-app');
   });
 
-  it('confirming runs the existing approveAndRelease once', async () => {
-    await tapApprove();
-    const go = lastAlert().buttons.find((b: any) => b.text === 'Release payment');
-    await act(async () => {
-      go.onPress();
-    });
-    await waitFor(() => expect(mockApproveAndRelease).toHaveBeenCalledTimes(1));
-    expect(mockApproveAndRelease.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ bountyId: 'b1', hunterId: 'hunter-1', amount: 60 })
+  it('contains no release path of its own', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '../../app/postings/[bountyId]/review-and-verify.tsx'),
+      'utf8'
     );
+    for (const forbidden of ['approveAndRelease', 'releaseFunds', 'releaseBountyPayment', 'bountyService.update']) {
+      expect(src).not.toContain(forbidden);
+    }
+  });
+});
+
+describe('payout page never releases unfinished work', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../../app/postings/[bountyId]/payout.tsx'), 'utf8');
+
+  it('hands any job that is not completed to the job page review', () => {
+    expect(src).toContain("if (data.status !== 'completed')");
+    expect(src).toContain("openReview: 'work'");
   });
 
-  it('blocks another dialog and ignores a stale confirmation after approval settles', async () => {
-    let finish: (v: boolean) => void = () => {};
-    mockApproveAndRelease.mockImplementation(() => new Promise(r => (finish = r)));
-    render(<ReviewAndVerifyScreen />);
-    const button = await screen.findByText('Approve and continue to payment');
-    await waitFor(() => expect(screen.getByText('ana_hunts')).toBeTruthy());
-    await act(async () => {
-      fireEvent.press(button);
-      fireEvent.press(button);
-    });
-    expect(Alert.alert).toHaveBeenCalledTimes(1);
-
-    const staleConfirmation = lastAlert().buttons.find((b: any) => b.text === 'Release payment');
-    await act(async () => {
-      staleConfirmation.onPress();
-    });
-    expect(mockApproveAndRelease).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      finish(true);
-    });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalledTimes(2));
-    await act(async () => {
-      // A confirmation callback already queued by the native dialog must
-      // remain consumed after the first approval has settled.
-      staleConfirmation.onPress();
-    });
-    expect(mockApproveAndRelease).toHaveBeenCalledTimes(1);
-  });
-
-  it('allows another confirmation after cancellation or a retryable failure', async () => {
-    await tapApprove();
-    const cancel = lastAlert().buttons.find((b: any) => b.style === 'cancel');
-    await act(async () => {
-      cancel.onPress();
-    });
-    fireEvent.press(screen.getByText('Approve and continue to payment'));
-    expect(Alert.alert).toHaveBeenCalledTimes(2);
-
-    mockApproveAndRelease.mockResolvedValue(false);
-    const retry = lastAlert().buttons.find((b: any) => b.text === 'Release payment');
-    await act(async () => {
-      retry.onPress();
-    });
-    await waitFor(() => expect(mockApproveAndRelease).toHaveBeenCalledTimes(1));
-    fireEvent.press(screen.getByText('Approve and continue to payment'));
-    expect(Alert.alert).toHaveBeenCalledTimes(4);
+  it('has no switch-and-button release of its own any more', () => {
+    for (const forbidden of ['handleReleasePayout', 'releaseFunds(', 'releaseBountyPayment(', 'confirmRelease', 'handleMarkComplete']) {
+      expect(src).not.toContain(forbidden);
+    }
   });
 });

@@ -143,6 +143,25 @@ describe('Inbox applicant rows', () => {
     expect(mockCancel).not.toHaveBeenCalled();
   });
 
+  it('never shows a job with offers as unanswered while its offers are still loading (16 Nov swarm)', async () => {
+    let release: (rows: unknown[]) => void = () => {};
+    mockBatch.mockReturnValue(new Promise(r => (release = r)));
+    const view = render(<InboxScreen initialTab="requests" activeScreen="postings" setActiveScreen={jest.fn()} />);
+    layoutAll(view);
+    await waitFor(() => expect(mockBatch).toHaveBeenCalled());
+    layoutAll(view);
+    // The jobs are known but their offers aren't: no row may claim nobody applied.
+    expect(screen.queryByText('Clear the garage')).toBeNull();
+    expect(screen.queryByText(/No one has applied yet/)).toBeNull();
+    await act(async () => {
+      release([offer('h1', 'Ana')]);
+    });
+    await waitFor(() => {
+      layoutAll(view);
+      expect(screen.getByText("Hi, I'm Ana")).toBeTruthy();
+    });
+  });
+
   it('a job with no applicants keeps its own delete action, behind a confirmation', async () => {
     await renderInbox();
     expect(screen.getByLabelText('Delete Rake leaves')).toBeTruthy();

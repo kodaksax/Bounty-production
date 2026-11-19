@@ -93,7 +93,11 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
         setError('This bounty is no longer available.');
         return;
       }
-      setBounty(b);
+      // The bounty is published together with its offers, request and
+      // counterpart below, not before them. Publishing it first rendered the
+      // poster's thread as "Live — waiting for hunters / Applicants will show
+      // up in your inbox" for the seconds the rest took to load, under an
+      // Inbox row that said the person had applied (16 Nov senior swarm).
 
       const posterId = String(b.poster_id || b.user_id || '');
       const otherId =
@@ -127,6 +131,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
       const mine = (reqs || []).find(
         r => String((r as any).hunter_id ?? (r as any).user_id) === hunterId
       );
+      setBounty(b);
       setRequest(mine ?? null);
       setPendingOfferCount(pendingOffers);
       setSubmission(sub);

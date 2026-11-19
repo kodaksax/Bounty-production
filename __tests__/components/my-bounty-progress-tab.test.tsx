@@ -64,7 +64,7 @@ describe('stashed tab — grid feed (transparent + large)', () => {
     const tab = utils.getByTestId('feed-my-bounty-progress-tab');
 
     expect(flatten(tab.props.style).height).toBe(LARGE_TAB_HEIGHT);
-    const label = utils.getByText('Your bounty');
+    const label = utils.getByText('Your job');
     expect(flatten(label.props.style).fontSize).toBeGreaterThanOrEqual(15);
   });
 
@@ -74,7 +74,7 @@ describe('stashed tab — grid feed (transparent + large)', () => {
       transparentTab: true,
       largeTab: true,
     });
-    expect(utils.getByText('Your bounties')).toBeTruthy();
+    expect(utils.getByText('Your jobs')).toBeTruthy();
     expect(utils.getByText('(3)')).toBeTruthy();
   });
 
@@ -84,7 +84,7 @@ describe('stashed tab — grid feed (transparent + large)', () => {
       largeTab: true,
       tabContentColor: '#ffffff',
     });
-    expect(flatten(utils.getByText('Your bounty').props.style).color).toBe('#ffffff');
+    expect(flatten(utils.getByText('Your job').props.style).color).toBe('#ffffff');
   });
 });
 
@@ -96,7 +96,7 @@ describe('stashed tab — other layouts (default)', () => {
     expect(flatten(tab.props.style).backgroundColor).not.toBe('transparent');
     expect(flatten(tab.props.style).height).toBeLessThan(LARGE_TAB_HEIGHT);
     expect(utils.UNSAFE_queryAllByType('BlurView' as never)).toHaveLength(1);
-    expect(utils.queryByText(/Your bount/)).toBeNull();
+    expect(utils.queryByText(/Your job/)).toBeNull();
   });
 });
 

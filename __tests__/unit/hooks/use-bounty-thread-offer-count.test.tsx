@@ -65,6 +65,25 @@ describe('useBountyThread pendingOfferCount', () => {
     expect(mockGetAll).toHaveBeenCalledWith({ bountyId: 'b1', status: 'pending' });
   });
 
+  it('never shows the bounty without its offer: both arrive together (16 Nov swarm)', async () => {
+    let releaseOffer: (rows: unknown[]) => void = () => {};
+    mockGetAllWithDetails.mockReturnValue(new Promise(r => (releaseOffer = r)));
+    const { result } = renderHook(() =>
+      useBountyThread({ bountyId: 'b1', role: 'poster', viewerId: 'poster-1', counterpartId: 'h1' })
+    );
+    // The bounty itself has loaded, but this hunter's offer hasn't: the
+    // screen must stay on its loader, not render "waiting for hunters".
+    await waitFor(() => expect(mockGetById).toHaveBeenCalled());
+    await new Promise(r => setTimeout(r, 0));
+    expect(result.current.bounty).toBeNull();
+    expect(result.current.loading).toBe(true);
+    releaseOffer([pending('h1')]);
+    await waitFor(() => expect(result.current.bounty).not.toBeNull());
+    expect(result.current.request).toEqual(expect.objectContaining({ id: 'h1' }));
+    expect(result.current.counterpart).toEqual(expect.objectContaining({ id: 'h1' }));
+    expect(result.current.pendingOfferCount).toBe(3);
+  });
+
   it('a single offer counts as one', async () => {
     mockGetAll.mockResolvedValue([pending('h1')]);
     const { result } = renderHook(() =>

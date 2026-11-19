@@ -38,8 +38,12 @@ export function manageDestinationPath(params: ManageRouteParams): string {
   const view = search.get('view')
 
   if (view === 'help') return '/legal/how-it-works'
-  if (view === 'applicant') return bountyAppTabPath('messages', 'myPostings')
-  if (view === 'complete' && bountyId) return ROUTES.BOUNTY.REVIEW_AND_VERIFY(bountyId)
+  // The job page lists every offer for the job, so an applicant link opens it
+  // (the cross-job list is only the fallback when the job isn't known).
+  if (view === 'applicant') return bountyId ? ROUTES.BOUNTY.DASHBOARD(bountyId) : bountyAppTabPath('messages', 'myPostings')
+  // Completion links open the job page's one review flow (PosterReviewModal),
+  // not the retired review-and-verify screen.
+  if (view === 'complete' && bountyId) return `${ROUTES.BOUNTY.DASHBOARD(bountyId)}?openReview=work`
   if (bountyId) return ROUTES.BOUNTY.DASHBOARD(bountyId)
   return bountyAppTabPath('postings')
 }

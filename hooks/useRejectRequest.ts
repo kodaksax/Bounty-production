@@ -10,6 +10,11 @@ interface UseRejectRequestParams {
   setBountyRequests: React.Dispatch<React.SetStateAction<BountyRequestWithDetails[]>>
   setIsLoading: React.Dispatch<React.SetStateAction<{ myBounties: boolean; inProgress: boolean; requests: boolean }>>
   setError: React.Dispatch<React.SetStateAction<string | null>>
+  /**
+   * Show the "Request Rejected" alert. Defaults to true. A screen that tells
+   * the poster what happened in its own words turns it off.
+   */
+  showSuccessAlert?: boolean
 }
 
 export function useRejectRequest({
@@ -17,8 +22,10 @@ export function useRejectRequest({
   setBountyRequests,
   setIsLoading,
   setError,
+  showSuccessAlert = true,
 }: UseRejectRequestParams) {
-  const handleRejectRequest = useCallback(async (requestId: string | number) => {
+  /** Resolves true only when the request was actually removed. */
+  const handleRejectRequest = useCallback(async (requestId: string | number): Promise<boolean> => {
     try {
       // Show quick-refresh indicator for requests
       setIsLoading((prev) => ({ ...prev, requests: true }))
@@ -56,14 +63,18 @@ export function useRejectRequest({
 
       // Show confirmation with next-step guidance
       const nextSteps = `\n\nNext steps:\n• Review your other applicants in My Bounties, or edit the posting from there.`
-      Alert.alert('Request Rejected', `The request has been rejected and removed.${nextSteps}`, [{ text: 'OK' }])
+      if (showSuccessAlert) {
+        Alert.alert('Request Rejected', `The request has been rejected and removed.${nextSteps}`, [{ text: 'OK' }])
+      }
+      return true
     } catch (err: any) {
       console.error("Error rejecting request:", err)
       setError(err.message || "Failed to reject request")
+      return false
     } finally {
       setIsLoading((prev) => ({ ...prev, requests: false }))
     }
-  }, [bountyRequests, setBountyRequests, setIsLoading, setError])
+  }, [bountyRequests, setBountyRequests, setIsLoading, setError, showSuccessAlert])
 
   return { handleRejectRequest }
 }

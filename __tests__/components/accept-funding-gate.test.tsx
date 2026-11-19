@@ -36,6 +36,7 @@ const mockSetSuccessInfo = jest.fn();
 const mockSetError = jest.fn();
 const mockSetShowPaymentMethodsModal = jest.fn();
 const mockLoadPaymentMethods = jest.fn().mockResolvedValue(undefined);
+const mockClearStripeError = jest.fn();
 
 type DepositState = {
   isProcessing: boolean;
@@ -74,6 +75,7 @@ jest.mock('hooks/use-wallet-deposit', () => ({
     setSuccessInfo: mockSetSuccessInfo,
     setShowPaymentMethodsModal: mockSetShowPaymentMethodsModal,
     loadPaymentMethods: mockLoadPaymentMethods,
+    clearStripeError: mockClearStripeError,
     payWithCard: (...a: unknown[]) => mockPayWithCard(...a),
     payWithApplePay: (...a: unknown[]) => mockPayWithApplePay(...a),
     payWithPaymentSheet: (...a: unknown[]) => mockPayWithPaymentSheet(...a),
@@ -86,7 +88,15 @@ jest.mock('lib/services/stripe-service', () => ({
 jest.mock('components/payment-methods-modal', () => ({ PaymentMethodsModal: () => null }));
 jest.mock('components/error-banner', () => {
   const { Text } = require('react-native');
-  return { ErrorBanner: ({ error }: any) => <Text>{`banner:${error?.message ?? ''}`}</Text> };
+  return {
+    ErrorBanner: ({ error, onAction }: any) => (
+      <>
+        <Text>{`banner:${error?.message ?? ''}`}</Text>
+        {error?.title ? <Text>{`banner-title:${error.title}`}</Text> : null}
+        {onAction ? <Text onPress={onAction}>banner-action</Text> : null}
+      </>
+    ),
+  };
 });
 jest.mock('lib/utils/error-messages', () => ({
   getUserFriendlyError: (e: any) => ({ message: e?.message ?? String(e) }),
@@ -568,11 +578,64 @@ describe('AcceptFundingGate', () => {
       expect(mockPayWithCard).not.toHaveBeenCalled();
     });
 
-    test('a non-payment error (e.g. methods failed to load) still shows the banner', () => {
-      resetDepositState({ stripeError: { message: 'Could not load payment methods' } });
-      const gate = makeGate();
-      const { getByText } = render(<AcceptFundingGate gate={gate} />);
-      expect(getByText('banner:Could not load payment methods')).toBeTruthy();
+    // Regression (second-pass senior audit, 2026-11-16): StripeProvider's
+    // background saved-card load had failed earlier (at sign-in or a token
+    // refresh) and left "Connection failed. Please check your internet and try
+    // again." in its shared error. The sheet rendered it the moment it opened,
+    // before the poster had confirmed anything — even when the wallet covered
+    // the hire and no card was involved.
+    describe('a saved-card failure from elsewhere in the app', () => {
+      const STALE = 'Connection failed. Please check your internet and try again.';
+
+      test('is not shown when the balance covers the hire, and no card check runs', () => {
+        resetDepositState({ stripeError: STALE });
+        const gate = makeGate({
+          stage: 'confirm',
+          requirement: { ...REQ, posterBalance: 500, shortfall: 0 },
+        });
+        const { queryByText, getByText } = render(<AcceptFundingGate gate={gate} />);
+
+        expect(getByText('Confirm & hire')).toBeTruthy();
+        expect(queryByText(/^banner/)).toBeNull();
+        expect(queryByText(/Connection failed/)).toBeNull();
+        expect(mockLoadPaymentMethods).not.toHaveBeenCalled();
+        expect(mockClearStripeError).not.toHaveBeenCalled();
+      });
+
+      test('is not shown when a card is needed; the sheet re-checks saved cards itself', async () => {
+        resetDepositState({ stripeError: STALE });
+        const { queryByText } = render(<AcceptFundingGate gate={makeGate()} />);
+
+        await waitFor(() => expect(mockLoadPaymentMethods).toHaveBeenCalledTimes(1));
+        expect(mockClearStripeError).not.toHaveBeenCalled();
+        expect(queryByText(/^banner/)).toBeNull();
+        expect(queryByText(/Connection failed/)).toBeNull();
+      });
+
+      test("if the sheet's own check fails it says only that, and Try again re-checks", async () => {
+        resetDepositState({ stripeError: STALE });
+        mockLoadPaymentMethods.mockRejectedValueOnce(new Error('Failed to fetch'));
+        const { findByText, getByText, queryByText } = render(
+          <AcceptFundingGate gate={makeGate()} />
+        );
+
+        expect(await findByText("banner-title:Couldn't load your saved cards")).toBeTruthy();
+        expect(
+          getByText('banner:Nothing has been charged. Check your connection, then tap Try again.')
+        ).toBeTruthy();
+        expect(queryByText(/Connection failed|Something Went Wrong/)).toBeNull();
+
+        fireEvent.press(getByText('banner-action'));
+        expect(mockClearStripeError).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mockLoadPaymentMethods).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(queryByText(/^banner/)).toBeNull());
+      });
+    });
+
+    test('a non-decline failure of a payment the poster started is still shown', () => {
+      resetDepositState({ error: { message: 'Not authenticated. Please sign in again.' } });
+      const { getByText } = render(<AcceptFundingGate gate={makeGate()} />);
+      expect(getByText('banner:Not authenticated. Please sign in again.')).toBeTruthy();
     });
 
     test('a legacy at_post bounty keeps the original held-funds line', () => {

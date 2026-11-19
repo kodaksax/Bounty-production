@@ -24,7 +24,16 @@ import type { AppTheme } from '../lib/themes/types';
 // "Review needed" badge).
 export type BountyProgressStage = 'open' | 'in_progress' | 'review';
 
-export type MyBountyProgressItem = { bounty: Bounty; stage: BountyProgressStage };
+export type MyBountyProgressItem = {
+  bounty: Bounty;
+  stage: BountyProgressStage;
+  /**
+   * Pending offers on an open job, when known. With offers the card says so
+   * ("3 people offered · your move") instead of "Waiting for offers", which
+   * told posters nothing had happened when three people were waiting on them.
+   */
+  offerCount?: number;
+};
 
 const STAGES: {
   key: BountyProgressStage;
@@ -32,14 +41,14 @@ const STAGES: {
   headline: string;
   icon: keyof typeof MaterialIcons.glyphMap;
 }[] = [
-  { key: 'open', label: 'Open', headline: 'Waiting for a hunter', icon: 'person-search' },
+  { key: 'open', label: 'Open', headline: 'Waiting for offers', icon: 'person-search' },
   {
     key: 'in_progress',
     label: 'In progress',
-    headline: 'A hunter is on it',
+    headline: 'Someone is doing the job',
     icon: 'directions-run',
   },
-  { key: 'review', label: 'Needs review', headline: 'Ready for your review', icon: 'fact-check' },
+  { key: 'review', label: 'Check it', headline: 'Done · ready for you to check', icon: 'fact-check' },
 ];
 
 // The reward pill keeps its own bright green in both modes.
@@ -300,8 +309,8 @@ export function MyBountyProgressCarousel({
             onPress={expand}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             accessibilityRole="button"
-            accessibilityLabel={`Your bounty progress is hidden${
-              items.length > 1 ? `, ${items.length} bounties` : ''
+            accessibilityLabel={`Your jobs are hidden${
+              items.length > 1 ? `, ${items.length} jobs` : ''
             }`}
             accessibilityHint="Shows it again"
             testID="feed-my-bounty-progress-tab"
@@ -312,7 +321,7 @@ export function MyBountyProgressCarousel({
             <View style={[styles.tabDot, largeTab && styles.tabDotLarge]} />
             {largeTab && (
               <Text style={[styles.tabLabel, tabTextColor]} numberOfLines={1}>
-                {items.length === 1 ? 'Your bounty' : 'Your bounties'}
+                {items.length === 1 ? 'Your job' : 'Your jobs'}
               </Text>
             )}
             {items.length > 1 && (
@@ -359,6 +368,7 @@ export function MyBountyProgressCarousel({
                 <MyBountyProgressBanner
                   bounty={item.bounty}
                   stage={item.stage}
+                  offerCount={item.offerCount}
                   position={items.length > 1 ? { index: i, total: items.length } : undefined}
                   onPress={() => onPressItem(item.bounty)}
                   onHide={stash}
@@ -375,6 +385,7 @@ export function MyBountyProgressCarousel({
 type Props = {
   bounty: Pick<Bounty, 'id' | 'title' | 'amount' | 'is_for_honor'>;
   stage: BountyProgressStage;
+  offerCount?: number;
   /** Set when shown in a carousel of several, for the screen-reader label. */
   position?: { index: number; total: number };
   onPress: () => void;
@@ -382,7 +393,7 @@ type Props = {
   onHide?: () => void;
 };
 
-export function MyBountyProgressBanner({ bounty, stage, position, onPress, onHide }: Props) {
+export function MyBountyProgressBanner({ bounty, stage, offerCount = 0, position, onPress, onHide }: Props) {
   // The progress line follows the app theme's brand color.
   const { theme, palette, styles } = useCardStyles();
   const index = Math.max(
@@ -390,8 +401,12 @@ export function MyBountyProgressBanner({ bounty, stage, position, onPress, onHid
     STAGES.findIndex(st => st.key === stage)
   );
   const current = STAGES[index];
+  const headline =
+    stage === 'open' && offerCount > 0
+      ? `${offerCount} ${offerCount === 1 ? 'person' : 'people'} offered · your move`
+      : current.headline;
   const fillPct = (index / (STAGES.length - 1)) * 100;
-  const reward = bounty.is_for_honor ? 'For honor' : `$${Number(bounty.amount || 0)}`;
+  const reward = bounty.is_for_honor ? 'No payment' : `${Number(bounty.amount || 0)}`;
 
   return (
     <TouchableOpacity
@@ -400,14 +415,10 @@ export function MyBountyProgressBanner({ bounty, stage, position, onPress, onHid
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${
-        position ? `Bounty ${position.index + 1} of ${position.total}. ` : ''
-      }Your bounty ${bounty.title}: ${current.label}, step ${index + 1} of ${STAGES.length}. ${
-        current.headline
-      }.`}
+        position ? `Job ${position.index + 1} of ${position.total}. ` : ''
+      }Your job ${bounty.title}: ${current.label}, step ${index + 1} of ${STAGES.length}. ${headline}.`}
       accessibilityHint={
-        position
-          ? 'Opens the bounty. Swipe left or right for your other bounties.'
-          : 'Opens the bounty'
+        position ? 'Opens the job. Swipe left or right for your other jobs.' : 'Opens the job'
       }
       accessibilityActions={
         onHide ? [{ name: 'activate' }, { name: 'hide', label: 'Hide' }] : undefined
@@ -422,7 +433,7 @@ export function MyBountyProgressBanner({ bounty, stage, position, onPress, onHid
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
           <Text style={styles.headline} numberOfLines={1}>
-            {current.headline}
+            {headline}
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>
             {bounty.title}

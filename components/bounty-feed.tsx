@@ -68,6 +68,7 @@ import { searchBountiesNearby, type NearbyBounty } from '../lib/services/bounty-
 import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { bountyService } from '../lib/services/bounty-service';
 import { completionService } from '../lib/services/completion-service';
+import { getPendingOfferCounts } from '../lib/services/poster-job-activity';
 import type { Bounty } from '../lib/services/database.types';
 import { bountyDistanceMiles } from '../lib/utils/bounty-distance';
 import { storage } from '../lib/storage';
@@ -701,10 +702,29 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       }
     }
 
+    // Pending offers per open job, so the card can say "3 people offered".
+    // null = the read failed; those cards keep the count they had.
+    const openIds = live.filter(b => b.status === 'open').map(b => String(b.id));
+    let offerCounts: Map<string, number> | null = new Map();
+    if (openIds.length > 0) {
+      try {
+        offerCounts = await withTimeout(getPendingOfferCounts(openIds), API_TIMEOUTS.DEFAULT);
+      } catch (error) {
+        offerCounts = null;
+        logger.warning('feed.my_active_bounties.offer_counts_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     setMyActiveBounties(prev => {
       const priorStages = new Map(prev.map(item => [String(item.bounty.id), item.stage]));
+      const priorCounts = new Map(prev.map(item => [String(item.bounty.id), item.offerCount]));
       const items = live.map((bounty): MyBountyProgressItem => {
-        if (bounty.status === 'open') return { bounty, stage: 'open' };
+        if (bounty.status === 'open') {
+          const id = String(bounty.id);
+          return { bounty, stage: 'open', offerCount: offerCounts ? offerCounts.get(id) ?? 0 : priorCounts.get(id) };
+        }
         const id = String(bounty.id);
         const isReview = latestSubmissions
           ? latestSubmissions.get(id)?.status === 'pending'

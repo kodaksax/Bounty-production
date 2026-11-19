@@ -8,34 +8,19 @@ import {
     Alert,
     ScrollView,
     StyleSheet,
-    Switch,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/success-animation';
 import { TrustSafetyNotice } from '../../../components/ui/trust-safety-notice';
 import { trustSafetyStrings } from '../../../lib/strings/trust-safety';
-import { analyticsService } from '../../../lib/services/analytics-service';
-import { failureEventProps } from '../../../lib/utils/stripe-error';
-import {
-    BountyPaymentError,
-    bountyPaymentsService,
-} from '../../../lib/services/bounty-payments-service';
-import { getHoursSinceClaimed } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { describeBountyUpdateError } from '../../../lib/services/bounty-update-error';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
-import {
-  bountyHoldsUnreleasedEscrow,
-  isPhase2Bounty,
-  isStripeNativeBounty,
-  isV3Bounty,
-} from '../../../lib/utils/payment-architecture';
-import { useWallet } from '../../../lib/wallet-context';
+import { bountyHoldsUnreleasedEscrow } from '../../../lib/utils/payment-architecture';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { withAlpha } from '../../../lib/utils';
@@ -52,18 +37,11 @@ export default function PayoutScreen() {
   );
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
-  const { releaseFunds, logTransaction, balance } = useWallet();
-
-  // guard against undefined wallet values to avoid runtime crashes
-  const displayBalance = typeof balance === 'number' && Number.isFinite(balance) ? balance : 0;
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [confirmRelease, setConfirmRelease] = useState(false);
-  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
     loadBounty();
@@ -92,6 +70,16 @@ export default function PayoutScreen() {
         return;
       }
 
+      // Paying for unfinished work happens in one place: the job page's
+      // review (PosterReviewModal), which approves the submission, warns that
+      // it can't be undone and asks for a deliberate slide. This screen used
+      // to release money from a switch + button WITHOUT approving the
+      // submission, so for anything not yet completed it now hands over.
+      if (data.status !== 'completed') {
+        router.replace({ pathname: '/postings/[bountyId]', params: { bountyId: id, openReview: 'work' } } as never);
+        return;
+      }
+
       setBounty(data);
     } catch (err) {
       console.error('Error loading bounty:', err);
@@ -99,252 +87,6 @@ export default function PayoutScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleReleasePayout = async () => {
-    if (!bounty || bounty.is_for_honor) {
-      Alert.alert("Something went wrong", 'Cannot release payout for honor bounties.');
-      return;
-    }
-
-    if (!confirmRelease) {
-      Alert.alert('Confirmation Required', 'Please confirm payout release by toggling the switch.');
-      return;
-    }
-
-    try {
-      setIsProcessing(true);
-
-      const useV2 = isPhase2Bounty(bounty);
-      const useV3 = isV3Bounty(bounty);
-      const useStripeNative = isStripeNativeBounty(bounty);
-      try {
-        await analyticsService.trackEvent('payment_architecture_routed', {
-          bountyId: String(bounty.id),
-          version: useV3 ? 3 : useV2 ? 2 : 1,
-          context: 'release',
-        });
-      } catch {
-        /* analytics is best-effort */
-      }
-
-      if (useStripeNative) {
-        // Stripe-native Phase 2 escrow: transfer captured funds to the
-        // hunter's Connect account via the bounty-payments edge function.
-        try {
-          const releaseResult = await bountyPaymentsService.releaseBountyPayment(
-            String(bounty.id),
-            bounty.accepted_by || undefined
-          );
-          if (!releaseResult.released || releaseResult.status !== 'released') {
-            throw new Error(
-              'Transfer requested. Waiting for Stripe to confirm settlement before completing this bounty.'
-            );
-          }
-          try {
-            await analyticsService.trackEvent('escrow_released', {
-              bountyId: String(bounty.id),
-              architecture: useV3 ? 'v3' : 'v2',
-              amount: bounty.amount,
-              bounty_id: String(bounty.id),
-              hunter_person_id: bounty.accepted_by || undefined,
-              poster_person_id: currentUserId || undefined,
-              via: 'payout_release',
-            });
-          } catch {
-            /* analytics is best-effort */
-          }
-        } catch (releaseErr) {
-          try {
-            await analyticsService.trackEvent('payment_failed', {
-              bountyId: String(bounty.id),
-              architecture: useV3 ? 'v3' : 'v2',
-              stage: 'release',
-              ...failureEventProps(releaseErr),
-            });
-          } catch {
-            /* analytics is best-effort */
-          }
-          const message =
-            releaseErr instanceof BountyPaymentError
-              ? releaseErr.message
-              : releaseErr instanceof Error
-                ? releaseErr.message
-                : 'Failed to release the payout. Please try again.';
-          throw new Error(message);
-        }
-      } else {
-        // Release escrowed funds (this updates escrow transaction and logs release)
-        const released = await releaseFunds(
-          Number(bounty.id),
-          bounty.accepted_by || 'hunter', // In production, get actual hunter ID
-          bounty.title
-        );
-
-        if (!released) {
-          throw new Error('Failed to release escrowed funds - no active escrow found');
-        }
-        try {
-          await analyticsService.trackEvent('escrow_released', {
-            bountyId: String(bounty.id),
-            architecture: 'v1',
-            amount: bounty.amount,
-            bounty_id: String(bounty.id),
-            hunter_person_id: bounty.accepted_by || undefined,
-            poster_person_id: currentUserId || undefined,
-            via: 'payout_release',
-          });
-        } catch {
-          /* analytics is best-effort */
-        }
-      }
-
-      // Update bounty status to completed
-      const updated = await bountyService.update(bounty?.id, {
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-      });
-
-      if (!updated) {
-        throw new Error('Failed to update bounty status');
-      }
-
-      // Funnel: bounty marked complete via payout release. Tracked here (not in
-      // bounty-service) because completion is fundamentally a user action.
-      try {
-        await analyticsService.trackEvent('bounty_completed', {
-          bountyId: String(bounty.id),
-          // Same key completion_submitted/escrow_released use, so the three
-          // join on one property. bountyId stays for existing insights.
-          bounty_id: String(bounty.id),
-          via: 'payout_release',
-          isForHonor: false,
-          amount: bounty.amount,
-          is_onboarding_demo: false,
-          hours_from_claim_to_completion: await getHoursSinceClaimed(bounty.id),
-        });
-      } catch {
-        /* analytics is best-effort */
-      }
-
-      // Show success animation with confetti
-      setShowSuccessAnimation(true);
-      setShowConfetti(true);
-
-      // After animations, show alert and navigate
-      setTimeout(() => {
-        setShowSuccessAnimation(false);
-        setShowConfetti(false);
-        Alert.alert(
-          'Success',
-          `Payout release for $${bounty.amount.toFixed(2)} has been recorded in Bounty. Check Wallet for payment status; availability depends on processing and any dispute review. The bounty is now completed and will be archived.`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigate back to postings screen
-                router.replace('/tabs/bounty-app');
-              },
-            },
-          ]
-        );
-      }, 2000);
-    } catch (err) {
-      console.error('Error releasing payout:', err);
-      Alert.alert(
-        'Payout Not Finalized',
-        err instanceof Error ? err.message : 'Failed to release payout. Please try again.'
-      );
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleMarkComplete = async () => {
-    if (!bounty) return;
-    if (bounty.is_for_honor !== true) {
-      Alert.alert('Use Payout Release', trustSafetyStrings.paidCompletion);
-      return;
-    }
-
-    Alert.alert(
-      'Mark as Complete',
-      'This will mark the bounty as complete and archive it for all parties.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsProcessing(true);
-
-              const updated = await bountyService.update(bountyId, {
-                status: 'completed',
-                completed_at: new Date().toISOString(),
-              });
-
-              if (!updated) {
-                throw new Error('Failed to update bounty status');
-              }
-
-              // Funnel: bounty marked complete (without escrow release).
-              try {
-                await analyticsService.trackEvent('bounty_completed', {
-                  bountyId: String(bounty.id),
-                  bounty_id: String(bounty.id),
-                  via: 'mark_complete',
-                  isForHonor: !!bounty.is_for_honor,
-                  amount: bounty.is_for_honor ? 0 : bounty.amount,
-                  is_onboarding_demo: false,
-                  hours_from_claim_to_completion: await getHoursSinceClaimed(bounty.id),
-                });
-              } catch {
-                /* analytics is best-effort */
-              }
-
-              // Record the non-monetary completion for honor bounties.
-              if (bounty.is_for_honor) {
-                if (typeof logTransaction === 'function') {
-                  await logTransaction({
-                    type: 'bounty_completed',
-                    amount: 0,
-                    details: {
-                      title: bounty.title,
-                      status: 'completed_for_honor',
-                      bounty_id: bounty.id,
-                    },
-                  });
-                } else {
-                  console.warn('logTransaction not available from wallet context');
-                }
-              }
-
-              // Show success animation
-              setShowSuccessAnimation(true);
-
-              // After animation, show alert and navigate
-              setTimeout(() => {
-                setShowSuccessAnimation(false);
-                Alert.alert('Success', 'Bounty marked as complete and archived.', [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      router.replace('/tabs/bounty-app');
-                    },
-                  },
-                ]);
-              }, 1500);
-            } catch (err) {
-              console.error('Error marking as complete:', err);
-              Alert.alert("Something went wrong", describeBountyUpdateError(err));
-            } finally {
-              setIsProcessing(false);
-            }
-          },
-        },
-      ]
-    );
   };
 
   const handleDeleteBounty = async () => {
@@ -480,7 +222,7 @@ export default function PayoutScreen() {
         <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={styles.backIcon} onPress={goBack}>
           <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Release payment</Text>
+        <Text style={styles.headerTitle}>Payment details</Text>
       </View>
 
       <ScrollView
@@ -497,7 +239,7 @@ export default function PayoutScreen() {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Status:</Text>
             <Text style={styles.summaryValue}>
-              {bounty.status === 'completed' ? 'Completed' : 'In Progress'}
+              {bounty.status === 'completed' ? 'Finished' : 'In progress'}
             </Text>
           </View>
         </View>
@@ -506,7 +248,7 @@ export default function PayoutScreen() {
         <View style={styles.payoutCard}>
           <View style={styles.payoutHeader}>
             <MaterialIcons name="account-balance-wallet" size={32} color={theme.primaryLight} />
-            <Text style={styles.payoutTitle}>Amount to release</Text>
+            <Text style={styles.payoutTitle}>Job price</Text>
           </View>
 
           {bounty.is_for_honor ? (
@@ -520,69 +262,21 @@ export default function PayoutScreen() {
           ) : (
             <>
               <Text style={styles.payoutAmount}>${bounty.amount.toFixed(2)}</Text>
-              {isPhase2Bounty(bounty) ? (
-                <View style={styles.balanceInfo}>
-                  <MaterialIcons name="verified-user" size={16} color={theme.primaryLight} />
-                  <Text style={styles.balanceLabel}>
-                    Stripe escrow — release and payout timing may vary
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.balanceInfo}>
-                  <Text style={styles.balanceLabel}>Wallet balance:</Text>
-                  <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
-                </View>
-              )}
             </>
           )}
         </View>
-
-        {/* Confirmation Section (Only for paid bounties) */}
-        {!bounty.is_for_honor && bounty.status !== 'completed' && (
-          <View style={styles.confirmationCard}>
-            <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
-            <Text style={styles.confirmationTitle}>Confirm payment release</Text>
-            <Text style={styles.confirmationSubtext}>
-              {trustSafetyStrings.paidCompletion} Confirm that the work is complete to request release.
-              Processing, fraud checks, or dispute review may delay payment.
-            </Text>
-            <View style={styles.switchContainer}>
-              <Text style={styles.switchLabel}>I confirm I want to release this payment</Text>
-              <Switch
-                value={confirmRelease}
-                onValueChange={setConfirmRelease}
-                trackColor={{ false: '#61656B', true: '#008E2A' }}
-                thumbColor={confirmRelease ? '#fff' : '#f4f4f5'}
-              />
-            </View>
-          </View>
-        )}
 
         {/* Already Completed Notice */}
         {bounty.status === 'completed' && (
           <>
             <View style={styles.completedCard}>
               <MaterialIcons name="check-circle" size={48} color={theme.primaryLight} />
-              <Text style={styles.completedTitle}>Bounty completed</Text>
+              <Text style={styles.completedTitle}>Job finished</Text>
               <Text style={styles.completedSubtext}>
-                This bounty has already been completed and archived.
+                You approved this job. Your Wallet shows the payment.
               </Text>
             </View>
-
-            {/* Receipt Download */}
-            <TouchableOpacity accessibilityRole="button"
-              style={styles.receiptButton}
-              onPress={() => {
-                // TODO (Post-Launch): Implement actual receipt generation and download
-                Alert.alert(
-                  'Receipt',
-                  `Transaction Receipt\n\nBounty: ${bounty.title}\nAmount: ${bounty.is_for_honor ? 'For Honor' : '$' + bounty.amount.toFixed(2)}\nStatus: Completed\nDate: ${bounty.created_at}\n\nReceipt download feature coming soon!`
-                );
-              }}
-            >
-              <MaterialIcons name="receipt" size={20} color={theme.primaryLight} />
-              <Text style={styles.receiptButtonText}>Download receipt</Text>
-            </TouchableOpacity>
+            <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
 
             {/* Completed actions: allow archive or delete after completion */}
             {bounty.status === 'completed' && (
@@ -621,84 +315,17 @@ export default function PayoutScreen() {
           </>
         )}
 
-        {/* Action Buttons */}
-        {bounty.status !== 'completed' && (
-          <View style={styles.actionButtons}>
-            {!bounty.is_for_honor && (
-              <TouchableOpacity accessibilityRole="button"
-                style={[
-                  styles.releaseButton,
-                  (!confirmRelease || isProcessing) && styles.buttonDisabled,
-                ]}
-                onPress={handleReleasePayout}
-                disabled={!confirmRelease || isProcessing}
-              >
-                {isProcessing ? (
-                  <ActivityIndicator size="small" color={theme.onPrimary} />
-                ) : (
-                  <>
-                    <MaterialIcons name="attach-money" size={24} color={theme.onPrimary} />
-                    <Text style={styles.releaseButtonText}>Release payment</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
-            {bounty.is_for_honor === true && (
-              <TouchableOpacity accessibilityRole="button"
-                style={[styles.completeButton, isProcessing && styles.buttonDisabled]}
-                onPress={handleMarkComplete}
-                disabled={isProcessing}
-              >
-                {isProcessing ? (
-                  <ActivityIndicator size="small" color={theme.onPrimary} />
-                ) : (
-                  <>
-                    <MaterialIcons name="check" size={24} color={theme.onPrimary} />
-                    <Text style={styles.completeButtonText}>Mark as complete</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity accessibilityRole="button"
-              style={[styles.deleteButton, isProcessing && styles.buttonDisabled]}
-              onPress={handleDeleteBounty}
-              disabled={isProcessing}
-            >
-              {isProcessing ? (
-                <ActivityIndicator size="small" color={theme.onPrimary} />
-              ) : (
-                <>
-                  <MaterialIcons name="delete" size={24} color={theme.onPrimary} />
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Info Section */}
         <View style={styles.infoCard}>
           <MaterialIcons name="info-outline" size={24} color={theme.primaryLight} />
           <Text style={styles.infoText}>
             {bounty.status === 'completed'
-              ? 'This bounty has been archived and is accessible in your bounty history.'
-              : bounty.is_for_honor
-                ? 'Once you mark as complete, the bounty will be archived for all parties.'
-                : 'Complete this bounty using Release Payout. Payment remains subject to processing and dispute review.'}
+              ? 'This job stays in your history. If something is wrong, use Get help on your job page.'
+              : "This job isn't finished yet."}
           </Text>
         </View>
       </ScrollView>
 
-      {/* Success Animations */}
-      <SuccessAnimation
-        visible={showSuccessAnimation}
-        icon="check-circle"
-        size={80}
-        color={theme.primaryLight}
-      />
-      <ConfettiAnimation visible={showConfetti} />
     </View>
   );
 }

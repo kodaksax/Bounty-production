@@ -972,6 +972,69 @@
         ]
       },
       "notes": "Golden-path audit. Needs open bounties on staging; an empty feed is itself a finding. Connect onboarding is a Stripe-hosted step and not testable on web."
+    },
+    {
+      "id": "senior-poster-2p-lifecycle",
+      "title": "Second-pass senior audit 2026-11-16 -- after publishing: find offers, compare, hire, message, approve, review",
+      "phase": 4,
+      "task": "You are using this app on your phone. Two days ago you posted a job asking for help removing old furniture from your garage (\"Remove old furniture from my garage\"). Starting from this screen and using only what the app shows you: (1) find out whether anyone has offered to do it, and how many; (2) look at each person and decide who you would trust to come to your home -- note what the app tells you about each one (who they are, whether the app has checked them, reviews, past jobs, how far away they are); (3) choose one and hire them, noting exactly what the app told you about money before you committed, and whether you are sure afterwards that they are officially hired; (4) send them a message to agree a day and time; (5) then find your other job \"Pick up my dry cleaning\", where the person says they have finished, and work out how to check the work and approve it -- approve it if you are satisfied, and say whether you understood when the money leaves and whether approving and paying were the same step; (6) afterwards, leave a review for that person. At each screen say in plain words what you think it wants from you and what you expect the next tap to do. Finish with the six steps marked DONE or STUCK, quoting the on-screen text that helped or confused you; say whether, at the end, you knew who was doing each job and where your money was; and list every word you did not understand. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs, treat them as real jobs. Your account is a disposable test account funded with test money, so you are authorised to hire, pay, approve, cancel or report a problem if that is the step in front of you. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-older-olive",
+        "bounty-homeowner-hal",
+        "bounty-busy-pro-bea"
+      ],
+      "swarm": 3,
+      "poolOffset": 7,
+      "maxSteps": 45,
+      "path": "/tabs/bounty-app",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:apply",
+          "funnel:trust",
+          "funnel:completion",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux"
+        ]
+      },
+      "notes": "Second-pass rerun of senior-poster-lifecycle (2026-11-14 baseline: 0/3 finished). Pool slots 08-10 (poolOffset 7), prepared by qa/shoal/repro/senior-second-pass-fixture.mjs: an open at_accept \"[shoal] sNN Remove old furniture from my garage\" with three pending offers, and \"[shoal] sNN Pick up my dry cleaning\" with a pending submission and a photo. Pool posters hold staging test balance, so Choose shows the Confirm & hire sheet; card payment cannot run on web (Stripe is stubbed). Re-run the fixture before repeating."
+    },
+    {
+      "id": "senior-poster-2p-something-wrong",
+      "title": "Second-pass senior audit 2026-11-16 -- the hired person went silent; reach a human, protect the money",
+      "phase": 4,
+      "task": "Four days ago you hired someone through this app to fix a dripping kitchen tap (\"Fix a dripping kitchen tap\"). They have not shown up and have not replied, and you are worried about your money. Starting from this screen and using only the app: find that job; work out what you can do about it (wait, cancel, get your money back, choose someone else, report them); try to reach a real person at the company and note how (phone, chat, email, form) and how quickly they say they will answer; then take the step you think is right and follow it until the app tells you what happens next. Afterwards say whether you know where your money is right now, whether and when you will get it back, and whether it goes back to your card or somewhere else. Finish with every question the app left unanswered, quoting the screen text, and every button that took you somewhere you did not expect. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs, treat them as real jobs. Your account is a disposable test account funded with test money, so you are authorised to hire, pay, approve, cancel or report a problem if that is the step in front of you. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-older-olive",
+        "bounty-homeowner-hal"
+      ],
+      "swarm": 2,
+      "poolOffset": 10,
+      "maxSteps": 40,
+      "path": "/tabs/bounty-app",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:trust",
+          "funnel:completion",
+          "funnel:payment"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux",
+          "area:supabase"
+        ]
+      },
+      "notes": "Second-pass rerun of senior-poster-something-wrong (2026-11-14 baseline: 1/2 finished, 1 trapped in the composer by Contact support). Pool slots 11-12 (poolOffset 10): \"[shoal] sNN Fix a dripping kitchen tap\", hired 4 days ago, no message from the helper. Expected now: the job page says \"Haven't heard from …?\" and Get help is on the page."
     }
   ]
 }

@@ -90,6 +90,9 @@ const PENDING = {
   submitted_at: new Date().toISOString(),
 };
 
+// The approve button names the amount ("Approve and pay $60.00"), or "Mark as done" for an unpaid job.
+const APPROVE_BUTTON = /^(Approve and pay \$\d|Mark as done$)/;
+
 function renderModal(props: Partial<React.ComponentProps<typeof PosterReviewModal>> = {}) {
   return render(
     <PosterReviewModal
@@ -118,14 +121,14 @@ describe('PosterReviewModal from the job page', () => {
   it('review: opening and "Proceed to Payout" release nothing; the irreversible-payout step comes first', async () => {
     mockGetSubmissionForReview.mockResolvedValue(PENDING);
     renderModal();
-    expect(await screen.findByText('Proceed to Payout')).toBeTruthy();
+    expect(await screen.findByText(APPROVE_BUTTON)).toBeTruthy();
     expect(mockGetSubmissionForReview).toHaveBeenCalledWith('b1', 'hunter-1');
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
 
-    fireEvent.press(screen.getByText('Proceed to Payout'));
-    expect(screen.getByText('Complete and release payment?')).toBeTruthy();
-    expect(screen.getByText('Once you continue, this action cannot be undone.')).toBeTruthy();
-    expect(screen.getByLabelText('Slide to confirm payout')).toBeTruthy();
+    fireEvent.press(screen.getByText(APPROVE_BUTTON));
+    expect(screen.getByText('Pay ana_hunts $60.00?')).toBeTruthy();
+    expect(screen.getByText('Once you approve, this cannot be undone.')).toBeTruthy();
+    expect(screen.getByLabelText('Slide to approve and pay')).toBeTruthy();
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
   });
 
@@ -134,8 +137,8 @@ describe('PosterReviewModal from the job page', () => {
     const onComplete = jest.fn();
     renderModal({ startOnRating: true, onComplete });
     expect(await screen.findByText('Rate ana_hunts')).toBeTruthy();
-    expect(screen.queryByText('No submission yet')).toBeNull();
-    expect(screen.queryByText('Slide to confirm payout')).toBeNull();
+    expect(screen.queryByText('Nothing to check yet')).toBeNull();
+    expect(screen.queryByText('Slide to approve and pay')).toBeNull();
 
     fireEvent.press(screen.getByLabelText('Give 5 stars'));
     await act(async () => {
@@ -157,21 +160,21 @@ describe('PosterReviewModal from the job page', () => {
     expect(mockSubmitRating).not.toHaveBeenCalled();
   });
 
-  it('without startOnRating and no submission, it is unchanged ("No submission yet")', async () => {
+  it('without startOnRating and no submission, it is unchanged ("Nothing to check yet")', async () => {
     mockGetSubmissionForReview.mockResolvedValue(null);
     renderModal();
-    expect(await screen.findByText('No submission yet')).toBeTruthy();
+    expect(await screen.findByText('Nothing to check yet')).toBeTruthy();
     expect(screen.queryByText('Rate ana_hunts')).toBeNull();
   });
 });
 
 /** The slide control's screen-reader / switch-control alternative: a double tap. */
-function activateSlider(label = 'Slide to confirm payout') {
+function activateSlider(label = 'Slide to approve and pay') {
   fireEvent(screen.getByLabelText(label), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
 }
 
 async function openPayoutStep() {
-  fireEvent.press(await screen.findByText('Proceed to Payout'));
+  fireEvent.press(await screen.findByText(APPROVE_BUTTON));
 }
 
 function lastAlertCall(): [string, string, any[]] {
@@ -189,10 +192,10 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
     mockApproveAndRelease.mockResolvedValue(true);
     renderModal();
     await openPayoutStep();
-    const handle = screen.getByLabelText('Slide to confirm payout');
+    const handle = screen.getByLabelText('Slide to approve and pay');
     expect(handle.props.accessibilityHint).toBe('Double tap to confirm. This cannot be undone.');
     expect(handle.props.accessibilityHint).not.toMatch(/drag/i);
-    expect(handle.props.accessibilityActions).toEqual([{ name: 'activate', label: 'Slide to confirm payout' }]);
+    expect(handle.props.accessibilityActions).toEqual([{ name: 'activate', label: 'Slide to approve and pay' }]);
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
     await act(async () => {
       activateSlider();
@@ -238,7 +241,7 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
     expect(message).not.toMatch(/approved/i);
     expect(message).not.toMatch(/nothing was (paid|charged)/i);
     expect(message).toMatch(/check the job's Payment section/);
-    expect(screen.getByText('Complete and release payment?')).toBeTruthy();
+    expect(screen.getByText('Pay ana_hunts $60.00?')).toBeTruthy();
     expect(screen.queryByTestId('review-approved-banner')).toBeNull();
     // Closing after a failure is a plain close, not "done".
     fireEvent.press(screen.getByLabelText('Back to previous step'));
@@ -274,17 +277,17 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
-  it('a failed load says so with a retry, never "No submission yet"', async () => {
+  it('a failed load says so with a retry, never "Nothing to check yet"', async () => {
     mockGetSubmissionForReview.mockReset();
     mockGetSubmissionForReview.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(PENDING);
     renderModal();
     expect(await screen.findByText("Couldn't load the submitted work")).toBeTruthy();
-    expect(screen.queryByText('No submission yet')).toBeNull();
-    expect(screen.queryByText('Proceed to Payout')).toBeNull();
+    expect(screen.queryByText('Nothing to check yet')).toBeNull();
+    expect(screen.queryByText(APPROVE_BUTTON)).toBeNull();
     await act(async () => {
       fireEvent.press(screen.getByText('Try again'));
     });
-    expect(await screen.findByText('Proceed to Payout')).toBeTruthy();
+    expect(await screen.findByText(APPROVE_BUTTON)).toBeTruthy();
     expect(mockGetSubmissionForReview).toHaveBeenNthCalledWith(1, 'b1', 'hunter-1');
     expect(mockGetSubmissionForReview).toHaveBeenNthCalledWith(2, 'b1', 'hunter-1');
     expect(mockApproveAndRelease).not.toHaveBeenCalled();
@@ -365,7 +368,7 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
     renderModal({ isForHonor: true, bountyAmount: 0 });
     await openPayoutStep();
     expect(screen.getByLabelText('Slide to mark complete')).toBeTruthy();
-    expect(screen.queryByLabelText('Slide to confirm payout')).toBeNull();
+    expect(screen.queryByLabelText('Slide to approve and pay')).toBeNull();
   });
 
   it('Android back steps back from the confirm step instead of dropping the poster out', async () => {
@@ -377,6 +380,6 @@ describe('QA pass 2: accessibility and failure states (2026-11-15)', () => {
       screen.UNSAFE_getByType(Modal).props.onRequestClose();
     });
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByText('Proceed to Payout')).toBeTruthy();
+    expect(screen.getByText(APPROVE_BUTTON)).toBeTruthy();
   });
 });

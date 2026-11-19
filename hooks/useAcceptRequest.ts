@@ -65,7 +65,32 @@ interface UseAcceptRequestParams {
    * is already looking at. Failure alerts are never suppressed.
    */
   showSuccessAlert?: boolean
+  /**
+   * Show the "messaging setup needed" alert when the hire succeeded but the
+   * conversation couldn't be created. Defaults to true. A caller that shows
+   * its own confirmation screen (whose "Message" button retries the
+   * conversation) turns it off so the poster doesn't get two answers.
+   */
+  showMessagingSetupAlert?: boolean
 }
+
+/**
+ * What handleAcceptRequest actually did. `accepted` is true only after the
+ * server confirmed the acceptance (fn_accept_bounty_request returned a row);
+ * every other path -- the poster backing out of the pay sheet, a failed or
+ * refused acceptance, a bounty that already moved on -- is `accepted: false`.
+ * Screens use it to show a hire confirmation only for a hire that happened.
+ */
+export type AcceptRequestOutcome =
+  | {
+      accepted: true
+      bountyId: string | null
+      hunterId: string | null
+      hunterName: string | null
+      /** The coordination conversation, when one could be set up. */
+      conversationId: string | null
+    }
+  | { accepted: false; reason: 'declined_payment' | 'failed' | 'already_moved_on' | 'error' }
 
 /**
  * Plain-language reason a hire didn't go through. Every caller reloads the
@@ -113,8 +138,9 @@ export function useAcceptRequest({
   refreshWallet,
   handleAcceptFailure,
   showSuccessAlert = true,
+  showMessagingSetupAlert = true,
 }: UseAcceptRequestParams) {
-  const handleAcceptRequest = useCallback(async (requestId: string | number) => {
+  const handleAcceptRequest = useCallback(async (requestId: string | number): Promise<AcceptRequestOutcome> => {
     // Track the conversation id created during this accept flow so
     // the alert action can re-assert the intent when the user taps "View Conversation".
     let pendingConvId: string | null = null
@@ -167,7 +193,7 @@ export function useAcceptRequest({
           // Poster declined or backed out. Nothing was charged and nobody was
           // assigned; leave every list exactly as it was.
           setIsLoading((prev) => ({ ...prev, requests: false, myBounties: false, inProgress: false }))
-          return
+          return { accepted: false, reason: 'declined_payment' }
         }
       }
 
@@ -250,7 +276,7 @@ export function useAcceptRequest({
 
           // Reload lists to attempt to restore correct state
           await Promise.allSettled([loadMyBounties(), loadInProgress(), loadRequestsForMyBounties(myBounties)])
-          return
+          return { accepted: false, reason: 'failed' }
         }
       }
 
@@ -266,7 +292,7 @@ export function useAcceptRequest({
           "Someone was already hired, or the bounty closed. We've refreshed your list."
         )
         await Promise.allSettled([loadMyBounties(), loadInProgress(), loadRequestsForMyBounties(myBounties)])
-        return
+        return { accepted: false, reason: 'already_moved_on' }
       }
 
       // Fetch authoritative bounty object (server performed the transition atomically)
@@ -538,16 +564,25 @@ export function useAcceptRequest({
         },
       }
 
+      const acceptedOutcome: AcceptRequestOutcome = {
+        accepted: true,
+        bountyId: bountyId != null ? String(bountyId) : null,
+        hunterId: hunterIdForConv ? String(hunterIdForConv) : null,
+        hunterName: request.profile?.username || null,
+        conversationId: pendingConvId,
+      }
+
       if (messagingSetupError) {
+        if (!showMessagingSetupAlert) return acceptedOutcome
         Alert.alert(
           'Bounty Accepted - Messaging Setup Needed',
           messagingSetupError,
           [retryMessagingAction, { text: 'Go to My Bounties', onPress: () => setActiveScreen('messages') }]
         )
-        return
+        return acceptedOutcome
       }
 
-      if (!showSuccessAlert) return
+      if (!showSuccessAlert) return acceptedOutcome
 
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
         Alert.alert(
@@ -562,9 +597,11 @@ export function useAcceptRequest({
           [viewAction, { text: 'OK' }]
         )
       }
+      return acceptedOutcome
     } catch (err: any) {
       console.error("Error accepting request:", err)
       setError(err.message || "Failed to accept request")
+      return { accepted: false, reason: 'error' }
     } finally {
       setIsLoading((prev) => ({ ...prev, requests: false, myBounties: false, inProgress: false }))
     }
@@ -586,6 +623,7 @@ export function useAcceptRequest({
     refreshWallet,
     handleAcceptFailure,
     showSuccessAlert,
+    showMessagingSetupAlert,
   ])
 
   return { handleAcceptRequest }

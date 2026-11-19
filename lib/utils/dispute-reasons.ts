@@ -27,22 +27,22 @@ export function getDisputeReasonOptions(
     if (!opts.workSubmitted) {
       options.push({
         code: 'hunter_unresponsive',
-        label: "Hunter hasn't responded",
-        help: "Bounty support contacts the hunter. If they can't finish, support can return your escrow.",
+        label: "They haven't replied or turned up",
+        help: "Bounty support contacts them. If they can't do the job, support can return your money. Nobody is paid while we look into it.",
       });
     }
     if (opts.workSubmitted) {
       options.push({
         code: 'work_quality',
-        label: "Work doesn't match the job",
-        help: 'Support looks at the submission and the job description, then decides how the escrow is settled.',
+        label: "The work wasn't done properly",
+        help: 'Support looks at what they sent and what you asked for, then decides what happens to your money. Nobody is paid in the meantime.',
       });
     }
     options.push(
       {
         code: 'missed_deadline',
         label: 'Missed the agreed time',
-        help: 'Support checks what was agreed in your messages and settles the escrow.',
+        help: 'Support checks what was agreed in your messages and decides what happens to your money.',
       },
       {
         code: 'scope_disagreement',

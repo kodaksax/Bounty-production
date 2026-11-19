@@ -99,7 +99,12 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       // to do with it is accept/decline -- land on the Requests tab where that
       // happens (GitHub #809), even for bundled notifications with no bountyId.
       if (ctx.type === 'application') {
-        return { kind: 'route', path: POSTER_REQUESTS_PATH };
+        // One job named: its own page, which lists every offer for that job
+        // with what we know about each person. A bundled notification for
+        // several jobs has no single job to open, so it keeps the list.
+        return bountyId
+          ? { kind: 'route', path: `/postings/${bountyId}` }
+          : { kind: 'route', path: POSTER_REQUESTS_PATH };
       }
       // The unfinished-post reminder: the Post tab, where the composer offers
       // to continue the draft from the step it stopped on.
