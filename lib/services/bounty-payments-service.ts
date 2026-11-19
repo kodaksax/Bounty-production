@@ -165,6 +165,25 @@ export async function createBountyPayment(bountyId: string): Promise<CreateBount
   return postBountyPayments<CreateBountyPaymentResult>('/create', { bountyId });
 }
 
+export interface AdminSettleBountyPaymentResult {
+  refunded?: boolean;
+  refundId?: string | null;
+  transferId?: string;
+  hunterId?: string;
+  status: string;
+  warning?: string;
+}
+
+/**
+ * Admin only: run the Stripe step of the disposition an admin recorded with
+ * admin_set_bounty_status() (refund the poster, or pay out the hunter). Takes
+ * only the bounty id; the server reads who is paid and how much from the
+ * payment row. See supabase/functions/_shared/admin-settlement.ts.
+ */
+export async function adminSettleBountyPayment(bountyId: string): Promise<AdminSettleBountyPaymentResult> {
+  return postBountyPayments<AdminSettleBountyPaymentResult>('/admin-settle', { bountyId });
+}
+
 /**
  * Release captured funds to the hunter (poster action on completion/approval).
  * `hunterId` is optional — the server falls back to the bounty's accepted_by.

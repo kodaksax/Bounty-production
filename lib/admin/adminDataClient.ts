@@ -51,9 +51,19 @@ export interface SendWarningParams {
  *  - 42501 (insufficient_privilege, from admin_assert_role())    -> NOT_ADMIN
  *  - P0002 (no_data_found, the bounty row does not exist)        -> BOUNTY_NOT_FOUND
  *  - 55000 (admin_set_bounty_status: money still held)           -> ESCROW_UNSETTLED
+ *  - 55000 'disposition_required:…' (a captured Stripe payment
+ *    needs refund / keep / pay-out chosen first)                  -> DISPOSITION_REQUIRED
  *  - anything else (illegal transition, connection failure, ...) -> DATABASE_ERROR
  */
-export type AdminModerationErrorCode = 'NOT_ADMIN' | 'BOUNTY_NOT_FOUND' | 'ESCROW_UNSETTLED' | 'DATABASE_ERROR';
+export type AdminModerationErrorCode =
+  | 'NOT_ADMIN'
+  | 'BOUNTY_NOT_FOUND'
+  | 'ESCROW_UNSETTLED'
+  | 'DISPOSITION_REQUIRED'
+  | 'DATABASE_ERROR';
+
+/** What happens to a captured Stripe payment when an admin ends its bounty. */
+export type AdminPaymentDisposition = 'refund_poster' | 'keep_as_platform_revenue' | 'pay_out_to_hunter';
 
 export class AdminModerationError extends Error {
   code: AdminModerationErrorCode;
@@ -439,11 +449,20 @@ export const adminDataClient = {
    * happened to render). See
    * 20260904020000_admin_bounty_status_authorization_fix.sql.
    */
-  async updateBountyStatus(id: string, status: AdminBounty['status'], reason?: string): Promise<AdminBounty> {
+  async updateBountyStatus(
+    id: string,
+    status: AdminBounty['status'],
+    reason?: string,
+    options?: { disposition?: AdminPaymentDisposition; hunterId?: string }
+  ): Promise<AdminBounty> {
     const { data, error } = await supabase.rpc('admin_set_bounty_status', {
       p_bounty_id: id,
       p_status: status,
       p_reason: reason ?? null,
+      // Required by the server when ending a bounty whose Stripe payment is
+      // captured (20261110120000); refused anywhere else.
+      ...(options?.disposition ? { p_disposition: options.disposition } : {}),
+      ...(options?.hunterId ? { p_hunter_id: options.hunterId } : {}),
     });
 
     if (error) {
@@ -456,6 +475,12 @@ export const adminDataClient = {
       // The server refuses to end, archive or reopen a bounty whose escrow is
       // still held (20261012120100): flipping the status would strand the
       // poster's money or close the job without paying the hunter.
+      if (error.code === '55000' && String(error.message ?? '').startsWith('disposition_required')) {
+        throw new AdminModerationError(
+          'DISPOSITION_REQUIRED',
+          'This bounty holds a captured card payment. Choose what happens to it: refund the poster, keep it as platform revenue, or pay out a hunter.'
+        );
+      }
       if (error.code === '55000') {
         throw new AdminModerationError(
           'ESCROW_UNSETTLED',

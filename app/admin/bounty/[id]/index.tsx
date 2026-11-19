@@ -37,7 +37,12 @@ import {
 } from '../../../../components/admin/AdminUI';
 import { useAppTheme } from '../../../../hooks/use-app-theme';
 import type { ViolationType } from '../../../../lib/admin/adminDataClient';
-import { AdminModerationError, adminDataClient } from '../../../../lib/admin/adminDataClient';
+import {
+  AdminModerationError,
+  adminDataClient,
+  type AdminPaymentDisposition,
+} from '../../../../lib/admin/adminDataClient';
+import { adminSettleBountyPayment } from '../../../../lib/services/bounty-payments-service';
 import {
   commandCenterClient,
   escrowHoldReasonLabel,
@@ -118,6 +123,36 @@ const ESCROW_GUARDED_STATUSES: ReadonlySet<AdminBountyStatus> = new Set<AdminBou
   'deleted',
   'open',
 ]);
+
+/**
+ * Ending a bounty whose only hold is a captured Stripe payment needs a
+ * disposition (20261110120000): refund the poster, keep the money as platform
+ * revenue, or pay out the hunter. These targets open that chooser instead of
+ * being locked.
+ */
+const DISPOSITION_TARGETS: ReadonlySet<AdminBountyStatus> = new Set<AdminBountyStatus>([
+  'cancelled',
+  'archived',
+  'deleted',
+]);
+const CAPTURED_PAYMENT_HOLD = 'stripe_payment_captured';
+const REFUND_PENDING_HOLD = 'stripe_payment_refund_pending';
+
+const DISPOSITION_COPY: Record<AdminPaymentDisposition, { button: string; confirm: string }> = {
+  refund_poster: {
+    button: 'Refund the poster',
+    confirm: "Refunds the full captured amount to the poster's card through Stripe.",
+  },
+  keep_as_platform_revenue: {
+    button: 'Keep as platform revenue',
+    confirm:
+      'Bounty keeps the captured amount. Nobody is refunded or paid; it is booked to the platform ledger. Use only when the poster agreed or the work was done outside the app.',
+  },
+  pay_out_to_hunter: {
+    button: 'Pay out the hunter',
+    confirm: "Transfers the hunter's share to their Stripe account, minus the platform fee.",
+  },
+};
 
 const VIOLATION_OPTIONS: { label: string; value: ViolationType }[] = [
   { label: 'Spam', value: 'spam' },
@@ -211,10 +246,43 @@ export default function AdminBountyDetailScreen() {
   );
 
   const applyStatus = useCallback(
-    async (next: AdminBountyStatus, settlesEscrow = false) => {
+    async (
+      next: AdminBountyStatus,
+      settlesEscrow = false,
+      disposition?: { kind: AdminPaymentDisposition; hunterId?: string }
+    ) => {
       if (!bounty || pendingAction != null) return;
       setPendingAction(next);
       try {
+        if (disposition) {
+          const label =
+            STATUS_TRANSITIONS[bounty.status]?.find((t) => t.status === next)?.label ?? 'Settle payment';
+          await adminDataClient.updateBountyStatus(
+            bounty.id,
+            next,
+            `Admin console: ${label} (${bounty.status} -> ${next}), payment: ${disposition.kind}`,
+            { disposition: disposition.kind, hunterId: disposition.hunterId }
+          );
+          // The decision is recorded. Refunds and payouts still need Stripe;
+          // if that step fails the payment stays visible to reconciliation and
+          // "Retry" below runs it again.
+          let stripeNote = '';
+          if (disposition.kind !== 'keep_as_platform_revenue') {
+            try {
+              const settled = await adminSettleBountyPayment(bounty.id);
+              stripeNote = settled.refunded
+                ? ` Stripe refund ${settled.refundId ?? ''} created.`
+                : ` Stripe transfer ${settled.transferId ?? ''} created.`;
+            } catch (settleErr) {
+              stripeNote = ` The Stripe step did not complete (${
+                settleErr instanceof Error ? settleErr.message : 'unknown error'
+              }). The decision is saved; use Retry on this screen.`;
+            }
+          }
+          await loadBounty();
+          Alert.alert('Payment settled', `${DISPOSITION_COPY[disposition.kind].button}: recorded.${stripeNote}`);
+          return;
+        }
         if (settlesEscrow) {
           // Refund + resolve + cancel, in one server-side transaction.
           const result = await adminDataClient.approveBountyCancellation(
@@ -259,9 +327,62 @@ export default function AdminBountyDetailScreen() {
     [bounty, pendingAction, router, loadBounty]
   );
 
+  const chooseDisposition = useCallback(
+    (target: AdminBountyStatus) => {
+      if (!bounty) return;
+      const confirm = (kind: AdminPaymentDisposition, hunterId?: string) =>
+        Alert.alert(DISPOSITION_COPY[kind].button + '?', DISPOSITION_COPY[kind].confirm + ' This moves real money.', [
+          { text: 'Back', style: 'cancel' },
+          {
+            text: DISPOSITION_COPY[kind].button,
+            style: 'destructive',
+            onPress: () => void applyStatus(target, false, { kind, hunterId }),
+          },
+        ]);
+      const options: { text: string; onPress: () => void }[] = [
+        { text: DISPOSITION_COPY.refund_poster.button, onPress: () => confirm('refund_poster') },
+        { text: DISPOSITION_COPY.keep_as_platform_revenue.button, onPress: () => confirm('keep_as_platform_revenue') },
+      ];
+      // Paying anyone other than the accepted hunter is possible server-side
+      // (any applicant), but needs a reviewed decision: scripts/ops.
+      if (bounty.acceptedBy) {
+        options.push({
+          text: `Pay out ${bounty.acceptedUsername ? '@' + bounty.acceptedUsername : 'the hunter'}`,
+          onPress: () => confirm('pay_out_to_hunter', bounty.acceptedBy),
+        });
+      }
+      Alert.alert(
+        'This bounty holds a captured payment',
+        'Choose what happens to the money before the bounty ends.',
+        // Android shows at most three buttons; tapping outside dismisses.
+        options.length < 3 ? [{ text: 'Back', style: 'cancel' }, ...options] : options,
+        { cancelable: true }
+      );
+    },
+    [bounty, applyStatus]
+  );
+
+  const retryStripeStep = useCallback(async () => {
+    if (!bounty || pendingAction != null) return;
+    setPendingAction('settle');
+    try {
+      const settled = await adminSettleBountyPayment(bounty.id);
+      await loadBounty();
+      Alert.alert('Stripe step done', settled.refunded ? `Refund ${settled.refundId ?? ''} created.` : `Transfer ${settled.transferId ?? ''} created.`);
+    } catch (err) {
+      Alert.alert('Stripe step failed', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setPendingAction(null);
+    }
+  }, [bounty, pendingAction, loadBounty]);
+
   const confirmStatusChange = useCallback(
     (transition: Transition) => {
       if (!bounty) return;
+      if (financial?.escrowHoldReason === CAPTURED_PAYMENT_HOLD && DISPOSITION_TARGETS.has(transition.status)) {
+        chooseDisposition(transition.status);
+        return;
+      }
       const escrowNote = transition.settlesEscrow
         ? "This cancels the bounty AND refunds the full escrowed amount to the poster's wallet. This moves real money and cannot be undone here."
         : `This changes the bounty's lifecycle state to "${transition.status.replace(/_/g, ' ')}". It does not move any money, so it is refused while the bounty still holds escrow: settle that first through the cancellation approval or the dispute.`;
@@ -280,7 +401,7 @@ export default function AdminBountyDetailScreen() {
         ]
       );
     },
-    [bounty, applyStatus]
+    [bounty, applyStatus, financial, chooseDisposition]
   );
 
   const executeRemove = useCallback(
@@ -407,8 +528,16 @@ export default function AdminBountyDetailScreen() {
   // same thing for this button's purposes: nothing left to remove.
   const isRemoved = bounty.status === 'archived' || bounty.status === 'deleted';
   const holdReason = financial?.escrowHoldReason;
+  const capturedHold = holdReason === CAPTURED_PAYMENT_HOLD;
   const isLockedByHold = (transition: Transition) =>
-    holdReason != null && !transition.settlesEscrow && ESCROW_GUARDED_STATUSES.has(transition.status);
+    holdReason != null &&
+    !transition.settlesEscrow &&
+    ESCROW_GUARDED_STATUSES.has(transition.status) &&
+    // A captured Stripe payment can be settled as part of ending the bounty.
+    !(capturedHold && DISPOSITION_TARGETS.has(transition.status));
+  // Already ended but still holding the money (5e96aaed): settle in place.
+  const canSettleInPlace = capturedHold && DISPOSITION_TARGETS.has(bounty.status);
+  const canRetryRefund = holdReason === REFUND_PENDING_HOLD;
 
   return (
     <AdminScreen>
@@ -661,9 +790,37 @@ export default function AdminBountyDetailScreen() {
               lineHeight: 18,
             }}
           >
-            Status changes affect the bounty lifecycle only. They never move escrow — use
-            Transactions or Disputes to settle money.
+            Status changes affect the bounty lifecycle. The one exception: ending a bounty
+            whose card payment is captured asks what happens to that money (refund, keep, or
+            pay out) and records the choice in the admin log. Wallet escrow and disputes are
+            still settled on Transactions or Disputes.
           </Text>
+          {canSettleInPlace || canRetryRefund ? (
+            <View style={[styles.actions, { marginTop: theme.spacing.sm }]}>
+              {canSettleInPlace ? (
+                <AdminButton
+                  label="Settle payment"
+                  icon="payments"
+                  variant="warning"
+                  loading={pendingAction === bounty.status}
+                  disabled={busy}
+                  onPress={() => chooseDisposition(bounty.status)}
+                  style={styles.actionButton}
+                />
+              ) : null}
+              {canRetryRefund ? (
+                <AdminButton
+                  label="Retry refund"
+                  icon="undo"
+                  variant="warning"
+                  loading={pendingAction === 'settle'}
+                  disabled={busy}
+                  onPress={() => void retryStripeStep()}
+                  style={styles.actionButton}
+                />
+              ) : null}
+            </View>
+          ) : null}
           {holdReason && transitions.some(isLockedByHold) ? (
             <Text
               style={{
