@@ -1097,13 +1097,30 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           bountyService
             .getById(inserted.id)
             .then(fresh => {
-              if (!fresh || filterOpenFeedBounties([fresh]).length === 0) return;
-              if (fresh.is_test && !includeTestBountiesRef.current) return;
-              // The filter changed while this ran; the reload it started decides.
+              // The filter may have changed while the row was loading; the
+              // reload it started decides what belongs in the feed.
               if (distanceFilterRef.current !== filter) return;
+              if (!fresh) {
+                setNewBountiesCount(prev => prev + 1);
+                return;
+              }
+              if (filterOpenFeedBounties([fresh]).length === 0) return;
+              if (fresh.is_test && !includeTestBountiesRef.current) return;
+              // The poster may have changed the location since the INSERT.
+              // Recheck the fetched row so it still matches the active radius.
+              const freshMiles = radiusSearch
+                ? bountyDistanceMiles(fresh, searchCoordsRef.current)
+                : null;
+              if (typeof filter === 'number' && fresh.work_type !== 'online') {
+                if (freshMiles == null) {
+                  setNewBountiesCount(prev => prev + 1);
+                  return;
+                }
+                if (freshMiles > filter) return;
+              }
               // Carry the distance the nearby search would return, so the row
               // sorts and reads like the rows around it.
-              const row = radiusSearch ? { ...fresh, distance_miles: miles } : fresh;
+              const row = radiusSearch ? { ...fresh, distance_miles: freshMiles } : fresh;
               setBounties(prev => {
                 const id = String(fresh.id);
                 if (prev.some(b => String(b.id) === id)) return prev;

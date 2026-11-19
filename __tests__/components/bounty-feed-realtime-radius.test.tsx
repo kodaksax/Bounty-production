@@ -306,6 +306,65 @@ describe('BountyFeed realtime INSERT under a radius', () => {
     expect(queryByText(/new bount/)).toBeNull();
   });
 
+  it('keeps the pill when fetching the inserted bounty returns null', async () => {
+    bountyService.getById.mockResolvedValue(null);
+    const { queryAllByTestId, getByText } = await renderLoaded();
+
+    emitInsert({
+      id: 'b-missing',
+      title: 'Not returned by lookup',
+      work_type: 'in_person',
+      ...NEAR,
+    });
+
+    await waitFor(() => expect(getByText('1 new bounty')).toBeTruthy());
+    expect(titles(queryAllByTestId)).toEqual(['Loaded nearby']);
+  });
+
+  it('rechecks the fetched location and leaves an out-of-radius bounty out', async () => {
+    const posted = {
+      id: 'b-moved',
+      title: 'Moved outside the radius',
+      work_type: 'in_person',
+      ...NEAR,
+    };
+    bountyService.getById.mockResolvedValue({
+      ...posted,
+      approx_latitude: FAR.approx_latitude,
+      approx_longitude: FAR.approx_longitude,
+      status: 'open',
+    });
+    const { queryAllByTestId, queryByText } = await renderLoaded();
+
+    emitInsert(posted);
+    await waitFor(() => expect(bountyService.getById).toHaveBeenCalledWith('b-moved'));
+    await act(async () => {});
+
+    expect(titles(queryAllByTestId)).toEqual(['Loaded nearby']);
+    expect(queryByText(/new bount/)).toBeNull();
+  });
+
+  it('shows the pill when the fetched location has become unknown', async () => {
+    const posted = {
+      id: 'b-location-unknown',
+      title: 'Location no longer available',
+      work_type: 'in_person',
+      ...NEAR,
+    };
+    bountyService.getById.mockResolvedValue({
+      ...posted,
+      approx_latitude: undefined,
+      approx_longitude: undefined,
+      status: 'open',
+    });
+    const { queryAllByTestId, getByText } = await renderLoaded();
+
+    emitInsert(posted);
+
+    await waitFor(() => expect(getByText('1 new bounty')).toBeTruthy());
+    expect(titles(queryAllByTestId)).toEqual(['Loaded nearby']);
+  });
+
   it('leaves out an in-person bounty outside the radius, with no pill', async () => {
     const { queryAllByTestId, queryByText } = await renderLoaded();
 
