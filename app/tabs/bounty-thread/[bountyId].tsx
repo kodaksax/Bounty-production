@@ -581,8 +581,11 @@ function BountyThreadScreen() {
 
   return (
     <>
+      {/* Keyed on the bounty, not the conversation id. The placeholder id
+          changes to the real id when the chat starts, and useMessages
+          follows that change. A remount rebuilt the full thread instead. */}
       <ChatDetailScreen
-        key={conversation.id}
+        key={`bounty-thread:${bountyId}`}
         conversation={conversation}
         onBack={() => router.back()}
         headerSubtitle={bounty.title}

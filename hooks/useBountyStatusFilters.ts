@@ -25,7 +25,7 @@ import {
   resolveBountyLifecycle,
 } from 'lib/utils/bounty-lifecycle'
 import * as React from 'react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type InProgressStatusFilter = 'all' | 'active' | 'applied' | 'in_progress' | 'review' | 'completed'
 export type MyPostingsStatusFilter = 'all' | 'review' | 'open' | 'in_progress' | 'completed'
@@ -138,9 +138,14 @@ export function useBountyStatusFilters({
     return Array.from(ids).sort().join(',')
   }, [myBounties, inProgressBounties])
 
+  // The current set's loader, so a screen can re-read submissions when the
+  // set of ids did not change (a refresh, or the tab coming back on screen).
+  const loadSubmissionsRef = useRef<(() => void) | null>(null)
+
   useEffect(() => {
     const ids = submissionBountyIdsKey ? submissionBountyIdsKey.split(',') : []
     if (ids.length === 0) {
+      loadSubmissionsRef.current = null
       setSubmissionsByBounty((prev) => (prev.size === 0 ? prev : new Map()))
       return
     }
@@ -150,6 +155,7 @@ export function useBountyStatusFilters({
       const latest = await completionService.getLatestSubmissionsForBounties(ids)
       if (!cancelled) setSubmissionsByBounty(latest)
     }
+    loadSubmissionsRef.current = load
     load()
 
     // A submission can land (or be reviewed) while the screen is open. Each card
@@ -179,6 +185,7 @@ export function useBountyStatusFilters({
 
     return () => {
       cancelled = true
+      if (loadSubmissionsRef.current === load) loadSubmissionsRef.current = null
       if (channel) {
         try {
           supabase.removeChannel(channel)
@@ -188,6 +195,10 @@ export function useBountyStatusFilters({
       }
     }
   }, [submissionBountyIdsKey, currentUserId])
+
+  const refreshSubmissions = useCallback(() => {
+    loadSubmissionsRef.current?.()
+  }, [])
 
   // Map of bountyId -> this user's own request status for that bounty.
   const requestStatusMap = React.useMemo(() => {
@@ -208,7 +219,9 @@ export function useBountyStatusFilters({
   // per role.
   const lifecycleCache = React.useMemo(
     () => new Map<string, BountyLifecycleState>(),
-    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
+    // The bounty lists too: a reload that changes only a bounty's status must
+    // not keep the lifecycle cached for its old status.
+    [myBounties, inProgressBounties, submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
   )
 
   /**
@@ -360,6 +373,7 @@ export function useBountyStatusFilters({
     myPostingsReviewCount,
     inProgressAttentionCount,
     myPostingsAttentionCount,
+    refreshSubmissions,
   }
 }
 
