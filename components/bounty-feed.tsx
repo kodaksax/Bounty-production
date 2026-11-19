@@ -1059,8 +1059,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   // Realtime: patch/remove already-loaded bounties in place, and render new
   // open bounties live the moment they're posted (under a radius, when they
-  // are inside it) — complete or not; an
-  // incomplete one gets the usual "Limited details" badge and ranking.
+  // are inside it) — complete or not; an incomplete one gets the usual
+  // "Limited details" badge and ranking.
   useEffect(() => {
     const channel = supabase
       .channel(`bounty-feed:bounties:${instanceId}`)
@@ -1105,7 +1105,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               // sorts and reads like the rows around it.
               const row = radiusSearch ? { ...fresh, distance_miles: miles } : fresh;
               setBounties(prev => {
-                const id = String(row.id);
+                const id = String(fresh.id);
                 if (prev.some(b => String(b.id) === id)) return prev;
                 // The unfiltered feed pages by created_at desc, so a new row sits
                 // at server offset 0 and pushes every loaded row down by one.
