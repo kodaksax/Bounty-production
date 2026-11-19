@@ -287,7 +287,8 @@ export default function BountyDashboard() {
   }, [bounty, otherParty.id, router]);
 
   // Approving the work goes through PosterReviewModal's own "Complete and
-  // release payment?" warning and slide-to-confirm before approveAndRelease.
+  // release payment?" warning and two-step "Approve and pay" → "Yes, pay"
+  // confirmation before approveAndRelease.
   const handleReviewSubmission = useCallback(() => {
     if (!bounty?.accepted_by) {
       Alert.alert('No hunter yet', 'There is no submitted work to review on this bounty.');

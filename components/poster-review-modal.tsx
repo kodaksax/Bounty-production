@@ -1,14 +1,13 @@
 // components/poster-review-modal.tsx - Modal for poster to review hunter's submission
 import { MaterialIcons } from '@expo/vector-icons';
 import { userProfileService } from 'lib/services/userProfile';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    AccessibilityInfo,
     ActivityIndicator,
     Alert,
-    Animated,
     FlatList,
     Modal,
-    PanResponder,
     ScrollView,
     StyleSheet,
     Text,
@@ -64,188 +63,6 @@ interface PosterReviewModalProps {
   onComplete: () => void;
 }
 
-const SLIDER_HANDLE_WIDTH = 56;
-// Uniform inset (px) between the handle and the track edges when at rest.
-// Matches the vertical top/bottom gap so the handle looks centred on all sides.
-const SLIDER_HANDLE_INSET = 2;
-// Fraction of the track the handle must reach for a release to count as a
-// confirm. 0.92 demanded almost the entire width before the gesture "took",
-// so near-complete drags were discarded; 0.75 still requires a deliberate
-// sweep well past halfway.
-const SLIDER_CONFIRM_THRESHOLD = 0.75;
-// Snap-back: no overshoot and a gentler speed. The old bounciness:8/speed:12
-// recoil read as the control actively rejecting the drag.
-const SLIDER_SPRING_BACK = { bounciness: 0, speed: 8 } as const;
-// Grows the handle's touch target without changing how it looks. Extra room on
-// the right because that is the direction the finger travels.
-const SLIDER_HANDLE_HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 24 } as const;
-
-interface SlideToConfirmProps {
-  label: string;
-  onConfirmed: () => void;
-  disabled?: boolean;
-  isProcessing?: boolean;
-}
-
-const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideToConfirm({
-  label,
-  onConfirmed,
-  disabled = false,
-  isProcessing = false,
-}) {
-  const { theme } = useAppThemeContext();
-  const ss = useMemo(() => makeSliderStyles(theme), [theme]);
-  const translateX = useRef(new Animated.Value(0)).current;
-  const [trackWidth, setTrackWidth] = useState(0);
-  const hasConfirmedRef = useRef(false);
-  // fillWidth = translateX + (inset + handle width) so the fill always covers
-  // from the track's left edge to the handle's right edge with no gap.
-  const handleOffset = useRef(new Animated.Value(SLIDER_HANDLE_WIDTH + SLIDER_HANDLE_INSET));
-  const accessibilityLabelText = isProcessing ? 'Processing payout' : label;
-  // Screen readers (VoiceOver, TalkBack, Switch/Voice Control) confirm with
-  // the 'activate' action below, a double tap: no drag is needed, so the hint
-  // must not say there is one.
-  const accessibilityHintText = 'Double tap to confirm. This cannot be undone.';
-
-  // Maximum translate: leave SLIDER_HANDLE_INSET gap on the right so the
-  // handle stops symmetrically with its left-edge inset.
-  const maxTranslate = Math.max(trackWidth - SLIDER_HANDLE_WIDTH - SLIDER_HANDLE_INSET * 2, 0);
-
-  // The PanResponder below is created exactly once. It used to be rebuilt by a
-  // useMemo keyed on onConfirmed, which the parent passes as a fresh arrow on
-  // every render: any re-render mid-drag swapped in an instance whose
-  // gestureState was zeroed and had never seen the grant, so dx restarted from
-  // 0 and the handle jumped back to the origin. Anything the handlers need
-  // that can change between renders is read through this ref instead.
-  const latest = useRef({ disabled, isProcessing, maxTranslate, onConfirmed });
-  latest.current = { disabled, isProcessing, maxTranslate, onConfirmed };
-
-  // translateX at the moment the drag was granted. Dragging from this offset
-  // instead of from 0 keeps the handle under the finger even if the responder
-  // is granted part-way along the track.
-  const startXRef = useRef(0);
-
-  const settleBack = useCallback(() => {
-    Animated.spring(translateX, {
-      toValue: 0,
-      useNativeDriver: false,
-      ...SLIDER_SPRING_BACK,
-    }).start(() => { hasConfirmedRef.current = false; });
-  }, [translateX]);
-
-  const runConfirm = useCallback(() => {
-    const { maxTranslate: max, onConfirmed: confirm } = latest.current;
-    hasConfirmedRef.current = true;
-    if (max <= 0) { confirm(); return; }
-    Animated.timing(translateX, {
-      toValue: max,
-      duration: 180,
-      useNativeDriver: false,
-    }).start(() => { confirm(); });
-  }, [translateX]);
-
-  useEffect(() => {
-    if (!isProcessing && !disabled && hasConfirmedRef.current) {
-      Animated.timing(translateX, {
-        toValue: 0,
-        duration: 160,
-        useNativeDriver: false,
-      }).start(() => {
-        hasConfirmedRef.current = false;
-      });
-    }
-  }, [disabled, isProcessing, translateX]);
-
-  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
-  if (panResponderRef.current === null) {
-    panResponderRef.current = PanResponder.create({
-      // Claim the touch the moment it lands on the handle. This previously
-      // returned false and left the decision to onMoveShouldSetPanResponder so
-      // that a vertical drag could still scroll the modal — but the handle is a
-      // 56px target inside a ScrollView, and by the time the direction was
-      // known the ScrollView had already won the responder, so the handle
-      // never moved. Claiming on start is what the working swipe-to-confirm in
-      // bounty-confirmation-card.tsx does; the ScrollView still scrolls
-      // normally anywhere off the handle.
-      onStartShouldSetPanResponder: () => !latest.current.disabled && !latest.current.isProcessing,
-      onMoveShouldSetPanResponder: () => !latest.current.disabled && !latest.current.isProcessing,
-      // Deliberately no onMoveShouldSetPanResponderCapture. Capture propagates
-      // root -> target, so a capture handler here runs *after* an ancestor
-      // ScrollView's and cannot pre-empt it; all it did was make PanResponder
-      // run _updateGestureStateOnMove twice per event (dt === 0 on the second
-      // pass, leaving vx/vy NaN and moveX/moveY at -1).
-      //
-      // Once the drag is ours, keep it. Without this the enclosing ScrollView
-      // could take the responder the moment a finger drifted vertically,
-      // firing onPanResponderTerminate and snapping the handle back
-      // mid-gesture.
-      onPanResponderTerminationRequest: () => false,
-      // Android: keep the native ScrollView recognizer out of this touch.
-      onShouldBlockNativeResponder: () => true,
-      onPanResponderGrant: () => {
-        translateX.stopAnimation((value) => {
-          startXRef.current = typeof value === 'number' ? value : 0;
-        });
-      },
-      onPanResponderMove: (_evt, gestureState) => {
-        const { maxTranslate: max } = latest.current;
-        translateX.setValue(Math.max(0, Math.min(startXRef.current + gestureState.dx, max)));
-      },
-      onPanResponderRelease: (_evt, gestureState) => {
-        const { maxTranslate: max } = latest.current;
-        const releaseX = Math.max(0, Math.min(startXRef.current + gestureState.dx, max));
-        startXRef.current = 0;
-        if (max > 0 && releaseX >= max * SLIDER_CONFIRM_THRESHOLD && !hasConfirmedRef.current) {
-          runConfirm();
-        } else {
-          settleBack();
-        }
-      },
-      onPanResponderTerminate: () => {
-        startXRef.current = 0;
-        settleBack();
-      },
-    });
-  }
-  const panResponder = panResponderRef.current!;
-
-  const fillWidth = useMemo(() => Animated.add(translateX, handleOffset.current), [handleOffset, translateX]);
-
-  return (
-    <View style={ss.sliderWrapper}>
-      <View
-        style={ss.sliderTrack}
-        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-      >
-        <Animated.View style={[ss.sliderFill, { width: fillWidth }]} />
-        <Text style={ss.sliderLabel}>{label}</Text>
-        <Animated.View
-          style={[ss.sliderHandle, { transform: [{ translateX }] }]}
-          {...panResponder.panHandlers}
-          hitSlop={SLIDER_HANDLE_HIT_SLOP}
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel={accessibilityLabelText}
-          accessibilityHint={accessibilityHintText}
-          accessibilityState={{ disabled: disabled || isProcessing, busy: isProcessing }}
-          accessibilityActions={[{ name: 'activate', label: label }]}
-          onAccessibilityAction={(event) => {
-            if (event.nativeEvent.actionName === 'activate' && !disabled && !isProcessing && !hasConfirmedRef.current) {
-              runConfirm();
-            }
-          }}
-        >
-          {isProcessing ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <MaterialIcons name="chevron-right" size={24} color="#fff" />
-          )}
-        </Animated.View>
-      </View>
-    </View>
-  );
-});
-
 export function PosterReviewModal({
   visible,
   bountyId,
@@ -289,6 +106,14 @@ export function PosterReviewModal({
   // pass it. This ref blocks a second rating or revision send while one is
   // in flight.
   const sendingRef = useRef(false);
+  // Same idea for the release. The "Yes, pay" button is disabled while a
+  // release is in flight, but that is state too: two taps in one render
+  // must still reach approveAndRelease only once.
+  const releasingRef = useRef(false);
+  // Second step of approve-and-pay: "Approve and pay $X" opens this
+  // confirmation; only its "Yes, pay $X" calls approveAndRelease.
+  const [showPayConfirm, setShowPayConfirm] = useState(false);
+  const payConfirmQuestionRef = useRef<React.ElementRef<typeof Text> | null>(null);
   const ratingPromptLoggedRef = useRef(false);
 
   const formattedPayoutAmount = useMemo(() => {
@@ -300,6 +125,14 @@ export function PosterReviewModal({
   }, [bountyAmount]);
 
   const displayHunterName = hunterProfile?.username || hunterName || submission?.hunter_id || 'Hunter';
+
+  // Approve-and-pay copy. A for-honor job moves no money, so it never says "pay".
+  const payPrimaryLabel = isForHonor ? 'Approve and mark complete' : `Approve and pay ${formattedPayoutAmount}`;
+  const payConfirmQuestion = isForHonor
+    ? `Mark this job complete for ${displayHunterName}?`
+    : `Pay ${displayHunterName} ${formattedPayoutAmount}?`;
+  const payYesLabel = isForHonor ? 'Yes, mark complete' : `Yes, pay ${formattedPayoutAmount}`;
+  const payBusyLabel = isForHonor ? 'Marking complete' : 'Sending payment';
 
   useEffect(() => {
     if (visible) { loadSubmission(); }
@@ -327,6 +160,7 @@ export function PosterReviewModal({
       setViewerVisible(false);
       setSelectedAttachment(null);
       setShowPayoutWarning(false);
+      setShowPayConfirm(false);
       setShowRatingForm(false);
       setShowRevisionForm(false);
       setRating(0);
@@ -338,9 +172,24 @@ export function PosterReviewModal({
       setLoadFailed(false);
       setApprovedHere(false);
       sendingRef.current = false;
+      releasingRef.current = false;
       ratingPromptLoggedRef.current = false;
     }
   }, [visible]);
+
+  // The confirmation replaces the button that had screen-reader focus, so
+  // move VoiceOver/TalkBack focus to its question. Otherwise focus can land
+  // anywhere and the poster hears nothing about what they're confirming.
+  useEffect(() => {
+    if (!showPayConfirm) return;
+    const timer = setTimeout(() => {
+      const node = payConfirmQuestionRef.current;
+      if (node && typeof AccessibilityInfo.sendAccessibilityEvent === 'function') {
+        AccessibilityInfo.sendAccessibilityEvent(node as any, 'focus');
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [showPayConfirm]);
 
   // Reopening this modal on a submission that's already approved (from the
   // "Review" tap targets in my-posting-expandable.tsx, or the rating_reminder
@@ -398,7 +247,8 @@ export function PosterReviewModal({
   };
 
   const handleApprove = async (): Promise<boolean> => {
-    if (!submission) return false;
+    if (!submission || releasingRef.current) return false;
+    releasingRef.current = true;
     try {
       setIsProcessing(true);
       const ok = await approveAndRelease({
@@ -429,11 +279,16 @@ export function PosterReviewModal({
       if (!ok) {
         Alert.alert(paymentNotConfirmedTitle(isForHonor), paymentNotConfirmedMessage(isForHonor));
         setShowPayoutWarning(true);
+        // Back to the single "Approve and pay" button: the alert asks the
+        // poster to check the job before trying again, so the "Yes, pay"
+        // step is not left armed.
+        setShowPayConfirm(false);
         return false;
       }
 
       triggerHaptic('success');
       setApprovedHere(true);
+      setShowPayConfirm(false);
       setShowPayoutWarning(false);
       setShowRatingForm(true);
       return true;
@@ -444,8 +299,10 @@ export function PosterReviewModal({
       const reason = err instanceof Error && err.message ? `${err.message}\n\n` : '';
       Alert.alert(paymentNotConfirmedTitle(isForHonor), `${reason}${paymentNotConfirmedMessage(isForHonor)}`);
       setShowPayoutWarning(true);
+      setShowPayConfirm(false);
       return false;
     } finally {
+      releasingRef.current = false;
       setIsProcessing(false);
     }
   };
@@ -482,6 +339,8 @@ export function PosterReviewModal({
 
   const handleHeaderClose = () => {
     if (showRevisionForm) { setShowRevisionForm(false); return; }
+    // Steps back one at a time: "Yes, pay" → "Approve and pay" → review.
+    if (showPayConfirm) { setShowPayConfirm(false); return; }
     if (showPayoutWarning) { setShowPayoutWarning(false); return; }
     closeSheet();
   };
@@ -769,11 +628,6 @@ export function PosterReviewModal({
             <ScrollView
               style={s.scrollView}
               contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
-              // Scrolling stays on here. It was disabled as a workaround for the
-              // slide-to-confirm handle losing every gesture to this ScrollView;
-              // the handle now claims the responder on touch-down and refuses
-              // termination, so the two no longer fight and the payout copy can
-              // still scroll on short screens.
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
@@ -796,23 +650,68 @@ export function PosterReviewModal({
                 <Text style={s.warningFootnote}>Once you continue, this action cannot be undone.</Text>
               </View>
 
-              <SlideToConfirm
-                label={
-                  isProcessing
-                    ? 'Processing payout…'
-                    : isForHonor
-                      ? 'Slide to mark complete'
-                      : 'Slide to confirm payout'
-                }
-                onConfirmed={() => { handleApprove(); }}
-                disabled={isProcessing}
-                isProcessing={isProcessing}
-              />
+              {/* Two steps, both plain buttons: "Approve and pay $X" only opens
+                  the confirmation; "Yes, pay $X" is the one tap that releases.
+                  A screen reader completes it with two double taps, no drag. */}
+              {!showPayConfirm ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={[s.payPrimaryButton, isProcessing && s.buttonDisabled]}
+                  onPress={() => { if (!isProcessing) setShowPayConfirm(true); }}
+                  disabled={isProcessing}
+                  accessibilityLabel={payPrimaryLabel}
+                  accessibilityHint="Asks you to confirm first."
+                  accessibilityState={{ disabled: isProcessing }}
+                  testID="approve-pay-button"
+                >
+                  <MaterialIcons name="check-circle" size={20} color="#fff" />
+                  <Text style={s.buttonText}>{payPrimaryLabel}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={s.payConfirmCard} testID="approve-pay-confirm">
+                  <Text
+                    ref={payConfirmQuestionRef}
+                    style={s.payConfirmQuestion}
+                    accessibilityRole="header"
+                  >
+                    {payConfirmQuestion}
+                  </Text>
+                  <Text style={s.payConfirmBody}>{"Once you approve, this can't be undone."}</Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={[s.payPrimaryButton, isProcessing && s.buttonDisabled]}
+                    onPress={() => { void handleApprove(); }}
+                    disabled={isProcessing}
+                    accessibilityLabel={isProcessing ? payBusyLabel : payYesLabel}
+                    accessibilityHint={isProcessing ? undefined : "This can't be undone."}
+                    accessibilityState={{ disabled: isProcessing, busy: isProcessing }}
+                    testID="approve-pay-yes"
+                  >
+                    {isProcessing ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={s.buttonText}>{payYesLabel}</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={[s.payNotYetButton, isProcessing && s.buttonDisabled]}
+                    onPress={() => setShowPayConfirm(false)}
+                    disabled={isProcessing}
+                    accessibilityLabel="Not yet"
+                    accessibilityHint="Goes back without paying anything."
+                    accessibilityState={{ disabled: isProcessing }}
+                    testID="approve-pay-not-yet"
+                  >
+                    <Text style={s.payNotYetText}>Not yet</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <View style={s.warningActions}>
                 <TouchableOpacity accessibilityRole="button"
                   style={[s.warningCancelButton, isProcessing && s.buttonDisabled]}
-                  onPress={() => setShowPayoutWarning(false)}
+                  onPress={() => { setShowPayConfirm(false); setShowPayoutWarning(false); }}
                   disabled={isProcessing}
                 >
                   <MaterialIcons name="arrow-back" size={18} color={theme.textSecondary} />
@@ -970,52 +869,6 @@ export function paymentNotConfirmedMessage(isForHonor: boolean): string {
   return isForHonor
     ? "We couldn't confirm the job was marked complete. Check your connection and try again."
     : "We couldn't confirm the payment went through. Before trying again, close this and check the job's Payment section. If you're unsure, contact support.";
-}
-
-function makeSliderStyles(t: AppTheme) {
-  return StyleSheet.create({
-    sliderWrapper: {
-      marginTop: 24,
-      marginBottom: 16,
-      width: '100%',
-    },
-    sliderTrack: {
-      position: 'relative',
-      backgroundColor: t.isDark ? 'rgba(4,120,87,0.4)' : withAlpha(t.primary, 0.15),
-      borderRadius: 999,
-      height: 60,
-      justifyContent: 'center',
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: t.isDark ? withAlpha(t.primary, 0.25) : withAlpha(t.primary, 0.3),
-    },
-    sliderFill: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      backgroundColor: t.isDark ? withAlpha(t.primary, 0.45) : withAlpha(t.primary, 0.35),
-    },
-    sliderLabel: {
-      color: t.isDark ? 'rgba(255,254,245,0.85)' : t.text,
-      fontSize: 15,
-      fontWeight: '600',
-      letterSpacing: 0.4,
-      textAlign: 'center',
-    },
-    sliderHandle: {
-      position: 'absolute',
-      width: SLIDER_HANDLE_WIDTH,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: t.primary,
-      justifyContent: 'center',
-      alignItems: 'center',
-      top: SLIDER_HANDLE_INSET,
-      left: SLIDER_HANDLE_INSET,
-      ...EMERALD_SHADOW,
-    },
-  });
 }
 
 function makeStyles(t: AppTheme) {
@@ -1408,6 +1261,58 @@ function makeStyles(t: AppTheme) {
       fontSize: 15,
       fontWeight: '600',
       textAlign: 'center',
+    },
+    // Approve-and-pay, step 1 and the "Yes, pay" in step 2. 56px tall: a
+    // large, unmistakable target for the one tap that releases money.
+    payPrimaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      alignSelf: 'stretch',
+      minHeight: 56,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      backgroundColor: t.primary,
+      ...EMERALD_SHADOW,
+    },
+    payConfirmCard: {
+      alignSelf: 'stretch',
+      gap: 12,
+      padding: 20,
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: t.primary,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.18) : t.surface,
+    },
+    payConfirmQuestion: {
+      color: t.text,
+      fontSize: 20,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    payConfirmBody: {
+      color: t.text,
+      fontSize: 15,
+      textAlign: 'center',
+      lineHeight: 22,
+      marginBottom: 4,
+    },
+    payNotYetButton: {
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 52,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: t.isDark ? withAlpha(t.primary, 0.35) : t.border,
+      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : t.surfaceSecondary,
+    },
+    payNotYetText: {
+      color: t.text,
+      fontSize: 16,
+      fontWeight: '600',
     },
     warningActions: {
       alignItems: 'center',

@@ -152,21 +152,6 @@ jest.mock('../../hooks/useBountyLifecycle', () => {
   };
 });
 
-// The global react-native mock has no Animated.add / PanResponder, which the
-// slide-to-confirm builds on. Inert stand-ins; the confirm itself is driven
-// through the control's accessibility action (its non-drag alternative).
-{
-  const RN = require('react-native');
-  const value = () => ({ setValue: jest.fn(), interpolate: jest.fn(() => 0), addListener: jest.fn(), removeAllListeners: jest.fn(), stopAnimation: jest.fn() });
-  RN.Animated = RN.Animated ?? {};
-  RN.Animated.Value = RN.Animated.Value ?? jest.fn(value);
-  RN.Animated.add = jest.fn(value);
-  RN.Animated.spring = RN.Animated.spring ?? jest.fn(() => ({ start: jest.fn() }));
-  RN.Animated.timing = RN.Animated.timing ?? jest.fn(() => ({ start: jest.fn() }));
-  RN.Animated.View = RN.Animated.View ?? 'Animated.View';
-  RN.PanResponder = RN.PanResponder ?? { create: () => ({ panHandlers: {} }) };
-}
-
 import BountyDashboard from '../../app/postings/[bountyId]/index';
 
 const BASE = {
@@ -310,10 +295,11 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
     // ── 8. Explicit confirmation releases, exactly once ───────────────────
     mockApproveAndRelease.mockResolvedValue(true);
     fireEvent.press(screen.getByText('Proceed to Payout'));
+    fireEvent.press(screen.getByLabelText('Approve and pay $60.00'));
+    expect(screen.getByText('Pay ana_hunts $60.00?')).toBeTruthy();
+    expect(mockApproveAndRelease).not.toHaveBeenCalled();
     await act(async () => {
-      fireEvent(screen.getByLabelText('Slide to confirm payout'), 'accessibilityAction', {
-        nativeEvent: { actionName: 'activate' },
-      });
+      fireEvent.press(screen.getByLabelText('Yes, pay $60.00'));
     });
     await waitFor(() => expect(mockApproveAndRelease).toHaveBeenCalledTimes(1));
     expect(mockApproveAndRelease.mock.calls[0][0]).toEqual(
@@ -375,10 +361,9 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
     render(<BountyDashboard />);
     fireEvent.press(await screen.findByLabelText('Review & release payment'));
     fireEvent.press(await screen.findByText('Proceed to Payout'));
+    fireEvent.press(screen.getByLabelText('Approve and pay $60.00'));
     await act(async () => {
-      fireEvent(screen.getByLabelText('Slide to confirm payout'), 'accessibilityAction', {
-        nativeEvent: { actionName: 'activate' },
-      });
+      fireEvent.press(screen.getByLabelText('Yes, pay $60.00'));
     });
     await waitFor(() => expect(lastAlert().title).toBe('Payment not confirmed'));
     expect(screen.queryByText(/has been released/)).toBeNull();
@@ -457,7 +442,8 @@ describe('For-honor job: no money anywhere in the flow', () => {
     expect(mockPlan).not.toHaveBeenCalled();
     fireEvent.press(await screen.findByLabelText(primaryLabel()));
     fireEvent.press(await screen.findByText('Proceed to Payout'));
-    expect(screen.getByLabelText('Slide to mark complete')).toBeTruthy();
+    expect(screen.getByLabelText('Approve and mark complete')).toBeTruthy();
+    expect(screen.queryByLabelText(/Approve and pay/)).toBeNull();
     expect(screen.queryByText(/escrow release/)).toBeNull();
   });
 });

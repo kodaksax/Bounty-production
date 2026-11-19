@@ -172,6 +172,7 @@ jest.mock('react-native', () => {
     AccessibilityInfo: {
       isReduceMotionEnabled: jest.fn().mockResolvedValue(false),
       addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+      sendAccessibilityEvent: jest.fn(),
     },
     Platform: {
       OS: 'ios',
