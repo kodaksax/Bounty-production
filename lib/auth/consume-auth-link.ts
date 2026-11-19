@@ -68,6 +68,79 @@ function classifyAuthError(error: { message?: string; status?: number } | null):
   return 'failed';
 }
 
+/**
+ * Link types whose only purpose is to sign someone in. Once one is used, the
+ * session it created is the whole result, so a second tap on the same email
+ * button (Supabase: "expired") while that session holds is a success, not an
+ * error. Deliberately excludes recovery (tracked above, because a recovery
+ * session must lead to "set a new password") and signup / invite /
+ * email_change (an existing session does not prove *that* confirmation
+ * happened).
+ */
+const SIGN_IN_LINK_TYPES: ReadonlySet<AuthLinkType> = new Set<AuthLinkType>(['magiclink', 'email']);
+
+/**
+ * Sign-in links this JS runtime has turned into a session, keyed by the link's
+ * own credential and mapped to the account it signed in.
+ *
+ * A live session alone proves nothing about *this* link: the device may be
+ * signed in as account A while the tapped link is a stale one for account B,
+ * spent on another phone. Only a link we cashed ourselves, for the account
+ * that is still signed in, may be reported as "already signed in". Module
+ * scope and in memory only, for the same reasons as `recoveryLinkConsumed`.
+ */
+const consumedSignInLinks = new Map<string, string>();
+
+/** Test seam. */
+export function resetConsumedSignInLinks(): void {
+  consumedSignInLinks.clear();
+}
+
+/**
+ * What identifies a link across repeat deliveries. A redirect that only
+ * carries an error has nothing to identify it, so it gets no key and can never
+ * be matched to an earlier sign-in.
+ */
+function linkKey(link: ParsedAuthLink): string | null {
+  switch (link.kind) {
+    case 'token_hash':
+      return `hash:${link.tokenHash}`;
+    case 'code':
+      return `code:${link.code}`;
+    case 'tokens':
+      return `tokens:${link.refreshToken}`;
+    default:
+      return null;
+  }
+}
+
+async function signInLinkAlreadyUsed(
+  link: ParsedAuthLink,
+  failure: 'expired' | 'invalid' | 'failed' | 'used' | 'unknown'
+): Promise<boolean> {
+  const type = 'type' in link ? link.type : null;
+  if (!type || !SIGN_IN_LINK_TYPES.has(type)) return false;
+  // Only "already used / expired". A malformed link or an outage is still
+  // reported as such, even to someone who happens to be signed in.
+  if (failure !== 'expired' && failure !== 'used') return false;
+  const key = linkKey(link);
+  if (!key) return false;
+  const signedInAs = consumedSignInLinks.get(key);
+  if (!signedInAs) return false;
+  // Still the account this link signed in — not one switched to since.
+  return (await currentSessionUserId()) === signedInAs;
+}
+
+async function currentSessionUserId(): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (!data?.session?.access_token) return null;
+    return data.session.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function hasLiveSession(): Promise<boolean> {
   try {
     const { data } = await supabase.auth.getSession();
@@ -93,6 +166,9 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
     if (recoveryLinkConsumed && (await hasLiveSession())) {
       return { status: 'already_established', type: link.type };
     }
+    if (await signInLinkAlreadyUsed(link, link.code)) {
+      return { status: 'already_established', type: link.type };
+    }
     if (link.code === 'expired' || link.code === 'used') return { status: 'expired' };
     if (link.code === 'invalid') return { status: 'invalid' };
     return { status: 'failed' };
@@ -101,6 +177,7 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
   try {
     let error: { message?: string; status?: number } | null = null;
     let sessionCreated = false;
+    let sessionUserId: string | null = null;
 
     if (link.kind === 'tokens') {
       const result = await supabase.auth.setSession({
@@ -109,6 +186,7 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
       });
       error = result.error ?? null;
       sessionCreated = Boolean(result.data?.session);
+      sessionUserId = result.data?.session?.user?.id ?? result.data?.user?.id ?? null;
     } else if (link.kind === 'token_hash') {
       const result = await supabase.auth.verifyOtp({
         token_hash: link.tokenHash,
@@ -116,6 +194,7 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
       });
       error = result.error ?? null;
       sessionCreated = Boolean(result.data?.session);
+      sessionUserId = result.data?.session?.user?.id ?? result.data?.user?.id ?? null;
     } else {
       // PKCE. Not the current flow (the client runs auth-js's default implicit
       // grant), but a link with `?code=` must not dead-end if the project or a
@@ -125,6 +204,7 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
       const result = await exchange.call(supabase.auth, link.code);
       error = result.error ?? null;
       sessionCreated = Boolean(result.data?.session);
+      sessionUserId = result.data?.session?.user?.id ?? result.data?.user?.id ?? null;
     }
 
     if (error) {
@@ -133,7 +213,14 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
       if (recoveryLinkConsumed && (await hasLiveSession())) {
         return { status: 'already_established', type: link.type };
       }
-      return { status: classifyAuthError(error) };
+      const failure = classifyAuthError(error);
+      // A sign-in button tapped twice: the first tap signed them in, so the
+      // second is "you're already in", not "link expired" (seen in production
+      // 2026-11-18: login at 22:20:17, same link re-tapped 22:20:26 → otp_expired).
+      if (await signInLinkAlreadyUsed(link, failure)) {
+        return { status: 'already_established', type: link.type };
+      }
+      return { status: failure };
     }
 
     if (!sessionCreated) {
@@ -146,6 +233,10 @@ export async function consumeAuthLink(link: ParsedAuthLink): Promise<ConsumeAuth
     }
 
     if (link.type === 'recovery') recoveryLinkConsumed = true;
+    if (link.type && SIGN_IN_LINK_TYPES.has(link.type) && sessionUserId) {
+      const key = linkKey(link);
+      if (key) consumedSignInLinks.set(key, sessionUserId);
+    }
     return { status: 'established', type: link.type };
   } catch {
     // Thrown (rather than returned) errors are transport-level.

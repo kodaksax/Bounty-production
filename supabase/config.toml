@@ -285,3 +285,18 @@ verify_jwt = false
 # the browser's CORS preflight (which carries no Authorization) is answered.
 [functions.web-account]
 verify_jwt = false
+
+# send-auth-email: Supabase Auth "Send Email" hook. Supabase Auth calls it with
+# a Standard Webhooks signature, not a user JWT; the signature
+# (SEND_EMAIL_HOOK_SECRET) is verified inside the function, fail-closed. With
+# gateway JWT checks on, every auth email (sign-in codes, password resets)
+# would fail to send.
+[functions.send-auth-email]
+verify_jwt = false
+
+# open-app: the button in emailed sign-in codes requested in the app. Opened
+# from a mail client by someone who is not signed in, so it carries no JWT.
+# It only redirects to the app's fixed callback with a validated token_hash and
+# never spends the token itself.
+[functions.open-app]
+verify_jwt = false
