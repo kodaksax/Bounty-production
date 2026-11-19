@@ -230,9 +230,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [sortByHighestPay, setSortByHighestPay] = useState(false);
   // Count of newly-posted open bounties observed via realtime that could NOT
-  // be put straight into the list — only while a distance filter is active
-  // (the INSERT payload can't say whether the bounty is inside the radius) or
-  // when fetching the new row failed. Every other new bounty renders live;
+  // be put straight into the list — only when a radius is active and the
+  // bounty's distance is unknown (no approximate point, or no search point),
+  // or when fetching the new row failed. Every other new bounty renders live;
   // see the realtime INSERT handler. Surfaced as a "New bounties" pill the
   // user taps to pull a fresh page.
   const [newBountiesCount, setNewBountiesCount] = useState(0);
@@ -723,6 +723,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   validUserIdRef.current = validUserId ?? currentUserId;
   const distanceFilterRef = useRef(distanceFilter);
   distanceFilterRef.current = distanceFilter;
+  const searchCoordsRef = useRef(searchCoords);
+  searchCoordsRef.current = searchCoords;
   const includeTestBountiesRef = useRef(includeTestBounties);
   includeTestBountiesRef.current = includeTestBounties;
   // Bounties already added live, so each shifts the page offset exactly once
@@ -1056,7 +1058,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   );
 
   // Realtime: patch/remove already-loaded bounties in place, and render new
-  // open bounties live the moment they're posted — complete or not; an
+  // open bounties live the moment they're posted (under a radius, when they
+  // are inside it) — complete or not; an
   // incomplete one gets the usual "Limited details" badge and ranking.
   useEffect(() => {
     const channel = supabase
@@ -1072,11 +1075,21 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           }
           // Same test-bounty rule the feed query applies server-side.
           if (inserted.is_test && !includeTestBountiesRef.current) return;
-          // The nearby search is radius-bound and the payload carries no
-          // distance, so under a distance filter fall back to the pill.
-          if (distanceFilterRef.current !== DISTANCE_OFF) {
-            setNewBountiesCount(prev => prev + 1);
-            return;
+          // Under a radius, do the same check search_bounties_nearby does:
+          // online jobs always match (SBA-02), in-person work matches when its
+          // approximate point (the one the server's geom is built from) is
+          // inside the radius. An unknown distance falls back to the pill.
+          const filter = distanceFilterRef.current;
+          const radiusSearch = filter !== DISTANCE_OFF;
+          const miles = radiusSearch
+            ? bountyDistanceMiles(inserted, searchCoordsRef.current)
+            : null;
+          if (typeof filter === 'number' && inserted.work_type !== 'online') {
+            if (miles == null) {
+              setNewBountiesCount(prev => prev + 1);
+              return;
+            }
+            if (miles > filter) return;
           }
           // Re-read rather than render the payload: it has no poster profile
           // (username/avatar), which getById attaches exactly as the feed
@@ -1086,17 +1099,25 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
             .then(fresh => {
               if (!fresh || filterOpenFeedBounties([fresh]).length === 0) return;
               if (fresh.is_test && !includeTestBountiesRef.current) return;
+              // The filter changed while this ran; the reload it started decides.
+              if (distanceFilterRef.current !== filter) return;
+              // Carry the distance the nearby search would return, so the row
+              // sorts and reads like the rows around it.
+              const row = radiusSearch ? { ...fresh, distance_miles: miles } : fresh;
               setBounties(prev => {
-                const id = String(fresh.id);
+                const id = String(row.id);
                 if (prev.some(b => String(b.id) === id)) return prev;
-                // The feed pages by created_at desc, so a new row sits at server
-                // offset 0 and pushes every loaded row down by one. Advance the
-                // offset to match, or the next page would repeat a row.
-                if (!liveInsertedIdsRef.current.has(id)) {
+                // The unfiltered feed pages by created_at desc, so a new row sits
+                // at server offset 0 and pushes every loaded row down by one.
+                // Advance the offset to match, or the next page would repeat a
+                // row. A radius search sorts by distance, so the row's server
+                // position is unknown: keep the offset. At worst the next page
+                // repeats a row, which the page merge drops.
+                if (!radiusSearch && !liveInsertedIdsRef.current.has(id)) {
                   liveInsertedIdsRef.current.add(id);
                   offsetRef.current += 1;
                 }
-                return [fresh, ...prev];
+                return [row, ...prev];
               });
             })
             .catch(() => setNewBountiesCount(prev => prev + 1));
@@ -1642,8 +1663,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       {bountyFormat !== 'grid' && renderFilterBar()}
 
       {/* New-bounties pill — the fallback for realtime INSERTs that couldn't be
-          rendered live (distance filter active, or the fetch failed). Sits
-          above the list so it works across all three feed layouts. */}
+          rendered live (distance unknown under a radius, or the fetch
+          failed). Sits above the list so it works across all three feed
+          layouts. */}
       {newBountiesCount > 0 && (
         <TouchableOpacity
           style={s.newBountiesPill}
