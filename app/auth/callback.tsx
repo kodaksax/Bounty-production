@@ -272,12 +272,18 @@ export default function AuthCallbackScreen() {
               <MaterialIcons name="check-circle" size={64} color={theme.primaryLight} />
             </View>
             <Text style={styles.title}>
-              {linkType === 'recovery' ? 'Link Verified' : 'Email Confirmed!'}
+              {linkType === 'recovery'
+                ? 'Link Verified'
+                : linkType === 'magiclink' || linkType === 'email'
+                  ? "You're signed in"
+                  : 'Email Confirmed!'}
             </Text>
             <Text style={styles.description}>
               {linkType === 'recovery'
                 ? 'Taking you to set your new password...'
-                : 'Your email has been verified. You can now access all features of BOUNTY.'}
+                : linkType === 'magiclink' || linkType === 'email'
+                  ? 'Taking you to Bounty...'
+                  : 'Your email has been verified. You can now access all features of BOUNTY.'}
             </Text>
           </View>
         );
