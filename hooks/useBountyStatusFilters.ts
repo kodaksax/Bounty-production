@@ -25,7 +25,7 @@ import {
   resolveBountyLifecycle,
 } from 'lib/utils/bounty-lifecycle'
 import * as React from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export type InProgressStatusFilter = 'all' | 'active' | 'applied' | 'in_progress' | 'review' | 'completed'
 export type MyPostingsStatusFilter = 'all' | 'review' | 'open' | 'in_progress' | 'completed'
@@ -138,25 +138,31 @@ export function useBountyStatusFilters({
     return Array.from(ids).sort().join(',')
   }, [myBounties, inProgressBounties])
 
-  // The current set's loader, so a screen can re-read submissions when the
-  // set of ids did not change (a refresh, or the tab coming back on screen).
-  const loadSubmissionsRef = useRef<(() => void) | null>(null)
+  // Bumped by the realtime channel below to re-read the submissions.
+  const [submissionsVersion, setSubmissionsVersion] = useState(0)
 
+  // Re-read on every list reload (new array identities), not only when the
+  // set of ids changes: a refresh with the same bounties must not keep an
+  // old submission, and with it an old YOUR MOVE badge.
   useEffect(() => {
     const ids = submissionBountyIdsKey ? submissionBountyIdsKey.split(',') : []
     if (ids.length === 0) {
-      loadSubmissionsRef.current = null
       setSubmissionsByBounty((prev) => (prev.size === 0 ? prev : new Map()))
       return
     }
 
     let cancelled = false
-    const load = async () => {
-      const latest = await completionService.getLatestSubmissionsForBounties(ids)
+    completionService.getLatestSubmissionsForBounties(ids).then((latest) => {
       if (!cancelled) setSubmissionsByBounty(latest)
+    })
+    return () => {
+      cancelled = true
     }
-    loadSubmissionsRef.current = load
-    load()
+  }, [submissionBountyIdsKey, myBounties, inProgressBounties, submissionsVersion])
+
+  useEffect(() => {
+    const ids = submissionBountyIdsKey ? submissionBountyIdsKey.split(',') : []
+    if (ids.length === 0) return
 
     // A submission can land (or be reviewed) while the screen is open. Each card
     // subscribes for its own badge; without this list-level subscription the chip
@@ -174,7 +180,7 @@ export function useBountyStatusFilters({
             filter: `bounty_id=in.(${ids.join(',')})`,
           },
           () => {
-            load()
+            setSubmissionsVersion((v) => v + 1)
           }
         )
         .subscribe()
@@ -184,8 +190,6 @@ export function useBountyStatusFilters({
     }
 
     return () => {
-      cancelled = true
-      if (loadSubmissionsRef.current === load) loadSubmissionsRef.current = null
       if (channel) {
         try {
           supabase.removeChannel(channel)
@@ -195,10 +199,6 @@ export function useBountyStatusFilters({
       }
     }
   }, [submissionBountyIdsKey, currentUserId])
-
-  const refreshSubmissions = useCallback(() => {
-    loadSubmissionsRef.current?.()
-  }, [])
 
   // Map of bountyId -> this user's own request status for that bounty.
   const requestStatusMap = React.useMemo(() => {
@@ -373,7 +373,6 @@ export function useBountyStatusFilters({
     myPostingsReviewCount,
     inProgressAttentionCount,
     myPostingsAttentionCount,
-    refreshSubmissions,
   }
 }
 

@@ -651,6 +651,24 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   }
 
   // ---- Thread rows ----
+  // Returning from a thread (where the user may have hired, submitted, paid…)
+  // must not leave the inbox showing the old state.
+  const firstFocusRef = useRef(true)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (firstFocusRef.current) {
+        firstFocusRef.current = false
+        return
+      }
+      refreshAll()
+      refreshConversations().catch(() => {})
+    }, [refreshAll, refreshConversations])
+  )
+
+  const handleRefresh = React.useCallback(async () => {
+    await Promise.all([refreshAll(), refreshConversations().catch(() => null)])
+  }, [refreshAll, refreshConversations])
+
   const openThread = React.useCallback(
     (bountyId: string | number, role: 'hunter' | 'poster', withId?: string | null) => {
       router.push({
@@ -703,7 +721,6 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     myPostingsReviewCount,
     inProgressAttentionCount,
     myPostingsAttentionCount,
-    refreshSubmissions,
   } = useBountyStatusFilters({
     currentUserId,
     myBounties,
@@ -714,23 +731,6 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     applicationCounts,
   })
 
-  // Returning from a thread (where the user may have hired, submitted, paid…)
-  // must not leave the inbox showing the old state. The submissions are
-  // re-read too: the lists reload with the same bounty ids, so the hook does
-  // not reload them by itself.
-  const firstFocusRef = useRef(true)
-  useFocusEffect(
-    React.useCallback(() => {
-      if (firstFocusRef.current) {
-        firstFocusRef.current = false
-        return
-      }
-      refreshAll()
-      refreshSubmissions()
-      refreshConversations().catch(() => {})
-    }, [refreshAll, refreshSubmissions, refreshConversations])
-  )
-
   // The tab pager keeps the Inbox mounted, so a swipe back onto it fires no
   // focus event. Reload when it becomes the active tab instead.
   const wasActiveRef = useRef(isActive)
@@ -740,9 +740,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     if (!isActive || wasActive || !currentUserId) return
     loadMyBounties()
     loadInProgress()
-    refreshSubmissions()
     refreshConversations().catch(() => {})
-  }, [isActive, currentUserId, loadMyBounties, loadInProgress, refreshSubmissions, refreshConversations])
+  }, [isActive, currentUserId, loadMyBounties, loadInProgress, refreshConversations])
 
   // Live turn state: the other party's move (hire, review, payout, cancel)
   // changes the bounty row, and the YOUR MOVE badge comes from that status.
@@ -789,11 +788,6 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
       }
     }
   }, [listedBountyIdsKey, currentUserId, loadMyBounties, loadInProgress])
-
-  const handleRefresh = React.useCallback(async () => {
-    refreshSubmissions()
-    await Promise.all([refreshAll(), refreshConversations().catch(() => null)])
-  }, [refreshAll, refreshSubmissions, refreshConversations])
 
   const requestStatusByBounty = React.useMemo(() => {
     const m = new Map<string, string>()

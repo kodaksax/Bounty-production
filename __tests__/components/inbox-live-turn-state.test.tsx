@@ -91,13 +91,16 @@ beforeEach(() => {
 describe('InboxScreen live turn state', () => {
   it('reloads the lists and submissions when the pager lands on the Inbox', async () => {
     const view = renderInbox(false);
-    await waitFor(() => expect(mockGetLatestSubmissions).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockGetAllWithDetails).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockGetLatestSubmissions).toHaveBeenCalled());
     expect(mockGetByUserId).toHaveBeenCalledTimes(1);
+    const submissionReads = mockGetLatestSubmissions.mock.calls.length;
 
     view.rerender(<InboxScreen activeScreen="messages" setActiveScreen={jest.fn()} isActive />);
     await waitFor(() => expect(mockGetByUserId).toHaveBeenCalledTimes(2));
     expect(mockGetAllWithDetails).toHaveBeenCalledTimes(2);
-    expect(mockGetLatestSubmissions).toHaveBeenCalledTimes(2);
+    // Same bounty ids as before: the hook still re-reads the submissions.
+    await waitFor(() => expect(mockGetLatestSubmissions.mock.calls.length).toBeGreaterThan(submissionReads));
     expect(mockRefreshConversations).toHaveBeenCalledTimes(1);
   });
 
