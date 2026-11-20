@@ -13,6 +13,11 @@ import { safeManageRedirect } from '../lib/navigation/manage-route';
 import { holdDeepLinks, takeDeferredTabLink } from '../lib/navigation/deferred-deep-link';
 import { ROUTES } from '../lib/routes';
 import { getRestorableLastScreen } from '../lib/storage/last-screen';
+import {
+  APP_LAUNCH_ENTRY,
+  launchTabFor,
+  resolveNavigationExperience,
+} from '../lib/experiments/home-post-navigation';
 import { hasDeviceSignedInBefore } from '../lib/storage/onboarding';
 import { logAuthLifecycleEvent } from '../lib/utils/auth-diagnostics';
 import { generateCorrelationId } from '../lib/utils/auth-errors';
@@ -329,11 +334,23 @@ export default function Index() {
       return;
     }
 
+    // The home_post_navigation_test arm decides the default landing (Post
+    // for post_first). Read alongside the last tab; both are bounded.
+    // Having left on the feed counts as a tab to restore only when the feed
+    // is not the default anyway.
     let cancelled = false;
-    void getRestorableLastScreen(userId).then(screen => {
+    void Promise.all([
+      resolveNavigationExperience(userId),
+      getRestorableLastScreen(userId, undefined, { includeFeed: true }),
+    ]).then(([experience, lastScreen]) => {
       if (cancelled) return;
+      const postFirst = experience.variant === 'post_first';
+      const screen = !postFirst && lastScreen === 'bounty' ? null : lastScreen;
+      const fallback = postFirst
+        ? `${bountyAppTabPath(launchTabFor('post_first'))}&entry=${APP_LAUNCH_ENTRY}`
+        : feedOrResume(null);
       // The notification may have been read while the last tab was.
-      land(takeDeferredTabLink() ?? feedOrResume(screen));
+      land(takeDeferredTabLink() ?? (screen ? feedOrResume(screen) : fallback));
     });
     return () => {
       cancelled = true;

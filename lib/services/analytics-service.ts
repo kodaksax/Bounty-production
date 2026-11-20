@@ -96,6 +96,12 @@ export type AnalyticsEvent =
   // event (once per cold start). The SDK's duplicate `Application Opened` is
   // dropped in lib/posthog.ts before_send.
   | 'app_opened'
+  // `home_post_navigation_test` experiment exposure: the tab shell rendered
+  // the assigned layout (lib/experiments/home-post-navigation.ts). Once per
+  // user per app process, enrolled users only. New concept: the SDK's
+  // `$feature_flag_called` records the flag read, not the screen the user
+  // got. Point the PostHog experiment's custom exposure at this event.
+  | 'navigation_experiment_exposed'
   // Auth events
   // `signup_completed` (renamed from `user_signed_up`) is the single signup
   // conversion event. Since SBA-13 the SERVER sends it, once per new profile
