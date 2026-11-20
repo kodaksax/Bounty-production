@@ -81,4 +81,23 @@ describe('useBountyThread conversation', () => {
     });
     expect(result.current.conversation?.id).toBe('c1');
   });
+
+  it('keeps a fallback conversation when a conversations read fails', async () => {
+    mockFetchConversations.mockResolvedValue([]);
+    const { result } = renderHook(() =>
+      useBountyThread({ bountyId: 'b1', role: 'poster', viewerId: 'poster-1', counterpartId: 'h1' })
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const fallback = { ...CONV, id: 'fallback-conversation' };
+    act(() => result.current.setConversation(fallback));
+    mockFetchConversations.mockRejectedValue(new Error('offline'));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(mockFetchConversations).toHaveBeenLastCalledWith('poster-1', { throwOnError: true });
+    expect(result.current.conversation).toEqual(fallback);
+  });
 });

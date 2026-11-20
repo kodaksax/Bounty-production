@@ -1,5 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { analyticsService } from '../lib/services/analytics-service';
 import { messageService } from '../lib/services/message-service';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
@@ -30,29 +30,37 @@ export function useMessages(conversationId: string): UseMessagesResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
   const currentUserId = getCurrentUserId();
 
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   const fetchMessages = useCallback(async () => {
+    const isCurrentConversation = () => conversationIdRef.current === conversationId;
     // Skip Supabase for local/fake conversation IDs (e.g. "conv-*")
     if (!conversationId || !UUID_RE.test(conversationId)) {
-      setLoading(false);
+      if (isCurrentConversation()) setLoading(false);
       return;
     }
     try {
-      setLoading(true);
-      setError(null);
+      if (isCurrentConversation()) {
+        setLoading(true);
+        setError(null);
+      }
       const data = await supabaseMessaging.fetchMessages(conversationId);
+      if (!isCurrentConversation()) return;
       setMessages(data);
 
       // Find pinned message
       const pinned = data.find(m => m.isPinned);
       setPinnedMessage(pinned || null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load messages');
+      if (isCurrentConversation()) {
+        setError(err instanceof Error ? err.message : 'Failed to load messages');
+      }
     } finally {
-      setLoading(false);
+      if (isCurrentConversation()) setLoading(false);
     }
   }, [conversationId]);
 
@@ -225,16 +233,26 @@ export function useMessages(conversationId: string): UseMessagesResult {
   }, [fetchMessages]);
 
   useEffect(() => {
+    setMessages([]);
+    setPinnedMessage(null);
+    setError(null);
+    setLoading(true);
+  }, [conversationId]);
+
+  useEffect(() => {
     let unsubscribe: (() => void) | null = null;
+    let active = true;
 
     const init = async () => {
       // Initial fetch
       await fetchMessages();
+      if (!active || conversationIdRef.current !== conversationId) return;
 
       // Subscribe to Realtime updates. The returned function is scoped to
       // this listener alone — it won't tear down the shared channel out from
       // under another mounted screen subscribed to the same conversation.
       unsubscribe = supabaseMessaging.subscribeToMessages(conversationId, newMessage => {
+        if (!active || conversationIdRef.current !== conversationId) return;
         if (newMessage) {
           // Add new message if it's not from current user (avoid duplicates from optimistic updates)
           if (newMessage.senderId !== currentUserId) {
@@ -256,6 +274,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
     init();
 
     return () => {
+      active = false;
       unsubscribe?.();
     };
   }, [conversationId, currentUserId, fetchMessages]);

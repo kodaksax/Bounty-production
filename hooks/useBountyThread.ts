@@ -116,7 +116,9 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
         cancellationService.getCancellationByBountyId(String(b.id)).catch(() => null),
         disputeService.getDisputeByBountyId(String(b.id)).catch(() => null),
         viewerId
-          ? supabaseMessaging.fetchConversations(String(viewerId)).catch(() => null)
+          ? supabaseMessaging
+              .fetchConversations(String(viewerId), { throwOnError: true })
+              .catch(() => null)
           : Promise.resolve([] as Conversation[]),
         otherId ? userProfileService.getProfile(otherId).catch(() => null) : Promise.resolve(null),
         countsOffers
