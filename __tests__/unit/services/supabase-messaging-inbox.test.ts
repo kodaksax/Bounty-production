@@ -162,4 +162,18 @@ describe('fetchConversations', () => {
     expect(messagesChain).not.toHaveBeenCalled();
     expect(result).toEqual([]);
   });
+
+  it('can surface query failures instead of returning an empty cached result', async () => {
+    const failure = new Error('offline');
+    mockTables({
+      conversation_participants: () => {
+        const failedQuery = chain([]);
+        failedQuery.then = (resolve: any, reject: any) =>
+          Promise.resolve({ data: null, error: failure }).then(resolve, reject);
+        return failedQuery;
+      },
+    });
+
+    await expect(fetchConversations(ME, { throwOnError: true })).rejects.toThrow('offline');
+  });
 });

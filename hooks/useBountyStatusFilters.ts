@@ -138,6 +138,12 @@ export function useBountyStatusFilters({
     return Array.from(ids).sort().join(',')
   }, [myBounties, inProgressBounties])
 
+  // Bumped by the realtime channel below to re-read the submissions.
+  const [submissionsVersion, setSubmissionsVersion] = useState(0)
+
+  // Re-read on every list reload (new array identities), not only when the
+  // set of ids changes: a refresh with the same bounties must not keep an
+  // old submission, and with it an old YOUR MOVE badge.
   useEffect(() => {
     const ids = submissionBountyIdsKey ? submissionBountyIdsKey.split(',') : []
     if (ids.length === 0) {
@@ -146,11 +152,17 @@ export function useBountyStatusFilters({
     }
 
     let cancelled = false
-    const load = async () => {
-      const latest = await completionService.getLatestSubmissionsForBounties(ids)
+    completionService.getLatestSubmissionsForBounties(ids).then((latest) => {
       if (!cancelled) setSubmissionsByBounty(latest)
+    })
+    return () => {
+      cancelled = true
     }
-    load()
+  }, [submissionBountyIdsKey, myBounties, inProgressBounties, submissionsVersion])
+
+  useEffect(() => {
+    const ids = submissionBountyIdsKey ? submissionBountyIdsKey.split(',') : []
+    if (ids.length === 0) return
 
     // A submission can land (or be reviewed) while the screen is open. Each card
     // subscribes for its own badge; without this list-level subscription the chip
@@ -168,7 +180,7 @@ export function useBountyStatusFilters({
             filter: `bounty_id=in.(${ids.join(',')})`,
           },
           () => {
-            load()
+            setSubmissionsVersion((v) => v + 1)
           }
         )
         .subscribe()
@@ -178,7 +190,6 @@ export function useBountyStatusFilters({
     }
 
     return () => {
-      cancelled = true
       if (channel) {
         try {
           supabase.removeChannel(channel)
@@ -208,7 +219,9 @@ export function useBountyStatusFilters({
   // per role.
   const lifecycleCache = React.useMemo(
     () => new Map<string, BountyLifecycleState>(),
-    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
+    // The bounty lists too: a reload that changes only a bounty's status must
+    // not keep the lifecycle cached for its old status.
+    [myBounties, inProgressBounties, submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
   )
 
   /**

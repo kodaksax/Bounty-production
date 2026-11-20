@@ -116,7 +116,9 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
         cancellationService.getCancellationByBountyId(String(b.id)).catch(() => null),
         disputeService.getDisputeByBountyId(String(b.id)).catch(() => null),
         viewerId
-          ? supabaseMessaging.fetchConversations(String(viewerId)).catch(() => [] as Conversation[])
+          ? supabaseMessaging
+              .fetchConversations(String(viewerId), { throwOnError: true })
+              .catch(() => null)
           : Promise.resolve([] as Conversation[]),
         otherId ? userProfileService.getProfile(otherId).catch(() => null) : Promise.resolve(null),
         countsOffers
@@ -137,7 +139,9 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
       setSubmission(sub);
       setCancellation(cancel);
       setDispute(disp);
-      setConversation(findPairConversation(convs, viewerId, otherId, String(b.id)));
+      // A failed read keeps the conversation already found, so a reload never
+      // swaps the chat back to its placeholder.
+      if (convs) setConversation(findPairConversation(convs, viewerId, otherId, String(b.id)));
       if (otherId) {
         setCounterpart({
           id: otherId,

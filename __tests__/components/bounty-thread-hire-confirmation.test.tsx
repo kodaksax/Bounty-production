@@ -14,6 +14,7 @@ import { lightTheme } from '../../lib/themes/lightTheme';
 let mockThread: any;
 const mockHandleAccept = jest.fn();
 const mockPush = jest.fn();
+const mockChatMounts = jest.fn();
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ bountyId: 'b1', role: 'poster', with: 'h1' }),
@@ -64,14 +65,19 @@ jest.mock('../../components/poster-review-modal', () => ({ PosterReviewModal: ()
 jest.mock('../../components/workflow-dispute-modal', () => ({ WorkflowDisputeModal: () => null }));
 jest.mock('../../components/ui/screen-loader', () => ({ ScreenLoader: () => null }));
 jest.mock('../../app/tabs/chat-detail-screen', () => ({
-  ChatDetailScreen: ({ topBanner, timelineItems }: any) => (
-    <>
-      {topBanner}
-      {timelineItems.map((i: any) => (
-        <React.Fragment key={i.id}>{i.render()}</React.Fragment>
-      ))}
-    </>
-  ),
+  ChatDetailScreen: ({ conversation, topBanner, timelineItems }: any) => {
+    React.useEffect(() => {
+      mockChatMounts(conversation.id);
+    }, []);
+    return (
+      <>
+        {topBanner}
+        {timelineItems.map((i: any) => (
+          <React.Fragment key={i.id}>{i.render()}</React.Fragment>
+        ))}
+      </>
+    );
+  },
 }));
 
 import BountyThreadRoute from '../../app/tabs/bounty-thread/[bountyId]';
@@ -130,6 +136,18 @@ describe('hiring from the chat', () => {
       fireEvent.press(screen.getByLabelText('Hire'));
     });
     expect(screen.queryByTestId('hire-confirmation')).toBeNull();
+  });
+});
+
+describe('starting the chat', () => {
+  it('keeps the chat mounted when the placeholder conversation becomes the real one', () => {
+    const view = render(<BountyThreadRoute />);
+    expect(mockChatMounts).toHaveBeenCalledTimes(1);
+    expect(mockChatMounts).toHaveBeenCalledWith('bounty-thread-b1');
+
+    mockThread = { ...mockThread, conversation: { id: 'c1', isGroup: false, name: 'Ana', participantIds: ['poster-1', 'h1'] } };
+    view.rerender(<BountyThreadRoute />);
+    expect(mockChatMounts).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -731,6 +731,64 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     applicationCounts,
   })
 
+  // The tab pager keeps the Inbox mounted, so a swipe back onto it fires no
+  // focus event. Reload when it becomes the active tab instead.
+  const wasActiveRef = useRef(isActive)
+  useEffect(() => {
+    const wasActive = wasActiveRef.current
+    wasActiveRef.current = isActive
+    if (!isActive || wasActive || !currentUserId) return
+    loadMyBounties()
+    loadInProgress()
+    refreshConversations().catch(() => {})
+  }, [isActive, currentUserId, loadMyBounties, loadInProgress, refreshConversations])
+
+  // Live turn state: the other party's move (hire, review, payout, cancel)
+  // changes the bounty row, and the YOUR MOVE badge comes from that status.
+  // One list-level channel for every bounty in either list.
+  const inProgressBountiesRef = useRef<Bounty[]>(inProgressBounties)
+  useEffect(() => {
+    inProgressBountiesRef.current = inProgressBounties
+  }, [inProgressBounties])
+
+  const listedBountyIdsKey = React.useMemo(() => {
+    const ids = new Set<string>()
+    for (const b of myBounties) ids.add(String(b.id))
+    for (const b of inProgressBounties) ids.add(String(b.id))
+    return Array.from(ids).sort().join(',')
+  }, [myBounties, inProgressBounties])
+
+  useEffect(() => {
+    const ids = listedBountyIdsKey ? listedBountyIdsKey.split(',') : []
+    if (!currentUserId || ids.length === 0) return
+
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase
+        .channel(uniqueRealtimeTopic(`inbox-bounties:${currentUserId}`))
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'bounties', filter: `id=in.(${ids.join(',')})` },
+          (payload: any) => {
+            const id = String(payload?.new?.id ?? '')
+            if (myBountiesRef.current.some((b) => String(b.id) === id)) loadMyBounties()
+            if (inProgressBountiesRef.current.some((b) => String(b.id) === id)) loadInProgress()
+          }
+        )
+        .subscribe()
+    } catch {
+      channel = null // realtime unavailable — focus and tab reloads still apply
+    }
+
+    return () => {
+      try {
+        if (channel) supabase.removeChannel(channel)
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  }, [listedBountyIdsKey, currentUserId, loadMyBounties, loadInProgress])
+
   const requestStatusByBounty = React.useMemo(() => {
     const m = new Map<string, string>()
     for (const r of hunterRequests) m.set(String(r?.bounty?.id ?? r?.bounty_id), r.status)

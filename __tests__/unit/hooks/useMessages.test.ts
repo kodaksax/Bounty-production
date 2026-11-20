@@ -162,6 +162,73 @@ describe('useMessages (local conversation)', () => {
       expect(result.current.messages.some((m: any) => m.id === realFirst.id)).toBe(true);
     });
   });
+
+  describe('useMessages conversation changes', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('discards stale reads and does not subscribe to the previous conversation', async () => {
+      (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue('user-1');
+      let resolveFirst: (messages: any[]) => void = () => {};
+      let resolveSecond: (messages: any[]) => void = () => {};
+      const firstRead = new Promise<any[]>(resolve => {
+        resolveFirst = resolve;
+      });
+      const secondRead = new Promise<any[]>(resolve => {
+        resolveSecond = resolve;
+      });
+      const firstConversation = '11111111-1111-4111-8111-111111111111';
+      const secondConversation = '22222222-2222-4222-8222-222222222222';
+      const {
+        fetchMessages,
+        subscribeToMessages,
+      } = require('../../../lib/services/supabase-messaging');
+      fetchMessages.mockImplementation((id: string) =>
+        id === firstConversation ? firstRead : secondRead
+      );
+
+      const { useMessages } = require('../../../hooks/useMessages');
+      const { result, rerender } = renderHook(({ id }) => useMessages(id), {
+        initialProps: { id: firstConversation },
+      });
+
+      rerender({ id: secondConversation });
+      expect(result.current.messages).toEqual([]);
+      expect(result.current.pinnedMessage).toBeNull();
+
+      const secondMessage = {
+        id: 'message-2',
+        conversationId: secondConversation,
+        senderId: 'user-2',
+        text: 'new thread',
+        createdAt: new Date().toISOString(),
+        status: 'sent',
+      };
+      await act(async () => {
+        resolveSecond([secondMessage]);
+        await secondRead;
+      });
+      await waitFor(() => {
+        expect(subscribeToMessages).toHaveBeenCalledWith(secondConversation, expect.any(Function));
+      });
+
+      await act(async () => {
+        resolveFirst([
+          {
+            ...secondMessage,
+            id: 'message-1',
+            conversationId: firstConversation,
+            text: 'stale thread',
+          },
+        ]);
+        await firstRead;
+      });
+
+      expect(result.current.messages).toEqual([secondMessage]);
+      expect(subscribeToMessages).not.toHaveBeenCalledWith(firstConversation, expect.any(Function));
+    });
+  });
   it('passes the attachment URL through to the local send path', async () => {
     (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue('user-1');
 
