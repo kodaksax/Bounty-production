@@ -38,8 +38,14 @@ export async function saveLastScreen(userId: string, screen: string): Promise<vo
  */
 export async function getRestorableLastScreen(
   userId: string,
-  timeoutMs = 500
+  timeoutMs = 500,
+  options: { includeFeed?: boolean } = {}
 ): Promise<string | null> {
+  // `includeFeed`: when the launch tab is not the feed (the post_first arm
+  // of lib/experiments/home-post-navigation.ts), having left on the feed is
+  // worth restoring too.
+  const restorable = (screen: string) =>
+    RESTORABLE_SCREENS.has(screen) || (options.includeFeed === true && screen === 'bounty');
   const read = (async () => {
     try {
       const raw = await AsyncStorage.getItem(keyFor(userId));
@@ -47,7 +53,7 @@ export async function getRestorableLastScreen(
       const parsed = JSON.parse(raw);
       const screen = parsed?.screen;
       const at = Number(parsed?.at);
-      if (typeof screen !== 'string' || !RESTORABLE_SCREENS.has(screen)) return null;
+      if (typeof screen !== 'string' || !restorable(screen)) return null;
       if (!Number.isFinite(at) || Date.now() - at > LAST_SCREEN_TTL_MS) return null;
       return screen;
     } catch {

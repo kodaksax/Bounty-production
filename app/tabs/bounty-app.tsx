@@ -17,7 +17,6 @@ import { useResumeComposerPrompt } from '../hooks/useResumeComposerPrompt'
 import { MomentsProvider } from '../../providers/moments-provider'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { BottomNav } from 'components/ui/bottom-nav'
 import { ScreenLoader } from 'components/ui/screen-loader'
 import { FloatingTabBar } from 'components/ui/floating-tab-bar'
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
@@ -43,18 +42,27 @@ import { parseBountyAppTabParams, parseBountyAppTabUrl } from '../../lib/navigat
 import { subscribeComposerRequests } from '../../lib/navigation/composer-request'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { useTopInsetOverlay } from '../../lib/context/TopInsetOverlayContext'
+import {
+  APP_LAUNCH_ENTRY,
+  CONTROL_EXPERIENCE,
+  getResolvedNavigationExperience,
+  recordNavigationExposure,
+  resolveNavigationExperience,
+  swipeOrderFor,
+  type NavigationExperience,
+} from '../../lib/experiments/home-post-navigation'
 
 // Main tab bar style. FloatingTabBar is the compact floating pill; BottomNav
-// is the classic full-width bar with the raised crosshair, kept for later —
-// swap this line back to `BottomNav` to restore it.
-const MainTabBar: typeof BottomNav = FloatingTabBar
+// is the classic full-width bar with the raised crosshair, kept for later.
+// Only FloatingTabBar takes the home_post_navigation_test `variant`: swapping
+// BottomNav back in means teaching it the variant's tab order first.
+const MainTabBar: React.ComponentType<React.ComponentProps<typeof FloatingTabBar>> = FloatingTabBar
 
-// Left-to-right order of the tabs you can swipe between — must match the
-// FloatingTabBar order. Admin is never swipeable: it pushes its own route
-// rather than rendering in this shell. When the admin tab replaces Profile
-// in the bar, Profile drops out of the swipe order too.
-const SWIPE_ORDER = ['messages', 'wallet', 'bounty', 'postings', 'profile']
-const SWIPE_ORDER_WITH_ADMIN = ['messages', 'wallet', 'bounty', 'postings']
+// Left-to-right order of the tabs you can swipe between comes from
+// swipeOrderFor() (lib/experiments/home-post-navigation.ts), the same order
+// FloatingTabBar draws for the variant. Admin is never swipeable: it pushes
+// its own route rather than rendering in this shell. When the admin tab
+// replaces Profile in the bar, Profile drops out of the swipe order too.
 
 // How long a tab-bar tap's animated scroll to the adjacent tab is given
 // before its result is committed anyway. Android's programmatic smooth
@@ -76,12 +84,41 @@ const PagerPage = memo(function PagerPage({
   return <View style={{ width, height }}>{children}</View>
 })
 
-function BountyAppInner() {
+// Records home_post_navigation_test exposure once the shell itself is on
+// screen: it is rendered only past the loading and redirect guards below.
+function NavigationExposureReporter({
+  userId,
+  experience,
+  landingTab,
+  landingReason,
+  accountCreatedAt,
+}: {
+  userId: string
+  experience: NavigationExperience
+  landingTab: string
+  landingReason: string
+  accountCreatedAt: string | null | undefined
+}) {
+  useEffect(() => {
+    recordNavigationExposure(userId, experience, {
+      landingTab,
+      landingReason,
+      primaryRole: authProfileService.getPrimaryRoleForAnalytics() ?? null,
+      accountCreatedAt,
+    })
+    // One report per user and arm; the rest is read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, experience])
+  return null
+}
+
+function BountyAppInner({ experience }: { experience: NavigationExperience }) {
   const router = useRouter()
   const { theme } = useAppThemeContext()
   // `tab` picks the tab (legacy `screen` is read too, though expo-router
-  // usually strips it — see lib/navigation/bounty-app-tab.ts).
-  const { tab, screen, initialTab, source } = useLocalSearchParams<{ tab?: string, screen?: string, initialTab?: string, source?: string }>()
+  // usually strips it — see lib/navigation/bounty-app-tab.ts). `entry` is
+  // set by the root gate when a post_first cold start lands on Post.
+  const { tab, screen, initialTab, source, entry } = useLocalSearchParams<{ tab?: string, screen?: string, initialTab?: string, source?: string, entry?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
   // Get current user ID from auth context (reactive to auth state changes)
   const { session, isLoading, profile } = useAuthContext()
@@ -199,6 +236,18 @@ function BountyAppInner() {
   const paramScreen: string = linkTarget.tab ?? 'bounty'
   const paramInitialTab: string | undefined = linkTarget.initialTab
   const [activeScreen, setActiveScreenState] = useState(paramScreen)
+  // How this shell first opened, for the experiment's exposure event.
+  const landingRef = useRef({
+    tab: paramScreen,
+    reason:
+      entry === APP_LAUNCH_ENTRY
+        ? 'app_launch'
+        : source === 'notification'
+          ? 'notification'
+          : linkTarget.tab
+            ? 'link'
+            : 'default',
+  })
 
   // Reports this tab shell's visible screen for analytics. Switching tabs
   // here (via BottomNav) never changes the route, so ScreenTracker in
@@ -234,7 +283,10 @@ function BountyAppInner() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [pagerSize, setPagerSize] = useState({ width: windowWidth, height: windowHeight })
   const pageWidth = pagerSize.width
-  const swipeOrder = showAdminTab ? SWIPE_ORDER_WITH_ADMIN : SWIPE_ORDER
+  const swipeOrder = useMemo(
+    () => swipeOrderFor(experience.variant, showAdminTab),
+    [experience.variant, showAdminTab]
+  )
   // The tab bar highlight. Runs ahead of activeScreen: it follows the pager
   // live, while activeScreen commits only once the pager settles.
   const [barScreen, setBarScreen] = useState(paramScreen)
@@ -586,7 +638,11 @@ function BountyAppInner() {
   const postIsActive = activeScreen === 'postings'
   // Set when something other than the Post tab sends the poster to the
   // composer, so it can report where they came from.
-  const [composerEntryPoint, setComposerEntryPoint] = useState<string | undefined>(undefined)
+  // A post_first cold start opens here without anyone tapping Post, so it
+  // reports `app_launch` instead of the tab's own entry point.
+  const [composerEntryPoint, setComposerEntryPoint] = useState<string | undefined>(
+    entry === APP_LAUNCH_ENTRY && paramScreen === 'postings' ? APP_LAUNCH_ENTRY : undefined
+  )
   const openComposer = useCallback((entryPoint: string) => {
     // A composer already on screen has reported its own entry point.
     if (activeRef.current !== 'postings') setComposerEntryPoint(entryPoint)
@@ -763,7 +819,17 @@ function BountyAppInner() {
         )}
 
         {showBottomNav && (
-          <MainTabBar activeScreen={barScreen} onNavigate={handleNavigate} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} postDraftPending={postDraftPending} />
+          <MainTabBar activeScreen={barScreen} onNavigate={handleNavigate} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} postDraftPending={postDraftPending} variant={experience.variant} />
+        )}
+
+        {currentUserId && (
+          <NavigationExposureReporter
+            userId={currentUserId}
+            experience={experience}
+            landingTab={landingRef.current.tab}
+            landingReason={landingRef.current.reason}
+            accountCreatedAt={profile?.created_at}
+          />
         )}
 
         {/* Moments Queue host — global, so a contextual activation prompt
@@ -780,8 +846,31 @@ function BountyAppInner() {
   )
 }
 
+/**
+ * Resolves the user's home_post_navigation_test arm before the shell first
+ * renders, so the tab order and launch tab never change on screen. The
+ * answer is per user per app process (usually already resolved by the root
+ * gate); the wait is bounded and falls back to control.
+ */
 export function BountyApp() {
-  return <BountyAppInner />
+  const { session } = useAuthContext()
+  const userId = session?.user?.id
+  const [, setResolvedTick] = useState(0)
+  const experience = userId ? getResolvedNavigationExperience(userId) : CONTROL_EXPERIENCE
+
+  useEffect(() => {
+    if (!userId || getResolvedNavigationExperience(userId)) return
+    let cancelled = false
+    void resolveNavigationExperience(userId).then(() => {
+      if (!cancelled) setResolvedTick(t => t + 1)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  if (!experience) return <ScreenLoader label="Loading..." />
+  return <BountyAppInner experience={experience} />
 }
 
 // Styles — container background is intentionally sourced from BountyAppInner's theme hook

@@ -71,6 +71,16 @@ type CapturedEvent = {
 
 let _posthog: any | null = null;
 
+// The distinct id the most recent /flags response settled for (see the
+// onFeatureFlags listener after construction). Null until one settles.
+let _flagsSettledForDistinctId: string | null = null;
+// True once identify() moved this process onto a different distinct id
+// (a sign-in or account switch). Until a /flags request settles for the new
+// id, the cached flags belong to the previous one.
+let _identityChangedThisProcess = false;
+// Called after _flagsSettledForDistinctId is updated, so a listener can read it.
+const _flagsSettledListeners = new Set<() => void>();
+
 // Device-level internal marker. `is_internal` is per user and reset() clears
 // it on logout, so a tester's logged-out sessions and any fresh test account
 // they sign up on the same device used to count as real users. Once an
@@ -201,6 +211,26 @@ try {
         debug: __DEV__,
       });
       _posthog.register(deviceSuperProperties());
+      // The SDK emits 'featureflags' only when a /flags request settles
+      // (success, error or quota), never for a read of its local cache.
+      // Record who it settled for, so a caller can tell a fresh answer for
+      // this user from a cached one or one left over from the anonymous id.
+      if (typeof _posthog.onFeatureFlags === 'function') {
+        _posthog.onFeatureFlags(() => {
+          try {
+            _flagsSettledForDistinctId = _posthog?.getDistinctId?.() ?? null;
+          } catch {
+            _flagsSettledForDistinctId = null;
+          }
+          _flagsSettledListeners.forEach(listener => {
+            try {
+              listener();
+            } catch {
+              // a listener's failure must not stop the others
+            }
+          });
+        });
+      }
     }
   } else if (__DEV__) {
     // eslint-disable-next-line no-console
@@ -304,6 +334,7 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
       _posthog.register({ is_internal: true });
       markInternalDevice();
     }
+    if (currentDistinctId !== distinctId) _identityChangedThisProcess = true;
     _posthog.identify(distinctId, identityProperties);
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -478,6 +509,63 @@ export const getFeatureFlag = (key: string): FeatureFlagValue | undefined => {
     console.error('[posthog] getFeatureFlag failed', e);
     return undefined;
   }
+};
+
+/** A flag evaluation: `enabled: false` is a conclusive off; `variant` is set for a multivariate flag. */
+export type FeatureFlagResult = { key: string; enabled: boolean; variant?: string };
+
+/**
+ * The SDK's `getFeatureFlagResult`. Unlike `getFeatureFlag` it returns
+ * `undefined` only when no evaluation exists for the key, so "off" and
+ * "unknown" stay distinct. `sendEvent: false` reads without recording
+ * `$feature_flag_called`, for a caller that records exposure itself once
+ * the experience is actually on screen.
+ */
+export const getFeatureFlagResult = (
+  key: string,
+  options?: { sendEvent?: boolean }
+): FeatureFlagResult | undefined => {
+  try {
+    if (!_posthog || typeof _posthog.getFeatureFlagResult !== 'function') return undefined;
+    return _posthog.getFeatureFlagResult(key, options) ?? undefined;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[posthog] getFeatureFlagResult failed', e);
+    return undefined;
+  }
+};
+
+/**
+ * Whether the cached flags can be trusted as `distinctId`'s own evaluation:
+ * a /flags request has settled for that id in this process, or the process
+ * started already identified as it (the cache came from its last launch).
+ * False after a sign-in or account switch until the new id's flags arrive.
+ */
+export const featureFlagsAreFor = (distinctId: string): boolean => {
+  if (!_posthog) return false;
+  if (_flagsSettledForDistinctId === distinctId) return true;
+  if (_identityChangedThisProcess) return false;
+  try {
+    return _posthog.getDistinctId?.() === distinctId;
+  } catch {
+    return false;
+  }
+};
+
+/** True when a /flags request has settled for `distinctId` in this process. */
+export const featureFlagsSettledFor = (distinctId: string): boolean =>
+  !!_posthog && _flagsSettledForDistinctId === distinctId;
+
+/**
+ * Runs `listener` each time a /flags request settles, after the id it
+ * settled for is recorded (so `featureFlagsSettledFor` is already current).
+ * @returns An unsubscribe function.
+ */
+export const onFeatureFlagsSettled = (listener: () => void): (() => void) => {
+  _flagsSettledListeners.add(listener);
+  return () => {
+    _flagsSettledListeners.delete(listener);
+  };
 };
 
 /**

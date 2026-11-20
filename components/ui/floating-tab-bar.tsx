@@ -10,6 +10,7 @@ import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
 import type { AppTheme } from "../../lib/themes/types";
 import type { ScreenKey } from "./bottom-nav";
 import { withAlpha } from '../../lib/utils';
+import { centerTabFor, tabOrderFor, type NavigationVariant } from '../../lib/experiments/home-post-navigation';
 
 /**
  * Floating pill tab bar — the compact, detached bar most iOS apps now use.
@@ -30,6 +31,8 @@ interface FloatingTabBarProps {
   /** A saved, unfinished post exists — dots the Post tab while it isn't the
    * active tab, so a poster who wandered off mid-post has a way back. */
   postDraftPending?: boolean;
+  /** home_post_navigation_test arm: tab order and which tab sits in the centre. */
+  variant?: NavigationVariant;
 }
 
 const BAR_HEIGHT = 64;
@@ -49,6 +52,7 @@ export function FloatingTabBar({
   onBountyTabRepress,
   unreadMessageCount = 0,
   postDraftPending = false,
+  variant = "control",
 }: FloatingTabBarProps) {
   const { theme } = useAppThemeContext();
   const { triggerHaptic } = useHapticFeedback();
@@ -56,9 +60,11 @@ export function FloatingTabBar({
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
-  const tabs: Tab[] = useMemo(
-    () => [
-      {
+  const centerKey = centerTabFor(variant);
+  const tabs: Tab[] = useMemo(() => {
+    const postFirst = variant === "post_first";
+    const byKey: Record<string, Tab> = {
+      messages: {
         key: "messages",
         icon: "assignment",
         title: "Inbox",
@@ -67,20 +73,30 @@ export function FloatingTabBar({
             ? `My Bounties, ${unreadMessageCount} unread message${unreadMessageCount === 1 ? "" : "s"}`
             : "View your bounties",
       },
-      { key: "wallet", icon: "account-balance-wallet", title: "Wallet", label: "View wallet and transactions" },
-      { key: "bounty", icon: "gps-fixed", title: "Home", label: "View bounty dashboard - Main screen" },
-      {
+      wallet: { key: "wallet", icon: "account-balance-wallet", title: "Wallet", label: "View wallet and transactions" },
+      // "Main screen" names whichever tab the app opens on.
+      bounty: {
+        key: "bounty",
+        icon: "gps-fixed",
+        title: "Home",
+        label: postFirst ? "View bounty dashboard" : "View bounty dashboard - Main screen",
+      },
+      postings: {
         key: "postings",
         icon: "post-add",
         title: "Post",
-        label: postDraftPending ? "Post a bounty, unfinished post saved" : "Post a new bounty",
+        label: postDraftPending
+          ? "Post a bounty, unfinished post saved"
+          : postFirst
+            ? "Post a new bounty - Main screen"
+            : "Post a new bounty",
       },
-      showAdmin
+      profile: showAdmin
         ? { key: "admin", icon: "admin-panel-settings", title: "Admin", label: "Admin panel" }
         : { key: "profile", icon: "person", title: "Profile", label: "View and edit profile" },
-    ],
-    [showAdmin, unreadMessageCount, postDraftPending]
-  );
+    };
+    return tabOrderFor(variant).map(key => byKey[key]);
+  }, [variant, showAdmin, unreadMessageCount, postDraftPending]);
 
   // Sliding highlight behind the active tab.
   const [tabWidth, setTabWidth] = useState(0);
@@ -112,10 +128,10 @@ export function FloatingTabBar({
         return;
       }
       if (screen === activeScreen) return;
-      triggerHaptic(screen === "bounty" ? "medium" : "selection");
+      triggerHaptic(screen === centerKey ? "medium" : "selection");
       onNavigate(screen);
     },
-    [activeScreen, onNavigate, onBountyTabRepress, triggerHaptic]
+    [activeScreen, onNavigate, onBountyTabRepress, triggerHaptic, centerKey]
   );
 
   const isKnownTab = tabs.some(t => t.key === activeScreen);
@@ -136,7 +152,7 @@ export function FloatingTabBar({
           )}
           {tabs.map(tab => {
             const active = tab.key === activeScreen;
-            const isCenter = tab.key === "bounty";
+            const isCenter = tab.key === centerKey;
             return (
               <TouchableOpacity
                 key={tab.key}
@@ -151,7 +167,7 @@ export function FloatingTabBar({
                   <MaterialIcons
                     name={tab.icon}
                     size={isCenter ? CENTER_ICON_SIZE : ICON_SIZE}
-                    // The bullseye is always brand green; others brighten when active.
+                    // The centre tab's icon is always brand green; others brighten when active.
                     color={isCenter ? theme.primary : active ? theme.text : theme.textSecondary}
                   />
                   {tab.key === "messages" && unreadMessageCount > 0 && (
