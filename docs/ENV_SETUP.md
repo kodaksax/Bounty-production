@@ -30,9 +30,17 @@ Start Expo with a chosen env (script added to `package.json`):
 
 ```bash
 npm run start:dev     # loads .env.development
-npm run start:staging # loads .env.staging
-npm run start:prod    # loads .env.production
+npm run start:staging # loads .env.staging (production bundle)
+npm run start:prod    # loads .env.production (production bundle)
 ```
+
+`start:staging` and `start:prod` serve a production bundle (`--no-dev --minify`,
+no hot reload or dev menu) with `EXPO_NO_DOTENV=1`. A development bundle always
+reads `.env`, `.env.development`, `.env.local` and `.env.development.local` from
+the project folder at runtime, so a dev bundle would silently use `.env.local`
+values (the dev project) on top of `.env.production`. After switching scripts,
+fully close the app on the device before reopening it, or it keeps running the
+previous bundle.
 
 4) Verify values at runtime in the app:
 

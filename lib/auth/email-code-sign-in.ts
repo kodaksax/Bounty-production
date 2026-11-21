@@ -47,6 +47,29 @@ export function emailCodeWaitMessage(error: unknown): string | null {
   return `We just sent a code. You can ask for another in ${match[1]} seconds.`;
 }
 
+export const EMAIL_CODE_NO_ACCOUNT_MESSAGE =
+  'No Bounty account uses this email. Check the address, or sign up to create an account.';
+
+/**
+ * requestEmailSignInCode never creates accounts (shouldCreateUser: false), so
+ * Supabase rejects an unknown address with "Signups not allowed for otp"
+ * (code otp_disabled, HTTP 422). That reads like a server fault; say what it
+ * means. Null for any other error.
+ */
+export function emailCodeNoAccountMessage(error: unknown): string | null {
+  const e = error as { code?: unknown; message?: unknown } | null;
+  const message = String(e?.message ?? '');
+  if (e?.code === 'otp_disabled' || /signups? not allowed for otp/i.test(message)) {
+    return EMAIL_CODE_NO_ACCOUNT_MESSAGE;
+  }
+  return null;
+}
+
+/** Specific copy for a failed code request, or null to fall back to generic copy. */
+export function emailCodeSendErrorMessage(error: unknown): string | null {
+  return emailCodeWaitMessage(error) ?? emailCodeNoAccountMessage(error);
+}
+
 /**
  * Ask Supabase to email a sign-in code. Never creates an account: a typo'd
  * address must not silently make a second, empty one.

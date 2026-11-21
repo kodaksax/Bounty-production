@@ -29,7 +29,7 @@ import { useFormSubmission } from '../../hooks/useFormSubmission';
 import {
     clearEmailCodeHandoff,
     EMAIL_CODE_PATTERN,
-    emailCodeWaitMessage,
+    emailCodeSendErrorMessage,
     type EmailCodeSource,
     peekEmailCodeHandoff,
     requestEmailSignInCode,
@@ -895,7 +895,7 @@ export function SignInForm() {
       await requestEmailSignInCode(email, emailCodeSourceRef.current, { isResend: emailCodeSent });
       setEmailCodeSent(true);
     } catch (error) {
-      const message = emailCodeWaitMessage(error) ?? getUserFriendlyError(error).message;
+      const message = emailCodeSendErrorMessage(error) ?? getUserFriendlyError(error).message;
       if (emailCodeSent) setEmailCodeError(message);
       else setSocialAuthError(message);
     } finally {
