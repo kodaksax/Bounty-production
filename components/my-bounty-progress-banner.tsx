@@ -17,7 +17,6 @@ import Reanimated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import type { Bounty } from '../lib/services/database.types';
@@ -157,7 +156,9 @@ const STASH_VELOCITY = 600;
 // gives it up to the horizontal scrollers (the card pager, the tab pager).
 const DRAG_ACTIVATE_Y = 10;
 const DRAG_FAIL_X = 14;
-const SPRING_HOME = { damping: 22, stiffness: 260, overshootClamping: false } as const;
+// Every settle (back home, or back out) is a short ease-out with no
+// overshoot: a spring here read as the card bouncing up and down.
+const SETTLE = { duration: 180, easing: REasing.out(REasing.cubic) };
 // Extra travel past the card's own height so its shadow clears the top too.
 const OFFSCREEN_EXTRA = 24;
 
@@ -250,7 +251,7 @@ export function MyBountyProgressCarousel({
 
   const expand = useCallback(() => {
     onExpanded();
-    drag.value = withSpring(0, SPRING_HOME);
+    drag.value = withTiming(0, SETTLE);
   }, [drag, onExpanded]);
 
   // ── Gestures ─────────────────────────────────────────────────────────
@@ -275,9 +276,8 @@ export function MyBountyProgressCarousel({
       .failOffsetX([-DRAG_FAIL_X, DRAG_FAIL_X])
       .onUpdate(e => {
         'worklet';
-        // Follows the finger up freely; downward it only gives a little, so
-        // it feels held in place rather than stuck.
-        drag.value = e.translationY < 0 ? e.translationY : e.translationY * 0.15;
+        // Follows the finger up; never moves down past its resting place.
+        drag.value = Math.min(0, e.translationY);
       })
       .onEnd(e => {
         'worklet';
@@ -292,7 +292,7 @@ export function MyBountyProgressCarousel({
             }
           );
         } else {
-          drag.value = withSpring(0, { ...SPRING_HOME, velocity: e.velocityY });
+          drag.value = withTiming(0, SETTLE);
         }
       });
     return tabPagerGesture
@@ -314,9 +314,9 @@ export function MyBountyProgressCarousel({
         'worklet';
         if (e.translationY > heightSV.value * STASH_DISTANCE || e.velocityY > STASH_VELOCITY) {
           runOnJS(onExpanded)();
-          drag.value = withSpring(0, { ...SPRING_HOME, velocity: e.velocityY });
+          drag.value = withTiming(0, SETTLE);
         } else {
-          drag.value = withTiming(-(heightSV.value + OFFSCREEN_EXTRA), { duration: 160 });
+          drag.value = withTiming(-(heightSV.value + OFFSCREEN_EXTRA), SETTLE);
         }
       });
     return tabPagerGesture ? pan.blocksExternalGesture(tabPagerGesture) : pan;
