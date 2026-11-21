@@ -2,7 +2,7 @@
 //
 // Contract for lib/services/application-withdrawal.ts — the shared
 // "hunter retracts a pending application" operation used by
-// app/tabs/postings-screen.tsx and app/tabs/inbox-screen.tsx.
+// app/tabs/postings-screen.tsx and hooks/useJobManagement.ts (My Jobs).
 //
 // The one behaviour that matters: `application_withdrawn` fires ONLY after the
 // delete is confirmed — never on a lookup miss, a failed delete, or a thrown

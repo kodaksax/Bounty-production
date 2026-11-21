@@ -34,7 +34,7 @@ it.each([null, 'reject'])('rejects failed updates: %s', async failure => {
   else (bountyService.update as jest.Mock).mockResolvedValue(null);
   await expect(saveStructuredBountyEdit('b1', { requirements_payload: null })).rejects.toThrow();
 });
-it.each(['app/tabs/postings-screen.tsx', 'app/tabs/inbox-screen.tsx', 'app/postings/[bountyId]/index.tsx'])(
+it.each(['app/tabs/postings-screen.tsx', 'hooks/useJobManagement.ts', 'app/postings/[bountyId]/index.tsx'])(
   'routes structured edits outside legacy catch-and-swallow callbacks: %s', path => {
     const source = readFileSync(join(__dirname, '../../..', path), 'utf8');
     const callback = source.slice(source.indexOf('const handleSaveEdit'), source.indexOf('const handleSaveEdit') + 1300);

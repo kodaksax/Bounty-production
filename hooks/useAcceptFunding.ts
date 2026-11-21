@@ -5,7 +5,7 @@
  * Split out of useAcceptRequest on purpose. useAcceptRequest is a large
  * optimistic-UI orchestrator; the money decision needs to be readable and
  * testable on its own, and both screens that accept hunters
- * (app/tabs/postings-screen.tsx and app/tabs/inbox-screen.tsx) need the exact
+ * (app/tabs/postings-screen.tsx and the bounty thread) need the exact
  * same behaviour.
  *
  * THE SHAPE OF THE GATE

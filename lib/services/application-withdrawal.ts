@@ -2,7 +2,7 @@
 //
 // Shared "hunter retracts their pending application" operation, extracted from
 // the byte-identical handlers in app/tabs/postings-screen.tsx and
-// app/tabs/inbox-screen.tsx so the success-only analytics contract lives in
+// the old app/tabs/inbox-screen.tsx (now hooks/useJobManagement.ts) so the success-only analytics contract lives in
 // one place and can be unit-tested.
 
 import { hideBountyForHunter } from '../utils/hunter-hidden-bounties';

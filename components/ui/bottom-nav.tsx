@@ -124,14 +124,14 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             accessibilityRole="button"
             accessibilityLabel={
               unreadMessageCount > 0
-                ? `My Bounties, ${unreadMessageCount} unread message${unreadMessageCount === 1 ? '' : 's'}`
-                : 'View your bounties'
+                ? `My jobs, ${unreadMessageCount} unread message${unreadMessageCount === 1 ? '' : 's'}`
+                : 'My jobs'
             }
             accessibilityState={{ selected: activeScreen === "messages" }}
           >
             <View style={styles.iconWrapper}>
               <MaterialIcons
-                name="assignment"
+                name="inbox"
                 color={activeScreen === "messages" ? theme.text : theme.textSecondary}
                 size={NAV_ICON_SIZE}
               />

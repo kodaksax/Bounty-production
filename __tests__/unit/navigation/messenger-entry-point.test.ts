@@ -1,10 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-describe('My Bounties messenger entry point', () => {
+describe('My Jobs messenger entry point', () => {
   it('uses the canonical themed messenger route', () => {
     const inboxSource = fs.readFileSync(
-      path.join(process.cwd(), 'app/tabs/inbox-screen.tsx'),
+      path.join(process.cwd(), 'app/tabs/my-jobs-screen.tsx'),
       'utf8',
     )
     const messengerSource = fs.readFileSync(

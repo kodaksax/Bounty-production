@@ -1,5 +1,5 @@
 /**
- * Status-filter logic shared by the Work / Posts screens (inbox-screen, and the
+ * Status-filter logic shared by the Work / Posts screens (My Jobs via useMyJobsData, and the
  * preserved postings-screen).
  *
  * A bounty's `status` column is not what its card displays: the badge also
@@ -349,9 +349,16 @@ export function useBountyStatusFilters({
     [myBounties, getLifecycle]
   )
 
+  /** The latest completion submission on a bounty, when one has loaded. */
+  const getLatestSubmission = React.useCallback(
+    (bountyId: string): CompletionSubmission | undefined => submissionsByBounty.get(String(bountyId)),
+    [submissionsByBounty]
+  )
+
   return {
     getDisplayStatus,
     getLifecycle,
+    getLatestSubmission,
     displayedInProgress,
     displayedMyPostings,
     inProgressSections,

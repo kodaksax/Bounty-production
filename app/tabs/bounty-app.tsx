@@ -1,6 +1,7 @@
-// The messaging inbox (MessengerScreen) is preserved in ./messenger-screen but is
-// no longer what the Inbox tab renders — InboxScreen now hosts Work/Posts/Requests.
-import { InboxScreen } from "./inbox-screen"
+// The "My jobs" tab (key `messages`) renders MyJobsScreen: the one job that
+// needs you, both sides. The messaging inbox (MessengerScreen) is reached from
+// its header and preserved in ./messenger-screen.
+import { MyJobsScreen } from "./my-jobs-screen"
 // The Need Help tab hosts only the post-a-bounty flow. The original combined
 // Work/Posts/Requests/New screen is preserved in app/tabs/postings-screen.
 import { NeedHelpScreen } from "./need-help-screen"
@@ -557,15 +558,16 @@ function BountyAppInner() {
     [backToFeed]
   )
   const profilePage = useMemo(() => <ProfileScreen onBack={backToFeed} />, [backToFeed])
-  // InboxScreen and NeedHelpScreen take activeScreen but never read it; a
+  // MyJobsScreen and NeedHelpScreen take activeScreen but never read it; a
   // constant keeps them from re-rendering on every tab change. `isActive`
-  // only flips when the pager settles on / leaves the Inbox, and gates its
-  // application_viewed analytics (it is preloaded beside Wallet otherwise).
+  // only flips when the pager settles on / leaves My Jobs, and holds back a
+  // link's "Who offered" sheet (and its application_viewed analytics) while
+  // the tab is preloaded beside Wallet.
   const inboxIsActive = activeScreen === 'messages'
   const inboxPage = useMemo(
     () => (
       <ReplayMask>
-        <InboxScreen
+        <MyJobsScreen
           initialTab={inboxInitialTab}
           onBack={backToFeed}
           activeScreen="messages"
