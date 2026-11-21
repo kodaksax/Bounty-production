@@ -72,11 +72,14 @@ interface BountyGridFeedProps {
    *  status-bar area green while the banner in `listHeader` still reaches
    *  the top of the screen. */
   onScroll?: FlatListProps<unknown>['onScroll']
+  /** Just-posted bounties, newest first: placed first under the carousel
+   *  instead of in price order. See buildGridRows. */
+  pinnedIds?: string[]
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function BountyGridFeed({ bounties, bountyDistances, listHeader, onScroll }: BountyGridFeedProps) {
+export function BountyGridFeed({ bounties, bountyDistances, listHeader, onScroll, pinnedIds }: BountyGridFeedProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
 
@@ -89,8 +92,8 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader, onScroll
   }, [bounties])
 
   const rows = useMemo(
-    () => buildGridRows(bounties, completenessById),
-    [bounties, completenessById]
+    () => buildGridRows(bounties, completenessById, pinnedIds),
+    [bounties, completenessById, pinnedIds]
   )
 
   const renderRow = useCallback(({ item, index }: { item: GridRow; index: number }) => {

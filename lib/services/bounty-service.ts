@@ -156,6 +156,15 @@ const MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK = 10; // Minimum title length for sub
 
 export const bountyService = {
   /**
+   * Attach poster username/avatar (from `public_profiles`) to rows the caller
+   * already has — one query, versus getById's row read plus profile read.
+   * Never throws: on failure the rows come back unchanged.
+   */
+  async attachPosterProfiles<T extends { poster_id?: string | null }>(rows: T[]): Promise<T[]> {
+    return (await attachProfilesToBounties(rows)) as T[];
+  },
+
+  /**
    * Get a bounty by ID
    */
   async getById(id: number | string): Promise<Bounty | null> {
