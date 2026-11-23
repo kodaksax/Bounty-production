@@ -27,7 +27,7 @@ import {
   OnboardingProgressDots,
 } from '../../components/onboarding/OnboardingProgressDots';
 import {
-  emailCodeWaitMessage,
+  emailCodeSendErrorMessage,
   requestEmailSignInCode,
   setEmailCodeHandoff,
 } from '../../lib/auth/email-code-sign-in';
@@ -674,7 +674,7 @@ export function SignUpForm() {
       }
       router.replace(ROUTES.AUTH.SIGN_IN as Href);
     } catch (err) {
-      setEmailCodeSendError(emailCodeWaitMessage(err) ?? parseAuthError(err).userMessage);
+      setEmailCodeSendError(emailCodeSendErrorMessage(err) ?? parseAuthError(err).userMessage);
     } finally {
       setEmailCodeSending(false);
     }

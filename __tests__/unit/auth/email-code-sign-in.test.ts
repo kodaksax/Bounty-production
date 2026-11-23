@@ -109,6 +109,22 @@ describe('email-code sign-in helpers', () => {
     expect(codes.emailCodeWaitMessage(null)).toBeNull();
   });
 
+  it('explains Supabase\'s "Signups not allowed for otp" as a missing account', () => {
+    const noAccount = { code: 'otp_disabled', status: 422, message: 'Signups not allowed for otp' };
+    expect(codes.emailCodeNoAccountMessage(noAccount)).toBe(codes.EMAIL_CODE_NO_ACCOUNT_MESSAGE);
+    expect(codes.emailCodeNoAccountMessage({ message: 'Signups not allowed for otp' })).toBe(
+      codes.EMAIL_CODE_NO_ACCOUNT_MESSAGE
+    );
+    expect(codes.emailCodeNoAccountMessage({ message: 'Invalid email' })).toBeNull();
+    expect(codes.emailCodeNoAccountMessage(null)).toBeNull();
+
+    expect(codes.emailCodeSendErrorMessage(noAccount)).toBe(codes.EMAIL_CODE_NO_ACCOUNT_MESSAGE);
+    expect(
+      codes.emailCodeSendErrorMessage({ message: 'you can only request this after 12 seconds' })
+    ).toBe('We just sent a code. You can ask for another in 12 seconds.');
+    expect(codes.emailCodeSendErrorMessage({ message: 'Invalid email' })).toBeNull();
+  });
+
   it('keeps the handoff readable until it is cleared, and drops it once stale', () => {
     const now = Date.now();
     codes.setEmailCodeHandoff({ email: EMAIL, source: 'signup_existing_account' });

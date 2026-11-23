@@ -153,6 +153,14 @@ npm run start:prod
 These scripts use `cross-env APP_ENV=<env> expo start`, which causes
 `app.config.js` to load the matching `.env.<env>` file before bundling.
 
+`start:staging` and `start:prod` also set `EXPO_NO_DOTENV=1` and pass
+`--no-dev --minify`. Expo's development bundle reads `.env`, `.env.development`,
+`.env.local` and `.env.development.local` from the project folder at runtime and
+lets them override everything else, so a dev bundle started for production would
+still use the dev project from `.env.local`. A production bundle inlines the
+values from `.env.<env>` instead; the cost is no hot reload or dev menu. Fully
+close the app on the device after switching scripts, or it keeps the old bundle.
+
 ### EAS dev builds
 
 ```bash
