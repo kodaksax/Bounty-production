@@ -20,8 +20,9 @@ What that means for the files the brief mentions:
   `<script type="text/x-dc">` class at the end of the canvas page.
 - **`poster-palette.css`**: not a separate file. The palette is the `<style>`
   block at the top of `PosterPhone.dc.html`: `:root` holds the light values
-  and `[data-pt="dark"]` the dark ones. The app's tokens
-  (`lib/themes/poster-palette.ts`) were copied from there.
+  and `[data-pt="dark"]` the dark ones. The app keeps the handoff's colour
+  *roles* (`lib/themes/poster-palette.ts`) but maps each one onto the app's
+  existing light and dark colours; the handoff's hex values were not adopted.
 - **`README.md`**: not present in the bundle.
 - **"Focus 02 System and Handoff"** (diagrams, components, the featured-job
   priority diagram): linked from the canvas but not included in the bundle.
