@@ -734,9 +734,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // the balance flashing/refetching constantly. Only react when the
           // balance field itself changed, and refresh silently so the UI doesn't
           // blank to a skeleton.
-          const newBalance = (payload.new as { balance?: number } | null)?.balance;
-          const oldBalance = (payload.old as { balance?: number } | null)?.balance;
-          if (newBalance === oldBalance) {
+          //
+          // Compare against the balance this app already holds, not
+          // payload.old: profiles uses the default replica identity, so the
+          // old record carries only the primary key and its balance is always
+          // undefined (that check let every profile write through). balance
+          // is numeric(…,2), which Realtime may deliver as a string, so compare
+          // in whole cents.
+          const rawBalance = (payload.new as { balance?: number | string | null } | null)?.balance;
+          const newBalance = rawBalance == null ? NaN : Number(rawBalance);
+          if (
+            Number.isFinite(newBalance) &&
+            Math.round(newBalance * 100) === Math.round(balanceRef.current * 100)
+          ) {
             return; // unrelated profile write — balance unchanged; ignore
           }
           getAccessToken().then(token => {
