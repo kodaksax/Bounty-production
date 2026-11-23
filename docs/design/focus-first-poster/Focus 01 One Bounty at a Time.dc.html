@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="380fd652-b94e-4dde-afd9-3e4d9d0302c8"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <style>/* fallback */
+@font-face {
+  font-family: 'Material Icons';
+  font-style: normal;
+  font-weight: 400;
+  src: url("9c06b75a-80d8-43f8-9208-c9f9432aa2a1") format('woff2');
+}
+
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+</style>
+  <style>/* ==========================================================================
+   BOUNTY — Color tokens
+   Source of truth: lib/themes/colors.ts, lib/themes/darkTheme.ts,
+   lib/themes/lightTheme.ts in kodaksax/Bounty-production.
+   The app defaults to the DARK theme (AppThemeProvider defaultMode="dark"),
+   so :root ships the dark palette; a [data-theme="light"] scope carries the
+   light variant used in a handful of surfaces.
+   ========================================================================== */
+
+:root {
+  /* ---- Raw palette : brand green ---- */
+  --bounty-green-950: #022c22;
+  --bounty-green-900: #064e3b;
+  --bounty-green-800: #065f46;
+  --bounty-green-700: #047857;
+  --bounty-green-600: #059669;
+  --bounty-green-500: #10b981;
+  --bounty-green-400: #34d399;
+  --bounty-green-300: #6ee7b7;
+  --bounty-green-200: #a7f3d0;
+  --bounty-green-100: #d1fae5;
+  --bounty-green-50:  #ecfdf5;
+
+  /* App-icon / marketing green (distinct from the UI accent green above —
+     used for the logo, app icon, and splash background only) */
+  --bounty-mark-green: #00912C;
+
+  /* ---- Raw palette : navy (dark-mode surfaces / neutrals) ---- */
+  --bounty-navy-950: #0B0F14;
+  --bounty-navy-900: #111827;
+  --bounty-navy-800: #1F2937;
+  --bounty-navy-700: #374151;
+  --bounty-navy-600: #4B5563;
+  --bounty-navy-500: #6B7280;
+  --bounty-navy-400: #9CA3AF;
+  --bounty-navy-300: #D1D5DB;
+  --bounty-navy-200: #E5E7EB;
+  --bounty-navy-100: #F3F4F6;
+  --bounty-navy-50:  #F9FAFB;
+
+  /* ---- Raw palette : semantic (shared across themes) ---- */
+  --bounty-white: #FFFFFF;
+  --bounty-black: #000000;
+  --bounty-error: #EF4444;
+  --bounty-warning: #FBBF24;
+  --bounty-success: #10B981;
+  --bounty-info: #60A5FA;
+  --bounty-completed: #6366F1;
+  --bounty-cancelled: #F97316;
+
+  /* ---- Semantic aliases — DARK theme (default) ---- */
+  --color-foreground: var(--bounty-white);
+  --color-accent-1: var(--bounty-green-600);
+  --color-accent-2: var(--bounty-green-300);
+  --color-accent-3: var(--bounty-info);
+
+  --color-bg: var(--bounty-navy-950);
+  --color-surface: var(--bounty-navy-900);
+  --color-surface-2: var(--bounty-navy-800);
+
+  --color-border: var(--bounty-navy-700);
+
+  --color-text: var(--bounty-white);
+  --color-text-secondary: var(--bounty-navy-400);
+  --color-text-disabled: var(--bounty-navy-500);
+
+  --color-primary: var(--bounty-green-600);
+  --color-primary-light: var(--bounty-green-300);
+  --color-overlay: rgba(255, 255, 255, 0.1);
+
+  --color-success: var(--bounty-success);
+  --color-error: var(--bounty-error);
+  --color-warning: var(--bounty-warning);
+  --color-info: var(--bounty-info);
+  --color-completed: var(--bounty-completed);
+  --color-cancelled: var(--bounty-cancelled);
+  --color-target: var(--bounty-white);
+}
+
+/* ---- Semantic aliases — LIGHT theme ---- */
+[data-theme="light"] {
+  --color-foreground: #18181B;
+  --color-accent-1: var(--bounty-green-600);
+  --color-accent-2: var(--bounty-green-700);
+  --color-accent-3: #3B82F6;
+
+  --color-bg: var(--bounty-navy-50);
+  --color-surface: var(--bounty-white);
+  --color-surface-2: var(--bounty-navy-200);
+
+  --color-border: var(--bounty-navy-300);
+
+  --color-text: #18181B;
+  --color-text-secondary: var(--bounty-navy-600);
+  --color-text-disabled: var(--bounty-navy-500);
+
+  --color-primary: var(--bounty-green-600);
+  --color-primary-light: var(--bounty-green-700);
+  --color-overlay: rgba(0, 0, 0, 0.05);
+
+  --color-success: var(--bounty-success);
+  --color-error: var(--bounty-error);
+  --color-warning: var(--bounty-warning);
+  --color-info: #3B82F6;
+  --color-completed: var(--bounty-completed);
+  --color-cancelled: var(--bounty-cancelled);
+  --color-target: var(--bounty-black);
+}
+</style>
+  <style>/* ==========================================================================
+   BOUNTY — Typography tokens
+   The product ships NO custom display typeface — it renders with the native
+   system font on both platforms (San Francisco on iOS, Roboto on Android).
+   The single loaded webfont, SpaceMono, is reserved for tabular / code-like
+   moments (OTP digits, countdown timers) — see fonts.css.
+   ========================================================================== */
+
+:root {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: "Bounty Mono", "SpaceMono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Type scale — lifted directly from lib/constants/accessibility.ts TYPOGRAPHY,
+     extended with the larger display sizes seen in bounty-list-item.tsx /
+     bounty-feed.tsx grid banner (26 / 28 / 38px) */
+  --text-tiny: 11px;      /* TYPOGRAPHY.SIZE_TINY   — badges, meta */
+  --text-xs: 12px;        /* SIZE_XSMALL            — captions, chip labels */
+  --text-sm: 14px;        /* SIZE_SMALL             — secondary body */
+  --text-default: 15px;   /* SIZE_DEFAULT           — buttons, list labels */
+  --text-body: 16px;      /* SIZE_BODY              — input text, paragraphs */
+  --text-header: 18px;    /* SIZE_HEADER            — card titles */
+  --text-lg: 20px;        /* SIZE_LARGE             — section headers */
+  --text-xl: 24px;        /* SIZE_XLARGE            — screen titles */
+  --text-display-sm: 26px; /* amount / price display */
+  --text-display-md: 28px; /* bounty-list-item title */
+  --text-display-lg: 38px; /* grid banner hero title */
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight: -0.5px;
+  --tracking-normal: 0;
+  --tracking-wide: 0.5px;
+  --tracking-wider: 1px;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-heavy: 800;
+}
+</style>
+  <style>/* ==========================================================================
+   BOUNTY — Spacing & sizing tokens
+   Source: lib/theme.ts `spacing`, lib/constants/accessibility.ts SPACING/SIZING.
+   ========================================================================== */
+
+:root {
+  /* Base spacing scale (lib/theme.ts) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  --space-4xl: 64px;
+
+  /* Semantic spacing (lib/constants/accessibility.ts SPACING) */
+  --space-screen-h: 16px;   /* SCREEN_HORIZONTAL — side padding on every screen */
+  --space-screen-v: 24px;   /* SCREEN_VERTICAL */
+  --space-element-gap: 12px; /* gap between related elements */
+  --space-section-gap: 24px; /* gap between major sections */
+  --space-compact-gap: 8px;  /* tightly related items */
+  --space-card-padding: 16px;
+
+  /* Touch targets & component sizing (SIZING) */
+  --size-touch-min: 44px;      /* WCAG 2.5.5 minimum */
+  --size-touch-comfortable: 48px;
+  --size-button-default: 48px;
+  --size-button-compact: 40px;
+  --size-button-large: 56px;
+
+  --size-icon-sm: 16px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+  --size-icon-xl: 32px;
+
+  --size-avatar-sm: 32px;
+  --size-avatar-md: 48px;
+  --size-avatar-lg: 80px;
+  --size-avatar-xl: 96px;
+
+  --size-bottom-nav: 110px; /* actual rendered height incl. floating tab bar */
+}
+</style>
+  <style>/* ==========================================================================
+   BOUNTY — Corner radius tokens
+   Source: lib/theme.ts borderRadius, plus exact per-component overrides
+   observed in button.tsx / card.tsx / bounty-card.tsx / bottom-nav.tsx.
+   ========================================================================== */
+
+:root {
+  --radius-sm: 4px;
+  --radius-default: 8px;
+  --radius-md: 12px;   /* default button / input radius */
+  --radius-lg: 16px;   /* cards, list items */
+  --radius-xl: 20px;   /* bounty-list-item footer, grid feed cards */
+  --radius-2xl: 24px;
+  --radius-pill: 999px; /* chips, badges, pill buttons */
+
+  /* Component-specific exact values (kit wins over the generic scale) */
+  --radius-button-sm: 10px;
+  --radius-button-default: 12px;
+  --radius-button-lg: 14px;
+  --radius-bottom-nav: 28px; /* top corners of the floating tab bar */
+}
+</style>
+  <style>/* ==========================================================================
+   BOUNTY — Elevation / shadow tokens
+   Translated from lib/theme.ts `shadows` (React Native shadow* props) to CSS
+   box-shadow equivalents. `--shadow-emerald` is the signature glow used on
+   primary CTAs and the active bottom-nav GPS button.
+   ========================================================================== */
+
+:root {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.18);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.2);
+  --shadow-emerald: 0 0 12px rgba(0, 145, 44, 0.35);
+  --shadow-card-dark: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-card-light: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+</style>
+  <style>/* ==========================================================================
+   BOUNTY — Webfonts
+   SpaceMono is the ONLY custom font file the app ships (assets/fonts in the
+   source repo); it is used sparingly for tabular/code-style moments. Material
+   Icons is loaded from Google Fonts CDN to match the app's icon system
+   (@expo/vector-icons MaterialIcons) — see ICONOGRAPHY in readme.md.
+   ========================================================================== */
+
+@font-face {
+  font-family: "Bounty Mono";
+  src: url("a3275389-1664-40a2-9b84-a834a4986fbc") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* fallback */
+@font-face {
+  font-family: 'Material Icons';
+  font-style: normal;
+  font-weight: 400;
+  src: url("9c06b75a-80d8-43f8-9208-c9f9432aa2a1") format('woff2');
+}
+
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+</style>
+  <style>/* BOUNTY design system — global stylesheet entry point.
+   Consumers link only this file; everything below is shipped transitively. */
+/* ==========================================================================
+   BOUNTY — Color tokens
+   Source of truth: lib/themes/colors.ts, lib/themes/darkTheme.ts,
+   lib/themes/lightTheme.ts in kodaksax/Bounty-production.
+   The app defaults to the DARK theme (AppThemeProvider defaultMode="dark"),
+   so :root ships the dark palette; a [data-theme="light"] scope carries the
+   light variant used in a handful of surfaces.
+   ========================================================================== */
+
+:root {
+  /* ---- Raw palette : brand green ---- */
+  --bounty-green-950: #022c22;
+  --bounty-green-900: #064e3b;
+  --bounty-green-800: #065f46;
+  --bounty-green-700: #047857;
+  --bounty-green-600: #059669;
+  --bounty-green-500: #10b981;
+  --bounty-green-400: #34d399;
+  --bounty-green-300: #6ee7b7;
+  --bounty-green-200: #a7f3d0;
+  --bounty-green-100: #d1fae5;
+  --bounty-green-50:  #ecfdf5;
+
+  /* App-icon / marketing green (distinct from the UI accent green above —
+     used for the logo, app icon, and splash background only) */
+  --bounty-mark-green: #00912C;
+
+  /* ---- Raw palette : navy (dark-mode surfaces / neutrals) ---- */
+  --bounty-navy-950: #0B0F14;
+  --bounty-navy-900: #111827;
+  --bounty-navy-800: #1F2937;
+  --bounty-navy-700: #374151;
+  --bounty-navy-600: #4B5563;
+  --bounty-navy-500: #6B7280;
+  --bounty-navy-400: #9CA3AF;
+  --bounty-navy-300: #D1D5DB;
+  --bounty-navy-200: #E5E7EB;
+  --bounty-navy-100: #F3F4F6;
+  --bounty-navy-50:  #F9FAFB;
+
+  /* ---- Raw palette : semantic (shared across themes) ---- */
+  --bounty-white: #FFFFFF;
+  --bounty-black: #000000;
+  --bounty-error: #EF4444;
+  --bounty-warning: #FBBF24;
+  --bounty-success: #10B981;
+  --bounty-info: #60A5FA;
+  --bounty-completed: #6366F1;
+  --bounty-cancelled: #F97316;
+
+  /* ---- Semantic aliases — DARK theme (default) ---- */
+  --color-foreground: var(--bounty-white);
+  --color-accent-1: var(--bounty-green-600);
+  --color-accent-2: var(--bounty-green-300);
+  --color-accent-3: var(--bounty-info);
+
+  --color-bg: var(--bounty-navy-950);
+  --color-surface: var(--bounty-navy-900);
+  --color-surface-2: var(--bounty-navy-800);
+
+  --color-border: var(--bounty-navy-700);
+
+  --color-text: var(--bounty-white);
+  --color-text-secondary: var(--bounty-navy-400);
+  --color-text-disabled: var(--bounty-navy-500);
+
+  --color-primary: var(--bounty-green-600);
+  --color-primary-light: var(--bounty-green-300);
+  --color-overlay: rgba(255, 255, 255, 0.1);
+
+  --color-success: var(--bounty-success);
+  --color-error: var(--bounty-error);
+  --color-warning: var(--bounty-warning);
+  --color-info: var(--bounty-info);
+  --color-completed: var(--bounty-completed);
+  --color-cancelled: var(--bounty-cancelled);
+  --color-target: var(--bounty-white);
+}
+
+/* ---- Semantic aliases — LIGHT theme ---- */
+[data-theme="light"] {
+  --color-foreground: #18181B;
+  --color-accent-1: var(--bounty-green-600);
+  --color-accent-2: var(--bounty-green-700);
+  --color-accent-3: #3B82F6;
+
+  --color-bg: var(--bounty-navy-50);
+  --color-surface: var(--bounty-white);
+  --color-surface-2: var(--bounty-navy-200);
+
+  --color-border: var(--bounty-navy-300);
+
+  --color-text: #18181B;
+  --color-text-secondary: var(--bounty-navy-600);
+  --color-text-disabled: var(--bounty-navy-500);
+
+  --color-primary: var(--bounty-green-600);
+  --color-primary-light: var(--bounty-green-700);
+  --color-overlay: rgba(0, 0, 0, 0.05);
+
+  --color-success: var(--bounty-success);
+  --color-error: var(--bounty-error);
+  --color-warning: var(--bounty-warning);
+  --color-info: #3B82F6;
+  --color-completed: var(--bounty-completed);
+  --color-cancelled: var(--bounty-cancelled);
+  --color-target: var(--bounty-black);
+}
+
+/* ==========================================================================
+   BOUNTY — Typography tokens
+   The product ships NO custom display typeface — it renders with the native
+   system font on both platforms (San Francisco on iOS, Roboto on Android).
+   The single loaded webfont, SpaceMono, is reserved for tabular / code-like
+   moments (OTP digits, countdown timers) — see fonts.css.
+   ========================================================================== */
+
+:root {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: "Bounty Mono", "SpaceMono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Type scale — lifted directly from lib/constants/accessibility.ts TYPOGRAPHY,
+     extended with the larger display sizes seen in bounty-list-item.tsx /
+     bounty-feed.tsx grid banner (26 / 28 / 38px) */
+  --text-tiny: 11px;      /* TYPOGRAPHY.SIZE_TINY   — badges, meta */
+  --text-xs: 12px;        /* SIZE_XSMALL            — captions, chip labels */
+  --text-sm: 14px;        /* SIZE_SMALL             — secondary body */
+  --text-default: 15px;   /* SIZE_DEFAULT           — buttons, list labels */
+  --text-body: 16px;      /* SIZE_BODY              — input text, paragraphs */
+  --text-header: 18px;    /* SIZE_HEADER            — card titles */
+  --text-lg: 20px;        /* SIZE_LARGE             — section headers */
+  --text-xl: 24px;        /* SIZE_XLARGE            — screen titles */
+  --text-display-sm: 26px; /* amount / price display */
+  --text-display-md: 28px; /* bounty-list-item title */
+  --text-display-lg: 38px; /* grid banner hero title */
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight: -0.5px;
+  --tracking-normal: 0;
+  --tracking-wide: 0.5px;
+  --tracking-wider: 1px;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-heavy: 800;
+}
+
+/* ==========================================================================
+   BOUNTY — Spacing & sizing tokens
+   Source: lib/theme.ts `spacing`, lib/constants/accessibility.ts SPACING/SIZING.
+   ========================================================================== */
+
+:root {
+  /* Base spacing scale (lib/theme.ts) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  --space-4xl: 64px;
+
+  /* Semantic spacing (lib/constants/accessibility.ts SPACING) */
+  --space-screen-h: 16px;   /* SCREEN_HORIZONTAL — side padding on every screen */
+  --space-screen-v: 24px;   /* SCREEN_VERTICAL */
+  --space-element-gap: 12px; /* gap between related elements */
+  --space-section-gap: 24px; /* gap between major sections */
+  --space-compact-gap: 8px;  /* tightly related items */
+  --space-card-padding: 16px;
+
+  /* Touch targets & component sizing (SIZING) */
+  --size-touch-min: 44px;      /* WCAG 2.5.5 minimum */
+  --size-touch-comfortable: 48px;
+  --size-button-default: 48px;
+  --size-button-compact: 40px;
+  --size-button-large: 56px;
+
+  --size-icon-sm: 16px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+  --size-icon-xl: 32px;
+
+  --size-avatar-sm: 32px;
+  --size-avatar-md: 48px;
+  --size-avatar-lg: 80px;
+  --size-avatar-xl: 96px;
+
+  --size-bottom-nav: 110px; /* actual rendered height incl. floating tab bar */
+}
+
+/* ==========================================================================
+   BOUNTY — Corner radius tokens
+   Source: lib/theme.ts borderRadius, plus exact per-component overrides
+   observed in button.tsx / card.tsx / bounty-card.tsx / bottom-nav.tsx.
+   ========================================================================== */
+
+:root {
+  --radius-sm: 4px;
+  --radius-default: 8px;
+  --radius-md: 12px;   /* default button / input radius */
+  --radius-lg: 16px;   /* cards, list items */
+  --radius-xl: 20px;   /* bounty-list-item footer, grid feed cards */
+  --radius-2xl: 24px;
+  --radius-pill: 999px; /* chips, badges, pill buttons */
+
+  /* Component-specific exact values (kit wins over the generic scale) */
+  --radius-button-sm: 10px;
+  --radius-button-default: 12px;
+  --radius-button-lg: 14px;
+  --radius-bottom-nav: 28px; /* top corners of the floating tab bar */
+}
+
+/* ==========================================================================
+   BOUNTY — Elevation / shadow tokens
+   Translated from lib/theme.ts `shadows` (React Native shadow* props) to CSS
+   box-shadow equivalents. `--shadow-emerald` is the signature glow used on
+   primary CTAs and the active bottom-nav GPS button.
+   ========================================================================== */
+
+:root {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.18);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.2);
+  --shadow-emerald: 0 0 12px rgba(0, 145, 44, 0.35);
+  --shadow-card-dark: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-card-light: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================================
+   BOUNTY — Webfonts
+   SpaceMono is the ONLY custom font file the app ships (assets/fonts in the
+   source repo); it is used sparingly for tabular/code-style moments. Material
+   Icons is loaded from Google Fonts CDN to match the app's icon system
+   (@expo/vector-icons MaterialIcons) — see ICONOGRAPHY in readme.md.
+   ========================================================================== */
+
+@font-face {
+  font-family: "Bounty Mono";
+  src: url("a3275389-1664-40a2-9b84-a834a4986fbc") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* fallback */
+@font-face {
+  font-family: 'Material Icons';
+  font-style: normal;
+  font-weight: 400;
+  src: url("9c06b75a-80d8-43f8-9208-c9f9432aa2a1") format('woff2');
+}
+
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+
+</style>
+  <script src="59ec8a21-9da7-4755-ad1b-14daa081276c"></script>
+  <style>body{margin:0;background:#E8E0D6;-webkit-font-smoothing:antialiased;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif} a{color:#00701F;font-weight:700} a:hover{color:#008e2a} :root{--p-bg:#F4EFE8;--p-card:#FFFFFF;--p-ink:#31363F;--p-ink2:#585E69;--p-line:#E2DBD1;--p-chip:#EAE3D9;--p-g:#008e2a;--p-gt:#00701F;--p-gpill:#00701F;--p-gpillfg:#FFFFFF;--p-gtint:#E3F3EA;--p-w:#C98A3A;--p-wt:#7A4F14;--p-wtint:#F7EAD6;--p-e:#C24A42;--p-etint:#F6E0DE;--p-it:#2C5597;--p-itint:#E1E9F5;--p-dt:#43449E;--p-dtint:#E5E5F6;--p-ft:#653A99;--p-ftint:#EEE6F7;--p-photo:#d7cbbd;--p-scrim:rgba(20,22,26,.5)}</style>
+</helmet>
+
+<section data-screen-label="Intro" style="padding:72px 72px 0;color:#31363F;display:flex;flex-direction:column;gap:18px;max-width:1200px">
+  <div style="display:flex;align-items:center;gap:10px;font-size:20px;font-weight:800;letter-spacing:1px"><span style="font-family:'Material Icons';font-weight:400;font-size:28px;line-height:1;color:#18a772">gps_fixed</span>BOUNTY · Focus-first poster experience</div>
+  <h1 style="margin:0;font-size:60px;line-height:1.02;font-weight:800;letter-spacing:-1.5px">One bounty at a time</h1>
+  <p style="margin:0;font-size:21px;line-height:1.5;color:#585E69;max-width:980px;text-wrap:pretty">My Jobs shows the single job that needs you most, as the whole screen. Tapping it opens that job's workspace, which always answers the same four questions (what's happening, what it means, what's next, what happens after) and keeps <b>one</b> next step pinned under your thumb. Other jobs are one tap away in a light switcher, never a dashboard. Poster side only. Sample people and amounts are illustrative.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px 18px;font-size:16px"><a href="#scenario">1 The scenario</a><a href="#switch">2 Switching jobs</a><a href="#stages">3 Other stages and help</a><a href="#edge">4 Empty, errors, delays</a><span style="color:#9A938A">|</span><a href="Focus%2002%20System%20and%20Handoff.dc.html">Diagrams, components, handoff</a></div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:14px;font-weight:700;padding-top:4px"><span style="color:#585E69">Backend tags on every screen:</span><span style="background:#E2F0E4;color:#00701F;border-radius:6px;padding:3px 8px">Verified · exists in code</span><span style="background:#E1E9F5;color:#2C5597;border-radius:6px;padding:3px 8px">Proposed UI · client only</span><span style="background:#EEE6F7;color:#653A99;border-radius:6px;padding:3px 8px">New eng · backend work</span><span style="background:#F7EAD6;color:#7A4F14;border-radius:6px;padding:3px 8px">Ops / policy · decision needed</span></div>
+</section>
+
+<section id="scenario" data-screen-label="1 Scenario" style="padding:88px 72px 0;color:#31363F;display:flex;flex-direction:column;gap:28px">
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><div style="font-size:15px;font-weight:800;color:#00701F;letter-spacing:.6px">1 · THE FINAL DESIGN TEST, END TO END</div><h2 style="margin:0;font-size:44px;font-weight:800;letter-spacing:-.6px">A homeowner gets one job done</h2><p style="margin:0;font-size:19px;line-height:1.5;color:#585E69">Read left to right. Each phone is the next thing they see; the line above it says what they tapped. The same job header and five-step bar stay on every workspace screen, so it always feels like one bounty moving forward.</p></div>
+  <div style="display:flex;flex-wrap:wrap;gap:44px 36px;align-items:flex-start">
+    <sc-for list="{{ scenario }}" as="s" hint-placeholder-count="6">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:10px;align-items:center;min-height:44px;width:406px"><span style="width:36px;height:36px;flex-shrink:0;border-radius:50%;background:#008e2a;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800">{{ s.n }}</span><span style="font-size:16px;line-height:1.35;font-weight:700">{{ s.tap }}</span></div><dc-import name="PosterPhone" p="{{ s.p }}" hint-size="406px,1300px"></dc-import>
+        
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section id="switch" data-screen-label="2 Switching" style="padding:88px 72px 0;color:#31363F;display:flex;flex-direction:column;gap:28px">
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><div style="font-size:15px;font-weight:800;color:#00701F;letter-spacing:.6px">2 · OTHER BOUNTIES</div><h2 style="margin:0;font-size:44px;font-weight:800;letter-spacing:-.6px">Switching without a dashboard</h2><p style="margin:0;font-size:19px;line-height:1.5;color:#585E69">The switcher is a sheet over My Jobs: one line per job, a "Needs you" marker in words, the current job ticked. Picking a job makes it the featured job and remembers that choice until something more urgent happens.</p></div>
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start"><sc-for list="{{ switching }}" as="p" hint-placeholder-count="2"><dc-import name="PosterPhone" p="{{ p }}" hint-size="406px,1200px"></dc-import></sc-for></div>
+</section>
+
+<section id="stages" data-screen-label="3 Other stages" style="padding:88px 72px 0;color:#31363F;display:flex;flex-direction:column;gap:28px">
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><div style="font-size:15px;font-weight:800;color:#00701F;letter-spacing:.6px">3 · STAGES A, B AND J</div><h2 style="margin:0;font-size:44px;font-weight:800;letter-spacing:-.6px">Before anyone offers, and when something goes wrong</h2></div>
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start"><sc-for list="{{ stages }}" as="p" hint-placeholder-count="4"><dc-import name="PosterPhone" p="{{ p }}" hint-size="406px,1200px"></dc-import></sc-for></div>
+</section>
+
+<section id="edge" data-screen-label="4 Edge states" style="padding:88px 72px 140px;color:#31363F;display:flex;flex-direction:column;gap:28px">
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><div style="font-size:15px;font-weight:800;color:#00701F;letter-spacing:.6px">4 · EMPTY, ERROR, DELAYED, SUPPORT</div><h2 style="margin:0;font-size:44px;font-weight:800;letter-spacing:-.6px">When there's nothing yet, or things are slow</h2></div>
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start"><sc-for list="{{ edge }}" as="p" hint-placeholder-count="4"><dc-import name="PosterPhone" p="{{ p }}" hint-size="406px,1100px"></dc-import></sc-for></div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const B = (t, o) => Object.assign({ t }, o || {});
+    const JOB = 'Clear old furniture out of my garage';
+    const TAB = B('tabbar', { active: 'My jobs' });
+    const WH = (step, stage) => B('whead', { title: JOB, meta: '$60 · Posted Monday', step, stage, picon: 'chair' });
+    const MORE = (open) => B('more', { open, items: [['edit', 'Edit job details'], ['delete_outline', 'Take this job down', 'e']] });
+    const HELD = "Your $60 is with Bounty. Nobody is paid until you approve.";
+    const UNPAID = "You haven't paid anything yet. You only pay when you choose someone.";
+    const P = (id, num, label, route, layer, o) => Object.assign({ id, num, label, route, layer }, o);
+
+    const overview = P('f-1', 'F.1', 'My Jobs · the job that needs you', 'My jobs tab (focus view)', 'MVP + E', {
+      blocks: [B('fhead', { title: 'My Jobs', intro: "Here's the job that needs you today." }),
+        B('feature', { state: 'attn', photo: 'Your photo of the garage', kicker: 'Posted Monday · $60', title: JOB, sicon: 'groups', status: '3 people want to help', explain: 'See who they are, then choose one person. You only pay when you choose.', sofar: 'Posted Monday · first offer Tuesday · newest this morning', action: 'Review the 3 people' }),
+        B('switch', { text: '2 other jobs', attn: 'Lee sent you a message', thumbs: ['yard', 'door_front'] }), B('btn', { kind: 'text', icon: 'add', label: 'Post another job' })],
+      foot: [TAB],
+      spec: { goal: 'See the one job that needs me and act on it.', primary: 'Review the 3 people', secondary: ['Switch (other jobs)', 'Post another job'], info: 'Which job; what is happening; why it matters; one next step; that nothing is paid yet.', flow: 'App launch, tab, or notification → workspace at stage C',
+        backend: [['V', 'Posted jobs + state from resolveBountyLifecycle'], ['V', 'Pending offer count (getAllWithDetailsBatch)'], ['P', 'Featured-job rule (see priority diagram)'], ['P', '"So far" line from bounty events'], ['E', 'Job photo as hero (post photos exist; thumbnail field to confirm)']],
+        verify: ['Featured rule needs engineering validation', 'Fallback to a category icon when there is no photo'] } });
+
+    const scenario = [
+      { n: '1', tap: 'Opens Bounty. One job needs her.', p: overview },
+      { n: '2', tap: 'Taps "Review the 3 people"', p: P('f-c', 'C', 'Workspace · offers received', '/postings/[jobId] (workspace)', 'MVP', {
+        blocks: [WH(2, 'Step 2 of 5 · Choosing someone to help'), B('qa', { now: '3 people want to help.', means: 'Each one read your job and offered to do it for $60. Look at each person, then choose one.', money: UNPAID, mkind: 'none', after: 'You agree a time with the person you chose.' }),
+          B('peoplestrip', { label: 'WHO OFFERED', items: [['AR', 'Ada'], ['PS', 'Priya'], ['ST', 'Sam']] }), B('p', { text: "Offers close after 3 days if you don't answer.", muted: true, small: true }), MORE(false)],
+        foot: [B('btn', { kind: 'primary', label: 'See each person' })],
+        spec: { goal: 'Understand who is interested.', primary: 'See each person', secondary: ['Tap a face to jump to that person', 'Other options (edit, take down)', 'Help'], info: 'How many offered; price; that nothing is paid; offers expire.', flow: 'F.1 → D (person 1)', backend: [['V', 'Pending requests + profiles (getAllWithDetails)'], ['V', 'Offer expiry 72h / 168h'], ['V', 'Edit locked once anyone offers (canEditTerms)'], ['P', 'Four-question layout over the resolver copy']], verify: ['Show an "open until" date per person? (Q-PRD-5)'] } }) },
+      { n: '3', tap: 'Taps "See each person"', p: P('f-d', 'D', 'Choosing a person · 1 of 3', '/postings/[jobId] · person view', 'MVP', {
+        blocks: [WH(2, 'Step 2 of 5 · Person 1 of 3'), B('peoplestrip', { label: 'WHO OFFERED', items: [['AR', 'Ada', true], ['PS', 'Priya'], ['ST', 'Sam']] }),
+          B('applicant', { initials: 'AR', name: 'Ada R.', since: 'On Bounty since March 2025', note: '"I have a van and can take everything to the recycling centre in one trip. Saturday morning works."', facts: [['verified_user', 'Bounty checked her photo ID'], ['star', '4.8 out of 5 from 12 reviews'], ['task_alt', '14 jobs done on Bounty'], ['place', 'About 2 miles away']] }),
+          B('btn2', { a: 'Ask Ada a question', b: 'Next person ›' })],
+        foot: [B('btn', { kind: 'primary', label: 'Choose Ada' }), B('btn', { kind: 'muted', label: 'Not this time' })],
+        spec: { goal: 'Decide whether Ada is right.', primary: 'Choose Ada', secondary: ['Next / previous person (buttons, no swipe)', 'Ask a question', 'Not this time'], info: 'Who; their note; only trust facts we have.', flow: 'C → E (choose) · chat (ask) · next person', backend: [['V', 'ID badge only when verified; "Not ID-checked" for in-home tiers'], ['V', 'Rating hidden below 3 ratings'], ['V', 'Distance from distance_mi'], ['P', 'One-person-at-a-time view']], verify: ['ID-check wording with Trust & Safety (Q-PRD-8)', 'People with missing facts show "No reviews yet" / "Distance not shown"'] } }) },
+      { n: '4', tap: 'Taps "Choose Ada"', p: P('f-e', 'E', 'Hiring confirmation', 'AcceptFundingGate (restyled)', 'MVP', { bg: 'card', fixed: true,
+        blocks: [B('nav', { back: 'Back to Ada' }), B('title', { h: 'Choose Ada for $60?', size: 'xl' }),
+          B('list3', { label: 'WHAT HAPPENS WHEN YOU CHOOSE ADA', items: [['payments', 'You pay $60 now', '$15 from your Bounty balance and $45 from your card.'], ['lock', 'Bounty holds it', 'Ada is paid only after you say the job is done.'], ['mark_email_read', "Priya's and Sam's offers close", 'Your job stops taking new offers.'], ['chat', 'You and Ada agree a time', 'In your messages.']] }),
+          B('p', { text: 'No fees for you.', muted: true, small: true })],
+        foot: [B('btn', { kind: 'primary', label: 'Pay $45 and choose Ada' }), B('btn', { kind: 'text', label: 'Use another card or Apple Pay' }), B('btn', { kind: 'neutral', label: 'Not yet' })],
+        spec: { goal: 'Know exactly what choosing Ada does, then do it.', primary: 'Pay $45 and choose Ada', secondary: ['Use another card', 'Not yet'], info: 'Amount and where it comes from; hold; what happens to others; next step.', flow: 'D → F (same workspace, success toast). Failure stays here.', backend: [['V', 'Balance/card split, failures, pending (useAcceptFunding)'], ['V', 'Accept + escrow in one transaction'], ['E', 'Confirm others are declined and told (Q-ENG-1)']], verify: ['Hire-failed-after-charge copy (Q-PAY-5)'] } }) },
+      { n: '4b', tap: 'Alternative to 4: quick confirm sheet with countdown', p: P('f-e2', 'E.2', 'Hiring confirmation · quick confirm', 'AcceptFundingGate (restyled)', 'MVP + ops', {
+        blocks: [B('payhero', { initials: 'AR', name: 'Ada R.', sub: '4.8 · 14 jobs · about 2 miles away', h: '230px' }),
+          B('paysheet', { title: 'Choosing Ada…', rows: [['chair', JOB, 'Ada does it for $60'], ['lock', 'Bounty holds your $60', 'Ada is paid only after you say the job is done.'], ['mark_email_read', "Priya's and Sam's offers close", 'Your job stops taking new offers.'], ['credit_card', 'Balance $15 · Visa ••••4242 $45', '', 'Change']], note: 'No fees for you. You agree a time with Ada next.', cta: 'Looks good (0:07)', pct: '24%', back: 'Go back' })],
+        spec: { goal: 'Confirm the hire at a glance; it goes through on its own unless she goes back.', primary: 'Looks good (confirms now; auto-confirms at 0:00)', secondary: ['Change payment', 'Go back (cancels, nothing charged)'], info: 'Who; what she gets; the hold; others close; where the money comes from.', flow: 'D → F on confirm or timeout · Go back → D', backend: [['V', 'Balance/card split, failures, pending (useAcceptFunding)'], ['V', 'Accept + escrow in one transaction'], ['P', '7-second countdown, cancellable client-side before the charge'], ['O', 'Auto-confirming a payment on timeout needs policy sign-off']], verify: ['Countdown pauses if the app goes to background', 'Screen readers: no auto-confirm; button only'] } }) },
+      { n: '5', tap: 'Payment goes through. Back in the same workspace.', p: P('f-f', 'F', 'Agree on a time', '/postings/[jobId] · stage 3', 'MVP + E', {
+        blocks: [WH(3, 'Step 3 of 5 · Agreeing a time'), B('toast', { icon: 'check_circle', text: "You chose Ada. She's your helper now." }),
+          B('qa', { now: 'Agree on a time with Ada.', means: "Ada needs to know when to come. Pick what suits you and we'll send it to her as a message.", money: HELD, mkind: 'held' }),
+          B('picks', { label: 'When suits you?', items: [['Saturday morning', true], ['Sunday morning'], ['A weekday'], ['Something else']] }),
+          B('box', { tone: 'bg', icon: 'chat_bubble_outline', text: '"Hi Ada, Saturday morning suits me. What time works for you?"' })],
+        foot: [B('btn', { kind: 'primary', label: 'Send to Ada' }), B('btn', { kind: 'text', label: 'Write my own message' })],
+        spec: { goal: 'Get a day agreed without typing much.', primary: 'Send to Ada', secondary: ['Write my own message', 'Help'], info: 'Who to talk to; that money is held; a starting message.', flow: 'E → chat thread (message sent) → back to workspace G', backend: [['V', 'Bounty thread messaging'], ['P', 'Picks build a pre-filled message (not a booking)'], ['E', 'Storing an agreed time, reminders, "upcoming" state']], verify: ['Hire success fires the toast only after acceptRequest resolves'] } }) },
+      { n: '6', tap: 'Ada replies in messages. Next time she opens the job:', p: P('f-g', 'G', 'Work underway', '/postings/[jobId] · stage 4', 'MVP', {
+        blocks: [WH(4, 'Step 4 of 5 · Work underway'), B('qa', { now: 'Ada is working on your job.', means: "She'll let you know here when it's done. You don't need to do anything until then.", money: HELD, mkind: 'held', after: 'You review her work and decide about payment.' }),
+          B('box', { tone: 'n', icon: 'format_quote', title: "Ada's last message · yesterday 6:40 pm", text: '"Saturday at 9 is perfect. See you then!"' }), B('story', { items: [['Monday', 'You posted the job'], ['Tuesday', 'You chose Ada and paid $60 into Bounty'], ['Yesterday', 'You and Ada agreed Saturday in messages']] })],
+        foot: [B('btn', { kind: 'quiet', icon: 'chat_bubble_outline', label: 'Message Ada' })],
+        spec: { goal: 'Feel confident the work is happening.', primary: 'Message Ada (quiet: nothing is required)', secondary: ['Help'], info: 'Who; latest word from her; what comes next.', flow: 'Notification / My Jobs → G → chat', backend: [['V', 'Latest message from the helper (conversation query)'], ['V', 'Hire time (bounty_events or request updated_at)'], ['E', 'Showing an agreed time as data (today: her words, quoted)']], verify: ['Cheapest last-message source (Q-ENG-3)'] } }) },
+      { n: '7', tap: 'Notification: "Ada says the job is done"', p: P('f-h', 'H', 'Work submitted', '/postings/[jobId] · stage 4', 'MVP', {
+        blocks: [WH(4, 'Step 4 of 5 · Reviewing the work'), B('qa', { now: 'Ada says the job is done.', means: 'She sent a note and 3 photos. Look at them, and check the garage yourself if you can.', money: HELD, mkind: 'held', after: 'You decide whether to approve and pay.' }),
+          B('photos', { cols: 3, h: '104px', items: [['Empty garage'], ['Swept floor'], ['Receipt', 'receipt_long']] })],
+        foot: [B('btn', { kind: 'primary', label: 'Review the completed work' })],
+        spec: { goal: 'Know the work is ready to check.', primary: 'Review the completed work', secondary: ['Message Ada', 'Help'], info: 'That she claims done; proof exists; money still held.', flow: 'Notification → H → I', backend: [['V', 'completion_submissions (pending) + proof_items'], ['V', 'Realtime submission update'], ['O', 'No review deadline shown (feature flag off; no auto-release)']], verify: [] } }) },
+      { n: '8', tap: 'Taps "Review the completed work"', p: P('f-i', 'I', 'Completion and payment decision', 'PosterReviewModal (restyled)', 'MVP', { fixed: true,
+        blocks: [B('nav', { back: 'Back to the job' }), B('title', { h: 'Is the job finished?', size: 'xl' }), B('box', { tone: 'n', title: "Ada's note", text: '"All four pieces are gone and I swept the floor. The receipt is in the photos."' }),
+          B('photos', { cols: 2, h: '120px', items: [['Empty garage'], ['Swept floor']] }),
+          B('list3', { label: 'IF YOU APPROVE', items: [['lock_open', 'Your $60 is released to Ada', 'It goes to her Bounty balance.'], ['block', "This can't be undone", 'Only approve if the job is finished.']] })],
+        foot: [B('btn', { kind: 'primary', label: 'Approve and pay Ada $60' }), B('btn', { kind: 'secondary', label: "Something isn't finished" })],
+        spec: { goal: 'Make the payment decision knowingly.', primary: 'Approve and pay Ada $60', secondary: ["Something isn't finished (request changes)", 'Help → report a problem'], info: 'Proof; exact consequence; irreversibility.', flow: 'H → I → confirm (I.2) → J-done', backend: [['V', 'PosterReviewModal + approveAndRelease (unchanged)'], ['V', 'Request changes (completionService)'], ['P', 'Tap confirm instead of slide']], verify: ['Proof photos open from all entry points (Q-ENG-7)'] } }) },
+      { n: '9', tap: 'Taps "Approve and pay Ada $60"', p: P('f-i2', 'I.2', 'Confirm (cannot be undone)', 'PosterReviewModal confirm step', 'MVP', {
+        blocks: [B('title', { h: 'Is the job finished?', size: 'xl' })],
+        overlay: { type: 'dialog', blocks: [B('title', { h: 'Pay Ada $60?' }), B('p', { text: "Only approve if the job is finished. This can't be undone." }), B('btn', { kind: 'primary', label: 'Yes, pay Ada $60' }), B('btn', { kind: 'neutral', label: 'Go back' })] },
+        spec: { goal: 'One deliberate final check.', primary: 'Yes, pay Ada $60', secondary: ['Go back'], info: 'Amount, person, irreversibility.', flow: 'I → done', backend: [['V', 'Existing irreversible confirmation copy']], verify: [] } }) },
+      { n: '10', tap: 'Payment released. Same workspace, last step.', p: P('f-done', 'I.3', 'Finished · released to Ada', '/postings/[jobId] · stage 5', 'MVP', {
+        blocks: [WH(5, 'Step 5 of 5 · Finished'), B('qa', { now: 'Done. Released to Ada.', means: 'Ada received your $60 in Bounty. Your job is finished.', money: 'Released to Ada on Saturday. No fees for you.', mkind: 'released' }), B('h2', { text: 'How did Ada do? (optional)' }), B('stars', { sel: 5 })],
+        foot: [B('btn', { kind: 'primary', label: 'Send rating' }), B('btn', { kind: 'text', label: 'Skip and go to My Jobs' })],
+        spec: { goal: 'Know it is over, and optionally rate.', primary: 'Send rating', secondary: ['Skip and go to My Jobs'], info: 'Released, not "paid to bank"; it is finished.', flow: 'I.2 → here → My Jobs (F.end)', backend: [['V', 'Release; settlement vocabulary ("Paid" reserved for bank)'], ['V', 'Rating (PosterReviewModal / RateCounterpartyCard)']], verify: ['"Released" vs "Paid" headline (Q-PAY-4)'] } }) },
+      { n: '11', tap: 'Back to My Jobs: this job is finished.', p: P('f-end', 'F.end', 'My Jobs · just finished', 'My jobs tab (focus view)', 'MVP', {
+        blocks: [B('fhead', { title: 'My Jobs', intro: 'Nothing needs you right now.' }),
+          B('feature', { state: 'done', photo: 'Your photo of the garage', kicker: 'Finished Saturday · $60', title: JOB, sicon: 'check_circle', status: 'Finished', explain: 'Released to Ada on Saturday. Thanks for getting it done with Bounty.', sofar: 'Posted Monday · Ada chosen Tuesday · finished Saturday', action: 'See the summary' }),
+          B('switch', { text: '2 other jobs · nothing needs you', thumbs: ['yard', 'door_front'] }), B('btn', { kind: 'text', icon: 'add', label: 'Post another job' })],
+        foot: [TAB],
+        spec: { goal: 'See the result; know nothing else is waiting.', primary: 'See the summary (receipt)', secondary: ['Switch', 'Post another job'], info: 'That it is finished, and when.', flow: 'Done → here. Stays featured this visit, then the rule picks next.', backend: [['V', 'completed state'], ['P', '"Just finished" stays featured for this visit']], verify: ['How long a finished job may stay featured (proposal: 7 days if nothing else needs you)'] } }) },
+    ];
+
+    const switching = [
+      P('f-sel', 'S.1', 'Switcher sheet', 'Sheet over My Jobs', 'MVP', { blocks: [B('fhead', { title: 'My Jobs' })],
+        overlay: { type: 'sheet', blocks: [B('sheethead', { title: 'Your jobs' }), B('p', { text: 'Showing the job that needs you most. Pick another to see it instead.', muted: true }),
+          B('selrow', { current: true, attn: true, picon: 'chair', title: JOB, status: '3 people want to help' }), B('selrow', { attn: true, picon: 'door_front', title: 'Fix a sticking kitchen door', status: 'Lee sent you a message' }), B('selrow', { picon: 'yard', title: 'Rake leaves in the back garden', status: 'Waiting for offers' }),
+          B('btn', { kind: 'secondary', icon: 'add', label: 'Post another job' })] },
+        spec: { goal: 'Get to another job in one tap.', primary: 'Tap a job', secondary: ['Post another job', 'Close'], info: 'Name, one-line status, "Needs you" in words.', flow: 'F.1 "Switch" → sheet → F.1 with that job featured', backend: [['V', 'Same data as My Jobs'], ['P', 'Sheet, sort = priority rule'], ['P', 'Remember manual pick until something more urgent happens']], verify: ['Finished jobs older than the window move to Profile › Past jobs'] } }),
+      P('f-sw2', 'S.2', 'After picking the kitchen door', 'My jobs tab (focus view)', 'MVP', {
+        blocks: [B('fhead', { title: 'My Jobs', intro: 'You picked this job.' }),
+          B('feature', { state: 'attn', flagText: 'New message', picon: 'door_front', photo: 'Your photo of the door', kicker: 'Lee is your helper · $45', title: 'Fix a sticking kitchen door', sicon: 'chat_bubble_outline', status: 'Lee sent you a message', explain: '"I can come Thursday after 4. Does that work?"', sofar: 'Posted last week · Lee chosen Sunday', action: 'Reply to Lee' }),
+          B('switch', { text: '2 other jobs', attn: '1 needs you', thumbs: ['chair', 'yard'] })], foot: [TAB],
+        spec: { goal: 'Work on the job I chose.', primary: 'Reply to Lee', secondary: ['Switch back'], info: 'Same pattern, different job.', flow: 'S.1 → here → chat or workspace', backend: [['V', 'Unread message per conversation'], ['P', 'Manual pick persists across launches']], verify: [] } }),
+    ];
+
+    const stages = [
+      P('f-a', 'A', 'Newly published', '/postings/[jobId] · stage 1', 'MVP', {
+        blocks: [WH(1, 'Step 1 of 5 · Finding someone'), B('toast', { icon: 'check_circle', text: 'Your job is posted.' }), B('qa', { now: 'Your job is live.', means: "People nearby can see it now. When someone offers to help, we'll send you a notification and show them here.", money: UNPAID, mkind: 'none', after: 'You choose one person to help.' }), MORE(false)],
+        foot: [B('btn', { kind: 'primary', label: 'Done' })],
+        spec: { goal: 'Know it worked and what happens next.', primary: 'Done (back to My Jobs)', secondary: ['Other options', 'Help'], info: 'Live; who sees it; that nothing is paid.', flow: 'Post composer → A → My Jobs', backend: [['V', 'open state; at_accept funding (nothing charged)'], ['P', 'Replaces post celebration + "add details" with stage A']], verify: [] } }),
+      P('f-b', 'B', 'Waiting for offers', '/postings/[jobId] · stage 1', 'MVP', {
+        blocks: [WH(1, 'Step 1 of 5 · Finding someone'), B('qa', { now: 'No one has offered yet.', means: "It's been 2 days. A clear photo and a few details can help people decide.", money: UNPAID, mkind: 'none', after: "We'll tell you as soon as someone offers." }), MORE(true)],
+        foot: [B('btn', { kind: 'primary', label: 'Add a photo or details' }), B('btn', { kind: 'text', label: 'Keep waiting' })],
+        spec: { goal: 'Know it is still open and whether to do anything.', primary: 'Add a photo or details', secondary: ['Keep waiting', 'Take this job down'], info: 'How long; nobody yet; nothing paid.', flow: 'My Jobs → B → edit', backend: [['V', 'EditPostingModal (allowed until someone offers)'], ['P', 'Nudge after N days']], verify: ['When to show the nudge (proposal: 48 h)'] } }),
+      P('f-j1', 'J', 'Get help with this job', 'Help sheet over workspace', 'MVP + ops', { blocks: [WH(4, 'Step 4 of 5 · Work underway')],
+        overlay: { type: 'sheet', blocks: [B('sheethead', { title: "What's going on?" }), B('p', { text: 'Ada is working on it · $60 held by Bounty', muted: true }),
+          B('options', { items: [['chat_bubble_outline', 'Message Ada', 'g'], ['person_off', "Ada hasn't replied or didn't come", 'w'], ['assignment_late', "The job isn't finished", 'w'], ['help_outline', 'Something else is wrong', 'i']] })] },
+        spec: { goal: 'Get help without hunting.', primary: 'Pick what is wrong', secondary: ['Talk to a person at Bounty'], info: 'Only options for this stage.', flow: 'Help (any stage) → report screen (reason preselected) or support form', backend: [['V', 'Dispute screen with ?reason='], ['V', 'Contact support form (Settings)'], ['E', 'Support form as a route with the job attached'], ['O', 'Phone staffing, reply time']], verify: ['Q-OPS-1, Q-OPS-2'] } }),
+      P('f-j2', 'J.2', 'Bounty is looking into it', '/postings/[jobId] · paused', 'MVP + ops', {
+        blocks: [WH(4, 'Paused · Bounty is reviewing'), B('qa', { now: 'Bounty is looking into it.', means: "You told us Ada didn't come. A person at Bounty is reviewing it and may contact Ada.", money: 'Nobody is paid while Bounty looks into it. If money comes back to you: {refund destination}, within {timeframe}.', mkind: 'ph', after: "We'll reply by email within {reply time}." })],
+        foot: [B('btn', { kind: 'quiet', label: 'See your report' })],
+        spec: { goal: 'Know someone is on it, and what is known about money.', primary: 'See your report', secondary: ['Add more information', 'Help'], info: 'Paused; nobody paid; what is not decided yet.', flow: 'Report → J.2 → /dispute/[id]', backend: [['V', 'Dispute overlay pauses everything'], ['O', 'Refund destination, timing (Q-PAY-1, Q-PAY-3)'], ['O', 'Reply time (Q-OPS-2)']], verify: [] } }),
+      P('f-j3', 'J.3', 'Ada asked to cancel', '/postings/[jobId] → cancellation-response', 'MVP', {
+        blocks: [WH(4, 'Step 4 of 5 · Ada asked to cancel'), B('qa', { now: 'Ada asked to cancel.', means: 'Her van broke down. She offers to return all $60 to your Bounty balance. If you accept, the job ends.', money: 'If you accept: $60 back to your Bounty balance.', mkind: 'held', after: 'You can post the job again.' })],
+        foot: [B('btn', { kind: 'primary', label: "Respond to Ada's request" })],
+        spec: { goal: 'Decide on her request.', primary: "Respond to Ada's request", secondary: ['Message Ada', 'Help'], info: 'Reason; refund % and where it goes.', flow: 'Notification → J.3 → cancellation-response', backend: [['V', 'Hunter-only cancellation request; refund % to balance'], ['O', 'Getting balance back to a card (Q-PAY-2)']], verify: [] } }),
+      P('f-j4', 'J.4', 'Take this job down (nobody chosen)', 'Other options → cancelAndRefundBounty', 'MVP', { blocks: [WH(1, 'Step 1 of 5 · Finding someone')],
+        overlay: { type: 'dialog', blocks: [B('title', { h: 'Take this job down?' }), B('p', { text: "It will be removed, along with any offers. This can't be undone.", muted: true }), B('money', { kind: 'none', text: "You haven't been charged, so there's nothing to refund." }), B('btn', { kind: 'danger', label: 'Yes, take it down' }), B('btn', { kind: 'neutral', label: 'Keep my job' })] },
+        spec: { goal: 'End a job I no longer need, safely.', primary: 'Yes, take it down', secondary: ['Keep my job'], info: 'What disappears; money truth by case.', flow: 'Other options → dialog → My Jobs (toast)', backend: [['V', 'planCancelRefund / describeCancelRefund'], ['V', 'Hard delete; offers removed'], ['E', 'Notify people who offered; undo (Q-PRD-4)']], verify: ['After hiring there is no self-cancel: route via Help (Q-PRD-3)'] } }),
+    ];
+
+    const edge = [
+      P('f-0', 'E.0', 'No posted jobs yet', 'My jobs tab', 'MVP', {
+        blocks: [B('fhead', { title: 'My Jobs', intro: "Tell us what you need done. We'll help you find someone nearby." }), B('hero', { tone: 'g', icon: 'add_task', h: 'Nothing posted yet', p: 'Your first job will appear here, with one clear next step at a time.' }),
+          B('list3', { label: 'HOW IT WORKS', items: [['edit_note', 'Describe the job and your price'], ['groups', 'People nearby offer to help'], ['handshake', 'Choose one. You pay only when you choose.']] })],
+        foot: [B('btn', { kind: 'primary', icon: 'add', label: 'Post your first job' }), TAB],
+        spec: { goal: 'Understand what this space is for.', primary: 'Post your first job', secondary: [], info: 'Three-step promise, truthful about payment.', flow: 'Tab → composer', backend: [['V', 'at_accept funding']], verify: [] } }),
+      P('f-x1', 'E.1', "Couldn't load My Jobs", 'My jobs tab', 'MVP', {
+        blocks: [B('fhead', { title: 'My Jobs' }), B('box', { tone: 'e', icon: 'wifi_off', title: "We couldn't load your jobs", text: 'Check your internet connection and try again.', text2: 'Nothing about your jobs has changed.' })],
+        foot: [B('btn', { kind: 'primary', icon: 'refresh', label: 'Try again' }), TAB],
+        spec: { goal: 'Recover without worry.', primary: 'Try again', secondary: [], info: 'What failed; that nothing changed.', flow: 'Retry → F.1', backend: [['V', 'ErrorBanner / offline banner']], verify: [] } }),
+      P('f-x2', 'E.2', "Haven't heard from Ada", '/postings/[jobId] · stage 4', 'MVP + ops', {
+        blocks: [WH(4, 'Step 4 of 5 · Work underway'), B('qa', { now: "You haven't heard from Ada.", means: "She hasn't replied since Friday. People are sometimes just busy. Message her, or tell us and we'll help.", money: HELD, mkind: 'held' }), B('box', { tone: 'ph', text: 'Appears {after N hours of silence}: threshold not decided (Q-PRD-2).' })],
+        foot: [B('btn', { kind: 'primary', label: 'Message Ada' }), B('btn', { kind: 'text', label: "Tell us Ada hasn't replied" })],
+        spec: { goal: 'Act on silence early.', primary: 'Message Ada', secondary: ["Tell us Ada hasn't replied (report, reason preset)"], info: 'How long; reassurance; route to help.', flow: 'Featured automatically → E.2 → chat or report', backend: [['V', 'Per-sender last message'], ['P', 'Silence trigger'], ['O', 'Threshold (Q-PRD-2)']], verify: [] } }),
+      P('f-x3', 'E.3', 'Payment still confirming', '/postings/[jobId] · stage 2', 'MVP', {
+        blocks: [WH(2, 'Step 2 of 5 · Choosing someone'), B('qa', { now: "We're still confirming your payment.", means: "Please don't pay again. Ada isn't your helper until it's confirmed. We'll tell you as soon as it is.", money: 'Your card payment is being confirmed. We check before any other charge.', mkind: 'warn' })],
+        foot: [B('btn', { kind: 'quiet', label: 'Back to My Jobs' })],
+        spec: { goal: 'Not pay twice; know what to expect.', primary: 'Back to My Jobs', secondary: ['Help'], info: 'Pending; not hired yet; we will notify.', flow: 'E (pending) → here', backend: [['V', 'Gate pending stage + reconciliation'], ['E', 'Allow leaving while pending (disabled today)']], verify: ['Notification on confirmation exists? (verify)'] } }),
+    ];
+    return { scenario, switching, stages, edge };
+  }
+}
+</script>
+
+
+<div id="__claude_design_branding"><style>#__claude_design_branding{position:fixed;right:16px;bottom:16px;z-index:2147483646;display:flex;align-items:center;gap:7px;height:30px;padding:0 5px 0 10px;border-radius:999px;font-family:"Anthropic Sans",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:12.5px;font-weight:400;line-height:1;letter-spacing:normal;text-transform:none;color:#141413;background:rgba(255,255,255,.86);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 0 0 .5px rgba(31,30,29,.14),0 2px 10px rgba(0,0,0,.09)}
+#__claude_design_branding *{box-sizing:border-box;margin:0}
+#__claude_design_branding a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+#__claude_design_branding a:hover span{text-decoration:underline}
+#__claude_design_branding svg{flex:none}
+#__claude_design_branding a svg{color:#D97757}
+#__claude_design_branding button{width:20px;height:20px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:currentColor;opacity:.55;border:0;background:none;cursor:pointer;flex:none;font:inherit;transition:opacity .14s}
+#__claude_design_branding button:hover{opacity:1;background:rgba(127,127,127,.22)}
+@media print{#__claude_design_branding{display:none}}</style><a href="https://claude.com/product/design" target="_blank" rel="noopener noreferrer"><svg width="14" height="14" viewBox="0 0 20 21" fill="none" aria-hidden="true"><path fill="currentColor" d="M9.99902 0C15.5258 0.000170936 19.999 4.50643 19.999 10.0547C19.999 11.7656 19.5863 12.9976 18.7861 13.8203C17.9924 14.6362 16.9465 14.9138 15.9854 15.0078C15.05 15.0993 14.0097 15.0262 13.2549 15.0186C12.8524 15.0145 12.5177 15.0267 12.2441 15.0703C11.9682 15.1144 11.8143 15.1813 11.7305 15.2432C11.4745 15.4322 11.3353 15.7121 11.2656 16.1602C11.2303 16.3875 11.2168 16.6362 11.209 16.9131C11.2017 17.1715 11.1986 17.4893 11.1807 17.7705C11.1469 18.2975 11.0495 19.0865 10.4199 19.5908C9.7846 20.0996 8.88652 20.1057 7.85449 19.877C7.36399 19.7682 6.88652 19.6232 6.42578 19.4453C2.66989 17.9949 0.000187748 14.3414 0 10.0547C0 4.50643 4.47223 0.000171048 9.99902 0ZM9.99902 1.60547C5.36781 1.60564 1.60547 5.38391 1.60547 10.0547C1.60566 13.6582 3.84823 16.7296 7.00391 17.9482C7.39027 18.0974 7.79085 18.2184 8.20215 18.3096C9.1375 18.5169 9.384 18.3633 9.41602 18.3379C9.4524 18.3087 9.54558 18.1915 9.5791 17.668C9.5947 17.4239 9.59473 17.1786 9.60352 16.8672C9.61179 16.5742 9.62831 16.2435 9.67969 15.9131C9.78359 15.2455 10.0474 14.4906 10.7764 13.9521C11.1479 13.6778 11.5842 13.5493 11.9912 13.4844C12.4007 13.4191 12.8434 13.4088 13.2705 13.4131C14.1753 13.4222 15.0071 13.4905 15.8291 13.4102C16.6257 13.3322 17.2249 13.1235 17.6357 12.7012C18.0401 12.2855 18.3935 11.5261 18.3936 10.0547C18.3936 5.38391 14.6302 1.60564 9.99902 1.60547ZM5.11621 9.86719C5.86386 9.91468 6.45486 10.5348 6.45508 11.2939C6.45506 12.0838 5.81519 12.7245 5.02539 12.7246C4.28481 12.7246 3.67573 12.1617 3.60254 11.4404L3.59473 11.2939L3.60156 11.1533C3.66942 10.4596 4.23282 9.91186 4.93359 9.86719H5.11621ZM14.9814 7.19141C15.729 7.23889 16.3199 7.85919 16.3203 8.61816C16.3203 9.40801 15.6804 10.0487 14.8906 10.0488C14.1501 10.0487 13.5409 9.48586 13.4678 8.76465L13.46 8.61816L13.4668 8.47754C13.5348 7.78403 14.0983 7.23618 14.7988 7.19141H14.9814ZM6.4541 4.93457C7.20161 4.9822 7.79275 5.60231 7.79297 6.36133C7.79288 7.151 7.15291 7.7917 6.36328 7.79199C5.62274 7.79199 5.01369 7.22903 4.94043 6.50781L4.93262 6.36133L4.93945 6.2207C5.00731 5.52698 5.5707 4.97922 6.27148 4.93457H6.4541ZM11.3867 3.59668C12.1343 3.64419 12.7253 4.26436 12.7256 5.02344C12.7256 5.81326 12.0857 6.45393 11.2959 6.4541C10.5553 6.4541 9.94622 5.89123 9.87305 5.16992L9.86523 5.02344L9.87207 4.88281C9.93996 4.18912 10.5033 3.64133 11.2041 3.59668H11.3867Z"></path></svg><span>Made with Claude Design</span></a><button type="button" aria-label="Dismiss" onclick="this.parentElement.remove()"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></button></div></body></html>
