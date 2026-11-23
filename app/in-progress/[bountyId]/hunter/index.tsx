@@ -149,6 +149,8 @@ export default function HunterFlowIndex() {
           onPress: async () => {
             setBusyAction('withdraw');
             try {
+              // TODO(E): a withdrawn offer is deleted, so "Your offers" can't list
+              // it (S.2), and the poster isn't told (S.3).
               await withdrawApplication({ bountyId: routeBountyId, currentUserId: currentUserId ?? undefined, surface: 'hunter_detail' });
               router.replace(MY_JOBS_ROUTE as never);
             } catch (err: any) {

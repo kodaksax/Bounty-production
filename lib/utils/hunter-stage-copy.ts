@@ -14,9 +14,12 @@
  *
  * Copy is the handoff's with live names and amounts. Gaps, recorded in the PR:
  *  - DESIGN-GAP: "We'll tell you either way" (H.3) is left out: no notification is sent
- *    when the poster chooses someone else.
+ *    when the poster chooses someone else. TODO(E): a declined notification;
+ *    and "has seen your offer" stays hidden while application_viewed is
+ *    analytics only.
  *  - DESIGN-GAP: "You're mounting Jordan's TV today" (H.7) becomes "You're doing
  *    {Poster}'s job": the verb is job-specific and no agreed day is stored.
+ *    TODO(E): store the agreed time and reminders (H.5, H.7).
  *  - DESIGN-GAP: pronouns in sample copy become names.
  */
 import { FOCUS_POLICY, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy';

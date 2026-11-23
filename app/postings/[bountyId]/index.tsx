@@ -934,6 +934,7 @@ export default function BountyDashboard() {
     }));
   // DESIGN-GAP: bounty_events is admin-only (RLS), so "the story so far" is
   // rebuilt from this job's own timestamps (posted, chosen), not an event log.
+  // TODO(E): a participant-readable event log for the full story.
   const story: { when: string; what: string }[] = [];
   const postedDay = formatJobDay(bounty.created_at);
   if (postedDay) story.push({ when: capitalizeDay(postedDay), what: 'You posted the job' });
@@ -1185,6 +1186,7 @@ async function readOpenJobMoney(
  * - nothing charged: the handoff's copy, "You haven't been charged, so
  *   there's nothing to refund."
  * The plan it confirms, and so what happens, is the same either way.
+ * TODO(E) Q-PRD-4: tell the people who offered, and an undo (J.4).
  */
 function describeTakeDown(
   bounty: Pick<Bounty, 'is_for_honor'>,

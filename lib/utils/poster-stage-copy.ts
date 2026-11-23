@@ -106,7 +106,11 @@ export function posterHeldLine(amount: string): string {
   return `Your ${amount} is with Bounty. Nobody is paid until you approve.`;
 }
 
-/** The handoff's quick picks for stage F (the hunter's H.5 has its own). */
+/**
+ * The handoff's quick picks for stage F (the hunter's H.5 has its own).
+ * TODO(E): store the agreed time and send reminders (F, G); today a pick is
+ * only a pre-filled chat message, never a booking.
+ */
 export const POSTER_TIME_PICKS = ['Saturday morning', 'Sunday morning', 'A weekday', 'Something else'] as const;
 
 /**
@@ -573,6 +577,8 @@ export function describeHire(input: HireCopyInput) {
     items: [
       { icon: 'payments', title: `You pay ${amount} now`, detail: source },
       { icon: 'lock', title: 'Bounty holds it', detail: `${first} is paid only after you say the job is done.` },
+      // TODO(E) Q-ENG-1: confirm the other offers are declined and the people
+      // told when someone is chosen; this line only says their offers close.
       { icon: 'mark-email-read', title: othersCloseLine(input.otherApplicantNames ?? []), detail: 'Your job stops taking new offers.' },
       { icon: 'chat', title: `You and ${first} agree a time`, detail: 'In your messages.' },
     ],

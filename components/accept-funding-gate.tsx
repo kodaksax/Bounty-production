@@ -427,6 +427,8 @@ export function AcceptFundingGate({ gate, otherApplicantNames }: AcceptFundingGa
             </View>
           )}
 
+          {/* TODO(E): allow leaving while a payment is confirming (E.3); the
+              gate keeps the poster here until the server confirms. */}
           {paymentPending && (
             <View style={styles.pending} accessibilityRole="alert" accessibilityLiveRegion="polite" testID="hire-payment-pending">
               <Text style={styles.pendingNow}>{hire.pending.now}</Text>

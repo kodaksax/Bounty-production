@@ -27,6 +27,7 @@
  *    bounty status: resolved disputes end completed or cancelled and show here;
  *  - take-home is today's fee (calculateHunterEarnings), the same figure the
  *    receipt shows; a job done under an older fee isn't re-read per job.
+ * TODO(E): one list across both sides, and the fee actually charged per job.
  */
 import { calculateHunterEarnings } from '../constants/fees';
 import type { Bounty } from '../services/database.types';
