@@ -37,7 +37,7 @@ describe('ApplicationPitchModal required-pitch gate', () => {
   it('lets a too-short apply tap through: no submit, a blocked event, an inline reason', () => {
     const { props, getByText, queryByText } = renderModal();
 
-    fireEvent.press(getByText('Apply — earn $180.00'));
+    fireEvent.press(getByText('Send offer'));
 
     expect(props.onSubmit).not.toHaveBeenCalled();
     expect(props.onPitchSubmitted).not.toHaveBeenCalled();
@@ -50,7 +50,7 @@ describe('ApplicationPitchModal required-pitch gate', () => {
     const { props, getByLabelText, getByText } = renderModal();
 
     fireEvent.changeText(getByLabelText('Application pitch'), pitch);
-    fireEvent.press(getByText('Apply — earn $180.00'));
+    fireEvent.press(getByText('Send offer'));
 
     expect(props.onPitchBlocked).not.toHaveBeenCalled();
     expect(props.onPitchSubmitted).toHaveBeenCalledWith(pitch);
@@ -60,7 +60,7 @@ describe('ApplicationPitchModal required-pitch gate', () => {
   it('clears the inline error once the pitch becomes long enough', () => {
     const { getByLabelText, getByText, queryByText } = renderModal();
 
-    fireEvent.press(getByText('Apply — earn $180.00'));
+    fireEvent.press(getByText('Send offer'));
     expect(queryByText(/Write at least/)).toBeTruthy();
 
     fireEvent.changeText(getByLabelText('Application pitch'), 'x'.repeat(PITCH_REQUIRED_MIN_LENGTH));
@@ -70,7 +70,7 @@ describe('ApplicationPitchModal required-pitch gate', () => {
   it('announces the blocked-tap reason to screen readers on both platforms', () => {
     const { getByText } = renderModal();
 
-    fireEvent.press(getByText('Apply — earn $180.00'));
+    fireEvent.press(getByText('Send offer'));
 
     const errorText = getByText(/Write at least/);
     // accessibilityLiveRegion alone only announces on Android; accessibilityRole
@@ -87,7 +87,7 @@ describe('ApplicationPitchModal optional pitch', () => {
     // No required counter on a low-amount bounty.
     expect(queryByText(`0/${PITCH_REQUIRED_MIN_LENGTH}`)).toBeNull();
 
-    fireEvent.press(getByText('Apply — earn $180.00'));
+    fireEvent.press(getByText('Send offer'));
     expect(props.onPitchBlocked).not.toHaveBeenCalled();
     expect(props.onSubmit).toHaveBeenCalledWith(null);
   });

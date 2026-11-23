@@ -709,6 +709,20 @@ export default function BountyDashboard() {
     ]
   );
 
+  // The lifecycle's support action: the real support form (not
+  // /tabs/need-help-screen, which is the Post-a-Bounty composer), with this
+  // job attached. Help's "Talk to a person at Bounty" lands here.
+  const lifecycleHandlers = useMemo(
+    () => ({
+      contact_support: () =>
+        router.push({
+          pathname: '/support/contact',
+          params: { bountyId: routeBountyId, bountyTitle: bounty?.title ?? '' },
+        } as never),
+    }),
+    [router, routeBountyId, bounty?.title]
+  );
+
   const onHelpOption = useCallback(
     (option: HelpOptionSpec) => {
       if (!bounty || !routeBountyId) return;
@@ -721,10 +735,10 @@ export default function BountyDashboard() {
           router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId, ...(option.reason ? { reason: option.reason } : {}) } } as never);
           return;
         default:
-          router.push({ pathname: '/support/contact', params: { bountyId: routeBountyId, bountyTitle: bounty.title ?? '' } } as never);
+          lifecycleHandlers.contact_support();
       }
     },
-    [bounty, routeBountyId, openThread, helperId, router]
+    [bounty, routeBountyId, openThread, helperId, router, lifecycleHandlers]
   );
 
   // ── States ────────────────────────────────────────────────────────────────
