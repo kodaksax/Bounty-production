@@ -64,6 +64,36 @@ function signature(job: MyJob): string {
   return `${job.key}:${job.rank}`;
 }
 
+/** `outranking` back into key → rank. Keys contain ':' ("posted:123"), so split on the last one. */
+function knownRanks(pick: ManualPick): Map<string, number> {
+  const ranks = new Map<string, number>();
+  for (const entry of pick.outranking) {
+    const at = entry.lastIndexOf(':');
+    if (at <= 0) continue;
+    const rank = Number(entry.slice(at + 1));
+    if (Number.isFinite(rank)) ranks.set(entry.slice(0, at), rank);
+  }
+  return ranks;
+}
+
+/**
+ * Whether `job` should take the featured slot back from a manual pick: it
+ * needs the user, it ranks above the pick, and that urgency is new since the
+ * pick — the job wasn't outranking it then, or it has escalated since. A job
+ * that was already more urgent and has since calmed down (say "chose you" →
+ * working on it) never takes the slot, and neither does one that merely
+ * ranks above the pick without needing the user.
+ *
+ * Extends #1012's rule ("only something new that ranks higher") with the
+ * Focus-first poster handoff's "until something more urgent happens": the
+ * order itself (JOB_RANK) is unchanged.
+ */
+function takesSlotBack(job: MyJob, picked: MyJob, known: Map<string, number>): boolean {
+  if (job.key === picked.key || !job.needsYou || job.rank >= picked.rank) return false;
+  const rankAtPick = known.get(job.key);
+  return rankAtPick === undefined || job.rank < rankAtPick;
+}
+
 export function createManualPick(jobs: readonly MyJob[], key: string): ManualPick | null {
   const picked = jobs.find((j) => j.key === key);
   if (!picked) return null;
@@ -91,11 +121,8 @@ export function pickFeaturedJob(
   if (manualPick) {
     const picked = jobs.find((j) => j.key === manualPick.key);
     if (picked) {
-      const known = new Set(manualPick.outranking);
-      const somethingNewOutranks = jobs.some(
-        (j) => j.key !== picked.key && j.rank < picked.rank && !known.has(signature(j))
-      );
-      if (!somethingNewOutranks) return { job: picked, reason: 'manual' };
+      const known = knownRanks(manualPick);
+      if (!jobs.some((j) => takesSlotBack(j, picked, known))) return { job: picked, reason: 'manual' };
     }
   }
   const auto = jobs.find((j) => canAutoFeature(j, now));

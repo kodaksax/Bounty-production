@@ -99,6 +99,38 @@ describe('pickFeaturedJob', () => {
     expect(pickFeaturedJob(calmer, pick, NOW)).toEqual({ job: leaves, reason: 'manual' });
   });
 
+  it('a job that calms down but still outranks the pick does not take it back', () => {
+    const pick = createManualPick(jobs, 'leaves');
+    // garage was rank 3 (offers) at pick time and is now 5 (work happening):
+    // still above the pick, but less urgent than before, and nothing needs the user.
+    const calmerButAbove = sortJobs([leaves, door, job('garage', JOB_RANK.working)]);
+    expect(pickFeaturedJob(calmerButAbove, pick, NOW)).toEqual({ job: leaves, reason: 'manual' });
+  });
+
+  it('a new job that outranks the pick but does not need the user does not take it back', () => {
+    const pick = createManualPick(jobs, 'leaves');
+    const working = sortJobs([...jobs, job('tv', JOB_RANK.working)]);
+    expect(pickFeaturedJob(working, pick, NOW)).toEqual({ job: leaves, reason: 'manual' });
+  });
+
+  it('a known job escalating into a needs-you state does take it back', () => {
+    // door was a message (4) at pick time; work submitted for review (2) is new urgency.
+    const pick = createManualPick(jobs, 'leaves');
+    const escalated = sortJobs([leaves, garage, job('door', JOB_RANK.waitingOnYou)]);
+    expect(pickFeaturedJob(escalated, pick, NOW)?.job.key).toBe('door');
+  });
+
+  it('reads picks stored by the earlier rule (keys with colons)', () => {
+    const posted = job('posted:b1', JOB_RANK.newOffers);
+    const doing = job('doing:b2', JOB_RANK.waiting);
+    const all = sortJobs([posted, doing]);
+    const pick = createManualPick(all, 'doing:b2');
+    expect(pick).toEqual({ key: 'doing:b2', outranking: ['posted:b1:3'] });
+    expect(pickFeaturedJob(all, pick, NOW)).toEqual({ job: doing, reason: 'manual' });
+    const escalated = sortJobs([doing, job('posted:b1', JOB_RANK.waitingOnYou)]);
+    expect(pickFeaturedJob(escalated, pick, NOW)?.job.key).toBe('posted:b1');
+  });
+
   it('falls back to the automatic choice when the pick is gone', () => {
     expect(pickFeaturedJob(jobs, { key: 'deleted', outranking: [] }, NOW)?.reason).toBe('auto');
   });

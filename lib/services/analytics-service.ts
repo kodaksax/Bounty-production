@@ -531,6 +531,18 @@ export type AnalyticsEvent =
   // views. Fired from hooks/useApplicationListViews.ts and
   // hooks/useApplicationDecisionVisit.ts.
   | 'application_viewed'
+  // Focus-first My Jobs and job workspaces (both sides). Additive; nothing
+  // is retired. `featured_job_viewed`: the job My Jobs features changed while
+  // the tab is showing (once per job per visit; `reason` auto|manual).
+  // `job_switcher_opened`: the "Switch" sheet opened. `job_switched`: a job
+  // was picked there. `workspace_primary_tapped`: the pinned next step on a
+  // job workspace was tapped (`screen_id` = the handoff's id, e.g. "C",
+  // "H.7"; `action` = the action key). Fired from app/tabs/my-jobs-screen.tsx
+  // and lib/services/focus-analytics.ts.
+  | 'featured_job_viewed'
+  | 'job_switcher_opened'
+  | 'job_switched'
+  | 'workspace_primary_tapped'
   // The POSTER opened a pending application in the bounty thread and left
   // (`trigger`: 'leave' = back/unmount, 'background' = app backgrounded)
   // without accepting, passing or messaging. `dwell_ms` = time on it, to the

@@ -29,6 +29,7 @@ import { OtherJobsBar } from '../../components/my-jobs/other-jobs-bar'
 import { YourOffersSheet } from '../../components/my-jobs/your-offers-sheet'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { BrandingLogo } from '../../components/ui/branding-logo'
+import { PosterButton } from '../../components/poster/poster-button'
 import { PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { useFeaturedJobPick } from '../../hooks/useFeaturedJobPick'
 import { useJobManagement } from '../../hooks/useJobManagement'
@@ -44,11 +45,14 @@ import {
 } from '../../lib/my-jobs/featured-job'
 import type { ManageAction } from '../../lib/my-jobs/manage-actions'
 import { getJobManageActions } from '../../lib/my-jobs/manage-actions'
+import { rememberWorksBothSides } from '../../lib/my-jobs/side-labels-store'
 import type { JobTarget, MyJob, MyOffer } from '../../lib/my-jobs/types'
 import { inboxSegmentForLink } from '../../lib/navigation/bounty-app-tab'
 import { ROUTES } from '../../lib/routes'
+import { trackFeaturedJobViewed, trackJobSwitched, trackJobSwitcherOpened } from '../../lib/services/focus-analytics'
 import type { BountyRequestWithDetails } from '../../lib/services/bounty-request-service'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
+import { FOCUS } from '../../lib/themes/poster-palette'
 import type { AppTheme } from '../../lib/themes/types'
 
 export interface MyJobsScreenProps {
@@ -95,6 +99,10 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   const others = useMemo(() => jobs.filter((j) => j.key !== featuredJob?.key), [jobs, featuredJob])
   const offerGroups = useMemo(() => groupOffers(offers), [offers])
   const showSideLabels = useMemo(() => shouldShowSideLabels(jobs, offers), [jobs, offers])
+  // The job workspaces label sides only for two-sided accounts, like this tab.
+  useEffect(() => {
+    if (!loading) rememberWorksBothSides(userId, showSideLabels)
+  }, [loading, userId, showSideLabels])
   const allPending = useMemo(() => Array.from(applicantsByBounty.values()).flat(), [applicantsByBounty])
 
   // ── Navigation ──────────────────────────────────────────────────────────
@@ -144,11 +152,34 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   // ── Switching jobs ──────────────────────────────────────────────────────
   const pickJob = React.useCallback(
     (job: MyJob) => {
+      trackJobSwitched(job, featuredJob?.bountyId ?? null)
       setPick(createManualPick(jobs, job.key))
       setSheet(null)
     },
-    [jobs, setPick]
+    [jobs, setPick, featuredJob]
   )
+
+  // featured_job_viewed: once per job each time the tab is showing.
+  const viewedKeysRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!isActive) {
+      viewedKeysRef.current = new Set()
+      return
+    }
+    if (!featured || loading) return
+    if (viewedKeysRef.current.has(featured.job.key)) return
+    viewedKeysRef.current.add(featured.job.key)
+    trackFeaturedJobViewed(featured.job, featured.reason)
+  }, [featured, isActive, loading])
+
+  const openSwitcher = React.useCallback(() => {
+    if (jobs.length > 0) {
+      trackJobSwitcherOpened(jobs.length, offers.length)
+      setSheet({ kind: 'switcher' })
+    } else {
+      setSheet({ kind: 'offers' })
+    }
+  }, [jobs.length, offers.length])
 
   const runManageAction = React.useCallback(
     (action: ManageAction, job: MyJob) => {
@@ -232,13 +263,10 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
             others={others}
             waitingOffers={offerGroups.waiting.length}
             // With no jobs at all, the bar is the "Your offers" row.
-            onSwitch={() => setSheet(jobs.length > 0 ? { kind: 'switcher' } : { kind: 'offers' })}
+            onSwitch={openSwitcher}
           />
         ) : null}
-        <TouchableOpacity onPress={postJob} style={s.postAnother} accessibilityRole="button" accessibilityLabel="Post another job">
-          <MaterialIcons name="add" size={22} color={theme.primaryLight} />
-          <Text style={s.postAnotherText}>Post another job</Text>
-        </TouchableOpacity>
+        <PosterButton kind="text" icon="add" label="Post another job" onPress={postJob} testID="my-jobs-post-another" />
       </>
     )
   }
@@ -391,8 +419,9 @@ function makeStyles(t: AppTheme) {
     },
     headerBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700', lineHeight: 12 },
     content: { paddingHorizontal: 16, gap: 14 },
-    title: { color: t.text, fontSize: 36, fontWeight: '800', letterSpacing: -0.5 },
-    subtitle: { color: t.textSecondary, fontSize: 17, lineHeight: 24, marginTop: -8 },
+    // Handoff block `fhead`: 38pt title, 18pt intro.
+    title: { color: t.poster.ink, fontSize: FOCUS.screenTitle, fontWeight: '800', letterSpacing: -1, lineHeight: 42 },
+    subtitle: { color: t.poster.ink2, fontSize: 18, lineHeight: 26, marginTop: -8 },
     errorBox: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -402,13 +431,5 @@ function makeStyles(t: AppTheme) {
       padding: 12,
     },
     errorText: { flex: 1, color: t.errorText, fontSize: 14 },
-    postAnother: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      minHeight: 52,
-    },
-    postAnotherText: { color: t.primaryLight, fontSize: 17, fontWeight: '800' },
   })
 }
