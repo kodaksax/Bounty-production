@@ -88,7 +88,7 @@ export function YourOffersSheet({ visible, offers, onClose, onBack, onWithdraw, 
     >
       {offers.length === 0 ? (
         <View style={s.empty}>
-          <Text style={s.detail}>You haven't offered to do any jobs yet.</Text>
+          <Text style={s.detail}>{"You haven't offered to do any jobs yet."}</Text>
           <TouchableOpacity onPress={onFindWork} style={s.action} accessibilityRole="button">
             <Text style={s.actionText}>Find work nearby</Text>
           </TouchableOpacity>

@@ -48,7 +48,7 @@ export function MoneyLine({
   kind,
   text,
   variant = 'inline',
-  testID = 'money-line',
+  testID,
 }: {
   kind: MoneyKind;
   text: string;
@@ -62,7 +62,7 @@ export function MoneyLine({
 
   if (variant === 'card') {
     return (
-      <View style={s.moneyCard} testID={testID} accessibilityLabel={`Your money. ${text}`}>
+      <View style={s.moneyCard} testID={testID ?? 'money-line'} accessibilityLabel={`Your money. ${text}`}>
         <MaterialIcons name={look.icon} size={22} color={look.iconColor} />
         <View style={s.moneyCardText}>
           <Text style={s.moneyCardLabel}>Your money</Text>
@@ -78,9 +78,11 @@ export function MoneyLine({
         s.moneyInline,
         { backgroundColor: look.bg, borderColor: look.border, borderStyle: look.dashed ? 'dashed' : 'solid' },
       ]}
-      testID={testID}
+      testID={testID ?? 'money-line'}
       accessible
       accessibilityLabel={`Your money. ${text}`}
+      // "Checking your payment…" changing to the answer is announced.
+      accessibilityLiveRegion="polite"
     >
       <MaterialIcons name={look.icon} size={20} color={look.iconColor} style={s.moneyIcon} />
       <Text style={s.moneyText}>
@@ -96,9 +98,11 @@ export interface FourQuestionsProps {
   means: string;
   money?: { kind: MoneyKind; text: string } | null;
   after?: string | null;
+  /** testID for the money row (screens keep their existing ones). */
+  moneyTestID?: string;
 }
 
-export function FourQuestions({ now, means, money, after }: FourQuestionsProps) {
+export function FourQuestions({ now, means, money, after, moneyTestID }: FourQuestionsProps) {
   const { theme } = useAppThemeContext();
   const p = theme.poster;
   const s = useMemo(() => makeStyles(p), [p]);
@@ -117,7 +121,7 @@ export function FourQuestions({ now, means, money, after }: FourQuestionsProps) 
           {means}
         </Text>
       </View>
-      {money ? <MoneyLine kind={money.kind} text={money.text} /> : null}
+      {money ? <MoneyLine kind={money.kind} text={money.text} testID={moneyTestID} /> : null}
       {after ? (
         <View style={s.after} testID="qa-after">
           <MaterialIcons name="subdirectory-arrow-right" size={20} color={p.ink2} style={s.moneyIcon} />

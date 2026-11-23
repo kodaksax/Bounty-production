@@ -27,6 +27,8 @@ import type { AppTheme } from '../lib/themes/types';
 import type { Attachment } from '../lib/types';
 import { getCurrentUserId } from '../lib/utils/data-utils';
 import { useWallet } from '../lib/wallet-context';
+import { ConsequenceList, FlowTitle } from './poster/blocks';
+import { firstName, formatJobAmount } from '../lib/my-jobs/format';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { RatingStars } from './ui/rating-stars';
@@ -59,6 +61,11 @@ interface PosterReviewModalProps {
    * approve/payout step, so it cannot release anything.
    */
   startOnRating?: boolean;
+  /**
+   * Stars already chosen on the workspace (stage I.3). Only prefills the
+   * rating step's stars; the poster still sends the review from here.
+   */
+  initialRating?: number;
   onClose: () => void;
   onComplete: () => void;
 }
@@ -72,6 +79,7 @@ export function PosterReviewModal({
   isForHonor,
   architecture,
   startOnRating = false,
+  initialRating,
   onClose,
   onComplete,
 }: PosterReviewModalProps) {
@@ -126,12 +134,15 @@ export function PosterReviewModal({
 
   const displayHunterName = hunterProfile?.username || hunterName || submission?.hunter_id || 'Hunter';
 
-  // Approve-and-pay copy. A for-honor job moves no money, so it never says "pay".
-  const payPrimaryLabel = isForHonor ? 'Approve and mark complete' : `Approve and pay ${formattedPayoutAmount}`;
+  // Approve-and-pay copy (Focus-first I / I.2). A for-honor job moves no
+  // money, so it never says "pay". Amounts drop whole cents, as in the design.
+  const shortAmount = formatJobAmount(bountyAmount);
+  const helperFirst = firstName(displayHunterName) ?? displayHunterName;
+  const payPrimaryLabel = isForHonor ? 'Approve and mark complete' : `Approve and pay ${helperFirst} ${shortAmount}`;
   const payConfirmQuestion = isForHonor
-    ? `Mark this job complete for ${displayHunterName}?`
-    : `Pay ${displayHunterName} ${formattedPayoutAmount}?`;
-  const payYesLabel = isForHonor ? 'Yes, mark complete' : `Yes, pay ${formattedPayoutAmount}`;
+    ? `Mark this job complete for ${helperFirst}?`
+    : `Pay ${helperFirst} ${shortAmount}?`;
+  const payYesLabel = isForHonor ? 'Yes, mark complete' : `Yes, pay ${helperFirst} ${shortAmount}`;
   const payBusyLabel = isForHonor ? 'Marking complete' : 'Sending payment';
 
   useEffect(() => {
@@ -220,6 +231,12 @@ export function PosterReviewModal({
   useEffect(() => {
     if (visible && startOnRating) setShowRatingForm(true);
   }, [visible, startOnRating]);
+
+  useEffect(() => {
+    if (visible && startOnRating && initialRating && initialRating >= 1 && initialRating <= 5) {
+      setRating(initialRating);
+    }
+  }, [visible, startOnRating, initialRating]);
 
   useEffect(() => {
     if (showRatingForm && !ratingPromptLoggedRef.current) {
@@ -631,23 +648,26 @@ export function PosterReviewModal({
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <View style={s.payoutWarningContainer}>
-                <View style={s.warningIcon}>
-                  <MaterialIcons name="warning" size={28} color={theme.warningText} />
-                </View>
-                <Text style={s.warningTitle}>Complete and release payment?</Text>
-                <Text style={s.warningDescription}>
-                  {isForHonor
-                    ? 'Completing this bounty will mark the work as finished for honor and alert the hunter.'
-                    : `This will mark the bounty as completed and release ${formattedPayoutAmount} to ${displayHunterName}.`}
-                </Text>
-                {!isForHonor && bountyAmount > 0 && (
-                  <View style={s.warningAmountChip}>
-                    <MaterialIcons name="account-balance-wallet" size={16} color={theme.warningText} />
-                    <Text style={s.warningAmountText}>{formattedPayoutAmount} escrow release</Text>
-                  </View>
-                )}
-                <Text style={s.warningFootnote}>Once you continue, this action cannot be undone.</Text>
+              <View style={s.focusApprove} testID="approve-consequences">
+                <FlowTitle title="Is the job finished?" />
+                <ConsequenceList
+                  label="IF YOU APPROVE"
+                  items={
+                    isForHonor
+                      ? [
+                          { icon: 'check-circle', title: 'The job is marked finished', detail: 'It was for honor, so no money moves.' },
+                          { icon: 'block', title: "This can't be undone", detail: 'Only approve if the job is finished.' },
+                        ]
+                      : [
+                          {
+                            icon: 'lock-open',
+                            title: `Your ${shortAmount} is released to ${helperFirst}`,
+                            detail: `It goes to ${helperFirst}'s Bounty balance.`,
+                          },
+                          { icon: 'block', title: "This can't be undone", detail: 'Only approve if the job is finished.' },
+                        ]
+                  }
+                />
               </View>
 
               {/* Two steps, both plain buttons: "Approve and pay $X" only opens
@@ -676,7 +696,7 @@ export function PosterReviewModal({
                   >
                     {payConfirmQuestion}
                   </Text>
-                  <Text style={s.payConfirmBody}>{"Once you approve, this can't be undone."}</Text>
+                  <Text style={s.payConfirmBody}>{"Only approve if the job is finished. This can't be undone."}</Text>
                   <TouchableOpacity
                     accessibilityRole="button"
                     style={[s.payPrimaryButton, isProcessing && s.buttonDisabled]}
@@ -698,12 +718,12 @@ export function PosterReviewModal({
                     style={[s.payNotYetButton, isProcessing && s.buttonDisabled]}
                     onPress={() => setShowPayConfirm(false)}
                     disabled={isProcessing}
-                    accessibilityLabel="Not yet"
+                    accessibilityLabel="Go back"
                     accessibilityHint="Goes back without paying anything."
                     accessibilityState={{ disabled: isProcessing }}
                     testID="approve-pay-not-yet"
                   >
-                    <Text style={s.payNotYetText}>Not yet</Text>
+                    <Text style={s.payNotYetText}>Go back</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -711,11 +731,14 @@ export function PosterReviewModal({
               <View style={s.warningActions}>
                 <TouchableOpacity accessibilityRole="button"
                   style={[s.warningCancelButton, isProcessing && s.buttonDisabled]}
-                  onPress={() => { setShowPayConfirm(false); setShowPayoutWarning(false); }}
+                  onPress={() => { setShowPayConfirm(false); setShowPayoutWarning(false); setShowRevisionForm(true); }}
                   disabled={isProcessing}
+                  accessibilityLabel="Something isn't finished"
+                  accessibilityHint="Ask for a change instead of approving."
+                  testID="approve-something-unfinished"
                 >
-                  <MaterialIcons name="arrow-back" size={18} color={theme.textSecondary} />
-                  <Text style={s.warningCancelText}>Back to review</Text>
+                  <MaterialIcons name="edit-note" size={18} color={theme.textSecondary} />
+                  <Text style={s.warningCancelText}>{"Something isn't finished"}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -1277,6 +1300,7 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.primary,
       ...EMERALD_SHADOW,
     },
+    focusApprove: { gap: 18, marginBottom: 20 },
     payConfirmCard: {
       alignSelf: 'stretch',
       gap: 12,

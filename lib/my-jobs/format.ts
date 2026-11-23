@@ -2,9 +2,10 @@
  * Small, pure formatting helpers for My Jobs copy. Kept separate so the copy
  * builders read as sentences rather than string plumbing.
  */
-export { getBountyCategoryIcon, getBountyCoverUri } from '../utils/bounty-cover';
 import type { IconName, MyJob } from './types';
 import { JOB_RANK } from './types';
+
+export { getBountyCategoryIcon, getBountyCoverUri } from '../utils/bounty-cover';
 
 /** "$60", "$60.50", "For honor". Whole amounts drop the cents, as in the design. */
 export function formatJobAmount(amount: number | null | undefined, isForHonor?: boolean | null): string {

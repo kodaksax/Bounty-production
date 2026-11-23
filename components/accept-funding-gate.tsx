@@ -33,6 +33,8 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { ErrorBanner } from 'components/error-banner';
+import { ConsequenceList, FlowTitle } from 'components/poster/blocks';
+import { MoneyLine } from 'components/poster/four-questions';
 import { PaymentMethodsModal } from 'components/payment-methods-modal';
 import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
 import { TrustSafetyNotice } from 'components/ui/trust-safety-notice';
@@ -47,6 +49,7 @@ import { trustSafetyStrings } from 'lib/strings/trust-safety';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
+import { describeHire } from 'lib/utils/poster-stage-copy';
 import { describePaymentFailure } from 'lib/utils/payment-failure-message';
 import type { DepositResult } from 'hooks/use-wallet-deposit';
 import React, { useMemo } from 'react';
@@ -64,6 +67,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface AcceptFundingGateProps {
   gate: AcceptFundingGateState;
+  /**
+   * The other people who offered, for "Priya's and Sam's offers close"
+   * (Focus-first screen E). Without them the line says "Other offers close".
+   */
+  otherApplicantNames?: readonly string[];
 }
 
 /**
@@ -123,7 +131,7 @@ function getGateMetrics(width: number, usableHeight: number) {
 
 type GateMetrics = ReturnType<typeof getGateMetrics>;
 
-export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
+export function AcceptFundingGate({ gate, otherApplicantNames }: AcceptFundingGateProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -259,6 +267,16 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   // --- Copy ----------------------------------------------------------------
   const money = (n: number) => `$${n.toFixed(2)}`;
   const initial = gate.hunterName.trim().charAt(0).toUpperCase() || '?';
+  // Focus-first screen E (and E.3 while a payment confirms). Copy only: every
+  // amount below is the gate's own (useAcceptFunding's requirement).
+  const hire = describeHire({
+    hunterName: gate.hunterName,
+    amount,
+    charge: needsPayment ? chargeAmount : 0,
+    fromBalance: needsPayment ? Math.max(0, amount - chargeAmount) : amount,
+    paysByCard: hasPaymentMethod,
+    otherApplicantNames,
+  });
 
   let primaryLabel: string;
   let primaryA11y: string;
@@ -269,7 +287,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     primaryLabel = 'Confirming payment…';
     primaryA11y = 'Confirming your payment';
   } else if (!needsPayment) {
-    primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : 'Confirm & hire';
+    primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : hire.primary;
     primaryA11y = showPaymentPromise
       ? paymentPromiseStrings.fundAndHireA11y(gate.hunterName)
       : `Confirm and hire ${gate.hunterName} for ${amount.toFixed(2)} dollars`;
@@ -283,9 +301,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     primaryLabel = 'Processing…';
     primaryA11y = 'Processing payment';
   } else {
-    primaryLabel = showPaymentPromise
-      ? paymentPromiseStrings.fundAndHire
-      : `Pay ${money(chargeAmount)} & hire`;
+    primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : hire.primary;
     primaryA11y = showPaymentPromise
       ? paymentPromiseStrings.fundAndHireA11y(gate.hunterName)
       : `Pay ${chargeAmount.toFixed(2)} dollars and hire ${gate.hunterName}`;
@@ -350,6 +366,26 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
           showsVerticalScrollIndicator={false}
         >
         <View style={styles.info}>
+          {showPaymentPromise ? null : (
+            <View style={styles.focusHead} testID="hire-confirmation">
+              <FlowTitle title={hire.title} />
+              <ConsequenceList
+                label={hire.label}
+                items={hire.items.map((item) => ({ ...item, icon: item.icon as never }))}
+              />
+              <View style={styles.heldRow}>
+                <MaterialIcons name="lock-outline" size={16} color={theme.textSecondary} />
+                <Text style={styles.heldText}>
+                  {gate.requirement?.fundingMode === 'at_accept'
+                    ? trustSafetyStrings.payWhenYouHire
+                    : 'Held for in-app completion or dispute review'}
+                </Text>
+              </View>
+              <Text style={styles.noFees}>{hire.note}</Text>
+            </View>
+          )}
+          {showPaymentPromise ? (
+          <>
           <Text style={styles.eyebrow}>{needsPayment ? 'PAY & HIRE' : 'HIRE'}</Text>
 
           <View style={styles.hunterRow}>
@@ -363,11 +399,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
               <Text style={styles.title} accessibilityRole="header">
                 {gate.hunterName}
               </Text>
-              {showPaymentPromise ? null : (
-                <Text style={styles.subtitle}>Bounty reward {money(amount)}</Text>
-              )}
             </View>
           </View>
+          </>
+          ) : null}
 
           {showPaymentPromise ? (
             <View style={styles.promiseCard} testID="payment-promise-summary">
@@ -379,27 +414,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
               </Text>
               <Text style={styles.promiseHold}>{paymentPromiseStrings.fundingHold}</Text>
             </View>
-          ) : (
-            <View style={styles.card}>
-              <Text
-                style={styles.amount}
-                accessibilityLabel={`${(needsPayment ? chargeAmount : amount).toFixed(2)} dollars`}
-              >
-                {money(needsPayment ? chargeAmount : amount)}
-              </Text>
-              <Text style={styles.amountCaption}>
-                {needsPayment ? 'charged to your card now' : 'from your wallet balance'}
-              </Text>
-              <View style={styles.heldRow}>
-                <MaterialIcons name="lock-outline" size={16} color={theme.textSecondary} />
-                <Text style={styles.heldText}>
-                  {gate.requirement?.fundingMode === 'at_accept'
-                    ? trustSafetyStrings.payWhenYouHire
-                    : 'Held for in-app completion or dispute review'}
-                </Text>
-              </View>
-            </View>
-          )}
+          ) : null}
 
           {gate.remainderAfterDeposit && (
             <View style={styles.notice} accessibilityRole="alert">
@@ -411,12 +426,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
           )}
 
           {paymentPending && (
-            <View style={styles.notice} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              <MaterialIcons name="info-outline" size={18} color={theme.primary} />
-              <Text style={styles.noticeText}>
-                Your payment is still being confirmed. Don’t try again yet; we’ll reconcile it
-                before another charge.
-              </Text>
+            <View style={styles.pending} accessibilityRole="alert" accessibilityLiveRegion="polite" testID="hire-payment-pending">
+              <Text style={styles.pendingNow}>{hire.pending.now}</Text>
+              <Text style={styles.pendingMeans}>{hire.pending.means}</Text>
+              <MoneyLine kind="warn" text={hire.pending.money} testID="hire-payment-pending-money" />
             </View>
           )}
 
@@ -538,7 +551,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={
-              showPaymentPromise ? paymentPromiseStrings.notYetA11y : 'Not now, go back without hiring'
+              showPaymentPromise ? paymentPromiseStrings.notYetA11y : 'Not yet, go back without choosing anyone'
             }
             accessibilityState={{ disabled: isProcessing || paymentPending }}
             style={styles.secondaryButton}
@@ -546,7 +559,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             onPress={handleCancel}
           >
             <Text style={styles.secondaryButtonText}>
-              {showPaymentPromise ? paymentPromiseStrings.notYet : 'Not now'}
+              {showPaymentPromise ? paymentPromiseStrings.notYet : hire.cancel}
             </Text>
           </TouchableOpacity>
         </View>
@@ -577,6 +590,11 @@ const ON_PRIMARY_TEXT = '#FFFFFF';
 
 const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
   StyleSheet.create({
+    focusHead: { gap: 18 },
+    noFees: { color: theme.poster.ink2, fontSize: 15 },
+    pending: { gap: 10 },
+    pendingNow: { color: theme.poster.ink, fontSize: 24, fontWeight: '800', lineHeight: 30 },
+    pendingMeans: { color: theme.poster.ink, fontSize: 17, lineHeight: 25 },
     root: { flex: 1, backgroundColor: theme.background },
     // The scrollable info block and the fixed actions footer as siblings:
     // actions size to their own content and stay pinned below the scroll

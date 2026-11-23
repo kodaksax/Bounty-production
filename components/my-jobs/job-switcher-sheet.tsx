@@ -128,7 +128,7 @@ export function JobSwitcherSheet({
 
       {showGroups && posted.length > 0 ? <SheetSectionLabel>Jobs you posted</SheetSectionLabel> : null}
       {posted.map(renderRow)}
-      {showGroups && doing.length > 0 ? <SheetSectionLabel>Work you're doing</SheetSectionLabel> : null}
+      {showGroups && doing.length > 0 ? <SheetSectionLabel>{"Work you're doing"}</SheetSectionLabel> : null}
       {doing.map(renderRow)}
 
       {totalOffers > 0 ? (
