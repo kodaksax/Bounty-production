@@ -18,7 +18,12 @@ export const FOCUS_POLICY = {
   disputeTimeframe: null as string | null,
   /** Q-OPS-2: how quickly support replies. */
   supportReplyTime: null as string | null,
-  /** Q-PRD-2: hours of silence before "You haven't heard from {helper}" (E.2). Not implemented. */
+  /**
+   * Q-PRD-2: hours of silence before "You haven't heard from {helper}".
+   * DESIGN-GAP: not implemented. The handoff's E.2 id is also used for the
+   * prohibited auto-confirming payment countdown (4b); neither is built, and
+   * the two are not mapped onto each other.
+   */
   silenceThresholdHours: null as number | null,
 };
 

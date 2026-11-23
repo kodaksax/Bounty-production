@@ -13,11 +13,11 @@
  * says exactly where the money is.
  *
  * Copy is the handoff's with live names and amounts. Gaps, recorded in the PR:
- *  - "We'll tell you either way" (H.3) is left out: no notification is sent
+ *  - DESIGN-GAP: "We'll tell you either way" (H.3) is left out: no notification is sent
  *    when the poster chooses someone else.
- *  - "You're mounting Jordan's TV today" (H.7) becomes "You're doing
+ *  - DESIGN-GAP: "You're mounting Jordan's TV today" (H.7) becomes "You're doing
  *    {Poster}'s job": the verb is job-specific and no agreed day is stored.
- *  - pronouns in sample copy become names.
+ *  - DESIGN-GAP: pronouns in sample copy become names.
  */
 import { FOCUS_POLICY, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy';
 import { calculateHunterEarnings, effectiveFeePercent } from '../constants/fees';
@@ -315,7 +315,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           ? null
           : { kind: 'released', text: `${m.net} is in your Bounty wallet. Wallet shows when you can move it to your bank.` },
         after: null,
-        // The optional "How was {Poster}?" rating is RateCounterpartyCard,
+        // DESIGN-GAP: the optional "How was {Poster}?" rating is RateCounterpartyCard,
         // which carries its own stars and Send button (it decides whether
         // this hunter can still rate), so the pinned step is the wallet.
         primary: honor ? action('find_work', 'Find more work', 'primary') : action('see_wallet', 'See my wallet', 'quiet'),
@@ -378,8 +378,8 @@ export function describeOfferSheet(args: {
   const honor = !!args.isForHonor;
   const PosterS = firstName(args.posterName) ? `${Poster}'s` : "The poster's";
   return {
-    // The handoff's "Offer to mount Jordan's TV" needs a verb phrase the app
-    // doesn't have; the job's own title stands in.
+    // DESIGN-GAP: the handoff's "Offer to mount Jordan's TV" needs a verb phrase
+    // the app doesn't have; the job's own title stands in.
     title: title ? `Offer to do “${title}”` : 'Offer to do this job',
     label: `IF ${POSTER} CHOOSES YOU`,
     items: honor

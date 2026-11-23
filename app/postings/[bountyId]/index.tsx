@@ -932,6 +932,8 @@ export default function BountyDashboard() {
       label: item.name || `Photo ${i + 1}`,
       onPress: handleReviewSubmission,
     }));
+  // DESIGN-GAP: bounty_events is admin-only (RLS), so "the story so far" is
+  // rebuilt from this job's own timestamps (posted, chosen), not an event log.
   const story: { when: string; what: string }[] = [];
   const postedDay = formatJobDay(bounty.created_at);
   if (postedDay) story.push({ when: capitalizeDay(postedDay), what: 'You posted the job' });

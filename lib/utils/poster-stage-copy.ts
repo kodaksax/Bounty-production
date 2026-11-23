@@ -8,9 +8,10 @@
  *
  * Copy is the handoff's, with live names, amounts, counts and days put in.
  * Two systematic substitutions, both recorded as design gaps in the PR:
- *  - the handoff's sample copy says "she/her" for Ada; the app has no pronoun
+ *  - DESIGN-GAP: the handoff's sample copy says "she/her" for Ada; the app has no pronoun
  *    data, so the person's name is used instead;
- *  - job-specific nouns in the samples ("check the garage") become "the work".
+ *  - DESIGN-GAP: job-specific nouns in the samples ("check the garage") become
+ *    "the work".
  *
  * Money vocabulary: "held" while Bounty holds the poster's money, "released"
  * once it goes to the helper's Bounty balance. Nothing here says the helper
@@ -498,6 +499,9 @@ export function formatDistanceWords(miles: number | null | undefined): string | 
  * screen decides that with deriveCoarseVerificationStatus); the rating only
  * from MIN_RATING_SAMPLE ratings up, "No reviews yet" when there are none,
  * and nothing in between; distance only when the server stamped it.
+ *
+ * DESIGN-GAP: with 1-2 ratings the rating line is left out: an average below
+ * MIN_RATING_SAMPLE isn't shown, and "No reviews yet" would be false.
  */
 export function describeApplicant(
   req: ApplicantInput,
@@ -578,8 +582,8 @@ export function describeHire(input: HireCopyInput) {
     /** E.3, while a payment is still confirming. */
     pending: {
       now: "We're still confirming your payment.",
-      // The handoff adds "We'll tell you as soon as it is.": no notification
-      // fires when a deposit confirms (DESIGN-GAP), so it is left out; this
+      // DESIGN-GAP: the handoff adds "We'll tell you as soon as it is.", but no
+      // notification fires when a deposit confirms, so it is left out; this
       // sheet updates itself when the server confirms.
       means: `Please don't pay again. ${first} isn't your helper until it's confirmed.`,
       money: 'Your card payment is being confirmed. We check before any other charge.',

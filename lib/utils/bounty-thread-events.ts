@@ -383,6 +383,8 @@ export function selectPinnedThreadCard(events: readonly BountyThreadEvent[], rol
     const e = events[i];
     if (e.yourTurn && e.action && PINNABLE.has(e.action)) return { event: e, mode: 'your_turn' };
   }
+  // DESIGN-GAP: an application waiting on the poster keeps its own Accept / Pass
+  // buttons on its card (existing, tested behaviour) and is not pinned.
   if (events.some((e) => e.yourTurn && e.action === 'accept_or_decline')) return null;
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
@@ -441,7 +443,7 @@ export function describePinnedCard(
       default:
         return {
           label: 'YOUR NEXT STEP',
-          // The handoff's "When the TV is up" is job-specific.
+          // DESIGN-GAP: the handoff's "When the TV is up" is job-specific; "the job" stands in.
           title: `When the job is done, tell ${other} it's done`,
           text: null,
           button: `Tell ${other} it's done`,

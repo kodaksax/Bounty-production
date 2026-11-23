@@ -551,7 +551,7 @@ export default function PublicBountyDetail() {
                   tone="n"
                   icon="lock"
                   title="Someone's already doing this job"
-                  // The hire time isn't loaded here, so the handoff's "{when}" is left out.
+                  // DESIGN-GAP: the hire time isn't loaded here, so the handoff's "{when}" is left out.
                   text={`${firstName((bounty as any).username) ?? 'The poster'} chose a helper, so it isn't taking offers.`}
                   testID="job-already-taken"
                 />

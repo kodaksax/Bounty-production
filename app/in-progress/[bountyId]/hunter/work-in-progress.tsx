@@ -443,6 +443,9 @@ export default function HunterWorkInProgressScreen() {
         )}
       </View>
 
+      {/* DESIGN-GAP: H.7 in the handoff has no quick message or progress update;
+          both are kept below because their send protection is tested
+          (hunter-work-send-protection). */}
       {/* Quick Messaging */}
       {conversation && (
         <View style={styles.section}>

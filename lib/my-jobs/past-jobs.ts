@@ -18,6 +18,15 @@
  *
  * Wording: "Released" is the wallet credit; "Paid" is kept for money that
  * reached a bank (Q-PAY-4), so no row here says "Paid".
+ *
+ * DESIGN-GAP (P.1):
+ *  - the handoff's "Paid · $72 to your wallet" reads "Released · $72 to your
+ *    wallet" (Q-PAY-4);
+ *  - its "5 out of 5 · 1 review" shows no average below MIN_RATING_SAMPLE;
+ *  - it lists disputed jobs, but a dispute is a record on an active job, not a
+ *    bounty status: resolved disputes end completed or cancelled and show here;
+ *  - take-home is today's fee (calculateHunterEarnings), the same figure the
+ *    receipt shows; a job done under an older fee isn't re-read per job.
  */
 import { calculateHunterEarnings } from '../constants/fees';
 import type { Bounty } from '../services/database.types';

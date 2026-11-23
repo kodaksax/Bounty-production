@@ -20,6 +20,8 @@
  *   - Payment Sheet     Apple Pay / Google Pay, saved cards and new card entry
  *                       in one native sheet. The primary button when no card
  *                       is saved, and "Use another card" otherwise.
+ *                       DESIGN-GAP: the handoff folds these into one primary
+ *                       action; the separate, tested wallet buttons are kept.
  *   - Link a card       the original card-entry modal; the fallback when the
  *                       sheet is unavailable (web).
  *
