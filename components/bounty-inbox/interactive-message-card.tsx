@@ -334,6 +334,10 @@ export function InteractiveMessageCard({
   const destructive = event.action === 'withdraw' || event.action === 'dismiss';
   const singleAction =
     !hideAction && event.action && event.action !== 'accept_or_decline' && !destructive && copy.cta ? event.action : null;
+  // When the thread pins this card's step above the message box, the pinned
+  // card says "Your turn"; this one doesn't repeat it, so there is one next
+  // step on screen, not two.
+  const yourMove = event.yourTurn && !hideAction;
 
   const fire = (action: BountyThreadAction, choice?: 'accept' | 'decline') => {
     if (busy) return;
@@ -370,18 +374,18 @@ export function InteractiveMessageCard({
           done && { opacity: 0.75 },
           superseded && { opacity: 0.62 },
         ]}
-        accessibilityLabel={[copy.label, copy.title, copy.subtitle, event.yourTurn ? 'Your move' : null]
+        accessibilityLabel={[copy.label, copy.title, copy.subtitle, yourMove ? 'Your move' : null]
           .filter(Boolean)
           .join('. ')}
       >
         {/* Stacked bubbles carry only the action ("Sam applied") and, when it
             is the viewer's turn, "Your move" — no step label, details or time. */}
         {stacked ? (
-          event.yourTurn && <Text style={[s.label, st.labelStacked]}>Your move</Text>
+          yourMove && <Text style={[s.label, st.labelStacked]}>Your move</Text>
         ) : (
           <Text style={s.label}>
             {copy.label}
-            {event.yourTurn ? ' · Your move' : ''}
+            {yourMove ? ' · Your move' : ''}
           </Text>
         )}
         <Text style={[s.title, stacked && st.titleStacked]}>{copy.title}</Text>
