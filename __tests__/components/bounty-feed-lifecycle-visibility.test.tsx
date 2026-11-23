@@ -188,6 +188,7 @@ jest.mock('../../lib/services/bounty-service', () => ({
     getAll: jest.fn(),
     getById: jest.fn(),
     getOpenCount: jest.fn().mockResolvedValue(0),
+    attachPosterProfiles: jest.fn(async (rows: any[]) => rows),
   },
 }));
 jest.mock('../../lib/services/bounty-request-service', () => ({
@@ -439,7 +440,8 @@ describe('BountyFeed lifecycle visibility', () => {
           expect.arrayContaining(['Still open', 'Just posted'])
         );
       });
-      expect(bountyService.getById).toHaveBeenCalledWith('9');
+      // Rendered straight from the payload: no read-back before it shows.
+      expect(bountyService.getById).not.toHaveBeenCalled();
       expect(feedLoadCalls()).toBe(1);
       expect(queryByText(/new bount/)).toBeNull();
     });
