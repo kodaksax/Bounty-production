@@ -29,6 +29,7 @@ import {
 import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { AcceptFundingGate } from '../../../components/accept-funding-gate';
 import { InteractiveMessageCard } from '../../../components/bounty-inbox/interactive-message-card';
+import { JobStrip, PinnedNextStep } from '../../../components/bounty-inbox/job-thread-bits';
 import { StatusBadge } from '../../../components/bounty-inbox/status-badge';
 import { SubmitWorkSheet } from '../../../components/bounty-inbox/submit-work-sheet';
 import { PosterReviewModal } from '../../../components/poster-review-modal';
@@ -48,6 +49,9 @@ import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import type { Conversation } from '../../../lib/types';
 import { resolveBountyLifecycle } from '../../../lib/utils/bounty-lifecycle';
+import { describePinnedCard, selectPinnedThreadCard } from '../../../lib/utils/bounty-thread-events';
+import { calculateHunterEarnings } from '../../../lib/constants/fees';
+import { firstName, formatJobAmount } from '../../../lib/my-jobs/format';
 import type {
   BountyThreadAction,
   BountyThreadEvent,
@@ -331,6 +335,11 @@ function BountyThreadScreen() {
     [bounty, request, counterpart?.id, counterpartName, dispute, handleAcceptRequest, handleRejectRequest, markEngaged, reload, router, viewerId]
   );
 
+  // Focus-first M.1–M.3 / H.6: one card is pinned above the message box —
+  // the viewer's next step, or what they are waiting on. Only that card has
+  // a button, so it is drawn in the timeline without one.
+  const pinned = useMemo(() => selectPinnedThreadCard(events, role), [events, role]);
+
   const timelineItems: ChatTimelineItem[] = useMemo(() => {
     if (!bounty) return [];
     return events.map(e => ({
@@ -346,10 +355,12 @@ function BountyThreadScreen() {
           animateIn={popIds.has(e.id)}
           busy={busyEventId === e.id}
           onAction={onCardAction}
+          hideAction={pinned?.mode === 'your_turn' && pinned.event.id === e.id}
+          superseded={!!e.superseded}
         />
       ),
     }));
-  }, [bounty, events, role, counterpartName, popIds, busyEventId, onCardAction]);
+  }, [bounty, events, role, counterpartName, popIds, busyEventId, onCardAction, pinned]);
 
   // ---- Conversation (the DM between the pair) ----
   const canStartChat = !!counterpart && (role === 'poster' || isAcceptedHunter);
@@ -426,8 +437,36 @@ function BountyThreadScreen() {
   const disputeLabel = hasActiveDispute ? 'View dispute' : 'Raise dispute';
   const cancelPending = bounty.status === 'cancellation_requested' || cancellation?.status === 'pending';
 
+  const openWorkspace = () =>
+    router.push(
+      (role === 'poster'
+        ? { pathname: '/postings/[bountyId]', params: { bountyId: String(bounty.id) } }
+        : { pathname: '/in-progress/[bountyId]/hunter', params: { bountyId: String(bounty.id) } }) as never
+    );
+
+  const otherFirst = firstName(counterpart?.name) ?? (role === 'poster' ? 'your helper' : 'the poster');
+  const pinnedCopy = pinned
+    ? describePinnedCard(pinned, role, otherFirst, {
+        amount: bounty.is_for_honor ? null : formatJobAmount(bounty.amount),
+        takeHome: bounty.is_for_honor ? null : formatJobAmount(calculateHunterEarnings(bounty.amount).net),
+      })
+    : null;
+  const aboveComposer =
+    pinned && pinnedCopy ? (
+      <PinnedNextStep
+        copy={pinnedCopy}
+        yourTurn={pinned.mode === 'your_turn'}
+        busy={busyEventId === pinned.event.id}
+        onPress={pinned.event.action ? () => void onCardAction(pinned.event.action!, pinned.event) : undefined}
+      />
+    ) : null;
+
   const topBanner = (
     <View style={s.banner}>
+      <JobStrip
+        input={{ role, viewerId: viewerId ?? null, bounty, counterpartName: firstName(counterpartName) ?? counterpartName }}
+        onOpenJob={openWorkspace}
+      />
       <View style={s.bannerTop}>
         {lifecycle && <StatusBadge status={lifecycle.status} />}
         <Text style={s.bannerText} numberOfLines={1}>
@@ -514,6 +553,7 @@ function BountyThreadScreen() {
         topBanner={topBanner}
         timelineItems={timelineItems}
         composerOverride={composerOverride}
+        aboveComposer={aboveComposer}
         onMessageSent={() => markEngaged('message')}
       />
 

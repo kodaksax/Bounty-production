@@ -21,7 +21,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { FOCUS, type PosterPalette } from '../../lib/themes/poster-palette'
 import type { AppTheme } from '../../lib/themes/types'
 import type { BountyLifecycleTone } from '../../lib/utils/bounty-lifecycle'
-import { SidePill } from '../poster/workspace-header'
+import { SidePill } from '../poster/side-label'
 import { ManageActionsList } from './job-bits'
 
 export interface FeaturedJobCardProps {

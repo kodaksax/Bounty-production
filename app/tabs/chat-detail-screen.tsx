@@ -64,6 +64,8 @@ interface ChatDetailScreenProps {
   topBanner?: ReactNode
   /** Replaces the composer, e.g. while no conversation exists yet. */
   composerOverride?: ReactNode
+  /** Pinned directly above the message box, e.g. a job thread's next-step card. */
+  aboveComposer?: ReactNode
   /** Called after a message from the composer is accepted by sendMessage. */
   onMessageSent?: () => void
 }
@@ -77,6 +79,7 @@ export function ChatDetailScreen({
   headerRight,
   topBanner,
   composerOverride,
+  aboveComposer,
   onMessageSent,
 }: ChatDetailScreenProps) {
   const router = useRouter()
@@ -541,6 +544,7 @@ export function ChatDetailScreen({
                 })
               }}
             />
+            {aboveComposer}
             {/* Message Input */}
             {composerOverride ? (
               <View style={s.inputContainer}>{composerOverride}</View>

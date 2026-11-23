@@ -9,7 +9,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import type { ManageAction } from '../../lib/my-jobs/manage-actions'
 import type { IconName, JobSide } from '../../lib/my-jobs/types'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
-import { SidePill } from '../poster/workspace-header'
+import { SidePill } from '../poster/side-label'
 
 /** The job's photo, or its category icon on a warm tile. */
 export function JobThumb({
