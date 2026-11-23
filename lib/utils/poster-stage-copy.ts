@@ -219,7 +219,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
     const placeholders = FOCUS_POLICY.showPlaceholders;
     const means =
       input.disputeOpenedByViewer === true
-        ? `You reported a problem. A person at Bounty is reviewing it and may contact ${Helper}.`
+        ? `You reported a problem. A person at Bounty is reviewing it and may contact ${helper}.`
         : input.disputeOpenedByViewer === false
           ? `${Helper} reported a problem. A person at Bounty is reviewing it and may contact you.`
           : 'A problem was reported with this job. A person at Bounty is reviewing it.';
@@ -265,7 +265,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           ? held
           : { kind: 'held', text: `If you accept: ${formatJobAmount(refund)} back to your Bounty balance.` },
       after: 'You can post the job again.',
-      primary: action('respond_cancellation', `Respond to ${Helper}'s request`, 'primary'),
+      primary: action('respond_cancellation', `Respond to ${helper}'s request`, 'primary'),
       show: NO_BLOCKS,
     };
   }
@@ -298,11 +298,11 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           screenId: 'G',
           step: 4,
           stage: 'Step 4 of 5 · Work underway',
-          now: `You asked ${Helper} for a change.`,
+          now: `You asked ${helper} for a change.`,
           means: `${Helper} will send the work again when it's done. You don't need to do anything until then.`,
           money: held,
           after: 'You review the work again and decide about payment.',
-          primary: action('message', `Message ${Helper}`, 'quiet', 'chat-bubble-outline'),
+          primary: action('message', `Message ${helper}`, 'quiet', 'chat-bubble-outline'),
           show: { ...NO_BLOCKS, lastMessage: true, story: true },
         };
       }
@@ -312,11 +312,11 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           screenId: 'F',
           step: 3,
           stage: 'Step 3 of 5 · Agreeing a time',
-          now: `Agree on a time with ${Helper}.`,
-          means: `${Helper} needs to know when to come. Pick what suits you and we'll send it to ${Helper} as a message.`,
+          now: `Agree on a time with ${helper}.`,
+          means: `${Helper} needs to know when to come. Pick what suits you and we'll send it to ${helper} as a message.`,
           money: held,
           after: null,
-          primary: action('send_time', `Send to ${Helper}`, 'primary'),
+          primary: action('send_time', `Send to ${helper}`, 'primary'),
           secondary: [action('write_own', 'Write my own message', 'text')],
           show: { ...NO_BLOCKS, timePicks: true },
         };
@@ -330,7 +330,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         means: `${Helper} will let you know here when it's done. You don't need to do anything until then.`,
         money: held,
         after: 'You review the work and decide about payment.',
-        primary: action('message', `Message ${Helper}`, 'quiet', 'chat-bubble-outline'),
+        primary: action('message', `Message ${helper}`, 'quiet', 'chat-bubble-outline'),
         show: { ...NO_BLOCKS, lastMessage: true, story: true },
       };
     }
@@ -405,7 +405,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           stage: 'Step 5 of 5 · Finished',
           now: 'You approved the work.',
           means: lifecycle.explanation,
-          money: honor ? null : { kind: 'held', text: `Bounty is releasing your ${amount} to ${Helper}.` },
+          money: honor ? null : { kind: 'held', text: `Bounty is releasing your ${amount} to ${helper}.` },
           after: lifecycle.nextStep || null,
           primary: action('back_to_jobs', 'Back to My Jobs', 'quiet'),
           show: NO_BLOCKS,
@@ -418,13 +418,13 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         screenId: 'I.3',
         step: 5,
         stage: 'Step 5 of 5 · Finished',
-        now: honor ? `Done. ${Helper} finished the job.` : `Done. Released to ${Helper}.`,
+        now: honor ? `Done. ${Helper} finished the job.` : `Done. Released to ${helper}.`,
         means: honor
           ? 'It was for honor, so no money moved. Your job is finished.'
           : `${Helper} received your ${amount} in Bounty. Your job is finished.`,
         money: honor
           ? null
-          : { kind: 'released', text: `Released to ${Helper}${when ? ` ${when}` : ''}. No fees for you.` },
+          : { kind: 'released', text: `Released to ${helper}${when ? ` ${when}` : ''}. No fees for you.` },
         after: null,
         primary: canRate ? action('send_rating', 'Send rating', 'primary') : action('back_to_jobs', 'Back to My Jobs', 'quiet'),
         secondary: canRate ? [action('skip_rating', 'Skip and go to My Jobs', 'text')] : [],
@@ -444,7 +444,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         means: lifecycle.explanation,
         money: hired ? held : null,
         after: lifecycle.nextStep || null,
-        primary: hired ? action('message', `Message ${Helper}`, 'quiet', 'chat-bubble-outline') : action('repost', 'Post a new bounty', 'primary'),
+        primary: hired ? action('message', `Message ${helper}`, 'quiet', 'chat-bubble-outline') : action('repost', 'Post a new bounty', 'primary'),
         show: NO_BLOCKS,
       };
     }

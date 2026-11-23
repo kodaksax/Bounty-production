@@ -175,7 +175,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
         side: 'offered',
         step: 1,
         stage: 'Step 1 of 5 · Offered',
-        now: `Your offer is with ${Poster}.`,
+        now: `Your offer is with ${poster}.`,
         means: `${Poster} will look at everyone who offered and choose one person.`,
         money: honor
           ? null
@@ -224,7 +224,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           : { kind: 'held', text: `Not paid yet. ${PosterS} ${amount} is still held by Bounty. You get ${m.net} when ${poster} approves.` },
         // Verified: trg_completion_review_notification notifies on both outcomes.
         after: "You'll get a notification either way.",
-        primary: action('message', `Message ${Poster}`, 'quiet', 'chat-bubble-outline'),
+        primary: action('message', `Message ${poster}`, 'quiet', 'chat-bubble-outline'),
         show: { ...NO_BLOCKS, deadline: input.reviewDeadline ? reviewDeadlineLine(Poster, input.reviewDeadline, now) : null },
       };
     }
@@ -244,7 +244,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           money: honor ? null : { kind: 'held', text: `${amount} is still held. Nothing is paid until ${poster} approves.` },
           after: null,
           primary: action('tell_done', 'Send updated work', 'primary'),
-          secondary: [action('message', `Message ${Poster}`, 'secondary', 'chat-bubble-outline')],
+          secondary: [action('message', `Message ${poster}`, 'secondary', 'chat-bubble-outline')],
           show: { ...NO_BLOCKS, changeRequested: feedback, askedFor: true },
         };
       }
@@ -256,11 +256,11 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           side: 'doing',
           step: 2,
           stage: 'Step 2 of 5 · Chosen',
-          now: `Agree on a time with ${Poster}.`,
-          means: `${Poster} needs to know when you'll come. Pick what suits you and we'll send it to ${Poster} as a message.`,
+          now: `Agree on a time with ${poster}.`,
+          means: `${Poster} needs to know when you'll come. Pick what suits you and we'll send it to ${poster} as a message.`,
           money: held,
           after: null,
-          primary: action('send_time', `Send to ${Poster}`, 'primary'),
+          primary: action('send_time', `Send to ${poster}`, 'primary'),
           secondary: [action('write_own', 'Write my own message', 'text')],
           show: { ...NO_BLOCKS, timePicks: true },
         };
@@ -273,11 +273,11 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
         step: 3,
         stage: 'Step 3 of 5 · Doing the work',
         now: firstName(posterFull) ? `You're doing ${posterS} job.` : "You're doing this job.",
-        means: `When it's done, take a photo or two and tell ${Poster} it's done.`,
+        means: `When it's done, take a photo or two and tell ${poster} it's done.`,
         money: held,
         after: `${Poster} checks the work and approves it.`,
-        primary: action('tell_done', `Tell ${Poster} it's done`, 'primary'),
-        secondary: [action('message', `Message ${Poster}`, 'secondary', 'chat-bubble-outline')],
+        primary: action('tell_done', `Tell ${poster} it's done`, 'primary'),
+        secondary: [action('message', `Message ${poster}`, 'secondary', 'chat-bubble-outline')],
         show: { ...NO_BLOCKS, askedFor: true, lastMessage: true },
       };
     }
@@ -338,7 +338,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
         after: lifecycle.nextStep || null,
         primary:
           lifecycle.status === 'deadline_passed' && input.requestStatus === 'accepted'
-            ? action('message', `Message ${Poster}`, 'quiet', 'chat-bubble-outline')
+            ? action('message', `Message ${poster}`, 'quiet', 'chat-bubble-outline')
             : action('find_work', 'Find more work', 'primary'),
         show: NO_BLOCKS,
       };
@@ -365,31 +365,33 @@ export function hunterHeaderMeta(amount: number | null | undefined, isForHonor: 
 // ── H.1 / H.2 / X.2 — the public job page and the offer sheet ────────────
 
 export function describeOfferSheet(args: {
-  title: string;
+  title: string | null | undefined;
   posterName: string | null;
   amount: number | null | undefined;
   isForHonor?: boolean | null;
 }) {
   const Poster = firstName(args.posterName) ?? 'The poster';
-  const POSTER = (firstName(args.posterName) ?? 'the poster').toUpperCase();
+  const poster = firstName(args.posterName) ?? 'the poster';
+  const POSTER = poster.toUpperCase();
   const m = hunterMoney(args.amount);
+  const title = args.title?.trim();
   const honor = !!args.isForHonor;
   const PosterS = firstName(args.posterName) ? `${Poster}'s` : "The poster's";
   return {
     // The handoff's "Offer to mount Jordan's TV" needs a verb phrase the app
     // doesn't have; the job's own title stands in.
-    title: `Offer to do “${args.title}”`,
+    title: title ? `Offer to do “${title}”` : 'Offer to do this job',
     label: `IF ${POSTER} CHOOSES YOU`,
     items: honor
-      ? [{ icon: 'undo', title: 'You can withdraw', detail: `Any time before ${Poster} chooses.` }]
+      ? [{ icon: 'undo', title: 'You can withdraw', detail: `Any time before ${poster} chooses.` }]
       : [
           { icon: 'lock', title: `${PosterS} ${m.gross} is held by Bounty`, detail: 'Before you start, so you know the money is there.' },
           {
             icon: 'account-balance-wallet',
-            title: `You get ${m.net} when ${Poster} approves`,
+            title: `You get ${m.net} when ${poster} approves`,
             detail: `${m.gross} minus the ${m.percent} service fee.`,
           },
-          { icon: 'undo', title: 'You can withdraw', detail: `Any time before ${Poster} chooses.` },
+          { icon: 'undo', title: 'You can withdraw', detail: `Any time before ${poster} chooses.` },
         ],
     field: 'Why you? (optional)',
     send: 'Send offer',

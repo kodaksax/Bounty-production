@@ -76,7 +76,9 @@ export interface HunterStageViewProps {
 
 export function HunterStageScreen(props: HunterStageViewProps) {
   const { view, bounty, posterName } = props;
+  // Start of a sentence vs inside one; only the fallback changes case.
   const Poster = firstName(posterName) ?? 'The poster';
+  const poster = firstName(posterName) ?? 'the poster';
   const more: OtherOption[] = [
     ...view.more.map((a) => ({
       key: a.key,
@@ -143,7 +145,7 @@ export function HunterStageScreen(props: HunterStageViewProps) {
       ) : null}
 
       {view.show.askedFor && bounty.description ? (
-        <NoteBox tone="bg" icon="description" title={`What ${Poster} asked for`} text={bounty.description} testID="asked-for" />
+        <NoteBox tone="bg" icon="description" title={`What ${poster} asked for`} text={bounty.description} testID="asked-for" />
       ) : null}
 
       {view.show.lastMessage && props.lastMessage ? (

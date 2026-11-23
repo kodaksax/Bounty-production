@@ -66,6 +66,36 @@ describe('H.3 — offer sent', () => {
   });
 });
 
+describe('without the poster’s name', () => {
+  it('the fallback is capitalised only at the start of a sentence, in copy and in button labels', () => {
+    const offered = describeHunterStage(input('applied', { posterName: null, bounty: { amount: 80, status: 'open' } }), NOW);
+    expect(offered.now).toBe('Your offer is with the poster.');
+    expect(offered.means).toBe('The poster will look at everyone who offered and choose one person.');
+
+    const chosen = describeHunterStage(input('in_progress', { posterName: null, hasMessages: false }), NOW);
+    expect(chosen.now).toBe('Agree on a time with the poster.');
+    expect(chosen.primary?.label).toBe('Send to the poster');
+
+    const working = describeHunterStage(input('in_progress', { posterName: null }), NOW);
+    expect(working.now).toBe("You're doing this job.");
+    expect(working.means).toBe("When it's done, take a photo or two and tell the poster it's done.");
+    expect(working.after).toBe('The poster checks the work and approves it.');
+    expect(working.primary?.label).toBe("Tell the poster it's done");
+    expect(working.secondary[0]?.label).toBe('Message the poster');
+  });
+
+  it('offer sheet: no name and no title read as plain sentences', () => {
+    const sheet = describeOfferSheet({ title: null, posterName: null, amount: 80 });
+    expect(sheet.title).toBe('Offer to do this job');
+    expect(sheet.label).toBe('IF THE POSTER CHOOSES YOU');
+    expect(sheet.items.map((i) => [i.title, i.detail])).toEqual([
+      ["The poster's $80 is held by Bounty", 'Before you start, so you know the money is there.'],
+      [`You get ${NET} when the poster approves`, `$80 minus the ${PLATFORM_FEE_PERCENT}% service fee.`],
+      ['You can withdraw', 'Any time before the poster chooses.'],
+    ]);
+  });
+});
+
 describe('after being chosen', () => {
   it('H.5: no messages yet → agree a time (a message, not a booking)', () => {
     const v = describeHunterStage(input('in_progress', { hasMessages: false }), NOW);

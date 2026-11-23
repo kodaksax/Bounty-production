@@ -333,7 +333,9 @@ export default function HunterReviewAndVerifyScreen() {
   };
 
   const posterFirst = firstName(lifecycle.otherParty.name);
+  // Start of a sentence vs inside one; only the fallback changes case.
   const Poster = posterFirst ?? 'The poster';
+  const poster = posterFirst ?? 'the poster';
   const uploading = isUploadingProof || isPickingProof;
   const money = bounty ? hunterMoney(bounty.amount) : null;
 
@@ -374,7 +376,7 @@ export default function HunterReviewAndVerifyScreen() {
     ? 'Locked (dispute open)'
     : uploading
       ? 'Uploading photo…'
-      : `Send to ${Poster} for approval`;
+      : `Send to ${poster} for approval`;
 
   return (
     <WorkspaceLayout
@@ -394,10 +396,10 @@ export default function HunterReviewAndVerifyScreen() {
       }
     >
       <FlowNav label="Back to the job" onBack={goBack} />
-      <FlowTitle title={`Tell ${Poster} it's done`} />
+      <FlowTitle title={`Tell ${poster} it's done`} />
 
       <View style={styles.focusField}>
-        <Text style={styles.focusLabel}>{`Note for ${Poster}`}</Text>
+        <Text style={styles.focusLabel}>{`Note for ${poster}`}</Text>
         <TextInput
           style={styles.messageTextArea}
           placeholder="What you did, and anything they should check"
@@ -408,7 +410,7 @@ export default function HunterReviewAndVerifyScreen() {
           numberOfLines={4}
           maxLength={1000}
           textAlignVertical="top"
-          accessibilityLabel={`Note for ${Poster}`}
+          accessibilityLabel={`Note for ${poster}`}
         />
       </View>
 
@@ -438,7 +440,7 @@ export default function HunterReviewAndVerifyScreen() {
             ? []
             : [
                 { icon: 'lock' as const, title: `${money.gross} stays held until then`, detail: 'Nobody is paid yet.' },
-                { icon: 'account-balance-wallet' as const, title: `You get ${money.net} when ${Poster} approves` },
+                { icon: 'account-balance-wallet' as const, title: `You get ${money.net} when ${poster} approves` },
               ]),
         ]}
       />
@@ -448,7 +450,7 @@ export default function HunterReviewAndVerifyScreen() {
         items={[
           {
             key: 'message',
-            label: `Message ${Poster}`,
+            label: `Message ${poster}`,
             icon: 'chat-bubble-outline',
             onPress: () => {
               if (!routeBountyId) return;

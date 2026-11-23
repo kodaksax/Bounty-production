@@ -223,6 +223,18 @@ describe('after choosing someone', () => {
     expect(named.now).toBe('Agree on a time with ana_hunts.');
     const unnamed = describePosterStage(input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: null, openJobCharge: null }));
     expect(unnamed.means.startsWith('Your helper needs to know')).toBe(true);
+    // Mid-sentence the fallback stays lowercase, in copy and in button labels.
+    expect(unnamed.now).toBe('Agree on a time with your helper.');
+    expect(unnamed.means).toBe("Your helper needs to know when to come. Pick what suits you and we'll send it to your helper as a message.");
+    expect(unnamed.primary?.label).toBe('Send to your helper');
+    const unnamedDone = describePosterStage(
+      input({ bounty: { ...HIRED, status: 'completed' }, lifecycle: lifecycle('completed', { tone: 'positive' }), helperName: null, openJobCharge: null })
+    );
+    expect(unnamedDone.now).toBe('Done. Released to your helper.');
+    const unnamedSettling = describePosterStage(
+      input({ bounty: { ...HIRED, status: 'completed' }, lifecycle: lifecycle('completed', { tone: 'progress' }), helperName: null, openJobCharge: null })
+    );
+    expect(unnamedSettling.money?.text).toBe('Bounty is releasing your $60 to your helper.');
   });
 });
 

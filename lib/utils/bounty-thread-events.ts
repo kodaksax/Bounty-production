@@ -417,7 +417,10 @@ export function describePinnedCard(
   otherName: string,
   money: { amount: string | null; takeHome: string | null }
 ): PinnedCardCopy {
-  const other = otherName.trim() || (role === 'poster' ? 'your helper' : 'the poster');
+  const named = !!otherName.trim();
+  const other = named ? otherName.trim() : role === 'poster' ? 'your helper' : 'the poster';
+  // At the start of a sentence. Only the fallback is capitalised: a username is shown as written.
+  const Other = named ? other : other.charAt(0).toUpperCase() + other.slice(1);
   const OTHER = other.toUpperCase();
   const { amount, takeHome } = money;
   const e = pinned.event;
@@ -433,7 +436,7 @@ export function describePinnedCard(
           button: 'Send updated work',
         };
       case 'respond_cancellation':
-        return { label: 'YOUR NEXT STEP', title: `${other} asked to cancel`, text: null, button: 'Respond to the request' };
+        return { label: 'YOUR NEXT STEP', title: `${Other} asked to cancel`, text: null, button: 'Respond to the request' };
       case 'submit_work':
       default:
         return {
@@ -449,22 +452,22 @@ export function describePinnedCard(
     case 'work_submitted':
       return {
         label: `WAITING FOR ${OTHER}`,
-        title: `${other} is checking your work`,
+        title: `${Other} is checking your work`,
         text: amount && takeHome ? `${amount} is still held. You get ${takeHome} when ${other} approves.` : null,
         button: null,
       };
     case 'applied':
-      return { label: `WAITING FOR ${OTHER}`, title: `${other} hasn't chosen yet`, text: amount ? 'Nothing is held yet.' : null, button: null };
+      return { label: `WAITING FOR ${OTHER}`, title: `${Other} hasn't chosen yet`, text: amount ? 'Nothing is held yet.' : null, button: null };
     case 'hired':
       return {
         label: `WAITING FOR ${OTHER}`,
-        title: `${other} is working on it`,
+        title: `${Other} is working on it`,
         text: amount ? `Your ${amount} is held by Bounty. Nobody is paid until you approve.` : null,
         button: null,
       };
     case 'revision_requested':
-      return { label: `WAITING FOR ${OTHER}`, title: `${other} is making the change you asked for`, text: null, button: null };
+      return { label: `WAITING FOR ${OTHER}`, title: `${Other} is making the change you asked for`, text: null, button: null };
     default:
-      return { label: `WAITING FOR ${OTHER}`, title: `${other} is looking at your request`, text: null, button: null };
+      return { label: `WAITING FOR ${OTHER}`, title: `${Other} is looking at your request`, text: null, button: null };
   }
 }

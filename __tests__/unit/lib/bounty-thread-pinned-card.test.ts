@@ -106,6 +106,19 @@ describe('selectPinnedThreadCard', () => {
     expect(selectPinnedThreadCard(open, 'poster')).toBeNull();
   });
 
+  it('without a name: "The poster" starts a sentence, "the poster" sits inside one; a username is never re-cased', () => {
+    const hunterWaiting = selectPinnedThreadCard(events('hunter', { submission: sent }), 'hunter');
+    expect(describePinnedCard(hunterWaiting!, 'hunter', '', MONEY)).toEqual({
+      label: 'WAITING FOR THE POSTER',
+      title: 'The poster is checking your work',
+      text: '$80 is still held. You get $76 when the poster approves.',
+      button: null,
+    });
+    const hunterTurn = selectPinnedThreadCard(events('hunter'), 'hunter');
+    expect(describePinnedCard(hunterTurn!, 'hunter', '', MONEY).button).toBe("Tell the poster it's done");
+    expect(describePinnedCard(hunterWaiting!, 'hunter', 'jordan_k', MONEY).title).toBe('jordan_k is checking your work');
+  });
+
   it('for honor: no money sentence on the pinned card', () => {
     const pinned = selectPinnedThreadCard(events('hunter', { submission: sent }), 'hunter');
     expect(describePinnedCard(pinned!, 'hunter', 'Jordan', { amount: null, takeHome: null }).text).toBeNull();

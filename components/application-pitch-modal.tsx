@@ -111,7 +111,7 @@ export function ApplicationPitchModal({
   // Focus-first H.2. The amounts are calculateHunterEarnings' (via the
   // caller's grossAmount, and describeOfferSheet for the take-home and fee).
   const sheet = describeOfferSheet({
-    title: jobTitle ?? 'this job',
+    title: jobTitle,
     posterName: posterName ?? null,
     amount: isForHonor ? null : grossAmount,
     isForHonor,
