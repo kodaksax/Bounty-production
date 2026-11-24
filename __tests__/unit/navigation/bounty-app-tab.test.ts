@@ -7,7 +7,6 @@
 
 import {
   bountyAppTabPath,
-  defaultInboxSegment,
   inboxSegmentForLink,
   isBountyAppTabPath,
   parseBountyAppTabParams,
@@ -123,8 +122,25 @@ describe('expo-router navigation payloads (root cause)', () => {
   });
 });
 
-// SBA-10 (3): the Inbox opens on My Bounties for a poster with an open bounty,
-// unless a link explicitly asked for a segment.
+// A link can name a side (SBA-12); My Jobs features that side's job.
+describe('links that name a job', () => {
+  it('carries the bounty id through the path and back', () => {
+    const path = bountyAppTabPath('messages', 'requests', 'b 1');
+    expect(path).toBe('/tabs/bounty-app?tab=messages&initialTab=requests&bountyId=b%201');
+    expect(parseBountyAppTabUrl(path)).toEqual({ tab: 'messages', initialTab: 'requests', bountyId: 'b 1' });
+    expect(parseBountyAppTabParams({ tab: 'messages', initialTab: 'requests', bountyId: ['b2'] })).toEqual({
+      tab: 'messages',
+      initialTab: 'requests',
+      bountyId: 'b2',
+    });
+  });
+
+  it('leaves the id out when there is none', () => {
+    expect(bountyAppTabPath('messages', 'requests', null)).toBe('/tabs/bounty-app?tab=messages&initialTab=requests');
+    expect(parseBountyAppTabParams({ tab: 'messages', bountyId: '' })).toEqual({ tab: 'messages', initialTab: undefined });
+  });
+});
+
 describe('inboxSegmentForLink', () => {
   it('maps each known link segment, and reports no choice otherwise', () => {
     expect(inboxSegmentForLink('myPostings')).toBe('myPostings');
@@ -135,19 +151,5 @@ describe('inboxSegmentForLink', () => {
     expect(inboxSegmentForLink('')).toBeNull();
     expect(inboxSegmentForLink('bogus')).toBeNull();
     expect(inboxSegmentForLink(['requests'])).toBe('myPostings');
-  });
-});
-
-describe('defaultInboxSegment', () => {
-  it('opens My Bounties when the user has an open bounty they posted', () => {
-    expect(defaultInboxSegment([{ status: 'in_progress' }, { status: 'open' }])).toBe('myPostings');
-  });
-
-  it('keeps My Work for a hunter-only account or a poster with nothing open', () => {
-    expect(defaultInboxSegment([])).toBe('inProgress');
-    expect(
-      defaultInboxSegment([{ status: 'in_progress' }, { status: 'completed' }, { status: 'cancelled' }])
-    ).toBe('inProgress');
-    expect(defaultInboxSegment([null, undefined, {}])).toBe('inProgress');
   });
 });

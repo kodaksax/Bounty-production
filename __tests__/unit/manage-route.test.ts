@@ -20,9 +20,9 @@ describe('manage app handoff route', () => {
     expect(safeManageRedirect('//example.com/manage')).toBeNull()
   })
 
-  test('routes applicant links to the poster activity list', () => {
+  test("routes applicant links to that job's applicants on My Jobs", () => {
     expect(manageDestinationPath({ bounty: BOUNTY, applicant: APPLICANT, view: 'applicant' })).toBe(
-      '/tabs/bounty-app?tab=messages&initialTab=myPostings'
+      `/tabs/bounty-app?tab=messages&initialTab=requests&bountyId=${BOUNTY}`
     )
   })
 

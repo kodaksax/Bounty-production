@@ -389,6 +389,29 @@ async function settleDisputeEscrow(
 
 export const disputeService = {
   /**
+   * Which of these bounties have an open or under-review dispute, in one
+   * query (the list equivalent of getDisputeByBountyId). Best effort: on
+   * failure nothing is reported as disputed.
+   */
+  async getOpenDisputeBountyIds(bountyIds: (string | number)[]): Promise<Set<string>> {
+    const disputed = new Set<string>();
+    const ids = Array.from(new Set(bountyIds.map(String))).filter(Boolean);
+    if (!isSupabaseConfigured || ids.length === 0) return disputed;
+    try {
+      const { data, error } = await supabase
+        .from('bounty_disputes')
+        .select('bounty_id')
+        .in('bounty_id', ids)
+        .in('status', ['open', 'under_review']);
+      if (error) throw error;
+      for (const row of (data ?? []) as { bounty_id: string | number }[]) disputed.add(String(row.bounty_id));
+    } catch (error) {
+      logger.warning('Could not load open disputes for bounties', { error, count: ids.length });
+    }
+    return disputed;
+  },
+
+  /**
    * Create a dispute from a cancellation request
    */
   async createDispute(

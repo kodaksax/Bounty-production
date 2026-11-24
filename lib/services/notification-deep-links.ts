@@ -98,8 +98,9 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       // A new application is only ever sent to the poster, and the only thing
       // to do with it is accept/decline -- land on the Requests tab where that
       // happens (GitHub #809), even for bundled notifications with no bountyId.
+      // With a bountyId, My Jobs opens "Who offered" for that job.
       if (ctx.type === 'application') {
-        return { kind: 'route', path: POSTER_REQUESTS_PATH };
+        return { kind: 'route', path: bountyId ? bountyAppTabPath('messages', 'requests', bountyId) : POSTER_REQUESTS_PATH };
       }
       // The unfinished-post reminder: the Post tab, where the composer offers
       // to continue the draft from the step it stopped on.

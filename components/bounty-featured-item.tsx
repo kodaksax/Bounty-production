@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useHapticFeedback } from '../lib/haptic-feedback'
-import type { AttachmentMeta } from '../lib/services/database.types'
+import { getBountyCoverUri } from '../lib/utils/bounty-cover'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { useCountdown } from '../hooks/useCountdown'
@@ -126,16 +126,7 @@ function BountyFeaturedItemComponent({
     openFrom(() => setShowDetail(true))
   }, [triggerHaptic, openFrom])
 
-  const firstImageUri = useMemo(() => {
-    if (!attachments_json) return null
-    try {
-      const attachments: AttachmentMeta[] = JSON.parse(attachments_json)
-      const found = attachments.find(a => a.remoteUri && a.mimeType?.startsWith('image/'))
-      return found?.remoteUri ?? null
-    } catch {
-      return null
-    }
-  }, [attachments_json])
+  const firstImageUri = useMemo(() => getBountyCoverUri(attachments_json), [attachments_json])
 
   return (
     <>

@@ -84,7 +84,6 @@ import { getUserFriendlyError } from '../../../lib/utils/error-messages';
 import { useWallet } from '../../../lib/wallet-context';
 
 /** Inbox → My Bounties, where applications are reviewed. */
-const REQUESTS_ROUTE = bountyAppTabPath('messages', 'requests');
 /** The post-a-bounty flow. */
 const POST_BOUNTY_ROUTE = bountyAppTabPath('postings');
 
@@ -463,7 +462,7 @@ export default function BountyDashboard() {
           category: bounty.category,
           location: bounty.location,
         }),
-      review_applications: () => router.push(REQUESTS_ROUTE as never),
+      review_applications: () => router.push(bountyAppTabPath('messages', 'requests', routeBountyId) as never),
       review_submission: handleReviewSubmission,
       view_payout: () =>
         router.push({

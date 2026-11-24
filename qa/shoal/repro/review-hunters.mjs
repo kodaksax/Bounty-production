@@ -11,17 +11,13 @@
  *
  * <bountyId> must be an open bounty owned by pool poster <slot> (default 4) with at
  * least one pending application (seed.mjs status / the staging database).
- * Exit code 0 = landed on My Bounties, 1 = landed somewhere else.
+ * Exit code 0 = landed on My Jobs with "Who offered" open, 1 = landed somewhere else.
  *
- * Since #921 every main tab stays mounted side by side in a horizontal pager, and both
- * Inbox segment labels are always rendered, so "is the text in the DOM" no longer says
- * where the poster is. This checks what is inside the viewport and which Inbox segment
- * is selected. The segment buttons are role="tab", but react-native-web does not emit
- * aria-selected for them, so the selected one is the label drawn in the active colour
- * (white; the other is grey — see SegmentLabel in app/tabs/inbox-screen.tsx). The active
- * bottom-bar tab is the one under the sliding highlight pill (FloatingTabBar); label
- * colour can't tell, because Home's label is always green. The Home tab no longer
- * shows "For You", so that text can't identify the feed either.
+ * Since #921 every main tab stays mounted side by side in a horizontal pager, so "is
+ * the text in the DOM" doesn't say where the poster is. This checks what is inside the
+ * viewport: the My Jobs "Who offered" sheet (app/tabs/my-jobs-screen.tsx opens it for a
+ * `requests` link) and the bottom-bar tab under the sliding highlight pill
+ * (FloatingTabBar); label colour can't tell, because Home's label is always green.
  */
 import { chromium } from 'playwright';
 import { derivePassword, poolAccount } from '../bin/lib/accounts.mjs';
@@ -69,11 +65,11 @@ try {
 
   const url = new URL(page.url());
   const barTab = await page.evaluate(() => {
-    // Bar labels only: the Inbox screen's own "Inbox" heading is not in a button.
+    // Bar labels only: the screen's own "My Jobs" heading is not in a button.
     const labels = [...document.querySelectorAll('*')].filter(
       (n) =>
         n.childElementCount === 0 &&
-        /^(Inbox|Wallet|Home|Post|Profile)$/.test((n.textContent || '').trim()) &&
+        /^(My jobs|Wallet|Home|Post|Profile)$/.test((n.textContent || '').trim()) &&
         n.closest('button,[role="button"]'),
     );
     const buttons = labels.map((n) => n.closest('button,[role="button"]'));
@@ -89,34 +85,19 @@ try {
     return i === -1 ? null : labels[i].textContent.trim();
   });
   const onFeed = barTab === 'Home';
-  const myBounties = page.getByRole('tab', { name: /^My Bounties/ });
-  const inboxOnScreen = await anyOnScreen(myBounties);
-  const labelColor = (tab) =>
-    tab
-      .first()
-      .evaluate((el) => {
-        if (el.getAttribute('aria-selected')) return el.getAttribute('aria-selected') === 'true' ? 'selected' : 'not';
-        const leaf = [...el.querySelectorAll('*')].find((n) => n.childElementCount === 0 && n.textContent);
-        return leaf ? getComputedStyle(leaf).color : null;
-      })
-      .catch(() => null);
-  const ACTIVE = new Set(['selected', 'rgb(255, 255, 255)']);
-  const myBountiesSelected =
-    ACTIVE.has(await labelColor(myBounties)) &&
-    !ACTIVE.has(await labelColor(page.getByRole('tab', { name: /^My Work/ })));
-  const onMyBounties = inboxOnScreen && myBountiesSelected;
+  // The sheet's heading; the people who offered are listed under it.
+  const whoOffered = page.getByText('Who offered', { exact: true });
+  const whoOfferedOnScreen = await anyOnScreen(whoOffered);
   console.log(
     JSON.stringify({
       url: url.pathname + url.search,
       tabParam: url.searchParams.get('tab'),
       barTab,
       onFeed,
-      inboxOnScreen,
-      myBountiesSelected,
-      onMyBounties,
+      whoOfferedOnScreen,
     }),
   );
-  process.exitCode = onMyBounties && barTab === 'Inbox' ? 0 : 1;
+  process.exitCode = whoOfferedOnScreen && barTab === 'My jobs' ? 0 : 1;
 } finally {
   await browser.close();
 }

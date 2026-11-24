@@ -45,7 +45,8 @@ describe('resolveNotificationDeepLink: application', () => {
       type: 'application',
       data: { bountyId: 'abc-123' },
     });
-    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?tab=messages&initialTab=requests' });
+    // Names the job, so My Jobs opens "Who offered" for that job, not another.
+    expect(action).toEqual({ kind: 'route', path: '/tabs/bounty-app?tab=messages&initialTab=requests&bountyId=abc-123' });
   });
 
   test('routes the pending-application reminder to the same screen', () => {
@@ -153,7 +154,7 @@ describe('resolveNotificationDeepLink: application (GitHub #809)', () => {
     });
     expect(action).toEqual({
       kind: 'route',
-      path: '/tabs/bounty-app?tab=messages&initialTab=requests',
+      path: '/tabs/bounty-app?tab=messages&initialTab=requests&bountyId=abc-123',
     });
   });
 

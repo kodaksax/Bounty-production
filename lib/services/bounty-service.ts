@@ -156,6 +156,29 @@ const MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK = 10; // Minimum title length for sub
 
 export const bountyService = {
   /**
+   * When each bounty is funded ('at_post' or 'at_accept'), for a list of the
+   * viewer's own bounties. The list reads use FEED_SAFE_BOUNTY_COLUMNS, which
+   * leave funding out; My Jobs needs it to tell a poster the money truth
+   * ("You only pay when you choose" vs "already held"). Best effort: an id
+   * that couldn't be read is simply missing from the map.
+   */
+  async getFundingModes(bountyIds: (string | number)[]): Promise<Map<string, 'at_post' | 'at_accept'>> {
+    const modes = new Map<string, 'at_post' | 'at_accept'>();
+    const ids = Array.from(new Set(bountyIds.map(String))).filter(Boolean);
+    if (!isSupabaseConfigured || ids.length === 0) return modes;
+    try {
+      const { data, error } = await supabase.from('bounties').select('id, funding_mode').in('id', ids);
+      if (error) throw error;
+      for (const row of (data ?? []) as { id: string | number; funding_mode?: string | null }[]) {
+        if (row.funding_mode === 'at_post' || row.funding_mode === 'at_accept') modes.set(String(row.id), row.funding_mode);
+      }
+    } catch (error) {
+      logger.warning('Could not load bounty funding modes', { error, count: ids.length });
+    }
+    return modes;
+  },
+
+  /**
    * Attach poster username/avatar (from `public_profiles`) to rows the caller
    * already has — one query, versus getById's row read plus profile read.
    * Never throws: on failure the rows come back unchanged.

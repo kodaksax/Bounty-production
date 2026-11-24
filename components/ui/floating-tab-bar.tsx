@@ -60,12 +60,12 @@ export function FloatingTabBar({
     () => [
       {
         key: "messages",
-        icon: "assignment",
-        title: "Inbox",
+        icon: "inbox",
+        title: "My jobs",
         label:
           unreadMessageCount > 0
-            ? `My Bounties, ${unreadMessageCount} unread message${unreadMessageCount === 1 ? "" : "s"}`
-            : "View your bounties",
+            ? `My jobs, ${unreadMessageCount} unread message${unreadMessageCount === 1 ? "" : "s"}`
+            : "My jobs",
       },
       { key: "wallet", icon: "account-balance-wallet", title: "Wallet", label: "View wallet and transactions" },
       { key: "bounty", icon: "gps-fixed", title: "Home", label: "View bounty dashboard - Main screen" },

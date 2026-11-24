@@ -18,6 +18,36 @@ export type CancellationReasonCategory =
  */
 export const cancellationService = {
   /**
+   * Pending cancellation requests for these bounties, keyed by bounty id, with
+   * who asked (the other role is the one who must respond). One query — the
+   * list equivalent of getCancellationByBountyId. Best effort: on failure the
+   * map is empty.
+   */
+  async getPendingCancellationsForBounties(
+    bountyIds: (string | number)[]
+  ): Promise<Map<string, 'poster' | 'hunter'>> {
+    const pending = new Map<string, 'poster' | 'hunter'>();
+    const ids = Array.from(new Set(bountyIds.map(String))).filter(Boolean);
+    if (!isSupabaseConfigured || ids.length === 0) return pending;
+    try {
+      const { data, error } = await supabase
+        .from('bounty_cancellations')
+        .select('bounty_id, requester_type')
+        .in('bounty_id', ids)
+        .eq('status', 'pending');
+      if (error) throw error;
+      for (const row of (data ?? []) as { bounty_id: string | number; requester_type?: string | null }[]) {
+        if (row.requester_type === 'poster' || row.requester_type === 'hunter') {
+          pending.set(String(row.bounty_id), row.requester_type);
+        }
+      }
+    } catch (error) {
+      logger.warning('Could not load pending cancellations for bounties', { error, count: ids.length });
+    }
+    return pending;
+  },
+
+  /**
    * File a cancellation request. HUNTER ONLY.
    *
    * A cancellation request asks the counterparty for release from work already
