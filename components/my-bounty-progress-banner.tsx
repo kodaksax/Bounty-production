@@ -5,18 +5,26 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
-  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Reanimated, {
+  Easing as REasing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import type { Bounty } from '../lib/services/database.types';
 import { SIZING, SPACING } from '../lib/constants/accessibility';
 import { storage } from '../lib/storage';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { useTabPager } from './ui/tab-pager';
 
 // Where the viewer's own bounty sits in its lifecycle, as the poster sees it.
 // 'review' is not a bounty status: it's an in_progress bounty whose latest
@@ -142,7 +150,15 @@ export const LARGE_TAB_HEIGHT = 32;
 // How far up (as a share of the card's height) a drag has to travel, or how
 // fast it has to be flicked, before letting go sends the card away.
 const STASH_DISTANCE = 0.3;
-const STASH_VELOCITY = 0.6;
+// pt/s (gesture-handler reports velocity in points per second).
+const STASH_VELOCITY = 600;
+// Vertical travel before the drag claims the touch, and sideways travel that
+// gives it up to the horizontal scrollers (the card pager, the tab pager).
+const DRAG_ACTIVATE_Y = 10;
+const DRAG_FAIL_X = 14;
+// Every settle (back home, or back out) is a short ease-out with no
+// overshoot: a spring here read as the card bouncing up and down.
+const SETTLE = { duration: 180, easing: REasing.out(REasing.cubic) };
 // Extra travel past the card's own height so its shadow clears the top too.
 const OFFSCREEN_EXTRA = 24;
 
@@ -175,11 +191,11 @@ export function MyBountyProgressCarousel({
   // stashed stack doesn't flash in on launch.
   const [hydrated, setHydrated] = useState(false);
 
-  // Vertical offset of the cards: 0 = showing, hiddenOffset() = off the top.
-  const drag = useRef(new Animated.Value(0)).current;
-  const heightRef = useRef(0);
-  heightRef.current = contentHeight;
-  const hiddenOffset = () => -(heightRef.current + OFFSCREEN_EXTRA);
+  // Vertical offset of the cards: 0 = showing, hidden() = off the top. A
+  // Reanimated shared value so the drag tracks the finger on the UI thread —
+  // a busy JS thread (feed loading on a real device) can't make it lag.
+  const drag = useSharedValue(0);
+  const heightSV = useSharedValue(0);
   // A stack restored as stashed has no height to hide behind until the cards
   // are measured, so it stays invisible until then instead of flashing in.
   const concealed = stashed && contentHeight === 0;
@@ -207,76 +223,116 @@ export function MyBountyProgressCarousel({
 
   // Keep a stashed stack fully off screen if its height changes.
   useEffect(() => {
-    if (stashed) drag.setValue(-(contentHeight + OFFSCREEN_EXTRA));
+    if (stashed) drag.value = -(contentHeight + OFFSCREEN_EXTRA);
   }, [stashed, contentHeight, drag]);
 
-  const persist = (value: boolean) => {
-    storage.setItem(STASHED_KEY, String(value)).catch?.(() => {});
-  };
+  // JS side of a stash/expand: state + the remembered preference. Stable, so
+  // the gestures below are built once, never mid-drag.
+  const onStashed = useCallback(() => {
+    setStashed(true);
+    storage.setItem(STASHED_KEY, 'true').catch?.(() => {});
+  }, []);
+  const onExpanded = useCallback(() => {
+    setStashed(false);
+    storage.setItem(STASHED_KEY, 'false').catch?.(() => {});
+  }, []);
 
-  const springHome = useCallback(() => {
-    Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
-  }, [drag]);
-
+  // Screen-reader "Hide" action (the drag's stand-in).
   const stash = useCallback(() => {
-    Animated.timing(drag, {
-      toValue: hiddenOffset(),
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => setStashed(true));
-    persist(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drag]);
+    drag.value = withTiming(
+      -(heightSV.value + OFFSCREEN_EXTRA),
+      { duration: 220, easing: REasing.out(REasing.cubic) },
+      finished => {
+        'worklet';
+        if (finished) runOnJS(onStashed)();
+      }
+    );
+  }, [drag, heightSV, onStashed]);
 
   const expand = useCallback(() => {
-    setStashed(false);
-    springHome();
-    persist(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [springHome]);
+    onExpanded();
+    drag.value = withTiming(0, SETTLE);
+  }, [drag, onExpanded]);
 
-  // Dragging the cards. Claims only clearly vertical moves (capture phase, so
-  // it wins over the card's tap), leaving sideways swipes to the pager.
-  const cardsPan = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponderCapture: (_, g) =>
-          Math.abs(g.dy) > 8 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
-        onPanResponderTerminationRequest: () => false,
-        // Follows the finger up freely; downward it only gives a little, so
-        // it feels held in place rather than stuck.
-        onPanResponderMove: (_, g) => drag.setValue(g.dy < 0 ? g.dy : g.dy * 0.15),
-        onPanResponderRelease: (_, g) => {
-          if (g.dy < -heightRef.current * STASH_DISTANCE || g.vy < -STASH_VELOCITY) stash();
-          else springHome();
-        },
-        onPanResponderTerminate: springHome,
-      }),
-    [drag, stash, springHome]
-  );
+  // ── Gestures ─────────────────────────────────────────────────────────
+  // The tab shell's pager (app/tabs/bounty-app.tsx) is a native
+  // UIScrollView/ViewPager. A JS PanResponder can't hold it off: the native
+  // recognizer decides on the UI thread from the first few points, while the
+  // responder only hears about the move a frame or more later over the
+  // bridge. On a real device — a thumb's swipe up always drifts sideways and
+  // the JS thread is busy — the pager won that race and slid to Wallet or
+  // Post. (A simulator's mouse drag is perfectly straight, so it never did.)
+  //
+  // So these pans run in gesture-handler and *block* the pager (and the cards'
+  // own horizontal pager): those wait until the pan fails, which it does as
+  // soon as the finger travels DRAG_FAIL_X sideways first. Horizontal swipes
+  // still page; vertical ones never leak into a tab change.
+  const tabPagerGesture = useTabPager()?.gesture ?? null;
+  const cardsScrollGesture = useMemo(() => Gesture.Native(), []);
+
+  const cardsPan = useMemo(() => {
+    const pan = Gesture.Pan()
+      .activeOffsetY([-DRAG_ACTIVATE_Y, DRAG_ACTIVATE_Y])
+      .failOffsetX([-DRAG_FAIL_X, DRAG_FAIL_X])
+      .onUpdate(e => {
+        'worklet';
+        // Follows the finger up; never moves down past its resting place.
+        drag.value = Math.min(0, e.translationY);
+      })
+      .onEnd(e => {
+        'worklet';
+        const height = heightSV.value;
+        if (e.translationY < -height * STASH_DISTANCE || e.velocityY < -STASH_VELOCITY) {
+          drag.value = withTiming(
+            -(height + OFFSCREEN_EXTRA),
+            { duration: 220, easing: REasing.out(REasing.cubic) },
+            finished => {
+              'worklet';
+              if (finished) runOnJS(onStashed)();
+            }
+          );
+        } else {
+          drag.value = withTiming(0, SETTLE);
+        }
+      })
+      .onFinalize((_e, success) => {
+        'worklet';
+        if (!success) drag.value = withTiming(0, SETTLE);
+      });
+    return tabPagerGesture
+      ? pan.blocksExternalGesture(tabPagerGesture, cardsScrollGesture)
+      : pan.blocksExternalGesture(cardsScrollGesture);
+  }, [drag, heightSV, onStashed, tabPagerGesture, cardsScrollGesture]);
 
   // Pulling the tab down draws the cards back in under the finger.
-  const tabPan = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
-        onPanResponderMove: (_, g) =>
-          drag.setValue(Math.min(0, hiddenOffset() + Math.max(0, g.dy))),
-        onPanResponderRelease: (_, g) => {
-          if (g.dy > heightRef.current * STASH_DISTANCE || g.vy > STASH_VELOCITY) expand();
-          else
-            Animated.timing(drag, {
-              toValue: hiddenOffset(),
-              duration: 160,
-              useNativeDriver: true,
-            }).start();
-        },
-        onPanResponderTerminate: () => drag.setValue(hiddenOffset()),
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [drag, expand]
-  );
+  const tabPan = useMemo(() => {
+    const pan = Gesture.Pan()
+      .activeOffsetY([-100000, 6])
+      .failOffsetX([-DRAG_FAIL_X, DRAG_FAIL_X])
+      .onUpdate(e => {
+        'worklet';
+        const hidden = -(heightSV.value + OFFSCREEN_EXTRA);
+        drag.value = Math.min(0, hidden + Math.max(0, e.translationY));
+      })
+      .onEnd(e => {
+        'worklet';
+        if (e.translationY > heightSV.value * STASH_DISTANCE || e.velocityY > STASH_VELOCITY) {
+          runOnJS(onExpanded)();
+          drag.value = withTiming(0, SETTLE);
+        } else {
+          drag.value = withTiming(-(heightSV.value + OFFSCREEN_EXTRA), SETTLE);
+        }
+      })
+      .onFinalize((_e, success) => {
+        'worklet';
+        if (!success) {
+          drag.value = withTiming(-(heightSV.value + OFFSCREEN_EXTRA), SETTLE);
+        }
+      });
+    return tabPagerGesture ? pan.blocksExternalGesture(tabPagerGesture) : pan;
+  }, [drag, heightSV, onExpanded, tabPagerGesture]);
+
+  const cardsStyle = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
 
   const tabTextColor = transparentTab && tabContentColor ? { color: tabContentColor } : null;
 
@@ -289,85 +345,88 @@ export function MyBountyProgressCarousel({
       onLayout={e => setWidth(e.nativeEvent.layout.width)}
     >
       {stashed && (
-        <View style={styles.tabRow} pointerEvents="box-none" {...tabPan.panHandlers}>
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              largeTab && styles.tabLarge,
-              transparentTab && styles.tabTransparent,
-            ]}
-            activeOpacity={0.85}
-            onPress={expand}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel={`Your bounty progress is hidden${
-              items.length > 1 ? `, ${items.length} bounties` : ''
-            }`}
-            accessibilityHint="Shows it again"
-            testID="feed-my-bounty-progress-tab"
-          >
-            {!transparentTab && (
-              <BlurView intensity={40} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
-            )}
-            <View style={[styles.tabDot, largeTab && styles.tabDotLarge]} />
-            {largeTab && (
-              <Text style={[styles.tabLabel, tabTextColor]} numberOfLines={1}>
-                {items.length === 1 ? 'Your bounty' : 'Your bounties'}
-              </Text>
-            )}
-            {items.length > 1 && (
-              <Text style={[styles.tabCount, largeTab && styles.tabCountLarge, tabTextColor]}>
-                {largeTab ? `(${items.length})` : items.length}
-              </Text>
-            )}
-            <MaterialIcons
-              name="expand-more"
-              size={largeTab ? 22 : 16}
-              color={(transparentTab && tabContentColor) || palette.strong}
-            />
-          </TouchableOpacity>
-        </View>
+        <GestureDetector gesture={tabPan}>
+          <View style={styles.tabRow} pointerEvents="box-none">
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                largeTab && styles.tabLarge,
+                transparentTab && styles.tabTransparent,
+              ]}
+              activeOpacity={0.85}
+              onPress={expand}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Your bounty progress is hidden${
+                items.length > 1 ? `, ${items.length} bounties` : ''
+              }`}
+              accessibilityHint="Shows it again"
+              testID="feed-my-bounty-progress-tab"
+            >
+              {!transparentTab && (
+                <BlurView intensity={40} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
+              )}
+              <View style={[styles.tabDot, largeTab && styles.tabDotLarge]} />
+              {largeTab && (
+                <Text style={[styles.tabLabel, tabTextColor]} numberOfLines={1}>
+                  {items.length === 1 ? 'Your bounty' : 'Your bounties'}
+                </Text>
+              )}
+              {items.length > 1 && (
+                <Text style={[styles.tabCount, largeTab && styles.tabCountLarge, tabTextColor]}>
+                  {largeTab ? `(${items.length})` : items.length}
+                </Text>
+              )}
+              <MaterialIcons
+                name="expand-more"
+                size={largeTab ? 22 : 16}
+                color={(transparentTab && tabContentColor) || palette.strong}
+              />
+            </TouchableOpacity>
+          </View>
+        </GestureDetector>
       )}
 
-      <Animated.View
-        style={[
-          styles.cards,
-          { opacity: concealed ? 0 : 1, transform: [{ translateY: drag }] },
-        ]}
-        pointerEvents={stashed ? 'none' : 'box-none'}
-        importantForAccessibility={stashed ? 'no-hide-descendants' : 'auto'}
-        onLayout={e => {
-          // Before the pager mounts (width 0) this is only the padding, not
-          // the cards, so it isn't a height worth hiding behind yet.
-          if (width === 0) return;
-          const height = e.nativeEvent.layout.height;
-          // Move a stashed stack off screen before the re-render reveals it.
-          if (stashed) drag.setValue(-(height + OFFSCREEN_EXTRA));
-          setContentHeight(height);
-        }}
-        {...cardsPan.panHandlers}
-      >
-        {width > 0 && (
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            scrollEnabled={items.length > 1}
-          >
-            {items.map((item, i) => (
-              <View key={String(item.bounty.id)} style={{ width }}>
-                <MyBountyProgressBanner
-                  bounty={item.bounty}
-                  stage={item.stage}
-                  position={items.length > 1 ? { index: i, total: items.length } : undefined}
-                  onPress={() => onPressItem(item.bounty)}
-                  onHide={stash}
-                />
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </Animated.View>
+      <GestureDetector gesture={cardsPan}>
+        <Reanimated.View
+          style={[styles.cards, { opacity: concealed ? 0 : 1 }, cardsStyle]}
+          pointerEvents={stashed ? 'none' : 'box-none'}
+          importantForAccessibility={stashed ? 'no-hide-descendants' : 'auto'}
+          onLayout={e => {
+            // Before the pager mounts (width 0) this is only the padding, not
+            // the cards, so it isn't a height worth hiding behind yet.
+            if (width === 0) return;
+            const height = e.nativeEvent.layout.height;
+            // Move a stashed stack off screen before the re-render reveals it.
+            heightSV.value = height;
+            if (stashed) drag.value = -(height + OFFSCREEN_EXTRA);
+            setContentHeight(height);
+          }}
+        >
+          {width > 0 && (
+            <GestureDetector gesture={cardsScrollGesture}>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                scrollEnabled={items.length > 1}
+              >
+                {items.map((item, i) => (
+                  <View key={String(item.bounty.id)} style={{ width }}>
+                    <MyBountyProgressBanner
+                      bounty={item.bounty}
+                      stage={item.stage}
+                      position={items.length > 1 ? { index: i, total: items.length } : undefined}
+                      onPress={() => onPressItem(item.bounty)}
+                      onHide={stash}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </GestureDetector>
+          )}
+        </Reanimated.View>
+      </GestureDetector>
     </View>
   );
 }
