@@ -387,13 +387,13 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
     primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : hire.primary;
     primaryA11y = showPaymentPromise
       ? paymentPromiseStrings.fundAndHireA11y(gate.hunterName)
-      : `Confirm and hire ${gate.hunterName} for ${amount.toFixed(2)} dollars`;
+      : hire.primary;
   } else if (stripeLoading) {
     primaryLabel = 'Checking payment methods…';
     primaryA11y = 'Checking payment methods';
   } else if (!hasPaymentMethod && !sheetAvailable) {
     primaryLabel = `Link a card to pay ${money(chargeAmount)}`;
-    primaryA11y = `Link a payment method to pay ${chargeAmount.toFixed(2)} dollars and hire`;
+    primaryA11y = primaryLabel;
   } else if (isProcessing) {
     primaryLabel = 'Processing…';
     primaryA11y = 'Processing payment';
@@ -401,7 +401,7 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
     primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : hire.primary;
     primaryA11y = showPaymentPromise
       ? paymentPromiseStrings.fundAndHireA11y(gate.hunterName)
-      : `Pay ${chargeAmount.toFixed(2)} dollars and hire ${gate.hunterName}`;
+      : hire.primary;
   }
   const primaryDisabled = busy || (needsPayment && stripeLoading);
   const showApplePay = Platform.OS === 'ios' && needsPayment && !settling && !paymentPending;

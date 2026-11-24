@@ -538,7 +538,7 @@ export default function PublicBountyDetail() {
               an application (or the poster) keeps the lifecycle banner. */}
           {lifecycle && viewerRole === 'visitor' && !isOwnBounty ? (
             <>
-              {bounty.status === 'open' ? (
+              {lifecycle.status === 'open' ? (
                 <NoteBox
                   tone="g"
                   icon="check-circle"
@@ -546,7 +546,7 @@ export default function PublicBountyDetail() {
                   text={`${firstName((bounty as any).username) ?? 'The poster'} hasn't chosen anyone yet.`}
                   testID="job-taking-offers"
                 />
-              ) : bounty.accepted_by || bounty.status === 'in_progress' || bounty.status === 'completed' ? (
+              ) : lifecycle.status === 'in_progress' ? (
                 <NoteBox
                   tone="n"
                   icon="lock"
@@ -701,7 +701,7 @@ export default function PublicBountyDetail() {
               <View style={s.closedNotice}>
                 <MaterialIcons name="lock" size={16} color={theme.textSecondary} />
                 <Text style={s.closedNoticeText}>
-                  {bounty.accepted_by || bounty.status === 'in_progress'
+                  {lifecycle?.status === 'in_progress'
                     ? "Someone's already doing this job, so it isn't taking offers."
                     : 'This bounty is no longer accepting applications.'}
                 </Text>

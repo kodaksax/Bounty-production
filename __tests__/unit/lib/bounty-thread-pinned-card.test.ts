@@ -138,8 +138,43 @@ describe('describeJobStrip', () => {
     ).toBe('You offered · $80');
   });
 
-  it('after approval: released to the wallet, never "paid"', () => {
+  it('after approval: release wording stays unconfirmed until settlement is confirmed', () => {
     const strip = describeJobStrip({ role: 'hunter', viewerId: HUNTER, bounty: { ...hired, status: 'completed' }, counterpartName: 'Jordan' });
+    expect(strip.text).toMatch(/^You did this · \$\d+(\.\d\d)? release status unconfirmed$/);
+    expect(strip.text).not.toMatch(/paid|released to your wallet/i);
+  });
+
+  it('confirms release only from payment settlement and uses a safe helper fallback', () => {
+    const strip = describeJobStrip({
+      role: 'poster',
+      viewerId: 'poster-1',
+      counterpartId: 'applicant-1',
+      bounty: { ...hired, status: 'completed', accepted_by: 'hunter-1' },
+      counterpartName: 'Jordan',
+      paymentState: 'released',
+    });
+    expect(strip.text).toBe('You posted this · Released to your helper');
+  });
+
+  it('archived completed work uses the completed, read-only strip', () => {
+    const strip = describeJobStrip({
+      role: 'hunter',
+      viewerId: HUNTER,
+      bounty: { ...hired, status: 'archived', completed_at: '2026-01-01' },
+      counterpartName: 'Jordan',
+      paymentState: 'released',
+    });
+    expect(strip.text).toMatch(/^You did this · \$\d+(\.\d\d)? released to your wallet$/);
+  });
+
+  it('after confirmed approval: released to the wallet, never "paid"', () => {
+    const strip = describeJobStrip({
+      role: 'hunter',
+      viewerId: HUNTER,
+      bounty: { ...hired, status: 'completed' },
+      counterpartName: 'Jordan',
+      paymentState: 'released',
+    });
     expect(strip.text).toMatch(/^You did this · \$\d+(\.\d\d)? released to your wallet$/);
     expect(strip.text).not.toMatch(/paid/i);
   });

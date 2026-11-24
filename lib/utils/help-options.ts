@@ -64,7 +64,9 @@ export function getHelpOptions(ctx: HelpContext): HelpOptionSpec[] {
   return [
     { key: 'message', icon: 'chat-bubble-outline', text: `Message ${name}`, tone: 'g', target: 'thread' },
     { key: 'not_replying', icon: 'person-off', text: `${name} isn't replying`, tone: 'w', target: 'dispute', reason: 'poster_unresponsive' },
-    { key: 'cant_do', icon: 'event-busy', text: "I can't do this job any more", tone: 'w', target: 'cancel_request' },
+    ...(!ctx.workSubmitted
+      ? [{ key: 'cant_do' as const, icon: 'event-busy', text: "I can't do this job any more", tone: 'w' as const, target: 'cancel_request' as const }]
+      : []),
     { ...somethingElse, target: 'dispute', reason: 'other' },
   ];
 }

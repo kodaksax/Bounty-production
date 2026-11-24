@@ -99,6 +99,7 @@ describe('buildPastJobs — WORK YOU DID', () => {
       viewerId: ME,
       posted: [],
       offers: [{ bounty: tv }],
+      paymentStates: new Map([['b-1', 'released']]),
       reviews: [review({ bountyId: 'b-1', raterRole: 'poster', raterName: 'Jordan K.', comment: 'Quick and tidy, cables hidden.' })],
       now: NOW,
     });
@@ -123,6 +124,7 @@ describe('buildPastJobs — WORK YOU DID', () => {
       viewerId: ME,
       posted: [],
       offers: [{ bounty: tv }],
+      paymentStates: new Map([['b-1', 'released']]),
       reviews: [
         review({ bountyId: 'b-1', raterRole: 'hunter', raterName: 'Someone', score: 1, comment: 'Not about your work' }),
         review({ bountyId: 'b-1', raterRole: 'poster', raterName: 'Jordan K.', score: 4 }),
@@ -179,6 +181,7 @@ describe('buildPastJobs — WORK YOU DID', () => {
           bounty: bounty({ id: 'b-1', accepted_by: ME, payment_architecture_version: 2, payment_status: 'release_pending' }),
         },
       ],
+      paymentStates: new Map([['b-1', 'pending']]),
       now: NOW,
     });
     expect(work[0].status).toBe(`Approved · ${net80} on its way to your wallet`);
@@ -195,6 +198,7 @@ describe('buildPastJobs — JOBS YOU POSTED', () => {
       posted: [gate, plants],
       offers: [],
       helperNames: new Map([['p-1', 'Sam T.']]),
+      paymentStates: new Map([['p-1', 'released']]),
       refunds: new Map([['p-2', 25]]),
       now: NOW,
     });
@@ -206,7 +210,7 @@ describe('buildPastJobs — JOBS YOU POSTED', () => {
 
   it('without a refund record a cancelled job says only "Cancelled"; without a name, "your helper"', () => {
     const { posted } = buildPastJobs({ viewerId: ME, posted: [gate, plants], offers: [], now: NOW });
-    expect(posted.map((r) => r.status)).toEqual(['Finished · $35 released to your helper', 'Cancelled']);
+    expect(posted.map((r) => r.status)).toEqual(['Finished · $35 settlement unconfirmed', 'Cancelled']);
   });
 
   it('a card-funded job refunds to the card, so it does not say "back to your balance"', () => {
@@ -246,6 +250,7 @@ describe('buildPastJobs — JOBS YOU POSTED', () => {
         bounty({ id: 'p-5', status: 'archived', completed_at: SATURDAY, accepted_by: 'h-2' }),
       ],
       offers: [],
+      paymentStates: new Map([['p-5', 'released']]),
       now: NOW,
     });
     expect(posted.map((r) => r.bountyId)).toEqual(['p-5']);

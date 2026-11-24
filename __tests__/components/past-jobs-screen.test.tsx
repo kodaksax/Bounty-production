@@ -100,7 +100,11 @@ function bothSides() {
   mockReviews.mockResolvedValue([
     { id: 'rv-1', user_id: 'me', rater_id: 'poster-1', bountyId: 'b-1', score: 5, raterRole: 'poster', raterName: 'Jordan K.', comment: 'Quick and tidy, cables hidden.', createdAt: recent },
   ]);
-  mockTransactions = [{ id: 't-1', type: 'refund', amount: 25, date: new Date(), details: { bounty_id: 'p-2' } }];
+  mockTransactions = [
+    { id: 't-1', type: 'refund', amount: 25, date: new Date(), details: { bounty_id: 'p-2' } },
+    { id: 't-2', type: 'release', amount: 80, date: new Date(), details: { bounty_id: 'b-1', settlementState: 'ledger_only' } },
+    { id: 't-3', type: 'release', amount: 35, date: new Date(), details: { bounty_id: 'p-1', settlementState: 'ledger_only' } },
+  ];
 }
 
 beforeEach(() => {
@@ -130,9 +134,15 @@ describe('Past jobs (P.1)', () => {
     // One review: below the threshold, so a count and no average.
     expect(within(facts).getByLabelText('Your rating as a helper: 1 review so far')).toBeTruthy();
 
-    expect(mockGetByUserId).toHaveBeenCalledWith('me', { includeArchived: true });
-    expect(mockOffers).toHaveBeenCalledWith({ userId: 'me' });
-    expect(mockBatch).toHaveBeenCalledWith(['p-1']);
+    expect(mockGetByUserId).toHaveBeenCalledWith('me', {
+      statuses: ['completed', 'cancelled', 'archived'],
+      includeArchived: true,
+      limit: 100,
+      offset: 0,
+      throwOnError: true,
+    });
+    expect(mockOffers).toHaveBeenCalledWith({ userId: 'me', page: 1, pageSize: 100, throwOnError: true });
+    expect(mockBatch).toHaveBeenCalledWith(['p-1'], { status: 'accepted', throwOnError: true });
     expect(mockReviews).toHaveBeenCalledWith('me', { limit: 50, offset: 0 });
   });
 

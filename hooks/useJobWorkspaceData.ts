@@ -13,6 +13,7 @@ import { useRefreshOnReturn } from './useRouteFocus';
 import { isCoordinationMessage, isHireWelcomeMessage } from '../lib/my-jobs/hire-message';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { bountyRequestService } from '../lib/services/bounty-request-service';
+import { messageService } from '../lib/services/message-service';
 import { cancellationService } from '../lib/services/cancellation-service';
 import { disputeService } from '../lib/services/dispute-service';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
@@ -76,19 +77,12 @@ export function useJobConversation(args: {
           const ids = (c.participantIds || []).map(String);
           return ids.includes(String(viewerId)) && ids.includes(String(otherId));
         });
-        const conv = pair.find((c) => String(c.bountyId) === String(bountyId)) ?? pair[0] ?? null;
+        const conv = pair.find((c) => String(c.bountyId) === String(bountyId)) ?? null;
         if (!conv) {
           if (active) setState({ ...EMPTY_CONVERSATION, loaded: true });
           return;
         }
-        let messages: Message[] = await supabaseMessaging.fetchMessages(String(conv.id));
-        // The thread shows everything the pair has said, so a message sent after
-        // the hire can sit in another of their conversations.
-        const otherIds = pair.filter((c) => c !== conv).map((c) => String(c.id));
-        if (since && otherIds.length > 0 && !messages.some((m) => isCoordinationMessage(m, since))) {
-          const elsewhere = await supabaseMessaging.fetchMessagesForConversations(otherIds).catch(() => [] as Message[]);
-          messages = messages.concat(elsewhere.filter((m) => isCoordinationMessage(m, since)));
-        }
+        const messages: Message[] = await messageService.getMessages(String(conv.id));
         const talk = messages
           .filter((m) => isCoordinationMessage(m, since))
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
@@ -127,6 +121,7 @@ export function useJobConversation(args: {
 export function usePendingApplicants(bountyId: string | null | undefined, enabled: boolean) {
   const [applicants, setApplicants] = useState<BountyRequestWithDetails[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -134,18 +129,31 @@ export function usePendingApplicants(bountyId: string | null | undefined, enable
     if (!enabled || !bountyId) {
       setApplicants([]);
       setLoaded(true);
+      setFailed(false);
       return;
     }
-    bountyRequestService
-      .getAllWithDetailsBatch([String(bountyId)], { status: 'pending', page: 1, pageSize: 50 })
+    setFailed(false);
+    (async () => {
+      const all: BountyRequestWithDetails[] = [];
+      const pageSize = 50;
+      for (let page = 1; ; page++) {
+        const rows = await bountyRequestService.getAllWithDetailsBatch(
+          [String(bountyId)],
+          { status: 'pending', page, pageSize, throwOnError: true }
+        );
+        all.push(...(rows ?? []).filter((row) => row.status === 'pending'));
+        if (!rows || rows.length < pageSize) break;
+      }
+      return all;
+    })()
       .then((rows) => {
         if (!active) return;
-        setApplicants(sortApplicantsLocalFirst((rows ?? []).filter((r) => r.status === 'pending')));
+        setApplicants(sortApplicantsLocalFirst(rows));
         setLoaded(true);
       })
       .catch(() => {
         if (!active) return;
-        setApplicants([]);
+        setFailed(true);
         setLoaded(true);
       });
     return () => {
@@ -154,7 +162,7 @@ export function usePendingApplicants(bountyId: string | null | undefined, enable
   }, [bountyId, enabled, attempt]);
 
   const reload = React.useCallback(() => setAttempt((n) => n + 1), []);
-  return { applicants, loaded, reload };
+  return { applicants, loaded, failed, reload };
 }
 
 /** When the helper was chosen: the accepted request's accepted_at (or its last update). */

@@ -29,6 +29,7 @@ import { useWallet } from '../lib/wallet-context';
 import { ConsequenceList, FlowTitle, NoteBox } from './poster/blocks';
 import { ProofPhotos } from './poster/media';
 import { firstName, formatJobAmount } from '../lib/my-jobs/format';
+import { calculateHunterEarnings } from '../lib/constants/fees';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
 import { RatingStars } from './ui/rating-stars';
 import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
@@ -757,7 +758,7 @@ export function PosterReviewModal({
                           {
                             icon: 'lock-open',
                             title: `Your ${shortAmount} is released to ${helperFirst}`,
-                            detail: `It goes to ${helperFirst}'s Bounty balance.`,
+                            detail: `After the platform fee, ${helperFirst} receives ${formatJobAmount(calculateHunterEarnings(bountyAmount).net)} in their Bounty balance.`,
                           },
                           { icon: 'block', title: "This can't be undone", detail: 'Only approve if the job is finished.' },
                         ]

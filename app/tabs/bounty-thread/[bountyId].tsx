@@ -90,7 +90,7 @@ function BountyThreadScreen() {
     viewerId: viewerId ?? null,
     counterpartId: role === 'poster' ? params.with ?? null : null,
   });
-  const { bounty, request, submission, counterpart, events, hasActiveDispute, dispute, cancellation } = thread;
+  const { bounty, request, submission, counterpart, events, hasActiveDispute, dispute, cancellation, paymentState } = thread;
   // The bounty's real pending-offer count (the job page and Inbox count the
   // same rows), replacing a hard-coded 1. If that read failed, this thread's
   // own pending offer is the one thing known for sure, so it never says 0
@@ -465,7 +465,14 @@ function BountyThreadScreen() {
   const topBanner = (
     <View style={s.banner}>
       <JobStrip
-        input={{ role, viewerId: viewerId ?? null, bounty, counterpartName: firstName(counterpartName) ?? counterpartName }}
+        input={{
+          role,
+          viewerId: viewerId ?? null,
+          counterpartId: counterpart?.id ?? null,
+          bounty,
+          counterpartName: firstName(counterpartName) ?? counterpartName,
+          paymentState,
+        }}
         onOpenJob={openWorkspace}
       />
       <View style={s.bannerTop}>

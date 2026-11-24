@@ -62,6 +62,7 @@ export function canAutoFeature(job: MyJob, now: Date = new Date()): boolean {
 export interface ManualPick {
   key: string;
   outranking: string[];
+  bestRankAtPick?: number;
 }
 
 function signature(job: MyJob): string {
@@ -92,8 +93,9 @@ function knownRanks(pick: ManualPick): Map<string, number> {
  * Focus-first poster handoff's "until something more urgent happens": the
  * order itself (JOB_RANK) is unchanged.
  */
-function takesSlotBack(job: MyJob, picked: MyJob, known: Map<string, number>): boolean {
+function takesSlotBack(job: MyJob, picked: MyJob, known: Map<string, number>, bestRankAtPick: number): boolean {
   if (job.key === picked.key || !job.needsYou || job.rank >= picked.rank) return false;
+  if (job.rank >= bestRankAtPick) return false;
   const rankAtPick = known.get(job.key);
   return rankAtPick === undefined || job.rank < rankAtPick;
 }
@@ -101,9 +103,11 @@ function takesSlotBack(job: MyJob, picked: MyJob, known: Map<string, number>): b
 export function createManualPick(jobs: readonly MyJob[], key: string): ManualPick | null {
   const picked = jobs.find((j) => j.key === key);
   if (!picked) return null;
+  const outranking = jobs.filter((j) => j.key !== key && j.rank < picked.rank);
   return {
     key,
-    outranking: jobs.filter((j) => j.key !== key && j.rank < picked.rank).map(signature),
+    outranking: outranking.map(signature),
+    bestRankAtPick: Math.min(picked.rank, ...outranking.map((j) => j.rank)),
   };
 }
 
@@ -126,7 +130,9 @@ export function pickFeaturedJob(
     const picked = jobs.find((j) => j.key === manualPick.key);
     if (picked) {
       const known = knownRanks(manualPick);
-      if (!jobs.some((j) => takesSlotBack(j, picked, known))) return { job: picked, reason: 'manual' };
+      const bestRankAtPick =
+        manualPick.bestRankAtPick ?? Math.min(picked.rank, ...known.values());
+      if (!jobs.some((j) => takesSlotBack(j, picked, known, bestRankAtPick))) return { job: picked, reason: 'manual' };
     }
   }
   const auto = jobs.find((j) => canAutoFeature(j, now));

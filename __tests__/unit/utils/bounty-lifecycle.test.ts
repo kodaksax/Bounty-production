@@ -107,6 +107,18 @@ describe('resolveBountyLifecycle — poster lifecycle', () => {
     expect(released.group).toBe('past');
   });
 
+  it('an archived completed job is completed for its selected hunter receipt', () => {
+    const state = resolveBountyLifecycle({
+      bounty: bounty({ status: 'archived', completed_at: PAST, accepted_by: 'hunter-a' }),
+      role: 'hunter',
+      viewerId: 'hunter-a',
+      paymentState: 'released',
+    });
+    expect(state.status).toBe('completed');
+    expect(state.headline).toBe('Paid');
+    expect(state.primaryAction?.key).toBe('view_payout');
+  });
+
   it('an unclaimed bounty past its deadline pushes repost, not a phantom hunter', () => {
     const s = resolveBountyLifecycle({
       bounty: bounty({ end_date: PAST }),

@@ -174,7 +174,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           ? null
           : {
               kind: 'none',
-              text: `Nothing is held yet. If ${poster} chooses you, ${posterS} ${amount} is held by Bounty before you start.`,
+              text: `If ${poster} chooses you, ${posterS} ${amount} is held by Bounty before you start.`,
             },
         after: `If ${poster} chooses you, you start the work.`,
         primary: action('back_to_jobs', 'Back to My Jobs', 'quiet'),

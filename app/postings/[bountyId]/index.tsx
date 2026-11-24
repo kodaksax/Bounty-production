@@ -191,7 +191,7 @@ export default function BountyDashboard() {
 
   // ── Records the stage needs beyond the lifecycle ─────────────────────────
   const isPoster = role === 'poster';
-  const { applicants, reload: reloadApplicants } = usePendingApplicants(
+  const { applicants, failed: applicantsFailed, reload: reloadApplicants } = usePendingApplicants(
     bounty?.id != null ? String(bounty.id) : null,
     isPoster && bounty?.status === 'open' && applicationCount > 0
   );
@@ -1006,6 +1006,18 @@ export default function BountyDashboard() {
         />
       ) : null}
 
+      {applicantsFailed ? (
+        <View style={s.applicantError} testID="applicant-load-error">
+          <NoteBox
+            tone="e"
+            icon="wifi-off"
+            title="We couldn't refresh the offers"
+            text="Your last loaded list is still here. Check your connection and try again."
+          />
+          <PosterButton kind="text" icon="refresh" label="Try again" onPress={reloadApplicants} />
+        </View>
+      ) : null}
+
       {view.show.peopleStrip && applicants.length > 0 ? (
         <PeopleStrip
           label="WHO OFFERED"
@@ -1227,6 +1239,7 @@ function describeEditLocked(
 
 function makeStyles(p: PosterPalette) {
   return StyleSheet.create({
+    applicantError: { gap: 8 },
     centered: { flex: 1, backgroundColor: p.bg, justifyContent: 'center', gap: 12, padding: 24 },
     flex: { flex: 1 },
     personNav: { flexDirection: 'row', gap: 10 },

@@ -379,6 +379,14 @@ export interface PinnedThreadCard {
  * passing on an application, which keeps its buttons on the card).
  */
 export function selectPinnedThreadCard(events: readonly BountyThreadEvent[], role: BountyThreadRole): PinnedThreadCard | null {
+  if (events.some((e) => e.kind === 'dispute_opened' && e.live)) return null;
+
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind !== 'cancellation_requested' || !e.live) continue;
+    return { event: e, mode: e.yourTurn ? 'your_turn' : 'waiting' };
+  }
+
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
     if (e.yourTurn && e.action && PINNABLE.has(e.action)) return { event: e, mode: 'your_turn' };

@@ -9,13 +9,14 @@
  */
 import * as React from 'react';
 import { useMemo } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { IconName } from '../../lib/my-jobs/types';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { PosterPalette } from '../../lib/themes/poster-palette';
 import type { StageAction } from '../../lib/utils/stage-copy-types';
 import { PosterButton } from './poster-button';
+import { KeyboardAwareScrollView, KeyboardAvoidingScreen } from '../ui/keyboard-avoiding';
 
 export function PinnedFooter({ children, testID = 'pinned-footer' }: { children: React.ReactNode; testID?: string }) {
   const { theme } = useAppThemeContext();
@@ -86,22 +87,24 @@ export function WorkspaceLayout({
   const s = useMemo(() => makeStyles(p), [p]);
   const bg = background === 'card' ? p.card : p.bg;
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: bg }]} edges={['top']} testID={testID}>
-      <ScrollView
-        style={s.scroll}
-        contentContainerStyle={s.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={p.ink} colors={[p.g]} />
-          ) : undefined
-        }
-      >
-        {children}
-      </ScrollView>
-      {footer}
-    </SafeAreaView>
+    <KeyboardAvoidingScreen style={s.root}>
+      <SafeAreaView style={[s.root, { backgroundColor: bg }]} edges={['top']} testID={testID}>
+        <KeyboardAwareScrollView
+          style={s.scroll}
+          contentContainerStyle={s.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={p.ink} colors={[p.g]} />
+            ) : undefined
+          }
+        >
+          {children}
+        </KeyboardAwareScrollView>
+        {footer}
+      </SafeAreaView>
+    </KeyboardAvoidingScreen>
   );
 }
 

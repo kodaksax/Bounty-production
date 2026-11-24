@@ -1,16 +1,16 @@
 /**
  * Profile › Past jobs (Focus-first P.1): finished and cancelled jobs from both
  * sides, built from the reads the app already makes — the bounties you posted,
- * your offers with their bounties, the reviews you received, and your wallet's
- * own refund records. No new query, table or endpoint.
+ * your offers with their bounties, the reviews you received, payment settlement
+ * records, and your wallet's own refund records. No new endpoint or table.
  *
  * Money is only stated where something the app already trusts says it:
  *   - A hunter's take-home comes from calculateHunterEarnings, the same figure
  *     the job's own receipt (H.10) and the thread strip show. Wallet rows are
  *     not used for it: the poster's wallet logs `release` rows too, and Phase 2
  *     earnings sit in the Connect account, not the wallet ledger.
- *   - "Released" vs "on its way" comes from bountyHoldsUnreleasedEscrow, the
- *     helper the workspace uses for the same question.
+ *   - "Released" vs pending/unknown comes from confirmed payment settlement,
+ *     never from the bounty's completed status alone.
  *   - "back to your balance" needs a `refund` record for that job in the
  *     wallet, on a wallet-funded (v1) job. A card-funded job refunds to the
  *     card, so it says "refunded" without a destination.
@@ -32,7 +32,7 @@
 import { calculateHunterEarnings } from '../constants/fees';
 import type { Bounty } from '../services/database.types';
 import type { UserRating } from '../types';
-import { bountyHoldsUnreleasedEscrow, isStripeNativeBounty } from '../utils/payment-architecture';
+import { isStripeNativeBounty } from '../utils/payment-architecture';
 import { MIN_RATING_SAMPLE } from '../utils/trust-summary';
 import { firstName, formatJobAmount, formatJobDay, getBountyCategoryIcon } from './format';
 import type { IconName } from './types';
@@ -150,6 +150,8 @@ export interface PastJobsInput {
   reviews?: readonly UserRating[] | null;
   /** From refundsByBounty. */
   refunds?: ReadonlyMap<string, number>;
+  /** Confirmed payment settlement, separate from the bounty's completed status. */
+  paymentStates?: ReadonlyMap<string, 'released' | 'pending' | 'unknown'>;
   now?: Date;
 }
 
@@ -167,6 +169,7 @@ export function buildPastJobs({
   helperNames,
   reviews,
   refunds,
+  paymentStates,
   now = new Date(),
 }: PastJobsInput): PastJobs {
   const me = String(viewerId);
@@ -202,9 +205,13 @@ export function buildPastJobs({
       const { net } = calculateHunterEarnings(b.amount);
       earned += net;
       amount = formatJobAmount(net);
-      status = bountyHoldsUnreleasedEscrow(b)
-        ? `Approved · ${amount} on its way to your wallet`
-        : `Released · ${amount} to your wallet`;
+      const settlement = paymentStates?.get(id) ?? 'unknown';
+      status =
+        settlement === 'released'
+          ? `Released · ${amount} to your wallet`
+          : settlement === 'pending'
+            ? `Approved · ${amount} on its way to your wallet`
+            : `Approved · ${amount} settlement unconfirmed`;
     }
     work.push({
       key: `did:${id}`,
@@ -234,11 +241,14 @@ export function buildPastJobs({
     const amount = formatJobAmount(b.amount, honor);
     let status: string;
     if (done) {
+      const settlement = paymentStates?.get(id) ?? 'unknown';
       status = honor
         ? 'Finished'
-        : bountyHoldsUnreleasedEscrow(b)
-          ? `Finished · ${amount} on its way to ${helperFirst}`
-          : `Finished · ${amount} released to ${helperFirst}`;
+        : settlement === 'released'
+          ? `Finished · ${amount} released to ${helperFirst}`
+          : settlement === 'pending'
+            ? `Finished · ${amount} release pending to ${helperFirst}`
+            : `Finished · ${amount} settlement unconfirmed`;
     } else {
       const refund = honor ? undefined : refunds?.get(id);
       status =

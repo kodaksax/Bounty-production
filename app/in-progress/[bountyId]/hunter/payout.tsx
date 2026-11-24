@@ -91,7 +91,10 @@ export default function HunterPayoutScreen() {
       setBounty(bountyData);
 
       // Check if bounty is completed (poster released payout)
-      setIsPaidOut(bountyData.status === 'completed');
+      setIsPaidOut(
+        bountyData.status === 'completed' ||
+          (bountyData.status === 'archived' && !!(bountyData as any).completed_at)
+      );
 
       // The review deadline is informational: never block the screen on it.
       completionService
@@ -350,7 +353,7 @@ export default function HunterPayoutScreen() {
       rating={isPaidOut && routeBountyId ? <RateCounterpartyCard bountyId={routeBountyId} /> : null}
       help={help}
       moreExtra={
-        isPaidOut
+        isPaidOut && bounty.status !== 'archived'
           ? [
               { key: 'archive', label: 'Archive', icon: 'archive', busy: isProcessing, onPress: handleArchive },
               { key: 'delete', label: 'Delete', icon: 'delete', danger: true, busy: isProcessing, onPress: handleDelete },

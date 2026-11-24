@@ -80,7 +80,11 @@ export default function HunterFlowIndex() {
     if (!bounty || !routeBountyId) return null;
     if (role === 'poster') return { pathname: '/postings/[bountyId]', params: { bountyId: routeBountyId } };
     if (requestStatus === 'accepted' && currentUserId && String(bounty.accepted_by ?? '') === String(currentUserId)) {
-      if (bounty.status === 'completed' || state?.status === 'submitted_for_review') {
+      if (
+        bounty.status === 'completed' ||
+        (bounty.status === 'archived' && !!(bounty as any).completed_at) ||
+        state?.status === 'submitted_for_review'
+      ) {
         return { pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: routeBountyId } };
       }
       if (bounty.status === 'in_progress') {

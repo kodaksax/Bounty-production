@@ -8,11 +8,11 @@ import { buildHireWelcomeMessage, isCoordinationMessage } from '../../../lib/my-
 
 const mockConversations = jest.fn();
 const mockMessages = jest.fn();
-const mockElsewhere = jest.fn();
 jest.mock('../../../lib/services/supabase-messaging', () => ({
   fetchConversations: (...a: unknown[]) => mockConversations(...a),
-  fetchMessages: (...a: unknown[]) => mockMessages(...a),
-  fetchMessagesForConversations: (...a: unknown[]) => mockElsewhere(...a),
+}));
+jest.mock('../../../lib/services/message-service', () => ({
+  messageService: { getMessages: (...a: unknown[]) => mockMessages(...a) },
 }));
 jest.mock('../../../lib/services/bounty-request-service', () => ({ bountyRequestService: {} }));
 jest.mock('../../../lib/services/cancellation-service', () => ({ cancellationService: {} }));
@@ -23,6 +23,8 @@ import { useJobConversation } from '../../../hooks/useJobWorkspaceData';
 const HIRED = '2026-11-20T10:00:00Z';
 const msg = (senderId: string, text: string, createdAt: string) => ({ senderId, text, createdAt });
 const WELCOME = msg('poster', buildHireWelcomeMessage('Garage'), '2026-11-20T10:00:03Z');
+
+beforeEach(() => jest.clearAllMocks());
 
 async function load(messages: unknown[], viewerId = 'poster') {
   mockConversations.mockResolvedValue([{ id: 'c', bountyId: 'b', isGroup: false, participantIds: ['poster', 'ada'] }]);
@@ -66,14 +68,12 @@ it('reads a hire time without a zone as UTC, so a message right after the hire c
   expect(isCoordinationMessage({ text: 'x', createdAt: '2026-11-20T10:00:00Z' }, '2026-11-20T10:00:00')).toBe(true);
 });
 
-it('finds a message sent after the hire in another of their conversations', async () => {
+it('does not use another job’s conversation when this job has no thread', async () => {
   mockConversations.mockResolvedValue([
-    { id: 'c', bountyId: 'b', isGroup: false, participantIds: ['poster', 'ada'] },
     { id: 'd', bountyId: 'old', isGroup: false, participantIds: ['poster', 'ada'] },
   ]);
-  mockMessages.mockResolvedValue([WELCOME]);
-  mockElsewhere.mockResolvedValue([msg('ada', 'Saturday at 9?', '2026-11-20T11:00:00Z')]);
   const { result } = renderHook(() => useJobConversation({ viewerId: 'poster', otherId: 'ada', bountyId: 'b', since: HIRED }));
   await waitFor(() => expect(result.current.loaded).toBe(true));
-  expect(result.current.firstTalk).toEqual({ at: '2026-11-20T11:00:00Z', mine: false });
+  expect(result.current.firstTalk).toBeNull();
+  expect(mockMessages).not.toHaveBeenCalled();
 });

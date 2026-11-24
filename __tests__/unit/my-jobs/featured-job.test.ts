@@ -42,6 +42,14 @@ describe('sortJobs', () => {
     expect(jobs.map((j) => j.key)).toEqual(['problem', 'you', 'offers', 'msg', 'work', 'waiting', 'done']);
   });
 
+  it('a new need only takes over when it outranks the best job at pick time', () => {
+    const urgent = job('urgent', JOB_RANK.waitingOnYou);
+    const picked = job('picked', JOB_RANK.waiting);
+    const pick = createManualPick([urgent, picked], 'picked');
+    expect(pickFeaturedJob([job('new-offer', JOB_RANK.newOffers), picked], pick, NOW)?.job.key).toBe('picked');
+    expect(pickFeaturedJob([job('new-problem', JOB_RANK.problem), picked], pick, NOW)?.job.key).toBe('new-problem');
+  });
+
   it('breaks ties by who has waited longest', () => {
     const jobs = sortJobs([
       job('later', JOB_RANK.newOffers, { attentionSince: '2026-11-20T00:00:00Z' }),
@@ -88,7 +96,7 @@ describe('pickFeaturedJob', () => {
 
   it('keeps a manual pick even though a known job outranks it', () => {
     const pick = createManualPick(jobs, 'door');
-    expect(pick).toEqual({ key: 'door', outranking: ['garage:3'] });
+    expect(pick).toEqual({ key: 'door', outranking: ['garage:3'], bestRankAtPick: 3 });
     expect(pickFeaturedJob(jobs, pick, NOW)).toEqual({ job: door, reason: 'manual' });
   });
 
@@ -145,7 +153,7 @@ describe('pickFeaturedJob', () => {
     const doing = job('doing:b2', JOB_RANK.waiting);
     const all = sortJobs([posted, doing]);
     const pick = createManualPick(all, 'doing:b2');
-    expect(pick).toEqual({ key: 'doing:b2', outranking: ['posted:b1:3'] });
+    expect(pick).toEqual({ key: 'doing:b2', outranking: ['posted:b1:3'], bestRankAtPick: 3 });
     expect(pickFeaturedJob(all, pick, NOW)).toEqual({ job: doing, reason: 'manual' });
     const escalated = sortJobs([doing, job('posted:b1', JOB_RANK.waitingOnYou)]);
     expect(pickFeaturedJob(escalated, pick, NOW)?.job.key).toBe('posted:b1');

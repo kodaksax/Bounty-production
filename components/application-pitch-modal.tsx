@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getPitchPrompt, getPitchRequirement, PITCH_REQUIRED_MIN_LENGTH } from '../lib/utils/pitch-requirement';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
-import { AppModal } from './ui/app-modal';
+import { AppModal, useModalContentHeight } from './ui/app-modal';
 import { TrustSafetyNotice } from './ui/trust-safety-notice';
 import { trustSafetyStrings } from '../lib/strings/trust-safety';
 import { detectOffPlatformRisk } from '../lib/utils/off-platform-risk';
@@ -60,6 +60,7 @@ export function ApplicationPitchModal({
 }: ApplicationPitchModalProps) {
   const { theme } = useAppThemeContext();
   const styles = React.useMemo(() => makeStyles(theme), [theme]);
+  const modalContentHeight = useModalContentHeight();
 
   const [pitch, setPitch] = React.useState('');
   // Set the first time a required pitch is submitted too short, so the button
@@ -120,16 +121,21 @@ export function ApplicationPitchModal({
 
   return (
     <AppModal visible={visible} onRequestClose={onCancel} variant="sheet" dismissable={!isSubmitting}>
-      <View style={styles.card}>
-        <Text style={styles.title} accessibilityRole="header">{sheet.title}</Text>
-        <ConsequenceList
-          label={sheet.label}
-          items={sheet.items.map((item) => ({ ...item, icon: item.icon as never }))}
-          testID="offer-consequences"
-        />
-        <TrustSafetyNotice message={trustSafetyStrings.beforeAcceptance} />
+      <View style={[styles.card, modalContentHeight != null && { maxHeight: modalContentHeight }]}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.cardContent}
+        >
+          <Text style={styles.title} accessibilityRole="header">{sheet.title}</Text>
+          <ConsequenceList
+            label={sheet.label}
+            items={sheet.items.map((item) => ({ ...item, icon: item.icon as never }))}
+            testID="offer-consequences"
+          />
+          <TrustSafetyNotice message={trustSafetyStrings.beforeAcceptance} />
 
-        <View style={styles.pitchSection}>
+          <View style={styles.pitchSection}>
           <View style={styles.pitchLabelRow}>
             <Text style={styles.pitchLabel}>{requirement === 'required' ? 'Why you?' : sheet.field}</Text>
             {requirement === 'required' && <Text style={styles.requiredTag}>Required</Text>}
@@ -165,18 +171,19 @@ export function ApplicationPitchModal({
               </Text>
             </View>
           )}
-        </View>
+          </View>
 
-        <View style={styles.focusActions}>
-          <PosterButton
-            label={primaryLabel}
-            onPress={handleSubmit}
-            loading={isSubmitting}
-            loadingLabel="Sending your offer"
-            testID="offer-send"
-          />
-          <PosterButton kind="neutral" label={sheet.cancel} onPress={onCancel} disabled={isSubmitting} testID="offer-cancel" />
-        </View>
+          <View style={styles.focusActions}>
+            <PosterButton
+              label={primaryLabel}
+              onPress={handleSubmit}
+              loading={isSubmitting}
+              loadingLabel="Sending your offer"
+              testID="offer-send"
+            />
+            <PosterButton kind="neutral" label={sheet.cancel} onPress={onCancel} disabled={isSubmitting} testID="offer-cancel" />
+          </View>
+        </ScrollView>
       </View>
     </AppModal>
   );
@@ -196,6 +203,7 @@ function makeStyles(theme: AppTheme) {
       paddingTop: 20,
       paddingBottom: 28,
     },
+    cardContent: { flexGrow: 1, gap: 12 },
     title: {
       fontSize: 18,
       fontWeight: '700',

@@ -98,7 +98,7 @@ const updateBountySchema = baseBountySchema.partial();
 
 // Schema for listing bounties with filters
 const listBountiesSchema = z.object({
-  status: z.enum(['open', 'in_progress', 'completed', 'archived', 'all'])
+  status: z.enum(['open', 'in_progress', 'completed', 'cancelled', 'archived', 'all'])
     .optional(),
   category: z.string()
     .optional(),

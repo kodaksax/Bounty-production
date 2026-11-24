@@ -809,10 +809,13 @@ export const bountyService = {
       const params = new URLSearchParams();
 
       if (options?.status) params.append('status', options.status);
-      if (options?.userId) params.append('poster_id', options.userId);
+      if (options?.userId) params.append('user_id', options.userId);
       if (options?.workType) params.append('work_type', options.workType);
       if (options?.limit != null) params.append('limit', String(options.limit));
       if (options?.offset != null) params.append('offset', String(options.offset));
+      if (options?.limit != null && options?.offset != null) {
+        params.append('page', String(Math.floor(options.offset / options.limit) + 1));
+      }
       // archived filtering handled client-side if API doesn't support it
 
       const response = await fetch(`${API_URL}?${params.toString()}`);
@@ -820,7 +823,9 @@ export const bountyService = {
         throw new Error(`Failed to fetch bounties: ${response.statusText}`);
       }
       const json = await response.json();
-      let list = Array.isArray(json) ? (json as Bounty[]) : [];
+      let list = Array.isArray(json)
+        ? (json as Bounty[])
+        : (Array.isArray(json?.data) ? json.data : Array.isArray(json?.bounties) ? json.bounties : []) as Bounty[];
       // The REST API takes no status allowlist, so apply it here the same way
       // the Supabase path does server-side.
       if (options?.statuses && options.statuses.length > 0) {
@@ -829,7 +834,7 @@ export const bountyService = {
       } else if (!options?.includeArchived) {
         list = list.filter(b => b.status !== 'archived');
       }
-      if (options?.limit != null || options?.offset != null) {
+      if (!json?.meta && !json?.pagination && (options?.limit != null || options?.offset != null)) {
         const start = options?.offset ?? 0;
         const end = options?.limit != null ? start + options.limit : undefined;
         list = list.slice(start, end);
@@ -1316,13 +1321,29 @@ export const bountyService = {
    */
   async getByUserId(
     userId: string,
-    options?: { limit?: number; includeArchived?: boolean; statuses?: string[] }
+    options?: { limit?: number; offset?: number; includeArchived?: boolean; statuses?: string[]; throwOnError?: boolean }
   ): Promise<Bounty[]> {
+    if (!isSupabaseConfigured && options?.statuses?.length) {
+      const pages = await Promise.all(
+        options.statuses.map((status) =>
+          this.getAll({
+            status,
+            userId,
+            limit: options.limit ?? 200,
+            offset: options.offset ?? 0,
+            throwOnError: options.throwOnError,
+          })
+        )
+      );
+      return pages.flat();
+    }
     return this.getAll({
       userId,
       limit: options?.limit ?? 200,
+      offset: options?.offset,
       includeArchived: options?.includeArchived,
       statuses: options?.statuses,
+      throwOnError: options?.throwOnError,
     });
   },
 

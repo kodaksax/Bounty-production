@@ -24,7 +24,7 @@ export const SIDE_LABELS: Record<WorkspaceSide, { text: string; icon: IconName }
 export function sideColors(p: PosterPalette, side: WorkspaceSide): { bg: string; fg: string } {
   switch (side) {
     case 'posted':
-      return { bg: p.gtint, fg: p.gt };
+      return { bg: p.gtint, fg: p.ink };
     case 'offered':
       return { bg: p.chip, fg: p.ink };
     default:

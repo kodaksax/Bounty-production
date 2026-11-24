@@ -21,27 +21,57 @@ import { sideColors, type WorkspaceSide } from '../poster/side-label';
 export interface JobStripInput {
   role: BountyThreadRole;
   viewerId: string | null;
-  bounty: { status?: string | null; amount?: number | null; is_for_honor?: boolean | null; accepted_by?: string | null };
+  counterpartId?: string | null;
+  bounty: {
+    status?: string | null;
+    amount?: number | null;
+    is_for_honor?: boolean | null;
+    accepted_by?: string | null;
+    completed_at?: string | null;
+  };
   counterpartName: string;
+  paymentState?: 'released' | 'pending' | 'unknown' | null;
 }
 
 /** "You're doing this · $80 held by Bounty". Says "held" only once someone is chosen. */
-export function describeJobStrip({ role, viewerId, bounty, counterpartName }: JobStripInput): { side: WorkspaceSide; icon: IconName; text: string } {
+export function describeJobStrip({ role, viewerId, counterpartId, bounty, counterpartName, paymentState }: JobStripInput): { side: WorkspaceSide; icon: IconName; text: string } {
   const honor = !!bounty.is_for_honor;
   const amount = honor ? null : formatJobAmount(bounty.amount);
   const status = String(bounty.status ?? '');
   const working = status === 'in_progress' || status === 'cancellation_requested';
   const hired = !!bounty.accepted_by;
+  const completed = status === 'completed' || (status === 'archived' && !!bounty.completed_at);
   if (role === 'poster') {
     if (hired && working) return { side: 'posted', icon: 'assignment-ind', text: amount ? `You posted this · ${amount} held by Bounty` : 'You posted this' };
-    if (hired && status === 'completed') return { side: 'posted', icon: 'assignment-ind', text: honor ? 'You posted this' : `You posted this · Released to ${counterpartName}` };
+    if (hired && completed) {
+      const helper = counterpartId && String(counterpartId) === String(bounty.accepted_by) && counterpartName.trim()
+        ? counterpartName.trim()
+        : 'your helper';
+      return {
+        side: 'posted',
+        icon: 'assignment-ind',
+        text: honor
+          ? 'You posted this'
+          : paymentState === 'released'
+            ? `You posted this · Released to ${helper}`
+            : `You posted this · Release status unconfirmed for ${helper}`,
+      };
+    }
     return { side: 'posted', icon: 'assignment-ind', text: amount ? `You posted this · ${amount}` : 'You posted this' };
   }
   const chosen = hired && !!viewerId && String(bounty.accepted_by) === String(viewerId);
   if (chosen && working) return { side: 'doing', icon: 'construction', text: amount ? `You're doing this · ${amount} held by Bounty` : "You're doing this" };
-  if (chosen && status === 'completed') {
+  if (chosen && completed) {
     const net = formatJobAmount(calculateHunterEarnings(bounty.amount).net);
-    return { side: 'did', icon: 'task-alt', text: honor ? 'You did this' : `You did this · ${net} released to your wallet` };
+    return {
+      side: 'did',
+      icon: 'task-alt',
+      text: honor
+        ? 'You did this'
+        : paymentState === 'released'
+          ? `You did this · ${net} released to your wallet`
+          : `You did this · ${net} release status unconfirmed`,
+    };
   }
   return { side: 'offered', icon: 'send', text: amount ? `You offered · ${amount}` : 'You offered' };
 }
