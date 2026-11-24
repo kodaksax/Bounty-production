@@ -228,6 +228,7 @@ describe('MomentsProvider — taps right after presentation are ignored', () => 
     latest = null;
     (analyticsService.trackEvent as jest.Mock).mockClear();
     (momentsService.markDismissed as jest.Mock).mockClear();
+    (momentsService.markSnoozed as jest.Mock).mockClear();
     (momentsService.markStarted as jest.Mock).mockClear();
   });
 
@@ -241,17 +242,39 @@ describe('MomentsProvider — taps right after presentation are ignored', () => 
 
     expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding');
     expect(momentsService.markDismissed).not.toHaveBeenCalled();
+    expect(momentsService.markSnoozed).not.toHaveBeenCalled();
     expect(
       (analyticsService.trackEvent as jest.Mock).mock.calls.some(([e]) => e === 'moment_dismissed')
     ).toBe(false);
 
-    // A deliberate tap once the window has passed still dismisses.
+    // A deliberate tap once the window has passed still closes it, as
+    // "Later": it may come back after a week, so it is snoozed, not retired.
     elapse(1000);
     await act(async () => {
       latest!.dismiss();
     });
     expect(latest?.activeMoment).toBeNull();
+    expect(momentsService.markSnoozed).toHaveBeenCalledWith(
+      'user-1',
+      'stripe_connect_onboarding',
+      7 * 24
+    );
+    expect(momentsService.markDismissed).not.toHaveBeenCalled();
+  });
+
+  it('retires the moment for good on an explicit no', async () => {
+    render(<Root activeScreen="wallet" />);
+    await waitFor(() => expect(latest?.activeMoment?.type).toBe('stripe_connect_onboarding'));
+    elapse(1000);
+    await act(async () => {
+      latest!.decline();
+    });
+    expect(latest?.activeMoment).toBeNull();
     expect(momentsService.markDismissed).toHaveBeenCalledTimes(1);
+    expect(momentsService.markSnoozed).not.toHaveBeenCalled();
+    expect(
+      (analyticsService.trackEvent as jest.Mock).mock.calls.find(([e]) => e === 'moment_dismissed')?.[1]
+    ).toEqual(expect.objectContaining({ outcome: 'declined' }));
   });
 
   it('ignores an accept inside the window', async () => {
@@ -330,4 +353,16 @@ describe('MomentsProvider — a single activation presents at most once', () => 
     first.unmount();
     other.unmount();
   });
+});
+
+// Home has loaded her jobs and none of them needs her, so the session prompt
+// gate is open (lib/moments/sessionPromptGate.ts). Suites that exercise the
+// gate itself live in moments-session-prompt-gate.test.tsx.
+import {
+  reportHomeJobs as mockGateReportHomeJobs,
+  resetPromptGateForTests as mockGateReset,
+} from '../../../../lib/moments/sessionPromptGate';
+beforeEach(() => {
+  mockGateReset();
+  mockGateReportHomeJobs('user-1', { needsYou: false });
 });

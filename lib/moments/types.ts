@@ -46,6 +46,12 @@ export type MomentStatus =
 export const MAX_MOMENT_SHOWS = 3;
 
 /**
+ * "Later" (or closing the sheet) brings a moment back no sooner than this,
+ * up to its show cap. An explicit no retires it instead.
+ */
+export const LATER_RETURN_HOURS = 7 * 24;
+
+/**
  * A tap on a moment's buttons sooner than this after it was presented can't be
  * a choice about that moment (e.g. a double-tap carried over from the previous
  * moment's sheet). MomentsProvider ignores such taps; momentsService rejects
@@ -147,6 +153,13 @@ export interface MomentContent {
   primaryLabel: string;
   /** Omit to make the moment programmatically dismissible only (no visible "later" affordance). */
   secondaryLabel?: string;
+  /**
+   * An explicit no ("No thanks", "Don't ask again"). When set, the sheet
+   * offers it under the buttons and answering it retires the moment for
+   * good; without it, "Later" is the only way out and the moment returns
+   * after LATER_RETURN_HOURS.
+   */
+  declineLabel?: string;
   estimatedMinutes?: number;
   /** MaterialIcons glyph name. */
   icon?: string;

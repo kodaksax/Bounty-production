@@ -44,6 +44,13 @@ import {
     shouldRecordSession,
 } from '../lib/moments/sessionTracking';
 import {
+    beginPromptSession,
+    promptGateClosedBy,
+    tryClaimPrompt,
+    usePromptGateState,
+} from '../lib/moments/sessionPromptGate';
+import {
+    LATER_RETURN_HOURS,
     MIN_MOMENT_VISIBLE_MS,
     type MomentContent,
     type MomentContext as MomentCtx,
@@ -61,7 +68,13 @@ interface MomentsContextValue {
   activeMoment: MomentDefinition | null;
   activeContent: MomentContent | null;
   accept: () => Promise<void>;
+  /**
+   * "Later", the sheet's close button, Android back or a backdrop tap. The
+   * moment may come back after LATER_RETURN_HOURS, up to its show cap.
+   */
   dismiss: () => void;
+  /** An explicit no ("No thanks" / "Don't ask again"). Retired for good. */
+  decline: () => void;
   snooze: (hours?: number) => void;
   refresh: () => Promise<void>;
 }
@@ -183,10 +196,6 @@ const INLINE_HANDLERS: Record<string, () => Promise<boolean>> = {
     const token = await notificationService.requestPermissionsAndRegisterToken();
     return !!token;
   },
-  request_location: async () => {
-    const perm = await locationService.requestPermission();
-    return perm.granted;
-  },
   // Delegates to referralService, which is the single feature-detection
   // point for whether a real referral system exists yet (see
   // lib/moments/referral-service.ts). Keeps this moment fully defined and
@@ -260,6 +269,12 @@ export function MomentsProvider({
     'undetermined'
   );
   const [sessionCount, setSessionCount] = useState(0);
+  // One prompt per session, none before Home has loaded her jobs, none while
+  // a job needs her — see lib/moments/sessionPromptGate.ts. Shared with the
+  // tab shell's draft sheet.
+  const promptGate = usePromptGateState(userId);
+  // moment_skipped for a gate hold is reported once per moment per session.
+  const gateSkipsLoggedRef = useRef<Set<string>>(new Set());
   // True once refresh() has resolved the real notifications/location
   // permission status at least once. Until then, notifPermission/
   // locPermission above still hold their 'undetermined' initial values,
@@ -436,6 +451,11 @@ export function MomentsProvider({
       });
     }
   }, [userId, profile?.primary_role, profile?.last_session_at, isPrimary, eligibilityFixEnabled]);
+
+  useEffect(() => {
+    if (!userId || sessionCount <= 0 || !isPrimary()) return;
+    void beginPromptSession(userId, sessionCount);
+  }, [userId, sessionCount, isPrimary, primaryVersion]);
 
   useEffect(() => {
     // Reset every user-scoped readiness/data field immediately on any
@@ -699,22 +719,34 @@ export function MomentsProvider({
     if (!ctx) return;
 
     const next = evaluateNextMoment(ctx, states);
-    setActiveMoment(prev => {
-      // A presented moment stays until the user answers it or it is otherwise
-      // closed: nothing else may replace it, including a moment with a higher
-      // priority or a change in its own eligibility.
-      if (eligibilityFixEnabled && prev && !isMomentResolved(states.get(prev.type) ?? null)) {
-        return prev;
+    const prev = activeMomentRef.current;
+    // A presented moment stays until the user answers it or it is otherwise
+    // closed: nothing else may replace it, including a moment with a higher
+    // priority or a change in its own eligibility.
+    if (eligibilityFixEnabled && prev && !isMomentResolved(states.get(prev.type) ?? null)) return;
+    if (prev?.type === next?.type) return;
+    // Anything new on screen spends the session's one prompt, so answering a
+    // moment never brings up the next one behind it. The gate also keeps
+    // this shut until Home has loaded her jobs, and for the whole session
+    // once a job needs her.
+    if (!next || prev || !tryClaimPrompt(userId, 'moment')) {
+      const skipKey = `${sessionCount}:${next?.type}`;
+      if (next && !prev && promptGate === 'closed' && !gateSkipsLoggedRef.current.has(skipKey)) {
+        gateSkipsLoggedRef.current.add(skipKey);
+        analyticsService.trackEvent('moment_skipped', {
+          momentType: next.type,
+          reason: promptGateClosedBy(userId) === 'jobs_need_you' ? 'jobs_need_you' : 'session_prompt_used',
+        });
       }
-      if (prev?.type === next?.type) return prev;
-      if (next) {
-        setActiveContent(next.content(ctx));
-      } else {
+      if (prev) {
+        setActiveMoment(null);
         setActiveContent(null);
       }
-      return next;
-    });
-  }, [states, buildContext, userId, isPrimary, suppressed, eligibilityFixEnabled]);
+      return;
+    }
+    setActiveContent(next.content(ctx));
+    setActiveMoment(next);
+  }, [states, buildContext, userId, isPrimary, suppressed, eligibilityFixEnabled, promptGate, sessionCount]);
 
   // Present (mark shown) whenever a new moment becomes active.
   useEffect(() => {
@@ -775,12 +807,31 @@ export function MomentsProvider({
   const dismiss = useCallback(() => {
     if (!activeMoment || !userId) return;
     if (isPresentationTooRecent()) return;
+    const snoozedUntil = new Date(Date.now() + LATER_RETURN_HOURS * 60 * 60 * 1000).toISOString();
+    hapticFeedback.light();
+    void momentsService.markSnoozed(userId, activeMoment.type, LATER_RETURN_HOURS);
+    patchState(activeMoment.type, { status: 'snoozed', snoozedUntil });
+    analyticsService.trackEvent('moment_dismissed', {
+      momentType: activeMoment.type,
+      outcome: 'later',
+      returnsAfterHours: LATER_RETURN_HOURS,
+      msVisible: shownAtRef.current ? Date.now() - shownAtRef.current : undefined,
+    });
+    setActiveMoment(null);
+    setActiveContent(null);
+    continueIfTriggeredByPost();
+  }, [activeMoment, userId, patchState, isPresentationTooRecent, continueIfTriggeredByPost]);
+
+  const decline = useCallback(() => {
+    if (!activeMoment || !userId) return;
+    if (isPresentationTooRecent()) return;
     const shownAtMs = shownAtRef.current;
     hapticFeedback.light();
     void momentsService.markDismissed(userId, activeMoment.type, shownAtMs);
     patchState(activeMoment.type, { status: 'dismissed', dismissedAt: new Date().toISOString() });
     analyticsService.trackEvent('moment_dismissed', {
       momentType: activeMoment.type,
+      outcome: 'declined',
       msVisible: shownAtRef.current ? Date.now() - shownAtRef.current : undefined,
     });
     setActiveMoment(null);
@@ -872,10 +923,11 @@ export function MomentsProvider({
       activeContent: hidden ? null : activeContent,
       accept,
       dismiss,
+      decline,
       snooze,
       refresh,
     }),
-    [hidden, activeMoment, activeContent, accept, dismiss, snooze, refresh]
+    [hidden, activeMoment, activeContent, accept, dismiss, decline, snooze, refresh]
   );
 
   return <MomentsContext.Provider value={value}>{children}</MomentsContext.Provider>;

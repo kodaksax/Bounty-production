@@ -556,7 +556,11 @@ function BountyAppInner() {
     ),
     [backToFeed]
   )
-  const profilePage = useMemo(() => <ProfileScreen onBack={backToFeed} />, [backToFeed])
+  const profileIsActive = activeScreen === 'profile'
+  const profilePage = useMemo(
+    () => <ProfileScreen onBack={backToFeed} isActive={profileIsActive} />,
+    [backToFeed, profileIsActive]
+  )
   // InboxScreen and NeedHelpScreen take activeScreen but never read it; a
   // constant keeps them from re-rendering on every tab change. `isActive`
   // only flips when the pager settles on / leaves the Inbox, and gates its

@@ -193,7 +193,7 @@ describe('with moments-eligibility-fix on', () => {
     mockFlagOn = true;
   });
 
-  it('keeps a presented moment on screen, through tab changes, until the user dismisses it', async () => {
+  it('keeps a presented moment on screen, through tab changes, until the user dismisses it, and shows no other that session', async () => {
     queue(row('post_first_bounty'), row('fund_wallet'));
     const { rerender } = render(<Root />);
     await waitFor(() => expect(latest?.activeMoment?.type).toBe('post_first_bounty'));
@@ -212,9 +212,10 @@ describe('with moments-eligibility-fix on', () => {
       latest!.dismiss();
     });
     await settle();
-    expect(momentsService.markDismissed).toHaveBeenCalledTimes(1);
-    // Only now may the next one come up.
-    expect(latest?.activeMoment?.type).toBe('fund_wallet');
+    expect(momentsService.markSnoozed).toHaveBeenCalledTimes(1);
+    // One prompt per session: answering it never brings up the next one.
+    expect(latest?.activeMoment).toBeNull();
+    expect(momentsService.markShown).toHaveBeenCalledTimes(1);
   });
 
   it('is not replaced by a higher-priority moment that arrives while it is up', async () => {
@@ -295,7 +296,7 @@ describe('with moments-eligibility-fix on', () => {
     await act(async () => {
       latest!.dismiss();
     });
-    expect(momentsService.markDismissed).toHaveBeenCalledTimes(1);
+    expect(momentsService.markSnoozed).toHaveBeenCalledTimes(1);
   });
 
   it('does not bring back a dismissed moment when an older refresh lands after', async () => {
@@ -365,14 +366,16 @@ describe('with moments-eligibility-fix off', () => {
     mockFlagOn = false;
   });
 
-  it('runs through every queued moment without waiting for an answer', async () => {
+  it('still lets a moment close itself, but no longer runs on to the next queued one', async () => {
+    // Before the session prompt gate this ran through every queued moment.
     queue(row('post_first_bounty'), row('fund_wallet'));
     render(<Root />);
-    await waitFor(() => expect(momentsService.markShown).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(momentsService.markShown).toHaveBeenCalledTimes(1));
+    await settle();
     await settle();
 
-    expect(momentsService.markShown).toHaveBeenNthCalledWith(1, 'user-1', 'post_first_bounty');
-    expect(momentsService.markShown).toHaveBeenNthCalledWith(2, 'user-1', 'fund_wallet');
+    expect(momentsService.markShown).toHaveBeenCalledTimes(1);
+    expect(momentsService.markShown).toHaveBeenCalledWith('user-1', 'post_first_bounty');
     expect(momentsService.markDismissed).not.toHaveBeenCalled();
     expect(latest?.activeMoment).toBeNull();
   });
@@ -413,4 +416,16 @@ describe('with moments-eligibility-fix off', () => {
     expect(mockPush).toHaveBeenCalledWith('/tabs/postings-screen?deliberateTap=1');
     expect(mockOpenComposer).not.toHaveBeenCalled();
   });
+});
+
+// Home has loaded her jobs and none of them needs her, so the session prompt
+// gate is open (lib/moments/sessionPromptGate.ts). Suites that exercise the
+// gate itself live in moments-session-prompt-gate.test.tsx.
+import {
+  reportHomeJobs as mockGateReportHomeJobs,
+  resetPromptGateForTests as mockGateReset,
+} from '../../../../lib/moments/sessionPromptGate';
+beforeEach(() => {
+  mockGateReset();
+  mockGateReportHomeJobs('user-1', { needsYou: false });
 });

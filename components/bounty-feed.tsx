@@ -69,6 +69,13 @@ import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { bountyService } from '../lib/services/bounty-service';
 import { completionService } from '../lib/services/completion-service';
 import { getPendingOfferCounts } from '../lib/services/poster-job-activity';
+import {
+  beginPromptSession,
+  markHomeJobsLoading,
+  reportHomeJobs,
+  usePromptGateSession,
+} from '../lib/moments/sessionPromptGate';
+import { readPosterJobsAttention } from '../lib/poster-jobs/needs-you';
 import type { Bounty } from '../lib/services/database.types';
 import { bountyDistanceMiles } from '../lib/utils/bounty-distance';
 import { storage } from '../lib/storage';
@@ -290,8 +297,13 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const bountyListRef = useRef<FlatList>(null);
   const offsetRef = useRef(0);
 
-  const { location: userLocation, permission } = useLocation();
+  const { location: userLocation, permission, requestPermission: requestLocationPermission } = useLocation();
   const validUserId = useValidUserId();
+  const promptSession = usePromptGateSession(validUserId ?? currentUserId);
+  const promptSessionRef = useRef(promptSession);
+  promptSessionRef.current = promptSession;
+  const activeScreenRef = useRef(activeScreen);
+  activeScreenRef.current = activeScreen;
 
   // SBA-02: a hunter with a location (device fix or saved profile point) sees
   // in-person work within LOCAL_DEFAULT_RADIUS_MILES plus every online job,
@@ -653,6 +665,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setMyActiveBounties([]);
       return;
     }
+    const session = promptSessionRef.current;
+    if (session !== null) await beginPromptSession(uid, session);
     let rows: Bounty[] = [];
     try {
       // Every live bounty, not a newest-first slice: the cards are ordered by
@@ -661,7 +675,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         const batch = await withTimeout(
           bountyService.getAll({
             userId: uid,
-            statuses: ['open', 'in_progress'],
+            statuses: ['open', 'in_progress', 'cancellation_requested'],
             limit: MY_ACTIVE_BOUNTIES_PAGE_SIZE,
             offset: page * MY_ACTIVE_BOUNTIES_PAGE_SIZE,
             throwOnError: true,
@@ -684,14 +698,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     const live = rows.filter(
       b => b.status === 'in_progress' || (b.status === 'open' && !isBountyDeadlinePassed(b))
     );
-    const inProgressIds = live.filter(b => b.status === 'in_progress').map(b => String(b.id));
+    const attentionInProgressIds = rows
+      .filter(b => b.status === 'in_progress' || b.status === 'cancellation_requested')
+      .map(b => String(b.id));
 
     // null = the lookup failed; those bounties keep whatever stage they had.
     let latestSubmissions: Map<string, { status?: string }> | null = new Map();
-    if (inProgressIds.length > 0) {
+    if (attentionInProgressIds.length > 0) {
       try {
         latestSubmissions = await withTimeout(
-          completionService.getLatestSubmissionsForBounties(inProgressIds, { throwOnError: true }),
+          completionService.getLatestSubmissionsForBounties(
+            attentionInProgressIds,
+            { throwOnError: true }
+          ),
           API_TIMEOUTS.DEFAULT
         );
       } catch (error) {
@@ -701,10 +720,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         });
       }
     }
-
     // Pending offers per open job, so the card can say "3 people offered".
     // null = the read failed; those cards keep the count they had.
-    const openIds = live.filter(b => b.status === 'open').map(b => String(b.id));
+    const openIds = rows.filter(b => b.status === 'open').map(b => String(b.id));
     let offerCounts: Map<string, number> | null = new Map();
     if (openIds.length > 0) {
       try {
@@ -716,7 +734,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         });
       }
     }
-
     setMyActiveBounties(prev => {
       const priorStages = new Map(prev.map(item => [String(item.bounty.id), item.stage]));
       const priorCounts = new Map(prev.map(item => [String(item.bounty.id), item.offerCount]));
@@ -733,6 +750,31 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       });
       return sortByProgress(items);
     });
+
+    // Tell the session prompt gate her jobs are on screen and whether one of
+    // them needs her (lib/poster-jobs/needs-you.ts). Only a complete read
+    // counts: if the offers or submissions failed, prompts keep waiting
+    // rather than read "unknown" as "nothing needs you".
+    if (!offerCounts || !latestSubmissions || session === null) return;
+    try {
+      const attention = await withTimeout(
+        readPosterJobsAttention({
+          userId: uid,
+          bounties: rows,
+          offerCounts,
+          latestSubmissions: latestSubmissions as Map<
+            string,
+            { status?: string | null; submitted_at?: string | null }
+          >,
+        }),
+        API_TIMEOUTS.DEFAULT
+      );
+      reportHomeJobs(uid, { needsYou: attention.needsYou }, session);
+    } catch (error) {
+      logger.warning('feed.my_active_bounties.attention_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }, [validUserId, currentUserId]);
 
   // The realtime handler below is bound once per mount, so it reads the
@@ -778,6 +820,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // A pick from the Distance sheet. "Any distance" is remembered and turns the
   // local default off; any radius clears that. A pick equal to the resulting
   // default is stored as "no override", so For You reads as active again.
+  // The OS location dialog can still be shown (never answered, or Android's
+  // "ask again").
+  const canAskForLocation =
+    !!permission && !permission.granted && (permission.status === 'undetermined' || permission.canAskAgain);
   const pickDistance = useCallback(
     (value: DistanceFilterValue) => {
       const pick = applyDistancePick({ value, hasLocation: hasFeedLocation });
@@ -788,8 +834,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         } catch {}
       })();
       selectOnlyFilter({ distance: pick.override });
+      // Browsing nearby is where the feed needs location: picking a radius
+      // is the ask, with the reason already shown under the options. Only
+      // while the OS can still show its dialog; never on its own.
+      if (value !== DISTANCE_OFF && !hasFeedLocation && canAskForLocation) {
+        void requestLocationPermission();
+      }
     },
-    [hasFeedLocation, selectOnlyFilter]
+    [hasFeedLocation, selectOnlyFilter, canAskForLocation, requestLocationPermission]
   );
 
   // "For You" is the default state (which includes the local radius for a
@@ -1240,12 +1292,24 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // up on focus and dropped back on the next reset — a spurious, confusing
   // change in the number of bounties shown. Initial load, pull-to-refresh, and
   // the foreground-resume effect are the real (re)load triggers.
+  // Reload attention at every initialized session, whichever tab is visible.
+  // The session is initialized before the read starts so an older in-flight
+  // result cannot satisfy the new session's gate.
+  useEffect(() => {
+    const uid = validUserId ?? currentUserId;
+    if (!uid || promptSession === null) return;
+    markHomeJobsLoading(uid);
+    if (activeScreenRef.current !== 'bounty') loadMyActiveBounties();
+  }, [validUserId, currentUserId, promptSession, loadMyActiveBounties]);
+
   useEffect(() => {
     if (activeScreen === 'bounty') {
       loadUserApplications();
-      loadMyActiveBounties();
     }
-  }, [activeScreen, loadUserApplications, loadMyActiveBounties]);
+  }, [activeScreen, loadUserApplications]);
+  useEffect(() => {
+    if (activeScreen === 'bounty' && promptSession !== null) loadMyActiveBounties();
+  }, [activeScreen, promptSession, loadMyActiveBounties]);
 
   // Silently reload feed data when the app returns from the background.
   // Requests started before backgrounding can be dropped by the OS and
@@ -1540,7 +1604,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 hint={
                   hasFeedLocation
                     ? undefined
-                    : 'Location access is off, so distance filters may not match what’s actually near you.'
+                    : canAskForLocation
+                      ? 'Pick a distance and we’ll ask to use your location, so we can show jobs near you.'
+                      : 'Location access is off, so distance filters may not match what’s actually near you.'
                 }
                 testID="feed-distance-filter"
               />
