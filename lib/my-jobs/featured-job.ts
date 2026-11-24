@@ -33,8 +33,11 @@ export function compareJobs(a: MyJob, b: MyJob): number {
   if (a.finished && b.finished) {
     return time(b.attentionSince, 0) - time(a.attentionSince, 0);
   }
-  const diff = time(a.attentionSince, Infinity) - time(b.attentionSince, Infinity);
-  if (diff !== 0 && Number.isFinite(diff)) return diff;
+  // Compared directly (not by subtraction): Infinity - Infinity is NaN, so an
+  // unknown wait must sort after every known one, and two unknowns by key.
+  const ta = time(a.attentionSince, Infinity);
+  const tb = time(b.attentionSince, Infinity);
+  if (ta !== tb) return ta < tb ? -1 : 1;
   return a.key.localeCompare(b.key);
 }
 
@@ -51,9 +54,10 @@ export function canAutoFeature(job: MyJob, now: Date = new Date()): boolean {
 }
 
 /**
- * A job the user chose in the switcher. `outranking` holds the jobs that
- * already outranked it at that moment (as `key:rank`), so only something
- * *new* that ranks higher takes the featured slot back.
+ * A job the user chose in the switcher. `outranking` records the jobs that
+ * already outranked it at that moment, as `key:rank`, so the pick holds until
+ * something *becomes more urgent*: a job that wasn't outranking it before, or
+ * one whose rank has risen since. A known job calming down never takes over.
  */
 export interface ManualPick {
   key: string;
@@ -62,6 +66,17 @@ export interface ManualPick {
 
 function signature(job: MyJob): string {
   return `${job.key}:${job.rank}`;
+}
+
+/** `key:rank` signatures back into the rank each job had when the pick was made. */
+function recordedRanks(outranking: readonly string[]): Map<string, number> {
+  const ranks = new Map<string, number>();
+  for (const sig of outranking) {
+    const cut = sig.lastIndexOf(':');
+    const rank = Number(sig.slice(cut + 1));
+    if (cut > 0 && Number.isFinite(rank)) ranks.set(sig.slice(0, cut), rank);
+  }
+  return ranks;
 }
 
 export function createManualPick(jobs: readonly MyJob[], key: string): ManualPick | null {
@@ -91,10 +106,13 @@ export function pickFeaturedJob(
   if (manualPick) {
     const picked = jobs.find((j) => j.key === manualPick.key);
     if (picked) {
-      const known = new Set(manualPick.outranking);
-      const somethingNewOutranks = jobs.some(
-        (j) => j.key !== picked.key && j.rank < picked.rank && !known.has(signature(j))
-      );
+      const before = recordedRanks(manualPick.outranking);
+      const somethingNewOutranks = jobs.some((j) => {
+        if (j.key === picked.key || j.rank >= picked.rank) return false;
+        const was = before.get(j.key);
+        // Newly outranking, or more urgent than it was (lower rank = more urgent).
+        return was === undefined || j.rank < was;
+      });
       if (!somethingNewOutranks) return { job: picked, reason: 'manual' };
     }
   }

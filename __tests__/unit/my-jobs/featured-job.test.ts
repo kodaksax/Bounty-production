@@ -51,6 +51,14 @@ describe('sortJobs', () => {
     expect(jobs.map((j) => j.key)).toEqual(['earlier', 'later', 'unknown']);
   });
 
+  it('puts an unknown wait after a known one, whatever the keys', () => {
+    const jobs = sortJobs([
+      job('a-unknown', JOB_RANK.newOffers, { attentionSince: null }),
+      job('z-dated', JOB_RANK.newOffers, { attentionSince: '2026-11-20T00:00:00Z' }),
+    ]);
+    expect(jobs.map((j) => j.key)).toEqual(['z-dated', 'a-unknown']);
+  });
+
   it('lists finished jobs most recent first', () => {
     const jobs = sortJobs([
       job('old', JOB_RANK.finished, { attentionSince: '2026-10-01T00:00:00Z' }),
@@ -91,6 +99,18 @@ describe('pickFeaturedJob', () => {
     expect(pickFeaturedJob(escalated, pick, NOW)?.job.key).toBe('garage');
     const newJob = sortJobs([...jobs, job('tv', JOB_RANK.problem)]);
     expect(pickFeaturedJob(newJob, pick, NOW)?.job.key).toBe('tv');
+  });
+
+  it('a known job calming down but still outranking does not take over', () => {
+    // Picked rank 6 while another job was rank 2; it drops to 3, still above the pick.
+    const urgent = job('urgent', JOB_RANK.waitingOnYou);
+    const quiet = job('quiet', JOB_RANK.waiting);
+    const pick = createManualPick(sortJobs([urgent, quiet]), 'quiet');
+    const calmer = sortJobs([job('urgent', JOB_RANK.newOffers), quiet]);
+    expect(pickFeaturedJob(calmer, pick, NOW)).toEqual({ job: quiet, reason: 'manual' });
+    // …but the same job becoming *more* urgent than recorded does.
+    const worse = sortJobs([job('urgent', JOB_RANK.problem), quiet]);
+    expect(pickFeaturedJob(worse, pick, NOW)?.job.key).toBe('urgent');
   });
 
   it('a job becoming less urgent does not override the pick', () => {

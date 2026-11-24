@@ -15,6 +15,7 @@ import { deriveCoarseVerificationStatus } from 'lib/utils/normalize-profile'
 import { router } from 'expo-router'
 import { useCallback } from 'react'
 import { Alert } from 'react-native'
+import { buildHireWelcomeMessage } from '../lib/messaging/hire-welcome'
 
 interface UseAcceptRequestParams {
   currentUserId?: string
@@ -410,7 +411,7 @@ export function useAcceptRequest({
             // send initial message via supabase function or messages table
             try {
               if (currentUserId) {
-                await sendSupabaseMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
+                await sendSupabaseMessage(convId, buildHireWelcomeMessage((bountyObj as any)?.title), currentUserId)
               }
             } catch (msgErr) {
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
@@ -439,7 +440,7 @@ export function useAcceptRequest({
           try {
             await messageService.sendMessage(
               localConv.id,
-              `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`,
+              buildHireWelcomeMessage((bountyObj as any)?.title),
               currentUserId
             )
           } catch (localMsgErr) {

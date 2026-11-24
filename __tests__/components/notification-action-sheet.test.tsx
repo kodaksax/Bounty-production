@@ -223,7 +223,8 @@ describe('NotificationActionSheet', () => {
 
       expect(mockAcceptRequest).not.toHaveBeenCalled();
       expect(onClose).toHaveBeenCalledTimes(1);
-      expect(push).toHaveBeenCalledWith('/tabs/bounty-app?tab=messages&initialTab=requests');
+      // Names the job, so My Jobs opens that job's "Who offered".
+      expect(push).toHaveBeenCalledWith('/tabs/bounty-app?tab=messages&initialTab=requests&bountyId=b1');
     });
 
     it('tells the poster when a decline fails instead of failing silently', async () => {

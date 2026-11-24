@@ -12,8 +12,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service'
 import { bountyRequestService } from 'lib/services/bounty-request-service'
 import { bountyService } from 'lib/services/bounty-service'
+import { cancellationService } from 'lib/services/cancellation-service'
+import { disputeService } from 'lib/services/dispute-service'
 import type { Bounty } from 'lib/services/database.types'
+import type { BountyLifecycleInput } from 'lib/utils/bounty-lifecycle'
 import { filterManagementBounties } from 'lib/utils/bounty-visibility'
+import { bountyHoldsUnreleasedEscrow } from 'lib/utils/payment-architecture'
 import { hideBountyForHunter, loadHunterHiddenBountyIds } from 'lib/utils/hunter-hidden-bounties'
 import { buildMyJobs } from '../lib/my-jobs/build-my-jobs'
 import type { MyJobsModel } from '../lib/my-jobs/types'
@@ -21,6 +25,9 @@ import { supabase } from '../lib/supabase'
 import { uniqueRealtimeTopic } from '../lib/utils/realtime-topic'
 import { useBountyStatusFilters } from './useBountyStatusFilters'
 import { useConversations } from './useConversations'
+
+/** Over: no dispute or cancellation can still be open on these. */
+const PAST = new Set(['completed', 'cancelled', 'archived', 'deleted'])
 
 export interface MyJobsData extends MyJobsModel {
   /** Pending applications on the viewer's open bounties, by bounty id. */
@@ -65,6 +72,10 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     refresh: refreshConversations,
   } = useConversations()
 
+  // Bumped to reload the per-bounty overlays (see below) on refresh and focus.
+  const [overlayNonce, setOverlayNonce] = useState(0)
+  const reloadOverlays = React.useCallback(() => setOverlayNonce((n) => n + 1), [])
+
   // ---- Loaders ----
   const loadPendingApplications = React.useCallback(async (bounties: Bounty[]) => {
     // Only open bounties take offers; once someone is chosen the rest close.
@@ -74,10 +85,13 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
       return
     }
     try {
+      // Throws on failure, so a failed load keeps the offers already shown
+      // instead of replacing them with an empty list.
       const requests = await bountyRequestService.getAllWithDetailsBatch(openIds, {
         status: 'pending',
         page: 1,
         pageSize: 200,
+        throwOnError: true,
       })
       setPendingApplications(requests)
     } catch (e) {
@@ -95,7 +109,9 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     }
     try {
       setError(null)
-      const mine = await bountyService.getByUserId(userId)
+      // throwOnError: a failed load must surface as an error and keep the last
+      // list, never read as "Nothing posted yet".
+      const mine = await bountyService.getAll({ userId, limit: 200, throwOnError: true })
       // The shared lifecycle filter, re-applied on every load: it also drops
       // bounties this client just removed, so a query that raced the mutation
       // can't put them back (see lib/utils/bounty-visibility).
@@ -119,7 +135,7 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     try {
       setError(null)
       // Every status (pending, accepted, rejected) so closed offers can be listed.
-      const requests = await bountyRequestService.getAllWithDetails({ userId })
+      const requests = await bountyRequestService.getAllWithDetails({ userId, throwOnError: true })
       const visible = new Set(
         filterManagementBounties(requests.map((r) => r?.bounty).filter((b): b is Bounty => !!b)).map((b) =>
           String(b.id)
@@ -138,10 +154,11 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     setRefreshing(true)
     try {
       await Promise.all([reloadPosted(), reloadOffers(), refreshConversations().catch(() => null)])
+      reloadOverlays()
     } finally {
       setRefreshing(false)
     }
-  }, [reloadPosted, reloadOffers, refreshConversations])
+  }, [reloadPosted, reloadOffers, refreshConversations, reloadOverlays])
 
   useEffect(() => {
     if (!userId) {
@@ -170,8 +187,9 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
       }
       reloadPosted()
       reloadOffers()
+      reloadOverlays()
       refreshConversations().catch(() => {})
-    }, [reloadPosted, reloadOffers, refreshConversations])
+    }, [reloadPosted, reloadOffers, refreshConversations, reloadOverlays])
   )
 
   useEffect(() => {
@@ -220,6 +238,72 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     }
   }, [openIdsKey, userId, loadPendingApplications])
 
+  // ---- Per-bounty state the list rows don't carry ----
+  // Funding mode (for the money truth), open disputes and pending cancellation
+  // requests, loaded in one batch per kind for every job on the tab — the list
+  // equivalent of what each job's own screen loads (hooks/useBountyLifecycle).
+  const [overlays, setOverlays] = useState<{
+    fundingModes: Map<string, 'at_post' | 'at_accept'>
+    disputed: Set<string>
+    cancellations: Map<string, 'poster' | 'hunter'>
+  }>(() => ({ fundingModes: new Map(), disputed: new Set(), cancellations: new Map() }))
+
+  const postedIdsKey = useMemo(() => myBounties.map((b) => String(b.id)).sort().join(','), [myBounties])
+  const liveIdsKey = useMemo(() => {
+    const ids = new Set<string>()
+    for (const b of myBounties) if (!PAST.has(String(b.status))) ids.add(String(b.id))
+    for (const r of hunterRequests) {
+      const b = r?.bounty
+      if (b && r.status === 'accepted' && !PAST.has(String(b.status))) ids.add(String(b.id))
+    }
+    return Array.from(ids).sort().join(',')
+  }, [myBounties, hunterRequests])
+
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    const posted = postedIdsKey ? postedIdsKey.split(',') : []
+    const live = liveIdsKey ? liveIdsKey.split(',') : []
+    Promise.all([
+      bountyService.getFundingModes(posted),
+      disputeService.getOpenDisputeBountyIds(live),
+      cancellationService.getPendingCancellationsForBounties(live),
+    ])
+      .then(([fundingModes, disputed, cancellations]) => {
+        if (!cancelled) setOverlays({ fundingModes, disputed, cancellations })
+      })
+      .catch(() => {
+        // Each loader is best effort already; keep whatever was shown.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [userId, postedIdsKey, liveIdsKey, overlayNonce])
+
+  const getLifecycleOverlay = React.useCallback(
+    (b: Bounty): Partial<BountyLifecycleInput> => {
+      const id = String(b.id)
+      const requestedBy = overlays.cancellations.get(id) ?? null
+      return {
+        hasDispute: overlays.disputed.has(id),
+        hasCancellationRequest: requestedBy !== null,
+        cancellationRequestedByRole: requestedBy,
+        paymentState: bountyHoldsUnreleasedEscrow(b) ? 'held' : 'released',
+      }
+    },
+    [overlays]
+  )
+
+  // The posted bounties with their funding mode filled in.
+  const postedWithFunding = useMemo(
+    () =>
+      myBounties.map((b) => {
+        const mode = overlays.fundingModes.get(String(b.id))
+        return mode && b.funding_mode !== mode ? { ...b, funding_mode: mode } : b
+      }),
+    [myBounties, overlays.fundingModes]
+  )
+
   // ---- Derived ----
   const applicantsByBounty = useMemo(() => {
     const m = new Map<string, BountyRequestWithDetails[]>()
@@ -258,13 +342,14 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     statusFilterInProgress: 'all',
     statusFilterMyPostings: 'all',
     applicationCounts,
+    getLifecycleOverlay,
   })
 
   const model = useMemo<MyJobsModel>(() => {
     if (!userId) return { jobs: [], offers: [] }
     return buildMyJobs({
       viewerId: userId,
-      postedBounties: myBounties,
+      postedBounties: postedWithFunding,
       hunterRequests,
       pendingApplicationsByBounty: applicantsByBounty,
       conversations,
@@ -272,7 +357,7 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
       getLifecycle,
       getSubmission: getLatestSubmission,
     })
-  }, [userId, myBounties, hunterRequests, applicantsByBounty, conversations, hiddenIds, getLifecycle, getLatestSubmission])
+  }, [userId, postedWithFunding, hunterRequests, applicantsByBounty, conversations, hiddenIds, getLifecycle, getLatestSubmission])
 
   const markHiddenLocally = React.useCallback((bountyId: string | number) => {
     const key = String(bountyId)
