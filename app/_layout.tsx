@@ -13,7 +13,6 @@ import {
 } from '@expo-google-fonts/inter';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
-import { AppMetrics, AppMetricsRoot } from 'expo-observe';
 import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
@@ -33,6 +32,7 @@ import { NotificationProvider } from '../lib/context/notification-context';
 import { ProfileImageViewerProvider } from '../lib/context/ProfileImageViewerContext';
 import { ErrorBoundary } from '../lib/error-boundary';
 import { analyticsService } from '../lib/services/analytics-service';
+import { markAppInteractive, wrapWithAppMetrics } from '../lib/services/app-metrics';
 import { startMemoryPressureWatcher } from '../lib/services/memory-pressure';
 import { StripeProvider } from '../lib/stripe-context';
 import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
@@ -362,9 +362,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         try {
           hideNativeSplashSafely();
         } catch {}
-        try {
-          AppMetrics.markInteractive();
-        } catch {}
+        markAppInteractive();
         setPhase('app');
       }
     }, SAFETY_MS);
@@ -455,9 +453,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         try {
           hideNativeSplashSafely();
         } catch {}
-        try {
-          AppMetrics.markInteractive();
-        } catch {}
+        markAppInteractive();
         setPhase('app');
       }
     };
@@ -470,9 +466,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       try {
         hideNativeSplashSafely();
       } catch {}
-      try {
-        AppMetrics.markInteractive();
-      } catch {}
+      markAppInteractive();
       setPhase('app');
     }
 
@@ -669,4 +663,4 @@ const styles = StyleSheet.create({
 // Sentry still captures errors/breadcrumbs via initializeSentry() + the ErrorBoundary
 // onError callback + the global error handlers in lib/error-handling.ts.
 
-export default AppMetricsRoot.wrap(RootLayout);
+export default wrapWithAppMetrics(RootLayout);
