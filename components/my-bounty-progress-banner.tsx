@@ -294,6 +294,10 @@ export function MyBountyProgressCarousel({
         } else {
           drag.value = withTiming(0, SETTLE);
         }
+      })
+      .onFinalize((_e, success) => {
+        'worklet';
+        if (!success) drag.value = withTiming(0, SETTLE);
       });
     return tabPagerGesture
       ? pan.blocksExternalGesture(tabPagerGesture, cardsScrollGesture)
@@ -316,6 +320,12 @@ export function MyBountyProgressCarousel({
           runOnJS(onExpanded)();
           drag.value = withTiming(0, SETTLE);
         } else {
+          drag.value = withTiming(-(heightSV.value + OFFSCREEN_EXTRA), SETTLE);
+        }
+      })
+      .onFinalize((_e, success) => {
+        'worklet';
+        if (!success) {
           drag.value = withTiming(-(heightSV.value + OFFSCREEN_EXTRA), SETTLE);
         }
       });
