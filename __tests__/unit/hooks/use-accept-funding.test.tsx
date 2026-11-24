@@ -649,6 +649,16 @@ describe('useAcceptFunding', () => {
       });
     });
 
+    test('refuses to start a payment when no hire is waiting', () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      let started: boolean | void;
+      act(() => {
+        started = result.current.gate.onPaymentStarted('card');
+      });
+      expect(started).toBe(false);
+      expect(result.current.gate.active).toBe(false);
+    });
+
     test('unmounting with no gate open emits nothing', () => {
       const { unmount } = renderHook(() => useAcceptFunding(FAST));
       unmount();

@@ -8,9 +8,7 @@
  * calculateHunterEarnings (the design's $80 → $72 at 10% is sample data).
  * Before the poster approves, the copy says the money is held and the hunter
  * is not paid yet; after, that it was released to their Bounty wallet. It
- * never says a wallet credit was paid to a bank. The step named "Paid" in the
- * design is the workflow stage's name (open question Q-PAY-4); its money line
- * says exactly where the money is.
+ * never says a wallet credit was paid to a bank.
  *
  * Copy is the handoff's with live names and amounts. Gaps, recorded in the PR:
  *  - DESIGN-GAP: "We'll tell you either way" (H.3) is left out: no notification is sent
@@ -18,22 +16,20 @@
  *    and "has seen your offer" stays hidden while application_viewed is
  *    analytics only.
  *  - DESIGN-GAP: "You're mounting Jordan's TV today" (H.7) becomes "You're doing
- *    {Poster}'s job": the verb is job-specific and no agreed day is stored.
- *    TODO(E): store the agreed time and reminders (H.5, H.7).
+ *    {Poster}'s job": the verb is job-specific.
  *  - DESIGN-GAP: pronouns in sample copy become names.
  */
 import { FOCUS_POLICY, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy';
 import { calculateHunterEarnings, effectiveFeePercent } from '../constants/fees';
 import { firstName, formatJobAmount, formatJobDay } from '../my-jobs/format';
 import type { BountyLifecycleState } from './bounty-lifecycle';
+import { JOB_STEP, stepLine } from './job-steps';
 import { formatClock } from './poster-stage-copy';
 import type { StageAction, StageMoney, StageViewModel } from './stage-copy-types';
 
 export type HunterActionKey =
   | 'back_to_jobs'
   | 'withdraw'
-  | 'send_time'
-  | 'write_own'
   | 'tell_done'
   | 'message'
   | 'cant_do'
@@ -50,7 +46,6 @@ export interface HunterStageView extends StageViewModel<HunterActionKey> {
   side: HunterSide;
   show: {
     yourNote: boolean;
-    timePicks: boolean;
     askedFor: boolean;
     lastMessage: boolean;
     receipt: boolean;
@@ -78,16 +73,12 @@ export interface HunterStageInput {
   hasDispute: boolean;
   /** True when this hunter opened the dispute, false when the poster did. */
   disputeOpenedByViewer?: boolean | null;
-  /** The two have exchanged at least one message on this job. */
-  hasMessages: boolean;
   /** The review window's deadline, already gated on REVIEW_WINDOW_ENABLED. */
   reviewDeadline?: Date | null;
   /** Server-authoritative fee for a completed release, when known. */
   actualFee?: number | null;
   canRate?: boolean;
 }
-
-export const HUNTER_TIME_PICKS = ['Saturday morning', 'Saturday afternoon', 'A weekday evening', 'Something else'] as const;
 
 /** The money split, always from calculateHunterEarnings. */
 export function hunterMoney(amount: number | null | undefined, actualFee?: number | null) {
@@ -111,7 +102,6 @@ function photos(n: number): string {
 
 const NO_BLOCKS: HunterStageView['show'] = {
   yourNote: false,
-  timePicks: false,
   askedFor: false,
   lastMessage: false,
   receipt: false,
@@ -176,8 +166,8 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
         moreOpen: true,
         screenId: 'H.3',
         side: 'offered',
-        step: 1,
-        stage: 'Step 1 of 5 · Offered',
+        step: JOB_STEP.choosing,
+        stage: stepLine(JOB_STEP.choosing),
         now: `Your offer is with ${poster}.`,
         means: `${Poster} will look at everyone who offered and choose one person.`,
         money: honor
@@ -186,7 +176,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
               kind: 'none',
               text: `Nothing is held yet. If ${poster} chooses you, ${posterS} ${amount} is held by Bounty before you start.`,
             },
-        after: `If ${poster} chooses you, you agree a time.`,
+        after: `If ${poster} chooses you, you start the work.`,
         primary: action('back_to_jobs', 'Back to My Jobs', 'quiet'),
         show: { ...NO_BLOCKS, yourNote: true },
       };
@@ -197,7 +187,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
         ...base,
         screenId: 'X.1',
         side: 'offered',
-        step: 1,
+        step: JOB_STEP.choosing,
         stage: 'Not going ahead',
         now: systemClosed ? `${lifecycle.headline}.` : `${Poster} chose someone else.`,
         means: systemClosed ? lifecycle.explanation : "Thanks for offering. This job isn't taking offers any more.",
@@ -219,7 +209,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
         screenId: 'H.9',
         side: 'doing',
         step: 4,
-        stage: 'Step 4 of 5 · Waiting for approval',
+        stage: stepLine(JOB_STEP.reviewing),
         now: `${Poster} is checking your work.`,
         means: `You sent a note${n > 0 ? ` and ${photos(n)}` : ''}${when}. ${Poster} will approve it or ask for a change.`,
         money: honor
@@ -241,7 +231,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           screenId: 'M.3',
           side: 'doing',
           step: 3,
-          stage: 'Step 3 of 5 · Doing the work',
+          stage: stepLine(JOB_STEP.working, 'doing'),
           now: `${Poster} asked for a change.`,
           means: 'Make the change, then send the work again.',
           money: honor ? null : { kind: 'held', text: `${amount} is still held. Nothing is paid until ${poster} approves.` },
@@ -251,30 +241,13 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           show: { ...NO_BLOCKS, changeRequested: feedback, askedFor: true },
         };
       }
-      if (!input.hasMessages) {
-        return {
-          ...base,
-          more: [action('cant_do', "I can't do this job any more", 'danger', 'event-busy')],
-          screenId: 'H.5',
-          side: 'doing',
-          step: 2,
-          stage: 'Step 2 of 5 · Chosen',
-          now: `Agree on a time with ${poster}.`,
-          means: `${Poster} needs to know when you'll come. Pick what suits you and we'll send it to ${poster} as a message.`,
-          money: held,
-          after: null,
-          primary: action('send_time', `Send to ${poster}`, 'primary'),
-          secondary: [action('write_own', 'Write my own message', 'text')],
-          show: { ...NO_BLOCKS, timePicks: true },
-        };
-      }
       return {
         ...base,
         more: [action('cant_do', "I can't do this job any more", 'danger', 'event-busy')],
         screenId: 'H.7',
         side: 'doing',
         step: 3,
-        stage: 'Step 3 of 5 · Doing the work',
+        stage: stepLine(JOB_STEP.working, 'doing'),
         now: firstName(posterFull) ? `You're doing ${posterS} job.` : "You're doing this job.",
         means: `When it's done, take a photo or two and tell ${poster} it's done.`,
         money: held,
@@ -293,7 +266,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           screenId: 'H.10',
           side: 'did',
           step: 5,
-          stage: 'Step 5 of 5 · Paid',
+          stage: stepLine(JOB_STEP.finished),
           now: `${Poster} approved your work.`,
           means: lifecycle.explanation,
           money: honor ? null : { kind: 'held', text: `Bounty is releasing ${m.net} to your Bounty wallet.` },
@@ -308,8 +281,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
         screenId: 'H.10',
         side: 'did',
         step: 5,
-        // Q-PAY-4: "Paid" is the design's stage name; the money line says where the money is.
-        stage: 'Step 5 of 5 · Paid',
+        stage: stepLine(JOB_STEP.finished),
         now: honor ? `${Poster} approved your work.` : `${Poster} approved. You earned ${m.net}.`,
         means: honor
           ? `${Poster} said the job is done. It was for honor, so no money moved.`
@@ -333,7 +305,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
         ...base,
         screenId: 'past',
         side: input.requestStatus === 'accepted' ? 'doing' : 'offered',
-        step: lifecycle.status === 'deadline_passed' && input.requestStatus === 'accepted' ? 3 : 1,
+        step: input.requestStatus === 'accepted' ? JOB_STEP.working : JOB_STEP.posted,
         stage: lifecycle.headline,
         now: `${lifecycle.headline}.`,
         means: lifecycle.explanation,

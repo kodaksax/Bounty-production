@@ -21,13 +21,6 @@ import { sortApplicantsLocalFirst } from '../lib/utils/applicant-distance';
 
 export interface JobConversationState {
   conversationId: string | null;
-  /**
-   * One of them has written to the other since the hire. The automatic
-   * "You've been selected" message and questions asked before hiring don't
-   * count, or "agree a time" (F, H.5) would never show. True while loading or
-   * when the read fails, so a network blip never sends a job back a step.
-   */
-  hasMessages: boolean;
   /** The other person's most recent readable message. */
   lastFromOther: { text: string; at: string } | null;
   /** When the viewer last wrote, if the other person hasn't answered since. */
@@ -39,7 +32,6 @@ export interface JobConversationState {
 
 const EMPTY_CONVERSATION: JobConversationState = {
   conversationId: null,
-  hasMessages: true,
   lastFromOther: null,
   awaitingReplySince: null,
   firstTalk: null,
@@ -56,16 +48,13 @@ export function useJobConversation(args: {
   otherId: string | null | undefined;
   bountyId: string | null | undefined;
   enabled?: boolean;
-  /** When the helper was chosen; earlier messages aren't about agreeing a time. */
+  /** When the helper was chosen; earlier messages were questions before hiring. */
   since?: string | null;
-}): JobConversationState & { reload: () => void; markSent: () => void } {
+}): JobConversationState & { reload: () => void } {
   const { viewerId, otherId, bountyId, enabled = true, since = null } = args;
   const [state, setState] = useState<JobConversationState>(EMPTY_CONVERSATION);
   const [attempt, setAttempt] = useState(0);
   const loadedKeyRef = useRef<string | null>(null);
-  // When the viewer sent a message from this screen: the job has moved on even
-  // if the read that follows is slow, stale or fails.
-  const sentAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -77,7 +66,6 @@ export function useJobConversation(args: {
     const key = `${viewerId}:${otherId}:${bountyId}`;
     if (loadedKeyRef.current !== key) {
       loadedKeyRef.current = key;
-      sentAtRef.current = null;
       setState(EMPTY_CONVERSATION);
     }
     (async () => {
@@ -90,7 +78,7 @@ export function useJobConversation(args: {
         });
         const conv = pair.find((c) => String(c.bountyId) === String(bountyId)) ?? pair[0] ?? null;
         if (!conv) {
-          if (active) setState({ ...EMPTY_CONVERSATION, ...sentState(sentAtRef.current, false), loaded: true });
+          if (active) setState({ ...EMPTY_CONVERSATION, loaded: true });
           return;
         }
         let messages: Message[] = await supabaseMessaging.fetchMessages(String(conv.id));
@@ -114,8 +102,7 @@ export function useJobConversation(args: {
         if (active) {
           setState({
             conversationId: String(conv.id),
-            ...sentState(sentAtRef.current, !!talk),
-            ...(talk ? { firstTalk: { at: talk.createdAt, mine: String(talk.senderId) === String(viewerId) } } : null),
+            firstTalk: talk ? { at: talk.createdAt, mine: String(talk.senderId) === String(viewerId) } : null,
             awaitingReplySince: lastMineAt && (!lastReplyAt || lastReplyAt < lastMineAt) ? lastMineAt : null,
             lastFromOther: last ? { text: last.text.trim(), at: last.createdAt } : null,
             loaded: true,
@@ -131,19 +118,9 @@ export function useJobConversation(args: {
   }, [viewerId, otherId, bountyId, enabled, attempt, since]);
 
   const reload = React.useCallback(() => setAttempt((n) => n + 1), []);
-  const markSent = React.useCallback(() => {
-    const at = new Date().toISOString();
-    sentAtRef.current = sentAtRef.current ?? at;
-    setState((prev) => ({ ...prev, ...sentState(at, true), firstTalk: prev.firstTalk ?? { at, mine: true }, loaded: true }));
-  }, []);
-  // "Write my own message" happens in the thread: look again on the way back.
+  // Messages are written in the thread: look again on the way back.
   useRefreshOnReturn(reload);
-  return { ...state, reload, markSent };
-}
-
-/** Whether they have talked, counting a message this screen just sent. */
-function sentState(sentAt: string | null, found: boolean): Pick<JobConversationState, 'hasMessages' | 'firstTalk'> {
-  return { hasMessages: found || !!sentAt, firstTalk: sentAt ? { at: sentAt, mine: true } : null };
+  return { ...state, reload };
 }
 
 /** Pending offers on an open job, nearest known first (the order Who offered uses). */

@@ -257,6 +257,15 @@ describe('AcceptFundingGate', () => {
         expect(mockPayWithCard).toHaveBeenCalledWith(20);
       });
 
+      test('charges nothing when no hire is waiting on the sheet', () => {
+        const gate = makeGate({ requirement: both, onPaymentStarted: jest.fn(() => false) });
+        const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+        fireEvent.press(getByText('Fund and hire'));
+
+        expect(mockPayWithCard).not.toHaveBeenCalled();
+      });
+
       test('"Fund and hire" confirms without Stripe when the balance covers it', () => {
         const gate = makeGate({ stage: 'confirm', requirement: balanceOnly });
         const { getByText } = render(<AcceptFundingGate gate={gate} />);

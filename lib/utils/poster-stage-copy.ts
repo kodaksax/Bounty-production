@@ -20,6 +20,7 @@
 import { FOCUS_POLICY, J2_MONEY_PLACEHOLDER, NUDGE_AFTER_HOURS, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy';
 import { firstName, formatJobAmount, formatJobDay } from '../my-jobs/format';
 import type { BountyLifecycleState } from './bounty-lifecycle';
+import { JOB_STEP, stepDetail, stepLine } from './job-steps';
 import { DEFAULT_REQUEST_EXPIRY_HOURS, formatExpiryWindow } from './request-expiry';
 import type { StageAction, StageMoney, StageViewModel } from './stage-copy-types';
 import { MIN_RATING_SAMPLE } from './trust-summary';
@@ -29,8 +30,6 @@ export type PosterActionKey =
   | 'add_details'
   | 'keep_waiting'
   | 'see_people'
-  | 'send_time'
-  | 'write_own'
   | 'message'
   | 'report_no_reply'
   | 'review_work'
@@ -73,8 +72,6 @@ export interface PosterStageInput {
   } | null;
   /** Only for an open, unhired job; null otherwise. */
   openJobCharge: OpenJobCharge | null;
-  /** The poster and helper have exchanged at least one message on this job. */
-  hasMessages: boolean;
   /** When the poster last wrote, if the helper hasn't answered since. */
   awaitingReplySince?: string | null;
   /** A payment to hire this person is still confirming (E.3). */
@@ -93,7 +90,6 @@ export interface PosterStageView extends StageViewModel<PosterActionKey> {
     peopleStrip: boolean;
     /** "Offers close after 3 days if you don't answer." */
     offersCloseNote: string | null;
-    timePicks: boolean;
     lastMessage: boolean;
     story: boolean;
     proofPhotos: boolean;
@@ -109,42 +105,6 @@ export const POSTER_UNPAID = "You haven't paid anything yet. You only pay when y
 
 export function posterHeldLine(amount: string): string {
   return `Your ${amount} is with Bounty. Nobody is paid until you approve.`;
-}
-
-/**
- * The handoff's quick picks for stage F (the hunter's H.5 has its own).
- * TODO(E): store the agreed time and send reminders (F, G); today a pick is
- * only a pre-filled chat message, never a booking.
- */
-export const POSTER_TIME_PICKS = ['Saturday morning', 'Sunday morning', 'A weekday', 'Something else'] as const;
-
-export const TIME_PICK_OTHER = 'Something else';
-
-/**
- * The agree-a-time buttons for the current pick. "Something else" sends
- * nothing by itself, so its button says what it does: open messages.
- */
-export function timePickActions<A extends { key: string; label: string }>(
-  primary: A | null,
-  secondary: A[],
-  pick: string,
-  name: string
-): { primary: A | null; secondary: A[] } {
-  if (primary?.key !== 'send_time' || pick !== TIME_PICK_OTHER) return { primary, secondary };
-  return {
-    primary: { ...primary, label: `Write to ${name}` },
-    // The same thing twice would only make them choose between two equals.
-    secondary: secondary.filter((a) => a.key !== 'write_own'),
-  };
-}
-
-/**
- * "Hi Ada, Saturday morning suits me. What time works for you?" A pick that
- * starts with an article reads mid-sentence ("a weekday suits me").
- */
-export function timePickMessage(name: string, choice: string): string {
-  const phrase = /^(A|An|The) /.test(choice) ? choice.charAt(0).toLowerCase() + choice.slice(1) : choice;
-  return `Hi ${name}, ${phrase} suits me. What time works for you?`;
 }
 
 function capitalize(s: string): string {
@@ -218,7 +178,6 @@ function openJobMoney(input: PosterStageInput, amount: string): { money: StageMo
 const NO_BLOCKS: PosterStageView['show'] = {
   peopleStrip: false,
   offersCloseNote: null,
-  timePicks: false,
   lastMessage: false,
   story: false,
   proofPhotos: false,
@@ -286,8 +245,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
     return {
       ...base,
       screenId: 'J.3',
-      step: 4,
-      stage: `Step 4 of 5 · ${Helper} asked to cancel`,
+      step: JOB_STEP.working,
+      stage: stepDetail(JOB_STEP.working, `${Helper} asked to cancel`),
       now: `${Helper} asked to cancel.`,
       means: reason ? `“${reason}” ${offer}` : offer,
       money:
@@ -306,8 +265,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
       return {
         ...base,
         screenId: 'H',
-        step: 4,
-        stage: 'Step 4 of 5 · Reviewing the work',
+        step: JOB_STEP.reviewing,
+        stage: stepLine(JOB_STEP.reviewing),
         now: `${Helper} says the job is done.`,
         means:
           n > 0
@@ -326,29 +285,14 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         return {
           ...base,
           screenId: 'G',
-          step: 4,
-          stage: 'Step 4 of 5 · Work underway',
+          step: JOB_STEP.working,
+          stage: stepLine(JOB_STEP.working),
           now: `You asked ${helper} for a change.`,
           means: `${Helper} will send the work again when it's done. You don't need to do anything until then.`,
           money: held,
           after: 'You review the work again and decide about payment.',
           primary: action('message', `Message ${helper}`, 'quiet', 'chat-bubble-outline'),
           show: { ...NO_BLOCKS, lastMessage: true, story: true },
-        };
-      }
-      if (!input.hasMessages) {
-        return {
-          ...base,
-          screenId: 'F',
-          step: 3,
-          stage: 'Step 3 of 5 · Agreeing a time',
-          now: `Agree on a time with ${helper}.`,
-          means: `${Helper} needs to know when to come. Pick what suits you and we'll send it to ${helper} as a message.`,
-          money: null,
-          after: null,
-          primary: action('send_time', `Send to ${helper}`, 'primary'),
-          secondary: [action('write_own', 'Write my own message', 'text')],
-          show: { ...NO_BLOCKS, timePicks: true },
         };
       }
       // E.2, only once Q-PRD-2 sets a threshold (FOCUS_POLICY.silenceThresholdHours).
@@ -359,8 +303,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         return {
           ...base,
           screenId: 'E.2',
-          step: 4,
-          stage: 'Step 4 of 5 · Work underway',
+          step: JOB_STEP.working,
+          stage: stepLine(JOB_STEP.working),
           now: `You haven't heard from ${helper}.`,
           means: `${Helper} hasn't replied${day ? ` since ${day}` : ''}. People are sometimes just busy. Message ${helper}, or tell us and we'll help.`,
           money: held,
@@ -373,8 +317,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
       return {
         ...base,
         screenId: 'G',
-        step: 4,
-        stage: 'Step 4 of 5 · Work underway',
+        step: JOB_STEP.working,
+        stage: stepLine(JOB_STEP.working),
         now: `${Helper} is working on your job.`,
         means: `${Helper} will let you know here when it's done. You don't need to do anything until then.`,
         money: held,
@@ -392,8 +336,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         return {
           ...base,
           screenId: 'E.3',
-          step: 2,
-          stage: 'Step 2 of 5 · Choosing someone',
+          step: JOB_STEP.choosing,
+          stage: stepLine(JOB_STEP.choosing),
           now: pending.now,
           means: pending.means,
           money: { kind: 'warn', text: pending.money },
@@ -411,8 +355,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           ...base,
           more,
           screenId: 'C',
-          step: 2,
-          stage: 'Step 2 of 5 · Choosing someone to help',
+          step: JOB_STEP.choosing,
+          stage: stepLine(JOB_STEP.choosing),
           now: n === 1 ? '1 person wants to help.' : `${n} people want to help.`,
           means: honor
             ? n === 1
@@ -422,7 +366,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
               ? `They read your job and offered to do it for ${amount}. Look at them, then decide.`
               : `Each one read your job and offered to do it for ${amount}. Look at each person, then choose one.`,
           money,
-          after: 'You agree a time with the person you chose.',
+          after: 'The person you choose starts the work.',
           primary: action('see_people', n === 1 ? 'See this person' : 'See each person', 'primary'),
           show: { ...NO_BLOCKS, peopleStrip: true, offersCloseNote: `Offers close after ${window} if you don't answer.`, checkPaymentAgain: checkAgain },
         };
@@ -433,8 +377,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           ...base,
           more,
           screenId: 'A',
-          step: 1,
-          stage: 'Step 1 of 5 · Finding someone',
+          step: JOB_STEP.posted,
+          stage: stepLine(JOB_STEP.posted),
           now: 'Your job is live.',
           means: "People nearby can see it now. When someone offers to help, we'll send you a notification and show them here.",
           money,
@@ -449,8 +393,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         more,
         moreOpen: true,
         screenId: 'B',
-        step: 1,
-        stage: 'Step 1 of 5 · Finding someone',
+        step: JOB_STEP.posted,
+        stage: stepLine(JOB_STEP.posted),
         now: 'No one has offered yet.',
         means: `It's been ${days} days. A clear photo and a few details can help people decide.`,
         money,
@@ -467,8 +411,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         return {
           ...base,
           screenId: 'I.3',
-          step: 5,
-          stage: 'Step 5 of 5 · Finished',
+          step: JOB_STEP.finished,
+          stage: stepLine(JOB_STEP.finished),
           now: 'You approved the work.',
           means: lifecycle.explanation,
           money: honor ? null : { kind: 'held', text: `Bounty is releasing your ${amount} to ${helper}.` },
@@ -482,8 +426,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
       return {
         ...base,
         screenId: 'I.3',
-        step: 5,
-        stage: 'Step 5 of 5 · Finished',
+        step: JOB_STEP.finished,
+        stage: stepLine(JOB_STEP.finished),
         now: honor ? `Done. ${Helper} finished the job.` : `Done. Released to ${helper}.`,
         means: honor
           ? 'It was for honor, so no money moved. Your job is finished.'
@@ -504,8 +448,8 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
       return {
         ...base,
         screenId: 'past',
-        step: hired ? 4 : 1,
-        stage: `Step ${hired ? 4 : 1} of 5 · ${lifecycle.headline}`,
+        step: hired ? JOB_STEP.working : JOB_STEP.posted,
+        stage: stepDetail(hired ? JOB_STEP.working : JOB_STEP.posted, lifecycle.headline),
         now: `${lifecycle.headline}.`,
         means: lifecycle.explanation,
         money: hired ? held : null,
@@ -592,7 +536,7 @@ export function describeApplicant(
   const distance = formatDistanceWords(req.distance_mi);
   if (opts.online) facts.push({ icon: 'computer', text: 'Online' });
   else facts.push(distance ? { icon: 'place', text: distance } : { icon: 'location-off', text: 'Distance not shown', muted: true });
-  return { name, first, since, note, facts, stage: `Step 2 of 5 · Person ${opts.index + 1} of ${opts.total}` };
+  return { name, first, since, note, facts, stage: stepDetail(JOB_STEP.choosing, `Person ${opts.index + 1} of ${opts.total}`) };
 }
 
 /** 4b's line under the name: "4.8 · 14 jobs · about 2 miles away", from D's own facts. */
@@ -665,7 +609,7 @@ export function describeHire(input: HireCopyInput) {
       // TODO(E) Q-ENG-1: confirm the other offers are declined and the people
       // told when someone is chosen; this line only says their offers close.
       { icon: 'mark-email-read', title: othersCloseLine(input.otherApplicantNames ?? []), detail: 'Your job stops taking new offers.' },
-      { icon: 'chat', title: `You and ${first} agree a time`, detail: 'In your messages.' },
+      { icon: 'construction', title: `${first} starts the work`, detail: 'You can message each other any time.' },
     ],
     note: 'No fees for you.',
     primary: needsPayment ? `Pay ${charge} and choose ${first}` : `Choose ${first}`,

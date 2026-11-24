@@ -25,7 +25,6 @@ function input(status: string, over: Partial<HunterStageInput> = {}): HunterStag
     lifecycle: { status, headline: 'Headline', explanation: 'Explanation.', nextStep: 'Next.', tone: 'progress', waitingOn: 'other' } as any,
     posterName: 'Jordan K.',
     hasDispute: false,
-    hasMessages: true,
     ...over,
   };
 }
@@ -50,12 +49,12 @@ describe('H.3 — offer sent', () => {
       expect.objectContaining({
         screenId: 'H.3',
         side: 'offered',
-        step: 1,
-        stage: 'Step 1 of 5 · Offered',
+        step: 2,
+        stage: 'Step 2 of 5 · Choosing help',
         now: 'Your offer is with Jordan.',
         means: 'Jordan will look at everyone who offered and choose one person.',
         money: { kind: 'none', text: "Nothing is held yet. If Jordan chooses you, Jordan's $80 is held by Bounty before you start." },
-        after: 'If Jordan chooses you, you agree a time.',
+        after: 'If Jordan chooses you, you start the work.',
         moreOpen: true,
       })
     );
@@ -71,10 +70,6 @@ describe('without the poster’s name', () => {
     const offered = describeHunterStage(input('applied', { posterName: null, bounty: { amount: 80, status: 'open' } }), NOW);
     expect(offered.now).toBe('Your offer is with the poster.');
     expect(offered.means).toBe('The poster will look at everyone who offered and choose one person.');
-
-    const chosen = describeHunterStage(input('in_progress', { posterName: null, hasMessages: false }), NOW);
-    expect(chosen.now).toBe('Agree on a time with the poster.');
-    expect(chosen.primary?.label).toBe('Send to the poster');
 
     const working = describeHunterStage(input('in_progress', { posterName: null }), NOW);
     expect(working.now).toBe("You're doing this job.");
@@ -97,19 +92,10 @@ describe('without the poster’s name', () => {
 });
 
 describe('after being chosen', () => {
-  it('H.5: no messages yet → agree a time (a message, not a booking)', () => {
-    const v = describeHunterStage(input('in_progress', { hasMessages: false }), NOW);
-    expect(v.screenId).toBe('H.5');
-    expect(v.stage).toBe('Step 2 of 5 · Chosen');
-    expect(v.now).toBe('Agree on a time with Jordan.');
-    expect(v.money).toEqual({ kind: 'held', text: `Jordan's $80 is held by Bounty. You get ${NET} after jordan approves your work.`.replace('after jordan', 'after Jordan') });
-    expect(v.primary?.label).toBe('Send to Jordan');
-    expect(v.secondary.map((a) => a.label)).toEqual(['Write my own message']);
-  });
-
   it('H.7: doing the work; no invented "today"', () => {
     const v = describeHunterStage(input('in_progress'), NOW);
     expect(v.screenId).toBe('H.7');
+    expect(v.stage).toBe('Step 3 of 5 · Doing the work');
     expect(v.now).toBe("You're doing Jordan's job.");
     expect(v.means).toBe("When it's done, take a photo or two and tell Jordan it's done.");
     expect(v.after).toBe('Jordan checks the work and approves it.');
@@ -137,7 +123,7 @@ describe('H.9 — waiting for approval', () => {
   it('not paid yet: still held, and what they get when approved', () => {
     const v = describeHunterStage(input('submitted_for_review', { submission: submitted }), NOW);
     expect(v.screenId).toBe('H.9');
-    expect(v.stage).toBe('Step 4 of 5 · Waiting for approval');
+    expect(v.stage).toBe('Step 4 of 5 · Reviewing the work');
     expect(v.now).toBe('Jordan is checking your work.');
     expect(v.means).toMatch(/^You sent a note and 2 photos today at \d{1,2}:\d{2} (am|pm)\. Jordan will approve it or ask for a change\.$/);
     expect(v.money).toEqual({ kind: 'held', text: `Not paid yet. Jordan's $80 is still held by Bounty. You get ${NET} when Jordan approves.` });
@@ -162,7 +148,7 @@ describe('H.10 — approved', () => {
     const v = describeHunterStage(input('completed', { lifecycle: { ...input('completed').lifecycle, tone: 'positive' } }), NOW);
     expect(v.screenId).toBe('H.10');
     expect(v.side).toBe('did');
-    expect(v.stage).toBe('Step 5 of 5 · Paid');
+    expect(v.stage).toBe('Step 5 of 5 · Finished');
     expect(v.now).toBe(`Jordan approved. You earned ${NET}.`);
     expect(v.means).toBe('Jordan said the job is done, and Bounty released the payment to you.');
     expect(v.money).toEqual({ kind: 'released', text: `${NET} is in your Bounty wallet. Wallet shows when you can move it to your bank.` });

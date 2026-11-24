@@ -12,8 +12,8 @@
 import * as React from 'react';
 import { firstName, formatJobDay, getBountyCategoryIcon, getBountyCoverUri } from '../../lib/my-jobs/format';
 import type { IconName } from '../../lib/my-jobs/types';
-import { HUNTER_TIME_PICKS, hunterHeaderMeta, type HunterActionKey, type HunterStageView } from '../../lib/utils/hunter-stage-copy';
-import { formatClock, TIME_PICK_OTHER, timePickActions, timePickMessage } from '../../lib/utils/poster-stage-copy';
+import { hunterHeaderMeta, type HunterActionKey, type HunterStageView } from '../../lib/utils/hunter-stage-copy';
+import { formatClock } from '../../lib/utils/poster-stage-copy';
 import {
   FourQuestions,
   HelpSheet,
@@ -22,7 +22,6 @@ import {
   ReceiptRows,
   StageFooter,
   StageToast,
-  TimePicks,
   WorkspaceHeader,
   WorkspaceLayout,
   type HelpOption,
@@ -49,9 +48,6 @@ export interface HunterStageViewProps {
   onToastHide?: () => void;
   /** H.3: the pitch the hunter sent. */
   yourNote?: string | null;
-  /** H.5: the selected pick. */
-  pick?: string;
-  onPick?: (pick: string) => void;
   /** H.7: the poster's latest message. */
   lastMessage?: { text: string; at: string } | null;
   /** H.10. */
@@ -98,7 +94,8 @@ export function HunterStageScreen(props: HunterStageViewProps) {
       testID="hunter-workspace"
       footer={
         <StageFooter
-          {...timePickActions(view.primary, view.secondary, props.pick ?? HUNTER_TIME_PICKS[0], poster)}
+          primary={view.primary}
+          secondary={view.secondary}
           onAction={props.onAction}
           busyKey={props.busyKey ?? null}
         />
@@ -127,23 +124,6 @@ export function HunterStageScreen(props: HunterStageViewProps) {
 
       {view.show.yourNote && props.yourNote ? (
         <NoteBox tone="n" icon="format-quote" title="Your note" text={`“${props.yourNote}”`} testID="your-note" />
-      ) : null}
-
-      {view.show.timePicks && props.onPick ? (
-        <>
-          <TimePicks options={HUNTER_TIME_PICKS} selected={props.pick ?? HUNTER_TIME_PICKS[0]} onSelect={props.onPick} />
-          <NoteBox
-            tone="bg"
-            icon="chat-bubble-outline"
-            title={props.pick === TIME_PICK_OTHER ? null : `Your message to ${poster}`}
-            text={
-              props.pick === TIME_PICK_OTHER
-                ? `We'll open your messages so you can tell ${poster} what suits you.`
-                : `“${timePickMessage(firstName(posterName) ?? 'there', props.pick ?? HUNTER_TIME_PICKS[0])}”`
-            }
-            testID="time-pick-preview"
-          />
-        </>
       ) : null}
 
       {view.show.askedFor && bounty.description ? (

@@ -44,7 +44,6 @@ import {
   StageToast,
   StarRating,
   StorySoFar,
-  TimePicks,
   WorkspaceHeader,
   WorkspaceLayout,
   type OtherOption,
@@ -81,7 +80,6 @@ import {
 } from '../../../lib/services/bounty-cancel-refund';
 import type { Bounty } from '../../../lib/services/database.types';
 import { trackWorkspacePrimaryTapped } from '../../../lib/services/focus-analytics';
-import { sendJobMessage } from '../../../lib/services/job-messages';
 import { ratingsService } from '../../../lib/services/ratings';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { PosterPalette } from '../../../lib/themes/poster-palette';
@@ -95,9 +93,7 @@ import {
   describeApplicantBrief,
   describePosterStage,
   formatClock,
-  POSTER_TIME_PICKS,
   posterHeaderMeta,
-  TIME_PICK_OTHER, timePickActions, timePickMessage,
   type OpenJobCharge,
   type PosterActionKey,
 } from '../../../lib/utils/poster-stage-copy';
@@ -167,7 +163,6 @@ export default function BountyDashboard() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [personIndex, setPersonIndex] = useState<number | null>(null);
-  const [pick, setPick] = useState<string>(POSTER_TIME_PICKS[0]);
   const [stars, setStars] = useState(0);
   const [alreadyRated, setAlreadyRated] = useState(false);
   const { ask: askConfirm, dialog: confirmDialog } = useConfirmDialog();
@@ -639,7 +634,6 @@ export default function BountyDashboard() {
           }
         : null,
       openJobCharge,
-      hasMessages: conversation.hasMessages,
       awaitingReplySince: conversation.awaitingReplySince,
       paymentConfirmingFor: unresolvedDeposit?.hunterName ?? null,
       justPosted: posted === '1' || posted === 'true',
@@ -657,7 +651,6 @@ export default function BountyDashboard() {
     problems.cancellation,
     currentUserId,
     openJobCharge,
-    conversation.hasMessages,
     conversation.awaitingReplySince,
     unresolvedDeposit,
     posted,
@@ -689,34 +682,6 @@ export default function BountyDashboard() {
         case 'see_people':
           setPersonIndex(0);
           return;
-        case 'write_own':
-          openThread(helperId);
-          return;
-        case 'send_time': {
-          if (!helperId || !currentUserId) return;
-          if (pick === TIME_PICK_OTHER) {
-            openThread(helperId);
-            return;
-          }
-          setBusyAction('send_time');
-          try {
-            await sendJobMessage({
-              viewerId: String(currentUserId),
-              otherId: helperId,
-              bountyId: routeBountyId,
-              text: timePickMessage(helperFirst, pick),
-            });
-            // Sent: the job moves to the next step, and the thread opens on top.
-            conversation.markSent();
-            conversation.reload();
-            openThread(helperId);
-          } catch {
-            Alert.alert("Couldn't send your message", 'Check your connection and try again. Nothing was sent.');
-          } finally {
-            setBusyAction(null);
-          }
-          return;
-        }
         case 'message':
           openThread(helperId);
           return;
@@ -752,9 +717,6 @@ export default function BountyDashboard() {
       openThread,
       helperId,
       currentUserId,
-      pick,
-      helperFirst,
-      conversation,
       handleReviewSubmission,
       handleLeaveReview,
       router,
@@ -1012,7 +974,8 @@ export default function BountyDashboard() {
       testID="poster-workspace"
       footer={
         <StageFooter
-          {...timePickActions(view.primary, view.secondary, pick, helperFirst)}
+          primary={view.primary}
+          secondary={view.secondary}
           onAction={(key) => void handleAction(key)}
           busyKey={busyAction && busyAction !== 'delete' && busyAction !== 'choose' && busyAction !== 'pass' ? busyAction : null}
         />
@@ -1053,23 +1016,6 @@ export default function BountyDashboard() {
       ) : null}
       {view.show.offersCloseNote ? <Text style={s.smallMuted}>{view.show.offersCloseNote}</Text> : null}
 
-      {view.show.timePicks ? (
-        <>
-          <TimePicks options={POSTER_TIME_PICKS} selected={pick} onSelect={setPick} />
-          <NoteBox
-            tone="bg"
-            icon="chat-bubble-outline"
-            title={pick === TIME_PICK_OTHER ? null : `Your message to ${helperFirst}`}
-            text={
-              pick === TIME_PICK_OTHER
-                ? `We'll open your messages so you can tell ${helperFirst} what suits you.`
-                : `“${timePickMessage(helperFirst, pick)}”`
-            }
-            testID="time-pick-preview"
-          />
-        </>
-      ) : null}
-
       {view.show.lastMessage && lastMessage ? (
         <NoteBox
           tone="n"
@@ -1098,7 +1044,7 @@ export default function BountyDashboard() {
         <OtherOptions items={moreItems} initiallyOpen={view.moreOpen} testID="bounty-manage-actions" />
       ) : working && helperId ? (
         <Text style={s.smallMuted} testID="bounty-manage-locked">
-          {`${view.show.timePicks ? `You chose ${helperFirst}` : `${HelperFirst} is working on this`}, so it can't be edited or taken down. If something's wrong, tap Help.`}
+          {`${HelperFirst} is working on this, so it can't be edited or taken down. If something's wrong, tap Help.`}
         </Text>
       ) : null}
 

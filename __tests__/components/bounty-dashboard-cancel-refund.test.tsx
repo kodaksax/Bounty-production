@@ -124,12 +124,11 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn(), markSent: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
-jest.mock('../../lib/services/job-messages', () => ({ sendJobMessage: jest.fn() }));
 jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
 jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));
 jest.mock('../../components/ui/app-modal', () => ({

@@ -135,12 +135,11 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn(), markSent: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
-jest.mock('../../lib/services/job-messages', () => ({ sendJobMessage: jest.fn() }));
 jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
 jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));
 jest.mock('../../components/ui/app-modal', () => ({
@@ -283,13 +282,13 @@ describe('Fix 2: Payment card', () => {
     expect(within(screen.getByTestId('bounty-payment-state')).queryByText(/poster_username/)).toBeNull();
   });
 
-  it('a hired job still agreeing a time (step 3) has no money line', () => {
+  it('a hired job keeps the held line, with no time to agree', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
     mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null };
     render(<BountyDashboard />);
     openOtherOptions();
-    expect(screen.getByText('Agree on a time with ana_hunts.')).toBeTruthy();
-    expect(screen.queryByTestId('bounty-payment-state')).toBeNull();
+    expect(screen.getByText('ana_hunts is working on your job.')).toBeTruthy();
+    expect(screen.getByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
     // Past the open stage the server read isn't needed.
     expect(mockPlan).not.toHaveBeenCalled();
   });

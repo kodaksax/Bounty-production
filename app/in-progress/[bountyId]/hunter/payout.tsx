@@ -250,7 +250,6 @@ export default function HunterPayoutScreen() {
       requestStatus: request?.status ?? null,
       submission: lifecycle.submission,
       hasDispute: lifecycle.hasDispute,
-      hasMessages: true,
       reviewDeadline: reviewDeadline ? reviewDeadline.deadline : null,
     });
   }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, request?.status, reviewDeadline]);

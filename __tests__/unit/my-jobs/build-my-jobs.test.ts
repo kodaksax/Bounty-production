@@ -162,36 +162,22 @@ describe('buildMyJobs — work you are doing and offers', () => {
     accepted_by: ME,
   });
 
-  it('just chosen (no messages yet): "Jordan chose you", agree a time in the workspace (H.5)', () => {
+  it('just chosen: the work starts straight away, no messages needed', () => {
     const [job] = buildMyJobs(
       makeInput({
         hunterRequests: [request({ bounty: tv, status: 'accepted', created_at: '2026-11-17T10:00:00Z', updated_at: '2026-11-21T08:00:00Z' })],
       })
     ).jobs;
     expect(job.side).toBe('doing');
-    expect(job.rank).toBe(JOB_RANK.waitingOnYou);
-    expect(job.status.text).toBe('Jordan chose you');
-    expect(job.detail).toBe("Agree a time with Jordan. Jordan's $80 is already held by Bounty.");
+    expect(job.rank).toBe(JOB_RANK.working);
+    expect(job.status.text).toBe("You're doing this job");
     // Take-home is the shared fee math, never a hard-coded percentage.
     expect(job.contextLine).toBe(`Jordan K. · you get ${formatJobAmount(calculateHunterEarnings(80).net)}`);
-    expect(job.cta).toEqual({ label: 'Agree a time', target: { kind: 'workspace', side: 'doing', bountyId: 'tv' } });
+    expect(job.cta).toEqual({ label: "Tell Jordan it's done", target: { kind: 'workspace', side: 'doing', bountyId: 'tv' } });
     expect(job.historyLine).toBe('You offered Tuesday · chosen today');
   });
 
-  it('the automatic hire message and pre-hire questions do not skip "agree a time"', () => {
-    const conv = (lastMessage: string, updatedAt: string) =>
-      buildMyJobs(
-        makeInput({
-          hunterRequests: [request({ bounty: tv, status: 'accepted', accepted_at: '2026-11-21T08:00:00Z' } as never)],
-          conversations: [conversation({ id: 'c', bountyId: 'tv', participantIds: [ME, POSTER], lastMessage, updatedAt, unread: 1 })],
-        })
-      ).jobs[0];
-    expect(conv(buildHireWelcomeMessage('Mount a TV'), '2026-11-21T08:00:05Z').status.text).toBe('Jordan chose you');
-    expect(conv('Do you have a drill?', '2026-11-20T08:00:00Z').status.text).toBe('Jordan chose you');
-    expect(conv('Saturday at 10', '2026-11-21T09:00:00Z').status.text).not.toBe('Jordan chose you');
-  });
-
-  it('the poster agrees a time first (F), then the helper is working (G)', () => {
+  it('a job the poster hired for is work underway, messages or not', () => {
     const b = bounty({ id: 'b1', status: 'in_progress', accepted_by: 'ada' });
     const job = (lastMessage: string) =>
       buildMyJobs(
@@ -200,10 +186,7 @@ describe('buildMyJobs — work you are doing and offers', () => {
           conversations: [conversation({ id: 'c1', bountyId: 'b1', name: 'Ada R.', participantIds: [ME, 'ada'], lastMessage })],
         })
       ).jobs[0];
-    const chosen = job(buildHireWelcomeMessage('Garage'));
-    expect(chosen.status.text).toBe('You chose Ada');
-    expect(chosen.cta).toEqual({ label: 'Agree a time', target: { kind: 'workspace', side: 'posted', bountyId: 'b1' } });
-    expect(chosen.needsYou).toBe(true);
+    expect(job(buildHireWelcomeMessage('Garage')).status.text).toBe('Ada is working on it');
     expect(job('Saturday at 9').status.text).toBe('Ada is working on it');
   });
 

@@ -1,8 +1,7 @@
 /**
  * The message the app sends by itself, in the poster's name, when someone is
- * chosen (hooks/useAcceptRequest). It isn't the two of them talking: the
- * "agree a time" step (poster F, hunter H.4 / H.5) lasts until one of them
- * writes a message of their own after the hire.
+ * chosen (hooks/useAcceptRequest). It isn't the two of them
+ * talking, so it never counts as either one's message.
  */
 import { parseServerTimestamp } from '../utils/bounty-thread-events';
 

@@ -41,9 +41,7 @@ import { useJobConversation, useJobProblemRecords } from '../../../../hooks/useJ
 import { firstName, formatJobAmount } from '../../../../lib/my-jobs/format';
 import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
 import { trackWorkspacePrimaryTapped } from '../../../../lib/services/focus-analytics';
-import { sendJobMessage } from '../../../../lib/services/job-messages';
-import { describeHunterStage, HUNTER_TIME_PICKS, type HunterActionKey } from '../../../../lib/utils/hunter-stage-copy';
-import { timePickMessage } from '../../../../lib/utils/poster-stage-copy';
+import { describeHunterStage, type HunterActionKey } from '../../../../lib/utils/hunter-stage-copy';
 
 export default function HunterWorkInProgressScreen() {
   const { theme } = useAppThemeContext();
@@ -268,9 +266,8 @@ export default function HunterWorkInProgressScreen() {
       submission: lifecycle.submission,
       hasDispute: lifecycle.hasDispute || hasActiveDispute,
       disputeOpenedByViewer: problems.dispute?.initiatorId ? String(problems.dispute.initiatorId) === String(currentUserId) : null,
-      hasMessages: jobConversation.hasMessages,
     });
-  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, hasActiveDispute, request?.status, problems.dispute, currentUserId, jobConversation.hasMessages]);
+  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, hasActiveDispute, request?.status, problems.dispute, currentUserId]);
 
   // Work already sent and waiting: that step has its own screen (H.9).
   React.useEffect(() => {
@@ -280,7 +277,6 @@ export default function HunterWorkInProgressScreen() {
   }, [lifecycle.state?.status, routeBountyId, router]);
 
   const posterFirst = firstName(lifecycle.otherParty.name);
-  const posterId = lifecycle.otherParty.id ?? (bounty ? String(bounty.poster_id || bounty.user_id || '') : '');
 
   const openThread = React.useCallback(() => {
     if (!routeBountyId) return;
@@ -320,8 +316,6 @@ export default function HunterWorkInProgressScreen() {
     contactSupport,
   });
 
-  const [pick, setPick] = React.useState<string>(HUNTER_TIME_PICKS[0]);
-  const [busyKey, setBusyKey] = React.useState<HunterActionKey | null>(null);
 
   const onAction = React.useCallback(
     async (key: HunterActionKey) => {
@@ -332,33 +326,8 @@ export default function HunterWorkInProgressScreen() {
           handleNext();
           return;
         case 'message':
-        case 'write_own':
           openThread();
           return;
-        case 'send_time': {
-          if (pick === 'Something else' || !posterId || !currentUserId) {
-            openThread();
-            return;
-          }
-          setBusyKey('send_time');
-          try {
-            await sendJobMessage({
-              viewerId: String(currentUserId),
-              otherId: String(posterId),
-              bountyId: routeBountyId,
-              text: timePickMessage(posterFirst ?? 'there', pick),
-            });
-            // Sent: the job moves to the next step, and the thread opens on top.
-            jobConversation.markSent();
-            jobConversation.reload();
-            openThread();
-          } catch {
-            Alert.alert("Couldn't send your message", 'Check your connection and try again. Nothing was sent.');
-          } finally {
-            setBusyKey(null);
-          }
-          return;
-        }
         case 'cant_do':
           requestCancellation();
           return;
@@ -372,7 +341,7 @@ export default function HunterWorkInProgressScreen() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNext is a plain push to H.8 for this bounty
-    [routeBountyId, view, openThread, pick, posterId, currentUserId, posterFirst, jobConversation, requestCancellation, activeDisputeId, problems.dispute, router]
+    [routeBountyId, view, openThread, requestCancellation, activeDisputeId, problems.dispute, router]
   );
 
   if (isLoading || lifecycle.isLoading) {
@@ -419,9 +388,6 @@ export default function HunterWorkInProgressScreen() {
       worksBothSides={worksBothSides}
       onBack={goBack}
       onAction={(key) => void onAction(key)}
-      busyKey={busyKey}
-      pick={pick}
-      onPick={setPick}
       lastMessage={jobConversation.lastFromOther}
       help={help}
       moreExtra={[disputeOption]}

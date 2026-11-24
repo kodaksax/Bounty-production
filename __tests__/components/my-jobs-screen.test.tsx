@@ -219,10 +219,8 @@ describe('My Jobs — the featured job', () => {
     const tv = { id: 'b-tv', status: 'in_progress', title: 'Mount a TV', amount: 80, poster_id: 'jordan', username: 'Jordan K.', accepted_by: 'me', created_at: now };
     mockHunterRequests.mockResolvedValue([{ id: 'r-tv', bounty_id: 'b-tv', hunter_id: 'me', status: 'accepted', created_at: now, bounty: tv }]);
     await renderMyJobs();
-    // "Jordan chose you" (someone waiting on you) outranks new offers.
     const card = await screen.findByTestId('featured-job-card');
-    await waitFor(() => expect(within(card).getByText('Jordan chose you')).toBeTruthy());
-    expect(within(card).getByTestId('side-label-doing')).toBeTruthy();
+    await waitFor(() => expect(within(card).getByTestId('side-label-posted')).toBeTruthy());
   });
 });
 

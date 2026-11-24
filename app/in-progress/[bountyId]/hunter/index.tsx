@@ -229,7 +229,6 @@ export default function HunterFlowIndex() {
       requestRejectionSource,
       submission,
       hasDispute,
-      hasMessages: false,
     });
   }, [bounty, state, otherParty.name, requestStatus, requestRejectionSource, submission, hasDispute]);
 

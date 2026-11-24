@@ -61,12 +61,11 @@ jest.mock('../../hooks/useBountyLifecycle', () => {
 });
 jest.mock('../../hooks/use-auth-context', () => ({ useAuthContext: () => ({ session: { user: { id: 'hunter' } } }) }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: true, lastFromOther: null, loaded: true, reload: jest.fn(), markSent: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, loaded: true, reload: jest.fn() }),
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
 jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));
 jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
-jest.mock('../../lib/services/job-messages', () => ({ sendJobMessage: jest.fn() }));
 jest.mock('expo-image', () => ({ Image: () => null }));
 jest.mock('../../components/ui/app-modal', () => ({
   AppModal: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => (visible ? children : null),

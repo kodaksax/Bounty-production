@@ -31,7 +31,6 @@ import {
   PosterButton,
   SidePill,
   StarRating,
-  TimePicks,
   WorkspaceHeader,
 } from '../../components/poster';
 
@@ -171,7 +170,7 @@ describe('FourQuestions / MoneyLine', () => {
         now="3 people want to help."
         means="Look at each person, then choose one."
         money={{ kind: 'none', text: "You haven't paid anything yet." }}
-        after="You agree a time with the person you chose."
+        after="The person you choose starts the work."
       />
     );
     expect(screen.getByText("WHAT'S HAPPENING")).toBeTruthy();
@@ -198,16 +197,6 @@ describe('FourQuestions / MoneyLine', () => {
 });
 
 describe('controls', () => {
-  it('time picks are radios; choosing one only selects it', () => {
-    const onSelect = jest.fn();
-    render(
-      <TimePicks options={['Saturday morning', 'Sunday morning']} selected="Saturday morning" onSelect={onSelect} />
-    );
-    expect(screen.getByTestId('time-pick-Saturday morning').props.accessibilityState).toEqual({ checked: true });
-    fireEvent.press(screen.getByTestId('time-pick-Sunday morning'));
-    expect(onSelect).toHaveBeenCalledWith('Sunday morning');
-  });
-
   it('star rating says the choice in words', () => {
     const onChange = jest.fn();
     render(<StarRating value={4} onChange={onChange} />);

@@ -150,8 +150,10 @@ export interface AcceptFundingGate {
   /**
    * A payment UI opened: the card charge, Apple Pay, or the add-a-card sheet
    * when no card is on file. Emits `accept_funding_started` each time.
+   * Returns false when no hire is waiting on this sheet any more: the caller
+   * must not charge, because nothing would follow the payment.
    */
-  onPaymentStarted: (method: AcceptFundingPaymentMethod) => void;
+  onPaymentStarted: (method: AcceptFundingPaymentMethod) => boolean | void;
   /**
    * The deposit was captured. Re-checks with the server — never with the
    * typed amount or the wallet context's optimistic balance — and resolves
@@ -379,6 +381,10 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       paymentInFlightRef.current = false;
       trackBlocked(pending, 'unmount');
       pending.resolve(false);
+      // Fast Refresh runs this cleanup but keeps state. Left open, the sheet
+      // would still charge with no hire behind it.
+      setStage('idle');
+      setRequirement(null);
     };
   }, [trackBlocked]);
 
@@ -550,7 +556,12 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
 
   const onConfirm = useCallback(() => {
     const pending = pendingRef.current;
-    if (!pending || !requirement) return;
+    if (!pending || !requirement) {
+      // Nothing is waiting on this sheet: close it rather than ignore the tap.
+      setStage('idle');
+      setRequirement(null);
+      return;
+    }
 
     analyticsService.trackEvent('accept_funding_started', {
       ...eventProps(requirement, pending.context),
@@ -568,9 +579,13 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   }, [close, eventProps, requirement]);
 
   const onPaymentStarted = useCallback(
-    (method: AcceptFundingPaymentMethod) => {
+    (method: AcceptFundingPaymentMethod): boolean => {
       const pending = pendingRef.current;
-      if (!pending) return;
+      if (!pending) {
+        setStage('idle');
+        setRequirement(null);
+        return false;
+      }
       // Linking a card charges nothing and reports no outcome back, so it
       // must not hold the background-abandonment check off.
       if (method !== 'linkCard') paymentInFlightRef.current = true;
@@ -581,6 +596,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
         paymentRequired: true,
         paymentMethod: method,
       });
+      return true;
     },
     [eventProps]
   );

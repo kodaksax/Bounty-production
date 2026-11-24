@@ -15,7 +15,6 @@ import {
   othersCloseLine,
   POSTER_UNPAID,
   posterHeaderMeta,
-  timePickActions, timePickMessage,
   type PosterStageInput,
 } from '../../../lib/utils/poster-stage-copy';
 
@@ -34,7 +33,6 @@ function input(over: Partial<PosterStageInput> = {}): PosterStageInput {
     submission: null,
     hasDispute: false,
     openJobCharge: 'not_charged',
-    hasMessages: false,
     now: NOW,
     ...over,
   };
@@ -49,7 +47,7 @@ describe('stage A / B — before anyone offers', () => {
       expect.objectContaining({
         screenId: 'A',
         step: 1,
-        stage: 'Step 1 of 5 · Finding someone',
+        stage: 'Step 1 of 5 · Posted',
         now: 'Your job is live.',
         means: "People nearby can see it now. When someone offers to help, we'll send you a notification and show them here.",
         money: { kind: 'none', text: POSTER_UNPAID },
@@ -82,11 +80,11 @@ describe('stage C — offers received', () => {
       expect.objectContaining({
         screenId: 'C',
         step: 2,
-        stage: 'Step 2 of 5 · Choosing someone to help',
+        stage: 'Step 2 of 5 · Choosing help',
         now: '3 people want to help.',
         means: 'Each one read your job and offered to do it for $60. Look at each person, then choose one.',
         money: { kind: 'none', text: POSTER_UNPAID },
-        after: 'You agree a time with the person you chose.',
+        after: 'The person you choose starts the work.',
       })
     );
     expect(v.primary?.label).toBe('See each person');
@@ -129,30 +127,11 @@ describe('money truth on an open job', () => {
 });
 
 describe('after choosing someone', () => {
-  it('F: no messages yet → agree a time; picks build a message, not a booking', () => {
+  it('G: hired → step 3, work underway straight away, nothing required', () => {
     const v = describePosterStage(input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: 'Ada R.', openJobCharge: null }));
-    expect(v).toEqual(
-      expect.objectContaining({
-        screenId: 'F',
-        step: 3,
-        stage: 'Step 3 of 5 · Agreeing a time',
-        now: 'Agree on a time with Ada.',
-        means: "Ada needs to know when to come. Pick what suits you and we'll send it to Ada as a message.",
-        // No money line on step 3: only the time to agree.
-        money: null,
-      })
-    );
-    expect(v.primary?.label).toBe('Send to Ada');
-    expect(v.secondary.map((a) => a.label)).toEqual(['Write my own message']);
-    expect(v.show.timePicks).toBe(true);
-    expect(timePickMessage('Ada', 'Saturday morning')).toBe('Hi Ada, Saturday morning suits me. What time works for you?');
-    expect(timePickMessage('Ada', 'A weekday')).toBe('Hi Ada, a weekday suits me. What time works for you?');
-  });
-
-  it('G: once they have talked → work underway, nothing required', () => {
-    const v = describePosterStage(input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: 'Ada R.', hasMessages: true, openJobCharge: null }));
     expect(v.screenId).toBe('G');
-    expect(v.step).toBe(4);
+    expect(v.step).toBe(3);
+    expect(v.stage).toBe('Step 3 of 5 · Work underway');
     expect(v.now).toBe('Ada is working on your job.');
     expect(v.means).toBe("Ada will let you know here when it's done. You don't need to do anything until then.");
     expect(v.after).toBe('You review the work and decide about payment.');
@@ -171,6 +150,7 @@ describe('after choosing someone', () => {
       })
     );
     expect(v.screenId).toBe('H');
+    expect(v.stage).toBe('Step 4 of 5 · Reviewing the work');
     expect(v.now).toBe('Ada says the job is done.');
     expect(v.means).toBe('Ada sent a note and 2 photos. Look at them, and check the work yourself if you can.');
     expect(v.money?.kind).toBe('held');
@@ -221,13 +201,12 @@ describe('after choosing someone', () => {
 
   it('a real username is never re-cased; the fallback is', () => {
     const named = describePosterStage(input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: 'ana_hunts', openJobCharge: null }));
-    expect(named.now).toBe('Agree on a time with ana_hunts.');
+    expect(named.now).toBe('ana_hunts is working on your job.');
     const unnamed = describePosterStage(input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: null, openJobCharge: null }));
-    expect(unnamed.means.startsWith('Your helper needs to know')).toBe(true);
     // Mid-sentence the fallback stays lowercase, in copy and in button labels.
-    expect(unnamed.now).toBe('Agree on a time with your helper.');
-    expect(unnamed.means).toBe("Your helper needs to know when to come. Pick what suits you and we'll send it to your helper as a message.");
-    expect(unnamed.primary?.label).toBe('Send to your helper');
+    expect(unnamed.now).toBe('Your helper is working on your job.');
+    expect(unnamed.means).toBe("Your helper will let you know here when it's done. You don't need to do anything until then.");
+    expect(unnamed.primary?.label).toBe('Message your helper');
     const unnamedDone = describePosterStage(
       input({ bounty: { ...HIRED, status: 'completed' }, lifecycle: lifecycle('completed', { tone: 'positive' }), helperName: null, openJobCharge: null })
     );
@@ -325,7 +304,7 @@ describe('header, days and the person view', () => {
 });
 
 describe('E — hiring confirmation', () => {
-  it('balance and card split, the hold, others close, agreeing a time', () => {
+  it('balance and card split, the hold, others close, the work starts', () => {
     const hire = describeHire({ hunterName: 'Ada R.', amount: 60, charge: 45, fromBalance: 15, paysByCard: true, otherApplicantNames: ['Priya S.', 'Sam T.'] });
     expect(hire.title).toBe('Choose Ada for $60?');
     expect(hire.label).toBe('WHAT HAPPENS WHEN YOU CHOOSE ADA');
@@ -333,7 +312,7 @@ describe('E — hiring confirmation', () => {
       ['You pay $60 now', '$15 from your Bounty balance and $45 from your card.'],
       ['Bounty holds it', 'Ada is paid only after you say the job is done.'],
       ["Priya's and Sam's offers close", 'Your job stops taking new offers.'],
-      ['You and Ada agree a time', 'In your messages.'],
+      ['Ada starts the work', 'You can message each other any time.'],
     ]);
     expect(hire.primary).toBe('Pay $45 and choose Ada');
     expect(hire.cancel).toBe('Not yet');
@@ -395,7 +374,7 @@ describe('help options (J / X.3)', () => {
 describe("E.2 — haven't heard from the helper", () => {
   const quiet = () =>
     describePosterStage(
-      input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: 'Ada R.', hasMessages: true, awaitingReplySince: '2026-11-18T08:00:00Z' })
+      input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: 'Ada R.', awaitingReplySince: '2026-11-18T08:00:00Z' })
     );
   afterEach(() => {
     FOCUS_POLICY.silenceThresholdHours = null;
@@ -422,15 +401,4 @@ it('E.3: a payment still confirming replaces choosing, with only the way back', 
   expect(v.means).toBe("Please don't pay again. Ada isn't your helper until it's confirmed.");
   expect(v.primary).toEqual(expect.objectContaining({ key: 'back_to_jobs', label: 'Back to My Jobs' }));
   expect(v.show.peopleStrip).toBe(false);
-});
-
-describe('agree-a-time buttons', () => {
-  const send = { key: 'send_time', label: 'Send to Ada' };
-  const own = { key: 'write_own', label: 'Write my own message' };
-  it('sends a picked time, with writing your own as the alternative', () => {
-    expect(timePickActions(send, [own], 'Saturday morning', 'Ada')).toEqual({ primary: send, secondary: [own] });
-  });
-  it('"Something else" says it opens messages, once', () => {
-    expect(timePickActions(send, [own], 'Something else', 'Ada')).toEqual({ primary: { ...send, label: 'Write to Ada' }, secondary: [] });
-  });
 });

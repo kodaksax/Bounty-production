@@ -30,7 +30,7 @@ export {
   type ConsequenceItem,
   type FactRow,
 } from './blocks';
-export { OtherOptions, TimePicks, StarRating, STAR_WORDS, describeStars, type OtherOption } from './controls';
+export { OtherOptions, StarRating, STAR_WORDS, describeStars, type OtherOption } from './controls';
 export {
   ProofPhotos,
   PeopleStrip,

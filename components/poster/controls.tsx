@@ -1,6 +1,6 @@
 /**
- * Focus-first controls with a little state: OtherOptions (`more`), TimePicks
- * (`picks`) and StarRating (`stars`). None of them needs a swipe or a drag:
+ * Focus-first controls with a little state: OtherOptions (`more`), 
+ * StarRating (`stars`). None of them needs a swipe or a drag:
  * every choice is a plain button.
  */
 import { MaterialIcons } from '@expo/vector-icons';
@@ -86,49 +86,6 @@ export function OtherOptions({
   );
 }
 
-// ── TimePicks ────────────────────────────────────────────────────────────
-/**
- * Quick picks that build a message (stage F / H.5). Choosing one only
- * changes the preview text: nothing is booked or stored.
- */
-export function TimePicks({
-  options,
-  selected,
-  onSelect,
-  label = 'When suits you?',
-}: {
-  options: readonly string[];
-  selected: string | null;
-  onSelect: (option: string) => void;
-  label?: string;
-}) {
-  const { p, s } = usePosterStyles();
-  return (
-    <View style={s.picks}>
-      <Text style={s.picksLabel}>{label}</Text>
-      <View style={s.picksGrid} accessibilityRole="radiogroup" accessibilityLabel={label}>
-        {options.map((option) => {
-          const on = option === selected;
-          return (
-            <TouchableOpacity
-              key={option}
-              onPress={() => onSelect(option)}
-              style={[s.pick, on ? { backgroundColor: p.gtint, borderColor: p.g } : { backgroundColor: p.card, borderColor: p.line }]}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: on }}
-              accessibilityLabel={option}
-              testID={`time-pick-${option}`}
-            >
-              {on ? <MaterialIcons name="check" size={20} color={p.gt} /> : null}
-              <Text style={[s.pickText, { color: on ? p.gt : p.ink }]}>{option}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
 // ── StarRating ───────────────────────────────────────────────────────────
 export const STAR_WORDS = ['Poor', 'Fair', 'OK', 'Good', 'Excellent'] as const;
 
@@ -194,22 +151,6 @@ function makeStyles(p: PosterPalette) {
     moreLabel: { color: p.ink, fontSize: 17, fontWeight: '700' },
     moreItem: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, borderTopWidth: 1, borderTopColor: p.line },
     moreItemText: { fontSize: 16, fontWeight: '600' },
-    picks: { gap: 8 },
-    picksLabel: { color: p.ink2, fontSize: 15, fontWeight: '700' },
-    picksGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    pick: {
-      flexBasis: '48%',
-      flexGrow: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      minHeight: 60,
-      borderRadius: 16,
-      borderWidth: 2,
-      paddingHorizontal: 8,
-    },
-    pickText: { fontSize: 17, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
     starsWrap: { gap: 10 },
     stars: { flexDirection: 'row', gap: 6 },
     star: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 76, borderRadius: 14 },

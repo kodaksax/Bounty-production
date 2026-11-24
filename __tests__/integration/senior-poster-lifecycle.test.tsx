@@ -166,12 +166,11 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn(), markSent: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
-jest.mock('../../lib/services/job-messages', () => ({ sendJobMessage: jest.fn() }));
 jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
 jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));
 jest.mock('../../components/ui/app-modal', () => ({
@@ -318,9 +317,8 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
       applicationCount: 0,
     });
     // The page re-read: no stale "You haven't paid", no take-down, the
-    // step is now agreeing a time, which has no money line.
-    expect(await screen.findByText('Agree on a time with ana_hunts.')).toBeTruthy();
-    expect(screen.queryByTestId('bounty-payment-state')).toBeNull();
+    // work is underway, with the money described as held.
+    expect(await screen.findByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
     expect(screen.queryByText(/You haven't paid anything yet\./)).toBeNull();
     expect(screen.queryByLabelText('Take this job down')).toBeNull();
     expect(screen.getByTestId('bounty-manage-locked')).toBeTruthy();

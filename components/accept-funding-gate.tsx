@@ -44,7 +44,8 @@ import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
 import { TrustSafetyNotice } from 'components/ui/trust-safety-notice';
 import type { AcceptFundingGate as AcceptFundingGateState } from 'hooks/useAcceptFunding';
 import { useWalletDeposit } from 'hooks/use-wallet-deposit';
-import { getBottomNavContentGap, getBottomNavOccludedHeight } from 'lib/constants/navigation';
+import { getFloatingTabBarTop } from 'components/ui/floating-tab-bar';
+import { getBottomNavContentGap } from 'lib/constants/navigation';
 import { usePaymentPromiseCopy } from 'lib/experiments/payment-promise-copy';
 import { FOCUS_POLICY } from 'lib/constants/focus-policy';
 import { hapticFeedback } from 'lib/haptic-feedback';
@@ -72,6 +73,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface AcceptFundingGateProps {
+  /** Rendered inside the tab shell, under its floating bar. */
+  overTabBar?: boolean;
   gate: AcceptFundingGateState;
   /**
    * The other people who offered, for "Priya's and Sam's offers close"
@@ -129,7 +132,7 @@ function getGateMetrics(width: number, usableHeight: number) {
     horizontalPadding: clamp(width * 0.06, 16, 28),
     topPadding: clamp(h * 0.02, 8, 24),
     sectionGap: clamp(h * 0.016, compact ? 6 : 10, 16),
-    cardPaddingVertical: clamp(h * 0.034, compact ? 16 : 22, 30),
+    cardPaddingVertical: clamp(h * 0.022, 14, 22),
     rowPaddingVertical: clamp(h * 0.014, compact ? 7 : 9, 12),
     eyebrowFontSize: clamp(h * 0.021, 14, 15),
     titleFontSize: clamp(Math.min(width * 0.068, h * 0.032), 20, 28),
@@ -139,7 +142,7 @@ function getGateMetrics(width: number, usableHeight: number) {
     heldFontSize: clamp(h * 0.024, 15, 17),
     rowFontSize: clamp(h * 0.028, 17, 19),
     bodyFontSize: clamp(h * 0.027, 17, 19),
-    buttonPaddingVertical: clamp(h * 0.026, compact ? 16 : 18, 22),
+    buttonPaddingVertical: clamp(h * 0.023, compact ? 14 : 16, 20),
     buttonFontSize: clamp(h * 0.032, 19, 22),
     secondaryPaddingVertical: clamp(h * 0.02, compact ? 12 : 14, 16),
     avatarSize: clamp(Math.min(width * 0.13, h * 0.06), 40, 52),
@@ -161,19 +164,18 @@ export function AcceptFundingGate({ hostSlides = false, ...props }: AcceptFundin
   );
 }
 
-function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onLeavePending }: AcceptFundingGateProps) {
+function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onLeavePending, overTabBar = false }: AcceptFundingGateProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const showPaymentPromise = usePaymentPromiseCopy();
 
-  // The floating BottomNav is position:absolute and overlays this gate, so the
-  // action buttons must clear the bar's *occluded* height — the bar box plus
-  // the crosshair that floats above its top edge — as well as the device safe
-  // area. Same derivation as insufficient-balance-screen and add-money-screen.
-  const footerClearance =
-    getBottomNavOccludedHeight(insets.bottom, windowWidth) + getBottomNavContentGap(windowHeight);
-  const usableHeight = windowHeight - insets.top - footerClearance;
+  // The root layout already keeps every screen between the status bar and the
+  // home indicator. Only the tab host has the floating bar over this gate.
+  const footerClearance = overTabBar
+    ? getFloatingTabBarTop(insets.bottom) + getBottomNavContentGap(windowHeight)
+    : insets.bottom > 0 ? 4 : 12;
+  const usableHeight = windowHeight - insets.top - insets.bottom - footerClearance;
 
   const metrics = useMemo(
     () => getGateMetrics(windowWidth, usableHeight),
@@ -252,18 +254,18 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
       // No card on file: linking one is the first half of the same tap, not a
       // separate screen. The sheet stays put and the button becomes "Pay" once
       // the modal closes with a method loaded.
-      gate.onPaymentStarted('linkCard');
+      if (gate.onPaymentStarted('linkCard') === false) return;
       setShowPaymentMethodsModal(true);
       return;
     }
-    gate.onPaymentStarted('card');
+    if (gate.onPaymentStarted('card') === false) return;
     resolveOutcome(await payWithCard(chargeAmount), chargeAmount);
   };
 
   const handleApplePay = async () => {
     if (busy) return;
     hapticFeedback.light();
-    gate.onPaymentStarted('applePay');
+    if (gate.onPaymentStarted('applePay') === false) return;
     resolveOutcome(await payWithApplePay(chargeAmount), chargeAmount);
   };
 
@@ -272,11 +274,11 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
     if (busy) return;
     hapticFeedback.light();
     if (!sheetAvailable) {
-      gate.onPaymentStarted('linkCard');
+      if (gate.onPaymentStarted('linkCard') === false) return;
       setShowPaymentMethodsModal(true);
       return;
     }
-    gate.onPaymentStarted('paymentSheet');
+    if (gate.onPaymentStarted('paymentSheet') === false) return;
     resolveOutcome(await payWithPaymentSheet(chargeAmount), chargeAmount);
   };
 
@@ -352,10 +354,10 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
             onChange: needsPayment ? () => setQuickDone(true) : undefined,
           },
         ]}
-        note={`${hire.note} You agree a time with ${first} next.`}
+        note={`${hire.note} ${first} starts the work next.`}
         seconds={quickSeconds}
         ready={!needsPayment || (!stripeLoading && hasPaymentMethod)}
-        paddingTop={insets.top + metrics.topPadding}
+        paddingTop={metrics.topPadding}
         paddingBottom={footerClearance}
         onConfirm={(how) => {
           trackWorkspacePrimaryTapped({
@@ -430,13 +432,14 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
           primaryCardPaymentMethod
         )}`}
       >
-        <Text style={styles.rowLabel}>Paying with</Text>
-        <View style={styles.rowInline}>
-          <Text style={styles.rowValue}>
+        {/* Stacked: side by side, a card number at this size pushes Change off the row. */}
+        <View style={styles.rowStack}>
+          <Text style={[styles.rowLabel, styles.payingText]}>Paying with</Text>
+          <Text style={[styles.rowValue, styles.payingText]}>
             {stripeService.formatCardDisplay(primaryCardPaymentMethod)}
           </Text>
-          <Text style={styles.changeLink}>Change</Text>
         </View>
+        <Text style={[styles.changeLink, styles.payingText]}>Change</Text>
       </TouchableOpacity>
     ) : null;
 
@@ -452,7 +455,7 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
       <View
         style={[
           styles.sheet,
-          { paddingTop: insets.top + metrics.topPadding, paddingBottom: footerClearance },
+          { paddingTop: metrics.topPadding, paddingBottom: footerClearance },
         ]}
       >
         <ScrollView
@@ -556,7 +559,7 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
           )}
 
           {showPaymentPromise ? (
-            payingWithRow && <View style={styles.rowGroup}>{payingWithRow}</View>
+            payingWithRow && <View style={[styles.rowGroup, styles.payingWith]}>{payingWithRow}</View>
           ) : (
             <>
               <View style={styles.rowGroup}>
@@ -770,13 +773,13 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
     promiseSource: {
       color: theme.text,
       fontSize: metrics.bodyFontSize,
-      lineHeight: metrics.bodyFontSize + 8,
+      lineHeight: metrics.bodyFontSize + 6,
       fontWeight: '600',
     },
     promiseHold: {
       color: theme.textSecondary,
       fontSize: metrics.bodyFontSize,
-      lineHeight: metrics.bodyFontSize + 8,
+      lineHeight: metrics.bodyFontSize + 6,
     },
     amount: { color: theme.text, fontSize: metrics.amountFontSize, fontWeight: '800' },
     amountCaption: { color: theme.textSecondary, fontSize: metrics.captionFontSize },
@@ -840,7 +843,10 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       alignItems: 'center',
       paddingVertical: metrics.rowPaddingVertical,
     },
-    rowInline: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    // Narrower than the summary card, so it reads as a detail under it.
+    payingWith: { alignSelf: 'center', width: '88%', paddingHorizontal: 14, paddingVertical: 0 },
+    payingText: { fontSize: metrics.rowFontSize - 2 },
+    rowStack: { flex: 1, gap: 2, paddingRight: 10 },
     rowLabel: { color: theme.textSecondary, fontSize: metrics.rowFontSize },
     rowValue: { color: theme.text, fontSize: metrics.rowFontSize, fontWeight: '600' },
     changeLink: { color: theme.primaryLight, fontSize: metrics.rowFontSize, fontWeight: '600' },
