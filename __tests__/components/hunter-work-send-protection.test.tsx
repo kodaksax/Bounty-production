@@ -73,6 +73,8 @@ jest.mock('../../components/ui/app-modal', () => ({
 jest.mock('../../components/ui/skeleton-loaders', () => ({ HunterDashboardSkeleton: () => null }));
 jest.mock('../../components/ui/keyboard-avoiding', () => ({
   KeyboardAwareScrollView: ({ children }: { children: React.ReactNode }) => children,
+  // WorkspaceLayout wraps the screen in this so the footer clears the keyboard.
+  KeyboardAvoidingScreen: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 async function renderWork() {
