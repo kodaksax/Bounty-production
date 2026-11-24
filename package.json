@@ -13,7 +13,7 @@
           "@stripe/stripe-identity-react-native",
           "react-native-branch",
           "@config-plugins/react-native-branch",
-          "posthog-react-native-session-replay"
+          "@posthog/react-native-plugin"
         ]
       }
     },
@@ -121,6 +121,7 @@
     "@fastify/busboy": "^3.2.0",
     "@heycatch/sdk": "^0.7.0",
     "@invertase/react-native-apple-authentication": "^2.5.1",
+    "@posthog/react-native-plugin": "^2.13.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.6.0",
     "@react-native-community/netinfo": "11.5.2",
@@ -185,8 +186,7 @@
     "nativewind": "^4.2.1",
     "node-fetch": "^2.6.13",
     "postgres": "^3.4.8",
-    "posthog-react-native": "^4.75.0",
-    "posthog-react-native-session-replay": "^1.6.0",
+    "posthog-react-native": "^4.87.2",
     "react": "19.2.0",
     "react-native": "0.83.10",
     "react-native-branch": "^6.9.0",

@@ -171,9 +171,11 @@ try {
         },
         // Session Replay. Also requires "Record user sessions" to be enabled
         // in the PostHog project settings, and the optional native module
-        // `posthog-react-native-session-replay` to be present (it is a
-        // dependency in package.json) — without it the SDK logs "Session
-        // replay enabled but not installed." and records nothing.
+        // `@posthog/react-native-plugin` to be present (it is a dependency in
+        // package.json) — without it the SDK logs "Session replay enabled but
+        // not installed." and records nothing. It replaced the deprecated
+        // `posthog-react-native-session-replay`, which stopped receiving
+        // native SDK updates at posthog-ios 3.58 / posthog-android 3.40.
         enableSessionReplay: true,
         // This app renders Stripe/ACH, password, KYC, private-message and
         // bounty-description screens, so replay runs fully masked. Do not
