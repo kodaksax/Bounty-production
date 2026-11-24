@@ -8,6 +8,10 @@
  *   - the unread dot
  *   - the users-only search bar: results replace the list, exclude yourself,
  *     and tapping one opens the DM with that person
+ *   - duplicate taps: a double/triple tap opens one chat, a second row tapped
+ *     while the first opens is ignored, and the next tap after the transition
+ *     settles works normally. The router mock is wrapped by the REAL
+ *     navigation guard, as expo-router's router is in the app.
  */
 
 import React from 'react';
@@ -17,9 +21,16 @@ import type { Conversation, UserProfile } from '../../lib/types';
 const ME = 'me-0000';
 
 const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn() }),
-}));
+const mockBack = jest.fn();
+jest.mock('expo-router', () => {
+  const { navigationGuard } = jest.requireActual('../../lib/navigation/navigation-guard');
+  const router = navigationGuard.wrapRouter({
+    push: (...args: unknown[]) => mockPush(...args),
+    back: (...args: unknown[]) => mockBack(...args),
+    canGoBack: () => true,
+  });
+  return { useRouter: () => router };
+});
 
 let mockConversations: Conversation[] = [];
 jest.mock('../../hooks/useConversations', () => ({
@@ -121,6 +132,7 @@ function user(id: string, username: string, name?: string): UserProfile {
 beforeEach(() => {
   jest.useFakeTimers();
   mockPush.mockReset();
+  mockBack.mockReset();
   mockSearchUsers.mockReset();
   mockConversations = [];
 });
@@ -227,5 +239,108 @@ describe('user search', () => {
     const utils = render(<MessengerScreen />);
     await typeQuery(utils, '   ');
     expect(mockSearchUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe('duplicate taps', () => {
+  /** Let the first frame after a navigation run, then the settle window pass. */
+  const settle = () =>
+    act(() => {
+      jest.advanceTimersByTime(16);
+      jest.advanceTimersByTime(600);
+    });
+
+  const twoPeople = () => [
+    conv({ id: 'a1', with: 'alice', lastMessage: 'yo', updatedAt: '2026-09-02T00:00:00Z' }),
+    conv({ id: 'b1', with: 'bob', lastMessage: 'hey', updatedAt: '2026-09-01T00:00:00Z' }),
+  ];
+
+  it('opens one chat on a double tap', () => {
+    mockConversations = twoPeople();
+    const { getByLabelText } = render(<MessengerScreen />);
+    const row = getByLabelText(/^alice\./);
+
+    fireEvent.press(row);
+    fireEvent.press(row);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/tabs/messenger/user/alice');
+  });
+
+  it('opens one chat on a triple tap', () => {
+    mockConversations = twoPeople();
+    const { getByLabelText } = render(<MessengerScreen />);
+    const row = getByLabelText(/^alice\./);
+
+    fireEvent.press(row);
+    fireEvent.press(row);
+    fireEvent.press(row);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a second conversation tapped while the first is opening', () => {
+    mockConversations = twoPeople();
+    const { getByLabelText } = render(<MessengerScreen />);
+
+    fireEvent.press(getByLabelText(/^alice\./));
+    fireEvent.press(getByLabelText(/^bob\./));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/tabs/messenger/user/alice');
+  });
+
+  it('opens the next conversation normally once the transition settles', () => {
+    mockConversations = twoPeople();
+    const { getByLabelText } = render(<MessengerScreen />);
+
+    fireEvent.press(getByLabelText(/^alice\./));
+    settle();
+    fireEvent.press(getByLabelText(/^bob\./));
+
+    expect(mockPush.mock.calls).toEqual([['/tabs/messenger/user/alice'], ['/tabs/messenger/user/bob']]);
+  });
+
+  it('can reopen the same conversation after coming back from it', () => {
+    mockConversations = twoPeople();
+    const { getByLabelText } = render(<MessengerScreen />);
+
+    fireEvent.press(getByLabelText(/^alice\./));
+    settle();
+    // The chat's back button.
+    const { useRouter } = require('expo-router');
+    useRouter().back();
+    settle();
+    fireEvent.press(getByLabelText(/^alice\./));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledTimes(2);
+  });
+
+  it('a row tapped right after backing out of a chat is not swallowed', () => {
+    mockConversations = twoPeople();
+    const { getByLabelText } = render(<MessengerScreen />);
+
+    fireEvent.press(getByLabelText(/^alice\./));
+    const { useRouter } = require('expo-router');
+    useRouter().back();
+    fireEvent.press(getByLabelText(/^bob\./));
+
+    expect(mockPush.mock.calls).toEqual([['/tabs/messenger/user/alice'], ['/tabs/messenger/user/bob']]);
+  });
+
+  it('opens one DM on a double tap of a search result', async () => {
+    mockSearchUsers.mockResolvedValue({ results: [user('u-1', 'jordan')] });
+    const utils = render(<MessengerScreen />);
+    fireEvent.changeText(utils.getByLabelText('Search users'), 'jordan');
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    await waitFor(() => expect(utils.getByLabelText('Message jordan')).toBeTruthy());
+
+    fireEvent.press(utils.getByLabelText('Message jordan'));
+    fireEvent.press(utils.getByLabelText('Message jordan'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
   });
 });

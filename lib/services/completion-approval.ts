@@ -1,6 +1,7 @@
 import { analyticsService, type AnalyticsProperties } from './analytics-service';
 import { logClientError, logClientInfo } from './monitoring';
 import { failureEventProps } from '../utils/stripe-error';
+import { createKeyedSingleFlight } from '../interaction/single-flight';
 
 export interface ApproveAndReleaseOptions {
   bountyId: string | number;
@@ -30,7 +31,19 @@ export interface ApproveAndReleaseOptions {
   notifyFn?: (userId: string, payload?: Record<string, any>) => Promise<void>;
 }
 
-export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise<boolean> {
+// One approve-and-release per bounty at a time, whichever screen asks (the
+// review modal and review-and-verify both call this). A second call made while
+// one is running joins it rather than releasing again. The server is the
+// backstop (Stripe idempotency keys and the already_released check in
+// bounty-payments); this stops the duplicate request, and the misleading
+// failure it would report, from being made at all.
+const approveFlights = createKeyedSingleFlight();
+
+export function approveAndRelease(opts: ApproveAndReleaseOptions): Promise<boolean> {
+  return approveFlights.run(`approve:${String(opts.bountyId)}`, () => approveAndReleaseOnce(opts));
+}
+
+async function approveAndReleaseOnce(opts: ApproveAndReleaseOptions): Promise<boolean> {
   const {
     bountyId,
     hunterId,

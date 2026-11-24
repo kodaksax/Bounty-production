@@ -700,3 +700,15 @@ afterAll(() => {
     // swallow
   }
 });
+
+// The duplicate-navigation guard is a module singleton with a short settle
+// window; without a reset, a row tapped in one test would swallow the tap in
+// the next test of the same file (lib/navigation/navigation-guard.ts).
+afterEach(() => {
+  try {
+    const guard = jest.requireActual('./lib/navigation/navigation-guard');
+    guard.navigationGuard.reset();
+  } catch (e) {
+    // swallow
+  }
+});

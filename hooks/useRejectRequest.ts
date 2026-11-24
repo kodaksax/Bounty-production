@@ -3,6 +3,7 @@ import { Alert } from 'react-native'
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service'
 import { bountyRequestService } from 'lib/services/bounty-request-service'
 import { analyticsService } from 'lib/services/analytics-service'
+import { useSingleFlight } from './useSingleFlight'
 
 interface UseRejectRequestParams {
   /** The applicant list currently on screen, used to resolve bounty/hunter/trust-tier context for analytics. */
@@ -18,7 +19,7 @@ export function useRejectRequest({
   setIsLoading,
   setError,
 }: UseRejectRequestParams) {
-  const handleRejectRequest = useCallback(async (requestId: string | number) => {
+  const rejectRequestOnce = useCallback(async (requestId: string | number) => {
     try {
       // Show quick-refresh indicator for requests
       setIsLoading((prev) => ({ ...prev, requests: true }))
@@ -64,6 +65,15 @@ export function useRejectRequest({
       setIsLoading((prev) => ({ ...prev, requests: false }))
     }
   }, [bountyRequests, setBountyRequests, setIsLoading, setError])
+
+  // One decline at a time: a second confirmation tapped while the first is
+  // deleting joins it, rather than deleting an already-deleted request and
+  // surfacing "Failed to reject request" for a decline that worked.
+  const rejectFlight = useSingleFlight()
+  const handleRejectRequest = useCallback(
+    (requestId: string | number) => rejectFlight.run(() => rejectRequestOnce(requestId)),
+    [rejectFlight, rejectRequestOnce]
+  )
 
   return { handleRejectRequest }
 }

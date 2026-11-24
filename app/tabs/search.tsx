@@ -69,6 +69,7 @@ import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '..
 import { KeyboardAvoidingScreen } from '../../components/ui/keyboard-avoiding';
 import { isNativeMapAvailable } from '../../lib/config/maps';
 import { withAlpha } from '../../lib/utils';
+import { runNavigationPress } from '../../lib/navigation/navigation-guard';
 /**
  * react-native-maps and its clustering wrapper are heavy modules, and a static
  * import runs their initialisation the first time this screen's module is
@@ -381,10 +382,10 @@ export default function EnhancedSearchScreen() {
 
       if (suggestion.type === 'bounty') {
         const bountyId = suggestion.id.replace('bounty_', '');
-        router.push(`/bounty/${bountyId}/public`);
+        runNavigationPress(() => router.push(`/bounty/${bountyId}/public`));
       } else if (suggestion.type === 'user') {
         const userId = suggestion.id.replace('user_', '');
-        router.push(`/profile/${userId}`);
+        runNavigationPress(() => router.push(`/profile/${userId}`));
       } else if (suggestion.type === 'skill') {
         // Search for bounties with this skill, appending to existing skills if not already present
         setQuery(suggestion.text);
@@ -618,7 +619,7 @@ export default function EnhancedSearchScreen() {
       return (
         <TouchableOpacity
           style={s.card}
-          onPress={() => router.push(`/bounty/${item.id}/public?source=search&position=${index}`)}
+          onPress={() => runNavigationPress(() => router.push(`/bounty/${item.id}/public?source=search&position=${index}`))}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
           accessibilityHint="Opens bounty details"
@@ -681,7 +682,7 @@ export default function EnhancedSearchScreen() {
       return (
         <TouchableOpacity
           style={s.card}
-          onPress={() => router.push(`/profile/${item.id}`)}
+          onPress={() => runNavigationPress(() => router.push(`/profile/${item.id}`))}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
           accessibilityHint="Opens user profile"
@@ -1081,7 +1082,7 @@ export default function EnhancedSearchScreen() {
                 <TouchableOpacity
                   key={String(bounty.id)}
                   style={s.trendingCard}
-                  onPress={() => router.push(`/bounty/${bounty.id}/public?source=search`)}
+                  onPress={() => runNavigationPress(() => router.push(`/bounty/${bounty.id}/public?source=search`))}
                   accessibilityRole="button"
                   accessibilityLabel={bounty.title}
                   accessibilityHint="Opens bounty details"

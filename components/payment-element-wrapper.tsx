@@ -13,7 +13,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { stripeService } from '../lib/services/stripe-service';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -208,9 +208,13 @@ export function PaymentElementWrapper({
     initializePaymentSheet();
   }, [stripeModule, clientSecret, mode, merchantDisplayName, showApplePay, showGooglePay]);
 
-  // Handle payment sheet presentation
+  // Handle payment sheet presentation. Synchronous lock: a second tap before
+  // `isProcessing` re-renders would call presentPaymentSheet while the sheet
+  // is already up, and report Stripe's refusal as a payment error.
+  const presentingRef = useRef(false);
   const handlePayment = useCallback(async () => {
-    if (!stripeModule || !isPaymentSheetReady) return;
+    if (!stripeModule || !isPaymentSheetReady || presentingRef.current) return;
+    presentingRef.current = true;
 
     setIsProcessing(true);
     setError(null);
@@ -256,6 +260,7 @@ export function PaymentElementWrapper({
       setError(err.message || 'Payment failed');
       onError(paymentError);
     } finally {
+      presentingRef.current = false;
       setIsProcessing(false);
     }
   }, [stripeModule, isPaymentSheetReady, clientSecret, mode, onSuccess, onError, onCancel]);

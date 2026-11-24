@@ -30,6 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppModal } from '../ui/app-modal';
 import { NotificationActionSheet } from './notification-action-sheet';
 import { NotificationListItem } from './notification-list-item';
+import { runNavigationPress } from '../../lib/navigation/navigation-guard';
 
 type FilterKey = 'all' | 'unread' | NotificationCategory;
 
@@ -106,7 +107,9 @@ export function NotificationCenterScreen() {
     return list;
   }, [notifications, filter, search]);
 
-  const handlePress = useCallback((notification: Notification) => {
+  // One notification opens per tap: a double tap, or a second row tapped while
+  // the first opens, is ignored (lib/navigation/navigation-guard.ts).
+  const handlePress = useCallback((notification: Notification) => runNavigationPress(() => {
     if (supportsActionSheet({ type: notification.type, category: notification.category }, notification)) {
       setActionSheetFor(notification);
       return;
@@ -125,7 +128,7 @@ export function NotificationCenterScreen() {
     } else if (action.kind === 'conversation') {
       router.push(`/tabs/messenger/${encodeURIComponent(action.conversationId)}` as any);
     }
-  }, [router]);
+  }), [router]);
 
   const handleToggleRead = useCallback(async (notification: Notification) => {
     const nextRead = !notification.read;

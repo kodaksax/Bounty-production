@@ -55,6 +55,7 @@ import type { BountyRequestWithDetails } from '../../lib/services/bounty-request
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { FOCUS } from '../../lib/themes/poster-palette'
 import type { AppTheme } from '../../lib/themes/types'
+import { runNavigationPress } from '../../lib/navigation/navigation-guard'
 
 export interface MyJobsScreenProps {
   /**
@@ -123,39 +124,48 @@ export function MyJobsScreen({ initialTab, linkBountyId, setActiveScreen, isActi
   const allPending = useMemo(() => Array.from(applicantsByBounty.values()).flat(), [applicantsByBounty])
 
   // ── Navigation ──────────────────────────────────────────────────────────
+  // Rows navigate through runNavigationPress: two rows tapped in quick
+  // succession open the first only (lib/navigation/navigation-guard.ts).
+  // The applicants sheet is not a screen change, so it stays ungated: the
+  // applicant rows inside it must answer a tap the moment it opens.
   const openTarget = React.useCallback(
     (target: JobTarget) => {
-      switch (target.kind) {
-        case 'applicants':
-          setSheet({ kind: 'applicants', bountyId: target.bountyId })
-          return
-        case 'workspace':
-          router.push(
-            (target.side === 'posted'
-              ? { pathname: '/postings/[bountyId]', params: { bountyId: target.bountyId } }
-              : { pathname: '/in-progress/[bountyId]/hunter', params: { bountyId: target.bountyId } }) as never
-          )
-          return
-        case 'thread': {
-          const role = target.side === 'posted' ? 'poster' : 'hunter'
-          const params: Record<string, string> = { bountyId: target.bountyId, role }
-          if (target.withId) params.with = String(target.withId)
-          router.push({ pathname: '/tabs/bounty-thread/[bountyId]', params } as never)
-          return
-        }
+      if (target.kind === 'applicants') {
+        setSheet({ kind: 'applicants', bountyId: target.bountyId })
+        return
       }
+      runNavigationPress(() => navigateToTarget(target))
     },
     [router]
   )
 
+  const navigateToTarget = (target: Exclude<JobTarget, { kind: 'applicants' }>) => {
+    switch (target.kind) {
+      case 'workspace':
+        router.push(
+          (target.side === 'posted'
+            ? { pathname: '/postings/[bountyId]', params: { bountyId: target.bountyId } }
+            : { pathname: '/in-progress/[bountyId]/hunter', params: { bountyId: target.bountyId } }) as never
+        )
+        return
+      case 'thread': {
+        const role = target.side === 'posted' ? 'poster' : 'hunter'
+        const params: Record<string, string> = { bountyId: target.bountyId, role }
+        if (target.withId) params.with = String(target.withId)
+        router.push({ pathname: '/tabs/bounty-thread/[bountyId]', params } as never)
+        return
+      }
+    }
+  }
+
   const openApplicant = React.useCallback(
-    (request: BountyRequestWithDetails) => {
+    (request: BountyRequestWithDetails) => runNavigationPress(() => {
       setSheet(null)
       router.push({
         pathname: '/postings/[bountyId]',
         params: { bountyId: String(request.bounty_id), person: String(request.id) },
       } as never)
-    },
+    }),
     [router]
   )
 

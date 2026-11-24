@@ -16,6 +16,7 @@ import { router } from 'expo-router'
 import { useCallback } from 'react'
 import { Alert } from 'react-native'
 import { buildHireWelcomeMessage } from '../lib/messaging/hire-welcome'
+import { useSingleFlight } from './useSingleFlight'
 
 interface UseAcceptRequestParams {
   currentUserId?: string
@@ -115,7 +116,7 @@ export function useAcceptRequest({
   handleAcceptFailure,
   showSuccessAlert = true,
 }: UseAcceptRequestParams) {
-  const handleAcceptRequest = useCallback(async (requestId: string | number) => {
+  const acceptRequestOnce = useCallback(async (requestId: string | number) => {
     // Track the conversation id created during this accept flow so
     // the alert action can re-assert the intent when the user taps "View Conversation".
     let pendingConvId: string | null = null
@@ -588,6 +589,19 @@ export function useAcceptRequest({
     handleAcceptFailure,
     showSuccessAlert,
   ])
+
+  // One hire at a time. Callers guard with React state (`busyAction`), which a
+  // fast double tap gets past before the re-render, and a second run would
+  // open the pay-to-hire sheet again and then report the already-accepted
+  // application as "no longer open". A call made while one is running joins
+  // it instead, so the caller's own busy state still ends when the hire does.
+  // The server is the backstop: fn_accept_bounty_request locks the request
+  // and bounty rows and refuses anything not pending/open.
+  const acceptFlight = useSingleFlight()
+  const handleAcceptRequest = useCallback(
+    (requestId: string | number) => acceptFlight.run(() => acceptRequestOnce(requestId)),
+    [acceptFlight, acceptRequestOnce]
+  )
 
   return { handleAcceptRequest }
 }

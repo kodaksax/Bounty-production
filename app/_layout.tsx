@@ -1,3 +1,6 @@
+// First, so the duplicate-navigation guard is on the shared router before any
+// screen can navigate (lib/navigation/navigation-guard.ts).
+import '../lib/navigation/install-navigation-guard';
 import { AppToastHost } from '../components/ui/app-toast';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Asset } from 'expo-asset';

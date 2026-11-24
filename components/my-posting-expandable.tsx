@@ -32,6 +32,7 @@ import {
   View,
 } from 'react-native';
 import { useAttachmentUpload } from '../hooks/use-attachment-upload';
+import { useSingleFlight } from '../hooks/useSingleFlight';
 import { logClientError } from '../lib/services/monitoring';
 
 import { useWallet } from '../lib/wallet-context';
@@ -278,6 +279,11 @@ export function MyPostingExpandable({
   }
 
   const [draft, dispatchDraft] = useReducer(draftReducer, initialDraft());
+  // Synchronous locks: `draft.isSubmitting` is reducer state and disables the
+  // button a render late. Two confirmations (a double tap shows two dialogs)
+  // would each pass the "already pending?" read before either insert landed.
+  const submissionFlight = useSingleFlight();
+  const staleActionFlight = useSingleFlight();
   const {
     completionMessage,
     proofItems,
@@ -813,7 +819,7 @@ export function MyPostingExpandable({
     const proofLabel = proofCount === 1 ? '1 proof item' : `${proofCount} proof items`;
 
     // Define the actual submission logic
-    const performSubmission = async () => {
+    const performSubmission = () => submissionFlight.run(async () => {
       try {
         dispatchDraft({ type: 'setSubmitting', value: true });
 
@@ -859,7 +865,7 @@ export function MyPostingExpandable({
       } finally {
         dispatchDraft({ type: 'setSubmitting', value: false });
       }
-    };
+    });
 
     // Show different confirmation dialogs based on whether proof is attached
     if (proofItems.length === 0) {
@@ -1084,7 +1090,7 @@ export function MyPostingExpandable({
     }
   };
 
-  const handleCancelStaleBounty = async (bountyId: number | string) => {
+  const handleCancelStaleBounty = (bountyId: number | string) => staleActionFlight.run(async () => {
     try {
       const result = await staleBountyService.cancelStaleBounty(bountyId);
       if (result.success) {
@@ -1097,9 +1103,9 @@ export function MyPostingExpandable({
     } catch (error) {
       Alert.alert("Something went wrong", 'An unexpected error occurred');
     }
-  };
+  });
 
-  const handleRepostStaleBounty = async (bountyId: number | string) => {
+  const handleRepostStaleBounty = (bountyId: number | string) => staleActionFlight.run(async () => {
     try {
       const result = await staleBountyService.repostStaleBounty(bountyId);
       if (result.success) {
@@ -1112,7 +1118,7 @@ export function MyPostingExpandable({
     } catch (error) {
       Alert.alert("Something went wrong", 'An unexpected error occurred');
     }
-  };
+  });
 
   if (hiddenByUser) return null;
 

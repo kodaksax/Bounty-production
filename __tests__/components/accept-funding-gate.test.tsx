@@ -477,6 +477,45 @@ describe('AcceptFundingGate', () => {
       expect(mockPayWithCard).not.toHaveBeenCalled();
     });
 
+    // Duplicate-tap protection: `busy` is React state and still reads false for
+    // a second tap that lands before the re-render.
+    test('a double tap on Pay starts one payment and charges once', () => {
+      const gate = makeGate();
+      const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
+
+      expect(gate.onPaymentStarted).toHaveBeenCalledTimes(1);
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+    });
+
+    test('Apple Pay tapped while a card charge is in flight starts nothing', () => {
+      const gate = makeGate();
+      const { getByText, getByLabelText } = render(<AcceptFundingGate gate={gate} />);
+
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
+      fireEvent.press(getByLabelText('Pay 30.00 dollars with Apple Pay and hire'));
+
+      expect(gate.onPaymentStarted).toHaveBeenCalledTimes(1);
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+      expect(mockPayWithApplePay).not.toHaveBeenCalled();
+    });
+
+    test('after a declined charge the poster can pay again', async () => {
+      mockPayWithCard
+        .mockResolvedValueOnce({ outcome: 'failed', failure: { failure_code: 'card_declined' } })
+        .mockImplementation(() => new Promise(() => {}));
+      const gate = makeGate();
+      const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
+      await waitFor(() => expect(gate.onPaymentFailed).toHaveBeenCalledTimes(1));
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
+
+      expect(mockPayWithCard).toHaveBeenCalledTimes(2);
+    });
+
     test('no Apple Pay button off iOS', () => {
       Platform.OS = 'android';
       const gate = makeGate();
