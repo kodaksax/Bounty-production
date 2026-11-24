@@ -135,7 +135,7 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
@@ -162,7 +162,30 @@ const OPEN_AT_ACCEPT = {
   created_at: new Date().toISOString(),
 };
 
-function lastAlert() {
+function lastAlert(): { title: string; message: string; buttons: any[] } {
+  // The designed confirmation (J.4) when it's showing, read like an alert.
+  const dialog = screen.queryByTestId('confirm-dialog');
+  if (dialog) {
+    const text = (id: string) => {
+      const node = screen.queryByTestId(id);
+      if (!node) return '';
+      const out: string[] = [];
+      const walk = (n: any) => (typeof n === 'string' ? out.push(n) : (n?.children ?? []).forEach(walk));
+      walk(node);
+      return out.join(' ');
+    };
+    const yes = screen.getByTestId('confirm-dialog-yes');
+    const no = screen.getByTestId('confirm-dialog-no');
+    const all = text('confirm-dialog');
+    return {
+      title: text('confirm-dialog-title') || all,
+      message: all,
+      buttons: [
+        { text: text('confirm-dialog-no').trim(), style: 'cancel', onPress: () => fireEvent.press(no) },
+        { text: text('confirm-dialog-yes').trim(), style: 'destructive', onPress: () => fireEvent.press(yes) },
+      ] as any[],
+    };
+  }
   const calls = (Alert.alert as jest.Mock).mock.calls;
   const [title, message, buttons] = calls[calls.length - 1];
   return { title, message, buttons: buttons ?? [] };
@@ -371,7 +394,7 @@ describe('Fix 8: take-down wording', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const confirm = lastAlert();
     // Fix D: the confirmation matches the button.
     expect(confirm.title).toBe('Take this job down?');
@@ -397,7 +420,7 @@ describe('Fix 8: take-down wording', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     expect(lastAlert().title).toBe('Cancel and refund?');
     await act(async () => {
       lastAlert().buttons.find((b: any) => b.style === 'destructive').onPress();
@@ -415,7 +438,7 @@ describe('Fix 8: take-down wording', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     expect(lastAlert().message).toContain('$60 goes back to your Bounty balance.');
     await act(async () => {
       lastAlert().buttons.find((b: any) => b.style === 'destructive').onPress();
@@ -458,7 +481,7 @@ describe('A: a failed funding read is never shown as payment', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const confirm = lastAlert();
     expect(confirm.title).toBe('Take this job down?');
     expect(confirm.message).toContain("We couldn't confirm whether you've been charged for it.");
@@ -569,7 +592,7 @@ describe('QA pass 2: resilience (2026-11-15)', () => {
       resolvePlan({ refundAmount: 0, destination: null });
     });
     expect(mockPlan).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getAllByTestId('confirm-dialog')).toHaveLength(1));
     expect(lastAlert().title).toBe('Take this job down?');
     expect(mockCancel).not.toHaveBeenCalled();
   });
@@ -582,7 +605,7 @@ describe('QA pass 2: resilience (2026-11-15)', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     expect(lastAlert().title).toBe("Can't take this job down right now");
     expect(lastAlert().message).toContain('nothing was changed');
     expect(mockCancel).not.toHaveBeenCalled();

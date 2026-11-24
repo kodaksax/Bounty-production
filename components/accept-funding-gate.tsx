@@ -36,6 +36,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { ErrorBanner } from 'components/error-banner';
 import { ConsequenceList, FlowTitle } from 'components/poster/blocks';
+import { QuickConfirm } from 'components/poster/quick-confirm';
 import { MoneyLine } from 'components/poster/four-questions';
 import { PaymentMethodsModal } from 'components/payment-methods-modal';
 import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
@@ -44,7 +45,9 @@ import type { AcceptFundingGate as AcceptFundingGateState } from 'hooks/useAccep
 import { useWalletDeposit } from 'hooks/use-wallet-deposit';
 import { getBottomNavContentGap, getBottomNavOccludedHeight } from 'lib/constants/navigation';
 import { usePaymentPromiseCopy } from 'lib/experiments/payment-promise-copy';
+import { FOCUS_POLICY } from 'lib/constants/focus-policy';
 import { hapticFeedback } from 'lib/haptic-feedback';
+import { trackWorkspacePrimaryTapped } from 'lib/services/focus-analytics';
 import { stripeService } from 'lib/services/stripe-service';
 import { fundingSourceLine, paymentPromiseStrings } from 'lib/strings/payment-promise';
 import { trustSafetyStrings } from 'lib/strings/trust-safety';
@@ -54,7 +57,7 @@ import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { describeHire } from 'lib/utils/poster-stage-copy';
 import { describePaymentFailure } from 'lib/utils/payment-failure-message';
 import type { DepositResult } from 'hooks/use-wallet-deposit';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -74,6 +77,15 @@ interface AcceptFundingGateProps {
    * (Focus-first screen E). Without them the line says "Other offers close".
    */
   otherApplicantNames?: readonly string[];
+  /** Where "Back to My Jobs" goes when a poster leaves a payment that is still confirming (E.3). */
+  onLeavePending?: () => void;
+  /**
+   * Opens on 4b, the quick confirm that confirms itself after
+   * FOCUS_POLICY.quickConfirmSeconds. Only when the Bounty balance or a saved
+   * card can pay; anything else (no card, a failed or partial payment, "Change")
+   * is screen E, which never confirms on its own.
+   */
+  quickConfirm?: { jobTitle: string; jobIcon: string; sub?: string | null };
 }
 
 /**
@@ -133,7 +145,7 @@ function getGateMetrics(width: number, usableHeight: number) {
 
 type GateMetrics = ReturnType<typeof getGateMetrics>;
 
-export function AcceptFundingGate({ gate, otherApplicantNames }: AcceptFundingGateProps) {
+export function AcceptFundingGate({ gate, otherApplicantNames, quickConfirm, onLeavePending }: AcceptFundingGateProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -192,14 +204,15 @@ export function AcceptFundingGate({ gate, otherApplicantNames }: AcceptFundingGa
   // way missed any exit that never set `isProcessing`, which left
   // `paymentInFlightRef` stuck and could race a background/cancel event
   // against a still-in-flight attempt.
-  const resolveOutcome = ({ outcome, failure }: DepositResult, paid: number) => {
+  const resolveOutcome = ({ outcome, failure, paymentIntentId }: DepositResult, paid: number) => {
     if (outcome === 'succeeded') {
       setSuccessInfo(null);
-      gate.onPaymentSucceeded(paid);
+      if (paymentIntentId) gate.onPaymentSucceeded(paid, paymentIntentId);
+      else gate.onPaymentSucceeded(paid);
       return;
     }
     if (outcome === 'pending') {
-      gate.onPaymentPending();
+      gate.onPaymentPending(paid, paymentIntentId);
       return;
     }
     // The sheet explains a failure itself (gate.paymentFailure), so the
@@ -279,6 +292,70 @@ export function AcceptFundingGate({ gate, otherApplicantNames }: AcceptFundingGa
     paysByCard: hasPaymentMethod,
     otherApplicantNames,
   });
+
+  // --- 4b: quick confirm ----------------------------------------------------
+  // Once it is confirmed or dismissed, the rest of this hire is screen E.
+  const [quickDone, setQuickDone] = useState(false);
+  const quickSeconds = FOCUS_POLICY.quickConfirmSeconds;
+  if (
+    quickConfirm &&
+    !quickDone &&
+    quickSeconds &&
+    !showPaymentPromise &&
+    gate.requirement &&
+    (gate.stage === 'confirm' || gate.stage === 'pay') &&
+    !isProcessing &&
+    !gate.paymentFailure &&
+    !gate.remainderAfterDeposit &&
+    !error &&
+    (!needsPayment || (!stripeError && (stripeLoading || hasPaymentMethod)))
+  ) {
+    const first = hire.back.replace(/^Back to /, '');
+    const bountyId = String(gate.requirement.bountyId);
+    const fromBalance = needsPayment ? Math.max(0, amount - chargeAmount) : amount;
+    const sources = [
+      fromBalance > 0 ? `Balance ${money(fromBalance)}` : null,
+      needsPayment && hasPaymentMethod
+        ? `${stripeService.formatCardDisplay(primaryCardPaymentMethod)} ${money(chargeAmount)}`
+        : null,
+    ].filter(Boolean);
+    return (
+      <QuickConfirm
+        // A different charge is a different decision: start the clock again.
+        key={`${gate.stage}:${amount}:${chargeAmount}`}
+        name={first}
+        avatarUri={gate.hunterAvatar}
+        sub={quickConfirm.sub}
+        rows={[
+          { icon: quickConfirm.jobIcon, title: quickConfirm.jobTitle, detail: `${first} does it for ${money(amount)}` },
+          { icon: 'lock', title: `Bounty holds your ${money(amount)}`, detail: hire.items[1].detail },
+          { icon: hire.items[2].icon, title: hire.items[2].title, detail: hire.items[2].detail },
+          {
+            icon: needsPayment ? 'credit-card' : 'account-balance-wallet',
+            title: sources.join(' · ') || 'Checking payment…',
+            onChange: needsPayment ? () => setQuickDone(true) : undefined,
+          },
+        ]}
+        note={`${hire.note} You agree a time with ${first} next.`}
+        seconds={quickSeconds}
+        ready={!needsPayment || (!stripeLoading && hasPaymentMethod)}
+        paddingTop={insets.top + metrics.topPadding}
+        paddingBottom={footerClearance}
+        onConfirm={(how) => {
+          trackWorkspacePrimaryTapped({
+            bountyId,
+            side: 'posted',
+            screenId: '4b',
+            action: how === 'tap' ? 'quick_confirm' : 'quick_confirm_timeout',
+          });
+          setQuickDone(true);
+          if (needsPayment) void handlePayWithCard();
+          else handleConfirm();
+        }}
+        onBack={handleCancel}
+      />
+    );
+  }
 
   let primaryLabel: string;
   let primaryA11y: string;
@@ -427,8 +504,6 @@ export function AcceptFundingGate({ gate, otherApplicantNames }: AcceptFundingGa
             </View>
           )}
 
-          {/* TODO(E): allow leaving while a payment is confirming (E.3); the
-              gate keeps the poster here until the server confirms. */}
           {paymentPending && (
             <View style={styles.pending} accessibilityRole="alert" accessibilityLiveRegion="polite" testID="hire-payment-pending">
               <Text style={styles.pendingNow}>{hire.pending.now}</Text>
@@ -552,6 +627,21 @@ export function AcceptFundingGate({ gate, otherApplicantNames }: AcceptFundingGa
             </TouchableOpacity>
           )}
 
+          {paymentPending && gate.canLeavePending ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Back to My Jobs"
+              style={styles.secondaryButton}
+              onPress={() => {
+                hapticFeedback.light();
+                gate.onLeavePending();
+                onLeavePending?.();
+              }}
+              testID="hire-leave-pending"
+            >
+              <Text style={styles.secondaryButtonText}>Back to My Jobs</Text>
+            </TouchableOpacity>
+          ) : (
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={
@@ -566,6 +656,7 @@ export function AcceptFundingGate({ gate, otherApplicantNames }: AcceptFundingGa
               {showPaymentPromise ? paymentPromiseStrings.notYet : hire.cancel}
             </Text>
           </TouchableOpacity>
+          )}
         </View>
       </View>
 

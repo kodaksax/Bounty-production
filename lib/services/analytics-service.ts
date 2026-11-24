@@ -696,7 +696,7 @@ export type AnalyticsEvent =
   //                                        opening (or per refusal to open).
   //                                        `trigger`: cancel | background |
   //                                        unmount | deposit_unconfirmed |
-  //                                        prior_deposit_unconfirmed. Also
+  //                                        prior_deposit_unconfirmed | left_pending. Also
   //                                        `stage`, `balanceCovers`,
   //                                        `paymentAttempts`, `lastFailureCode`,
   //                                        bounty_id / application_id /

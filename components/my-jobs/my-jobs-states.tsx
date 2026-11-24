@@ -32,7 +32,7 @@ export function MyJobsEmptyState({ onPostJob, onFindWork }: { onPostJob: () => v
       <View style={{ gap: 4 }}>
         <PosterButton icon="add" label="Post your first job" onPress={onPostJob} testID="my-jobs-post-first" />
         {/* DESIGN-GAP: not in the poster handoff; an account that only does work starts here too. */}
-        <PosterButton kind="text" label="Or find work nearby" onPress={onFindWork} testID="my-jobs-find-work" />
+
       </View>
     </View>
   )

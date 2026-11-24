@@ -43,6 +43,7 @@ import { useRejectRequest } from '../../../hooks/useRejectRequest';
 import { useValidUserId } from '../../../hooks/useValidUserId';
 import { ErrorBoundary } from '../../../lib/error-boundary';
 import { discardApplication, withdrawApplication } from '../../../lib/services/application-withdrawal';
+import { bountyAppTabPath } from '../../../lib/navigation/bounty-app-tab';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import * as supabaseMessaging from '../../../lib/services/supabase-messaging';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
@@ -415,7 +416,7 @@ function BountyThreadScreen() {
   // The pay-at-accept gate takes over the screen while open, exactly as on
   // the old Requests list.
   if (acceptFundingGate.active) {
-    return <AcceptFundingGate gate={acceptFundingGate} />;
+    return <AcceptFundingGate gate={acceptFundingGate} onLeavePending={() => router.replace(bountyAppTabPath('messages', 'myPostings') as never)} />;
   }
 
   if (thread.loading && !bounty) {

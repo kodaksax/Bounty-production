@@ -24,9 +24,9 @@
  *   * sub-minimum shortfall -> charged at Stripe's $0.50 floor, not refused
  */
 
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
-import { Platform } from 'react-native';
+import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 
 const mockPayWithCard = jest.fn();
@@ -83,6 +83,8 @@ jest.mock('hooks/use-wallet-deposit', () => ({
 jest.mock('lib/services/stripe-service', () => ({
   stripeService: { formatCardDisplay: () => 'Visa •••• 4242' },
 }));
+jest.mock('expo-image', () => ({ Image: () => null }));
+jest.mock('lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
 jest.mock('components/payment-methods-modal', () => ({ PaymentMethodsModal: () => null }));
 jest.mock('components/error-banner', () => {
   const { Text } = require('react-native');
@@ -140,6 +142,8 @@ function makeGate(overrides: Record<string, unknown> = {}) {
     onPaymentPending: jest.fn(),
     onPaymentFailed: jest.fn(),
     onCancel: jest.fn(),
+    canLeavePending: false,
+    onLeavePending: jest.fn(),
     ...overrides,
   };
 }
@@ -280,6 +284,129 @@ describe('AcceptFundingGate', () => {
 
         expect(getByText('Ada is still selected. Nothing has changed on this bounty.')).toBeTruthy();
       });
+    });
+  });
+
+  describe('4b quick confirm', () => {
+    const quick = { jobTitle: 'Clear the garage', jobIcon: 'chair', sub: '4.8 · 14 jobs' };
+    const covered = { ...REQ, posterBalance: 80, shortfall: 0 };
+    let readerOn: boolean;
+    let onAppState: ((s: string) => void) | null;
+    const tick = async (seconds: number) => {
+      for (let i = 0; i < seconds; i++) await act(async () => void jest.advanceTimersByTime(1000));
+    };
+    const open = async (gate = makeGate(), props: Record<string, unknown> = { quickConfirm: quick }) => {
+      const view = render(<AcceptFundingGate gate={gate} {...props} />);
+      await act(async () => {});
+      return { gate, ...view };
+    };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      readerOn = false;
+      onAppState = null;
+      (AppState as any).currentState = 'active';
+      (AppState as any).addEventListener = jest.fn((_e: string, cb: any) => {
+        onAppState = cb;
+        return { remove: jest.fn() };
+      });
+      (AccessibilityInfo as any).addEventListener = jest.fn(() => ({ remove: jest.fn() }));
+      (AccessibilityInfo as any).isScreenReaderEnabled = jest.fn(async () => readerOn);
+    });
+    afterEach(() => jest.useRealTimers());
+
+    test('charges exactly the shortfall once, at 0:00 and not before', async () => {
+      const { gate, getByText, queryByTestId } = await open();
+      expect(getByText('Looks good (0:07)')).toBeTruthy();
+      await tick(6);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      await tick(5);
+      expect(gate.onPaymentStarted).toHaveBeenCalledWith('card');
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+      expect(mockPayWithCard).toHaveBeenCalledWith(30);
+      // What follows (processing, a decline) is screen E.
+      expect(queryByTestId('quick-confirm')).toBeNull();
+    });
+
+    test('tapping confirms now, and the timer does not confirm again', async () => {
+      const { gate, getByTestId } = await open(makeGate({ stage: 'confirm', requirement: covered }));
+      fireEvent.press(getByTestId('quick-confirm-yes'));
+      await tick(10);
+      expect(gate.onConfirm).toHaveBeenCalledTimes(1);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('Go back cancels and nothing is charged', async () => {
+      const { gate, getByTestId } = await open();
+      fireEvent.press(getByTestId('quick-confirm-back'));
+      await tick(10);
+      expect(gate.onCancel).toHaveBeenCalledTimes(1);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('Change stops the timer and opens the full screen', async () => {
+      const { getByTestId, getByText } = await open();
+      fireEvent.press(getByTestId('quick-confirm-change'));
+      await tick(10);
+      expect(getByText('Choose Ada for $50?')).toBeTruthy();
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('pauses in the background and carries on after', async () => {
+      const { getByText } = await open();
+      await tick(3);
+      act(() => onAppState!('background'));
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      act(() => onAppState!('active'));
+      expect(getByText('Looks good (0:04)')).toBeTruthy();
+      await tick(4);
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+    });
+
+    test('a screen reader gets the button and no timer', async () => {
+      readerOn = true;
+      const { getByText, getByTestId } = await open();
+      expect(getByText('Looks good')).toBeTruthy();
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      fireEvent.press(getByTestId('quick-confirm-yes'));
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+    });
+
+    test('leaving the screen charges nothing', async () => {
+      const { unmount } = await open();
+      unmount();
+      await tick(10);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('waits while saved cards load', async () => {
+      resetDepositState({ stripeLoading: true, paymentMethods: [] });
+      const { getByText } = await open();
+      expect(getByText('Checking payment…')).toBeTruthy();
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['no saved card', () => resetDepositState({ paymentMethods: [] }), {}],
+      ['a declined payment', () => {}, { paymentFailure: { error_code: 'card_declined', error_type: 'card_error' } }],
+      ['a remainder to pay', () => {}, { remainderAfterDeposit: true }],
+      ['a pending payment', () => {}, { stage: 'pending' }],
+    ])('%s is screen E, and never confirms itself', async (_n, setup, over) => {
+      setup();
+      const { queryByTestId, gate } = await open(makeGate(over));
+      expect(queryByTestId('quick-confirm')).toBeNull();
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      expect(mockPayWithPaymentSheet).not.toHaveBeenCalled();
+      expect(gate.onConfirm).not.toHaveBeenCalled();
+    });
+
+    test('is only where the screen asks for it', async () => {
+      const { queryByTestId } = await open(makeGate(), {});
+      expect(queryByTestId('quick-confirm')).toBeNull();
     });
   });
 
@@ -474,6 +601,16 @@ describe('AcceptFundingGate', () => {
         .toMatchObject({ disabled: true, busy: true });
       fireEvent.press(getByLabelText('Not yet, go back without choosing anyone'));
       expect(gate.onCancel).not.toHaveBeenCalled();
+    });
+
+    test('E.3: Back to My Jobs leaves a remembered payment', () => {
+      const gate = makeGate({ stage: 'pending', canLeavePending: true });
+      const onLeavePending = jest.fn();
+      const { getByTestId, queryByText } = render(<AcceptFundingGate gate={gate} onLeavePending={onLeavePending} />);
+      expect(queryByText('Not yet')).toBeNull();
+      fireEvent.press(getByTestId('hire-leave-pending'));
+      expect(gate.onLeavePending).toHaveBeenCalledTimes(1);
+      expect(onLeavePending).toHaveBeenCalledTimes(1);
     });
 
     test('a dismissed Apple Pay sheet is reported as cancelled and the sheet stays up', async () => {

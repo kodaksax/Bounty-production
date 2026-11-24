@@ -17,6 +17,7 @@ import { HunterStageScreen } from '../../../../components/hunter/hunter-stage-vi
 import { useHunterHelp } from '../../../../components/hunter/use-hunter-help';
 import { NotFoundScreen } from '../../../../components/not-found-screen';
 import { NoteBox, PosterButton } from '../../../../components/poster';
+import { useConfirmDialog, withdrawOfferCopy } from '../../../../components/poster/confirm-dialog';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
@@ -69,6 +70,7 @@ export default function HunterFlowIndex() {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [busyAction, setBusyAction] = useState<HunterActionKey | null>(null);
+  const { ask, dialog: confirmDialog } = useConfirmDialog();
   const [toast, setToast] = useState<string | null>(null);
   const [yourNote, setYourNote] = useState<string | null>(null);
 
@@ -137,32 +139,23 @@ export default function HunterFlowIndex() {
   // for a pending offer; a chosen one gets its clear error.
   const handleWithdraw = useCallback(() => {
     if (!routeBountyId) return;
-    const poster = posterFirst ?? 'The poster';
-    Alert.alert(
-      'Withdraw your offer?',
-      `${poster} won't see your offer any more. You can offer again while the job is open.\n\nNothing was held, so nothing changes in your wallet.`,
-      [
-        { text: 'Keep my offer', style: 'cancel' },
-        {
-          text: 'Yes, withdraw',
-          style: 'destructive',
-          onPress: async () => {
-            setBusyAction('withdraw');
-            try {
-              // TODO(E): a withdrawn offer is deleted, so "Your offers" can't list
-              // it (S.2), and the poster isn't told (S.3).
-              await withdrawApplication({ bountyId: routeBountyId, currentUserId: currentUserId ?? undefined, surface: 'hunter_detail' });
-              router.replace(MY_JOBS_ROUTE as never);
-            } catch (err: any) {
-              Alert.alert('Could not withdraw', err?.message || 'Please try again.');
-            } finally {
-              setBusyAction(null);
-            }
-          },
-        },
-      ]
-    );
-  }, [routeBountyId, posterFirst, currentUserId, router]);
+    ask({
+      ...withdrawOfferCopy(posterFirst),
+      onConfirm: async () => {
+        setBusyAction('withdraw');
+        try {
+          // TODO(E): a withdrawn offer is deleted, so "Your offers" can't list
+          // it (S.2), and the poster isn't told (S.3).
+          await withdrawApplication({ bountyId: routeBountyId, currentUserId: currentUserId ?? undefined, surface: 'hunter_detail' });
+          router.replace(MY_JOBS_ROUTE as never);
+        } catch (err: any) {
+          Alert.alert('Could not withdraw', err?.message || 'Please try again.');
+        } finally {
+          setBusyAction(null);
+        }
+      },
+    });
+  }, [routeBountyId, posterFirst, currentUserId, router, ask]);
 
   const handleDiscardApplication = useCallback(() => {
     if (!routeBountyId) return;
@@ -329,7 +322,9 @@ export default function HunterFlowIndex() {
             ? [{ key: 'discard', label: 'Remove from my list', icon: 'delete-outline', danger: true, onPress: handleDiscardApplication }]
             : []
       }
-    />
+    >
+      {confirmDialog}
+    </HunterStageScreen>
   );
 }
 

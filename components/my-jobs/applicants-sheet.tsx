@@ -1,8 +1,8 @@
 /**
  * "Who offered" — the people who offered to do one of your jobs.
  *
- * Each person opens their conversation for this job, which is where the
- * poster asks questions and chooses someone (the bounty thread's hire card).
+ * Each person opens in the job workspace (stage D), where the poster asks
+ * questions and chooses someone.
  * Nearest first; offers more than 50 miles from an in-person job sit under a
  * closed "Not nearby" group (SBA-02). While this sheet is open, the people on
  * screen count as seen (`application_viewed`, surface inbox_list) exactly as
@@ -87,7 +87,7 @@ export function ApplicantsSheet({ visible, jobTitle, applicants, allPending, onC
         onPress={() => onOpenPerson(r)}
         style={s.person}
         accessibilityRole="button"
-        accessibilityLabel={`${name}${distance ? `, ${distance}` : ''}. Open your conversation`}
+        accessibilityLabel={`${name}${distance ? `, ${distance}` : ''}. See this person`}
         testID={`applicant-row-${r.hunter_id}`}
       >
         <View style={s.avatar}>
@@ -120,7 +120,7 @@ export function ApplicantsSheet({ visible, jobTitle, applicants, allPending, onC
       scrollable={false}
       testID="applicants-sheet"
     >
-      <Text style={s.hint}>Look at each person, then choose one in your conversation with them.</Text>
+      <Text style={s.hint}>Look at each person, then then choose one.</Text>
       <FlatList
         data={rows}
         keyExtractor={(row) => row.key}

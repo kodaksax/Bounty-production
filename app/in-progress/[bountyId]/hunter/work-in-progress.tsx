@@ -97,6 +97,7 @@ export default function HunterWorkInProgressScreen() {
     viewerId: currentUserId,
     otherId: lifecycle.otherParty.id,
     bountyId: routeBountyId,
+    since: (request as { accepted_at?: string | null } | null)?.accepted_at ?? null,
   });
   const problems = useJobProblemRecords(routeBountyId, { cancellation: false, dispute: lifecycle.hasDispute });
 

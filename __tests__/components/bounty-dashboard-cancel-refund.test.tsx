@@ -124,7 +124,7 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
@@ -139,7 +139,30 @@ jest.mock('../../components/ui/app-modal', () => ({
 import BountyDashboard from '../../app/postings/[bountyId]/index';
 
 /** The buttons of the most recent Alert.alert call. */
-function lastAlert() {
+function lastAlert(): { title: string; message: string; buttons: any[] } {
+  // The designed confirmation (J.4) when it's showing, read like an alert.
+  const dialog = screen.queryByTestId('confirm-dialog');
+  if (dialog) {
+    const text = (id: string) => {
+      const node = screen.queryByTestId(id);
+      if (!node) return '';
+      const out: string[] = [];
+      const walk = (n: any) => (typeof n === 'string' ? out.push(n) : (n?.children ?? []).forEach(walk));
+      walk(node);
+      return out.join(' ');
+    };
+    const yes = screen.getByTestId('confirm-dialog-yes');
+    const no = screen.getByTestId('confirm-dialog-no');
+    const all = text('confirm-dialog');
+    return {
+      title: text('confirm-dialog-title') || all,
+      message: all,
+      buttons: [
+        { text: text('confirm-dialog-no').trim(), style: 'cancel', onPress: () => fireEvent.press(no) },
+        { text: text('confirm-dialog-yes').trim(), style: 'destructive', onPress: () => fireEvent.press(yes) },
+      ] as any[],
+    };
+  }
   const calls = (Alert.alert as jest.Mock).mock.calls;
   const [title, message, buttons] = calls[calls.length - 1];
   return { title, message, buttons: buttons ?? [] };
@@ -269,7 +292,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const go = lastAlert().buttons.find((b: any) => b.style === 'destructive');
     await act(async () => {
       go.onPress();
@@ -288,7 +311,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const confirm = lastAlert();
     expect(confirm.title).toBe('Cancel and refund?');
     expect(confirm.message).toContain('$40 goes back to your Bounty balance.');
@@ -316,10 +339,11 @@ describe('BountyDashboard — Cancel and refund', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const keep = lastAlert().buttons.find((b: any) => b.style === 'cancel');
     expect(keep.text).toBe('Keep my job');
-    expect(keep.onPress).toBeUndefined();
+    act(() => keep.onPress());
+    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
     expect(mockCancel).not.toHaveBeenCalled();
   });
 
@@ -332,7 +356,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     await act(async () => {
       lastAlert().buttons.find((b: any) => b.style === 'destructive').onPress();
     });
@@ -358,7 +382,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     expect(lastAlert().message).toContain('no money is involved');
   });
 });

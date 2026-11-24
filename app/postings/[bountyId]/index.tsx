@@ -49,32 +49,33 @@ import {
   WorkspaceLayout,
   type OtherOption,
 } from '../../../components/poster';
+import { useConfirmDialog } from '../../../components/poster/confirm-dialog';
 import { PosterReviewModal } from '../../../components/poster-review-modal';
 import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useApplicationDecisionVisit } from '../../../hooks/useApplicationDecisionVisit';
 import { useAcceptFunding } from '../../../hooks/useAcceptFunding';
 import { useAcceptRequest } from '../../../hooks/useAcceptRequest';
 import { formatExactAddress, useBountyExactLocation } from '../../../hooks/useBountyExactLocation';
 import { useBountyLifecycle } from '../../../hooks/useBountyLifecycle';
 import { useHireTime, useJobConversation, useJobProblemRecords, usePendingApplicants } from '../../../hooks/useJobWorkspaceData';
+import { useUnresolvedDeposit } from '../../../hooks/useUnresolvedDeposit';
 import { useRejectRequest } from '../../../hooks/useRejectRequest';
 import { useRequestExpiryPolicy } from '../../../hooks/useRequestExpiryPolicy';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { firstName, formatJobAmount, formatJobDay, getBountyCategoryIcon, getBountyCoverUri } from '../../../lib/my-jobs/format';
+import { describeTakeDown, readOpenJobMoney } from '../../../lib/my-jobs/take-down';
 import { useWorksBothSides } from '../../../lib/my-jobs/side-labels-store';
 import type { IconName } from '../../../lib/my-jobs/types';
 import { bountyAppTabPath } from '../../../lib/navigation/bounty-app-tab';
 import type { BountyRequestWithDetails } from '../../../lib/services/bounty-request-service';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
-import { getBountyFundingRequirement } from '../../../lib/services/bounty-funding-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import {
   BountyRefundFailedError,
   canPosterCancelBounty,
   cancelAndRefundBounty,
-  describeCancelRefund,
   describeCancelRefundDone,
-  planCancelRefund,
   type CancelRefundPlan,
 } from '../../../lib/services/bounty-cancel-refund';
 import type { Bounty } from '../../../lib/services/database.types';
@@ -90,6 +91,7 @@ import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-pro
 import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
 import {
   describeApplicant,
+  describeApplicantBrief,
   describePosterStage,
   formatClock,
   POSTER_TIME_PICKS,
@@ -111,12 +113,14 @@ const POST_BOUNTY_ROUTE = bountyAppTabPath('postings');
 const noop = () => {};
 
 export default function BountyDashboard() {
-  const { bountyId, openEdit, openReview, posted } = useLocalSearchParams<{
+  const { bountyId, openEdit, openReview, posted, person: personParam } = useLocalSearchParams<{
     bountyId?: string;
     openEdit?: string;
     openReview?: string;
     /** Set by a link straight after publishing: stage A says so. */
     posted?: string;
+    /** A request id from "Who offered": opens that person (stage D). */
+    person?: string;
   }>();
   const router = useRouter();
   // `isAuthLoading` matters here: on a cold start the session restores after
@@ -165,6 +169,7 @@ export default function BountyDashboard() {
   const [pick, setPick] = useState<string>(POSTER_TIME_PICKS[0]);
   const [stars, setStars] = useState(0);
   const [alreadyRated, setAlreadyRated] = useState(false);
+  const { ask: askConfirm, dialog: confirmDialog } = useConfirmDialog();
   const { refundEscrow, refreshFromApi } = useWallet();
   // Blocks a second tap from re-entering the refund while one is in flight.
   const cancellingRef = React.useRef(false);
@@ -195,13 +200,50 @@ export default function BountyDashboard() {
     bounty?.id != null ? String(bounty.id) : null,
     isPoster && bounty?.status === 'open' && applicationCount > 0
   );
+  const hireAt = useHireTime(isPoster && helperId && bounty ? String(bounty.id) : null, helperId);
   const conversation = useJobConversation({
     viewerId: currentUserId,
     otherId: helperId,
     bountyId: bounty?.id ? String(bounty.id) : null,
     enabled: isPoster && !!helperId,
+    since: hireAt,
   });
-  const hireAt = useHireTime(isPoster && helperId && bounty ? String(bounty.id) : null, helperId);
+  const refreshWallet = useCallback(async () => {
+    if (!session?.access_token) return;
+    await refreshFromApi(session.access_token, { silent: true, force: true });
+  }, [session?.access_token, refreshFromApi]);
+  // E.3: a payment left confirming for this job. Nobody can be chosen until
+  // the server says what became of it.
+  const { record: unresolvedDeposit, check: checkUnresolvedDeposit } = useUnresolvedDeposit(
+    bounty?.id != null ? String(bounty.id) : null,
+    isPoster && bounty?.status === 'open',
+    (verdict, record) => {
+      const name = firstName(record.hunterName) ?? record.hunterName;
+      setToast(
+        verdict === 'credited'
+          ? name === 'this hunter'
+            ? 'Your payment is confirmed and in your Bounty balance. You can choose someone now.'
+            : `Your payment is confirmed and in your Bounty balance. You can choose ${name} now.`
+          : "Your payment didn't go through, and nothing was charged."
+      );
+      void refreshWallet();
+    }
+  );
+  const shownPerson = personIndex !== null && !unresolvedDeposit ? applicants[personIndex] ?? null : null;
+  // "Who offered" links straight to one person.
+  const personHandledRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!personParam || personHandledRef.current || unresolvedDeposit || applicants.length === 0) return;
+    personHandledRef.current = true;
+    const at = applicants.findIndex((r) => String(r.id) === String(personParam));
+    if (at >= 0) setPersonIndex(at);
+  }, [personParam, applicants, unresolvedDeposit]);
+  // The same application_viewed / application_dismissed the job thread reports.
+  const { markEngaged } = useApplicationDecisionVisit({
+    request: shownPerson,
+    enabled: isPoster && !!shownPerson,
+    surface: 'workspace_person',
+  });
   const problems = useJobProblemRecords(isPoster ? routeBountyId : null, {
     cancellation: hasCancellationRequest,
     dispute: hasDispute,
@@ -325,10 +367,6 @@ export default function BountyDashboard() {
     Alert.alert('Something went wrong', localError);
     setLocalError(null);
   }, [localError]);
-  const refreshWallet = useCallback(async () => {
-    if (!session?.access_token) return;
-    await refreshFromApi(session.access_token, { silent: true, force: true });
-  }, [session?.access_token, refreshFromApi]);
   const { gate: acceptFundingGate, ensureFunded, handleAcceptFailure } = useAcceptFunding();
   const reloadForRequests = useCallback(async () => {
     reloadApplicants();
@@ -373,6 +411,7 @@ export default function BountyDashboard() {
       if (!bounty || busyAction) return;
       const hunterId = String((request as any).hunter_id ?? (request as any).user_id ?? '');
       const name = firstName(request.profile?.username) ?? 'They';
+      markEngaged('accept');
       setBusyAction('choose');
       try {
         await handleAcceptRequest(request.id);
@@ -384,10 +423,11 @@ export default function BountyDashboard() {
         }
       } finally {
         setBusyAction(null);
+        checkUnresolvedDeposit();
         await reloadAll();
       }
     },
-    [bounty, busyAction, handleAcceptRequest, reloadAll]
+    [bounty, busyAction, handleAcceptRequest, reloadAll, markEngaged, checkUnresolvedDeposit]
   );
 
   const passApplicant = useCallback(
@@ -399,6 +439,7 @@ export default function BountyDashboard() {
           text: 'Pass',
           style: 'destructive',
           onPress: async () => {
+            markEngaged('decline');
             setBusyAction('pass');
             try {
               await handleRejectRequest(request.id);
@@ -411,7 +452,7 @@ export default function BountyDashboard() {
         },
       ]);
     },
-    [handleRejectRequest, applicants.length, reloadAll]
+    [handleRejectRequest, applicants.length, reloadAll, markEngaged]
   );
 
   // ── Review and rating (PosterReviewModal) ────────────────────────────────
@@ -561,11 +602,8 @@ export default function BountyDashboard() {
     // The confirmation below is modal, so the guard can drop once it shows.
     takeDownCheckRef.current = false;
     const copy = describeTakeDown(bounty, plan, charge);
-    Alert.alert(copy.title, copy.message, [
-      { text: copy.cancelLabel, style: 'cancel' },
-      { text: copy.confirmLabel, style: 'destructive', onPress: () => void runCancel(bounty, plan) },
-    ]);
-  }, [bounty, runCancel]);
+    askConfirm({ ...copy, onConfirm: () => void runCancel(bounty, plan) });
+  }, [bounty, runCancel, askConfirm]);
 
   // ── Redirect rather than dead-end a non-poster ────────────────────────────
   React.useEffect(() => {
@@ -601,6 +639,8 @@ export default function BountyDashboard() {
         : null,
       openJobCharge,
       hasMessages: conversation.hasMessages,
+      awaitingReplySince: conversation.awaitingReplySince,
+      paymentConfirmingFor: unresolvedDeposit?.hunterName ?? null,
       justPosted: posted === '1' || posted === 'true',
       expiryHours: expiryPolicy.expiryHours,
       canRate: !alreadyRated,
@@ -617,6 +657,8 @@ export default function BountyDashboard() {
     currentUserId,
     openJobCharge,
     conversation.hasMessages,
+    conversation.awaitingReplySince,
+    unresolvedDeposit,
     posted,
     expiryPolicy.expiryHours,
     alreadyRated,
@@ -630,6 +672,10 @@ export default function BountyDashboard() {
       }
       switch (key) {
         case 'done':
+          // Straight from the composer, "back" would be the composer again.
+          if (posted === '1' || posted === 'true') router.replace(MY_JOBS_ROUTE as never);
+          else goBack();
+          return;
         case 'keep_waiting':
         case 'skip_rating':
         case 'back_to_jobs':
@@ -671,6 +717,9 @@ export default function BountyDashboard() {
         case 'message':
           openThread(helperId);
           return;
+        case 'report_no_reply':
+          router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId, reason: 'hunter_unresponsive' } } as never);
+          return;
         case 'review_work':
           handleReviewSubmission();
           return;
@@ -693,6 +742,7 @@ export default function BountyDashboard() {
       bounty,
       routeBountyId,
       view,
+      posted,
       goBack,
       canEditTerms,
       explainEditLocked,
@@ -750,6 +800,20 @@ export default function BountyDashboard() {
           .filter((r) => personIndex === null || r.id !== applicants[personIndex]?.id)
           .map((r) => r.profile?.username ?? '')
           .filter(Boolean)}
+        onLeavePending={() => router.replace(MY_JOBS_ROUTE as never)}
+        quickConfirm={
+          bounty
+            ? {
+                jobTitle: bounty.title,
+                jobIcon: getBountyCategoryIcon(bounty.category),
+                sub: shownPerson
+                  ? describeApplicantBrief(
+                      describeApplicant(shownPerson, { index: 0, total: 1, verified: false, online: bounty.work_type === 'online' })
+                    )
+                  : null,
+              }
+            : undefined
+        }
       />
     );
   }
@@ -826,7 +890,7 @@ export default function BountyDashboard() {
     : [];
 
   // ── D: one person at a time ──────────────────────────────────────────────
-  const person = personIndex !== null ? applicants[personIndex] ?? null : null;
+  const person = shownPerson;
   if (person && personIndex !== null) {
     const personView = describeApplicant(person, {
       index: personIndex,
@@ -889,7 +953,10 @@ export default function BountyDashboard() {
           <PosterButton
             kind="secondary"
             label={`Ask ${personView.first} a question`}
-            onPress={() => openThread(String((person as any).hunter_id ?? ''))}
+            onPress={() => {
+              markEngaged('message');
+              openThread(String((person as any).hunter_id ?? ''));
+            }}
             style={s.flex}
             testID="person-ask"
           />
@@ -1100,6 +1167,7 @@ export default function BountyDashboard() {
         options={helpOptions.map((o) => ({ ...o, icon: o.icon as IconName, onPress: () => onHelpOption(o) }))}
         onTalkToPerson={() => onHelpOption({ key: 'other', icon: 'help-outline', text: '', tone: 'i', target: 'support' })}
       />
+      {confirmDialog}
     </WorkspaceLayout>
   );
 }
@@ -1153,70 +1221,6 @@ function JobDetails({
       ) : null}
     </View>
   );
-}
-
-/**
- * What to tell the poster about money on an open, unhired job.
- *
- * `plan` is planCancelRefund's answer, unchanged, and is the only thing a
- * take-down ever acts on. `charge` is for wording only. When
- * fn_get_bounty_funding_requirement can't be read, getBountyFundingRequirement
- * answers "already funded" (so a take-down still tries the refund rather than
- * stranding money), which would make an unpaid pay-when-you-choose job look
- * paid. So for an at_accept job a "held" answer is re-read: a real reply
- * echoes the job's own funding_mode, while that fallback says 'at_post'.
- * Anything not confirmed is 'unknown', never 'held'.
- */
-async function readOpenJobMoney(
-  bounty: Bounty
-): Promise<{ plan: CancelRefundPlan; charge: Exclude<OpenJobCharge, 'checking'> }> {
-  const plan = await planCancelRefund(bounty);
-  if (!plan.destination || plan.refundAmount <= 0) return { plan, charge: 'not_charged' };
-  if (bounty.funding_mode !== 'at_accept') return { plan, charge: 'held' };
-  const req = await getBountyFundingRequirement(bounty.id);
-  const confirmed = req.fundingMode === 'at_accept' && req.alreadyFunded;
-  return { plan, charge: confirmed ? 'held' : 'unknown' };
-}
-
-/**
- * J.4, the take-down confirmation, honest about money by case:
- * - money held: the planner's own "Cancel and refund?" with the amount and
- *   where it goes (describeCancelRefund);
- * - charge not confirmed: says so, and what would come back if it was;
- * - nothing charged: the handoff's copy, "You haven't been charged, so
- *   there's nothing to refund."
- * The plan it confirms, and so what happens, is the same either way.
- * TODO(E) Q-PRD-4: tell the people who offered, and an undo (J.4).
- */
-function describeTakeDown(
-  bounty: Pick<Bounty, 'is_for_honor'>,
-  plan: CancelRefundPlan,
-  charge: OpenJobCharge
-): { title: string; message: string; confirmLabel: string; cancelLabel: string } {
-  const base = describeCancelRefund(bounty, plan);
-  const refunds = !!plan.destination && plan.refundAmount > 0;
-  const removed = "It will be removed, along with any offers. This can't be undone.";
-  if (refunds && charge === 'held') return { ...base, cancelLabel: 'Keep my job' };
-  if (refunds) {
-    const where = plan.destination === 'wallet' ? 'your Bounty balance' : 'your original payment method';
-    const amount = `$${plan.refundAmount % 1 === 0 ? plan.refundAmount.toFixed(0) : plan.refundAmount.toFixed(2)}`;
-    return {
-      title: 'Take this job down?',
-      message: `${removed} We couldn't confirm whether you've been charged for it. If you were, ${amount} goes back to ${where}.`,
-      confirmLabel: 'Yes, take it down',
-      cancelLabel: 'Keep my job',
-    };
-  }
-  return {
-    title: 'Take this job down?',
-    // The handoff's money line for a paid job nobody was charged for; a
-    // for-honor job keeps the planner's own "no money is involved".
-    message: bounty.is_for_honor
-      ? `${removed}\n\nIt's a for-honor bounty, so no money is involved.`
-      : `${removed}\n\nYou haven't been charged, so there's nothing to refund.`,
-    confirmLabel: 'Yes, take it down',
-    cancelLabel: 'Keep my job',
-  };
 }
 
 /**

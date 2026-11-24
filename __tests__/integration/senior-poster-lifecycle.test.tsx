@@ -166,7 +166,7 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
@@ -205,7 +205,30 @@ const PENDING_SUBMISSION = {
 function alerts(): any[][] {
   return (Alert.alert as jest.Mock).mock.calls;
 }
-function lastAlert() {
+function lastAlert(): { title: string; message: string; buttons: any[] } {
+  // The designed confirmation (J.4) when it's showing, read like an alert.
+  const dialog = screen.queryByTestId('confirm-dialog');
+  if (dialog) {
+    const text = (id: string) => {
+      const node = screen.queryByTestId(id);
+      if (!node) return '';
+      const out: string[] = [];
+      const walk = (n: any) => (typeof n === 'string' ? out.push(n) : (n?.children ?? []).forEach(walk));
+      walk(node);
+      return out.join(' ');
+    };
+    const yes = screen.getByTestId('confirm-dialog-yes');
+    const no = screen.getByTestId('confirm-dialog-no');
+    const all = text('confirm-dialog');
+    return {
+      title: text('confirm-dialog-title') || all,
+      message: all,
+      buttons: [
+        { text: text('confirm-dialog-no').trim(), style: 'cancel', onPress: () => fireEvent.press(no) },
+        { text: text('confirm-dialog-yes').trim(), style: 'destructive', onPress: () => fireEvent.press(yes) },
+      ] as any[],
+    };
+  }
   const calls = alerts();
   const [title, message, buttons] = calls[calls.length - 1];
   return { title, message, buttons: buttons ?? [] };

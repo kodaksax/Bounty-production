@@ -7,6 +7,7 @@ import { analyticsService } from 'lib/services/analytics-service'
 import { amountBucket } from 'lib/services/bounty-funding-service'
 import { logClientError, logClientInfo } from 'lib/services/monitoring'
 import { navigationIntent } from 'lib/services/navigation-intent'
+import { buildHireWelcomeMessage } from 'lib/my-jobs/hire-message'
 import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
 import { supabase } from 'lib/supabase'
 import { wasApplicantProfileViewed } from 'lib/analytics/sessionFlags'
@@ -410,7 +411,7 @@ export function useAcceptRequest({
             // send initial message via supabase function or messages table
             try {
               if (currentUserId) {
-                await sendSupabaseMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
+                await sendSupabaseMessage(convId, buildHireWelcomeMessage((bountyObj as any)?.title), currentUserId)
               }
             } catch (msgErr) {
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
@@ -439,7 +440,7 @@ export function useAcceptRequest({
           try {
             await messageService.sendMessage(
               localConv.id,
-              `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`,
+              buildHireWelcomeMessage((bountyObj as any)?.title),
               currentUserId
             )
           } catch (localMsgErr) {

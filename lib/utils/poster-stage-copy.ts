@@ -32,6 +32,7 @@ export type PosterActionKey =
   | 'send_time'
   | 'write_own'
   | 'message'
+  | 'report_no_reply'
   | 'review_work'
   | 'send_rating'
   | 'skip_rating'
@@ -74,6 +75,10 @@ export interface PosterStageInput {
   openJobCharge: OpenJobCharge | null;
   /** The poster and helper have exchanged at least one message on this job. */
   hasMessages: boolean;
+  /** When the poster last wrote, if the helper hasn't answered since. */
+  awaitingReplySince?: string | null;
+  /** A payment to hire this person is still confirming (E.3). */
+  paymentConfirmingFor?: string | null;
   /** The poster arrived straight from publishing it. */
   justPosted?: boolean;
   /** The live offer-expiry window (hooks/useRequestExpiryPolicy). */
@@ -326,6 +331,25 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           show: { ...NO_BLOCKS, timePicks: true },
         };
       }
+      // E.2, only once Q-PRD-2 sets a threshold (FOCUS_POLICY.silenceThresholdHours).
+      const threshold = FOCUS_POLICY.silenceThresholdHours;
+      const since = input.awaitingReplySince;
+      if (threshold !== null && since && hoursSince(since, now) >= threshold) {
+        const day = formatJobDay(since, now);
+        return {
+          ...base,
+          screenId: 'E.2',
+          step: 4,
+          stage: 'Step 4 of 5 · Work underway',
+          now: `You haven't heard from ${helper}.`,
+          means: `${Helper} hasn't replied${day ? ` since ${day}` : ''}. People are sometimes just busy. Message ${helper}, or tell us and we'll help.`,
+          money: held,
+          after: null,
+          primary: action('message', `Message ${helper}`, 'primary', 'chat-bubble-outline'),
+          secondary: [action('report_no_reply', `Tell us ${helper} hasn't replied`, 'text')],
+          show: { ...NO_BLOCKS, lastMessage: true },
+        };
+      }
       return {
         ...base,
         screenId: 'G',
@@ -341,6 +365,23 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
     }
 
     case 'open': {
+      // E.3: nobody is hired until it's confirmed, and nothing here may charge again.
+      if (input.paymentConfirmingFor) {
+        const first = firstName(input.paymentConfirmingFor) ?? input.paymentConfirmingFor;
+        const pending = pendingPaymentCopy(first);
+        return {
+          ...base,
+          screenId: 'E.3',
+          step: 2,
+          stage: 'Step 2 of 5 · Choosing someone',
+          now: pending.now,
+          means: pending.means,
+          money: { kind: 'warn', text: pending.money },
+          after: null,
+          primary: action('back_to_jobs', 'Back to My Jobs', 'quiet'),
+          show: NO_BLOCKS,
+        };
+      }
       const { money, checkAgain } = openJobMoney(input, amount);
       const more: StageAction<PosterActionKey>[] = [];
       if (input.applicantCount > 0) {
@@ -534,6 +575,16 @@ export function describeApplicant(
   return { name, first, since, note, facts, stage: `Step 2 of 5 · Person ${opts.index + 1} of ${opts.total}` };
 }
 
+/** 4b's line under the name: "4.8 · 14 jobs · about 2 miles away", from D's own facts. */
+export function describeApplicantBrief(view: ApplicantView): string | null {
+  const fact = (icon: string) => view.facts.find((f) => f.icon === icon)?.text ?? null;
+  const rating = fact('star')?.match(/^[\d.]+/)?.[0] ?? null;
+  const jobs = fact('task-alt')?.replace(/ done on Bounty$/, '') ?? null;
+  const place = fact('place') ?? fact('computer');
+  const parts = [rating, jobs, place ? (rating || jobs ? place.charAt(0).toLowerCase() + place.slice(1) : place) : null].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
 // ── E: hiring confirmation (AcceptFundingGate) ───────────────────────────
 
 /** "Priya's and Sam's offers close", "Priya's offer closes", "The other 4 offers close". */
@@ -557,6 +608,20 @@ export interface HireCopyInput {
   /** A saved card will be charged (vs Apple Pay / the payment sheet). */
   paysByCard: boolean;
   otherApplicantNames?: readonly string[];
+}
+
+/**
+ * DESIGN-GAP: the handoff adds "We'll tell you as soon as it is.", but no
+ * notification fires when a deposit confirms, so it is left out; the screen
+ * updates itself when the server confirms.
+ */
+function pendingPaymentCopy(first: string) {
+  const known = first !== 'this hunter';
+  return {
+    now: "We're still confirming your payment.",
+    means: `Please don't pay again. ${known ? `${first} isn't` : "The person you chose isn't"} your helper until it's confirmed.`,
+    money: 'Your card payment is being confirmed. We check before any other charge.',
+  };
 }
 
 export function describeHire(input: HireCopyInput) {
@@ -586,13 +651,6 @@ export function describeHire(input: HireCopyInput) {
     primary: needsPayment ? `Pay ${charge} and choose ${first}` : `Choose ${first}`,
     cancel: 'Not yet',
     /** E.3, while a payment is still confirming. */
-    pending: {
-      now: "We're still confirming your payment.",
-      // DESIGN-GAP: the handoff adds "We'll tell you as soon as it is.", but no
-      // notification fires when a deposit confirms, so it is left out; this
-      // sheet updates itself when the server confirms.
-      means: `Please don't pay again. ${first} isn't your helper until it's confirmed.`,
-      money: 'Your card payment is being confirmed. We check before any other charge.',
-    },
+    pending: pendingPaymentCopy(first),
   };
 }

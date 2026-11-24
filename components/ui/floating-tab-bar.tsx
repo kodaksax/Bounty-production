@@ -4,7 +4,7 @@ import { useHapticFeedback } from "lib/haptic-feedback";
 import { settleSpring } from "lib/motion";
 import { useAccessibleAnimation } from "../../hooks/use-accessible-animation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, LayoutChangeEvent, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Animated, LayoutChangeEvent, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
 import type { AppTheme } from "../../lib/themes/types";
@@ -35,6 +35,11 @@ interface FloatingTabBarProps {
 const BAR_HEIGHT = 64;
 const BAR_SIDE_MARGIN = 16;
 const BAR_PADDING = 5;
+// How far the bar dips into the bottom safe area. On iOS 20 leaves it just above
+// the home indicator; Android's inset can be a button bar, so it dips less there.
+const SAFE_AREA_DIP = Platform.OS === "ios" ? 20 : 8;
+// Gap from the screen edge on devices with little or no bottom inset.
+const MIN_BOTTOM_GAP = 6;
 const ICON_SIZE = 23;
 const CENTER_ICON_SIZE = 25;
 // Caps Dynamic Type so labels can't push the bar taller than BAR_HEIGHT.
@@ -123,7 +128,7 @@ export function FloatingTabBar({
   return (
     <View
       pointerEvents="box-none"
-      style={[s.container, { bottom: Math.max(insets.bottom - 8, 12) }]}
+      style={[s.container, { bottom: Math.max(insets.bottom - SAFE_AREA_DIP, MIN_BOTTOM_GAP) }]}
     >
       <View style={s.bar}>
         <BlurView intensity={50} tint={theme.isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />

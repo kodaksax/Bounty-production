@@ -34,6 +34,8 @@ export interface DepositResult {
    * 'failed'.
    */
   failure?: FailureEventProps;
+  /** The charge, when there is or may be one ('succeeded' / 'pending'). */
+  paymentIntentId?: string;
 }
 
 const failed = (code: string): DepositResult => ({
@@ -266,7 +268,7 @@ Platform.OS === 'ios'
 
       if (result.success) {
         await settleDeposit(numAmount, result.paymentIntentId, 'card');
-        return { outcome: 'succeeded' };
+        return { outcome: 'succeeded', paymentIntentId: result.paymentIntentId };
       }
       showFailure(result.failure);
       return { outcome: 'failed', failure: result.failure };
@@ -306,10 +308,10 @@ Platform.OS === 'ios'
         await settleDeposit(numAmount, result.paymentIntentId, 'paymentSheet');
         // A card saved inside the sheet becomes the one-tap card next time.
         loadPaymentMethods().catch(() => {});
-        return { outcome: 'succeeded' };
+        return { outcome: 'succeeded', paymentIntentId: result.paymentIntentId };
       }
       if (result.outcome === 'cancelled') return { outcome: 'cancelled' };
-      if (result.outcome === 'pending') return { outcome: 'pending' };
+      if (result.outcome === 'pending') return { outcome: 'pending', paymentIntentId: result.paymentIntentId };
       showFailure(result.failure);
       return { outcome: 'failed', failure: result.failure };
     } catch (err: any) {
@@ -384,7 +386,7 @@ Platform.OS === 'ios'
 
       if (result.success) {
         await settleDeposit(numAmount, result.paymentIntentId, 'applePay');
-        return { outcome: 'succeeded' };
+        return { outcome: 'succeeded', paymentIntentId: result.paymentIntentId };
       } else if (result.errorCode === 'cancelled') {
         // user cancelled - no alert
         return { outcome: 'cancelled' };

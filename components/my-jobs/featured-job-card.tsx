@@ -21,6 +21,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { FOCUS, type PosterPalette } from '../../lib/themes/poster-palette'
 import type { AppTheme } from '../../lib/themes/types'
 import type { BountyLifecycleTone } from '../../lib/utils/bounty-lifecycle'
+import { PosterButton } from '../poster/poster-button'
 import { SidePill } from '../poster/side-label'
 import { ManageActionsList } from './job-bits'
 
@@ -30,6 +31,8 @@ export interface FeaturedJobCardProps {
   manageActions: ManageAction[]
   onPrimary: () => void
   onManageAction: (action: ManageAction) => void
+  /** Set when the main action goes to messages, so the job's own screen stays one tap away. */
+  onOpenJob?: () => void
 }
 
 export function toneColor(theme: AppTheme, tone: BountyLifecycleTone): string {
@@ -60,7 +63,7 @@ function flagColor(p: PosterPalette, kind: ReturnType<typeof getFeaturedFlag>['k
   }
 }
 
-export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, onManageAction }: FeaturedJobCardProps) {
+export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, onManageAction, onOpenJob }: FeaturedJobCardProps) {
   const { theme } = useAppThemeContext()
   const p = theme.poster
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -125,6 +128,8 @@ export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, 
           <Text style={s.ctaText}>{job.cta.label}</Text>
           <MaterialIcons name="arrow-forward" size={26} color={p.onFill} />
         </TouchableOpacity>
+
+        {onOpenJob ? <PosterButton kind="text" label="See the job" onPress={onOpenJob} testID="featured-job-open" /> : null}
 
         {manageActions.length > 0 ? (
           <View style={s.options}>

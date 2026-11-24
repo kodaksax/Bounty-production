@@ -129,7 +129,7 @@ export function PosterDialog({
   return (
     <AppModal visible={visible} onRequestClose={onClose} variant="dialog" dismissable={!blocking} accessibilityViewIsModal>
       <View style={s.dialog} accessibilityRole="alert" testID={testID}>
-        <Text ref={titleRef} style={s.dialogTitle} accessibilityRole="header">
+        <Text ref={titleRef} style={s.dialogTitle} accessibilityRole="header" testID={testID ? `${testID}-title` : undefined}>
           {title}
         </Text>
         {body ? <Text style={s.dialogBody}>{body}</Text> : null}

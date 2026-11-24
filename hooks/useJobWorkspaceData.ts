@@ -7,7 +7,8 @@
  * block out (the stage copy never depends on it to tell the money truth).
  */
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { isCoordinationMessage, isHireWelcomeMessage } from '../lib/my-jobs/hire-message';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { cancellationService } from '../lib/services/cancellation-service';
@@ -18,14 +19,27 @@ import { sortApplicantsLocalFirst } from '../lib/utils/applicant-distance';
 
 export interface JobConversationState {
   conversationId: string | null;
-  /** The two of them have exchanged at least one message on this job. */
+  /**
+   * One of them has written to the other since the hire. The automatic
+   * "You've been selected" message and questions asked before hiring don't
+   * count, or "agree a time" (F, H.5) would never show. True while loading or
+   * when the read fails, so a network blip never sends a job back a step.
+   */
   hasMessages: boolean;
   /** The other person's most recent readable message. */
   lastFromOther: { text: string; at: string } | null;
+  /** When the viewer last wrote, if the other person hasn't answered since. */
+  awaitingReplySince: string | null;
   loaded: boolean;
 }
 
-const EMPTY_CONVERSATION: JobConversationState = { conversationId: null, hasMessages: false, lastFromOther: null, loaded: false };
+const EMPTY_CONVERSATION: JobConversationState = {
+  conversationId: null,
+  hasMessages: true,
+  lastFromOther: null,
+  awaitingReplySince: null,
+  loaded: false,
+};
 
 /**
  * The viewer's 1:1 conversation with `otherId`, preferring this job's own
@@ -37,16 +51,25 @@ export function useJobConversation(args: {
   otherId: string | null | undefined;
   bountyId: string | null | undefined;
   enabled?: boolean;
+  /** When the helper was chosen; earlier messages aren't about agreeing a time. */
+  since?: string | null;
 }): JobConversationState & { reload: () => void } {
-  const { viewerId, otherId, bountyId, enabled = true } = args;
+  const { viewerId, otherId, bountyId, enabled = true, since = null } = args;
   const [state, setState] = useState<JobConversationState>(EMPTY_CONVERSATION);
   const [attempt, setAttempt] = useState(0);
+  const loadedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
     if (!enabled || !viewerId || !otherId || !bountyId) {
       setState({ ...EMPTY_CONVERSATION, loaded: true });
       return;
+    }
+    // A different job starts over; a reload of the same one keeps its answer.
+    const key = `${viewerId}:${otherId}:${bountyId}`;
+    if (loadedKeyRef.current !== key) {
+      loadedKeyRef.current = key;
+      setState(EMPTY_CONVERSATION);
     }
     (async () => {
       try {
@@ -58,29 +81,34 @@ export function useJobConversation(args: {
         });
         const conv = pair.find((c) => String(c.bountyId) === String(bountyId)) ?? pair[0] ?? null;
         if (!conv) {
-          if (active) setState({ ...EMPTY_CONVERSATION, loaded: true });
+          if (active) setState({ ...EMPTY_CONVERSATION, hasMessages: false, loaded: true });
           return;
         }
         const messages: Message[] = await supabaseMessaging.fetchMessages(String(conv.id));
-        const readable = messages.filter((m) => !m.isEncrypted && typeof m.text === 'string' && m.text.trim().length > 0);
+        const readable = messages.filter((m) => !m.isEncrypted && typeof m.text === 'string' && m.text.trim().length > 0 && !isHireWelcomeMessage(m.text));
         const fromOther = readable.filter((m) => String(m.senderId) === String(otherId));
+        const mine = readable.filter((m) => String(m.senderId) === String(viewerId) && isCoordinationMessage(m, since));
+        const lastMineAt = mine.map((m) => m.createdAt).sort().pop() ?? null;
+        // Any reply counts, including one that can't be read here.
+        const lastReplyAt = messages.filter((m) => String(m.senderId) === String(otherId)).map((m) => m.createdAt).sort().pop() ?? null;
         const last = fromOther.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).pop() ?? null;
         if (active) {
           setState({
             conversationId: String(conv.id),
-            hasMessages: messages.length > 0,
+            hasMessages: messages.some((m) => isCoordinationMessage(m, since)),
+            awaitingReplySince: lastMineAt && (!lastReplyAt || lastReplyAt < lastMineAt) ? lastMineAt : null,
             lastFromOther: last ? { text: last.text.trim(), at: last.createdAt } : null,
             loaded: true,
           });
         }
       } catch {
-        if (active) setState({ ...EMPTY_CONVERSATION, loaded: true });
+        if (active) setState((prev) => ({ ...prev, loaded: true }));
       }
     })();
     return () => {
       active = false;
     };
-  }, [viewerId, otherId, bountyId, enabled, attempt]);
+  }, [viewerId, otherId, bountyId, enabled, attempt, since]);
 
   const reload = React.useCallback(() => setAttempt((n) => n + 1), []);
   return { ...state, reload };

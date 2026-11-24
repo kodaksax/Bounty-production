@@ -134,9 +134,12 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   const openApplicant = React.useCallback(
     (request: BountyRequestWithDetails) => {
       setSheet(null)
-      openTarget({ kind: 'thread', side: 'posted', bountyId: String(request.bounty_id), withId: String(request.hunter_id) })
+      router.push({
+        pathname: '/postings/[bountyId]',
+        params: { bountyId: String(request.bounty_id), person: String(request.id) },
+      } as never)
     },
-    [openTarget]
+    [router]
   )
 
   const postJob = React.useCallback(() => {
@@ -184,10 +187,13 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   const runManageAction = React.useCallback(
     (action: ManageAction, job: MyJob) => {
       // Close any sheet first so an edit modal or dialog never stacks on it.
+      const sheetWasOpen = sheet !== null
       setSheet(null)
-      manage.runJobAction(action, job)
+      // iOS drops a modal presented while another is still sliding away.
+      if (sheetWasOpen && action.key === 'take_down') setTimeout(() => manage.runJobAction(action, job), 350)
+      else manage.runJobAction(action, job)
     },
-    [manage]
+    [manage, sheet]
   )
 
   const openOfferJob = React.useCallback(
@@ -248,6 +254,11 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
             manageActions={getJobManageActions(featuredJob)}
             onPrimary={() => openTarget(featuredJob.cta.target)}
             onManageAction={(action) => runManageAction(action, featuredJob)}
+            onOpenJob={
+              featuredJob.cta.target.kind === 'thread'
+                ? () => openTarget({ kind: 'workspace', side: featuredJob.side, bountyId: featuredJob.bountyId })
+                : undefined
+            }
           />
         ) : (
           <NothingNeedsYou
@@ -357,7 +368,9 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
         onOpen={openOfferJob}
         onRemove={manage.removeOffer}
         onFindWork={findWork}
+        overlay={sheet?.kind === 'offers' ? manage.confirmDialog : null}
       />
+      {sheet?.kind === 'offers' ? null : manage.confirmDialog}
       <ApplicantsSheet
         visible={sheet?.kind === 'applicants' && isActive}
         jobTitle={applicantsJob?.title ?? ''}

@@ -20,11 +20,20 @@ export const FOCUS_POLICY = {
   supportReplyTime: null as string | null,
   /**
    * Q-PRD-2: hours of silence before "You haven't heard from {helper}".
-   * DESIGN-GAP: not implemented. The handoff's E.2 id is also used for the
-   * prohibited auto-confirming payment countdown (4b); neither is built, and
-   * the two are not mapped onto each other.
+   * The screen (E.2) is built and appears as soon as this is a number. It stays
+   * null until product decides. The handoff reuses the E.2 id for the quick
+   * confirm (4b), which is a different screen: see quickConfirmSeconds.
+   * TODO(E): featuring the job on My Jobs when it goes quiet needs the sender
+   * of the last message on the conversation list.
    */
   silenceThresholdHours: null as number | null,
+  /**
+   * 4b: seconds before the quick confirm hires, and charges the balance or
+   * saved card, by itself. Built at the product owner's direction (2026-11-23);
+   * the handoff marks auto-confirming a payment as needing policy sign-off.
+   * null turns 4b off and every hire uses screen E.
+   */
+  quickConfirmSeconds: 7 as number | null,
 };
 
 /** The handoff's wording for J.2, with its placeholders. */

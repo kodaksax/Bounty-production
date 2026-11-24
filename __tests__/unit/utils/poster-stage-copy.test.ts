@@ -390,3 +390,35 @@ describe('help options (J / X.3)', () => {
     expect(helpSubtitle({ side: 'doing', otherName: 'Jordan', working: false, heldAmount: '$80' })).toBeNull();
   });
 });
+
+describe("E.2 — haven't heard from the helper", () => {
+  const quiet = () =>
+    describePosterStage(
+      input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: 'Ada R.', hasMessages: true, awaitingReplySince: '2026-11-18T08:00:00Z' })
+    );
+  afterEach(() => {
+    FOCUS_POLICY.silenceThresholdHours = null;
+  });
+  it('stays on G until a threshold is decided (Q-PRD-2)', () => {
+    expect(quiet().screenId).toBe('G');
+  });
+  it('shows once the helper has been quiet past the threshold', () => {
+    FOCUS_POLICY.silenceThresholdHours = 48;
+    const v = quiet();
+    expect(v.screenId).toBe('E.2');
+    expect(v.now).toBe("You haven't heard from Ada.");
+    expect(v.primary).toEqual(expect.objectContaining({ key: 'message', label: 'Message Ada' }));
+    expect(v.secondary[0]).toEqual(expect.objectContaining({ key: 'report_no_reply', label: "Tell us Ada hasn't replied" }));
+    FOCUS_POLICY.silenceThresholdHours = 200;
+    expect(quiet().screenId).toBe('G');
+  });
+});
+
+it('E.3: a payment still confirming replaces choosing, with only the way back', () => {
+  const v = describePosterStage(input({ applicantCount: 3, paymentConfirmingFor: 'Ada R.' }));
+  expect(v.screenId).toBe('E.3');
+  expect(v.now).toBe("We're still confirming your payment.");
+  expect(v.means).toBe("Please don't pay again. Ada isn't your helper until it's confirmed.");
+  expect(v.primary).toEqual(expect.objectContaining({ key: 'back_to_jobs', label: 'Back to My Jobs' }));
+  expect(v.show.peopleStrip).toBe(false);
+});

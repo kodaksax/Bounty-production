@@ -20,8 +20,10 @@ import { deriveCoarseVerificationStatus } from 'lib/utils/normalize-profile'
  *                   (still reachable from moments); Accept/Decline are on the card.
  *  - bounty_thread: the application opened on its own, with Accept / Pass. The
  *                   only surface `application_dismissed` fires from.
+ *  - workspace_person: one person at a time in the job workspace (stage D), with
+ *                   Choose / Not this time. Also fires `application_dismissed`.
  */
-export type ApplicationViewSurface = 'inbox_list' | 'requests_list' | 'bounty_thread'
+export type ApplicationViewSurface = 'inbox_list' | 'requests_list' | 'bounty_thread' | 'workspace_person'
 
 /** Hours between the application arriving and `now`, one decimal place. */
 export function applicationAgeHours(createdAt: unknown, now: number = Date.now()): number | undefined {

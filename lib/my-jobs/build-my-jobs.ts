@@ -17,6 +17,7 @@ import type { CompletionSubmission } from '../services/completion-service';
 import type { Bounty } from '../services/database.types';
 import type { Conversation } from '../types';
 import type { BountyLifecycleState } from '../utils/bounty-lifecycle';
+import { isHireWelcomeMessage } from './hire-message';
 import { sortJobs } from './featured-job';
 import {
   firstName,
@@ -108,6 +109,16 @@ function sentence(...parts: (string | null | undefined | false)[]): string {
   return parts.filter(Boolean).join(' ');
 }
 
+/**
+ * The two have talked since the hire. The automatic "You've been selected"
+ * message doesn't count, nor does anything from before `since` (a question
+ * asked while choosing). Mirrors useJobConversation's `hasMessages`.
+ */
+function hasCoordinated(conv: Conversation | null, since: string | null | undefined): boolean {
+  if (!conv?.lastMessage || isHireWelcomeMessage(conv.lastMessage)) return false;
+  return !(since && conv.updatedAt && new Date(conv.updatedAt).getTime() < new Date(since).getTime());
+}
+
 /** The problem overlay — a dispute (support is on it) or a cancellation request. */
 function problemStatus(lifecycle: BountyLifecycleState): JobStatusLine | null {
   if (lifecycle.status === 'cancellation_requested') {
@@ -122,7 +133,7 @@ function problemStatus(lifecycle: BountyLifecycleState): JobStatusLine | null {
 interface JobDraft {
   rank: JobRank;
   status: JobStatusLine;
-  detail: string;
+  detail: string | null;
   cta: { label: string; target: JobTarget };
   attentionSince: string | null;
 }
@@ -203,7 +214,8 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
       detail: sentence('See who they are, then choose one person.', payWhenChoosing),
       cta: {
         label: count === 1 ? 'Review the offer' : `Review the ${count} people`,
-        target: { kind: 'applicants', bountyId },
+        // F.1 → C: the workspace, then one person at a time (D).
+        target: workspace,
       },
       attentionSince: earliest(...offers.map((o) => o.created_at)),
     };
@@ -226,7 +238,15 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
     };
   } else if (bounty.status === 'in_progress') {
     const changeAsked = submission?.status === 'revision_requested';
-    draft = {
+    // F: someone is chosen and nobody has written yet, so the helper is waiting for a time.
+    if (!changeAsked && !hasCoordinated(conv, null)) draft = {
+      rank: JOB_RANK.waitingOnYou,
+      status: { icon: 'handshake', text: helper ? `You chose ${helper}` : 'You chose a helper', tone: 'action' },
+      detail: sentence(`Agree a time with ${helper ?? 'your helper'}.`, heldLine),
+      cta: { label: 'Agree a time', target: workspace },
+      attentionSince: updatedAt(bounty),
+    };
+    else draft = {
       rank: JOB_RANK.waiting,
       status: changeAsked
         ? { icon: 'edit-note', text: `You asked ${helper ?? 'your helper'} for a change`, tone: 'progress' }
@@ -253,10 +273,7 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
     draft = {
       rank: JOB_RANK.waiting,
       status: { icon: 'hourglass-empty', text: 'Waiting for offers', tone: 'progress' },
-      detail: sentence(
-        "People nearby can see it now. We'll tell you as soon as someone offers.",
-        honor ? null : 'You haven\'t paid anything yet.'
-      ),
+      detail: null,
       cta: { label: 'Open the job', target: workspace },
       attentionSince: bounty.created_at,
     };
@@ -361,7 +378,7 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
       cta: { label: poster ? `Message ${poster}` : 'Message the poster', target: thread },
       attentionSince: submission?.submitted_at ?? updatedAt(bounty),
     };
-  } else if (!conv?.lastMessage) {
+  } else if (!hasCoordinated(conv, (request as { accepted_at?: string | null }).accepted_at)) {
     // Chosen, and the two of them haven't spoken yet: agreeing a time comes first.
     draft = {
       rank: JOB_RANK.waitingOnYou,
@@ -370,7 +387,8 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
         `Agree a time with ${poster ?? 'them'}.`,
         honor ? null : `${possessive} ${amount} is already held by Bounty.`
       ),
-      cta: { label: 'Agree a time', target: thread },
+      // H.4 → H.5: the hub forwards to the work screen's time picks.
+      cta: { label: 'Agree a time', target: workspace },
       attentionSince: request.updated_at ?? updatedAt(bounty),
     };
   } else {

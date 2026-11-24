@@ -39,7 +39,7 @@ export function useApplicationListViews<T>({
   bountyRequests,
   getApplication,
 }: {
-  surface: Exclude<ApplicationViewSurface, 'bounty_thread'>
+  surface: Exclude<ApplicationViewSurface, 'bounty_thread' | 'workspace_person'>
   enabled: boolean
   bountyRequests: BountyRequestWithDetails[]
   /** Maps a list item to its pending application, or null for non-application rows. */

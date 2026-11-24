@@ -1,6 +1,7 @@
 "use client"
 
 import { CreateBountyFlow } from "app/screens/CreateBounty"
+import { useRouter } from "expo-router"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { View } from "react-native"
@@ -38,6 +39,7 @@ interface NeedHelpScreenProps {
  */
 export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav, isActive = true, entryPoint = "need_help_tab" }: NeedHelpScreenProps) {
   const insets = useSafeAreaInsets()
+  const router = useRouter()
   const { theme } = useAppThemeContext()
 
   // Bumping this remounts CreateBountyFlow so leaving the tab — by tab bar,
@@ -77,11 +79,15 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
         deliberateTap
         isActive={isActive}
         topInset={insets.top}
-        onComplete={() => {
-          // After creation, go to the main feed and refresh the public list
+        onComplete={(bountyId) => {
+          // After creation, the job's own workspace says it's live (stage A),
+          // over a refreshed feed.
           setShowBottomNav?.(true)
           setActiveScreen('bounty')
           onBountyPosted?.()
+          if (bountyId) {
+            router.push({ pathname: '/postings/[bountyId]', params: { bountyId: String(bountyId), posted: '1' } } as never)
+          }
         }}
         onCancel={() => {
           // Exit the flow: return to the feed and show nav. Leaving the tab
