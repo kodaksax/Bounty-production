@@ -55,14 +55,21 @@ export interface InvokePaymentsOptions {
 
 function generatePaymentRequestId(): string {
   try {
-    const maybeCrypto = globalThis.crypto as { randomUUID?: () => string } | undefined;
+    const maybeCrypto = globalThis.crypto as
+      | { randomUUID?: () => string; getRandomValues?: <T extends ArrayBufferView>(array: T) => T }
+      | undefined;
     if (typeof maybeCrypto?.randomUUID === 'function') {
       return `payments_${maybeCrypto.randomUUID()}`;
+    }
+    if (typeof maybeCrypto?.getRandomValues === 'function') {
+      const bytes = maybeCrypto.getRandomValues(new Uint8Array(16));
+      const suffix = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      return `payments_${Date.now()}_${suffix}`;
     }
   } catch {
     /* fall through */
   }
-  return `payments_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `payments_${Date.now()}`;
 }
 
 function getHeaderValue(headers: unknown, name: string): string | undefined {
