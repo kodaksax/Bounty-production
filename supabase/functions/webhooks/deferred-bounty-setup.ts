@@ -23,6 +23,7 @@
  */
 
 import { ensureSolePaymentMethodDefault } from '../_shared/sole-payment-method-default.ts';
+import { sendWebBountyPublished, type SendServerEvent } from '../_shared/web-marketplace-events.ts';
 
 // deno-lint-ignore no-explicit-any
 type AnyClient = any;
@@ -77,6 +78,11 @@ export interface DeferredSetupParams {
   eventId: string;
   /** Sign-in link destination for a newly created account. */
   authRedirectUrl: string;
+  /**
+   * PostHog sender for the bounty_published this creates. index.ts passes the
+   * real one; when absent nothing is sent.
+   */
+  sendEvent?: SendServerEvent;
 }
 
 export async function handleDeferredBountySetup(params: DeferredSetupParams): Promise<void> {
@@ -404,6 +410,17 @@ export async function handleDeferredBountySetup(params: DeferredSetupParams): Pr
     bountyId: (created as { bounty_id?: string } | null)?.bounty_id,
     newlyCreated: (created as { created?: boolean } | null)?.created,
   });
+
+  // First creation only (a replay returns created=false); never throws.
+  if (params.sendEvent) {
+    await sendWebBountyPublished({
+      supabase,
+      bountyId: (created as { bounty_id?: string } | null)?.bounty_id,
+      created: (created as { created?: boolean } | null)?.created,
+      source: 'webhooks',
+      send: params.sendEvent,
+    });
+  }
 }
 
 type ResolvedPoster = { posterId: string; via: 'authed' | 'new' | 'existing' };

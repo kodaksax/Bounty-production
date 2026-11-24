@@ -8,7 +8,7 @@
 //
 // Deno-only (reads env, calls fetch). The DB client is passed in.
 
-declare const Deno: any
+import { capture } from './posthog-capture.ts'
 
 type Json = Record<string, unknown>
 
@@ -90,23 +90,7 @@ async function notifySupportCase(
   return { id, created: true }
 }
 
-// Server-side analytics, PostHog HTTP capture (same pattern as app-link /
-// process-notification). Properties are ids and enums only — never a name,
-// email, phone, address or free text. Fire-and-forget.
-export function capture(distinctId: string, event: string, properties: Json): void {
-  const apiKey = Deno.env.get('POSTHOG_PROJECT_API_KEY')
-  if (!apiKey) return
-  const host = Deno.env.get('POSTHOG_HOST') ?? 'https://us.i.posthog.com'
-  const task = fetch(`${host}/capture/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(3000),
-    body: JSON.stringify({
-      api_key: apiKey,
-      event,
-      properties: { distinct_id: distinctId, platform: 'web', app_env: 'production', source: 'poster-web', ...properties },
-    }),
-  }).catch(() => {})
-  const runtime = (globalThis as any).EdgeRuntime
-  if (runtime?.waitUntil) runtime.waitUntil(task)
-}
+// The PostHog capture helper moved to posthog-capture.ts (optional uuid and
+// timestamp, app_env from resolveAppEnv). Re-exported so existing imports
+// (poster-web, email-inbound, geocode-bounties) are unchanged.
+export { capture, sendServerEvent } from './posthog-capture.ts'

@@ -26,6 +26,8 @@ function harness(
     held?: any;
     authed?: boolean;
     userMetadata?: Record<string, unknown>;
+    bountyRow?: any;
+    sendEvent?: jest.Mock;
   } = {}
 ) {
   const writes: Array<{ table: string; op: string; payload?: any; filters: any[] }> = [];
@@ -49,7 +51,9 @@ function harness(
       in: (...a: any[]) => (rec.filters.push(['in', ...a]), builder),
       maybeSingle: () =>
         Promise.resolve(
-          name === 'pending_bounties'
+          name === 'bounties'
+            ? { data: o.bountyRow ?? null, error: null }
+            : name === 'pending_bounties'
             ? {
                 data:
                   o.held === undefined
@@ -104,6 +108,7 @@ function harness(
       stripe,
       eventId: 'evt_1',
       authRedirectUrl: 'https://example.test/manage',
+      sendEvent: o.sendEvent,
       session: {
         id: 'cs_1',
         setup_intent: 'seti_1',
@@ -369,6 +374,74 @@ describe('signed-out submission matching an existing account', () => {
     expect(h.stripe.paymentMethods.attach).toHaveBeenCalledWith('pm_1', {
       customer: 'cus_created',
     });
+  });
+});
+
+describe('bounty_published for a card-at-post web bounty', () => {
+  const row = {
+    id: 'b1',
+    poster_id: POSTER,
+    user_id: POSTER,
+    amount: '45.00',
+    category: 'labor',
+    funding_mode: 'at_accept',
+    created_at: '2026-11-24T15:00:00.000+00:00',
+  };
+
+  it('sends it once the bounty exists, as the poster, from webhooks', async () => {
+    const sendEvent = jest.fn();
+    const h = harness({ bountyRow: row, sendEvent });
+    await h.run();
+
+    expect(sendEvent).toHaveBeenCalledTimes(1);
+    const e = sendEvent.mock.calls[0][0];
+    expect(e.event).toBe('bounty_published');
+    expect(e.distinct_id).toBe(POSTER);
+    expect(e.properties).toEqual({
+      role: 'poster',
+      bounty_id: 'b1',
+      amount: 45,
+      category: 'labor',
+      funding_mode: 'at_accept',
+      surface: 'web_checkout',
+      source: 'webhooks',
+    });
+    // Read after the RPC, never before it.
+    const rpcOrder = h.rpc.mock.invocationCallOrder.at(-1)!;
+    const bountyReads = h.supabase.from.mock.calls
+      .map((c: any[], i: number) => [c[0], h.supabase.from.mock.invocationCallOrder[i]])
+      .filter(([t]: any[]) => t === 'bounties');
+    expect(bountyReads.length).toBe(1);
+    expect(bountyReads[0][1]).toBeGreaterThan(rpcOrder);
+  });
+
+  it('sends nothing on a replay (created=false)', async () => {
+    const sendEvent = jest.fn();
+    const h = harness({ bountyRow: row, sendEvent, rpc: { data: [{ bounty_id: 'b1', created: false }], error: null } });
+    await h.run();
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing when the RPC fails, terminal or transient', async () => {
+    const sendEvent = jest.fn();
+    await harness({ bountyRow: row, sendEvent, rpc: { data: null, error: { code: '23514', message: 'rule' } } }).run();
+    await expect(
+      harness({ bountyRow: row, sendEvent, rpc: { data: null, error: { code: '57014', message: 'timeout' } } }).run()
+    ).rejects.toBeTruthy();
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing for a post held for sign-in (no bounty yet)', async () => {
+    const sendEvent = jest.fn();
+    await harness({ bountyRow: row, sendEvent, authed: false, findUser: POSTER }).run();
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+
+  it('a failing send does not fail the webhook', async () => {
+    const sendEvent = jest.fn(() => {
+      throw new Error('posthog down');
+    });
+    await expect(harness({ bountyRow: row, sendEvent }).run()).resolves.toBeUndefined();
   });
 });
 

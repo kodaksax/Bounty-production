@@ -391,3 +391,68 @@ What it does not cover:
   or dispatch. Its only use is gating the poster quality nudge (score below 70
   in `fn_escalate_stale_bounty_liquidity_unlocked`). Do not read a rank effect
   into it.
+
+---
+
+# Server-side web events — 2026-11-24
+
+From the 2026-11-23 PostHog audit. A bounty posted through website checkout,
+and a hire or completion approval made on the web poster page
+(`bountyfinder.net/manage/`), ran no app code, so no client sent the canonical
+event. In 2026-10-21 → 11-22 the ledger had 29 `bounty.posted` rows against 24
+`bounty_published` events: the 5 missing were 3 web-checkout posts and 2 later
+deleted. Two web-approved completions had no `bounty_completed`.
+
+The server now sends the canonical names for those steps. They follow the
+server `signup_completed` rules: `distinct_id` is the Supabase user id; the
+uuid is a UUIDv5 of `'<event>:<row id>'`
+(`supabase/functions/_shared/web-marketplace-events.ts`), so a retried send is
+dropped by PostHog rather than counted twice; `app_env` comes from
+`resolveAppEnv`; and `source` names the sending function. Ids, amounts and
+enums only: no email, title or other free text.
+
+| Event | Sent by | When | `surface` | `source` | uuid key |
+|---|---|---|---|---|---|
+| `bounty_published` | `webhooks` | `checkout.session.completed` (payment mode, `fn_create_bounty_from_pending`) or setup mode (`fn_create_bounty_from_pending_deferred`) **created** the bounty. A replay (`created = false`) sends nothing | `web_checkout` | `webhooks` | `bounty_published:<bounty id>` |
+| `bounty_published` | `poster-web` | the owner confirmed a post that was held for sign-in (`/held-posts/:id/confirm`, `fn_claim_pending_bounties` outcome `created`) | `web_checkout` | `poster-web` | `bounty_published:<bounty id>` |
+| `application_accepted` | `poster-web` | `/requests/:id/accept` outcome `accepted`. `already_accepted` (a repeat click) and every failure send nothing | `web_poster_page` | `poster-web` | `application_accepted:<request id>` |
+| `bounty_completed` | `poster-web` | `/bounties/:id/confirm-completion` and this call's guarded update moved the bounty to `completed`: the honor path, or `paid`. `payment_on_its_way`, a blocked payout, `no_submission`, "already complete" and failures send nothing | `web_poster_page` | `poster-web` | `bounty_completed:<bounty id>` |
+
+Properties:
+
+- `bounty_published`: `role: 'poster'`, `bounty_id`, `amount`, `category`,
+  `funding_mode`, `surface`, `source`. The timestamp is `bounties.created_at`.
+  The bounty row is read back before sending, so the event cannot exist
+  without the row.
+- `application_accepted`: the app's names (`hooks/useAcceptRequest.ts`):
+  `role: 'poster'`, `bounty_id`, `application_id` (= `bounty_requests.id`),
+  `hunter_id`, `is_for_honor`, `amount`, plus `surface` and `source`. The app's
+  selection-quality properties (`hunterVerified`, `applicantCount`, …) are
+  not sent.
+- `bounty_completed`: `bounty_id`, `amount`, `isForHonor`, `via: 'web_confirm'`,
+  `surface`, `source`. The timestamp is the `completed_at` the update wrote.
+
+Reading them:
+
+- **No filter is needed to count these events.** The app never sends a
+  `source` on `bounty_published`, `application_accepted` or `bounty_completed`,
+  and never sends these surfaces, so web and app events do not overlap.
+  To split by surface: `source IN ('webhooks', 'poster-web')` is the web, and an
+  unset `source` is the app.
+- The held-post `bounty_published` has the same uuid key as the webhook one,
+  so a bounty can never count twice across the two sources.
+- The web diagnostics stay as they were: `web_applicant_decision_completed`,
+  `web_completion_confirmed`, `web_held_post_decision`. They sit next to the
+  canonical events the way `AUTH_LOGIN_SUCCESS` sits next to `user_logged_in`.
+  Funnels use the canonical names.
+- **`app_env` on every server `capture()`** (poster-web, email-inbound,
+  geocode-bounties, webhooks) was hard-coded to `production` until this
+  change. Staging sends are now `staging`. Production is unchanged: the server
+  `signup_completed`, which uses the same resolver, has reported `production`
+  on prod since 2026-10-20.
+- `bounty_events.source` reads `app` for web-created bounties. That is not
+  the surface: `trg_bounty_events_from_bounties` writes the literal `'app'` for
+  every INSERT. Use `pending_bounties.resulting_bounty_id` to find web posts in
+  SQL.
+- Not backfilled. Web posts and decisions before the deploy stay missing in
+  PostHog.

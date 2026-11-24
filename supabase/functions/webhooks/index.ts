@@ -26,6 +26,8 @@ import {
 } from '../_shared/stripe-dispute.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
 import { handleDeferredBountySetup } from './deferred-bounty-setup.ts';
+import { sendServerEvent } from '../_shared/posthog-capture.ts';
+import { sendWebBountyPublished } from '../_shared/web-marketplace-events.ts';
 import { linkCheckoutCustomerAndCard } from './checkout-customer.ts';
 import { ensureSolePaymentMethodDefault } from '../_shared/sole-payment-method-default.ts';
 import {
@@ -4020,6 +4022,7 @@ Deno.serve(async (req: Request) => {
             authRedirectUrl:
               Deno.env.get('BOUNTY_AUTH_REDIRECT_URL') ??
               'https://www.bountyfinder.net/manage/?utm_source=bounty_email&utm_medium=email&utm_campaign=account_access',
+            sendEvent: sendServerEvent,
           });
           break;
         }
@@ -4331,6 +4334,17 @@ Deno.serve(async (req: Request) => {
           customerLinked: customerLink.linked,
           customerSplit: customerLink.split,
           savedCard: !!customerLink.savedCardId,
+        });
+
+        // The canonical bounty_published for a web post (no app ran, so no
+        // client sent it). First creation only, after reading the row back;
+        // never throws, so it cannot change what Stripe is told.
+        await sendWebBountyPublished({
+          supabase,
+          bountyId: created?.bounty_id,
+          created: created?.created,
+          source: 'webhooks',
+          send: sendServerEvent,
         });
         break;
       }
