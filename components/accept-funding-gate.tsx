@@ -36,6 +36,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { ErrorBanner } from 'components/error-banner';
 import { ConsequenceList, FlowTitle } from 'components/poster/blocks';
+import { SlideInScreen } from 'components/ui/slide-in-screen';
 import { QuickConfirm } from 'components/poster/quick-confirm';
 import { MoneyLine } from 'components/poster/four-questions';
 import { PaymentMethodsModal } from 'components/payment-methods-modal';
@@ -110,7 +111,9 @@ const clamp = (value: number, min: number, max: number) =>
  * window height minus the status bar and the floating BottomNav — rather than
  * fixed points, so the whole thing (hunter, amount, "held until you approve",
  * the balance rows AND the pay / "Not now" buttons) is on screen at once
- * without scrolling. A 320×568 SE gets a tighter sheet; a 430×932 Pro Max a
+ * without scrolling where it fits. Body text stays 17pt or larger so older
+ * posters can read it; on a small phone the info scrolls and the buttons stay
+ * pinned. A 320×568 SE gets a tighter sheet; a 430×932 Pro Max a
  * roomier one. Nothing here is allowed to push the buttons below the fold: a
  * poster who has to scroll to find "Pay" is a poster who taps nothing.
  */
@@ -126,26 +129,39 @@ function getGateMetrics(width: number, usableHeight: number) {
     horizontalPadding: clamp(width * 0.06, 16, 28),
     topPadding: clamp(h * 0.02, 8, 24),
     sectionGap: clamp(h * 0.016, compact ? 6 : 10, 16),
-    cardPaddingVertical: clamp(h * 0.024, compact ? 10 : 14, 24),
+    cardPaddingVertical: clamp(h * 0.034, compact ? 16 : 22, 30),
     rowPaddingVertical: clamp(h * 0.014, compact ? 7 : 9, 12),
-    eyebrowFontSize: clamp(h * 0.017, 11, 12),
+    eyebrowFontSize: clamp(h * 0.021, 14, 15),
     titleFontSize: clamp(Math.min(width * 0.068, h * 0.032), 20, 28),
     subtitleFontSize: clamp(h * 0.019, 12, 14),
     amountFontSize: clamp(Math.min(width * 0.11, h * 0.052), 30, 44),
     captionFontSize: clamp(h * 0.018, 12, 13),
-    heldFontSize: clamp(h * 0.02, 13, 14),
-    rowFontSize: clamp(h * 0.02, 13, 14),
-    bodyFontSize: clamp(h * 0.019, 12, 14),
-    buttonPaddingVertical: clamp(h * 0.019, compact ? 12 : 14, 18),
-    buttonFontSize: clamp(h * 0.022, 15, 16),
-    secondaryPaddingVertical: clamp(h * 0.014, compact ? 8 : 10, 14),
+    heldFontSize: clamp(h * 0.024, 15, 17),
+    rowFontSize: clamp(h * 0.028, 17, 19),
+    bodyFontSize: clamp(h * 0.027, 17, 19),
+    buttonPaddingVertical: clamp(h * 0.026, compact ? 16 : 18, 22),
+    buttonFontSize: clamp(h * 0.032, 19, 22),
+    secondaryPaddingVertical: clamp(h * 0.02, compact ? 12 : 14, 16),
     avatarSize: clamp(Math.min(width * 0.13, h * 0.06), 40, 52),
   };
 }
 
 type GateMetrics = ReturnType<typeof getGateMetrics>;
 
-export function AcceptFundingGate({ gate, otherApplicantNames, quickConfirm, onLeavePending }: AcceptFundingGateProps) {
+/** The gate takes over its host's screen, so it slides in like a pushed route. */
+export function AcceptFundingGate({ hostSlides = false, ...props }: AcceptFundingGateProps & {
+  /** The host already slides the gate in over its own screen. */
+  hostSlides?: boolean;
+}) {
+  if (hostSlides) return <AcceptFundingGateContent {...props} />;
+  return (
+    <SlideInScreen>
+      <AcceptFundingGateContent {...props} />
+    </SlideInScreen>
+  );
+}
+
+function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onLeavePending }: AcceptFundingGateProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -742,25 +758,25 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       borderWidth: 1,
       borderRadius: 16,
       paddingVertical: metrics.cardPaddingVertical,
-      paddingHorizontal: 16,
+      paddingHorizontal: 20,
       gap: metrics.sectionGap,
     },
     promiseSummary: {
       color: theme.text,
-      fontSize: metrics.rowFontSize + 1,
-      lineHeight: metrics.rowFontSize + 7,
+      fontSize: metrics.rowFontSize + 4,
+      lineHeight: metrics.rowFontSize + 12,
       fontWeight: '700',
     },
     promiseSource: {
       color: theme.text,
       fontSize: metrics.bodyFontSize,
-      lineHeight: metrics.bodyFontSize + 6,
+      lineHeight: metrics.bodyFontSize + 8,
       fontWeight: '600',
     },
     promiseHold: {
       color: theme.textSecondary,
       fontSize: metrics.bodyFontSize,
-      lineHeight: metrics.bodyFontSize + 6,
+      lineHeight: metrics.bodyFontSize + 8,
     },
     amount: { color: theme.text, fontSize: metrics.amountFontSize, fontWeight: '800' },
     amountCaption: { color: theme.textSecondary, fontSize: metrics.captionFontSize },
@@ -863,8 +879,8 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       fontWeight: '600',
     },
     secondaryButtonText: {
-      color: theme.textSecondary,
-      fontSize: metrics.buttonFontSize - 1,
+      color: theme.text,
+      fontSize: metrics.buttonFontSize - 2,
       fontWeight: '600',
     },
   });

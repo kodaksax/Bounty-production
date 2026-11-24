@@ -4,6 +4,8 @@
  * "agree a time" step (poster F, hunter H.4 / H.5) lasts until one of them
  * writes a message of their own after the hire.
  */
+import { parseServerTimestamp } from '../utils/bounty-thread-events';
+
 const PREFIX = 'Welcome! You\'ve been selected for: "';
 
 export function buildHireWelcomeMessage(title: string | null | undefined): string {
@@ -21,7 +23,9 @@ export function isCoordinationMessage(
 ): boolean {
   if (isHireWelcomeMessage(message.text)) return false;
   if (!since || !message.createdAt) return true;
-  const at = new Date(message.createdAt).getTime();
-  const from = new Date(since).getTime();
+  // accepted_at is a timestamp without a zone (UTC): read as local time it
+  // lands hours after the hire, and the first messages would not count.
+  const at = parseServerTimestamp(message.createdAt);
+  const from = parseServerTimestamp(since);
   return Number.isNaN(at) || Number.isNaN(from) || at >= from;
 }

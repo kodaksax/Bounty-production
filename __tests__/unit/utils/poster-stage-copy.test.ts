@@ -15,7 +15,7 @@ import {
   othersCloseLine,
   POSTER_UNPAID,
   posterHeaderMeta,
-  timePickMessage,
+  timePickActions, timePickMessage,
   type PosterStageInput,
 } from '../../../lib/utils/poster-stage-copy';
 
@@ -138,7 +138,8 @@ describe('after choosing someone', () => {
         stage: 'Step 3 of 5 · Agreeing a time',
         now: 'Agree on a time with Ada.',
         means: "Ada needs to know when to come. Pick what suits you and we'll send it to Ada as a message.",
-        money: { kind: 'held', text: 'Your $60 is with Bounty. Nobody is paid until you approve.' },
+        // No money line on step 3: only the time to agree.
+        money: null,
       })
     );
     expect(v.primary?.label).toBe('Send to Ada');
@@ -421,4 +422,15 @@ it('E.3: a payment still confirming replaces choosing, with only the way back', 
   expect(v.means).toBe("Please don't pay again. Ada isn't your helper until it's confirmed.");
   expect(v.primary).toEqual(expect.objectContaining({ key: 'back_to_jobs', label: 'Back to My Jobs' }));
   expect(v.show.peopleStrip).toBe(false);
+});
+
+describe('agree-a-time buttons', () => {
+  const send = { key: 'send_time', label: 'Send to Ada' };
+  const own = { key: 'write_own', label: 'Write my own message' };
+  it('sends a picked time, with writing your own as the alternative', () => {
+    expect(timePickActions(send, [own], 'Saturday morning', 'Ada')).toEqual({ primary: send, secondary: [own] });
+  });
+  it('"Something else" says it opens messages, once', () => {
+    expect(timePickActions(send, [own], 'Something else', 'Ada')).toEqual({ primary: { ...send, label: 'Write to Ada' }, secondary: [] });
+  });
 });

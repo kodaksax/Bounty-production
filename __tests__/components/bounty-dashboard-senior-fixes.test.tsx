@@ -135,7 +135,7 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn(), markSent: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
@@ -283,12 +283,13 @@ describe('Fix 2: Payment card', () => {
     expect(within(screen.getByTestId('bounty-payment-state')).queryByText(/poster_username/)).toBeNull();
   });
 
-  it('a hired job keeps the existing escrow line, naming the hunter', () => {
+  it('a hired job still agreeing a time (step 3) has no money line', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
     mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null };
     render(<BountyDashboard />);
     openOtherOptions();
-    expect(screen.getByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
+    expect(screen.getByText('Agree on a time with ana_hunts.')).toBeTruthy();
+    expect(screen.queryByTestId('bounty-payment-state')).toBeNull();
     // Past the open stage the server read isn't needed.
     expect(mockPlan).not.toHaveBeenCalled();
   });

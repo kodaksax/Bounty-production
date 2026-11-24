@@ -146,38 +146,43 @@ export function PeopleStrip({
   people,
   selectedKey,
   onSelect,
+  labelOnly = false,
 }: {
   label: string;
   people: StripPerson[];
   selectedKey?: string | null;
   onSelect?: (person: StripPerson) => void;
+  /** Just the label: with one person already shown below, there is nobody to pick. */
+  labelOnly?: boolean;
 }) {
   const { p, s } = usePosterStyles();
   return (
     <View style={s.strip} testID="people-strip">
       <SectionLabel>{label}</SectionLabel>
-      <View style={s.stripGrid}>
-        {people.map((person) => {
-          const on = person.key === selectedKey;
-          return (
-            <TouchableOpacity
-              key={person.key}
-              onPress={onSelect ? () => onSelect(person) : undefined}
-              disabled={!onSelect}
-              style={[s.stripCell, { backgroundColor: on ? p.card : 'transparent', borderColor: on ? p.g : p.line }]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: on }}
-              accessibilityLabel={on ? `${person.name}, showing` : `See ${person.name}`}
-              testID={`person-${person.key}`}
-            >
-              <PersonAvatar uri={person.avatarUri} initials={initialsOf(person.name)} size={42} ring={2} />
-              <Text style={[s.stripName, { fontWeight: on ? '800' : '600' }]} numberOfLines={1}>
-                {person.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {labelOnly ? null : (
+        <View style={s.stripGrid}>
+          {people.map((person) => {
+            const on = person.key === selectedKey;
+            return (
+              <TouchableOpacity
+                key={person.key}
+                onPress={onSelect ? () => onSelect(person) : undefined}
+                disabled={!onSelect}
+                style={[s.stripCell, { backgroundColor: on ? p.card : 'transparent', borderColor: on ? p.g : p.line }]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={on ? `${person.name}, showing` : `See ${person.name}`}
+                testID={`person-${person.key}`}
+              >
+                <PersonAvatar uri={person.avatarUri} initials={initialsOf(person.name)} size={42} ring={2} />
+                <Text style={[s.stripName, { fontWeight: on ? '800' : '600' }]} numberOfLines={1}>
+                  {person.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }

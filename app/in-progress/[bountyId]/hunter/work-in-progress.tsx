@@ -348,6 +348,8 @@ export default function HunterWorkInProgressScreen() {
               bountyId: routeBountyId,
               text: timePickMessage(posterFirst ?? 'there', pick),
             });
+            // Sent: the job moves to the next step, and the thread opens on top.
+            jobConversation.markSent();
             jobConversation.reload();
             openThread();
           } catch {

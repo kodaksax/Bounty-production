@@ -166,7 +166,7 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, hasMessages: false, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn(), markSent: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
@@ -318,8 +318,9 @@ describe('Unfunded job (pay when you choose): open → hired → submitted → r
       applicationCount: 0,
     });
     // The page re-read: no stale "You haven't paid", no take-down, the
-    // money is now described as held for the hired hunter.
-    expect(await screen.findByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
+    // step is now agreeing a time, which has no money line.
+    expect(await screen.findByText('Agree on a time with ana_hunts.')).toBeTruthy();
+    expect(screen.queryByTestId('bounty-payment-state')).toBeNull();
     expect(screen.queryByText(/You haven't paid anything yet\./)).toBeNull();
     expect(screen.queryByLabelText('Take this job down')).toBeNull();
     expect(screen.getByTestId('bounty-manage-locked')).toBeTruthy();

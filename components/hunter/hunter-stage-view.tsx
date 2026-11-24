@@ -13,7 +13,7 @@ import * as React from 'react';
 import { firstName, formatJobDay, getBountyCategoryIcon, getBountyCoverUri } from '../../lib/my-jobs/format';
 import type { IconName } from '../../lib/my-jobs/types';
 import { HUNTER_TIME_PICKS, hunterHeaderMeta, type HunterActionKey, type HunterStageView } from '../../lib/utils/hunter-stage-copy';
-import { formatClock, timePickMessage } from '../../lib/utils/poster-stage-copy';
+import { formatClock, TIME_PICK_OTHER, timePickActions, timePickMessage } from '../../lib/utils/poster-stage-copy';
 import {
   FourQuestions,
   HelpSheet,
@@ -98,8 +98,7 @@ export function HunterStageScreen(props: HunterStageViewProps) {
       testID="hunter-workspace"
       footer={
         <StageFooter
-          primary={view.primary}
-          secondary={view.secondary}
+          {...timePickActions(view.primary, view.secondary, props.pick ?? HUNTER_TIME_PICKS[0], poster)}
           onAction={props.onAction}
           busyKey={props.busyKey ?? null}
         />
@@ -133,14 +132,17 @@ export function HunterStageScreen(props: HunterStageViewProps) {
       {view.show.timePicks && props.onPick ? (
         <>
           <TimePicks options={HUNTER_TIME_PICKS} selected={props.pick ?? HUNTER_TIME_PICKS[0]} onSelect={props.onPick} />
-          {props.pick !== 'Something else' ? (
-            <NoteBox
-              tone="bg"
-              icon="chat-bubble-outline"
-              text={`“${timePickMessage(Poster, props.pick ?? HUNTER_TIME_PICKS[0])}”`}
-              testID="time-pick-preview"
-            />
-          ) : null}
+          <NoteBox
+            tone="bg"
+            icon="chat-bubble-outline"
+            title={props.pick === TIME_PICK_OTHER ? null : `Your message to ${poster}`}
+            text={
+              props.pick === TIME_PICK_OTHER
+                ? `We'll open your messages so you can tell ${poster} what suits you.`
+                : `“${timePickMessage(firstName(posterName) ?? 'there', props.pick ?? HUNTER_TIME_PICKS[0])}”`
+            }
+            testID="time-pick-preview"
+          />
         </>
       ) : null}
 

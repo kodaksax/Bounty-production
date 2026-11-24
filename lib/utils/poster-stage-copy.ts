@@ -118,6 +118,26 @@ export function posterHeldLine(amount: string): string {
  */
 export const POSTER_TIME_PICKS = ['Saturday morning', 'Sunday morning', 'A weekday', 'Something else'] as const;
 
+export const TIME_PICK_OTHER = 'Something else';
+
+/**
+ * The agree-a-time buttons for the current pick. "Something else" sends
+ * nothing by itself, so its button says what it does: open messages.
+ */
+export function timePickActions<A extends { key: string; label: string }>(
+  primary: A | null,
+  secondary: A[],
+  pick: string,
+  name: string
+): { primary: A | null; secondary: A[] } {
+  if (primary?.key !== 'send_time' || pick !== TIME_PICK_OTHER) return { primary, secondary };
+  return {
+    primary: { ...primary, label: `Write to ${name}` },
+    // The same thing twice would only make them choose between two equals.
+    secondary: secondary.filter((a) => a.key !== 'write_own'),
+  };
+}
+
 /**
  * "Hi Ada, Saturday morning suits me. What time works for you?" A pick that
  * starts with an article reads mid-sentence ("a weekday suits me").
@@ -324,7 +344,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           stage: 'Step 3 of 5 · Agreeing a time',
           now: `Agree on a time with ${helper}.`,
           means: `${Helper} needs to know when to come. Pick what suits you and we'll send it to ${helper} as a message.`,
-          money: held,
+          money: null,
           after: null,
           primary: action('send_time', `Send to ${helper}`, 'primary'),
           secondary: [action('write_own', 'Write my own message', 'text')],

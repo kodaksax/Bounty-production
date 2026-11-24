@@ -15,6 +15,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SlideInScreen } from './ui/slide-in-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
 import { useHapticFeedback } from '../lib/haptic-feedback';
@@ -581,10 +582,11 @@ export function PosterReviewModal({
     <>
       <Modal
         visible={visible}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        transparent
+        animationType="none"
         onRequestClose={handleRequestClose}
       >
+        <SlideInScreen>
         <View style={[s.container, { paddingTop: insets.top }]}>
           {/* Header */}
           <View style={s.header}>
@@ -873,6 +875,7 @@ export function PosterReviewModal({
           attachment={selectedAttachment}
           onClose={() => { setViewerVisible(false); setSelectedAttachment(null); }}
         />
+        </SlideInScreen>
       </Modal>
     </>
   );

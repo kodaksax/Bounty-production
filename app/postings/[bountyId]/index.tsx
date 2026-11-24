@@ -50,6 +50,7 @@ import {
   type OtherOption,
 } from '../../../components/poster';
 import { useConfirmDialog } from '../../../components/poster/confirm-dialog';
+import { PushTransition } from '../../../components/ui/slide-in-screen';
 import { PosterReviewModal } from '../../../components/poster-review-modal';
 import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useAuthContext } from '../../../hooks/use-auth-context';
@@ -96,7 +97,7 @@ import {
   formatClock,
   POSTER_TIME_PICKS,
   posterHeaderMeta,
-  timePickMessage,
+  TIME_PICK_OTHER, timePickActions, timePickMessage,
   type OpenJobCharge,
   type PosterActionKey,
 } from '../../../lib/utils/poster-stage-copy';
@@ -693,7 +694,7 @@ export default function BountyDashboard() {
           return;
         case 'send_time': {
           if (!helperId || !currentUserId) return;
-          if (pick === 'Something else') {
+          if (pick === TIME_PICK_OTHER) {
             openThread(helperId);
             return;
           }
@@ -705,6 +706,8 @@ export default function BountyDashboard() {
               bountyId: routeBountyId,
               text: timePickMessage(helperFirst, pick),
             });
+            // Sent: the job moves to the next step, and the thread opens on top.
+            conversation.markSent();
             conversation.reload();
             openThread(helperId);
           } catch {
@@ -792,32 +795,7 @@ export default function BountyDashboard() {
   );
 
   // ── States ────────────────────────────────────────────────────────────────
-  if (acceptFundingGate.active) {
-    return (
-      <AcceptFundingGate
-        gate={acceptFundingGate}
-        otherApplicantNames={applicants
-          .filter((r) => personIndex === null || r.id !== applicants[personIndex]?.id)
-          .map((r) => r.profile?.username ?? '')
-          .filter(Boolean)}
-        onLeavePending={() => router.replace(MY_JOBS_ROUTE as never)}
-        quickConfirm={
-          bounty
-            ? {
-                jobTitle: bounty.title,
-                jobIcon: getBountyCategoryIcon(bounty.category),
-                sub: shownPerson
-                  ? describeApplicantBrief(
-                      describeApplicant(shownPerson, { index: 0, total: 1, verified: false, online: bounty.work_type === 'online' })
-                    )
-                  : null,
-              }
-            : undefined
-        }
-      />
-    );
-  }
-
+  const renderScreen = () => {
   if (isAuthLoading || (isLoading && !bounty)) {
     return <ScreenLoader label="Loading your job…" />;
   }
@@ -891,6 +869,7 @@ export default function BountyDashboard() {
 
   // ── D: one person at a time ──────────────────────────────────────────────
   const person = shownPerson;
+  let personScreen: React.ReactNode = null;
   if (person && personIndex !== null) {
     const personView = describeApplicant(person, {
       index: personIndex,
@@ -903,7 +882,7 @@ export default function BountyDashboard() {
       online: bounty.work_type === 'online',
     });
     const busy = busyAction === 'choose' || busyAction === 'pass';
-    return (
+    personScreen = (
       <WorkspaceLayout
         testID="poster-person-view"
         footer={
@@ -939,6 +918,7 @@ export default function BountyDashboard() {
           label="WHO OFFERED"
           people={applicants.map((r) => ({ key: String(r.id), name: firstName(r.profile?.username) ?? 'Someone', avatarUri: r.profile?.avatar ?? null }))}
           selectedKey={String(person.id)}
+          labelOnly={applicants.length === 1}
           onSelect={(chosen) => setPersonIndex(Math.max(0, applicants.findIndex((r) => String(r.id) === chosen.key)))}
         />
         <ApplicantProfile
@@ -1015,17 +995,24 @@ export default function BountyDashboard() {
           : `You chose ${helperFirst} and paid ${formatJobAmount(bounty.amount)} into Bounty`,
     });
   }
+  const talkDay = formatJobDay(conversation.firstTalk?.at);
+  if (talkDay && conversation.firstTalk && helperName) {
+    // Not "agreed Saturday": an agreed time isn't stored, only that they wrote.
+    story.push({
+      when: capitalizeDay(talkDay),
+      what: conversation.firstTalk.mine ? `You messaged ${helperFirst}` : `${HelperFirst} messaged you`,
+    });
+  }
   const lastMessage = conversation.lastFromOther;
 
-  return (
+  const workspace = (
     <WorkspaceLayout
       refreshing={isRefreshing}
       onRefresh={onRefresh}
       testID="poster-workspace"
       footer={
         <StageFooter
-          primary={view.primary}
-          secondary={view.secondary}
+          {...timePickActions(view.primary, view.secondary, pick, helperFirst)}
           onAction={(key) => void handleAction(key)}
           busyKey={busyAction && busyAction !== 'delete' && busyAction !== 'choose' && busyAction !== 'pass' ? busyAction : null}
         />
@@ -1069,9 +1056,17 @@ export default function BountyDashboard() {
       {view.show.timePicks ? (
         <>
           <TimePicks options={POSTER_TIME_PICKS} selected={pick} onSelect={setPick} />
-          {pick !== 'Something else' ? (
-            <NoteBox tone="bg" icon="chat-bubble-outline" text={`“${timePickMessage(helperFirst, pick)}”`} testID="time-pick-preview" />
-          ) : null}
+          <NoteBox
+            tone="bg"
+            icon="chat-bubble-outline"
+            title={pick === TIME_PICK_OTHER ? null : `Your message to ${helperFirst}`}
+            text={
+              pick === TIME_PICK_OTHER
+                ? `We'll open your messages so you can tell ${helperFirst} what suits you.`
+                : `“${timePickMessage(helperFirst, pick)}”`
+            }
+            testID="time-pick-preview"
+          />
         </>
       ) : null}
 
@@ -1103,7 +1098,7 @@ export default function BountyDashboard() {
         <OtherOptions items={moreItems} initiallyOpen={view.moreOpen} testID="bounty-manage-actions" />
       ) : working && helperId ? (
         <Text style={s.smallMuted} testID="bounty-manage-locked">
-          {`${HelperFirst} is working on this, so it can't be edited or taken down. If something's wrong, tap Help.`}
+          {`${view.show.timePicks ? `You chose ${helperFirst}` : `${HelperFirst} is working on this`}, so it can't be edited or taken down. If something's wrong, tap Help.`}
         </Text>
       ) : null}
 
@@ -1161,7 +1156,7 @@ export default function BountyDashboard() {
       )}
 
       <HelpSheet
-        visible={helpOpen}
+        visible={helpOpen && !personScreen}
         onClose={() => setHelpOpen(false)}
         subtitle={helpSubtitle({ side: 'posted', otherName: helperName ? helperFirst : null, working: working && !!helperId, heldAmount })}
         options={helpOptions.map((o) => ({ ...o, icon: o.icon as IconName, onPress: () => onHelpOption(o) }))}
@@ -1169,6 +1164,43 @@ export default function BountyDashboard() {
       />
       {confirmDialog}
     </WorkspaceLayout>
+  );
+  return <PushTransition base={workspace} top={personScreen} startOpen={!!personParam} slideOut />;
+  };
+
+  // The hire step slides in over the screen it came from, which stays mounted
+  // underneath. Hosted here, outside renderScreen, so nothing that screen does
+  // (a reload, a new stage) can remount the gate mid-payment.
+  return (
+    <PushTransition
+      base={renderScreen()}
+      top={
+        acceptFundingGate.active ? (
+          <AcceptFundingGate
+            hostSlides
+            gate={acceptFundingGate}
+            otherApplicantNames={applicants
+              .filter((r) => personIndex === null || r.id !== applicants[personIndex]?.id)
+              .map((r) => r.profile?.username ?? '')
+              .filter(Boolean)}
+            onLeavePending={() => router.replace(MY_JOBS_ROUTE as never)}
+            quickConfirm={
+              bounty
+                ? {
+                    jobTitle: bounty.title,
+                    jobIcon: getBountyCategoryIcon(bounty.category),
+                    sub: shownPerson
+                      ? describeApplicantBrief(
+                          describeApplicant(shownPerson, { index: 0, total: 1, verified: false, online: bounty.work_type === 'online' })
+                        )
+                      : null,
+                  }
+                : undefined
+            }
+          />
+        ) : null
+      }
+    />
   );
 }
 

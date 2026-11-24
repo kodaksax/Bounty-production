@@ -13,7 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons'
 import { Image as ExpoImage } from 'expo-image'
 import * as React from 'react'
 import { useMemo, useState } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { StyleSheet, Text, TouchableOpacity, View, type LayoutChangeEvent } from 'react-native'
 import { getFeaturedFlag } from '../../lib/my-jobs/format'
 import type { ManageAction } from '../../lib/my-jobs/manage-actions'
 import type { MyJob } from '../../lib/my-jobs/types'
@@ -33,6 +33,17 @@ export interface FeaturedJobCardProps {
   onManageAction: (action: ManageAction) => void
   /** Set when the main action goes to messages, so the job's own screen stays one tap away. */
   onOpenJob?: () => void
+  /** Photo height; the screen shrinks it so everything below the card fits. */
+  heroHeight?: number
+  /** Where the card sits in the scroll content. */
+  onLayout?: (e: LayoutChangeEvent) => void
+  /** Height of everything under the photo, with "Other options" closed. */
+  onBodyHeight?: (height: number) => void
+}
+
+/** The smallest photo that still fits its pills: one on top, or one on top and one below. */
+export function minHeroHeight(showSideLabel: boolean): number {
+  return showSideLabel ? 116 : 72
 }
 
 export function toneColor(theme: AppTheme, tone: BountyLifecycleTone): string {
@@ -63,7 +74,7 @@ function flagColor(p: PosterPalette, kind: ReturnType<typeof getFeaturedFlag>['k
   }
 }
 
-export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, onManageAction, onOpenJob }: FeaturedJobCardProps) {
+export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, onManageAction, onOpenJob, heroHeight, onLayout, onBodyHeight }: FeaturedJobCardProps) {
   const { theme } = useAppThemeContext()
   const p = theme.poster
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -73,8 +84,8 @@ export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, 
   const side = job.side === 'posted' ? 'posted' : job.finished ? 'did' : 'doing'
 
   return (
-    <View style={s.card} testID="featured-job-card">
-      <View style={s.hero}>
+    <View style={s.card} onLayout={onLayout} testID="featured-job-card">
+      <View style={[s.hero, heroHeight != null && { height: heroHeight }]}>
         {job.coverUri ? (
           <ExpoImage
             source={{ uri: job.coverUri }}
@@ -96,7 +107,13 @@ export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, 
         ) : null}
       </View>
 
-      <View style={s.body}>
+      <View
+        style={s.body}
+        onLayout={(e) => {
+          // Opening the options should scroll, not squeeze the photo.
+          if (!optionsOpen) onBodyHeight?.(e.nativeEvent.layout.height)
+        }}
+      >
         <Text style={s.kicker} numberOfLines={1}>
           {job.contextLine}
         </Text>

@@ -20,7 +20,7 @@ import type { AppTheme } from './types';
 export interface PosterPalette {
   /** Page background. */
   bg: string;
-  /** Cards, sheets, the pinned footer. */
+  /** Cards and sheets. */
   card: string;
   /** Primary text. */
   ink: string;

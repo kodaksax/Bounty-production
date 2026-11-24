@@ -22,7 +22,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { EditPostingModal } from '../../components/edit-posting-modal'
 import { ApplicantsSheet } from '../../components/my-jobs/applicants-sheet'
-import { FeaturedJobCard } from '../../components/my-jobs/featured-job-card'
+import { FeaturedJobCard, minHeroHeight } from '../../components/my-jobs/featured-job-card'
 import { JobSwitcherSheet } from '../../components/my-jobs/job-switcher-sheet'
 import { MyJobsEmptyState, MyJobsErrorState, NothingNeedsYou } from '../../components/my-jobs/my-jobs-states'
 import { OtherJobsBar } from '../../components/my-jobs/other-jobs-bar'
@@ -35,7 +35,7 @@ import { useFeaturedJobPick } from '../../hooks/useFeaturedJobPick'
 import { useJobManagement } from '../../hooks/useJobManagement'
 import { useMyJobsData } from '../../hooks/useMyJobsData'
 import { useValidUserId } from '../../hooks/useValidUserId'
-import { getBottomNavContentPadding } from '../../lib/constants/navigation'
+import { getFloatingTabBarTop } from '../../components/ui/floating-tab-bar'
 import { groupOffers } from '../../lib/my-jobs/build-my-jobs'
 import {
   bestJobOnSide,
@@ -76,8 +76,9 @@ export interface MyJobsScreenProps {
 
 type OpenSheet = { kind: 'switcher' } | { kind: 'offers'; from?: 'switcher' } | { kind: 'applicants'; bountyId: string } | null
 
-/** Header pulled up under the status bar, like the other tabs. */
-const HEADER_TOP_OFFSET = 55
+const CONTENT_GAP = 10
+// Left open under the page so the card doesn't stretch to fill the whole screen.
+const CARD_FIT_SLACK = 0
 
 export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: MyJobsScreenProps) {
   const rawUserId = useValidUserId()
@@ -87,6 +88,10 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
   const [headerHeight, setHeaderHeight] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(0)
+  const [cardTop, setCardTop] = useState(0)
+  const [cardBodyHeight, setCardBodyHeight] = useState(0)
+  const [footerHeight, setFooterHeight] = useState(0)
   const [sheet, setSheet] = useState<OpenSheet>(null)
 
   const data = useMyJobsData(userId)
@@ -237,6 +242,20 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   const applicantsJob =
     sheet?.kind === 'applicants' ? jobs.find((j) => j.bountyId === sheet.bountyId && j.side === 'posted') ?? null : null
 
+  // The photo takes whatever height is left once the rest of the page fits above the tab bar.
+  // None of these measurements include the photo, so resizing it can't feed back into them.
+  const contentBottom = getFloatingTabBarTop(insets.bottom) + 6
+  const measured = viewportHeight > 0 && cardTop > 0 && cardBodyHeight > 0 && footerHeight > 0
+  const heroHeight = measured
+    ? Math.min(
+        FOCUS.featureHero,
+        Math.max(
+          minHeroHeight(showSideLabels),
+          Math.floor(viewportHeight - contentBottom - cardTop - cardBodyHeight - CONTENT_GAP - footerHeight - CARD_FIT_SLACK)
+        )
+      )
+    : FOCUS.featureHero
+
   let body: React.ReactNode
   if (loading && !hasAnything) {
     body = <PostingsListSkeleton count={2} />
@@ -250,6 +269,9 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
         {featuredJob ? (
           <FeaturedJobCard
             job={featuredJob}
+            heroHeight={heroHeight}
+            onLayout={(e) => setCardTop(e.nativeEvent.layout.y)}
+            onBodyHeight={setCardBodyHeight}
             showSideLabel={showSideLabels}
             manageActions={getJobManageActions(featuredJob)}
             onPrimary={() => openTarget(featuredJob.cta.target)}
@@ -269,15 +291,17 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
             }
           />
         )}
-        {others.length > 0 || offers.length > 0 ? (
-          <OtherJobsBar
-            others={others}
-            waitingOffers={offerGroups.waiting.length}
-            // With no jobs at all, the bar is the "Your offers" row.
-            onSwitch={openSwitcher}
-          />
-        ) : null}
-        <PosterButton kind="text" icon="add" label="Post another job" onPress={postJob} testID="my-jobs-post-another" />
+        <View style={s.footer} onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
+          {others.length > 0 || offers.length > 0 ? (
+            <OtherJobsBar
+              others={others}
+              waitingOffers={offerGroups.waiting.length}
+              // With no jobs at all, the bar is the "Your offers" row.
+              onSwitch={openSwitcher}
+            />
+          ) : null}
+          <PosterButton kind="text" icon="add" label="Post another job" onPress={postJob} testID="my-jobs-post-another" />
+        </View>
       </>
     )
   }
@@ -286,7 +310,7 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <View
         onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
-        style={[s.header, { top: -HEADER_TOP_OFFSET, paddingTop: insets.top }]}
+        style={s.header}
       >
         <View style={s.headerRow}>
           <BrandingLogo size="medium" />
@@ -312,28 +336,31 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
         <View style={{ paddingHorizontal: 16 }}>
           <OfflineStatusBadge />
         </View>
+        {/* Stays put while everything under it scrolls. */}
+        <View style={s.heading}>
+          <Text style={s.title} accessibilityRole="header">
+            My Jobs
+          </Text>
+          <Text style={s.subtitle}>{subtitle}</Text>
+        </View>
       </View>
 
       <ScrollView
         style={{ flex: 1 }}
+        onLayout={(e) => setViewportHeight(e.nativeEvent.layout.height)}
         contentContainerStyle={[
           s.content,
           {
-            paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)),
-            paddingBottom: getBottomNavContentPadding(insets.bottom, 16),
+            paddingTop: headerHeight + 2,
+            paddingBottom: contentBottom,
           },
         ]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.text} colors={[theme.primary]} />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} progressViewOffset={headerHeight} tintColor={theme.text} colors={[theme.primary]} />
         }
         showsVerticalScrollIndicator={false}
         testID="my-jobs-scroll"
       >
-        <Text style={s.title} accessibilityRole="header">
-          My Jobs
-        </Text>
-        <Text style={s.subtitle}>{subtitle}</Text>
-
         {error && hasAnything ? (
           <View style={s.errorBox} accessibilityRole="alert">
             <Text style={s.errorText}>{error}</Text>
@@ -404,9 +431,13 @@ export default MyJobsScreen
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     header: {
+      // The root layout already keeps screens below the status bar; pulling the
+      // header up past the top edge clipped the chat icon and its badge.
       position: 'absolute',
+      top: 0,
       left: 0,
       right: 0,
+      paddingTop: 4,
       backgroundColor: t.background,
       zIndex: 20,
       paddingBottom: 6,
@@ -416,6 +447,7 @@ function makeStyles(t: AppTheme) {
       justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 16,
+      minHeight: 48,
     },
     headerIconBtn: { padding: 8, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
     headerBadge: {
@@ -431,10 +463,13 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.error,
     },
     headerBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700', lineHeight: 12 },
-    content: { paddingHorizontal: 16, gap: 14 },
-    // Handoff block `fhead`: 38pt title, 18pt intro.
-    title: { color: t.poster.ink, fontSize: FOCUS.screenTitle, fontWeight: '800', letterSpacing: -1, lineHeight: 42 },
-    subtitle: { color: t.poster.ink2, fontSize: 18, lineHeight: 26, marginTop: -8 },
+    content: { paddingHorizontal: 16, gap: CONTENT_GAP },
+    // The text button under the bar brings its own touch padding.
+    footer: { gap: 4 },
+    heading: { paddingHorizontal: 16, marginTop: -4 },
+    // Handoff block `fhead`, with the title at 34pt (38 in the design) to give the header row room; 18pt intro.
+    title: { color: t.poster.ink, fontSize: 34, fontWeight: '800', letterSpacing: -0.9, lineHeight: 38 },
+    subtitle: { color: t.poster.ink2, fontSize: 18, lineHeight: 26 },
     errorBox: {
       flexDirection: 'row',
       alignItems: 'center',

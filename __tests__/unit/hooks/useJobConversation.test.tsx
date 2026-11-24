@@ -3,14 +3,16 @@
  * hire. The app sends its own message in the poster's name when someone is
  * chosen; counting it would skip "agree a time" (F, H.5) on every real job.
  */
-import { renderHook, waitFor } from '@testing-library/react-native';
-import { buildHireWelcomeMessage } from '../../../lib/my-jobs/hire-message';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { buildHireWelcomeMessage, isCoordinationMessage } from '../../../lib/my-jobs/hire-message';
 
 const mockConversations = jest.fn();
 const mockMessages = jest.fn();
+const mockElsewhere = jest.fn();
 jest.mock('../../../lib/services/supabase-messaging', () => ({
   fetchConversations: (...a: unknown[]) => mockConversations(...a),
   fetchMessages: (...a: unknown[]) => mockMessages(...a),
+  fetchMessagesForConversations: (...a: unknown[]) => mockElsewhere(...a),
 }));
 jest.mock('../../../lib/services/bounty-request-service', () => ({ bountyRequestService: {} }));
 jest.mock('../../../lib/services/cancellation-service', () => ({ cancellationService: {} }));
@@ -53,5 +55,38 @@ it('a failed read never sends the job back a step', async () => {
   mockConversations.mockRejectedValue(new Error('offline'));
   const { result } = renderHook(() => useJobConversation({ viewerId: 'poster', otherId: 'ada', bountyId: 'b' }));
   await waitFor(() => expect(result.current.loaded).toBe(true));
+  expect(result.current.hasMessages).toBe(true);
+});
+
+it('reads a hire time without a zone as UTC, so a message right after the hire counts', () => {
+  const sent = { text: 'Saturday?', createdAt: '2026-11-20T10:05:00+00:00' };
+  expect(isCoordinationMessage(sent, '2026-11-20T10:00:00')).toBe(true);
+  expect(isCoordinationMessage(sent, '2026-11-20T10:06:00')).toBe(false);
+  // The same instant written the way every server row writes it must not depend on this machine's zone.
+  expect(isCoordinationMessage({ text: 'x', createdAt: '2026-11-20T10:00:00Z' }, '2026-11-20T10:00:00')).toBe(true);
+});
+
+it('finds a message sent after the hire in another of their conversations', async () => {
+  mockConversations.mockResolvedValue([
+    { id: 'c', bountyId: 'b', isGroup: false, participantIds: ['poster', 'ada'] },
+    { id: 'd', bountyId: 'old', isGroup: false, participantIds: ['poster', 'ada'] },
+  ]);
+  mockMessages.mockResolvedValue([WELCOME]);
+  mockElsewhere.mockResolvedValue([msg('ada', 'Saturday at 9?', '2026-11-20T11:00:00Z')]);
+  const { result } = renderHook(() => useJobConversation({ viewerId: 'poster', otherId: 'ada', bountyId: 'b', since: HIRED }));
+  await waitFor(() => expect(result.current.loaded).toBe(true));
+  expect(result.current.hasMessages).toBe(true);
+  expect(result.current.firstTalk).toEqual({ at: '2026-11-20T11:00:00Z', mine: false });
+});
+
+it('a message sent from the workspace moves the job on, even if the next read misses it', async () => {
+  mockConversations.mockResolvedValue([{ id: 'c', bountyId: 'b', isGroup: false, participantIds: ['poster', 'ada'] }]);
+  mockMessages.mockResolvedValue([WELCOME]);
+  const { result } = renderHook(() => useJobConversation({ viewerId: 'poster', otherId: 'ada', bountyId: 'b', since: HIRED }));
+  await waitFor(() => expect(result.current.loaded).toBe(true));
+  expect(result.current.hasMessages).toBe(false);
+  act(() => result.current.markSent());
+  expect(result.current.hasMessages).toBe(true);
+  await act(async () => result.current.reload());
   expect(result.current.hasMessages).toBe(true);
 });

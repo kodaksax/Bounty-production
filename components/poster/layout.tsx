@@ -3,7 +3,7 @@
  * next step pinned under the thumb.
  *
  *   WorkspaceLayout  safe area, page colour, pull-to-refresh, pinned footer
- *   PinnedFooter     the footer on its own (card colour, hairline on top)
+ *   PinnedFooter     the footer on its own (page colour, hairline on top)
  *   StageFooter      a stage view model's primary + up to two secondary
  *                    actions, bound to the screen's handlers
  */
@@ -20,9 +20,12 @@ import { PosterButton } from './poster-button';
 export function PinnedFooter({ children, testID = 'pinned-footer' }: { children: React.ReactNode; testID?: string }) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
+  // The root layout already keeps every screen above the home indicator, so the
+  // footer needs no inset of its own.
+  const paddingBottom = insets.bottom > 0 ? 4 : 12;
   const s = useMemo(() => makeStyles(theme.poster), [theme.poster]);
   return (
-    <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]} testID={testID}>
+    <View style={[s.footer, { paddingBottom }]} testID={testID}>
       {children}
     </View>
   );
@@ -108,7 +111,7 @@ function makeStyles(p: PosterPalette) {
     scroll: { flex: 1 },
     content: { paddingTop: 4, paddingHorizontal: 20, paddingBottom: 24, gap: 16 },
     footer: {
-      backgroundColor: p.card,
+      backgroundColor: p.bg,
       borderTopWidth: 1,
       borderTopColor: p.line,
       paddingTop: 12,

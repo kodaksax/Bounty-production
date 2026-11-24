@@ -8,6 +8,8 @@
  */
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { parseServerTimestamp } from '../lib/utils/bounty-thread-events';
+import { useRefreshOnReturn } from './useRouteFocus';
 import { isCoordinationMessage, isHireWelcomeMessage } from '../lib/my-jobs/hire-message';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { bountyRequestService } from '../lib/services/bounty-request-service';
@@ -30,6 +32,8 @@ export interface JobConversationState {
   lastFromOther: { text: string; at: string } | null;
   /** When the viewer last wrote, if the other person hasn't answered since. */
   awaitingReplySince: string | null;
+  /** When they first wrote after the hire, and who did. */
+  firstTalk: { at: string; mine: boolean } | null;
   loaded: boolean;
 }
 
@@ -38,6 +42,7 @@ const EMPTY_CONVERSATION: JobConversationState = {
   hasMessages: true,
   lastFromOther: null,
   awaitingReplySince: null,
+  firstTalk: null,
   loaded: false,
 };
 
@@ -53,11 +58,14 @@ export function useJobConversation(args: {
   enabled?: boolean;
   /** When the helper was chosen; earlier messages aren't about agreeing a time. */
   since?: string | null;
-}): JobConversationState & { reload: () => void } {
+}): JobConversationState & { reload: () => void; markSent: () => void } {
   const { viewerId, otherId, bountyId, enabled = true, since = null } = args;
   const [state, setState] = useState<JobConversationState>(EMPTY_CONVERSATION);
   const [attempt, setAttempt] = useState(0);
   const loadedKeyRef = useRef<string | null>(null);
+  // When the viewer sent a message from this screen: the job has moved on even
+  // if the read that follows is slow, stale or fails.
+  const sentAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -69,6 +77,7 @@ export function useJobConversation(args: {
     const key = `${viewerId}:${otherId}:${bountyId}`;
     if (loadedKeyRef.current !== key) {
       loadedKeyRef.current = key;
+      sentAtRef.current = null;
       setState(EMPTY_CONVERSATION);
     }
     (async () => {
@@ -81,10 +90,20 @@ export function useJobConversation(args: {
         });
         const conv = pair.find((c) => String(c.bountyId) === String(bountyId)) ?? pair[0] ?? null;
         if (!conv) {
-          if (active) setState({ ...EMPTY_CONVERSATION, hasMessages: false, loaded: true });
+          if (active) setState({ ...EMPTY_CONVERSATION, ...sentState(sentAtRef.current, false), loaded: true });
           return;
         }
-        const messages: Message[] = await supabaseMessaging.fetchMessages(String(conv.id));
+        let messages: Message[] = await supabaseMessaging.fetchMessages(String(conv.id));
+        // The thread shows everything the pair has said, so a message sent after
+        // the hire can sit in another of their conversations.
+        const otherIds = pair.filter((c) => c !== conv).map((c) => String(c.id));
+        if (since && otherIds.length > 0 && !messages.some((m) => isCoordinationMessage(m, since))) {
+          const elsewhere = await supabaseMessaging.fetchMessagesForConversations(otherIds).catch(() => [] as Message[]);
+          messages = messages.concat(elsewhere.filter((m) => isCoordinationMessage(m, since)));
+        }
+        const talk = messages
+          .filter((m) => isCoordinationMessage(m, since))
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
         const readable = messages.filter((m) => !m.isEncrypted && typeof m.text === 'string' && m.text.trim().length > 0 && !isHireWelcomeMessage(m.text));
         const fromOther = readable.filter((m) => String(m.senderId) === String(otherId));
         const mine = readable.filter((m) => String(m.senderId) === String(viewerId) && isCoordinationMessage(m, since));
@@ -95,7 +114,8 @@ export function useJobConversation(args: {
         if (active) {
           setState({
             conversationId: String(conv.id),
-            hasMessages: messages.some((m) => isCoordinationMessage(m, since)),
+            ...sentState(sentAtRef.current, !!talk),
+            ...(talk ? { firstTalk: { at: talk.createdAt, mine: String(talk.senderId) === String(viewerId) } } : null),
             awaitingReplySince: lastMineAt && (!lastReplyAt || lastReplyAt < lastMineAt) ? lastMineAt : null,
             lastFromOther: last ? { text: last.text.trim(), at: last.createdAt } : null,
             loaded: true,
@@ -111,7 +131,19 @@ export function useJobConversation(args: {
   }, [viewerId, otherId, bountyId, enabled, attempt, since]);
 
   const reload = React.useCallback(() => setAttempt((n) => n + 1), []);
-  return { ...state, reload };
+  const markSent = React.useCallback(() => {
+    const at = new Date().toISOString();
+    sentAtRef.current = sentAtRef.current ?? at;
+    setState((prev) => ({ ...prev, ...sentState(at, true), firstTalk: prev.firstTalk ?? { at, mine: true }, loaded: true }));
+  }, []);
+  // "Write my own message" happens in the thread: look again on the way back.
+  useRefreshOnReturn(reload);
+  return { ...state, reload, markSent };
+}
+
+/** Whether they have talked, counting a message this screen just sent. */
+function sentState(sentAt: string | null, found: boolean): Pick<JobConversationState, 'hasMessages' | 'firstTalk'> {
+  return { hasMessages: found || !!sentAt, firstTalk: sentAt ? { at: sentAt, mine: true } : null };
 }
 
 /** Pending offers on an open job, nearest known first (the order Who offered uses). */
@@ -162,7 +194,9 @@ export function useHireTime(bountyId: string | null | undefined, hunterId: strin
       .then((rows) => {
         if (!active) return;
         const mine = (rows ?? []).find((r: any) => String(r.hunter_id ?? r.user_id) === String(hunterId));
-        setAt((mine as any)?.accepted_at ?? (mine as any)?.updated_at ?? null);
+        const raw = (mine as any)?.accepted_at ?? (mine as any)?.updated_at ?? null;
+        const ms = raw ? parseServerTimestamp(String(raw)) : NaN;
+        setAt(Number.isNaN(ms) ? null : new Date(ms).toISOString());
       })
       .catch(() => active && setAt(null));
     return () => {

@@ -4,7 +4,7 @@ import { useHapticFeedback } from "lib/haptic-feedback";
 import { settleSpring } from "lib/motion";
 import { useAccessibleAnimation } from "../../hooks/use-accessible-animation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, LayoutChangeEvent, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Animated, LayoutChangeEvent, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
 import type { AppTheme } from "../../lib/themes/types";
@@ -35,15 +35,23 @@ interface FloatingTabBarProps {
 const BAR_HEIGHT = 64;
 const BAR_SIDE_MARGIN = 16;
 const BAR_PADDING = 5;
-// How far the bar dips into the bottom safe area. On iOS 20 leaves it just above
-// the home indicator; Android's inset can be a button bar, so it dips less there.
-const SAFE_AREA_DIP = Platform.OS === "ios" ? 20 : 8;
-// Gap from the screen edge on devices with little or no bottom inset.
+// Gap from the screen edge on devices with no bottom inset. Where there is one, the
+// root layout already reserves it below every screen, so the bar sits right on it
+// (any lower and it would leave its parent and stop taking taps).
 const MIN_BOTTOM_GAP = 6;
 const ICON_SIZE = 23;
 const CENTER_ICON_SIZE = 25;
 // Caps Dynamic Type so labels can't push the bar taller than BAR_HEIGHT.
 const LABEL_MAX_FONT_SCALE = 1.2;
+
+function getBarBottom(bottomInset: number) {
+  return bottomInset > 0 ? 0 : MIN_BOTTOM_GAP;
+}
+
+/** Distance from the bottom of the tab screens to the top edge of the floating bar. */
+export function getFloatingTabBarTop(bottomInset = 0) {
+  return getBarBottom(bottomInset) + BAR_HEIGHT;
+}
 
 type Tab = { key: ScreenKey; icon: keyof typeof MaterialIcons.glyphMap; title: string; label: string };
 
@@ -128,7 +136,7 @@ export function FloatingTabBar({
   return (
     <View
       pointerEvents="box-none"
-      style={[s.container, { bottom: Math.max(insets.bottom - SAFE_AREA_DIP, MIN_BOTTOM_GAP) }]}
+      style={[s.container, { bottom: getBarBottom(insets.bottom) }]}
     >
       <View style={s.bar}>
         <BlurView intensity={50} tint={theme.isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />

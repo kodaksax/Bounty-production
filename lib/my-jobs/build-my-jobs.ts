@@ -11,6 +11,7 @@
  * resolver's headline and explanation are used, so the tab never disagrees
  * with the job's own screen.
  */
+import { parseServerTimestamp } from '../utils/bounty-thread-events';
 import { calculateHunterEarnings } from '../constants/fees';
 import type { BountyRequestWithDetails } from '../services/bounty-request-service';
 import type { CompletionSubmission } from '../services/completion-service';
@@ -116,7 +117,7 @@ function sentence(...parts: (string | null | undefined | false)[]): string {
  */
 function hasCoordinated(conv: Conversation | null, since: string | null | undefined): boolean {
   if (!conv?.lastMessage || isHireWelcomeMessage(conv.lastMessage)) return false;
-  return !(since && conv.updatedAt && new Date(conv.updatedAt).getTime() < new Date(since).getTime());
+  return !(since && conv.updatedAt && parseServerTimestamp(conv.updatedAt) < parseServerTimestamp(since));
 }
 
 /** The problem overlay — a dispute (support is on it) or a cancellation request. */
