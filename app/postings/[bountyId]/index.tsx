@@ -1,109 +1,134 @@
 /**
- * app/postings/[bountyId] — the Poster's command center for one bounty.
+ * app/postings/[bountyId] — the poster's workspace for one job (Focus-first
+ * handoff screens A–J.4, docs/design/focus-first-poster/).
  *
- * What this replaced, and why:
+ * Every stage answers the same four questions — what's happening, what it
+ * means, the money truth, what comes after — under the shared workspace
+ * header (job, side label for two-sided accounts, five-step bar), and keeps
+ * one next step pinned under the thumb. Edit and take-down sit behind "Other
+ * options"; after someone is chosen there is no self-cancel, only Help.
  *
- * The previous screen tracked a four-stage "timeline" in LOCAL component state
- * seeded from `bounty.status`, let the poster tap through it, and popped a
- * "Stage Locked — complete current stage to unlock" alert when they tapped too
- * far. None of that reflected the backend: the stage reset on every navigation,
- * the "Next Stage" button advanced a bounty whose hunter had submitted nothing,
- * and the screen never once mentioned applications, the selected hunter, the
- * submitted work, or the payment. A poster could not answer "what do I do now?"
- * from it.
+ * What the screen says comes from lib/utils/poster-stage-copy.ts, which reads
+ * the same resolved lifecycle (useBountyLifecycle → resolveBountyLifecycle)
+ * the hunter is reading from their side. Money is only ever described from
+ * the server's answer: the charge read for an open job (readOpenJobMoney,
+ * the same read the take-down uses), the bounty's escrow state after hiring.
  *
- * Everything on this screen is now derived from backend state through
- * useBountyLifecycle → resolveBountyLifecycle: one status, one explanation, one
- * primary action, and the same story the hunter is being told from their side.
- * Secondary actions live behind the panel's disclosure so the primary action is
- * never one of six equal buttons. The poster's own Edit / Cancel are the
- * exception: they sit in the hero card's Manage row, because behind the
- * disclosure posters could not find them.
- *
- * Access: a non-poster is no longer met with an "Access Denied" alert that
- * bounced them backwards (a dead end reachable from any deep link) — they are
- * redirected to the view that is actually theirs.
+ * Unchanged from the previous screen: the charge read, the edit lock and its
+ * explanations, ?openEdit / ?openReview deep links, the refund-then-delete
+ * take-down with its double-tap guards, PosterReviewModal for approval and
+ * rating, and redirecting anyone who isn't the poster to their own view.
+ * Choosing someone (stage D) runs the same accept / reject hooks and pay gate
+ * as the job thread.
  */
 import { MaterialIcons } from '@expo/vector-icons';
 import { saveStructuredBountyEdit } from '../../../lib/services/bounty-requirements-service';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { AcceptFundingGate } from '../../../components/accept-funding-gate';
 import { EditPostingModal } from '../../../components/edit-posting-modal';
 import { NotFoundScreen } from '../../../components/not-found-screen';
+import {
+  ApplicantProfile,
+  FourQuestions,
+  HelpSheet,
+  NoteBox,
+  OtherOptions,
+  PeopleStrip,
+  PinnedFooter,
+  PosterButton,
+  ProofPhotos,
+  StageFooter,
+  StageToast,
+  StarRating,
+  StorySoFar,
+  WorkspaceHeader,
+  WorkspaceLayout,
+  type OtherOption,
+} from '../../../components/poster';
+import { useConfirmDialog } from '../../../components/poster/confirm-dialog';
+import { PushTransition } from '../../../components/ui/slide-in-screen';
 import { PosterReviewModal } from '../../../components/poster-review-modal';
 import { ScreenLoader } from '../../../components/ui/screen-loader';
-import { BountyStatusPanel } from '../../../components/ui/bounty-status-panel';
-import { Stepper } from '../../../components/ui/stepper';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useApplicationDecisionVisit } from '../../../hooks/useApplicationDecisionVisit';
+import { useAcceptFunding } from '../../../hooks/useAcceptFunding';
+import { useAcceptRequest } from '../../../hooks/useAcceptRequest';
 import { formatExactAddress, useBountyExactLocation } from '../../../hooks/useBountyExactLocation';
 import { useBountyLifecycle } from '../../../hooks/useBountyLifecycle';
+import { useHireTime, useJobConversation, useJobProblemRecords, usePendingApplicants } from '../../../hooks/useJobWorkspaceData';
+import { useUnresolvedDeposit } from '../../../hooks/useUnresolvedDeposit';
+import { useRejectRequest } from '../../../hooks/useRejectRequest';
+import { useRequestExpiryPolicy } from '../../../hooks/useRequestExpiryPolicy';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
-import { bountyRequestService } from '../../../lib/services/bounty-request-service';
-import { getBountyFundingRequirement } from '../../../lib/services/bounty-funding-service';
-import { bountyService } from '../../../lib/services/bounty-service';
-import type { Bounty } from '../../../lib/services/database.types';
-import { messageService } from '../../../lib/services/message-service';
-import { ratingsService } from '../../../lib/services/ratings';
-import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
-import type { AppTheme } from '../../../lib/themes/types';
-import { getBountyStages } from '../../../lib/utils/bounty-lifecycle';
-import type { BountyActionKey } from '../../../lib/utils/bounty-lifecycle';
-import { formatCategoryLabel } from '../../../lib/utils/data-utils';
-import {
-  bountyHoldsUnreleasedEscrow,
-  isPhase2Bounty,
-  isV3Bounty,
-} from '../../../lib/utils/payment-architecture';
-import { formatPublicLocation } from '../../../lib/utils/public-location';
-import { getTrustTierLabel } from '../../../lib/utils/trust-tier';
-import { shareBounty } from '../../../lib/utils/share-utils';
+import { firstName, formatJobAmount, formatJobDay, getBountyCategoryIcon, getBountyCoverUri } from '../../../lib/my-jobs/format';
+import { describeTakeDown, readOpenJobMoney } from '../../../lib/my-jobs/take-down';
+import { useWorksBothSides } from '../../../lib/my-jobs/side-labels-store';
+import type { IconName } from '../../../lib/my-jobs/types';
 import { bountyAppTabPath } from '../../../lib/navigation/bounty-app-tab';
+import type { BountyRequestWithDetails } from '../../../lib/services/bounty-request-service';
+import { bountyRequestService } from '../../../lib/services/bounty-request-service';
+import { bountyService } from '../../../lib/services/bounty-service';
 import {
   BountyRefundFailedError,
   canPosterCancelBounty,
   cancelAndRefundBounty,
-  describeCancelRefund,
   describeCancelRefundDone,
-  planCancelRefund,
   type CancelRefundPlan,
 } from '../../../lib/services/bounty-cancel-refund';
-import { markBountyRemovedLocally } from '../../../lib/utils/bounty-visibility';
+import type { Bounty } from '../../../lib/services/database.types';
+import { trackWorkspacePrimaryTapped } from '../../../lib/services/focus-analytics';
+import { ratingsService } from '../../../lib/services/ratings';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import type { PosterPalette } from '../../../lib/themes/poster-palette';
+import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { getUserFriendlyError } from '../../../lib/utils/error-messages';
+import { getHelpOptions, helpSubtitle, type HelpOptionSpec } from '../../../lib/utils/help-options';
+import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
+import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
+import {
+  describeApplicant,
+  describeApplicantBrief,
+  describePosterStage,
+  formatClock,
+  posterHeaderMeta,
+  type OpenJobCharge,
+  type PosterActionKey,
+} from '../../../lib/utils/poster-stage-copy';
+import { formatPublicLocation } from '../../../lib/utils/public-location';
+import { markBountyRemovedLocally } from '../../../lib/utils/bounty-visibility';
+import { shareBounty } from '../../../lib/utils/share-utils';
 import { useWallet } from '../../../lib/wallet-context';
 
-/** Inbox → My Bounties, where applications are reviewed. */
+/** My Jobs (the tab that replaced the Inbox). */
+const MY_JOBS_ROUTE = bountyAppTabPath('messages', 'myPostings');
 /** The post-a-bounty flow. */
 const POST_BOUNTY_ROUTE = bountyAppTabPath('postings');
+const noop = () => {};
 
 export default function BountyDashboard() {
-  const { bountyId, openEdit, openReview } = useLocalSearchParams<{
+  const { bountyId, openEdit, openReview, posted, person: personParam } = useLocalSearchParams<{
     bountyId?: string;
     openEdit?: string;
     openReview?: string;
+    /** Set by a link straight after publishing: stage A says so. */
+    posted?: string;
+    /** A request id from "Who offered": opens that person (stage D). */
+    person?: string;
   }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   // `isAuthLoading` matters here: on a cold start the session restores after
   // the first render, so a poster momentarily looks like a signed-out visitor.
-  // Acting on that would redirect them off their own dashboard before auth
-  // resolved.
+  // Acting on that would redirect them off their own job before auth resolved.
   const { session, isLoading: isAuthLoading } = useAuthContext();
   const currentUserId = session?.user?.id ?? null;
   const { pushColor, popColor } = useBackgroundColor();
   const { theme } = useAppThemeContext();
-  const s = useMemo(() => makeStyles(theme), [theme]);
+  const p = theme.poster;
+  const s = useMemo(() => makeStyles(p), [p]);
+  const worksBothSides = useWorksBothSides(currentUserId);
 
   const routeBountyId = useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
@@ -117,6 +142,9 @@ export default function BountyDashboard() {
     otherParty,
     applicationCount,
     submission,
+    hasDispute,
+    disputeId,
+    hasCancellationRequest,
     isLoading,
     error,
     notFound,
@@ -128,21 +156,24 @@ export default function BountyDashboard() {
   const locationText = formatExactAddress(exactLocation) || (bounty ? formatPublicLocation(bounty) : null);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [busyAction, setBusyAction] = useState<BountyActionKey | null>(null);
-  const { refundEscrow } = useWallet();
+  const [busyAction, setBusyAction] = useState<PosterActionKey | 'delete' | 'choose' | 'pass' | null>(null);
+  const [toast, setToast] = useState<string | null>(posted === '1' || posted === 'true' ? 'Your job is posted.' : null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [personIndex, setPersonIndex] = useState<number | null>(null);
+  const [stars, setStars] = useState(0);
+  const [alreadyRated, setAlreadyRated] = useState(false);
+  const { ask: askConfirm, dialog: confirmDialog } = useConfirmDialog();
+  const { refundEscrow, refreshFromApi } = useWallet();
   // Blocks a second tap from re-entering the refund while one is in flight.
   const cancellingRef = React.useRef(false);
   // "Add details"/"Improve bounty" notifications deep-link here with
-  // ?openEdit=true so the poster lands directly in the edit modal instead of
-  // having to find the edit action themselves. Guarded to fire once per
-  // mount — the modal is user-closeable and shouldn't reopen on its own.
+  // ?openEdit=true so the poster lands directly in the edit modal. Guarded to
+  // fire once per mount — the modal is user-closeable and shouldn't reopen.
   const autoOpenEditHandledRef = React.useRef(false);
   // The completion review and the rating step both live in PosterReviewModal
-  // (the same one the chat uses). It replaced pushing review-and-verify, whose
-  // "Approve and continue to payment" released the money on one tap, and
-  // pushing the payout receipt for "Leave a review", which has no rating UI.
+  // (the same one the chat uses).
   const [showReview, setShowReview] = useState(false);
   const [reviewStartsOnRating, setReviewStartsOnRating] = useState(false);
   // rating_reminder notifications deep-link here with ?openReview=true.
@@ -152,24 +183,79 @@ export default function BountyDashboard() {
   // ever the hired hunter, and anything else falls back to a neutral phrase.
   const hunterName =
     (otherParty.id && String(otherParty.id) !== String(currentUserId) && otherParty.name) || 'your hunter';
+  const helperId = bounty?.accepted_by ? String(bounty.accepted_by) : null;
+  const helperName = helperId && otherParty.name && String(otherParty.id) !== String(currentUserId) ? otherParty.name : null;
+  const helperFirst = firstName(helperName) ?? 'your helper';
+  // For the start of a line: the name as it is, or "Your helper".
+  const HelperFirst = helperName ? helperFirst : 'Your helper';
+
+  // ── Records the stage needs beyond the lifecycle ─────────────────────────
+  const isPoster = role === 'poster';
+  const { applicants, failed: applicantsFailed, reload: reloadApplicants } = usePendingApplicants(
+    bounty?.id != null ? String(bounty.id) : null,
+    isPoster && bounty?.status === 'open' && applicationCount > 0
+  );
+  const hireAt = useHireTime(isPoster && helperId && bounty ? String(bounty.id) : null, helperId);
+  const conversation = useJobConversation({
+    viewerId: currentUserId,
+    otherId: helperId,
+    bountyId: bounty?.id ? String(bounty.id) : null,
+    enabled: isPoster && !!helperId,
+    since: hireAt,
+  });
+  const refreshWallet = useCallback(async () => {
+    if (!session?.access_token) return;
+    await refreshFromApi(session.access_token, { silent: true, force: true });
+  }, [session?.access_token, refreshFromApi]);
+  // E.3: a payment left confirming for this job. Nobody can be chosen until
+  // the server says what became of it.
+  const { record: unresolvedDeposit, check: checkUnresolvedDeposit } = useUnresolvedDeposit(
+    bounty?.id != null ? String(bounty.id) : null,
+    isPoster && bounty?.status === 'open',
+    (verdict, record) => {
+      const name = firstName(record.hunterName) ?? record.hunterName;
+      setToast(
+        verdict === 'credited'
+          ? name === 'this hunter'
+            ? 'Your payment is confirmed and in your Bounty balance. You can choose someone now.'
+            : `Your payment is confirmed and in your Bounty balance. You can choose ${name} now.`
+          : "Your payment didn't go through, and nothing was charged."
+      );
+      void refreshWallet();
+    }
+  );
+  const shownPerson = personIndex !== null && !unresolvedDeposit ? applicants[personIndex] ?? null : null;
+  // "Who offered" links straight to one person.
+  const personHandledRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!personParam || personHandledRef.current || unresolvedDeposit || applicants.length === 0) return;
+    personHandledRef.current = true;
+    const at = applicants.findIndex((r) => String(r.id) === String(personParam));
+    if (at >= 0) setPersonIndex(at);
+  }, [personParam, applicants, unresolvedDeposit]);
+  // The same application_viewed / application_dismissed the job thread reports.
+  const { markEngaged } = useApplicationDecisionVisit({
+    request: shownPerson,
+    enabled: isPoster && !!shownPerson,
+    surface: 'workspace_person',
+  });
+  const problems = useJobProblemRecords(isPoster ? routeBountyId : null, {
+    cancellation: hasCancellationRequest,
+    dispute: hasDispute,
+  });
+  const expiryPolicy = useRequestExpiryPolicy();
 
   // ── Has this poster actually been charged? ───────────────────────────────
   // Only asked while the poster can still take the job down (open, nobody
   // hired). It is the same server read the take-down confirmation uses
-  // (readOpenJobMoney → planCancelRefund), so the Payment card, the button
+  // (readOpenJobMoney → planCancelRefund), so the money line, the button
   // label and the confirmation all agree. It reads only; nothing here moves
-  // money. bountyHoldsUnreleasedEscrow is a delete guard that counts every
-  // open paid bounty as held, so it cannot say whether a pay-when-you-choose
-  // (at_accept) job has been charged.
+  // money.
   const checksCharge =
-    !!bounty &&
-    role === 'poster' &&
-    canPosterCancelBounty(bounty) &&
-    !bounty.is_for_honor &&
-    Number(bounty.amount) > 0;
+    !!bounty && isPoster && canPosterCancelBounty(bounty) && !bounty.is_for_honor && Number(bounty.amount) > 0;
   const [chargeRead, setChargeRead] = useState<OpenJobCharge | null>(null);
-  // Bumped by the Payment card's "Check again" so a failed read can be retried
-  // without knowing about pull-to-refresh.
+  // Bumped by "Check again" so a failed read can be retried without knowing
+  // about pull-to-refresh.
   const [chargeReadAttempt, setChargeReadAttempt] = useState(0);
   React.useEffect(() => {
     if (!checksCharge || !bounty) {
@@ -178,8 +264,7 @@ export default function BountyDashboard() {
     }
     let cancelled = false;
     // Every re-read starts from "Checking…" rather than showing the previous
-    // answer as current: after a hire elsewhere, "You haven't paid" would be
-    // stale.
+    // answer as current: after a hire elsewhere, "You haven't paid" would be stale.
     setChargeRead(null);
     readOpenJobMoney(bounty)
       .then(({ charge }) => {
@@ -193,17 +278,29 @@ export default function BountyDashboard() {
     };
   }, [checksCharge, bounty, chargeReadAttempt]);
   const openJobCharge: OpenJobCharge | null = !checksCharge ? null : chargeRead ?? 'checking';
-  const retryChargeRead = useCallback(() => setChargeReadAttempt(n => n + 1), []);
+  const retryChargeRead = useCallback(() => setChargeReadAttempt((n) => n + 1), []);
 
   React.useEffect(() => {
     pushColor(theme.background);
     return () => popColor(theme.background);
   }, [pushColor, popColor, theme.background]);
 
+  // A finished job only asks for a rating the poster hasn't given yet.
+  React.useEffect(() => {
+    let active = true;
+    if (!bounty || !isPoster || bounty.status !== 'completed' || !helperId || !currentUserId) return;
+    ratingsService
+      .hasRated(String(currentUserId), String(bounty.id), helperId)
+      .then((rated) => active && setAlreadyRated(!!rated))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [bounty, isPoster, helperId, currentUserId]);
+
   // Editing is only honest while the terms can still legally change: open,
   // nobody hired, and nobody has applied on the current terms yet.
-  const canEditTerms =
-    !!bounty && bounty.status === 'open' && !bounty.accepted_by && applicationCount === 0;
+  const canEditTerms = !!bounty && bounty.status === 'open' && !bounty.accepted_by && applicationCount === 0;
 
   const explainEditLocked = useCallback(() => {
     if (!bounty) return;
@@ -221,73 +318,141 @@ export default function BountyDashboard() {
     else explainEditLocked();
   }, [openEdit, isLoading, bounty, role, canEditTerms, explainEditLocked]);
 
+  const reloadAll = useCallback(async () => {
+    await refresh();
+    reloadApplicants();
+    conversation.reload();
+  }, [refresh, reloadApplicants, conversation]);
+
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await refresh();
+      await reloadAll();
     } finally {
       setIsRefreshing(false);
     }
-  }, [refresh]);
+  }, [reloadAll]);
 
-  // Coming back from Requests (an offer accepted), a chat, Contact support or
-  // the edit screen: re-read quietly so the page doesn't keep showing the
-  // state it had when the poster left (e.g. "You haven't paid anything yet"
-  // for a job they just hired someone on). The first focus is the initial
-  // load, which useBountyLifecycle already does.
-  // Read through a ref so a new `refresh` identity (auth restoring) doesn't
-  // count as a focus and fire an extra load.
+  // Coming back from a chat, the dispute screen or support: re-read quietly so
+  // the page doesn't keep showing the state it had when the poster left. The
+  // first focus is the initial load. Read through a ref so a new `refresh`
+  // identity (auth restoring) doesn't count as a focus.
   const hasFocusedOnceRef = React.useRef(false);
-  const refreshRef = React.useRef(refresh);
-  refreshRef.current = refresh;
+  const reloadRef = React.useRef(reloadAll);
+  reloadRef.current = reloadAll;
   useFocusEffect(
     useCallback(() => {
       if (!hasFocusedOnceRef.current) {
         hasFocusedOnceRef.current = true;
         return;
       }
-      void refreshRef.current();
+      void reloadRef.current();
     }, [])
   );
 
   const goBack = useCallback(() => {
     if (router.canGoBack()) router.back();
-    else router.replace(bountyAppTabPath('messages', 'myPostings') as never);
+    else router.replace(MY_JOBS_ROUTE as never);
   }, [router]);
 
-  // ── Actions ───────────────────────────────────────────────────────────────
-  const handleMessage = useCallback(async () => {
-    if (!bounty) return;
-    const hunterId = otherParty.id ?? (bounty.accepted_by as string | undefined) ?? null;
-    if (!hunterId) {
-      Alert.alert(
-        'No hunter yet',
-        'You can message a hunter once you have selected one for this bounty.'
-      );
-      return;
-    }
-    setBusyAction('message');
-    try {
-      const conversation = await messageService.getOrCreateConversation(
-        [String(hunterId)],
-        '',
-        String(bounty.id)
-      );
-      if (!conversation?.id) throw new Error('no conversation');
-      router.push(`/tabs/messenger/${encodeURIComponent(String(conversation.id))}` as never);
-    } catch {
-      Alert.alert(
-        "Couldn't open the conversation",
-        'Check your connection and try again. Your messages are safe either way.'
-      );
-    } finally {
-      setBusyAction(null);
-    }
-  }, [bounty, otherParty.id, router]);
+  // ── Hiring (D → E): the job thread's accept / reject hooks and pay gate ──
+  const [localError, setLocalError] = useState<string | null>(null);
+  React.useEffect(() => {
+    if (!localError) return;
+    Alert.alert('Something went wrong', localError);
+    setLocalError(null);
+  }, [localError]);
+  const { gate: acceptFundingGate, ensureFunded, handleAcceptFailure } = useAcceptFunding();
+  const reloadForRequests = useCallback(async () => {
+    reloadApplicants();
+  }, [reloadApplicants]);
+  const { handleAcceptRequest } = useAcceptRequest({
+    currentUserId: currentUserId ?? undefined,
+    bountyRequests: applicants,
+    myBounties: bounty ? [bounty] : [],
+    setBountyRequests: noop as any,
+    setMyBounties: noop as any,
+    setInProgressBounties: noop as any,
+    setIsLoading: noop as any,
+    setError: setLocalError,
+    loadMyBounties: refresh,
+    loadInProgress: refresh,
+    loadRequestsForMyBounties: reloadForRequests,
+    setActiveScreen: () => router.replace(MY_JOBS_ROUTE as never),
+    ensureFunded,
+    refreshWallet,
+    handleAcceptFailure,
+    showSuccessAlert: false,
+  });
+  const { handleRejectRequest } = useRejectRequest({
+    bountyRequests: applicants,
+    setBountyRequests: noop as any,
+    setIsLoading: noop as any,
+    setError: setLocalError,
+  });
 
-  // Approving the work goes through PosterReviewModal's own "Complete and
-  // release payment?" warning and two-step "Approve and pay" → "Yes, pay"
-  // confirmation before approveAndRelease.
+  const openThread = useCallback(
+    (withId: string | null) => {
+      if (!bounty) return;
+      const params: Record<string, string> = { bountyId: String(bounty.id), role: 'poster' };
+      if (withId) params.with = withId;
+      router.push({ pathname: '/tabs/bounty-thread/[bountyId]', params } as never);
+    },
+    [bounty, router]
+  );
+
+  const chooseApplicant = useCallback(
+    async (request: BountyRequestWithDetails) => {
+      if (!bounty || busyAction) return;
+      const hunterId = String((request as any).hunter_id ?? (request as any).user_id ?? '');
+      const name = firstName(request.profile?.username) ?? 'They';
+      markEngaged('accept');
+      setBusyAction('choose');
+      try {
+        await handleAcceptRequest(request.id);
+        // The toast only follows an accept the server actually recorded.
+        const fresh = await bountyService.getById(String(bounty.id)).catch(() => null);
+        if (fresh && String(fresh.accepted_by ?? '') === hunterId) {
+          setPersonIndex(null);
+          setToast(`You chose ${name}. ${name} is your helper now.`);
+        }
+      } finally {
+        setBusyAction(null);
+        checkUnresolvedDeposit();
+        await reloadAll();
+      }
+    },
+    [bounty, busyAction, handleAcceptRequest, reloadAll, markEngaged, checkUnresolvedDeposit]
+  );
+
+  const passApplicant = useCallback(
+    (request: BountyRequestWithDetails) => {
+      const name = firstName(request.profile?.username) ?? 'This person';
+      Alert.alert(`Pass on ${name}?`, `${name}'s offer will be declined.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pass',
+          style: 'destructive',
+          onPress: async () => {
+            markEngaged('decline');
+            setBusyAction('pass');
+            try {
+              await handleRejectRequest(request.id);
+            } finally {
+              setBusyAction(null);
+              setPersonIndex((i) => (i === null || applicants.length <= 1 ? null : Math.max(0, Math.min(i, applicants.length - 2))));
+              await reloadAll();
+            }
+          },
+        },
+      ]);
+    },
+    [handleRejectRequest, applicants.length, reloadAll, markEngaged]
+  );
+
+  // ── Review and rating (PosterReviewModal) ────────────────────────────────
+  // Approving goes through PosterReviewModal's own "If you approve" step and
+  // its "Pay Ada $60?" confirmation before approveAndRelease.
   const handleReviewSubmission = useCallback(() => {
     if (!bounty?.accepted_by) {
       Alert.alert('No hunter yet', 'There is no submitted work to review on this bounty.');
@@ -297,29 +462,27 @@ export default function BountyDashboard() {
     setShowReview(true);
   }, [bounty?.accepted_by]);
 
-  // "Leave a review" opens the rating step of the same modal. A poster who
-  // already rated this hunter for this job is told so rather than asked again.
+  // "Send rating" opens the rating step of the same modal with the stars
+  // already chosen. A poster who already rated this helper is told so.
   const handleLeaveReview = useCallback(async () => {
     if (!bounty) return;
     const hunterId = bounty.accepted_by ? String(bounty.accepted_by) : otherParty.id;
     if (!hunterId || !currentUserId) {
-      Alert.alert(
-        "Couldn't open the review",
-        "We couldn't tell who did this job. Pull down to refresh, then try again."
-      );
+      Alert.alert("Couldn't open the review", "We couldn't tell who did this job. Pull down to refresh, then try again.");
       return;
     }
-    setBusyAction('leave_review');
-    let alreadyRated: boolean;
+    setBusyAction('send_rating');
+    let rated: boolean;
     try {
-      alreadyRated = await ratingsService.hasRated(String(currentUserId), String(bounty.id), hunterId);
+      rated = await ratingsService.hasRated(String(currentUserId), String(bounty.id), hunterId);
     } catch {
       Alert.alert("Couldn't open the review", 'Check your connection and try again.');
       return;
     } finally {
       setBusyAction(null);
     }
-    if (alreadyRated) {
+    if (rated) {
+      setAlreadyRated(true);
       Alert.alert('Already reviewed', `You've already left a review for ${hunterName}. Thank you!`);
       return;
     }
@@ -332,6 +495,18 @@ export default function BountyDashboard() {
     setReviewStartsOnRating(false);
   }, []);
 
+  // A rating_reminder lands here with ?openReview=true: once the bounty is
+  // loaded and rating is actually the thing to do, open the rating step.
+  React.useEffect(() => {
+    if (openReview !== 'true' || autoOpenReviewHandledRef.current) return;
+    if (isLoading || !bounty || role !== 'poster' || !state) return;
+    autoOpenReviewHandledRef.current = true;
+    const offersReview =
+      state.primaryAction?.key === 'leave_review' || state.secondaryActions.some((a) => a.key === 'leave_review');
+    if (offersReview) void handleLeaveReview();
+  }, [openReview, isLoading, bounty, role, state, handleLeaveReview]);
+
+  // ── Edit ─────────────────────────────────────────────────────────────────
   const handleSaveEdit = useCallback(
     async (updates: Partial<Bounty>) => {
       if (updates.requirements_payload !== undefined) {
@@ -343,31 +518,19 @@ export default function BountyDashboard() {
       }
       if (!bounty) return;
       // A hunter applying mid-edit must not have the terms changed underneath
-      // them — the same guard the list screens apply, re-checked server-side
-      // against the live request rows rather than a stale local count.
+      // them — re-checked against the live request rows, not a stale count.
       try {
-        const pending = await bountyRequestService.getAll({
-          bountyId: String(bounty.id),
-          status: 'pending',
-        });
+        const pending = await bountyRequestService.getAll({ bountyId: String(bounty.id), status: 'pending' });
         if (pending && pending.length > 0) {
-          Alert.alert(
-            "Can't edit now",
-            'A hunter applied while you were editing, so the terms are locked. Review the applications instead.'
-          );
+          Alert.alert("Can't edit now", 'A hunter applied while you were editing, so the terms are locked. Review the applications instead.');
           return;
         }
       } catch {
-        Alert.alert(
-          "Can't edit right now",
-          "We couldn't check for new applications. Check your connection and try again."
-        );
+        Alert.alert("Can't edit right now", "We couldn't check for new applications. Check your connection and try again.");
         return;
       }
-
       // A refusal throws a BountyUpdateError whose message says why in plain
-      // words; letting it reach the edit modal shows it inline with the
-      // poster's edits intact, instead of closing on "update failed" (SBA-10).
+      // words; letting it reach the edit modal shows it inline (SBA-10).
       await bountyService.update(bounty.id, updates);
       setShowEditModal(false);
       await refresh();
@@ -375,9 +538,8 @@ export default function BountyDashboard() {
     [bounty, refresh]
   );
 
-  // "Cancel and refund" (SBA-10): the same refund-then-delete path as the
-  // Inbox row's trash icon (lib/services/bounty-cancel-refund.ts), confirmed
-  // here with the amount coming back and where it goes.
+  // ── J.4: take this job down (nobody chosen) ──────────────────────────────
+  // The same refund-then-delete path as My Jobs (lib/services/bounty-cancel-refund.ts).
   const runCancel = useCallback(
     async (target: Bounty, plan: CancelRefundPlan) => {
       if (cancellingRef.current) return;
@@ -386,12 +548,8 @@ export default function BountyDashboard() {
       try {
         const resolvedPlan = await cancelAndRefundBounty(target, { refundEscrow }, plan);
         markBountyRemovedLocally(target.id);
-        // Matches the button: a refund means it was cancelled and refunded;
-        // otherwise the job was simply taken down.
         const doneTitle = resolvedPlan.destination ? 'Bounty cancelled' : 'Job taken down';
-        Alert.alert(doneTitle, describeCancelRefundDone(resolvedPlan), [
-          { text: 'OK', onPress: goBack },
-        ]);
+        Alert.alert(doneTitle, describeCancelRefundDone(resolvedPlan), [{ text: 'OK', onPress: goBack }]);
       } catch (err) {
         if (err instanceof BountyRefundFailedError) {
           Alert.alert(
@@ -399,10 +557,7 @@ export default function BountyDashboard() {
             "We couldn't refund the money held for this bounty, so it is still live and nothing was lost. Try again, or contact support."
           );
         } else if (plan.destination) {
-          Alert.alert(
-            "Couldn't take the bounty down",
-            'Your refund went through, but the bounty is still listed. Pull to refresh and try again.'
-          );
+          Alert.alert("Couldn't take the bounty down", 'Your refund went through, but the bounty is still listed. Pull to refresh and try again.');
           void refresh();
         } else {
           const friendly = getUserFriendlyError(err);
@@ -416,8 +571,8 @@ export default function BountyDashboard() {
     [refundEscrow, goBack, refresh]
   );
 
-  // A quick second tap on "Take this job down" used to start a second money
-  // read and stack a second confirmation behind the first.
+  // A quick second tap must not start a second money read and stack a second
+  // confirmation behind the first.
   const takeDownCheckRef = React.useRef(false);
   const handleCancelAndRefund = useCallback(async () => {
     if (!bounty || !canPosterCancelBounty(bounty) || cancellingRef.current || takeDownCheckRef.current) return;
@@ -442,116 +597,168 @@ export default function BountyDashboard() {
     // The confirmation below is modal, so the guard can drop once it shows.
     takeDownCheckRef.current = false;
     const copy = describeTakeDown(bounty, plan, charge);
-    Alert.alert(copy.title, copy.message, [
-      { text: 'Keep it', style: 'cancel' },
-      { text: copy.confirmLabel, style: 'destructive', onPress: () => void runCancel(bounty, plan) },
-    ]);
-  }, [bounty, runCancel]);
-
-  const handlers = useMemo((): Partial<Record<BountyActionKey, () => void>> => {
-    if (!bounty || !routeBountyId) return {};
-    const map: Partial<Record<BountyActionKey, () => void>> = {
-      message: handleMessage,
-      share: () =>
-        shareBounty({
-          id: bounty.id,
-          title: bounty.title,
-          amount: bounty.amount,
-          isForHonor: bounty.is_for_honor,
-          description: bounty.description,
-          category: bounty.category,
-          location: bounty.location,
-        }),
-      review_applications: () => router.push(bountyAppTabPath('messages', 'requests', routeBountyId) as never),
-      review_submission: handleReviewSubmission,
-      view_payout: () =>
-        router.push({
-          pathname: '/postings/[bountyId]/payout',
-          params: { bountyId: routeBountyId },
-        } as never),
-      leave_review: () => void handleLeaveReview(),
-      repost: () => router.push(POST_BOUNTY_ROUTE as never),
-      // No cancel_bounty for the poster: cancellation REQUESTS are hunter-only
-      // (see describeHunter in lib/utils/bounty-lifecycle.ts). A poster with an
-      // unaccepted bounty deletes it (refunded on the spot); once a hunter is
-      // working, the poster's route is a dispute. The poster's role here is to
-      // RESPOND to the hunter's request, below.
-      respond_cancellation: () =>
-        router.push({
-          pathname: '/bounty/[id]/cancellation-response',
-          params: { id: routeBountyId },
-        } as never),
-      open_dispute: () =>
-        router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
-      view_dispute: () =>
-        router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
-      // The real support form (not /tabs/need-help-screen, which is the
-      // Post-a-Bounty composer), with this job attached.
-      contact_support: () =>
-        router.push({
-          pathname: '/support/contact',
-          params: { bountyId: routeBountyId, bountyTitle: bounty.title ?? '' },
-        } as never),
-    };
-
-    // Open and nobody hired: the poster can edit (or hear why not) and cancel,
-    // refunding anything held. Both render in the Manage row, always visible.
-    if (canPosterCancelBounty(bounty)) {
-      map.edit = canEditTerms ? () => setShowEditModal(true) : explainEditLocked;
-      map.delete = () => void handleCancelAndRefund();
-    }
-    return map;
-  }, [
-    bounty,
-    routeBountyId,
-    canEditTerms,
-    explainEditLocked,
-    handleMessage,
-    handleCancelAndRefund,
-    handleReviewSubmission,
-    handleLeaveReview,
-    router,
-  ]);
-
-  // A rating_reminder lands here with ?openReview=true: once the bounty is
-  // loaded and reviewing is actually the thing to do, open the rating step.
-  React.useEffect(() => {
-    if (openReview !== 'true' || autoOpenReviewHandledRef.current) return;
-    if (isLoading || !bounty || role !== 'poster' || !state) return;
-    autoOpenReviewHandledRef.current = true;
-    const offersReview =
-      state.primaryAction?.key === 'leave_review' ||
-      state.secondaryActions.some(a => a.key === 'leave_review');
-    if (offersReview) void handleLeaveReview();
-  }, [openReview, isLoading, bounty, role, state, handleLeaveReview]);
-
-  // Edit and cancel live in the Manage row rather than behind the panel's
-  // "More actions" disclosure, where posters couldn't find them.
-  const panelHandlers = useMemo(() => {
-    const { edit: _edit, delete: _delete, ...rest } = handlers;
-    return rest;
-  }, [handlers]);
+    askConfirm({ ...copy, onConfirm: () => void runCancel(bounty, plan) });
+  }, [bounty, runCancel, askConfirm]);
 
   // ── Redirect rather than dead-end a non-poster ────────────────────────────
   React.useEffect(() => {
     if (isAuthLoading || isLoading || !bounty || !routeBountyId) return;
     if (role === 'poster') return;
     if (role === 'hunter') {
-      router.replace({
-        pathname: '/in-progress/[bountyId]/hunter',
-        params: { bountyId: routeBountyId },
-      } as never);
+      router.replace({ pathname: '/in-progress/[bountyId]/hunter', params: { bountyId: routeBountyId } } as never);
     } else {
-      router.replace({
-        pathname: '/bounty/[id]/public',
-        params: { id: routeBountyId },
-      } as never);
+      router.replace({ pathname: '/bounty/[id]/public', params: { id: routeBountyId } } as never);
     }
   }, [isAuthLoading, isLoading, bounty, role, routeBountyId, router]);
 
+  // ── The stage ────────────────────────────────────────────────────────────
+  const view = useMemo(() => {
+    if (!bounty || !state) return null;
+    return describePosterStage({
+      bounty: bounty as any,
+      lifecycle: state,
+      helperName,
+      applicantCount: applicationCount,
+      submission,
+      hasDispute,
+      disputeOpenedByViewer: problems.dispute?.initiatorId
+        ? String(problems.dispute.initiatorId) === String(currentUserId)
+        : null,
+      cancellation: problems.cancellation
+        ? {
+            requesterType: problems.cancellation.requesterType,
+            reason: problems.cancellation.reason,
+            refundAmount: problems.cancellation.refundAmount ?? null,
+            refundPercentage: problems.cancellation.refundPercentage ?? null,
+          }
+        : null,
+      openJobCharge,
+      awaitingReplySince: conversation.awaitingReplySince,
+      paymentConfirmingFor: unresolvedDeposit?.hunterName ?? null,
+      justPosted: posted === '1' || posted === 'true',
+      expiryHours: expiryPolicy.expiryHours,
+      canRate: !alreadyRated,
+    });
+  }, [
+    bounty,
+    state,
+    helperName,
+    applicationCount,
+    submission,
+    hasDispute,
+    problems.dispute,
+    problems.cancellation,
+    currentUserId,
+    openJobCharge,
+    conversation.awaitingReplySince,
+    unresolvedDeposit,
+    posted,
+    expiryPolicy.expiryHours,
+    alreadyRated,
+  ]);
+
+  const handleAction = useCallback(
+    async (key: PosterActionKey) => {
+      if (!bounty || !routeBountyId || !view) return;
+      if (view.primary?.key === key) {
+        trackWorkspacePrimaryTapped({ bountyId: routeBountyId, side: 'posted', screenId: view.screenId, action: key });
+      }
+      switch (key) {
+        case 'done':
+          // Straight from the composer, "back" would be the composer again.
+          if (posted === '1' || posted === 'true') router.replace(MY_JOBS_ROUTE as never);
+          else goBack();
+          return;
+        case 'keep_waiting':
+        case 'skip_rating':
+        case 'back_to_jobs':
+          goBack();
+          return;
+        case 'add_details':
+          if (canEditTerms) setShowEditModal(true);
+          else explainEditLocked();
+          return;
+        case 'see_people':
+          setPersonIndex(0);
+          return;
+        case 'message':
+          openThread(helperId);
+          return;
+        case 'report_no_reply':
+          router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId, reason: 'hunter_unresponsive' } } as never);
+          return;
+        case 'review_work':
+          handleReviewSubmission();
+          return;
+        case 'send_rating':
+          await handleLeaveReview();
+          return;
+        case 'respond_cancellation':
+          router.push({ pathname: '/bounty/[id]/cancellation-response', params: { id: routeBountyId } } as never);
+          return;
+        case 'see_report':
+          if (disputeId) router.push(`/dispute/${disputeId}` as never);
+          else router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never);
+          return;
+        case 'repost':
+          router.push(POST_BOUNTY_ROUTE as never);
+          return;
+      }
+    },
+    [
+      bounty,
+      routeBountyId,
+      view,
+      posted,
+      goBack,
+      canEditTerms,
+      explainEditLocked,
+      openThread,
+      helperId,
+      currentUserId,
+      handleReviewSubmission,
+      handleLeaveReview,
+      router,
+      disputeId,
+    ]
+  );
+
+  // The lifecycle's support action: the real support form (not
+  // /tabs/need-help-screen, which is the Post-a-Bounty composer), with this
+  // job attached. Help's "Talk to a person at Bounty" lands here.
+  const lifecycleHandlers = useMemo(
+    () => ({
+      contact_support: () =>
+        router.push({
+          pathname: '/support/contact',
+          params: { bountyId: routeBountyId, bountyTitle: bounty?.title ?? '' },
+        } as never),
+    }),
+    [router, routeBountyId, bounty?.title]
+  );
+
+  const onHelpOption = useCallback(
+    (option: HelpOptionSpec) => {
+      if (!bounty || !routeBountyId) return;
+      setHelpOpen(false);
+      switch (option.target) {
+        case 'thread':
+          openThread(helperId);
+          return;
+        case 'dispute':
+          router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId, ...(option.reason ? { reason: option.reason } : {}) } } as never);
+          return;
+        default:
+          lifecycleHandlers.contact_support();
+      }
+    },
+    [bounty, routeBountyId, openThread, helperId, router, lifecycleHandlers]
+  );
+
   // ── States ────────────────────────────────────────────────────────────────
+  const renderScreen = () => {
   if (isAuthLoading || (isLoading && !bounty)) {
-    return <ScreenLoader label="Loading your bounty…" />;
+    return <ScreenLoader label="Loading your job…" />;
   }
 
   if (notFound) {
@@ -560,7 +767,7 @@ export default function BountyDashboard() {
         title="This bounty is gone"
         message="It was deleted, or the link points somewhere that no longer exists. Your other postings are unaffected."
         icon="search-off"
-        actionText="Back to My Postings"
+        actionText="Back to My Jobs"
         onAction={goBack}
       />
     );
@@ -569,398 +776,316 @@ export default function BountyDashboard() {
   if (error || !bounty) {
     return (
       <SafeAreaView style={s.centered}>
-        <MaterialIcons name="cloud-off" size={48} color={theme.textSecondary} />
-        <Text style={s.errorTitle}>{"Couldn't load this bounty"}</Text>
-        <Text style={s.centeredText}>
-          {"You're offline or the connection dropped. Nothing about the bounty has changed."}
-        </Text>
-        <TouchableOpacity accessibilityRole="button" style={s.retryButton} onPress={onRefresh}>
-          <Text style={s.retryButtonText}>Try again</Text>
-        </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" style={s.textButton} onPress={goBack}>
-          <Text style={s.textButtonText}>Go back</Text>
-        </TouchableOpacity>
+        <NoteBox
+          tone="e"
+          icon="cloud-off"
+          title={"Couldn't load this job"}
+          text="You're offline or the connection dropped."
+          text2="Nothing about the job has changed."
+        />
+        <PosterButton label="Try again" icon="refresh" onPress={onRefresh} />
+        <PosterButton kind="text" label="Go back" onPress={goBack} />
       </SafeAreaView>
     );
   }
 
-  // Redirect in flight for a non-poster — don't paint a poster's dashboard.
-  if (role !== 'poster' || !state) {
-    return <ScreenLoader label="Opening bounty…" />;
+  // Redirect in flight for a non-poster — don't paint a poster's workspace.
+  if (role !== 'poster' || !state || !view) {
+    return <ScreenLoader label="Opening your job…" />;
   }
 
-  const stages = getBountyStages('poster');
-  const description = bounty.description ?? '';
-  const descriptionPreview =
-    description.length > 180 ? `${description.substring(0, 180)}…` : description;
-  // While the job is open and unhired the server says whether money is held;
-  // after that, the existing status-based answer stands.
-  const escrowHeld = openJobCharge ? openJobCharge === 'held' : bountyHoldsUnreleasedEscrow(bounty as any);
-  // formatCategoryLabel returns null for a bounty with no category.
-  const categoryLabel = formatCategoryLabel((bounty as any).category);
-  // "Refund" only when money was actually collected. Otherwise taking the job
-  // down is all that happens; the confirmation still re-checks on tap.
-  const cancelLabel = openJobCharge === 'held' ? 'Cancel and refund' : 'Take this job down';
-  const payment = describePaymentLine({
-    openJobCharge,
-    escrowHeld,
-    completed: bounty.status === 'completed',
-    hired: !!bounty.accepted_by,
-    hunterName,
+  const icon = getBountyCategoryIcon(bounty.category) as IconName;
+  const coverUri = getBountyCoverUri(bounty.attachments_json);
+  const meta = posterHeaderMeta({ bounty: bounty as any, helperName });
+  const side = worksBothSides ? 'posted' : null;
+  const working = bounty.status === 'in_progress' || bounty.status === 'cancellation_requested';
+  const helpOptions = getHelpOptions({
+    side: 'posted',
+    otherName: helperName ? helperFirst : null,
+    working: working && !!helperId,
+    workSubmitted: submission?.status === 'pending',
+    disputeOpen: hasDispute,
   });
+  const heldAmount = bounty.is_for_honor ? null : formatJobAmount(bounty.amount);
+  const cancelLabel = openJobCharge === 'held' ? 'Cancel and refund' : 'Take this job down';
+  const moreItems: OtherOption[] = canPosterCancelBounty(bounty)
+    ? [
+        {
+          key: 'edit',
+          label: 'Edit job details',
+          icon: canEditTerms ? 'edit' : 'lock-outline',
+          onPress: canEditTerms ? () => setShowEditModal(true) : explainEditLocked,
+          disabledReason: canEditTerms ? undefined : 'Explains why the details are locked',
+        },
+        {
+          key: 'take_down',
+          label: cancelLabel,
+          icon: 'delete-outline',
+          danger: true,
+          busy: busyAction === 'delete',
+          onPress: () => void handleCancelAndRefund(),
+        },
+      ]
+    : [];
 
-  return (
-    <SafeAreaView style={s.container} edges={['top']}>
-      <View style={s.header}>
-        <TouchableOpacity
-          style={s.headerIcon}
-          onPress={goBack}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>
-          Your bounty
-        </Text>
-        <TouchableOpacity
-          style={s.headerIcon}
-          onPress={handlers.share}
-          accessibilityRole="button"
-          accessibilityLabel="Share this bounty"
-        >
-          <MaterialIcons name="share" size={22} color={theme.text} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={s.scroll}
-        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.text}
-            colors={[theme.primary]}
-          />
+  // ── D: one person at a time ──────────────────────────────────────────────
+  const person = shownPerson;
+  let personScreen: React.ReactNode = null;
+  if (person && personIndex !== null) {
+    const personView = describeApplicant(person, {
+      index: personIndex,
+      total: applicants.length,
+      verified:
+        deriveCoarseVerificationStatus(
+          (person.profile as any)?.stripe_identity_status,
+          (person.profile as any)?.id_verification_status
+        ) === 'verified',
+      online: bounty.work_type === 'online',
+    });
+    const busy = busyAction === 'choose' || busyAction === 'pass';
+    personScreen = (
+      <WorkspaceLayout
+        testID="poster-person-view"
+        footer={
+          <PinnedFooter>
+            <PosterButton
+              label={`Choose ${personView.first}`}
+              loading={busyAction === 'choose'}
+              loadingLabel={`Choosing ${personView.first}`}
+              disabled={busy}
+              onPress={() => {
+                trackWorkspacePrimaryTapped({ bountyId: String(bounty.id), side: 'posted', screenId: 'D', action: 'choose' });
+                void chooseApplicant(person);
+              }}
+              testID="person-choose"
+            />
+            <PosterButton kind="muted" label="Not this time" disabled={busy} onPress={() => passApplicant(person)} testID="person-pass" />
+          </PinnedFooter>
         }
       >
-        {/* ── Identity: what is this, and what is it worth ──────────────── */}
-        <View style={s.heroCard}>
-          <View style={s.heroTopRow}>
-            <Text style={s.heroTitle} numberOfLines={3}>
-              {bounty.title}
-            </Text>
-            {bounty.is_for_honor ? (
-              <View style={s.honorPill}>
-                <MaterialIcons name="favorite" size={14} color="#ffffff" />
-                <Text style={s.honorPillText}>For honor</Text>
-              </View>
-            ) : (
-              <Text style={s.heroAmount}>${bounty.amount}</Text>
-            )}
-          </View>
-
-          <View style={s.metaRow}>
-            <MetaChip icon="schedule" label={`Posted ${formatTimeAgo(bounty.created_at)}`} s={s} color={theme.textSecondary} />
-            {!!bounty.end_date && (
-              <MetaChip icon="event" label={`Due ${formatDate(bounty.end_date)}`} s={s} color={theme.textSecondary} />
-            )}
-            {!!categoryLabel && (
-              <MetaChip icon="local-offer" label={categoryLabel} s={s} color={theme.textSecondary} />
-            )}
-            {!!bounty.work_type && (
-              <MetaChip
-                icon={bounty.work_type === 'online' ? 'computer' : 'person-pin'}
-                label={bounty.work_type === 'online' ? 'Online' : 'In person'}
-                s={s}
-                color={theme.textSecondary}
-              />
-            )}
-          </View>
-
-          {/* Bounty-level trust requirement system (lib/utils/trust-tier.ts):
-              tells the poster WHY their applicant pool is filtered, without
-              re-litigating the choice — there's no edit-after-posting UI for
-              this in scope. */}
-          {bounty.requires_id_verified && (
-            <View style={s.metaRow}>
-              <MetaChip
-                icon="verified-user"
-                label={`Only ID-verified hunters can apply — ${getTrustTierLabel(bounty.trust_tier)}`}
-                s={s}
-                color={theme.primary}
-              />
-            </View>
-          )}
-
-          {/* ── Manage: the poster's own edit / cancel, never hidden ───────── */}
-          {canPosterCancelBounty(bounty) ? (
-            <View style={s.manageRow} testID="bounty-manage-actions">
-              <TouchableOpacity
-                style={[s.outlineBtn, !canEditTerms && s.dimmedBtn]}
-                onPress={handlers.edit}
-                accessibilityRole="button"
-                accessibilityLabel="Edit details"
-                accessibilityHint={
-                  canEditTerms
-                    ? 'Change the title, description, reward or deadline'
-                    : 'Explains why the details are locked'
-                }
-              >
-                <MaterialIcons name={canEditTerms ? 'edit' : 'lock-outline'} size={16} color={theme.text} />
-                <Text style={s.outlineBtnText}>Edit details</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.outlineBtn, s.dangerBtn]}
-                onPress={handlers.delete}
-                disabled={busyAction === 'delete'}
-                accessibilityRole="button"
-                accessibilityLabel={cancelLabel}
-                accessibilityState={{ disabled: busyAction === 'delete', busy: busyAction === 'delete' }}
-              >
-                {busyAction === 'delete' ? (
-                  <ActivityIndicator size="small" color={theme.error} />
-                ) : (
-                  <MaterialIcons name="cancel" size={16} color={theme.error} />
-                )}
-                <Text style={[s.outlineBtnText, { color: theme.error }]}>{cancelLabel}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : bounty.status === 'in_progress' || bounty.status === 'cancellation_requested' ? (
-            <View style={s.manageNote} testID="bounty-manage-locked">
-              <MaterialIcons name="lock-outline" size={14} color={theme.textSecondary} />
-              <Text style={s.cardBodyMuted}>
-                {`${hunterName} is working on this, so it can't be edited or cancelled. Message them, or use Report a problem if something's wrong.`}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* ── The command center: what's happening, what's next, what to do ── */}
-        <BountyStatusPanel
-          state={state}
-          role="poster"
-          otherPartyName={otherParty.name}
-          onAction={panelHandlers}
-          busyAction={busyAction}
+        <WorkspaceHeader
+          onBack={() => setPersonIndex(null)}
+          backLabel="Your job"
+          onHelp={() => setHelpOpen(true)}
+          icon={icon}
+          coverUri={coverUri}
+          title={bounty.title}
+          meta={meta}
+          side={side}
+          step={2}
+          stage={personView.stage}
         />
-
-        {/* ── Where this bounty is in its life ──────────────────────────── */}
-        <View style={s.card}>
-          <Text style={s.sectionTitle}>Progress</Text>
-          <Stepper stages={stages} activeIndex={state.stageIndex} variant="compact" />
+        <PeopleStrip
+          label="WHO OFFERED"
+          people={applicants.map((r) => ({ key: String(r.id), name: firstName(r.profile?.username) ?? 'Someone', avatarUri: r.profile?.avatar ?? null }))}
+          selectedKey={String(person.id)}
+          labelOnly={applicants.length === 1}
+          onSelect={(chosen) => setPersonIndex(Math.max(0, applicants.findIndex((r) => String(r.id) === chosen.key)))}
+        />
+        <ApplicantProfile
+          name={personView.name}
+          avatarUri={person.profile?.avatar ?? null}
+          since={personView.since}
+          note={personView.note}
+          facts={personView.facts.map((f) => ({ icon: f.icon as IconName, text: f.text, muted: f.muted }))}
+        />
+        {/* Buttons, never a swipe: previous, ask, next. */}
+        <View style={s.personNav}>
+          <PosterButton
+            kind="secondary"
+            label={`Ask ${personView.first} a question`}
+            onPress={() => {
+              markEngaged('message');
+              openThread(String((person as any).hunter_id ?? ''));
+            }}
+            style={s.flex}
+            testID="person-ask"
+          />
+          <PosterButton
+            kind="neutral"
+            label="Next person"
+            trailingIcon="chevron-right"
+            disabled={personIndex >= applicants.length - 1}
+            onPress={() => setPersonIndex(Math.min(applicants.length - 1, personIndex + 1))}
+            style={s.flex}
+            testID="person-next"
+          />
         </View>
+        {personIndex > 0 ? (
+          <PosterButton
+            kind="text"
+            icon="chevron-left"
+            label="Previous person"
+            onPress={() => setPersonIndex(Math.max(0, personIndex - 1))}
+            testID="person-previous"
+          />
+        ) : null}
+        <HelpSheet
+          visible={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          subtitle={null}
+          options={helpOptions.map((o) => ({ ...o, icon: o.icon as IconName, onPress: () => onHelpOption(o) }))}
+          onTalkToPerson={() => onHelpOption({ key: 'other', icon: 'help-outline', text: '', tone: 'i', target: 'support' })}
+        />
+      </WorkspaceLayout>
+    );
+  }
 
-        {/* ── Applications ─────────────────────────────────────────────── */}
-        {bounty.status === 'open' && (
-          <TouchableOpacity
-            style={s.card}
-            onPress={handlers.review_applications}
-            accessibilityRole="button"
-            accessibilityLabel={
-              applicationCount > 0
-                ? `${applicationCount} applications waiting for review`
-                : 'No applications yet'
-            }
-          >
-            <View style={s.rowBetween}>
-              <View style={s.rowLeft}>
-                <MaterialIcons name="people" size={20} color={theme.primaryLight} />
-                <Text style={s.sectionTitleInline}>Applications</Text>
-              </View>
-              {applicationCount > 0 ? (
-                <View style={s.countPill}>
-                  <Text style={s.countPillText}>{applicationCount}</Text>
-                </View>
-              ) : (
-                <Text style={s.mutedSmall}>None yet</Text>
-              )}
-            </View>
-            <Text style={s.cardBody}>
-              {applicationCount > 0
-                ? describeApplicationsLine(openJobCharge)
-                : `Hunters who apply show up here. Sharing the bounty gets it in front of more of them.`}
-            </Text>
-            {applicationCount > 0 && (
-              <View style={s.linkRow}>
-                <Text style={s.linkText}>Review hunters</Text>
-                <MaterialIcons name="chevron-right" size={18} color={theme.primaryLight} />
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
+  // ── Every other stage ────────────────────────────────────────────────────
+  const proofPhotos = (Array.isArray(submission?.proof_items) ? submission!.proof_items : [])
+    .filter((item: any) => item?.type === 'image')
+    .map((item: any, i: number) => ({
+      key: String(item.id ?? i),
+      uri: item.url || item.remoteUri || item.uri || null,
+      label: item.name || `Photo ${i + 1}`,
+      onPress: handleReviewSubmission,
+    }));
+  // DESIGN-GAP: bounty_events is admin-only (RLS), so "the story so far" is
+  // rebuilt from this job's own timestamps (posted, chosen), not an event log.
+  // TODO(E): a participant-readable event log for the full story.
+  const story: { when: string; what: string }[] = [];
+  const postedDay = formatJobDay(bounty.created_at);
+  if (postedDay) story.push({ when: capitalizeDay(postedDay), what: 'You posted the job' });
+  const hiredDay = formatJobDay(hireAt);
+  if (hiredDay && helperName) {
+    story.push({
+      when: capitalizeDay(hiredDay),
+      what:
+        bounty.is_for_honor || bounty.funding_mode === 'at_post'
+          ? `You chose ${helperFirst}`
+          : `You chose ${helperFirst} and paid ${formatJobAmount(bounty.amount)} into Bounty`,
+    });
+  }
+  const talkDay = formatJobDay(conversation.firstTalk?.at);
+  if (talkDay && conversation.firstTalk && helperName) {
+    // Not "agreed Saturday": an agreed time isn't stored, only that they wrote.
+    story.push({
+      when: capitalizeDay(talkDay),
+      what: conversation.firstTalk.mine ? `You messaged ${helperFirst}` : `${HelperFirst} messaged you`,
+    });
+  }
+  const lastMessage = conversation.lastFromOther;
 
-        {/* ── The hunter doing the work ─────────────────────────────────── */}
-        {!!bounty.accepted_by && (
-          <View style={s.card}>
-            <Text style={s.sectionTitle}>Your hunter</Text>
-            <View style={s.personRow}>
-              {otherParty.avatar ? (
-                <ExpoImage
-                  source={{ uri: otherParty.avatar }}
-                  style={s.avatar}
-                  recyclingKey={otherParty.avatar}
-                  accessibilityLabel={`${hunterName} profile picture`}
-                />
-              ) : (
-                <View style={[s.avatar, s.avatarFallback]}>
-                  <MaterialIcons name="person" size={24} color={theme.textSecondary} />
-                </View>
-              )}
-              <View style={s.personText}>
-                <Text style={s.personName}>{otherParty.name || 'Hunter'}</Text>
-                <Text style={s.mutedSmall}>Selected for this bounty</Text>
-              </View>
-            </View>
-            <View style={s.actionRow}>
-              <TouchableOpacity
-                style={s.outlineBtn}
-                onPress={handleMessage}
-                accessibilityRole="button"
-                accessibilityLabel={`Message ${hunterName}`}
-              >
-                <MaterialIcons name="chat" size={16} color={theme.text} />
-                <Text style={s.outlineBtnText}>Message</Text>
-              </TouchableOpacity>
-              {!!otherParty.id && (
-                <TouchableOpacity
-                  style={s.outlineBtn}
-                  onPress={() =>
-                    router.push(
-                      `/profile/${otherParty.id}?source=bounty_dashboard&isApplicant=false&bountyId=${encodeURIComponent(
-                        String(bounty.id)
-                      )}` as never
-                    )
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel={`View ${hunterName}'s profile`}
-                >
-                  <MaterialIcons name="badge" size={16} color={theme.text} />
-                  <Text style={s.outlineBtnText}>View profile</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
+  const workspace = (
+    <WorkspaceLayout
+      refreshing={isRefreshing}
+      onRefresh={onRefresh}
+      testID="poster-workspace"
+      footer={
+        <StageFooter
+          primary={view.primary}
+          secondary={view.secondary}
+          onAction={(key) => void handleAction(key)}
+          busyKey={busyAction && busyAction !== 'delete' && busyAction !== 'choose' && busyAction !== 'pass' ? busyAction : null}
+        />
+      }
+    >
+      <WorkspaceHeader
+        onBack={goBack}
+        onHelp={() => setHelpOpen(true)}
+        icon={icon}
+        coverUri={coverUri}
+        title={bounty.title}
+        meta={meta}
+        side={side}
+        step={view.step}
+        stage={view.stage}
+      />
+      {toast ? <StageToast text={toast} onHide={() => setToast(null)} /> : null}
 
-        {/* ── The submitted work ────────────────────────────────────────── */}
-        {!!submission && (
-          <View style={s.card}>
-            <View style={s.rowBetween}>
-              <Text style={s.sectionTitle}>Submitted work</Text>
-              <Text style={s.mutedSmall}>{submissionStatusLabel(submission.status)}</Text>
-            </View>
-            {!!submission.message && <Text style={s.cardBody}>{submission.message}</Text>}
-            {Array.isArray(submission.proof_items) && submission.proof_items.length > 0 && (
-              <View style={s.proofRow}>
-                <MaterialIcons name="attach-file" size={16} color={theme.primaryLight} />
-                <Text style={s.mutedSmall}>
-                  {submission.proof_items.length}{' '}
-                  {submission.proof_items.length === 1 ? 'attachment' : 'attachments'}
-                </Text>
-              </View>
-            )}
-            {submission.status === 'pending' && (
-              <TouchableOpacity
-                style={s.linkRow}
-                onPress={handlers.review_submission}
-                accessibilityRole="button"
-                accessibilityLabel="Open the full review"
-              >
-                <Text style={s.linkText}>Open the full review</Text>
-                <MaterialIcons name="chevron-right" size={18} color={theme.primaryLight} />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+      <FourQuestions now={view.now} means={view.means} money={view.money} after={view.after} moneyTestID="bounty-payment-state" />
 
-        {/* ── Money: the trust half of the transaction ──────────────────── */}
-        {!bounty.is_for_honor && (
-          <View style={s.card}>
-            <Text style={s.sectionTitle}>Payment</Text>
-            <View style={s.rowBetween}>
-              <Text style={s.cardBody}>Bounty reward</Text>
-              <Text style={s.paymentAmount}>${bounty.amount}</Text>
-            </View>
-            {/* Live region: "Checking your payment…" changing to the answer
-                is announced by TalkBack rather than happening silently. */}
-            <View style={s.paymentStateRow} testID="bounty-payment-state" accessibilityLiveRegion="polite">
-              <MaterialIcons
-                name={payment.icon}
-                size={16}
-                color={
-                  escrowHeld
-                    ? theme.warning
-                    : payment.icon === 'hourglass-empty' || payment.icon === 'help-outline'
-                      ? theme.textSecondary
-                      : theme.success
-                }
-              />
-              <View style={s.paymentStateText}>
-                {payment.headline ? <Text style={s.cardBody}>{payment.headline}</Text> : null}
-                <Text style={s.cardBodyMuted}>{payment.detail}</Text>
-              </View>
-            </View>
-            {openJobCharge === 'unknown' && (
-              <TouchableOpacity
-                style={[s.outlineBtn, s.selfStart]}
-                onPress={retryChargeRead}
-                accessibilityRole="button"
-                accessibilityLabel="Check payment again"
-                testID="bounty-payment-retry"
-              >
-                <MaterialIcons name="refresh" size={16} color={theme.text} />
-                <Text style={s.outlineBtnText}>Check again</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+      {view.show.checkPaymentAgain ? (
+        <PosterButton
+          kind="text"
+          icon="refresh"
+          label="Check again"
+          accessibilityLabel="Check payment again"
+          onPress={retryChargeRead}
+          testID="bounty-payment-retry"
+        />
+      ) : null}
 
-        {/* ── The brief itself ──────────────────────────────────────────── */}
-        <View style={s.card}>
-          <Text style={s.sectionTitle}>Details</Text>
-          {description.length > 0 ? (
-            <>
-              <Text style={s.cardBody}>
-                {descriptionExpanded ? description : descriptionPreview}
-              </Text>
-              {description.length > 180 && (
-                <TouchableOpacity
-                  style={s.expandBtn}
-                  onPress={() => setDescriptionExpanded(v => !v)}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: descriptionExpanded }}
-                >
-                  <Text style={s.linkText}>{descriptionExpanded ? 'Show less' : 'Show more'}</Text>
-                  <MaterialIcons
-                    name={descriptionExpanded ? 'expand-less' : 'expand-more'}
-                    size={16}
-                    color={theme.primaryLight}
-                  />
-                </TouchableOpacity>
-              )}
-            </>
-          ) : (
-            <Text style={s.cardBodyMuted}>No description was added to this bounty.</Text>
-          )}
-
-          {!!locationText && <DetailRow icon="place" text={locationText} s={s} color={theme.primaryLight} />}
-          {!!bounty.timeline && <DetailRow icon="schedule" text={bounty.timeline} s={s} color={theme.primaryLight} />}
-          {!!bounty.skills_required && (
-            <DetailRow icon="build" text={bounty.skills_required} s={s} color={theme.primaryLight} />
-          )}
+      {applicantsFailed ? (
+        <View style={s.applicantError} testID="applicant-load-error">
+          <NoteBox
+            tone="e"
+            icon="wifi-off"
+            title="We couldn't refresh the offers"
+            text="Your last loaded list is still here. Check your connection and try again."
+          />
+          <PosterButton kind="text" icon="refresh" label="Try again" onPress={reloadApplicants} />
         </View>
-      </ScrollView>
+      ) : null}
+
+      {view.show.peopleStrip && applicants.length > 0 ? (
+        <PeopleStrip
+          label="WHO OFFERED"
+          people={applicants.map((r) => ({ key: String(r.id), name: firstName(r.profile?.username) ?? 'Someone', avatarUri: r.profile?.avatar ?? null }))}
+          onSelect={(chosen) => setPersonIndex(Math.max(0, applicants.findIndex((r) => String(r.id) === chosen.key)))}
+        />
+      ) : null}
+      {view.show.offersCloseNote ? <Text style={s.smallMuted}>{view.show.offersCloseNote}</Text> : null}
+
+      {view.show.lastMessage && lastMessage ? (
+        <NoteBox
+          tone="n"
+          icon="format-quote"
+          title={`${HelperFirst}'s last message · ${[formatJobDay(lastMessage.at), formatClock(lastMessage.at)].filter(Boolean).join(' ')}`}
+          text={`“${lastMessage.text}”`}
+          testID="last-helper-message"
+        />
+      ) : null}
+      {view.show.story ? <StorySoFar items={story} /> : null}
+
+      {view.screenId === 'H' && submission?.message ? (
+        // The helper's own note, as the handoff's review screen (I) shows it.
+        <NoteBox tone="n" title={`${HelperFirst}'s note`} text={`“${submission.message}”`} testID="submitted-note" />
+      ) : null}
+      {view.show.proofPhotos && proofPhotos.length > 0 ? <ProofPhotos items={proofPhotos} cols={3} height={104} /> : null}
+
+      {view.show.rating ? (
+        <>
+          <Text style={s.h2} accessibilityRole="header">{`How did ${helperFirst} do? (optional)`}</Text>
+          <StarRating value={stars} onChange={setStars} />
+        </>
+      ) : null}
+
+      {moreItems.length > 0 ? (
+        <OtherOptions items={moreItems} initiallyOpen={view.moreOpen} testID="bounty-manage-actions" />
+      ) : working && helperId ? (
+        <Text style={s.smallMuted} testID="bounty-manage-locked">
+          {`${HelperFirst} is working on this, so it can't be edited or taken down. If something's wrong, tap Help.`}
+        </Text>
+      ) : null}
+
+      <JobDetails
+        open={detailsOpen}
+        onToggle={() => setDetailsOpen((v) => !v)}
+        description={bounty.description ?? ''}
+        rows={[
+          locationText ? { icon: 'place' as IconName, text: locationText } : null,
+          bounty.timeline ? { icon: 'schedule' as IconName, text: bounty.timeline } : null,
+          bounty.skills_required ? { icon: 'build' as IconName, text: bounty.skills_required } : null,
+          formatCategoryLabel((bounty as any).category) ? { icon: 'local-offer' as IconName, text: formatCategoryLabel((bounty as any).category) as string } : null,
+          bounty.work_type ? { icon: (bounty.work_type === 'online' ? 'computer' : 'person-pin') as IconName, text: bounty.work_type === 'online' ? 'Online' : 'In person' } : null,
+        ].filter((r): r is { icon: IconName; text: string } => !!r)}
+        onShare={() =>
+          shareBounty({
+            id: bounty.id,
+            title: bounty.title,
+            amount: bounty.amount,
+            isForHonor: bounty.is_for_honor,
+            description: bounty.description,
+            category: bounty.category,
+            location: bounty.location,
+          })
+        }
+        palette={p}
+      />
 
       {showEditModal && (
-        <EditPostingModal
-          visible={showEditModal}
-          bounty={bounty}
-          onClose={() => setShowEditModal(false)}
-          onSave={handleSaveEdit}
-        />
+        <EditPostingModal visible={showEditModal} bounty={bounty} onClose={() => setShowEditModal(false)} onSave={handleSaveEdit} />
       )}
 
       {!!bounty.accepted_by && (
@@ -973,137 +1098,123 @@ export default function BountyDashboard() {
           isForHonor={!!bounty.is_for_honor}
           architecture={isV3Bounty(bounty as any) ? 'v3' : isPhase2Bounty(bounty as any) ? 'v2' : 'v1'}
           startOnRating={reviewStartsOnRating}
+          initialRating={stars || undefined}
           // Re-read on any close: after a release that didn't confirm, the
-          // modal tells the poster to check this page's Payment section.
+          // modal tells the poster to check this page.
           onClose={() => {
             closeReview();
-            void refresh();
+            void reloadAll();
           }}
           onComplete={() => {
             closeReview();
-            void refresh();
+            void reloadAll();
           }}
         />
       )}
-    </SafeAreaView>
+
+      <HelpSheet
+        visible={helpOpen && !personScreen}
+        onClose={() => setHelpOpen(false)}
+        subtitle={helpSubtitle({ side: 'posted', otherName: helperName ? helperFirst : null, working: working && !!helperId, heldAmount })}
+        options={helpOptions.map((o) => ({ ...o, icon: o.icon as IconName, onPress: () => onHelpOption(o) }))}
+        onTalkToPerson={() => onHelpOption({ key: 'other', icon: 'help-outline', text: '', tone: 'i', target: 'support' })}
+      />
+      {confirmDialog}
+    </WorkspaceLayout>
+  );
+  return <PushTransition base={workspace} top={personScreen} startOpen={!!personParam} slideOut />;
+  };
+
+  // The hire step slides in over the screen it came from, which stays mounted
+  // underneath. Hosted here, outside renderScreen, so nothing that screen does
+  // (a reload, a new stage) can remount the gate mid-payment.
+  return (
+    <PushTransition
+      base={renderScreen()}
+      top={
+        acceptFundingGate.active ? (
+          <AcceptFundingGate
+            hostSlides
+            gate={acceptFundingGate}
+            otherApplicantNames={applicants
+              .filter((r) => personIndex === null || r.id !== applicants[personIndex]?.id)
+              .map((r) => r.profile?.username ?? '')
+              .filter(Boolean)}
+            onLeavePending={() => router.replace(MY_JOBS_ROUTE as never)}
+            quickConfirm={
+              bounty
+                ? {
+                    jobTitle: bounty.title,
+                    jobIcon: getBountyCategoryIcon(bounty.category),
+                    sub: shownPerson
+                      ? describeApplicantBrief(
+                          describeApplicant(shownPerson, { index: 0, total: 1, verified: false, online: bounty.work_type === 'online' })
+                        )
+                      : null,
+                  }
+                : undefined
+            }
+          />
+        ) : null
+      }
+    />
   );
 }
 
-/** Whether a still-open, unhired job has charged the poster, per the server. */
-type OpenJobCharge = 'held' | 'not_charged' | 'checking' | 'unknown';
+/** "today" → "Today", "Monday" stays; for the start of a line. */
+function capitalizeDay(day: string): string {
+  return day ? day.charAt(0).toUpperCase() + day.slice(1) : day;
+}
 
-/**
- * What to tell the poster about money on an open, unhired job.
- *
- * `plan` is planCancelRefund's answer, unchanged, and is the only thing a
- * take-down ever acts on. `charge` is for wording only. When
- * fn_get_bounty_funding_requirement can't be read, getBountyFundingRequirement
- * answers "already funded" (so a take-down still tries the refund rather than
- * stranding money), which would make an unpaid pay-when-you-choose job look
- * paid. So for an at_accept job a "held" answer is re-read: a real reply
- * echoes the job's own funding_mode, while that fallback says 'at_post'.
- * Anything not confirmed is 'unknown', never 'held'.
- */
-async function readOpenJobMoney(
-  bounty: Bounty
-): Promise<{ plan: CancelRefundPlan; charge: Exclude<OpenJobCharge, 'checking'> }> {
-  const plan = await planCancelRefund(bounty);
-  if (!plan.destination || plan.refundAmount <= 0) return { plan, charge: 'not_charged' };
-  if (bounty.funding_mode !== 'at_accept') return { plan, charge: 'held' };
-  const req = await getBountyFundingRequirement(bounty.id);
-  const confirmed = req.fundingMode === 'at_accept' && req.alreadyFunded;
-  return { plan, charge: confirmed ? 'held' : 'unknown' };
+/** The job's own details, collapsed: description, place, timing, skills, and Share. */
+function JobDetails({
+  open,
+  onToggle,
+  description,
+  rows,
+  onShare,
+  palette: p,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  description: string;
+  rows: { icon: IconName; text: string }[];
+  onShare: () => void;
+  palette: PosterPalette;
+}) {
+  const s = useMemo(() => makeStyles(p), [p]);
+  return (
+    <View style={s.details}>
+      <TouchableOpacity
+        onPress={onToggle}
+        style={s.detailsToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="Job details"
+        testID="job-details-toggle"
+      >
+        <Text style={s.detailsLabel}>Job details</Text>
+        <MaterialIcons name={open ? 'expand-less' : 'expand-more'} size={24} color={p.ink2} />
+      </TouchableOpacity>
+      {open ? (
+        <View style={s.detailsBody}>
+          <Text style={description ? s.detailsText : s.detailsMuted}>{description || 'No description was added to this job.'}</Text>
+          {rows.map((row) => (
+            <View key={row.text} style={s.detailRow}>
+              <MaterialIcons name={row.icon} size={18} color={p.gt} />
+              <Text style={s.detailsMuted}>{row.text}</Text>
+            </View>
+          ))}
+          <PosterButton kind="text" icon="share" label="Share this job" onPress={onShare} />
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 /**
- * The take-down confirmation. "Cancel and refund?" only when the charge is
- * confirmed; otherwise it says "Take this job down?", matching the button.
- * The plan it confirms, and so what happens, is unchanged either way.
- */
-function describeTakeDown(
-  bounty: Pick<Bounty, 'is_for_honor'>,
-  plan: CancelRefundPlan,
-  charge: OpenJobCharge
-): { title: string; message: string; confirmLabel: string } {
-  const base = describeCancelRefund(bounty, plan);
-  const refunds = !!plan.destination && plan.refundAmount > 0;
-  if (refunds && charge === 'held') return base;
-  if (refunds) {
-    const where = plan.destination === 'wallet' ? 'your Bounty balance' : 'your original payment method';
-    const amount = `$${plan.refundAmount % 1 === 0 ? plan.refundAmount.toFixed(0) : plan.refundAmount.toFixed(2)}`;
-    return {
-      title: 'Take this job down?',
-      message: `It comes off the feed right away, and this can't be undone. We couldn't confirm whether you've been charged for it. If you were, ${amount} goes back to ${where}.`,
-      confirmLabel: 'Take it down',
-    };
-  }
-  return { title: 'Take this job down?', message: base.message, confirmLabel: 'Take it down' };
-}
-
-/** The Applications card's line: only says how paying works when it's known. */
-function describeApplicationsLine(charge: OpenJobCharge | null): string {
-  const lead = 'Review who applied and choose the hunter you want.';
-  if (charge === 'not_charged') return `${lead} You're charged only when you accept.`;
-  if (charge === 'held') return `${lead} You've already paid for this job.`;
-  return lead;
-}
-
-/**
- * The Payment card's status line. Says money is held only when it is:
- * held per the server for an open job, or per the bounty's own escrow state
- * once a hunter is hired. Never names the poster as the one who gets paid.
- */
-function describePaymentLine(args: {
-  openJobCharge: OpenJobCharge | null;
-  escrowHeld: boolean;
-  completed: boolean;
-  hired: boolean;
-  hunterName: string;
-}): {
-  icon: 'lock' | 'check-circle' | 'account-balance-wallet' | 'hourglass-empty' | 'help-outline';
-  headline: string | null;
-  detail: string;
-} {
-  const { openJobCharge, escrowHeld, completed, hired, hunterName } = args;
-  if (openJobCharge === 'not_charged') {
-    return {
-      icon: 'account-balance-wallet',
-      headline: "You haven't paid anything yet.",
-      detail: 'You only pay when you choose someone.',
-    };
-  }
-  if (openJobCharge === 'checking') {
-    return { icon: 'hourglass-empty', headline: null, detail: 'Checking your payment…' };
-  }
-  if (openJobCharge === 'unknown') {
-    return {
-      icon: 'help-outline',
-      headline: null,
-      detail: "We couldn't check your payment just now. Tap Check again, or pull down to refresh.",
-    };
-  }
-  if (escrowHeld) {
-    return {
-      icon: 'lock',
-      headline: null,
-      detail: hired
-        ? `Held safely in escrow. It's released to ${hunterName} only when you approve the work.`
-        : "Held safely in escrow. It's released to the hunter you choose, only when you approve their work.",
-    };
-  }
-  if (completed) {
-    return { icon: 'check-circle', headline: null, detail: `Released to ${hunterName}.` };
-  }
-  return {
-    icon: 'account-balance-wallet',
-    headline: null,
-    detail: "You'll be charged when you accept a hunter, and the money is held in escrow until you approve the work.",
-  };
-}
-
-/**
- * Why "Edit details" won't open, and what to do instead. Applicants judged the
- * bounty on its current terms, and a hired hunter agreed to them, so neither
+ * Why "Edit job details" won't open, and what to do instead. Applicants judged
+ * the job on its current terms, and a hired helper agreed to them, so neither
  * is changed underneath them.
  */
 function describeEditLocked(
@@ -1123,224 +1234,23 @@ function describeEditLocked(
       message: "A hunter has been hired, so the agreed details can't change. Message them, or use Report a problem if something's wrong.",
     };
   }
-  return {
-    title: "Can't edit this bounty",
-    message: 'This bounty has ended, so its details are kept as they were.',
-  };
+  return { title: "Can't edit this bounty", message: 'This bounty has ended, so its details are kept as they were.' };
 }
 
-/**
- * Presentational rows. They take the already-memoized style sheet rather than
- * the theme so they never rebuild a StyleSheet per render — the pattern the
- * rest of the hot screens follow.
- */
-type Styles = ReturnType<typeof makeStyles>;
-
-function MetaChip({ icon, label, s, color }: { icon: string; label: string; s: Styles; color: string }) {
-  return (
-    <View style={s.metaChip}>
-      <MaterialIcons name={icon as any} size={13} color={color} />
-      <Text style={s.metaChipText} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function DetailRow({ icon, text, s, color }: { icon: string; text: string; s: Styles; color: string }) {
-  return (
-    <View style={s.detailRow}>
-      <MaterialIcons name={icon as any} size={16} color={color} />
-      <Text style={s.cardBodyMuted}>{text}</Text>
-    </View>
-  );
-}
-
-function submissionStatusLabel(status: string): string {
-  switch (status) {
-    case 'pending':
-      return 'Awaiting your review';
-    case 'approved':
-      return 'Approved';
-    case 'revision_requested':
-      return 'Changes requested';
-    case 'rejected':
-      return 'Rejected';
-    default:
-      return status;
-  }
-}
-
-function formatTimeAgo(dateString?: string | null): string {
-  if (!dateString) return 'recently';
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return 'recently';
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(diffMs / 3600000);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(diffMs / 86400000);
-  return `${days}d ago`;
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return dateString;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function makeStyles(t: AppTheme) {
+function makeStyles(p: PosterPalette) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: t.background },
-    centered: {
-      flex: 1,
-      backgroundColor: t.background,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 12,
-      padding: 32,
-    },
-    centeredText: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
-    errorTitle: { color: t.text, fontSize: 18, fontWeight: '700' },
-    retryButton: {
-      backgroundColor: t.primary,
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-      borderRadius: 12,
-      marginTop: 8,
-      minHeight: 44,
-      justifyContent: 'center',
-    },
-    retryButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
-    textButton: { paddingHorizontal: 24, paddingVertical: 12, minHeight: 44, justifyContent: 'center' },
-    textButtonText: { color: t.primaryLight, fontSize: 14, fontWeight: '600' },
-
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 8,
-      paddingVertical: 8,
-      borderBottomWidth: 1,
-      borderBottomColor: t.border,
-    },
-    headerIcon: { padding: 10, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-    headerTitle: { flex: 1, color: t.text, fontSize: 17, fontWeight: '700' },
-
-    scroll: { flex: 1 },
-    content: { padding: 16 },
-
-    heroCard: {
-      backgroundColor: t.surface,
-      borderRadius: 16,
-      borderWidth: 1,
-      ...t.insetBorder, // pressed-in edge: dark top → light bottom
-      padding: 16,
-      marginBottom: 16,
-      gap: 12,
-    },
-    heroTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-    heroTitle: { flex: 1, color: t.text, fontSize: 20, fontWeight: '700', lineHeight: 26 },
-    heroAmount: { color: t.text, fontSize: 24, fontWeight: '800' },
-    honorPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: t.primary,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 12,
-    },
-    honorPillText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-    metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    metaChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: t.surfaceSecondary,
-      paddingHorizontal: 8,
-      paddingVertical: 5,
-      borderRadius: 8,
-    },
-    metaChipText: { color: t.textSecondary, fontSize: 12, fontWeight: '600' },
-
-    card: {
-      backgroundColor: t.surface,
-      borderRadius: 16,
-      borderWidth: 1,
-      ...t.insetBorder, // pressed-in edge: dark top → light bottom
-      padding: 16,
-      marginBottom: 16,
-      gap: 10,
-    },
-    sectionTitle: { color: t.text, fontSize: 15, fontWeight: '700' },
-    sectionTitleInline: { color: t.text, fontSize: 15, fontWeight: '700' },
-    cardBody: { color: t.text, fontSize: 14, lineHeight: 20 },
-    cardBodyMuted: { color: t.textSecondary, fontSize: 13, lineHeight: 19, flex: 1 },
-    mutedSmall: { color: t.textSecondary, fontSize: 12 },
-
-    rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    countPill: {
-      backgroundColor: t.warning,
-      minWidth: 24,
-      // minHeight, not height: a fixed 24px clipped the count at large text sizes.
-      minHeight: 24,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 8,
-    },
-    countPillText: { color: '#22262C', fontSize: 12, fontWeight: '800' },
-    linkRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },
-    linkText: { color: t.primaryLight, fontSize: 13, fontWeight: '700' },
-    expandBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },
-
-    personRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: t.surfaceSecondary },
-    avatarFallback: { alignItems: 'center', justifyContent: 'center' },
-    personText: { flex: 1 },
-    personName: { color: t.text, fontSize: 15, fontWeight: '700' },
-    actionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-    outlineBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      borderWidth: 1,
-      borderColor: t.border,
-      backgroundColor: t.surfaceSecondary,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 12,
-      minHeight: 44,
-    },
-    outlineBtnText: { color: t.text, fontSize: 13, fontWeight: '600' },
-    dimmedBtn: { opacity: 0.6 },
-    dangerBtn: { borderColor: t.error },
-    selfStart: { alignSelf: 'flex-start' },
-    manageRow: {
-      flexDirection: 'row',
-      gap: 8,
-      flexWrap: 'wrap',
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: t.surfaceSecondary,
-    },
-    manageNote: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 6,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: t.surfaceSecondary,
-    },
-
-    proofRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    paymentAmount: { color: t.text, fontSize: 18, fontWeight: '800' },
-    paymentStateRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-    paymentStateText: { flex: 1, gap: 2 },
-
-    detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 4 },
+    applicantError: { gap: 8 },
+    centered: { flex: 1, backgroundColor: p.bg, justifyContent: 'center', gap: 12, padding: 24 },
+    flex: { flex: 1 },
+    personNav: { flexDirection: 'row', gap: 10 },
+    smallMuted: { color: p.ink2, fontSize: 15, lineHeight: 22 },
+    h2: { color: p.ink, fontSize: 20, fontWeight: '800', paddingTop: 4 },
+    details: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: p.line },
+    detailsToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 56 },
+    detailsLabel: { color: p.ink, fontSize: 17, fontWeight: '700' },
+    detailsBody: { gap: 8, paddingBottom: 12 },
+    detailsText: { color: p.ink, fontSize: 16, lineHeight: 24 },
+    detailsMuted: { flex: 1, color: p.ink2, fontSize: 15, lineHeight: 22 },
+    detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   });
 }

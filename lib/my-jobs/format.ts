@@ -2,6 +2,9 @@
  * Small, pure formatting helpers for My Jobs copy. Kept separate so the copy
  * builders read as sentences rather than string plumbing.
  */
+import type { IconName, MyJob } from './types';
+import { JOB_RANK } from './types';
+
 export { getBountyCategoryIcon, getBountyCoverUri } from '../utils/bounty-cover';
 
 /** "$60", "$60.50", "For honor". Whole amounts drop the cents, as in the design. */
@@ -50,4 +53,28 @@ export function firstName(name: string | null | undefined): string | null {
 /** "1 person wants" / "3 people want". */
 export function peopleWant(count: number): string {
   return count === 1 ? '1 person wants' : `${count} people want`;
+}
+
+/**
+ * The pill on the featured job's photo (handoff `feature` state): what the
+ * job needs, in words. A dispute says Bounty is on it rather than asking the
+ * user to act; an unread message says so (S.2); a finished job says so.
+ */
+export interface FeaturedFlag {
+  kind: 'attn' | 'ok' | 'done' | 'help';
+  text: string;
+  icon: IconName;
+}
+
+export function getFeaturedFlag(job: Pick<MyJob, 'finished' | 'needsYou' | 'rank' | 'lifecycle'>): FeaturedFlag {
+  if (job.finished) return { kind: 'done', text: 'Finished', icon: 'check-circle' };
+  if (job.lifecycle?.waitingOn === 'support') return { kind: 'help', text: 'Bounty is on it', icon: 'support-agent' };
+  if (job.needsYou) {
+    return {
+      kind: 'attn',
+      text: job.rank === JOB_RANK.newMessage ? 'New message' : 'Needs you',
+      icon: 'notifications-active',
+    };
+  }
+  return { kind: 'ok', text: 'Nothing to do yet', icon: 'hourglass-empty' };
 }

@@ -1,9 +1,10 @@
 import { palette } from './colors';
+import { derivePosterPalette, type PosterPaletteSource } from './poster-palette';
 import { fonts, radius, shadows, spacing, textStyles, typography } from './tokens';
 import type { AppTheme } from './types';
 
 // Dark theme — warm graphite with #008E2A lead and #F1EBE3 text.
-export const darkTheme: AppTheme = {
+const darkBase: PosterPaletteSource = {
   foreground:        palette.cream,       // #F1EBE3 — primary text/icons
   accent1:           palette.green[600],  // #008E2A — brand / CTA
   accent2:           palette.green[500],  // #1FAE49 — highlight
@@ -62,3 +63,5 @@ export const darkTheme: AppTheme = {
   shadows,
   fonts,
 };
+
+export const darkTheme: AppTheme = { ...darkBase, poster: derivePosterPalette(darkBase) };

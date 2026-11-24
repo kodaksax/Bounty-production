@@ -6,7 +6,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -25,7 +24,6 @@ import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 import { formatPublicLocation } from '../../../../lib/utils/public-location';
 import { formatExactAddress, useBountyExactLocation } from '../../../../hooks/useBountyExactLocation';
-import { KeyboardAwareScrollView } from '../../../../components/ui/keyboard-avoiding';
 import { TrustSafetyNotice } from '../../../../components/ui/trust-safety-notice';
 import { getApplicationSafetyMessage } from '../../../../lib/utils/bounty-lifecycle';
 import { useChatSendProtection, useChatSendScope } from '../../../../hooks/use-chat-send-protection';
@@ -35,7 +33,15 @@ import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { withAlpha } from '../../../../lib/utils';
 import { showToast } from '../../../../lib/toast';
-import { HunterStageTimeline, type HunterStage } from '../../../../components/hunter-stage-timeline';
+import { HunterStageScreen } from '../../../../components/hunter/hunter-stage-view';
+import { useHunterHelp } from '../../../../components/hunter/use-hunter-help';
+import { useAuthContext } from '../../../../hooks/use-auth-context';
+import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
+import { useJobConversation, useJobProblemRecords } from '../../../../hooks/useJobWorkspaceData';
+import { firstName, formatJobAmount } from '../../../../lib/my-jobs/format';
+import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
+import { trackWorkspacePrimaryTapped } from '../../../../lib/services/focus-analytics';
+import { describeHunterStage, type HunterActionKey } from '../../../../lib/utils/hunter-stage-copy';
 
 export default function HunterWorkInProgressScreen() {
   const { theme } = useAppThemeContext();
@@ -54,13 +60,11 @@ export default function HunterWorkInProgressScreen() {
   const [request, setRequest] = useState<BountyRequest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentStage] = useState<HunterStage>('work_in_progress');
   const [messageText, setMessageText] = useState('');
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const confirmSend = useChatSendProtection(conversation?.id);
   const sendInFlightRef = useRef(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [progressUpdate, setProgressUpdate] = useState('');
   const [isPostingUpdate, setIsPostingUpdate] = useState(false);
   const [showProgressForm, setShowProgressForm] = useState(false);
@@ -81,6 +85,19 @@ export default function HunterWorkInProgressScreen() {
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [bountyId]);
   const captureSendScope = useChatSendScope(routeBountyId ?? undefined);
+
+  // The resolved lifecycle (the same one the poster and My Jobs read) drives
+  // what this screen says; the loaders below still guard who may see it.
+  const { session } = useAuthContext();
+  const lifecycle = useBountyLifecycle(routeBountyId, session?.user?.id ?? currentUserId ?? null);
+  const worksBothSides = useWorksBothSides(currentUserId);
+  const jobConversation = useJobConversation({
+    viewerId: currentUserId,
+    otherId: lifecycle.otherParty.id,
+    bountyId: routeBountyId,
+    since: (request as { accepted_at?: string | null } | null)?.accepted_at ?? null,
+  });
+  const problems = useJobProblemRecords(routeBountyId, { cancellation: false, dispute: lifecycle.hasDispute });
 
   useEffect(() => {
     if (!routeBountyId) {
@@ -229,27 +246,6 @@ export default function HunterWorkInProgressScreen() {
     }
   };
 
-  const handleMarkAsComplete = () => {
-    Alert.alert(
-      'Mark as Complete',
-      'Are you ready to submit your work for review? You can add proof of completion on the next screen.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          onPress: () => {
-            if (routeBountyId) {
-              router.push({
-                pathname: '/in-progress/[bountyId]/hunter/review-and-verify',
-                params: { bountyId: routeBountyId },
-              });
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleNext = () => {
     if (routeBountyId) {
       router.push({
@@ -259,20 +255,96 @@ export default function HunterWorkInProgressScreen() {
     }
   };
 
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+  // ── Focus-first: the stage this job is at (H.5 / H.7 / M.3 / X.4) ─────────
+  const view = React.useMemo(() => {
+    if (!bounty || !lifecycle.state) return null;
+    return describeHunterStage({
+      bounty: bounty as any,
+      lifecycle: lifecycle.state,
+      posterName: lifecycle.otherParty.name,
+      requestStatus: request?.status ?? null,
+      submission: lifecycle.submission,
+      hasDispute: lifecycle.hasDispute || hasActiveDispute,
+      disputeOpenedByViewer: problems.dispute?.initiatorId ? String(problems.dispute.initiatorId) === String(currentUserId) : null,
+    });
+  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, hasActiveDispute, request?.status, problems.dispute, currentUserId]);
 
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
-  };
+  // Work already sent and waiting: that step has its own screen (H.9).
+  React.useEffect(() => {
+    if (lifecycle.state?.status === 'submitted_for_review' && routeBountyId) {
+      router.replace({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: routeBountyId } });
+    }
+  }, [lifecycle.state?.status, routeBountyId, router]);
 
-  if (isLoading) {
+  const posterFirst = firstName(lifecycle.otherParty.name);
+
+  const openThread = React.useCallback(() => {
+    if (!routeBountyId) return;
+    router.push({ pathname: '/tabs/bounty-thread/[bountyId]', params: { bountyId: routeBountyId, role: 'hunter' } } as never);
+  }, [routeBountyId, router]);
+
+  // The hunter's way out of work they can't finish: a request the poster (or
+  // support) approves. Same guards as the job thread.
+  const requestCancellation = React.useCallback(() => {
+    if (!routeBountyId || !bounty) return;
+    if (lifecycle.hasCancellationRequest || bounty.status === 'cancellation_requested') {
+      showToast({ message: `Waiting on ${posterFirst ?? 'the poster'} to respond to your request.` });
+      return;
+    }
+    if (lifecycle.hasDispute || hasActiveDispute) {
+      Alert.alert('Dispute open', 'A dispute is open for this bounty, so it will be settled there instead.');
+      return;
+    }
+    router.push({ pathname: '/bounty/[id]/cancel', params: { id: routeBountyId } } as never);
+  }, [routeBountyId, bounty, lifecycle.hasCancellationRequest, lifecycle.hasDispute, hasActiveDispute, posterFirst, router]);
+
+  const contactSupport = React.useCallback(() => {
+    if (!routeBountyId) return;
+    router.push({ pathname: '/support/contact', params: { bountyId: routeBountyId, bountyTitle: bounty?.title ?? '' } } as never);
+  }, [routeBountyId, bounty?.title, router]);
+
+  const heldAmount = bounty && !bounty.is_for_honor ? formatJobAmount(bounty.amount) : null;
+  const help = useHunterHelp({
+    bountyId: routeBountyId,
+    posterName: posterFirst,
+    working: true,
+    workSubmitted: lifecycle.submission?.status === 'pending',
+    disputeOpen: lifecycle.hasDispute || hasActiveDispute,
+    heldAmount,
+    openThread,
+    requestCancellation,
+    contactSupport,
+  });
+
+
+  const onAction = React.useCallback(
+    async (key: HunterActionKey) => {
+      if (!routeBountyId || !view) return;
+      if (view.primary?.key === key) trackWorkspacePrimaryTapped({ bountyId: routeBountyId, side: 'doing', screenId: view.screenId, action: key });
+      switch (key) {
+        case 'tell_done':
+          handleNext();
+          return;
+        case 'message':
+          openThread();
+          return;
+        case 'cant_do':
+          requestCancellation();
+          return;
+        case 'see_report':
+        case 'add_info':
+          if (activeDisputeId || problems.dispute?.id) (router as any).push(`/dispute/${activeDisputeId ?? problems.dispute?.id}`);
+          else router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId, from: 'in-progress' } } as never);
+          return;
+        default:
+          return;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNext is a plain push to H.8 for this bounty
+    [routeBountyId, view, openThread, requestCancellation, activeDisputeId, problems.dispute, router]
+  );
+
+  if (isLoading || lifecycle.isLoading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
         <HunterDashboardSkeleton />
@@ -300,243 +372,157 @@ export default function HunterWorkInProgressScreen() {
 
   if (request.status !== 'accepted' || !currentUserId ||
     String(bounty.accepted_by ?? '') !== String(currentUserId) ||
-    bounty.status !== 'in_progress') {
+    bounty.status !== 'in_progress' || !view) {
     return <HunterDashboardSkeleton />;
   }
 
-  // Guard every access: `description` is optional on the two-step posting flow
-  // and null on some older/API-created rows — an unguarded `.length` here
-  // white-screens the hunter's active-job screen.
-  const description = bounty.description ?? '';
-  const descriptionPreview =
-    description.length > 150 ? description.substring(0, 150) + '...' : description;
+  const disputeOption = hasActiveDispute
+    ? { key: 'view_dispute', label: 'View dispute', icon: 'gavel' as const, onPress: () => (router as any).push(`/dispute/${activeDisputeId}`) }
+    : { key: 'open_dispute', label: 'Open a dispute', icon: 'gavel' as const, onPress: () => setShowDisputeModal(true) };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={styles.backIcon} onPress={goBack}>
-          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Your work</Text>
+    <HunterStageScreen
+      view={view}
+      bounty={bounty as any}
+      posterName={lifecycle.otherParty.name}
+      worksBothSides={worksBothSides}
+      onBack={goBack}
+      onAction={(key) => void onAction(key)}
+      lastMessage={jobConversation.lastFromOther}
+      help={help}
+      moreExtra={[disputeOption]}
+    >
+      <TrustSafetyNotice message={getApplicationSafetyMessage({
+        bounty, viewerId: currentUserId, requestStatus: request.status,
+      })} />
+
+      {/* Where, and the poster's own timing notes. */}
+      <View style={styles.infoRow}>
+        {locationText && (
+          <View style={styles.infoItem}>
+            <MaterialIcons name="location-on" size={16} color={theme.primaryLight} />
+            <Text style={styles.infoText}>{locationText}</Text>
+          </View>
+        )}
+        {bounty.timeline && (
+          <View style={styles.infoItem}>
+            <MaterialIcons name="schedule" size={16} color={theme.primaryLight} />
+            <Text style={styles.infoText}>{bounty.timeline}</Text>
+          </View>
+        )}
       </View>
 
-      <KeyboardAwareScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Bounty Header Card */}
-        <View style={styles.bountyCard}>
-          <View style={styles.bountyHeader}>
-            <View style={styles.avatarPlaceholder}>
-              <MaterialIcons name="person" size={32} color={theme.primaryLight} />
-            </View>
-            <View style={styles.bountyInfo}>
-              <Text style={styles.bountyTitle} numberOfLines={2}>
-                {bounty.title}
-              </Text>
-              <Text style={styles.postedTime}>
-                Posted {formatTimeAgo(bounty.created_at)}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.amountContainer}>
-            {bounty.is_for_honor ? (
-              <View style={styles.honorBadge}>
-                <MaterialIcons name="favorite" size={16} color={theme.onPrimary} />
-                <Text style={styles.honorText}>For Honor</Text>
-              </View>
-            ) : (
-              <Text style={styles.amount}>${bounty.amount}</Text>
-            )}
-          </View>
-        </View>
-
-        <TrustSafetyNotice message={getApplicationSafetyMessage({
-          bounty, viewerId: currentUserId, requestStatus: request.status,
-        })} />
-
-        {/* Timeline */}
-        <HunterStageTimeline currentStage={currentStage} />
-
-        {/* Quick Messaging */}
-        {conversation && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quick message</Text>
-            <View style={styles.messageInputContainer}>
-              <TextInput
-                style={styles.messageInput}
-                placeholder="Type a message to the poster..."
-                placeholderTextColor={withAlpha(theme.text, 0.4)}
-                value={messageText}
-                onChangeText={setMessageText}
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
-                onPress={handleSendMessage}
-                disabled={!messageText.trim() || isSendingMessage}
-                accessibilityRole="button"
-                accessibilityLabel="Send message to poster"
-              >
-                {isSendingMessage ? (
-                  <ActivityIndicator size="small" color={theme.onPrimary} />
-                ) : (
-                  <MaterialIcons name="send" size={20} color={theme.onPrimary} />
-                )}
-              </TouchableOpacity>
-            </View>
-            <ChatSafetyWarning risk={detectOffPlatformRisk(messageText)} />
-          </View>
-        )}
-
-        {/* Progress Updates Section */}
+      {/* DESIGN-GAP: H.7 in the handoff has no quick message or progress update;
+          both are kept below because their send protection is tested
+          (hunter-work-send-protection). */}
+      {/* Quick Messaging */}
+      {conversation && (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Updates</Text>
-            <TouchableOpacity accessibilityRole="button"
-              style={styles.addUpdateButton}
-              onPress={() => setShowProgressForm(!showProgressForm)}
+          <Text style={styles.sectionTitle}>Quick message</Text>
+          <View style={styles.messageInputContainer}>
+            <TextInput
+              style={styles.messageInput}
+              placeholder="Type a message to the poster..."
+              placeholderTextColor={withAlpha(theme.text, 0.4)}
+              value={messageText}
+              onChangeText={setMessageText}
+              multiline
+              maxLength={500}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
+              onPress={handleSendMessage}
+              disabled={!messageText.trim() || isSendingMessage}
+              accessibilityRole="button"
+              accessibilityLabel="Send message to poster"
             >
-              <MaterialIcons
-                name={showProgressForm ? 'remove' : 'add'}
-                size={20}
-                color={theme.primaryLight}
-              />
-              <Text style={styles.addUpdateText}>
-                {showProgressForm ? 'Hide' : 'Add update'}
-              </Text>
+              {isSendingMessage ? (
+                <ActivityIndicator size="small" color={theme.onPrimary} />
+              ) : (
+                <MaterialIcons name="send" size={20} color={theme.onPrimary} />
+              )}
             </TouchableOpacity>
           </View>
+          <ChatSafetyWarning risk={detectOffPlatformRisk(messageText)} />
+        </View>
+      )}
 
-          {showProgressForm && (
-            <View style={styles.progressFormContainer}>
-              <TextInput
-                style={styles.progressInput}
-                placeholder="Describe your progress..."
-                placeholderTextColor={withAlpha(theme.text, 0.4)}
-                value={progressUpdate}
-                onChangeText={setProgressUpdate}
-                multiline
-                numberOfLines={4}
-                maxLength={500}
-              />
-              <ChatSafetyWarning risk={detectOffPlatformRisk(progressUpdate)} />
-              <TouchableOpacity accessibilityRole="button"
-                style={[
-                  styles.postUpdateButton,
-                  (!progressUpdate.trim() || isPostingUpdate) && styles.postUpdateButtonDisabled,
-                ]}
-                onPress={handlePostProgressUpdate}
-                disabled={!progressUpdate.trim() || isPostingUpdate}
-              >
-                {isPostingUpdate ? (
-                  <ActivityIndicator size="small" color={theme.onPrimary} />
-                ) : (
-                  <>
-                    <MaterialIcons name="send" size={18} color={theme.onPrimary} />
-                    <Text style={styles.postUpdateButtonText}>Post update</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={styles.progressHint}>
-            <MaterialIcons name="info-outline" size={16} color={theme.primaryLight} />
-            <Text style={styles.progressHintText}>
-              Share progress updates with the poster to keep them informed
+      {/* Progress Updates Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Updates</Text>
+          <TouchableOpacity accessibilityRole="button"
+            style={styles.addUpdateButton}
+            onPress={() => setShowProgressForm(!showProgressForm)}
+          >
+            <MaterialIcons
+              name={showProgressForm ? 'remove' : 'add'}
+              size={20}
+              color={theme.primaryLight}
+            />
+            <Text style={styles.addUpdateText}>
+              {showProgressForm ? 'Hide' : 'Add update'}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Context Panel - Description */}
-        <View style={styles.contextPanel}>
-          <Text style={styles.contextTitle}>Description</Text>
-          <Text style={styles.contextText}>
-            {descriptionExpanded ? description : descriptionPreview}
-          </Text>
-          {description.length > 150 && (
-            <TouchableOpacity accessibilityRole="button" onPress={() => setDescriptionExpanded(!descriptionExpanded)}>
-              <Text style={styles.expandText}>
-                {descriptionExpanded ? 'Show Less' : 'Show More'}
-              </Text>
+        {showProgressForm && (
+          <View style={styles.progressFormContainer}>
+            <TextInput
+              style={styles.progressInput}
+              placeholder="Describe your progress..."
+              placeholderTextColor={withAlpha(theme.text, 0.4)}
+              value={progressUpdate}
+              onChangeText={setProgressUpdate}
+              multiline
+              numberOfLines={4}
+              maxLength={500}
+            />
+            <ChatSafetyWarning risk={detectOffPlatformRisk(progressUpdate)} />
+            <TouchableOpacity accessibilityRole="button"
+              style={[
+                styles.postUpdateButton,
+                (!progressUpdate.trim() || isPostingUpdate) && styles.postUpdateButtonDisabled,
+              ]}
+              onPress={handlePostProgressUpdate}
+              disabled={!progressUpdate.trim() || isPostingUpdate}
+            >
+              {isPostingUpdate ? (
+                <ActivityIndicator size="small" color={theme.onPrimary} />
+              ) : (
+                <>
+                  <MaterialIcons name="send" size={18} color={theme.onPrimary} />
+                  <Text style={styles.postUpdateButtonText}>Post update</Text>
+                </>
+              )}
             </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Timeline & Location Info */}
-        <View style={styles.infoRow}>
-          {locationText && (
-            <View style={styles.infoItem}>
-              <MaterialIcons name="location-on" size={16} color={theme.primaryLight} />
-              <Text style={styles.infoText}>{locationText}</Text>
-            </View>
-          )}
-          {bounty.timeline && (
-            <View style={styles.infoItem}>
-              <MaterialIcons name="schedule" size={16} color={theme.primaryLight} />
-              <Text style={styles.infoText}>{bounty.timeline}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Mark as Complete Button */}
-        <TouchableOpacity accessibilityRole="button" style={styles.completeButton} onPress={handleMarkAsComplete}>
-          <MaterialIcons name="check-circle" size={20} color={theme.onPrimary} />
-          <Text style={styles.completeButtonText}>Mark as complete</Text>
-        </TouchableOpacity>
-
-        {/* Raise Dispute / View Dispute Button */}
-        {hasActiveDispute ? (
-          <TouchableOpacity accessibilityRole="button"
-            style={styles.disputeButton}
-            onPress={() => (router as any).push(`/dispute/${activeDisputeId}`)}
-          >
-            <MaterialIcons name="gavel" size={20} color={theme.warningText} />
-            <Text style={styles.disputeButtonText}>View dispute</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity accessibilityRole="button"
-            style={styles.disputeButton}
-            onPress={() => setShowDisputeModal(true)}
-          >
-            <MaterialIcons name="gavel" size={20} color={theme.warningText} />
-            <Text style={styles.disputeButtonText}>Open a dispute</Text>
-          </TouchableOpacity>
+          </View>
         )}
+      </View>
 
-        {/* Workflow Dispute Modal */}
-        {bounty && routeBountyId && (
-          <WorkflowDisputeModal
-            visible={showDisputeModal}
-            bountyId={routeBountyId}
-            bountyTitle={bounty.title}
-            initiatorId={currentUserId}
-            respondentId={String(bounty.poster_id || bounty.user_id)}
-            stage="in_progress"
-            onClose={() => setShowDisputeModal(false)}
-            onDisputeCreated={(disputeId) => {
-              setShowDisputeModal(false);
-              setHasActiveDispute(true);
-              setActiveDisputeId(disputeId);
-              Alert.alert('Dispute Filed', 'Your dispute has been submitted and the other party has been notified.', [
-                { text: 'View Dispute', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
-                { text: 'OK' },
-              ]);
-            }}
-          />
-        )}
-
-        {/* Next Button */}
-        <TouchableOpacity accessibilityRole="button" style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextButtonText}>Next</Text>
-          <MaterialIcons name="arrow-forward" size={20} color={theme.onPrimary} />
-        </TouchableOpacity>
-      </KeyboardAwareScrollView>
-    </View>
+      {/* Workflow Dispute Modal */}
+      {bounty && routeBountyId && (
+        <WorkflowDisputeModal
+          visible={showDisputeModal}
+          bountyId={routeBountyId}
+          bountyTitle={bounty.title}
+          initiatorId={currentUserId}
+          respondentId={String(bounty.poster_id || bounty.user_id)}
+          stage="in_progress"
+          onClose={() => setShowDisputeModal(false)}
+          onDisputeCreated={(disputeId) => {
+            setShowDisputeModal(false);
+            setHasActiveDispute(true);
+            setActiveDisputeId(disputeId);
+            void lifecycle.refresh();
+            Alert.alert('Dispute Filed', 'Your dispute has been submitted and the other party has been notified.', [
+              { text: 'View Dispute', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
+              { text: 'OK' },
+            ]);
+          }}
+        />
+      )}
+    </HunterStageScreen>
   );
 }
 

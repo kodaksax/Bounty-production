@@ -20,6 +20,8 @@
  *   - Payment Sheet     Apple Pay / Google Pay, saved cards and new card entry
  *                       in one native sheet. The primary button when no card
  *                       is saved, and "Use another card" otherwise.
+ *                       DESIGN-GAP: the handoff folds these into one primary
+ *                       action; the separate, tested wallet buttons are kept.
  *   - Link a card       the original card-entry modal; the fallback when the
  *                       sheet is unavailable (web).
  *
@@ -33,23 +35,31 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { ErrorBanner } from 'components/error-banner';
+import { ConsequenceList, FlowTitle } from 'components/poster/blocks';
+import { SlideInScreen } from 'components/ui/slide-in-screen';
+import { QuickConfirm } from 'components/poster/quick-confirm';
+import { MoneyLine } from 'components/poster/four-questions';
 import { PaymentMethodsModal } from 'components/payment-methods-modal';
 import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
 import { TrustSafetyNotice } from 'components/ui/trust-safety-notice';
 import type { AcceptFundingGate as AcceptFundingGateState } from 'hooks/useAcceptFunding';
 import { useWalletDeposit } from 'hooks/use-wallet-deposit';
-import { getBottomNavContentGap, getBottomNavOccludedHeight } from 'lib/constants/navigation';
+import { getFloatingTabBarTop } from 'components/ui/floating-tab-bar';
+import { getBottomNavContentGap } from 'lib/constants/navigation';
 import { usePaymentPromiseCopy } from 'lib/experiments/payment-promise-copy';
+import { FOCUS_POLICY } from 'lib/constants/focus-policy';
 import { hapticFeedback } from 'lib/haptic-feedback';
+import { trackWorkspacePrimaryTapped } from 'lib/services/focus-analytics';
 import { stripeService } from 'lib/services/stripe-service';
 import { fundingSourceLine, paymentPromiseStrings } from 'lib/strings/payment-promise';
 import { trustSafetyStrings } from 'lib/strings/trust-safety';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
+import { describeHire } from 'lib/utils/poster-stage-copy';
 import { describePaymentFailure } from 'lib/utils/payment-failure-message';
 import type { DepositResult } from 'hooks/use-wallet-deposit';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -63,7 +73,23 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface AcceptFundingGateProps {
+  /** Rendered inside the tab shell, under its floating bar. */
+  overTabBar?: boolean;
   gate: AcceptFundingGateState;
+  /**
+   * The other people who offered, for "Priya's and Sam's offers close"
+   * (Focus-first screen E). Without them the line says "Other offers close".
+   */
+  otherApplicantNames?: readonly string[];
+  /** Where "Back to My Jobs" goes when a poster leaves a payment that is still confirming (E.3). */
+  onLeavePending?: () => void;
+  /**
+   * Opens on 4b, the quick confirm that confirms itself after
+   * FOCUS_POLICY.quickConfirmSeconds. Only when the Bounty balance or a saved
+   * card can pay; anything else (no card, a failed or partial payment, "Change")
+   * is screen E, which never confirms on its own.
+   */
+  quickConfirm?: { jobTitle: string; jobIcon: string; sub?: string | null };
 }
 
 /**
@@ -88,7 +114,9 @@ const clamp = (value: number, min: number, max: number) =>
  * window height minus the status bar and the floating BottomNav — rather than
  * fixed points, so the whole thing (hunter, amount, "held until you approve",
  * the balance rows AND the pay / "Not now" buttons) is on screen at once
- * without scrolling. A 320×568 SE gets a tighter sheet; a 430×932 Pro Max a
+ * without scrolling where it fits. Body text stays 17pt or larger so older
+ * posters can read it; on a small phone the info scrolls and the buttons stay
+ * pinned. A 320×568 SE gets a tighter sheet; a 430×932 Pro Max a
  * roomier one. Nothing here is allowed to push the buttons below the fold: a
  * poster who has to scroll to find "Pay" is a poster who taps nothing.
  */
@@ -104,38 +132,50 @@ function getGateMetrics(width: number, usableHeight: number) {
     horizontalPadding: clamp(width * 0.06, 16, 28),
     topPadding: clamp(h * 0.02, 8, 24),
     sectionGap: clamp(h * 0.016, compact ? 6 : 10, 16),
-    cardPaddingVertical: clamp(h * 0.024, compact ? 10 : 14, 24),
+    cardPaddingVertical: clamp(h * 0.022, 14, 22),
     rowPaddingVertical: clamp(h * 0.014, compact ? 7 : 9, 12),
-    eyebrowFontSize: clamp(h * 0.017, 11, 12),
+    eyebrowFontSize: clamp(h * 0.021, 14, 15),
     titleFontSize: clamp(Math.min(width * 0.068, h * 0.032), 20, 28),
     subtitleFontSize: clamp(h * 0.019, 12, 14),
     amountFontSize: clamp(Math.min(width * 0.11, h * 0.052), 30, 44),
     captionFontSize: clamp(h * 0.018, 12, 13),
-    heldFontSize: clamp(h * 0.02, 13, 14),
-    rowFontSize: clamp(h * 0.02, 13, 14),
-    bodyFontSize: clamp(h * 0.019, 12, 14),
-    buttonPaddingVertical: clamp(h * 0.019, compact ? 12 : 14, 18),
-    buttonFontSize: clamp(h * 0.022, 15, 16),
-    secondaryPaddingVertical: clamp(h * 0.014, compact ? 8 : 10, 14),
+    heldFontSize: clamp(h * 0.024, 15, 17),
+    rowFontSize: clamp(h * 0.028, 17, 19),
+    bodyFontSize: clamp(h * 0.027, 17, 19),
+    buttonPaddingVertical: clamp(h * 0.023, compact ? 14 : 16, 20),
+    buttonFontSize: clamp(h * 0.032, 19, 22),
+    secondaryPaddingVertical: clamp(h * 0.02, compact ? 12 : 14, 16),
     avatarSize: clamp(Math.min(width * 0.13, h * 0.06), 40, 52),
   };
 }
 
 type GateMetrics = ReturnType<typeof getGateMetrics>;
 
-export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
+/** The gate takes over its host's screen, so it slides in like a pushed route. */
+export function AcceptFundingGate({ hostSlides = false, ...props }: AcceptFundingGateProps & {
+  /** The host already slides the gate in over its own screen. */
+  hostSlides?: boolean;
+}) {
+  if (hostSlides) return <AcceptFundingGateContent {...props} />;
+  return (
+    <SlideInScreen>
+      <AcceptFundingGateContent {...props} />
+    </SlideInScreen>
+  );
+}
+
+function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onLeavePending, overTabBar = false }: AcceptFundingGateProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const showPaymentPromise = usePaymentPromiseCopy();
 
-  // The floating BottomNav is position:absolute and overlays this gate, so the
-  // action buttons must clear the bar's *occluded* height — the bar box plus
-  // the crosshair that floats above its top edge — as well as the device safe
-  // area. Same derivation as insufficient-balance-screen and add-money-screen.
-  const footerClearance =
-    getBottomNavOccludedHeight(insets.bottom, windowWidth) + getBottomNavContentGap(windowHeight);
-  const usableHeight = windowHeight - insets.top - footerClearance;
+  // The root layout already keeps every screen between the status bar and the
+  // home indicator. Only the tab host has the floating bar over this gate.
+  const footerClearance = overTabBar
+    ? getFloatingTabBarTop(insets.bottom) + getBottomNavContentGap(windowHeight)
+    : insets.bottom > 0 ? 4 : 12;
+  const usableHeight = windowHeight - insets.top - insets.bottom - footerClearance;
 
   const metrics = useMemo(
     () => getGateMetrics(windowWidth, usableHeight),
@@ -182,14 +222,15 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   // way missed any exit that never set `isProcessing`, which left
   // `paymentInFlightRef` stuck and could race a background/cancel event
   // against a still-in-flight attempt.
-  const resolveOutcome = ({ outcome, failure }: DepositResult, paid: number) => {
+  const resolveOutcome = ({ outcome, failure, paymentIntentId }: DepositResult, paid: number) => {
     if (outcome === 'succeeded') {
       setSuccessInfo(null);
-      gate.onPaymentSucceeded(paid);
+      if (paymentIntentId) gate.onPaymentSucceeded(paid, paymentIntentId);
+      else gate.onPaymentSucceeded(paid);
       return;
     }
     if (outcome === 'pending') {
-      gate.onPaymentPending();
+      gate.onPaymentPending(paid, paymentIntentId);
       return;
     }
     // The sheet explains a failure itself (gate.paymentFailure), so the
@@ -213,18 +254,18 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
       // No card on file: linking one is the first half of the same tap, not a
       // separate screen. The sheet stays put and the button becomes "Pay" once
       // the modal closes with a method loaded.
-      gate.onPaymentStarted('linkCard');
+      if (gate.onPaymentStarted('linkCard') === false) return;
       setShowPaymentMethodsModal(true);
       return;
     }
-    gate.onPaymentStarted('card');
+    if (gate.onPaymentStarted('card') === false) return;
     resolveOutcome(await payWithCard(chargeAmount), chargeAmount);
   };
 
   const handleApplePay = async () => {
     if (busy) return;
     hapticFeedback.light();
-    gate.onPaymentStarted('applePay');
+    if (gate.onPaymentStarted('applePay') === false) return;
     resolveOutcome(await payWithApplePay(chargeAmount), chargeAmount);
   };
 
@@ -233,11 +274,11 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     if (busy) return;
     hapticFeedback.light();
     if (!sheetAvailable) {
-      gate.onPaymentStarted('linkCard');
+      if (gate.onPaymentStarted('linkCard') === false) return;
       setShowPaymentMethodsModal(true);
       return;
     }
-    gate.onPaymentStarted('paymentSheet');
+    if (gate.onPaymentStarted('paymentSheet') === false) return;
     resolveOutcome(await payWithPaymentSheet(chargeAmount), chargeAmount);
   };
 
@@ -259,6 +300,80 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
   // --- Copy ----------------------------------------------------------------
   const money = (n: number) => `$${n.toFixed(2)}`;
   const initial = gate.hunterName.trim().charAt(0).toUpperCase() || '?';
+  // Focus-first screen E (and E.3 while a payment confirms). Copy only: every
+  // amount below is the gate's own (useAcceptFunding's requirement).
+  const hire = describeHire({
+    hunterName: gate.hunterName,
+    amount,
+    charge: needsPayment ? chargeAmount : 0,
+    fromBalance: needsPayment ? Math.max(0, amount - chargeAmount) : amount,
+    paysByCard: hasPaymentMethod,
+    otherApplicantNames,
+  });
+
+  // --- 4b: quick confirm ----------------------------------------------------
+  // Once it is confirmed or dismissed, the rest of this hire is screen E.
+  const [quickDone, setQuickDone] = useState(false);
+  const quickSeconds = FOCUS_POLICY.quickConfirmSeconds;
+  if (
+    quickConfirm &&
+    !quickDone &&
+    quickSeconds &&
+    !showPaymentPromise &&
+    gate.requirement &&
+    (gate.stage === 'confirm' || gate.stage === 'pay') &&
+    !isProcessing &&
+    !gate.paymentFailure &&
+    !gate.remainderAfterDeposit &&
+    !error &&
+    (!needsPayment || (!stripeError && (stripeLoading || hasPaymentMethod)))
+  ) {
+    const first = hire.back.replace(/^Back to /, '');
+    const bountyId = String(gate.requirement.bountyId);
+    const fromBalance = needsPayment ? Math.max(0, amount - chargeAmount) : amount;
+    const sources = [
+      fromBalance > 0 ? `Balance ${money(fromBalance)}` : null,
+      needsPayment && hasPaymentMethod
+        ? `${stripeService.formatCardDisplay(primaryCardPaymentMethod)} ${money(chargeAmount)}`
+        : null,
+    ].filter(Boolean);
+    return (
+      <QuickConfirm
+        // A different charge is a different decision: start the clock again.
+        key={`${gate.stage}:${amount}:${chargeAmount}`}
+        name={first}
+        avatarUri={gate.hunterAvatar}
+        sub={quickConfirm.sub}
+        rows={[
+          { icon: quickConfirm.jobIcon, title: quickConfirm.jobTitle, detail: `${first} does it for ${money(amount)}` },
+          { icon: 'lock', title: `Bounty holds your ${money(amount)}`, detail: hire.items[1].detail },
+          { icon: hire.items[2].icon, title: hire.items[2].title, detail: hire.items[2].detail },
+          {
+            icon: needsPayment ? 'credit-card' : 'account-balance-wallet',
+            title: sources.join(' · ') || 'Checking payment…',
+            onChange: needsPayment ? () => setQuickDone(true) : undefined,
+          },
+        ]}
+        note={`${hire.note} ${first} starts the work next.`}
+        seconds={quickSeconds}
+        ready={!needsPayment || (!stripeLoading && hasPaymentMethod)}
+        paddingTop={metrics.topPadding}
+        paddingBottom={footerClearance}
+        onConfirm={(how) => {
+          trackWorkspacePrimaryTapped({
+            bountyId,
+            side: 'posted',
+            screenId: '4b',
+            action: how === 'tap' ? 'quick_confirm' : 'quick_confirm_timeout',
+          });
+          setQuickDone(true);
+          if (needsPayment) void handlePayWithCard();
+          else handleConfirm();
+        }}
+        onBack={handleCancel}
+      />
+    );
+  }
 
   let primaryLabel: string;
   let primaryA11y: string;
@@ -269,26 +384,24 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
     primaryLabel = 'Confirming payment…';
     primaryA11y = 'Confirming your payment';
   } else if (!needsPayment) {
-    primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : 'Confirm & hire';
+    primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : hire.primary;
     primaryA11y = showPaymentPromise
       ? paymentPromiseStrings.fundAndHireA11y(gate.hunterName)
-      : `Confirm and hire ${gate.hunterName} for ${amount.toFixed(2)} dollars`;
+      : hire.primary;
   } else if (stripeLoading) {
     primaryLabel = 'Checking payment methods…';
     primaryA11y = 'Checking payment methods';
   } else if (!hasPaymentMethod && !sheetAvailable) {
     primaryLabel = `Link a card to pay ${money(chargeAmount)}`;
-    primaryA11y = `Link a payment method to pay ${chargeAmount.toFixed(2)} dollars and hire`;
+    primaryA11y = primaryLabel;
   } else if (isProcessing) {
     primaryLabel = 'Processing…';
     primaryA11y = 'Processing payment';
   } else {
-    primaryLabel = showPaymentPromise
-      ? paymentPromiseStrings.fundAndHire
-      : `Pay ${money(chargeAmount)} & hire`;
+    primaryLabel = showPaymentPromise ? paymentPromiseStrings.fundAndHire : hire.primary;
     primaryA11y = showPaymentPromise
       ? paymentPromiseStrings.fundAndHireA11y(gate.hunterName)
-      : `Pay ${chargeAmount.toFixed(2)} dollars and hire ${gate.hunterName}`;
+      : hire.primary;
   }
   const primaryDisabled = busy || (needsPayment && stripeLoading);
   const showApplePay = Platform.OS === 'ios' && needsPayment && !settling && !paymentPending;
@@ -319,13 +432,14 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
           primaryCardPaymentMethod
         )}`}
       >
-        <Text style={styles.rowLabel}>Paying with</Text>
-        <View style={styles.rowInline}>
-          <Text style={styles.rowValue}>
+        {/* Stacked: side by side, a card number at this size pushes Change off the row. */}
+        <View style={styles.rowStack}>
+          <Text style={[styles.rowLabel, styles.payingText]}>Paying with</Text>
+          <Text style={[styles.rowValue, styles.payingText]}>
             {stripeService.formatCardDisplay(primaryCardPaymentMethod)}
           </Text>
-          <Text style={styles.changeLink}>Change</Text>
         </View>
+        <Text style={[styles.changeLink, styles.payingText]}>Change</Text>
       </TouchableOpacity>
     ) : null;
 
@@ -341,7 +455,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
       <View
         style={[
           styles.sheet,
-          { paddingTop: insets.top + metrics.topPadding, paddingBottom: footerClearance },
+          { paddingTop: metrics.topPadding, paddingBottom: footerClearance },
         ]}
       >
         <ScrollView
@@ -350,6 +464,26 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
           showsVerticalScrollIndicator={false}
         >
         <View style={styles.info}>
+          {showPaymentPromise ? null : (
+            <View style={styles.focusHead} testID="hire-confirmation">
+              <FlowTitle title={hire.title} />
+              <ConsequenceList
+                label={hire.label}
+                items={hire.items.map((item) => ({ ...item, icon: item.icon as never }))}
+              />
+              <View style={styles.heldRow}>
+                <MaterialIcons name="lock-outline" size={16} color={theme.textSecondary} />
+                <Text style={styles.heldText}>
+                  {gate.requirement?.fundingMode === 'at_accept'
+                    ? trustSafetyStrings.payWhenYouHire
+                    : 'Held for in-app completion or dispute review'}
+                </Text>
+              </View>
+              <Text style={styles.noFees}>{hire.note}</Text>
+            </View>
+          )}
+          {showPaymentPromise ? (
+          <>
           <Text style={styles.eyebrow}>{needsPayment ? 'PAY & HIRE' : 'HIRE'}</Text>
 
           <View style={styles.hunterRow}>
@@ -363,11 +497,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
               <Text style={styles.title} accessibilityRole="header">
                 {gate.hunterName}
               </Text>
-              {showPaymentPromise ? null : (
-                <Text style={styles.subtitle}>Bounty reward {money(amount)}</Text>
-              )}
             </View>
           </View>
+          </>
+          ) : null}
 
           {showPaymentPromise ? (
             <View style={styles.promiseCard} testID="payment-promise-summary">
@@ -379,27 +512,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
               </Text>
               <Text style={styles.promiseHold}>{paymentPromiseStrings.fundingHold}</Text>
             </View>
-          ) : (
-            <View style={styles.card}>
-              <Text
-                style={styles.amount}
-                accessibilityLabel={`${(needsPayment ? chargeAmount : amount).toFixed(2)} dollars`}
-              >
-                {money(needsPayment ? chargeAmount : amount)}
-              </Text>
-              <Text style={styles.amountCaption}>
-                {needsPayment ? 'charged to your card now' : 'from your wallet balance'}
-              </Text>
-              <View style={styles.heldRow}>
-                <MaterialIcons name="lock-outline" size={16} color={theme.textSecondary} />
-                <Text style={styles.heldText}>
-                  {gate.requirement?.fundingMode === 'at_accept'
-                    ? trustSafetyStrings.payWhenYouHire
-                    : 'Held for in-app completion or dispute review'}
-                </Text>
-              </View>
-            </View>
-          )}
+          ) : null}
 
           {gate.remainderAfterDeposit && (
             <View style={styles.notice} accessibilityRole="alert">
@@ -411,12 +524,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
           )}
 
           {paymentPending && (
-            <View style={styles.notice} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              <MaterialIcons name="info-outline" size={18} color={theme.primary} />
-              <Text style={styles.noticeText}>
-                Your payment is still being confirmed. Don’t try again yet; we’ll reconcile it
-                before another charge.
-              </Text>
+            <View style={styles.pending} accessibilityRole="alert" accessibilityLiveRegion="polite" testID="hire-payment-pending">
+              <Text style={styles.pendingNow}>{hire.pending.now}</Text>
+              <Text style={styles.pendingMeans}>{hire.pending.means}</Text>
+              <MoneyLine kind="warn" text={hire.pending.money} testID="hire-payment-pending-money" />
             </View>
           )}
 
@@ -448,7 +559,7 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
           )}
 
           {showPaymentPromise ? (
-            payingWithRow && <View style={styles.rowGroup}>{payingWithRow}</View>
+            payingWithRow && <View style={[styles.rowGroup, styles.payingWith]}>{payingWithRow}</View>
           ) : (
             <>
               <View style={styles.rowGroup}>
@@ -535,10 +646,25 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             </TouchableOpacity>
           )}
 
+          {paymentPending && gate.canLeavePending ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Back to My Jobs"
+              style={styles.secondaryButton}
+              onPress={() => {
+                hapticFeedback.light();
+                gate.onLeavePending();
+                onLeavePending?.();
+              }}
+              testID="hire-leave-pending"
+            >
+              <Text style={styles.secondaryButtonText}>Back to My Jobs</Text>
+            </TouchableOpacity>
+          ) : (
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={
-              showPaymentPromise ? paymentPromiseStrings.notYetA11y : 'Not now, go back without hiring'
+              showPaymentPromise ? paymentPromiseStrings.notYetA11y : 'Not yet, go back without choosing anyone'
             }
             accessibilityState={{ disabled: isProcessing || paymentPending }}
             style={styles.secondaryButton}
@@ -546,9 +672,10 @@ export function AcceptFundingGate({ gate }: AcceptFundingGateProps) {
             onPress={handleCancel}
           >
             <Text style={styles.secondaryButtonText}>
-              {showPaymentPromise ? paymentPromiseStrings.notYet : 'Not now'}
+              {showPaymentPromise ? paymentPromiseStrings.notYet : hire.cancel}
             </Text>
           </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -577,6 +704,11 @@ const ON_PRIMARY_TEXT = '#FFFFFF';
 
 const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
   StyleSheet.create({
+    focusHead: { gap: 18 },
+    noFees: { color: theme.poster.ink2, fontSize: 15 },
+    pending: { gap: 10 },
+    pendingNow: { color: theme.poster.ink, fontSize: 24, fontWeight: '800', lineHeight: 30 },
+    pendingMeans: { color: theme.poster.ink, fontSize: 17, lineHeight: 25 },
     root: { flex: 1, backgroundColor: theme.background },
     // The scrollable info block and the fixed actions footer as siblings:
     // actions size to their own content and stay pinned below the scroll
@@ -629,13 +761,13 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       borderWidth: 1,
       borderRadius: 16,
       paddingVertical: metrics.cardPaddingVertical,
-      paddingHorizontal: 16,
+      paddingHorizontal: 20,
       gap: metrics.sectionGap,
     },
     promiseSummary: {
       color: theme.text,
-      fontSize: metrics.rowFontSize + 1,
-      lineHeight: metrics.rowFontSize + 7,
+      fontSize: metrics.rowFontSize + 4,
+      lineHeight: metrics.rowFontSize + 12,
       fontWeight: '700',
     },
     promiseSource: {
@@ -711,7 +843,10 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       alignItems: 'center',
       paddingVertical: metrics.rowPaddingVertical,
     },
-    rowInline: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    // Narrower than the summary card, so it reads as a detail under it.
+    payingWith: { alignSelf: 'center', width: '88%', paddingHorizontal: 14, paddingVertical: 0 },
+    payingText: { fontSize: metrics.rowFontSize - 2 },
+    rowStack: { flex: 1, gap: 2, paddingRight: 10 },
     rowLabel: { color: theme.textSecondary, fontSize: metrics.rowFontSize },
     rowValue: { color: theme.text, fontSize: metrics.rowFontSize, fontWeight: '600' },
     changeLink: { color: theme.primaryLight, fontSize: metrics.rowFontSize, fontWeight: '600' },
@@ -750,8 +885,8 @@ const makeStyles = (theme: AppTheme, metrics: GateMetrics) =>
       fontWeight: '600',
     },
     secondaryButtonText: {
-      color: theme.textSecondary,
-      fontSize: metrics.buttonFontSize - 1,
+      color: theme.text,
+      fontSize: metrics.buttonFontSize - 2,
       fontWeight: '600',
     },
   });

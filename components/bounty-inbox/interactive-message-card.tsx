@@ -47,6 +47,14 @@ interface Props {
   busy?: boolean;
   /** `choice` is only set for accept_or_decline. */
   onAction: (action: BountyThreadAction, event: BountyThreadEvent, choice?: 'accept' | 'decline') => void;
+  /**
+   * The thread pins this card's action above the message box (Focus-first
+   * M.1–M.3), so the card itself shows it without a button: only one card
+   * in the thread ever carries the next step.
+   */
+  hideAction?: boolean;
+  /** A later card replaced this one (e.g. "You sent the work" after a change was asked for): drawn faded. */
+  superseded?: boolean;
 }
 
 interface Copy {
@@ -291,6 +299,8 @@ export function InteractiveMessageCard({
   animateIn = false,
   busy = false,
   onAction,
+  hideAction = false,
+  superseded = false,
 }: Props) {
   const { prefersReducedMotion } = useAccessibleAnimation();
   const { triggerHaptic } = useHapticFeedback();
@@ -323,7 +333,11 @@ export function InteractiveMessageCard({
   const done = !event.live && event.kind !== 'posted' && event.kind !== 'paid';
   const destructive = event.action === 'withdraw' || event.action === 'dismiss';
   const singleAction =
-    event.action && event.action !== 'accept_or_decline' && !destructive && copy.cta ? event.action : null;
+    !hideAction && event.action && event.action !== 'accept_or_decline' && !destructive && copy.cta ? event.action : null;
+  // When the thread pins this card's step above the message box, the pinned
+  // card says "Your turn"; this one doesn't repeat it, so there is one next
+  // step on screen, not two.
+  const yourMove = event.yourTurn && !hideAction;
 
   const fire = (action: BountyThreadAction, choice?: 'accept' | 'decline') => {
     if (busy) return;
@@ -358,19 +372,20 @@ export function InteractiveMessageCard({
           stacked && st.bubbleStacked,
           stacked && { transform: [{ translateY: bubbleLift }] },
           done && { opacity: 0.75 },
+          superseded && { opacity: 0.62 },
         ]}
-        accessibilityLabel={[copy.label, copy.title, copy.subtitle, event.yourTurn ? 'Your move' : null]
+        accessibilityLabel={[copy.label, copy.title, copy.subtitle, yourMove ? 'Your move' : null]
           .filter(Boolean)
           .join('. ')}
       >
         {/* Stacked bubbles carry only the action ("Sam applied") and, when it
             is the viewer's turn, "Your move" — no step label, details or time. */}
         {stacked ? (
-          event.yourTurn && <Text style={[s.label, st.labelStacked]}>Your move</Text>
+          yourMove && <Text style={[s.label, st.labelStacked]}>Your move</Text>
         ) : (
           <Text style={s.label}>
             {copy.label}
-            {event.yourTurn ? ' · Your move' : ''}
+            {yourMove ? ' · Your move' : ''}
           </Text>
         )}
         <Text style={[s.title, stacked && st.titleStacked]}>{copy.title}</Text>

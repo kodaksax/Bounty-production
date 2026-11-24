@@ -70,3 +70,21 @@ describe('bounty cover', () => {
     expect(getBountyCategoryIcon('nope')).toBe('work-outline');
   });
 });
+
+describe('getFeaturedFlag', () => {
+  const { getFeaturedFlag } = jest.requireActual('../../../lib/my-jobs/format');
+  const base = { finished: false, needsYou: false, rank: 6, lifecycle: { waitingOn: 'other' } };
+
+  it('says what the job needs in words', () => {
+    expect(getFeaturedFlag({ ...base, needsYou: true, rank: 3 }).text).toBe('Needs you');
+    expect(getFeaturedFlag({ ...base, needsYou: true, rank: 4 }).text).toBe('New message');
+    expect(getFeaturedFlag({ ...base, finished: true, rank: 7 }).text).toBe('Finished');
+    expect(getFeaturedFlag(base).text).toBe('Nothing to do yet');
+  });
+
+  it('a dispute says Bounty is on it, not that the user must act', () => {
+    expect(getFeaturedFlag({ ...base, needsYou: true, rank: 1, lifecycle: { waitingOn: 'support' } })).toEqual(
+      expect.objectContaining({ kind: 'help', text: 'Bounty is on it' })
+    );
+  });
+});

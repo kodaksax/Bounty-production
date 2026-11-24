@@ -164,7 +164,7 @@ function problemStatus(lifecycle: BountyLifecycleState): JobStatusLine | null {
 interface JobDraft {
   rank: JobRank;
   status: JobStatusLine;
-  detail: string;
+  detail: string | null;
   cta: { label: string; target: JobTarget };
   attentionSince: string | null;
 }
@@ -257,7 +257,8 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
       detail: sentence('See who they are, then choose one person.', payWhenChoosing),
       cta: {
         label: count === 1 ? 'Review the offer' : `Review the ${count} people`,
-        target: { kind: 'applicants', bountyId },
+        // F.1 → C: the workspace, then one person at a time (D).
+        target: workspace,
       },
       attentionSince: earliest(...offers.map((o) => o.created_at)),
     };

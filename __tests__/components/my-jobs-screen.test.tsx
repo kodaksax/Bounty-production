@@ -16,6 +16,7 @@ const mockUpdate = jest.fn();
 const mockHunterRequests = jest.fn();
 const mockBatch = jest.fn();
 const mockGetAll = jest.fn();
+const mockPlan = jest.fn();
 const mockCancel = jest.fn();
 const mockWithdraw = jest.fn();
 const mockDiscard = jest.fn();
@@ -74,6 +75,7 @@ jest.mock('lib/services/application-withdrawal', () => ({
 }));
 jest.mock('../../lib/services/bounty-cancel-refund', () => ({
   ...jest.requireActual('../../lib/services/bounty-cancel-refund'),
+  planCancelRefund: (...a: unknown[]) => mockPlan(...a),
   cancelAndRefundBounty: (...a: unknown[]) => mockCancel(...a),
 }));
 jest.mock('../../lib/supabase', () => {
@@ -88,6 +90,9 @@ jest.mock('../../lib/storage', () => ({
   },
 }));
 jest.mock('../../lib/toast', () => ({ showToast: jest.fn() }));
+jest.mock('../../components/ui/app-modal', () => ({
+  AppModal: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => (visible ? children : null),
+}));
 jest.mock('expo-image', () => ({ Image: () => null }));
 jest.mock('../../components/ui/skeleton-loaders', () => ({ PostingsListSkeleton: () => null }));
 jest.mock('../../components/ui/branding-logo', () => ({ BrandingLogo: () => null }));
@@ -160,6 +165,7 @@ beforeEach(() => {
   mockBatch.mockResolvedValue([offer('h1', 'Ana'), offer('h2', 'Ben')]);
   mockGetAll.mockResolvedValue([]);
   mockUpdate.mockImplementation(async (id: string, patch: object) => ({ id, ...patch }));
+  mockPlan.mockResolvedValue({ refundAmount: 0, destination: null });
   mockCancel.mockResolvedValue({});
   mockWithdraw.mockResolvedValue({ applicationId: 'r' });
 });
@@ -172,7 +178,7 @@ async function renderMyJobs(props: Partial<React.ComponentProps<typeof MyJobsScr
 }
 
 describe('My Jobs — the featured job', () => {
-  it('features the job with offers, and the CTA opens Who offered', async () => {
+  it('features the job with offers, and the CTA opens its workspace (F.1 → C)', async () => {
     await renderMyJobs();
     const card = await screen.findByTestId('featured-job-card');
     expect(within(card).getByText('Clear the garage')).toBeTruthy();
@@ -180,25 +186,34 @@ describe('My Jobs — the featured job', () => {
     expect(screen.getByText("Here's the job that needs you today.")).toBeTruthy();
     // Poster-only account: no side labels.
     expect(screen.queryByTestId('side-label-posted')).toBeNull();
-
     // The applicants sheet is closed, so nothing counts as viewed yet.
     expect(mockListViews.mock.calls.every(([args]) => args.enabled === false)).toBe(true);
 
     fireEvent.press(within(card).getByText('Review the 2 people'));
-    expect(await screen.findByTestId('applicants-sheet')).toBeTruthy();
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/postings/[bountyId]', params: { bountyId: 'b-garage' } });
+  });
+
+  it('Who offered (from a link) opens each person in the workspace', async () => {
+    await renderMyJobs({ initialTab: 'requests' });
+    const sheet = await screen.findByTestId('applicants-sheet');
     expect(screen.getByText('“Hi, I\'m Ana”')).toBeTruthy();
     expect(mockListViews.mock.calls.at(-1)![0].enabled).toBe(true);
     // An applicant's row never offers to delete the whole job (audit 2026-11-14, fix 5).
-    const sheet = screen.getByTestId('applicants-sheet');
     expect(within(sheet).queryByText('Take this job down')).toBeNull();
     fireEvent(within(sheet).getByTestId('applicant-row-h1'), 'longPress');
     expect(mockCancel).not.toHaveBeenCalled();
-
     fireEvent.press(screen.getByTestId('applicant-row-h1'));
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/tabs/bounty-thread/[bountyId]',
-      params: { bountyId: 'b-garage', role: 'poster', with: 'h1' },
-    });
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/postings/[bountyId]', params: { bountyId: 'b-garage', person: 'r-h1' } });
+  });
+
+  it('when the main action is a message, "See the job" opens the workspace (G)', async () => {
+    mockGetByUserId.mockResolvedValue([{ ...GARAGE, status: 'in_progress', accepted_by: 'ada' }]);
+    mockBatch.mockResolvedValue([]);
+    mockConversations = [{ id: 'c', bountyId: 'b-garage', isGroup: false, name: 'Ada R.', participantIds: ['me', 'ada'], lastMessage: 'Saturday at 9', unread: 0 }];
+    await renderMyJobs();
+    expect(await screen.findByText('Message Ada')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('featured-job-open'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/postings/[bountyId]', params: { bountyId: 'b-garage' } });
   });
 
   it('the header keeps the way into every conversation', async () => {
@@ -212,10 +227,8 @@ describe('My Jobs — the featured job', () => {
     const tv = { id: 'b-tv', status: 'in_progress', title: 'Mount a TV', amount: 80, poster_id: 'jordan', username: 'Jordan K.', accepted_by: 'me', created_at: now };
     mockHunterRequests.mockResolvedValue([{ id: 'r-tv', bounty_id: 'b-tv', hunter_id: 'me', status: 'accepted', created_at: now, bounty: tv }]);
     await renderMyJobs();
-    // "Jordan chose you" (someone waiting on you) outranks new offers.
     const card = await screen.findByTestId('featured-job-card');
-    await waitFor(() => expect(within(card).getByText('Jordan chose you')).toBeTruthy());
-    expect(within(card).getByTestId('side-label-doing')).toBeTruthy();
+    await waitFor(() => expect(within(card).getByTestId('side-label-doing')).toBeTruthy());
   });
 });
 
@@ -242,16 +255,16 @@ describe('My Jobs — managing a job', () => {
   it('take down asks first, refunds once, then removes', async () => {
     await openLeavesMenu();
     fireEvent.press(screen.getByTestId('manage-action-take_down'));
-    expect(alertSpy.mock.calls.at(-1)![0]).toBe('Take this job down?');
+    const yes = await screen.findByTestId('confirm-dialog-yes');
+    expect(screen.getByText('Take this job down?')).toBeTruthy();
+    expect(screen.getByLabelText("Your money. You haven't been charged, so there's nothing to refund.")).toBeTruthy();
     expect(mockCancel).not.toHaveBeenCalled();
 
     let release!: () => void;
     mockCancel.mockReturnValueOnce(new Promise<void>((r) => (release = r)));
-    const call = alertSpy.mock.calls.at(-1)!;
-    const confirm = call[2].find((b: { text: string }) => b.text === 'Yes, take it down');
-    // A double tap while the refund is in flight refunds once.
-    act(() => void confirm.onPress());
-    act(() => void confirm.onPress());
+    // A double tap refunds once.
+    fireEvent.press(yes);
+    fireEvent.press(yes);
     await act(async () => release());
     expect(mockCancel).toHaveBeenCalledTimes(1);
     expect(mockCancel.mock.calls[0][0]).toMatchObject({ id: 'b-leaves' });
@@ -262,7 +275,8 @@ describe('My Jobs — managing a job', () => {
     await openLeavesMenu();
     fireEvent.press(screen.getByTestId('manage-action-take_down'));
     const callsBefore = mockGetByUserId.mock.calls.length;
-    await pressAlert('Yes, take it down');
+    const yes = await screen.findByTestId('confirm-dialog-yes');
+    await act(async () => fireEvent.press(yes));
     expect(alertSpy.mock.calls.at(-1)![0]).toBe('Refund failed');
     // Not reloaded as if it were gone.
     expect(mockGetByUserId.mock.calls.length).toBe(callsBefore);
@@ -317,9 +331,22 @@ describe('My Jobs — your offers', () => {
     expect(await screen.findByTestId('my-jobs-nothing')).toBeTruthy();
     fireEvent.press(screen.getByTestId('other-jobs-bar'));
     fireEvent.press(await screen.findByTestId('offer-action-withdraw-b-wardrobe'));
-    expect(alertSpy.mock.calls.at(-1)![0]).toBe('Withdraw your offer?');
-    await pressAlert('Yes, withdraw');
+    expect(screen.getByText('Withdraw your offer?')).toBeTruthy();
+    await act(async () => fireEvent.press(screen.getByTestId('confirm-dialog-yes')));
     expect(mockWithdraw).toHaveBeenCalledWith({ bountyId: 'b-wardrobe', currentUserId: 'me', surface: 'inbox' });
+  });
+});
+
+describe('My Jobs — an offer opens its own screen', () => {
+  it.each(['pending', 'rejected'])('%s', async (status) => {
+    mockGetByUserId.mockResolvedValue([]);
+    mockBatch.mockResolvedValue([]);
+    const sofa = { id: 'b-sofa', status: 'open', title: 'Carry a sofa', amount: 40, poster_id: 'dan', username: 'Dan P.', created_at: now };
+    mockHunterRequests.mockResolvedValue([{ id: 'r-s', bounty_id: 'b-sofa', hunter_id: 'me', status, created_at: now, bounty: sofa }]);
+    await renderMyJobs();
+    fireEvent.press(await screen.findByTestId('other-jobs-bar'));
+    fireEvent.press(await screen.findByTestId('offer-open-b-sofa'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/in-progress/[bountyId]/hunter', params: { bountyId: 'b-sofa' } });
   });
 });
 

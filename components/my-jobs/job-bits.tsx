@@ -9,7 +9,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import type { ManageAction } from '../../lib/my-jobs/manage-actions'
 import type { IconName, JobSide } from '../../lib/my-jobs/types'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
-import type { AppTheme } from '../../lib/themes/types'
+import { SidePill } from '../poster/side-label'
 
 /** The job's photo, or its category icon on a warm tile. */
 export function JobThumb({
@@ -45,39 +45,15 @@ export function JobThumb({
   )
 }
 
-const SIDE_LABEL: Record<JobSide | 'offered' | 'did', { text: string; icon: IconName }> = {
-  posted: { text: 'You posted this', icon: 'assignment-ind' },
-  doing: { text: "You're doing this", icon: 'construction' },
-  did: { text: 'You did this', icon: 'task-alt' },
-  offered: { text: 'You offered', icon: 'send' },
-}
-
-function sideColors(theme: AppTheme, side: keyof typeof SIDE_LABEL) {
-  switch (side) {
-    case 'posted':
-      return { bg: theme.neutralTint, fg: theme.text }
-    case 'offered':
-      return { bg: theme.primaryTint, fg: theme.primaryLight }
-    default:
-      return { bg: theme.infoTint, fg: theme.infoText }
-  }
-}
-
 /**
  * Which side of the job the user is on — words first, then icon and colour,
  * never colour alone. Only shown when the account has jobs on both sides.
+ * Drawn by the shared SidePill so My Jobs and the workspaces label sides the
+ * same way (the handoff's mapping: posted green, offered neutral, doing blue).
  */
 export function JobSideLabel({ side, finished = false }: { side: JobSide | 'offered'; finished?: boolean }) {
-  const { theme } = useAppThemeContext()
-  const key = side === 'doing' && finished ? 'did' : side
-  const { text, icon } = SIDE_LABEL[key]
-  const { bg, fg } = sideColors(theme, key)
-  return (
-    <View style={[bitStyles.pill, { backgroundColor: bg }]} testID={`side-label-${side}`}>
-      <MaterialIcons name={icon} size={14} color={fg} />
-      <Text style={[bitStyles.pillText, { color: fg }]}>{text}</Text>
-    </View>
-  )
+  const pill = side === 'doing' && finished ? 'did' : side
+  return <SidePill side={pill} testID={`side-label-${side}`} />
 }
 
 /** "Needs you", in words, with the bell as support. */
@@ -85,8 +61,8 @@ export function NeedsYouMarker({ compact = false }: { compact?: boolean }) {
   const { theme } = useAppThemeContext()
   return (
     <View style={bitStyles.needsYou}>
-      <MaterialIcons name="notifications-active" size={compact ? 13 : 16} color={theme.warningText} />
-      <Text style={[bitStyles.needsYouText, { color: theme.warningText, fontSize: compact ? 13 : 14 }]}>
+      <MaterialIcons name="notifications-active" size={compact ? 16 : 18} color={theme.poster.wt} />
+      <Text style={[bitStyles.needsYouText, { color: theme.poster.wt, fontSize: compact ? 14 : 15 }]}>
         Needs you
       </Text>
     </View>
@@ -136,18 +112,8 @@ export function ManageActionsList({
 }
 
 const bitStyles = StyleSheet.create({
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  pillText: { fontSize: 13, fontWeight: '700' },
   needsYou: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  needsYouText: { fontWeight: '700' },
+  needsYouText: { fontWeight: '800' },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingHorizontal: 4 },
   actionText: { fontSize: 16, fontWeight: '600' },
 })

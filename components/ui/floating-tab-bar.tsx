@@ -35,10 +35,23 @@ interface FloatingTabBarProps {
 const BAR_HEIGHT = 64;
 const BAR_SIDE_MARGIN = 16;
 const BAR_PADDING = 5;
+// Gap from the screen edge on devices with no bottom inset. Where there is one, the
+// root layout already reserves it below every screen, so the bar sits right on it
+// (any lower and it would leave its parent and stop taking taps).
+const MIN_BOTTOM_GAP = 6;
 const ICON_SIZE = 23;
 const CENTER_ICON_SIZE = 25;
 // Caps Dynamic Type so labels can't push the bar taller than BAR_HEIGHT.
 const LABEL_MAX_FONT_SCALE = 1.2;
+
+function getBarBottom(bottomInset: number) {
+  return bottomInset > 0 ? 0 : MIN_BOTTOM_GAP;
+}
+
+/** Distance from the bottom of the tab screens to the top edge of the floating bar. */
+export function getFloatingTabBarTop(bottomInset = 0) {
+  return getBarBottom(bottomInset) + BAR_HEIGHT;
+}
 
 type Tab = { key: ScreenKey; icon: keyof typeof MaterialIcons.glyphMap; title: string; label: string };
 
@@ -123,7 +136,7 @@ export function FloatingTabBar({
   return (
     <View
       pointerEvents="box-none"
-      style={[s.container, { bottom: Math.max(insets.bottom - 8, 12) }]}
+      style={[s.container, { bottom: getBarBottom(insets.bottom) }]}
     >
       <View style={s.bar}>
         <BlurView intensity={50} tint={theme.isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />

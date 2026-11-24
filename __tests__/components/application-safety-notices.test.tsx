@@ -44,7 +44,9 @@ describe('application safety notices', () => {
     const { onSubmit, getByLabelText, getByText } = renderApplication();
     const pitch = 'Pay me using Venmo';
     fireEvent.changeText(getByLabelText('Application pitch'), pitch);
-    fireEvent.press(getByText('Apply — earn $18.00'));
+    // Focus-first H.2: the button is "Send offer" (no payment promised in a
+    // button label); the take-home is stated in the list above it instead.
+    fireEvent.press(getByText('Send offer'));
     expect(onSubmit).toHaveBeenCalledWith(pitch);
   });
 });

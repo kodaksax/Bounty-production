@@ -35,6 +35,7 @@ let mockInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 
 // ---- module mocks ----
 
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: jest.fn(() => mockInsets),
 }));

@@ -110,10 +110,58 @@ jest.mock('../../components/edit-posting-modal', () => {
   };
 });
 
+// ── Focus-first workspace dependencies (app/postings/[bountyId]) ──────────
+// The workspace mounts the job thread's pay gate and accept/reject hooks for
+// stage D, and reads the pair's conversation and the problem records. None
+// of that is under test here, so they are inert.
+jest.mock('../../components/accept-funding-gate', () => ({ AcceptFundingGate: () => null }));
+jest.mock('../../hooks/useAcceptFunding', () => ({
+  useAcceptFunding: () => ({ gate: { active: false }, ensureFunded: jest.fn(), handleAcceptFailure: jest.fn() }),
+}));
+jest.mock('../../hooks/useAcceptRequest', () => ({ useAcceptRequest: () => ({ handleAcceptRequest: jest.fn() }) }));
+jest.mock('../../hooks/useRejectRequest', () => ({ useRejectRequest: () => ({ handleRejectRequest: jest.fn() }) }));
+jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
+  useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
+}));
+jest.mock('../../hooks/useJobWorkspaceData', () => ({
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
+  usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
+  useHireTime: () => null,
+  useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
+}));
+jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
+jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));
+jest.mock('../../components/ui/app-modal', () => ({
+  AppModal: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => (visible ? children : null),
+}));
+
 import BountyDashboard from '../../app/postings/[bountyId]/index';
 
 /** The buttons of the most recent Alert.alert call. */
-function lastAlert() {
+function lastAlert(): { title: string; message: string; buttons: any[] } {
+  // The designed confirmation (J.4) when it's showing, read like an alert.
+  const dialog = screen.queryByTestId('confirm-dialog');
+  if (dialog) {
+    const text = (id: string) => {
+      const node = screen.queryByTestId(id);
+      if (!node) return '';
+      const out: string[] = [];
+      const walk = (n: any) => (typeof n === 'string' ? out.push(n) : (n?.children ?? []).forEach(walk));
+      walk(node);
+      return out.join(' ');
+    };
+    const yes = screen.getByTestId('confirm-dialog-yes');
+    const no = screen.getByTestId('confirm-dialog-no');
+    const all = text('confirm-dialog');
+    return {
+      title: text('confirm-dialog-title') || all,
+      message: all,
+      buttons: [
+        { text: text('confirm-dialog-no').trim(), style: 'cancel', onPress: () => fireEvent.press(no) },
+        { text: text('confirm-dialog-yes').trim(), style: 'destructive', onPress: () => fireEvent.press(yes) },
+      ] as any[],
+    };
+  }
   const calls = (Alert.alert as jest.Mock).mock.calls;
   const [title, message, buttons] = calls[calls.length - 1];
   return { title, message, buttons: buttons ?? [] };
@@ -145,6 +193,17 @@ afterEach(() => {
   (Alert.alert as jest.Mock).mockRestore?.();
 });
 
+
+/**
+ * Edit and take-down sit under the workspace's collapsed "Other options"
+ * (Focus-first handoff). Opens it when it is there; a no-op when the job
+ * offers neither, so "not offered" assertions still see nothing.
+ */
+function openOtherOptions() {
+  const toggle = screen.queryByTestId('bounty-manage-actions-toggle');
+  if (toggle) fireEvent.press(toggle);
+}
+
 describe('BountyDashboard — Cancel and refund', () => {
   it.each([
     ['light', lightTheme],
@@ -152,26 +211,29 @@ describe('BountyDashboard — Cancel and refund', () => {
   ])('sits next to Edit details on an open, unhired bounty, with no disclosure to open (%s theme)', async (_n, theme) => {
     mockTheme = theme;
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.getByTestId('bounty-manage-actions')).toBeTruthy();
-    expect(screen.getByLabelText('Edit details')).toBeTruthy();
+    expect(screen.getByLabelText('Edit job details')).toBeTruthy();
     expect(await screen.findByLabelText('Cancel and refund')).toBeTruthy();
     // Not duplicated under the status panel's "More actions".
     if (screen.queryByLabelText('More actions')) fireEvent.press(screen.getByLabelText('More actions'));
-    expect(screen.getAllByLabelText('Edit details')).toHaveLength(1);
+    expect(screen.getAllByLabelText('Edit job details')).toHaveLength(1);
     expect(screen.getAllByLabelText('Cancel and refund')).toHaveLength(1);
   });
 
   it('Edit details opens the editor while nobody has applied', () => {
     render(<BountyDashboard />);
-    fireEvent.press(screen.getByLabelText('Edit details'));
+    openOtherOptions();
+    fireEvent.press(screen.getByLabelText('Edit job details'));
     expect(screen.getByText('edit-modal-open')).toBeTruthy();
   });
 
   it('is still offered once hunters have applied; Edit explains why the terms are locked', async () => {
     mockApplicationCount = 2;
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(await screen.findByLabelText('Cancel and refund')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Edit details'));
+    fireEvent.press(screen.getByLabelText('Edit job details'));
     expect(screen.queryByText('edit-modal-open')).toBeNull();
     expect(lastAlert().title).toBe('Details are locked');
     expect(lastAlert().message).toContain('2 hunters have applied on these terms');
@@ -180,6 +242,7 @@ describe('BountyDashboard — Cancel and refund', () => {
   it('?openEdit=true opens the editor on an editable bounty', () => {
     mockParams = { bountyId: 'b1', openEdit: 'true' };
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.getByText('edit-modal-open')).toBeTruthy();
   });
 
@@ -187,6 +250,7 @@ describe('BountyDashboard — Cancel and refund', () => {
     mockParams = { bountyId: 'b1', openEdit: 'true' };
     mockBounty = { ...mockBounty, status: 'in_progress', accepted_by: 'hunter-1' };
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.queryByText('edit-modal-open')).toBeNull();
     expect(lastAlert().title).toBe("Can't edit this bounty");
   });
@@ -194,23 +258,26 @@ describe('BountyDashboard — Cancel and refund', () => {
   it('a hired bounty says why it cannot be edited or cancelled instead of offering either', () => {
     mockBounty = { ...mockBounty, status: 'in_progress', accepted_by: 'hunter-1' };
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.getByTestId('bounty-manage-locked')).toBeTruthy();
-    expect(screen.queryByLabelText('Edit details')).toBeNull();
+    expect(screen.queryByLabelText('Edit job details')).toBeNull();
   });
 
   it('a completed bounty offers no edit or cancel', () => {
     mockBounty = { ...mockBounty, status: 'completed', accepted_by: 'hunter-1' };
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.queryByTestId('bounty-manage-actions')).toBeNull();
-    expect(screen.queryByLabelText('Edit details')).toBeNull();
+    expect(screen.queryByLabelText('Edit job details')).toBeNull();
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
   });
 
   it('a non-owner never sees the owner actions and is redirected off the screen', () => {
     mockRole = 'hunter';
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.queryByTestId('bounty-manage-actions')).toBeNull();
-    expect(screen.queryByLabelText('Edit details')).toBeNull();
+    expect(screen.queryByLabelText('Edit job details')).toBeNull();
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
     expect(mockReplace).toHaveBeenCalled();
   });
@@ -219,11 +286,12 @@ describe('BountyDashboard — Cancel and refund', () => {
     let finish: (v: unknown) => void = () => {};
     mockCancel.mockImplementation(() => new Promise(r => (finish = r)));
     render(<BountyDashboard />);
+    openOtherOptions();
     await screen.findByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const go = lastAlert().buttons.find((b: any) => b.style === 'destructive');
     await act(async () => {
       go.onPress();
@@ -237,11 +305,12 @@ describe('BountyDashboard — Cancel and refund', () => {
 
   it('confirms in the app with the refund amount and destination, then cancels', async () => {
     render(<BountyDashboard />);
+    openOtherOptions();
     await screen.findByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const confirm = lastAlert();
     expect(confirm.title).toBe('Cancel and refund?');
     expect(confirm.message).toContain('$40 goes back to your Bounty balance.');
@@ -264,14 +333,16 @@ describe('BountyDashboard — Cancel and refund', () => {
 
   it('"Keep it" does nothing', async () => {
     render(<BountyDashboard />);
+    openOtherOptions();
     await screen.findByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const keep = lastAlert().buttons.find((b: any) => b.style === 'cancel');
-    expect(keep.text).toBe('Keep it');
-    expect(keep.onPress).toBeUndefined();
+    expect(keep.text).toBe('Keep my job');
+    act(() => keep.onPress());
+    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
     expect(mockCancel).not.toHaveBeenCalled();
   });
 
@@ -279,11 +350,12 @@ describe('BountyDashboard — Cancel and refund', () => {
     const { BountyRefundFailedError } = jest.requireActual('../../lib/services/bounty-cancel-refund');
     mockCancel.mockRejectedValue(new BountyRefundFailedError(new Error('owner_refund_in_progress')));
     render(<BountyDashboard />);
+    openOtherOptions();
     await screen.findByLabelText('Cancel and refund');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     await act(async () => {
       lastAlert().buttons.find((b: any) => b.style === 'destructive').onPress();
     });
@@ -295,6 +367,7 @@ describe('BountyDashboard — Cancel and refund', () => {
   it('is not offered once a hunter is hired', () => {
     mockBounty = { ...mockBounty, status: 'in_progress', accepted_by: 'hunter-1' };
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
     if (screen.queryByLabelText('More actions')) fireEvent.press(screen.getByLabelText('More actions'));
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
@@ -304,10 +377,11 @@ describe('BountyDashboard — Cancel and refund', () => {
     mockBounty = { ...mockBounty, is_for_honor: true, amount: 0 };
     mockPlan.mockResolvedValue({ refundAmount: 0, destination: null });
     render(<BountyDashboard />);
+    openOtherOptions();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     expect(lastAlert().message).toContain('no money is involved');
   });
 });

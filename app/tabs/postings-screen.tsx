@@ -1047,7 +1047,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // only ever active for a bounty that was posted unfunded and still needs
   // escrow — every legacy bounty resolves it instantly and invisibly.
   if (acceptFundingGate.active) {
-    return <AcceptFundingGate gate={acceptFundingGate} />
+    return <AcceptFundingGate overTabBar gate={acceptFundingGate} onLeavePending={() => setActiveScreen('messages')} />
   }
 
   return (

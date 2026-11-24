@@ -104,6 +104,36 @@ jest.mock('lib/themes/AppThemeContext', () => {
     },
     shadows,
   };
+  // Focus-first colour roles, mapped from the tokens above exactly as
+  // lib/themes/poster-palette.ts#derivePosterPalette maps the real theme.
+  mockTheme.poster = {
+    bg: mockTheme.background,
+    card: mockTheme.surface,
+    ink: mockTheme.text,
+    ink2: mockTheme.textSecondary,
+    line: mockTheme.borderSubtle,
+    outline: mockTheme.border,
+    chip: mockTheme.neutralTint,
+    g: mockTheme.primary,
+    gt: mockTheme.primaryLight,
+    gpill: mockTheme.primaryShade,
+    gpillfg: mockTheme.onPrimary,
+    gtint: mockTheme.primaryTint,
+    w: mockTheme.warning,
+    wt: mockTheme.warningText,
+    wtint: mockTheme.warningTint,
+    e: mockTheme.error,
+    et: mockTheme.errorText,
+    etint: mockTheme.errorTint,
+    it: mockTheme.infoText,
+    itint: mockTheme.infoTint,
+    photo: mockTheme.surfaceSecondary,
+    photoInk: mockTheme.text,
+    onFill: mockTheme.onPrimary,
+    stepDone: mockTheme.primaryLight,
+    stepNow: mockTheme.primary,
+    stepTodo: mockTheme.border,
+  };
   return {
     useAppThemeContext: () => ({
       theme: mockTheme,

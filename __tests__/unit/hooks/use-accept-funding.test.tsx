@@ -44,6 +44,15 @@ jest.mock('lib/services/bounty-funding-service', () => {
   };
 });
 
+const mockLoad = jest.fn();
+const mockReconcile = jest.fn();
+const mockSave = jest.fn();
+jest.mock('lib/services/unresolved-deposit', () => ({
+  loadUnresolvedDeposit: (...a: unknown[]) => mockLoad(...a),
+  reconcileUnresolvedDeposit: (...a: unknown[]) => mockReconcile(...a),
+  saveUnresolvedDeposit: (...a: unknown[]) => mockSave(...a),
+}));
+
 jest.mock('lib/services/analytics-service', () => ({
   analyticsService: { trackEvent: (...args: unknown[]) => mockTrackEvent(...args) },
 }));
@@ -89,7 +98,7 @@ const allPropsFor = (name: string) =>
 
 // No real waiting in the settle poll: the hook accepts the cadence as options
 // precisely so tests can exercise the poll without fake timers.
-const FAST = { settlePollAttempts: 2, settlePollDelayMs: 1 };
+const FAST = { settlePollAttempts: 2, settlePollDelayMs: 1, pendingPollDelayMs: 1 };
 
 /** Opens the gate and returns a probe for the still-pending promise. */
 function openGate(result: { current: any }, requirement: unknown, context = {}) {
@@ -110,6 +119,9 @@ describe('useAcceptFunding', () => {
     mockTrackEvent.mockReset();
     mockAlert.mockReset();
     mockAppStateListen.mockClear();
+    mockLoad.mockReset().mockResolvedValue(null);
+    mockReconcile.mockReset().mockResolvedValue('pending');
+    mockSave.mockReset().mockResolvedValue(undefined);
   });
 
   test('a bounty needing no funding resolves true with no gate shown', async () => {
@@ -195,6 +207,109 @@ describe('useAcceptFunding', () => {
       expect(probe.settled).toBe(false);
       expect(result.current.gate.remainderAfterDeposit).toBe(false);
       expect(propsFor('accept_funding_required')).toMatchObject({ balanceCovers: false });
+    });
+
+    describe('leaving while a payment confirms (E.3)', () => {
+      const SAVED = { paymentIntentId: 'pi_abcdefgh', amount: 30, bountyId: 'b1', hunterName: 'Sam', savedAt: new Date().toISOString() };
+
+      test('the payment is saved first, then leaving hires nobody', async () => {
+        const { result } = renderHook(() => useAcceptFunding({ ...FAST, pendingPollDelayMs: 60000 }));
+        const probe = openGate(result, NEEDS_TOPUP, { hunterName: 'Sam' });
+        await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+        act(() => result.current.gate.onPaymentPending(30, 'pi_abcdefgh'));
+        expect(mockSave).toHaveBeenCalledWith({ paymentIntentId: 'pi_abcdefgh', amount: 30, bountyId: 'b1', hunterName: 'Sam' });
+        expect(result.current.gate.canLeavePending).toBe(true);
+        await act(async () => result.current.gate.onLeavePending());
+        expect(probe.resolved).toBe(false);
+        expect(result.current.gate.active).toBe(false);
+        expect(propsFor('accept_blocked_by_payment')).toMatchObject({ trigger: 'left_pending', stage: 'pending' });
+      });
+
+      test('without a payment id it cannot be remembered, so it cannot be left', async () => {
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        openGate(result, NEEDS_TOPUP);
+        await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+        act(() => result.current.gate.onPaymentPending(30));
+        expect(result.current.gate.canLeavePending).toBe(false);
+        act(() => result.current.gate.onLeavePending());
+        expect(result.current.gate.stage).toBe('pending');
+      });
+
+      test('a saved payment that is still unresolved blocks another charge on a new screen', async () => {
+        mockLoad.mockResolvedValue(SAVED);
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        const probe = openGate(result, NEEDS_TOPUP);
+        await waitFor(() => expect(probe.resolved).toBe(false));
+        expect(result.current.gate.active).toBe(false);
+        expect(mockAlert.mock.calls[0][0]).toBe('Your payment is still confirming');
+      });
+
+      test('"no funding required" is not trusted while one is unresolved (a failed read says the same)', async () => {
+        mockLoad.mockResolvedValue(SAVED);
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        const probe = openGate(result, NO_FUNDING);
+        await waitFor(() => expect(probe.resolved).toBe(false));
+      });
+
+      test('a failed requirement read while one is unresolved does not let the hire through', async () => {
+        mockLoad.mockResolvedValue(SAVED);
+        mockGetRequirement.mockRejectedValueOnce(new Error('offline'));
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        let resolved: boolean | undefined;
+        await act(async () => {
+          resolved = await result.current.ensureFunded('b1');
+        });
+        expect(resolved).toBe(false);
+      });
+
+      test('a hire the balance already covers needs no charge and goes on', async () => {
+        mockLoad.mockResolvedValue(SAVED);
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        openGate(result, NEEDS_FUNDING);
+        await waitFor(() => expect(result.current.gate.stage).toBe('confirm'));
+      });
+
+      test.each([
+        ['credited', COVERED_AFTER_TOPUP, 'confirm'],
+        ['not_charged', NEEDS_TOPUP, 'pay'],
+      ])('once %s, hiring carries on', async (verdict, requirement, stage) => {
+        mockLoad.mockResolvedValue(SAVED);
+        mockReconcile.mockResolvedValue(verdict);
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        openGate(result, requirement);
+        await waitFor(() => expect(result.current.gate.stage).toBe(stage));
+      });
+
+      test('staying: a credited payment finishes the hire by itself', async () => {
+        mockReconcile.mockResolvedValue('credited');
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        const probe = openGate(result, NEEDS_TOPUP);
+        await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+        mockGetRequirement.mockResolvedValue(COVERED_AFTER_TOPUP);
+        act(() => result.current.gate.onPaymentPending(30, 'pi_abcdefgh'));
+        await waitFor(() => expect(probe.resolved).toBe(true));
+      });
+
+      test('staying: a payment that did not happen goes back to the pay sheet and says so', async () => {
+        mockReconcile.mockResolvedValue('not_charged');
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        const probe = openGate(result, NEEDS_TOPUP);
+        await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+        act(() => result.current.gate.onPaymentPending(30, 'pi_abcdefgh'));
+        await waitFor(() => expect(result.current.gate.paymentFailure).toBeTruthy());
+        expect(result.current.gate.stage).toBe('pay');
+        expect(probe.settled).toBe(false);
+      });
+
+      test('a captured payment the wallet has not caught up with is saved too', async () => {
+        const { result } = renderHook(() => useAcceptFunding(FAST));
+        const probe = openGate(result, NEEDS_TOPUP, { hunterName: 'Sam' });
+        await waitFor(() => expect(result.current.gate.stage).toBe('pay'));
+        mockGetRequirement.mockResolvedValue(NEEDS_TOPUP);
+        await act(async () => result.current.gate.onPaymentSucceeded(30, 'pi_abcdefgh'));
+        await waitFor(() => expect(probe.resolved).toBe(false));
+        expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ paymentIntentId: 'pi_abcdefgh', amount: 30 }));
+      });
     });
 
     test('resolves true only after the SERVER reports the shortfall covered, with no further tap', async () => {
@@ -532,6 +647,16 @@ describe('useAcceptFunding', () => {
         stage: 'pay',
         trigger: 'unmount',
       });
+    });
+
+    test('refuses to start a payment when no hire is waiting', () => {
+      const { result } = renderHook(() => useAcceptFunding(FAST));
+      let started: boolean | void;
+      act(() => {
+        started = result.current.gate.onPaymentStarted('card');
+      });
+      expect(started).toBe(false);
+      expect(result.current.gate.active).toBe(false);
     });
 
     test('unmounting with no gate open emits nothing', () => {

@@ -21,7 +21,11 @@ function parsePick(raw: string | null): ManualPick | null {
   try {
     const value = JSON.parse(raw) as Partial<ManualPick>
     if (typeof value?.key !== 'string' || !Array.isArray(value.outranking)) return null
-    return { key: value.key, outranking: value.outranking.filter((s): s is string => typeof s === 'string') }
+    return {
+      key: value.key,
+      outranking: value.outranking.filter((s): s is string => typeof s === 'string'),
+      ...(Number.isFinite(value.bestRankAtPick) ? { bestRankAtPick: value.bestRankAtPick } : {}),
+    }
   } catch {
     return null
   }

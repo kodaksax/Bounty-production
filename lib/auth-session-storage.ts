@@ -219,6 +219,9 @@ async function readRawItem(key: string): Promise<string | null> {
   if (cached) return cached;
 
   if (isWeb) {
+    // Static rendering (app.json web.output) runs this in Node, where there is no
+    // localStorage and nobody is signed in; the browser reads it on load.
+    if (typeof window === 'undefined') return null;
     try {
       const val = await AsyncStorage.getItem(key);
       if (val) inMemorySessionCache.set(key, val);

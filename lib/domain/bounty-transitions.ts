@@ -31,7 +31,7 @@ export const bountyCreateSchema = z.object({
 export const bountyUpdateSchema = bountyCreateSchema.partial().omit({ user_id: true });
 
 export const bountyFilterSchema = z.object({
-  status: z.enum(["open", "in_progress", "completed", "archived"]).optional(),
+  status: z.enum(["open", "in_progress", "completed", "cancelled", "archived"]).optional(),
   user_id: z.string().min(1).optional(), // Less strict for filtering too
   work_type: z.enum(['online', 'in_person']).optional(),
 });

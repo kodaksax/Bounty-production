@@ -52,6 +52,10 @@ import { formatPostedAgo } from '../../../lib/utils/format-relative-date';
 import { BountyTrustSignals } from '../../../components/bounty-trust-signals';
 import { BountyRequirementsSummary } from '../../../components/bounty-requirements-summary';
 import { withAlpha } from '../../../lib/utils';
+import { FactsList, NoteBox } from '../../../components/poster/blocks';
+import { firstName } from '../../../lib/my-jobs/format';
+import { describeJobFacts } from '../../../lib/utils/hunter-stage-copy';
+import { formatDistanceWords } from '../../../lib/utils/poster-stage-copy';
 
 export default function PublicBountyDetail() {
   const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
@@ -375,7 +379,7 @@ export default function PublicBountyDetail() {
           [
             {
               text: 'Track it',
-              onPress: () => router.push(`/in-progress/${bounty.id}/hunter`),
+              onPress: () => router.push(`/in-progress/${bounty.id}/hunter?sent=offer`),
             },
             { text: 'Keep browsing', style: 'cancel' },
           ]
@@ -529,14 +533,51 @@ export default function PublicBountyDetail() {
           {/* What this state means for the person reading it. No action button
               here: the sticky Apply / View-your-application control below is
               already this screen's single primary action. */}
-          {lifecycle && (
+          {/* Focus-first H.1 / X.2: for someone deciding whether to offer, the
+              job's state in a sentence and the facts that matter. Anyone with
+              an application (or the poster) keeps the lifecycle banner. */}
+          {lifecycle && viewerRole === 'visitor' && !isOwnBounty ? (
+            <>
+              {lifecycle.status === 'open' ? (
+                <NoteBox
+                  tone="g"
+                  icon="check-circle"
+                  title="Taking offers"
+                  text={`${firstName((bounty as any).username) ?? 'The poster'} hasn't chosen anyone yet.`}
+                  testID="job-taking-offers"
+                />
+              ) : lifecycle.status === 'in_progress' ? (
+                <NoteBox
+                  tone="n"
+                  icon="lock"
+                  title="Someone's already doing this job"
+                  // DESIGN-GAP: the hire time isn't loaded here, so the handoff's "{when}" is left out.
+                  text={`${firstName((bounty as any).username) ?? 'The poster'} chose a helper, so it isn't taking offers.`}
+                  testID="job-already-taken"
+                />
+              ) : (
+                <BountyStatusPanel state={lifecycle} role={viewerRole} variant="banner" />
+              )}
+              <FactsList
+                testID="job-facts"
+                rows={describeJobFacts({
+                  posterName: (bounty as any).username ?? null,
+                  amount: bounty.amount,
+                  isForHonor: bounty.is_for_honor,
+                  online: bounty.work_type === 'online',
+                  distanceText: formatDistanceWords((bounty as any).distance_miles ?? (bounty as any).distance_mi),
+                  dueText: formatDue((bounty as any).deadline ?? (bounty as any).end_date),
+                }).map((row) => ({ ...row, icon: row.icon as never }))}
+              />
+            </>
+          ) : lifecycle ? (
             <BountyStatusPanel state={lifecycle} role={viewerRole} variant="banner" />
-          )}
+          ) : null}
 
           {/* Details Section */}
           <View style={s.detailsCard}>
             <Text style={s.sectionTitle}>Description</Text>
-            <Text style={s.description}>{bounty.description}</Text>
+            <Text style={s.description}>{bounty.description ? `“${bounty.description}”` : ''}</Text>
             <BountyRequirementsSummary value={bounty.requirements_payload} />
             
             <View style={s.infoGrid}>
@@ -638,11 +679,7 @@ export default function PublicBountyDetail() {
               onPress={handleApply}
               disabled={isApplying}
               accessibilityRole="button"
-              accessibilityLabel={
-                bounty.is_for_honor
-                  ? 'Apply for this bounty'
-                  : `Apply for this bounty and earn $${calculateHunterEarnings(bounty.amount).net.toFixed(2)}`
-              }
+              accessibilityLabel="Offer to do this"
               accessibilityState={{ disabled: isApplying, busy: isApplying }}
             >
               <LinearGradient
@@ -652,11 +689,7 @@ export default function PublicBountyDetail() {
               {isApplying ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text style={s.actionButtonText}>
-                  {bounty.is_for_honor
-                    ? 'Apply for this bounty'
-                    : `Apply — earn $${calculateHunterEarnings(bounty.amount).net.toFixed(2)}`}
-                </Text>
+                <Text style={s.actionButtonText}>Offer to do this</Text>
               )}
             </TouchableOpacity>
             </>
@@ -668,20 +701,22 @@ export default function PublicBountyDetail() {
               <View style={s.closedNotice}>
                 <MaterialIcons name="lock" size={16} color={theme.textSecondary} />
                 <Text style={s.closedNoticeText}>
-                  This bounty is no longer accepting applications.
+                  {lifecycle?.status === 'in_progress'
+                    ? "Someone's already doing this job, so it isn't taking offers."
+                    : 'This bounty is no longer accepting applications.'}
                 </Text>
               </View>
               <TouchableOpacity
                 style={s.actionButton}
                 onPress={() => router.replace(`${ROUTES.TABS.BOUNTY_APP}?tab=bounty` as never)}
                 accessibilityRole="button"
-                accessibilityLabel="Browse other bounties"
+                accessibilityLabel="Find more work"
               >
                 <LinearGradient
                   colors={[theme.primary, theme.primary]}
                   style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
                 />
-                <Text style={s.actionButtonText}>Browse other bounties</Text>
+                <Text style={s.actionButtonText}>Find more work</Text>
               </TouchableOpacity>
             </>
           )}
@@ -693,6 +728,8 @@ export default function PublicBountyDetail() {
           bounty={{ amount: bounty.amount, is_for_honor: bounty.is_for_honor, category: bounty.category }}
           netEarnings={calculateHunterEarnings(bounty.amount).net}
           grossAmount={calculateHunterEarnings(bounty.amount).gross}
+          jobTitle={bounty.title}
+          posterName={(bounty as any).username ?? null}
           isSubmitting={isApplying}
           onCancel={() => setShowPitchModal(false)}
           onSubmit={submitApplication}
@@ -1047,4 +1084,12 @@ function makeStyles(t: AppTheme) {
       letterSpacing: 0.5,
     },
   });
+}
+
+/** "By Saturday, Nov 29" for a due date; null when there isn't one. */
+function formatDue(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `By ${d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}`;
 }

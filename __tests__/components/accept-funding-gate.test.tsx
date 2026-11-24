@@ -24,9 +24,9 @@
  *   * sub-minimum shortfall -> charged at Stripe's $0.50 floor, not refused
  */
 
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
-import { Platform } from 'react-native';
+import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
 
 const mockPayWithCard = jest.fn();
@@ -83,6 +83,8 @@ jest.mock('hooks/use-wallet-deposit', () => ({
 jest.mock('lib/services/stripe-service', () => ({
   stripeService: { formatCardDisplay: () => 'Visa •••• 4242' },
 }));
+jest.mock('expo-image', () => ({ Image: () => null }));
+jest.mock('lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
 jest.mock('components/payment-methods-modal', () => ({ PaymentMethodsModal: () => null }));
 jest.mock('components/error-banner', () => {
   const { Text } = require('react-native');
@@ -140,6 +142,8 @@ function makeGate(overrides: Record<string, unknown> = {}) {
     onPaymentPending: jest.fn(),
     onPaymentFailed: jest.fn(),
     onCancel: jest.fn(),
+    canLeavePending: false,
+    onLeavePending: jest.fn(),
     ...overrides,
   };
 }
@@ -174,22 +178,23 @@ describe('AcceptFundingGate', () => {
       test('the card-charge sheet is unchanged', () => {
         const { getByText, queryByText, queryByTestId } = render(<AcceptFundingGate gate={makeGate()} />);
 
-        expect(getByText('Pay $30.00 & hire')).toBeTruthy();
-        expect(getByText('Not now')).toBeTruthy();
-        expect(getByText('Bounty reward $50.00')).toBeTruthy();
-        expect(getByText('charged to your card now')).toBeTruthy();
+        expect(getByText('Pay $30 and choose Ada')).toBeTruthy();
+        expect(getByText('Not yet')).toBeTruthy();
+        expect(getByText('Choose Ada for $50?')).toBeTruthy();
+        expect(getByText(/\$30 from your (card|payment method)\./)).toBeTruthy();
         expect(getByText('Wallet balance')).toBeTruthy();
         expect(getByText(trustSafetyStrings.posterHire)).toBeTruthy();
         expect(queryByTestId('payment-promise-summary')).toBeNull();
         expect(queryByText('Fund and hire')).toBeNull();
-        expect(queryByText('Not yet')).toBeNull();
+        // Focus-first screen E names the back-out button "Not yet" too, so the
+        // promise copy is told apart by its summary and "Fund and hire" above.
       });
 
       test('the balance-covered sheet is unchanged', () => {
         const gate = makeGate({ stage: 'confirm', requirement: balanceOnly });
         const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
-        expect(getByText('Confirm & hire')).toBeTruthy();
+        expect(getByText('Choose Ada')).toBeTruthy();
         expect(getByText('After this hire')).toBeTruthy();
         expect(queryByText('Fund and hire')).toBeNull();
       });
@@ -252,6 +257,15 @@ describe('AcceptFundingGate', () => {
         expect(mockPayWithCard).toHaveBeenCalledWith(20);
       });
 
+      test('charges nothing when no hire is waiting on the sheet', () => {
+        const gate = makeGate({ requirement: both, onPaymentStarted: jest.fn(() => false) });
+        const { getByText } = render(<AcceptFundingGate gate={gate} />);
+
+        fireEvent.press(getByText('Fund and hire'));
+
+        expect(mockPayWithCard).not.toHaveBeenCalled();
+      });
+
       test('"Fund and hire" confirms without Stripe when the balance covers it', () => {
         const gate = makeGate({ stage: 'confirm', requirement: balanceOnly });
         const { getByText } = render(<AcceptFundingGate gate={gate} />);
@@ -282,6 +296,129 @@ describe('AcceptFundingGate', () => {
     });
   });
 
+  describe('4b quick confirm', () => {
+    const quick = { jobTitle: 'Clear the garage', jobIcon: 'chair', sub: '4.8 · 14 jobs' };
+    const covered = { ...REQ, posterBalance: 80, shortfall: 0 };
+    let readerOn: boolean;
+    let onAppState: ((s: string) => void) | null;
+    const tick = async (seconds: number) => {
+      for (let i = 0; i < seconds; i++) await act(async () => void jest.advanceTimersByTime(1000));
+    };
+    const open = async (gate = makeGate(), props: Record<string, unknown> = { quickConfirm: quick }) => {
+      const view = render(<AcceptFundingGate gate={gate} {...props} />);
+      await act(async () => {});
+      return { gate, ...view };
+    };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      readerOn = false;
+      onAppState = null;
+      (AppState as any).currentState = 'active';
+      (AppState as any).addEventListener = jest.fn((_e: string, cb: any) => {
+        onAppState = cb;
+        return { remove: jest.fn() };
+      });
+      (AccessibilityInfo as any).addEventListener = jest.fn(() => ({ remove: jest.fn() }));
+      (AccessibilityInfo as any).isScreenReaderEnabled = jest.fn(async () => readerOn);
+    });
+    afterEach(() => jest.useRealTimers());
+
+    test('charges exactly the shortfall once, at 0:00 and not before', async () => {
+      const { gate, getByText, queryByTestId } = await open();
+      expect(getByText('Looks good (0:07)')).toBeTruthy();
+      await tick(6);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      await tick(5);
+      expect(gate.onPaymentStarted).toHaveBeenCalledWith('card');
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+      expect(mockPayWithCard).toHaveBeenCalledWith(30);
+      // What follows (processing, a decline) is screen E.
+      expect(queryByTestId('quick-confirm')).toBeNull();
+    });
+
+    test('tapping confirms now, and the timer does not confirm again', async () => {
+      const { gate, getByTestId } = await open(makeGate({ stage: 'confirm', requirement: covered }));
+      fireEvent.press(getByTestId('quick-confirm-yes'));
+      await tick(10);
+      expect(gate.onConfirm).toHaveBeenCalledTimes(1);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('Go back cancels and nothing is charged', async () => {
+      const { gate, getByTestId } = await open();
+      fireEvent.press(getByTestId('quick-confirm-back'));
+      await tick(10);
+      expect(gate.onCancel).toHaveBeenCalledTimes(1);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('Change stops the timer and opens the full screen', async () => {
+      const { getByTestId, getByText } = await open();
+      fireEvent.press(getByTestId('quick-confirm-change'));
+      await tick(10);
+      expect(getByText('Choose Ada for $50?')).toBeTruthy();
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('pauses in the background and carries on after', async () => {
+      const { getByText } = await open();
+      await tick(3);
+      act(() => onAppState!('background'));
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      act(() => onAppState!('active'));
+      expect(getByText('Looks good (0:04)')).toBeTruthy();
+      await tick(4);
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+    });
+
+    test('a screen reader gets the button and no timer', async () => {
+      readerOn = true;
+      const { getByText, getByTestId } = await open();
+      expect(getByText('Looks good')).toBeTruthy();
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      fireEvent.press(getByTestId('quick-confirm-yes'));
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+    });
+
+    test('leaving the screen charges nothing', async () => {
+      const { unmount } = await open();
+      unmount();
+      await tick(10);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('waits while saved cards load', async () => {
+      resetDepositState({ stripeLoading: true, paymentMethods: [] });
+      const { getByText } = await open();
+      expect(getByText('Checking payment…')).toBeTruthy();
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['no saved card', () => resetDepositState({ paymentMethods: [] }), {}],
+      ['a declined payment', () => {}, { paymentFailure: { error_code: 'card_declined', error_type: 'card_error' } }],
+      ['a remainder to pay', () => {}, { remainderAfterDeposit: true }],
+      ['a pending payment', () => {}, { stage: 'pending' }],
+    ])('%s is screen E, and never confirms itself', async (_n, setup, over) => {
+      setup();
+      const { queryByTestId, gate } = await open(makeGate(over));
+      expect(queryByTestId('quick-confirm')).toBeNull();
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      expect(mockPayWithPaymentSheet).not.toHaveBeenCalled();
+      expect(gate.onConfirm).not.toHaveBeenCalled();
+    });
+
+    test('is only where the screen asks for it', async () => {
+      const { queryByTestId } = await open(makeGate(), {});
+      expect(queryByTestId('quick-confirm')).toBeNull();
+    });
+  });
+
   describe('balance covers it', () => {
     const covered = { ...REQ, posterBalance: 80, shortfall: 0 };
 
@@ -289,13 +426,13 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate({ stage: 'confirm', requirement: covered });
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
-      expect(getByText('Ada')).toBeTruthy();
+      expect(getByText('Choose Ada for $50?')).toBeTruthy();
       expect(getByText(trustSafetyStrings.payWhenYouHire)).toBeTruthy();
-      expect(getByText('from your wallet balance')).toBeTruthy();
+      expect(getByText('From your Bounty balance.')).toBeTruthy();
       // No Apple Pay button when there is nothing to charge.
       expect(queryByText('Pay')).toBeNull();
 
-      fireEvent.press(getByText('Confirm & hire'));
+      fireEvent.press(getByText('Choose Ada'));
 
       expect(gate.onConfirm).toHaveBeenCalledTimes(1);
       expect(gate.onPaymentStarted).not.toHaveBeenCalled();
@@ -306,7 +443,7 @@ describe('AcceptFundingGate', () => {
     test('"Not now" backs out', () => {
       const gate = makeGate({ stage: 'confirm', requirement: covered });
       const { getByText } = render(<AcceptFundingGate gate={gate} />);
-      fireEvent.press(getByText('Not now'));
+      fireEvent.press(getByText('Not yet'));
       expect(gate.onCancel).toHaveBeenCalledTimes(1);
       expect(gate.onConfirm).not.toHaveBeenCalled();
     });
@@ -317,10 +454,10 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate();
       const { getByText } = render(<AcceptFundingGate gate={gate} />);
 
-      expect(getByText('charged to your card now')).toBeTruthy();
+      expect(getByText(/\$30 from your (card|payment method)\./)).toBeTruthy();
       expect(getByText(trustSafetyStrings.payWhenYouHire)).toBeTruthy();
 
-      fireEvent.press(getByText('Pay $30.00 & hire'));
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
 
       expect(gate.onPaymentStarted).toHaveBeenCalledWith('card');
       expect(mockPayWithCard).toHaveBeenCalledWith(30);
@@ -345,7 +482,7 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate();
       const { queryByLabelText, getByText } = render(<AcceptFundingGate gate={gate} />);
       expect(queryByLabelText('Pay 30.00 dollars with Apple Pay and hire')).toBeNull();
-      expect(getByText('Pay $30.00 & hire')).toBeTruthy();
+      expect(getByText('Pay $30 and choose Ada')).toBeTruthy();
     });
 
     test('with no card on file the primary button opens the Payment Sheet for exactly the shortfall', () => {
@@ -353,7 +490,7 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate();
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
-      fireEvent.press(getByText('Pay $30.00 & hire'));
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
 
       expect(gate.onPaymentStarted).toHaveBeenCalledWith('paymentSheet');
       expect(mockPayWithPaymentSheet).toHaveBeenCalledWith(30);
@@ -407,7 +544,7 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate();
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
-      fireEvent.press(getByText('Pay $30.00 & hire'));
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
 
       expect(mockPayWithPaymentSheet).toHaveBeenCalledWith(30);
       expect(mockPayWithCard).not.toHaveBeenCalled();
@@ -432,7 +569,7 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate({ requirement: { ...REQ, posterBalance: 49.8, shortfall: 0.2 } });
       const { getByText } = render(<AcceptFundingGate gate={gate} />);
 
-      fireEvent.press(getByText(`Pay $${MIN_SHORTFALL_CHARGE.toFixed(2)} & hire`));
+      fireEvent.press(getByText(`Pay $${MIN_SHORTFALL_CHARGE.toFixed(2)} and choose Ada`));
 
       expect(mockPayWithCard).toHaveBeenCalledWith(MIN_SHORTFALL_CHARGE);
       expect(chargeAmountForShortfall(0.2)).toBe(0.5);
@@ -446,7 +583,7 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate();
       const { getByText, queryByText } = render(<AcceptFundingGate gate={gate} />);
 
-      fireEvent.press(getByText('Pay $30.00 & hire'));
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
 
       await waitFor(() => expect(gate.onPaymentSucceeded).toHaveBeenCalledWith(30));
       expect(gate.onPaymentSucceeded).toHaveBeenCalledTimes(1);
@@ -467,12 +604,22 @@ describe('AcceptFundingGate', () => {
 
       await waitFor(() => expect(gate.onPaymentPending).toHaveBeenCalledTimes(1));
       rerender(<AcceptFundingGate gate={makeGate({ stage: 'pending' })} />);
-      expect(getByText(/Your payment is still being confirmed/)).toBeTruthy();
+      expect(getByText(/We're still confirming your payment/)).toBeTruthy();
       expect(queryByText('Use another card')).toBeNull();
       expect(getByLabelText('Payment status is still being confirmed').props.accessibilityState)
         .toMatchObject({ disabled: true, busy: true });
-      fireEvent.press(getByLabelText('Not now, go back without hiring'));
+      fireEvent.press(getByLabelText('Not yet, go back without choosing anyone'));
       expect(gate.onCancel).not.toHaveBeenCalled();
+    });
+
+    test('E.3: Back to My Jobs leaves a remembered payment', () => {
+      const gate = makeGate({ stage: 'pending', canLeavePending: true });
+      const onLeavePending = jest.fn();
+      const { getByTestId, queryByText } = render(<AcceptFundingGate gate={gate} onLeavePending={onLeavePending} />);
+      expect(queryByText('Not yet')).toBeNull();
+      fireEvent.press(getByTestId('hire-leave-pending'));
+      expect(gate.onLeavePending).toHaveBeenCalledTimes(1);
+      expect(onLeavePending).toHaveBeenCalledTimes(1);
     });
 
     test('a dismissed Apple Pay sheet is reported as cancelled and the sheet stays up', async () => {
@@ -488,7 +635,7 @@ describe('AcceptFundingGate', () => {
         expect(gate.onPaymentFailed).toHaveBeenCalledWith('cancelled', undefined)
       );
       expect(gate.onPaymentSucceeded).not.toHaveBeenCalled();
-      expect(getByText('Pay $30.00 & hire')).toBeTruthy();
+      expect(getByText('Pay $30 and choose Ada')).toBeTruthy();
     });
 
     test('a declined charge is reported with its Stripe reason and the sheet stays up', async () => {
@@ -504,7 +651,7 @@ describe('AcceptFundingGate', () => {
       const gate = makeGate();
       const { getByText } = render(<AcceptFundingGate gate={gate} />);
 
-      fireEvent.press(getByText('Pay $30.00 & hire'));
+      fireEvent.press(getByText('Pay $30 and choose Ada'));
 
       await waitFor(() => expect(gate.onPaymentFailed).toHaveBeenCalledWith('failed', failure));
       expect(gate.onPaymentSucceeded).not.toHaveBeenCalled();
@@ -531,7 +678,7 @@ describe('AcceptFundingGate', () => {
       expect(getByText('Ada is still selected. Nothing has changed on this bounty.')).toBeTruthy();
       expect(queryByText(/fraud/i)).toBeNull();
       // Still on the sheet, with every way forward available.
-      expect(getByText('Pay $30.00 & hire')).toBeTruthy();
+      expect(getByText('Pay $30 and choose Ada')).toBeTruthy();
       expect(getByText('Use another card')).toBeTruthy();
       expect(gate.onCancel).not.toHaveBeenCalled();
     });
@@ -596,7 +743,7 @@ describe('AcceptFundingGate', () => {
       const { getByText, getByLabelText } = render(<AcceptFundingGate gate={gate} />);
 
       fireEvent.press(getByText('Processing…'));
-      fireEvent.press(getByText('Not now'));
+      fireEvent.press(getByText('Not yet'));
       fireEvent.press(getByLabelText('Pay 30.00 dollars with Apple Pay and hire'));
 
       expect(mockPayWithCard).not.toHaveBeenCalled();
@@ -627,9 +774,9 @@ describe('AcceptFundingGate', () => {
         expect(getByText(trustSafetyStrings.payWhenYouHire)).toBeTruthy();
         expect(getByText(trustSafetyStrings.posterHire)).toBeTruthy();
         expect(getByText(/Refunds and releases depend/)).toBeTruthy();
-        expect(getByText('Pay $30.00 & hire')).toBeTruthy();
+        expect(getByText('Pay $30 and choose Ada')).toBeTruthy();
         expect(getByLabelText('Pay 30.00 dollars with Apple Pay and hire')).toBeTruthy();
-        expect(getByText('Not now')).toBeTruthy();
+        expect(getByText('Not yet')).toBeTruthy();
         expect(getByText('Wallet balance')).toBeTruthy();
         expect(
           queryByText("If it doesn't work out, you can cancel and the money comes back to your wallet.")
@@ -655,7 +802,7 @@ describe('AcceptFundingGate', () => {
       const { getByText } = render(<AcceptFundingGate gate={gate} />);
 
       expect(getByText('Payment received. $20.00 more is needed to hire Ada.')).toBeTruthy();
-      fireEvent.press(getByText('Pay $20.00 & hire'));
+      fireEvent.press(getByText('Pay $20 and choose Ada'));
       expect(mockPayWithCard).toHaveBeenCalledWith(20);
     });
   });

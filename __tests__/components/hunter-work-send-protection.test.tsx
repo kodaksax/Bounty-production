@@ -11,6 +11,8 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  // The shared Focus-first workspace layout wraps the screen in one.
+  SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
 jest.mock('../../hooks/useSafeBack', () => ({ useSafeBack: () => jest.fn(), FEED_FALLBACK: '/' }));
 jest.mock('../../hooks/use-chat-send-protection', () => ({
@@ -41,9 +43,38 @@ jest.mock('../../lib/services/message-service', () => ({
 }));
 jest.mock('../../lib/services/dispute-service', () => ({ disputeService: {} }));
 jest.mock('../../components/workflow-dispute-modal', () => ({ WorkflowDisputeModal: () => null }));
+
+// ── Focus-first workspace dependencies ────────────────────────────────────
+// The work screen now reads the resolved lifecycle for its copy; give it the
+// real resolver's answer for this test's accepted, in-progress job.
+jest.mock('../../hooks/useBountyLifecycle', () => {
+  const { resolveBountyLifecycle } = jest.requireActual('../../lib/utils/bounty-lifecycle');
+  const bounty = { id: 'b1', title: 'Garden cleanup', status: 'in_progress', amount: 20, user_id: 'poster', accepted_by: 'hunter' };
+  const state = resolveBountyLifecycle({ bounty, role: 'hunter', viewerId: 'hunter', requestStatus: 'accepted' });
+  const value = {
+    bounty, role: 'hunter', state, otherParty: { id: 'poster', name: 'Pat', avatar: null }, applicationCount: 0,
+    submission: null, requestStatus: 'accepted', requestRejectionSource: null, requestId: 'r1', hasDispute: false,
+    disputeId: null, hasCancellationRequest: false, cancellationRequestedByRole: null, isLoading: false, error: null,
+    notFound: false, refresh: async () => {},
+  };
+  return { useBountyLifecycle: () => value };
+});
+jest.mock('../../hooks/use-auth-context', () => ({ useAuthContext: () => ({ session: { user: { id: 'hunter' } } }) }));
+jest.mock('../../hooks/useJobWorkspaceData', () => ({
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, loaded: true, reload: jest.fn() }),
+  useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
+}));
+jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));
+jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
+jest.mock('expo-image', () => ({ Image: () => null }));
+jest.mock('../../components/ui/app-modal', () => ({
+  AppModal: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => (visible ? children : null),
+}));
 jest.mock('../../components/ui/skeleton-loaders', () => ({ HunterDashboardSkeleton: () => null }));
 jest.mock('../../components/ui/keyboard-avoiding', () => ({
   KeyboardAwareScrollView: ({ children }: { children: React.ReactNode }) => children,
+  // WorkspaceLayout wraps the screen in this so the footer clears the keyboard.
+  KeyboardAvoidingScreen: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 async function renderWork() {

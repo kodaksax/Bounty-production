@@ -138,6 +138,7 @@ export interface BountyLifecycleInput {
     id?: string | number;
     status?: string | null;
     end_date?: string | null;
+    completed_at?: string | null;
     amount?: number | null;
     is_for_honor?: boolean | null;
     accepted_by?: string | null;
@@ -787,7 +788,9 @@ function resolveHunter(args: {
     });
   }
 
-  switch (status) {
+  const resolvedStatus =
+    isSelected && status === 'archived' && !!bounty.completed_at ? 'completed' : status;
+  switch (resolvedStatus) {
     case 'submitted_for_review':
       return finalize({
         status,
@@ -933,7 +936,7 @@ function resolveHunter(args: {
     case 'completed':
       if (paymentState === 'held') {
         return finalize({
-          status,
+          status: resolvedStatus,
           headline: 'Approved — payment on the way',
           explanation: `${poster} approved your work and ${reward} is being released.`,
           nextStep: 'It lands in your Bounty balance, usually within a few minutes.',
@@ -946,7 +949,7 @@ function resolveHunter(args: {
         });
       }
       return finalize({
-        status,
+        status: resolvedStatus,
         headline: 'Paid',
         explanation: `Your work was approved and ${reward} was added to your balance.`,
         nextStep: 'Withdraw it any time from your wallet.',

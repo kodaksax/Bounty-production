@@ -27,7 +27,7 @@ describe('buildMyJobs — jobs you posted', () => {
     expect(job.needsYou).toBe(true);
     expect(job.status.text).toBe('3 people want to help');
     expect(job.detail).toContain('You only pay when you choose.');
-    expect(job.cta).toEqual({ label: 'Review the 3 people', target: { kind: 'applicants', bountyId: 'b1' } });
+    expect(job.cta).toEqual({ label: 'Review the 3 people', target: { kind: 'workspace', side: 'posted', bountyId: 'b1' } });
     expect(job.pendingOfferCount).toBe(3);
     // Waited longest = the first offer.
     expect(job.attentionSince).toBe('2026-11-18T09:00:00Z');
@@ -163,7 +163,12 @@ describe('buildMyJobs — jobs you posted', () => {
   it("reads naturally when the helper's name is not known", () => {
     const working = bounty({ id: 'w', status: 'in_progress', accepted_by: 'ada' });
     const done = bounty({ id: 'd', status: 'completed', accepted_by: 'ada' });
-    const { jobs } = buildMyJobs(makeInput({ postedBounties: [working, done] }));
+    const { jobs } = buildMyJobs(
+      makeInput({
+        postedBounties: [working, done],
+        conversations: [conversation({ id: 'c', bountyId: 'w', name: 'Unknown', participantIds: [ME, 'ada'], lastMessage: 'Saturday at 9' })],
+      })
+    );
     const byId = Object.fromEntries(jobs.map((j) => [j.bountyId, j]));
     expect(byId.w.contextLine).toBe('You chose a helper · $60');
     expect(byId.w.status.text).toBe('Your helper is working on it');
@@ -197,7 +202,7 @@ describe('buildMyJobs — work you are doing and offers', () => {
     accepted_by: ME,
   });
 
-  it('just chosen (no messages yet): "Jordan chose you", agree a time in the thread', () => {
+  it('just chosen: agree a time before work starts', () => {
     const [job] = buildMyJobs(
       makeInput({
         hunterRequests: [request({ bounty: tv, status: 'accepted', created_at: '2026-11-17T10:00:00Z', updated_at: '2026-11-21T08:00:00Z' })],
@@ -206,11 +211,21 @@ describe('buildMyJobs — work you are doing and offers', () => {
     expect(job.side).toBe('doing');
     expect(job.rank).toBe(JOB_RANK.waitingOnYou);
     expect(job.status.text).toBe('Jordan chose you');
-    expect(job.detail).toBe("Agree a time with Jordan. Jordan's $80 is already held by Bounty.");
     // Take-home is the shared fee math, never a hard-coded percentage.
     expect(job.contextLine).toBe(`Jordan K. · you get ${formatJobAmount(calculateHunterEarnings(80).net)}`);
     expect(job.cta).toEqual({ label: 'Agree a time', target: { kind: 'thread', side: 'doing', bountyId: 'tv' } });
     expect(job.historyLine).toBe('You offered Tuesday · chosen today');
+  });
+
+  it('a job the poster hired for is work underway after the hunter messages', () => {
+    const b = bounty({ id: 'b1', status: 'in_progress', accepted_by: 'ada' });
+    const [job] = buildMyJobs(
+      makeInput({
+        postedBounties: [b],
+        conversations: [conversation({ id: 'c1', bountyId: 'b1', name: 'Ada R.', participantIds: [ME, 'ada'], lastMessage: 'Saturday at 9' })],
+      })
+    ).jobs;
+    expect(job.status.text).toBe('Ada is working on it');
   });
 
   it('the automatic "you have been selected" message is not coordination', () => {

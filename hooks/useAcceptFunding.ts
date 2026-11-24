@@ -49,8 +49,14 @@ import {
   type AcceptFundingFailureReason,
   type BountyFundingRequirement,
 } from 'lib/services/bounty-funding-service';
+import {
+  loadUnresolvedDeposit,
+  reconcileUnresolvedDeposit,
+  saveUnresolvedDeposit,
+  type UnresolvedDepositRecord,
+} from 'lib/services/unresolved-deposit';
 import { analyticsService } from 'lib/services/analytics-service';
-import type { FailureEventProps } from 'lib/utils/stripe-error';
+import { failureEventProps, type FailureEventProps } from 'lib/utils/stripe-error';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState } from 'react-native';
 
@@ -116,7 +122,9 @@ export type AcceptBlockedTrigger =
   /** Stripe took a top-up but the server never reflected it; sheet closed. */
   | 'deposit_unconfirmed'
   /** A previous top-up was still unconfirmed, so the sheet refused to open. */
-  | 'prior_deposit_unconfirmed';
+  | 'prior_deposit_unconfirmed'
+  /** Poster left E.3 while the payment was still confirming. */
+  | 'left_pending';
 
 export interface AcceptFundingGate {
   /** True whenever the gate should be rendered over the current screen. */
@@ -142,16 +150,25 @@ export interface AcceptFundingGate {
   /**
    * A payment UI opened: the card charge, Apple Pay, or the add-a-card sheet
    * when no card is on file. Emits `accept_funding_started` each time.
+   * Returns false when no hire is waiting on this sheet any more: the caller
+   * must not charge, because nothing would follow the payment.
    */
-  onPaymentStarted: (method: AcceptFundingPaymentMethod) => void;
+  onPaymentStarted: (method: AcceptFundingPaymentMethod) => boolean | void;
   /**
    * The deposit was captured. Re-checks with the server — never with the
    * typed amount or the wallet context's optimistic balance — and resolves
    * `true` on its own once the balance covers the requirement.
    */
-  onPaymentSucceeded: (amount: number) => void;
-  /** Stripe may have captured the payment but could not confirm its result. */
-  onPaymentPending: () => void;
+  onPaymentSucceeded: (amount: number, paymentIntentId?: string) => void;
+  /**
+   * Stripe may have captured the payment but could not confirm its result.
+   * With its id, it is remembered on the device and the poster may leave.
+   */
+  onPaymentPending: (amount?: number, paymentIntentId?: string) => void;
+  /** The pending payment is remembered, so leaving can't lead to a second charge. */
+  canLeavePending: boolean;
+  /** E.3 "Back to My Jobs": closes the gate, nobody is hired. */
+  onLeavePending: () => void;
   /**
    * No money moved. The sheet stays up with the hunter still selected; the
    * bounty stays open. `failure` is the structured Stripe reason.
@@ -188,10 +205,13 @@ export interface UseAcceptFundingOptions {
    */
   settlePollAttempts?: number;
   settlePollDelayMs?: number;
+  /** How often E.3 asks the server about a payment that is still confirming. */
+  pendingPollDelayMs?: number;
 }
 
 const DEFAULT_SETTLE_POLL_ATTEMPTS = 6;
 const DEFAULT_SETTLE_POLL_DELAY_MS = 1500;
+const DEFAULT_PENDING_POLL_DELAY_MS = 5000;
 
 export interface UseAcceptFundingResult {
   gate: AcceptFundingGate;
@@ -221,6 +241,7 @@ const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms
 export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcceptFundingResult {
   const settlePollAttempts = options.settlePollAttempts ?? DEFAULT_SETTLE_POLL_ATTEMPTS;
   const settlePollDelayMs = options.settlePollDelayMs ?? DEFAULT_SETTLE_POLL_DELAY_MS;
+  const pendingPollDelayMs = options.pendingPollDelayMs ?? DEFAULT_PENDING_POLL_DELAY_MS;
 
   const [stage, setStage] = useState<AcceptFundingStage>('idle');
   const [requirement, setRequirement] = useState<BountyFundingRequirement | null>(null);
@@ -229,6 +250,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   const [remainderAfterDeposit, setRemainderAfterDeposit] = useState(false);
   const [paymentFailure, setPaymentFailure] = useState<FailureEventProps | null>(null);
   const pendingRef = useRef<PendingGate | null>(null);
+  const [pendingRecord, setPendingRecord] = useState<UnresolvedDepositRecord | null>(null);
   const unresolvedDepositRef = useRef<UnresolvedDeposit | null>(null);
   // Mirrors of state for the AppState listener and the unmount cleanup, which
   // are registered once and must not read a stale closure.
@@ -318,6 +340,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     setRequirement(null);
     setRemainderAfterDeposit(false);
     setPaymentFailure(null);
+    setPendingRecord(null);
     pending?.resolve(proceed);
   }, []);
 
@@ -358,6 +381,10 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       paymentInFlightRef.current = false;
       trackBlocked(pending, 'unmount');
       pending.resolve(false);
+      // Fast Refresh runs this cleanup but keeps state. Left open, the sheet
+      // would still charge with no hire behind it.
+      setStage('idle');
+      setRequirement(null);
     };
   }, [trackBlocked]);
 
@@ -394,11 +421,20 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
         );
         return false;
       };
+      // A payment left confirming from an earlier visit (or app launch). Ask
+      // what became of it before anything here can charge again.
+      let chargeBlocked = false;
+      const saved = await loadUnresolvedDeposit().catch(() => null);
+      if (saved) {
+        if ((await reconcileUnresolvedDeposit(saved)) === 'pending') chargeBlocked = true;
+        else unresolvedDepositRef.current = null;
+      }
+
       let req: BountyFundingRequirement | null;
       try {
         req = await getBountyFundingRequirement(id);
       } catch (error) {
-        if (unresolvedDepositRef.current) return stopForUnresolvedDeposit();
+        if (chargeBlocked || unresolvedDepositRef.current) return stopForUnresolvedDeposit();
         throw error;
       }
       const unresolvedDeposit = unresolvedDepositRef.current;
@@ -422,6 +458,13 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
             return stopForUnresolvedDeposit(req);
           }
         }
+      }
+
+      // Hiring from a balance that covers it needs no charge, so it may go on.
+      // Anything else may not: "no funding required" is also what a failed
+      // read answers, and the accept itself can charge a saved card.
+      if (chargeBlocked && !(req?.fundingMode === 'at_accept' && req.requiresFunding && req.shortfall <= 0)) {
+        return stopForUnresolvedDeposit(req);
       }
 
       // Nothing to charge: legacy bounty already escrowed at post time,
@@ -513,7 +556,12 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
 
   const onConfirm = useCallback(() => {
     const pending = pendingRef.current;
-    if (!pending || !requirement) return;
+    if (!pending || !requirement) {
+      // Nothing is waiting on this sheet: close it rather than ignore the tap.
+      setStage('idle');
+      setRequirement(null);
+      return;
+    }
 
     analyticsService.trackEvent('accept_funding_started', {
       ...eventProps(requirement, pending.context),
@@ -531,9 +579,13 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   }, [close, eventProps, requirement]);
 
   const onPaymentStarted = useCallback(
-    (method: AcceptFundingPaymentMethod) => {
+    (method: AcceptFundingPaymentMethod): boolean => {
       const pending = pendingRef.current;
-      if (!pending) return;
+      if (!pending) {
+        setStage('idle');
+        setRequirement(null);
+        return false;
+      }
       // Linking a card charges nothing and reports no outcome back, so it
       // must not hold the background-abandonment check off.
       if (method !== 'linkCard') paymentInFlightRef.current = true;
@@ -544,6 +596,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
         paymentRequired: true,
         paymentMethod: method,
       });
+      return true;
     },
     [eventProps]
   );
@@ -571,7 +624,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   );
 
   const onPaymentSucceeded = useCallback(
-    async (paidAmount: number) => {
+    async (paidAmount: number, paymentIntentId?: string) => {
       const pending = pendingRef.current;
       paymentInFlightRef.current = false;
       if (!pending) return;
@@ -610,6 +663,15 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
           reason: 'deposit_unconfirmed',
         });
         unresolvedDepositRef.current = unresolvedDeposit;
+        // The ref dies with this screen; the saved record doesn't.
+        if (paymentIntentId) {
+          void saveUnresolvedDeposit({
+            paymentIntentId,
+            amount: paidAmount,
+            bountyId: pending.bountyId,
+            hunterName: pending.context.hunterName?.trim() || 'this hunter',
+          });
+        }
         trackBlocked(pending, 'deposit_unconfirmed');
         close(false);
         Alert.alert(
@@ -645,10 +707,56 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     [close, depositReflected, eventProps, settlePollAttempts, settlePollDelayMs, trackBlocked]
   );
 
-  const onPaymentPending = useCallback(() => {
+  const onPaymentPending = useCallback((amount?: number, paymentIntentId?: string) => {
     paymentInFlightRef.current = false;
-    setStage('pending');
+    const pending = pendingRef.current;
+    // Saved even if the gate has gone (the sheet can report back after the
+    // screen unmounted): the charge may still have happened.
+    const bountyId = pending?.bountyId ?? requirementRef.current?.bountyId;
+    if (paymentIntentId && amount && bountyId) {
+      const record = {
+        paymentIntentId,
+        amount,
+        bountyId: String(bountyId),
+        hunterName: pending?.context.hunterName?.trim() || 'this hunter',
+      };
+      void saveUnresolvedDeposit(record);
+      setPendingRecord({ ...record, savedAt: new Date().toISOString() });
+    }
+    if (pending) setStage('pending');
   }, []);
+
+  const onLeavePending = useCallback(() => {
+    const pending = pendingRef.current;
+    if (stageRef.current !== 'pending' || !pending || !pendingRecord) return;
+    trackBlocked(pending, 'left_pending');
+    close(false);
+  }, [close, pendingRecord, trackBlocked]);
+
+  // E.3 updates itself: a credited payment carries on with the hire the
+  // poster already confirmed, a payment that didn't happen goes back to the
+  // pay sheet. Leaving or unmounting stops it.
+  useEffect(() => {
+    if (stage !== 'pending' || !pendingRecord) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      const verdict = await reconcileUnresolvedDeposit(pendingRecord);
+      if (!active || stageRef.current !== 'pending') return;
+      if (verdict === 'pending') {
+        timer = setTimeout(() => void poll(), pendingPollDelayMs);
+        return;
+      }
+      setPendingRecord(null);
+      if (verdict === 'credited') void onPaymentSucceeded(pendingRecord.amount, pendingRecord.paymentIntentId);
+      else onPaymentFailed('failed', failureEventProps(undefined, 'payment_not_completed'));
+    };
+    timer = setTimeout(() => void poll(), pendingPollDelayMs);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [stage, pendingRecord, pendingPollDelayMs, onPaymentSucceeded, onPaymentFailed]);
 
   const onCancel = useCallback(() => {
     if (stageRef.current === 'pending') return;
@@ -670,10 +778,12 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     paymentFailure,
     onConfirm,
     onPaymentStarted,
-    onPaymentSucceeded: (amount: number) => {
-      void onPaymentSucceeded(amount);
+    onPaymentSucceeded: (amount: number, paymentIntentId?: string) => {
+      void onPaymentSucceeded(amount, paymentIntentId);
     },
     onPaymentPending,
+    canLeavePending: stage === 'pending' && !!pendingRecord,
+    onLeavePending,
     onPaymentFailed,
     onCancel,
   };

@@ -1,3 +1,4 @@
+import type { PosterPalette } from './poster-palette';
 import type { Fonts, Radius, Shadows, Spacing, TextStyles, Typography } from './tokens';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
@@ -66,6 +67,11 @@ export type AppTheme = {
   completed: string;          // indigo family
   cancelled: string;          // orange family
   target: string;
+  // ── Focus-first (poster and hunter workspaces, My Jobs) ──────────────────
+  // The design handoff's palette, light or dark to match this theme. See
+  // lib/themes/poster-palette.ts.
+  poster: PosterPalette;
+
   // ── Meta ──────────────────────────────────────────────────────────────────
   isDark: boolean;
 

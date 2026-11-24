@@ -24,9 +24,11 @@ export interface YourOffersSheetProps {
   onOpen: (offer: MyOffer) => void
   onRemove: (offer: MyOffer) => void
   onFindWork: () => void
+  /** A confirmation drawn over the sheet (S.3), inside its modal. */
+  overlay?: React.ReactNode
 }
 
-export function YourOffersSheet({ visible, offers, onClose, onBack, onWithdraw, onOpen, onRemove, onFindWork }: YourOffersSheetProps) {
+export function YourOffersSheet({ visible, offers, onClose, onBack, onWithdraw, onOpen, onRemove, onFindWork, overlay }: YourOffersSheetProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
   const groups = groupOffers(offers)
@@ -38,7 +40,14 @@ export function YourOffersSheet({ visible, offers, onClose, onBack, onWithdraw, 
       offer.status === 'chosen' ? theme.primaryLight : offer.status === 'waiting' ? theme.warningText : theme.textSecondary
     return (
       <View key={offer.key} style={s.card} testID={`offer-row-${offer.bountyId}`}>
-        <View style={s.top}>
+        {/* The row opens the offer's own screen: H.3 while waiting, X.1 when it didn't go ahead. */}
+        <TouchableOpacity
+          style={s.top}
+          onPress={() => onOpen(offer)}
+          accessibilityRole="button"
+          accessibilityLabel={`${offer.title}, ${offer.statusText}`}
+          testID={`offer-open-${offer.bountyId}`}
+        >
           <JobThumb coverUri={offer.coverUri} icon={offer.icon} size={44} />
           <View style={{ flex: 1 }}>
             <Text style={s.title} numberOfLines={2}>
@@ -47,7 +56,7 @@ export function YourOffersSheet({ visible, offers, onClose, onBack, onWithdraw, 
             {offer.subtitle ? <Text style={s.subtitle}>{offer.subtitle}</Text> : null}
           </View>
           <Text style={s.amount}>{offer.amountLabel}</Text>
-        </View>
+        </TouchableOpacity>
         <View style={s.statusRow}>
           <MaterialIcons name={offer.statusIcon} size={18} color={statusColor} />
           <Text style={[s.status, { color: statusColor }]}>{offer.statusText}</Text>
@@ -88,7 +97,7 @@ export function YourOffersSheet({ visible, offers, onClose, onBack, onWithdraw, 
     >
       {offers.length === 0 ? (
         <View style={s.empty}>
-          <Text style={s.detail}>You haven't offered to do any jobs yet.</Text>
+          <Text style={s.detail}>{"You haven't offered to do any jobs yet."}</Text>
           <TouchableOpacity onPress={onFindWork} style={s.action} accessibilityRole="button">
             <Text style={s.actionText}>Find work nearby</Text>
           </TouchableOpacity>
@@ -100,6 +109,7 @@ export function YourOffersSheet({ visible, offers, onClose, onBack, onWithdraw, 
       {groups.chosen.map(renderOffer)}
       {groups.not_going_ahead.length > 0 ? <SheetSectionLabel>Not going ahead</SheetSectionLabel> : null}
       {groups.not_going_ahead.map(renderOffer)}
+      {overlay}
     </MyJobsSheet>
   )
 }

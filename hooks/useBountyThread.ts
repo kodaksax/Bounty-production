@@ -17,6 +17,7 @@ import { bountyService } from 'lib/services/bounty-service';
 import { cancellationService } from 'lib/services/cancellation-service';
 import type { CompletionSubmission } from 'lib/services/completion-service';
 import { completionService } from 'lib/services/completion-service';
+import { getBountyPaymentSettlementStates } from 'lib/services/bounty-payments-service';
 import type { Bounty } from 'lib/services/database.types';
 import { disputeService } from 'lib/services/dispute-service';
 import * as supabaseMessaging from 'lib/services/supabase-messaging';
@@ -77,6 +78,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
   // thread's hunter. Same definition as the job page and the Inbox (pending
   // bounty_requests). Null when not applicable or the read failed.
   const [pendingOfferCount, setPendingOfferCount] = useState<number | null>(null);
+  const [paymentState, setPaymentState] = useState<'released' | 'pending' | 'unknown' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loadSeq = useRef(0);
@@ -94,6 +96,12 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
         return;
       }
       setBounty(b);
+      const isCompleted = b.status === 'completed' || (b.status === 'archived' && !!(b as any).completed_at);
+      const architectureVersion = Number((b as any).payment_architecture_version ?? 1);
+      const settlementRead =
+        isCompleted && architectureVersion >= 2
+          ? getBountyPaymentSettlementStates([String(b.id)]).then((states) => states.get(String(b.id)) ?? 'unknown').catch(() => 'unknown' as const)
+          : Promise.resolve(isCompleted ? 'released' as const : null);
 
       const posterId = String(b.poster_id || b.user_id || '');
       const otherId =
@@ -102,7 +110,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
       // The application between this hunter and this bounty.
       const hunterId = role === 'poster' ? otherId : String(viewerId || '');
       const countsOffers = role === 'poster' && b.status === 'open';
-      const [reqs, sub, cancel, disp, convs, profile, pendingOffers] = await Promise.all([
+      const [reqs, sub, cancel, disp, convs, profile, pendingOffers, settlement] = await Promise.all([
         hunterId
           ? bountyRequestService
               .getAllWithDetails({ bountyId: String(b.id), userId: hunterId })
@@ -121,6 +129,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
               .then(list => (Array.isArray(list) ? list.length : null))
               .catch(() => null)
           : Promise.resolve(null),
+        settlementRead,
       ]);
       if (stale()) return;
 
@@ -129,6 +138,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
       );
       setRequest(mine ?? null);
       setPendingOfferCount(pendingOffers);
+      setPaymentState(settlement);
       setSubmission(sub);
       setCancellation(cancel);
       setDispute(disp);
@@ -186,6 +196,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
         .on('postgres_changes', { event: '*', schema: 'public', table: 'bounties', filter: `id=eq.${bountyId}` }, () => load())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'bounty_requests', filter: `bounty_id=eq.${bountyId}` }, () => load())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'bounty_cancellations', filter: `bounty_id=eq.${bountyId}` }, () => load())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bounty_payments', filter: `bounty_id=eq.${bountyId}` }, () => load())
         .subscribe();
     } catch {
       channel = null; // realtime unavailable — focus reloads still apply
@@ -274,6 +285,7 @@ export function useBountyThread({ bountyId, role, viewerId, counterpartId }: Use
     setConversation,
     counterpart,
     pendingOfferCount,
+    paymentState,
     events,
     loading,
     error,

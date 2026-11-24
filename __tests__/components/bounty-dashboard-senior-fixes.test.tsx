@@ -121,6 +121,31 @@ jest.mock('../../components/poster-review-modal', () => {
   };
 });
 
+// ── Focus-first workspace dependencies (app/postings/[bountyId]) ──────────
+// The workspace mounts the job thread's pay gate and accept/reject hooks for
+// stage D, and reads the pair's conversation and the problem records. None
+// of that is under test here, so they are inert.
+jest.mock('../../components/accept-funding-gate', () => ({ AcceptFundingGate: () => null }));
+jest.mock('../../hooks/useAcceptFunding', () => ({
+  useAcceptFunding: () => ({ gate: { active: false }, ensureFunded: jest.fn(), handleAcceptFailure: jest.fn() }),
+}));
+jest.mock('../../hooks/useAcceptRequest', () => ({ useAcceptRequest: () => ({ handleAcceptRequest: jest.fn() }) }));
+jest.mock('../../hooks/useRejectRequest', () => ({ useRejectRequest: () => ({ handleRejectRequest: jest.fn() }) }));
+jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
+  useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
+}));
+jest.mock('../../hooks/useJobWorkspaceData', () => ({
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
+  usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
+  useHireTime: () => null,
+  useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
+}));
+jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
+jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));
+jest.mock('../../components/ui/app-modal', () => ({
+  AppModal: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => (visible ? children : null),
+}));
+
 import BountyDashboard from '../../app/postings/[bountyId]/index';
 
 const OPEN_AT_ACCEPT = {
@@ -136,7 +161,30 @@ const OPEN_AT_ACCEPT = {
   created_at: new Date().toISOString(),
 };
 
-function lastAlert() {
+function lastAlert(): { title: string; message: string; buttons: any[] } {
+  // The designed confirmation (J.4) when it's showing, read like an alert.
+  const dialog = screen.queryByTestId('confirm-dialog');
+  if (dialog) {
+    const text = (id: string) => {
+      const node = screen.queryByTestId(id);
+      if (!node) return '';
+      const out: string[] = [];
+      const walk = (n: any) => (typeof n === 'string' ? out.push(n) : (n?.children ?? []).forEach(walk));
+      walk(node);
+      return out.join(' ');
+    };
+    const yes = screen.getByTestId('confirm-dialog-yes');
+    const no = screen.getByTestId('confirm-dialog-no');
+    const all = text('confirm-dialog');
+    return {
+      title: text('confirm-dialog-title') || all,
+      message: all,
+      buttons: [
+        { text: text('confirm-dialog-no').trim(), style: 'cancel', onPress: () => fireEvent.press(no) },
+        { text: text('confirm-dialog-yes').trim(), style: 'destructive', onPress: () => fireEvent.press(yes) },
+      ] as any[],
+    };
+  }
   const calls = (Alert.alert as jest.Mock).mock.calls;
   const [title, message, buttons] = calls[calls.length - 1];
   return { title, message, buttons: buttons ?? [] };
@@ -166,12 +214,25 @@ afterEach(() => {
   (Alert.alert as jest.Mock).mockRestore?.();
 });
 
+
+/**
+ * Edit and take-down sit under the workspace's collapsed "Other options"
+ * (Focus-first handoff). Opens it when it is there; a no-op when the job
+ * offers neither, so "not offered" assertions still see nothing.
+ */
+function openOtherOptions() {
+  const toggle = screen.queryByTestId('bounty-manage-actions-toggle');
+  if (toggle) fireEvent.press(toggle);
+}
+
 describe('Fix 1: Contact support', () => {
   it('opens the real support form with the job id, not the job composer', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
     mockLifecycleArgs = { hasDispute: true };
     render(<BountyDashboard />);
-    pressSecondary('Contact support');
+    openOtherOptions();
+    fireEvent.press(screen.getByLabelText('Help with this job'));
+    fireEvent.press(screen.getByLabelText('Talk to a person at Bounty'));
     expect(mockPush).toHaveBeenCalledTimes(1);
     const [target] = mockPush.mock.calls[0];
     expect(target).toEqual({
@@ -185,25 +246,28 @@ describe('Fix 1: Contact support', () => {
 describe('Fix 2: Payment card', () => {
   it('an unhired pay-when-you-choose job says nothing has been paid, never "escrow"', async () => {
     render(<BountyDashboard />);
-    expect(await screen.findByText("You haven't paid anything yet.")).toBeTruthy();
-    expect(screen.getByText('You only pay when you choose someone.')).toBeTruthy();
-    expect(screen.queryByText(/held safely in escrow/i)).toBeNull();
+    openOtherOptions();
+    expect(await screen.findByText(/You haven't paid anything yet\./)).toBeTruthy();
+    expect(screen.getByText(/You only pay when you choose someone\./)).toBeTruthy();
+    expect(screen.queryByText(/is with Bounty\. Nobody is paid until you approve/i)).toBeNull();
     expect(mockPlan).toHaveBeenCalledWith(expect.objectContaining({ id: 'b1' }));
   });
 
   it('says it is checking, not "held", while the server read is in flight', () => {
     mockPlan.mockReturnValue(new Promise(() => {}));
     render(<BountyDashboard />);
-    expect(screen.getByText('Checking your payment…')).toBeTruthy();
+    openOtherOptions();
+    expect(screen.getByText(/Checking your payment…/)).toBeTruthy();
     expect(screen.queryByText(/escrow/i)).toBeNull();
   });
 
   it('a failed read claims neither way', async () => {
     mockPlan.mockRejectedValue(new Error('offline'));
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(await screen.findByText(/couldn't check your payment/i)).toBeTruthy();
-    expect(screen.queryByText(/held safely in escrow/i)).toBeNull();
-    expect(screen.queryByText("You haven't paid anything yet.")).toBeNull();
+    expect(screen.queryByText(/is with Bounty\. Nobody is paid until you approve/i)).toBeNull();
+    expect(screen.queryByText(/You haven't paid anything yet\./)).toBeNull();
   });
 
   it('a job that really was paid for keeps the truthful escrow line, naming no recipient', async () => {
@@ -212,16 +276,19 @@ describe('Fix 2: Payment card', () => {
     // Even if the "other party" resolved to the poster themself, they are not named.
     mockOtherParty = { id: 'poster-1', name: 'poster_username', avatar: null };
     render(<BountyDashboard />);
-    expect(await screen.findByText(/Held safely in escrow\. It's released to the hunter you choose/)).toBeTruthy();
+    openOtherOptions();
+    expect(await screen.findByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
     const { within } = require('@testing-library/react-native');
     expect(within(screen.getByTestId('bounty-payment-state')).queryByText(/poster_username/)).toBeNull();
   });
 
-  it('a hired job keeps the existing escrow line, naming the hunter', () => {
+  it('a hired job keeps the held line, with no time to agree', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
     mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null };
     render(<BountyDashboard />);
-    expect(screen.getByText("Held safely in escrow. It's released to ana_hunts only when you approve the work.")).toBeTruthy();
+    openOtherOptions();
+    expect(screen.getByText('ana_hunts is working on your job.')).toBeTruthy();
+    expect(screen.getByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
     // Past the open stage the server read isn't needed.
     expect(mockPlan).not.toHaveBeenCalled();
   });
@@ -230,7 +297,8 @@ describe('Fix 2: Payment card', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'completed', accepted_by: 'hunter-1' };
     mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null };
     render(<BountyDashboard />);
-    expect(screen.getByText('Released to ana_hunts.')).toBeTruthy();
+    openOtherOptions();
+    expect(screen.getByText('Done. Released to ana_hunts.')).toBeTruthy();
   });
 });
 
@@ -239,10 +307,10 @@ describe('Fix 3: completion review', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
     mockLifecycleArgs = { submissionStatus: 'pending' };
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.queryByTestId('poster-review-modal')).toBeNull();
-    const primary = resolveBountyLifecycle({ bounty: mockBounty, role: 'poster', submissionStatus: 'pending' } as any)
-      .primaryAction!.label;
-    fireEvent.press(screen.getByLabelText(primary));
+    // The workspace shows the resolver's review action as the handoff's \"Review the completed work\".
+    fireEvent.press(screen.getByLabelText('Review the completed work'));
     expect(screen.getByTestId('poster-review-modal').props.children).toBe('review:b1:hunter-1:review');
     expect(mockPush).not.toHaveBeenCalledWith(
       expect.objectContaining({ pathname: '/postings/[bountyId]/review-and-verify' })
@@ -260,8 +328,9 @@ describe('Fix 6: Leave a review', () => {
   it('opens the rating step, not the payout receipt', async () => {
     completed();
     render(<BountyDashboard />);
+    openOtherOptions();
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('Leave a review'));
+      fireEvent.press(screen.getByLabelText('Send rating'));
     });
     expect(mockHasRated).toHaveBeenCalledWith('poster-1', 'b1', 'hunter-1');
     expect(screen.getByTestId('poster-review-modal').props.children).toBe('review:b1:hunter-1:rating');
@@ -273,8 +342,9 @@ describe('Fix 6: Leave a review', () => {
     completed();
     mockHasRated.mockResolvedValue(true);
     render(<BountyDashboard />);
+    openOtherOptions();
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('Leave a review'));
+      fireEvent.press(screen.getByLabelText('Send rating'));
     });
     expect(screen.queryByTestId('poster-review-modal')).toBeNull();
     expect(lastAlert().title).toBe('Already reviewed');
@@ -284,8 +354,9 @@ describe('Fix 6: Leave a review', () => {
     completed();
     mockHasRated.mockRejectedValue(new Error('offline'));
     render(<BountyDashboard />);
+    openOtherOptions();
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('Leave a review'));
+      fireEvent.press(screen.getByLabelText('Send rating'));
     });
     expect(screen.queryByTestId('poster-review-modal')).toBeNull();
     expect(lastAlert().title).toBe("Couldn't open the review");
@@ -295,6 +366,7 @@ describe('Fix 6: Leave a review', () => {
     completed();
     mockParams = { bountyId: 'b1', openReview: 'true' };
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(await screen.findByTestId('poster-review-modal')).toBeTruthy();
     expect(screen.getByTestId('poster-review-modal').props.children).toBe('review:b1:hunter-1:rating');
   });
@@ -303,6 +375,7 @@ describe('Fix 6: Leave a review', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
     mockParams = { bountyId: 'b1', openReview: 'true' };
     render(<BountyDashboard />);
+    openOtherOptions();
     await act(async () => {});
     expect(screen.queryByTestId('poster-review-modal')).toBeNull();
     expect(mockHasRated).not.toHaveBeenCalled();
@@ -312,7 +385,8 @@ describe('Fix 6: Leave a review', () => {
 describe('Fix 8: take-down wording', () => {
   it('an unfunded job says "Take this job down" and never "Cancel and refund"', async () => {
     render(<BountyDashboard />);
-    await screen.findByText("You haven't paid anything yet.");
+    openOtherOptions();
+    await screen.findByText(/You haven't paid anything yet\./);
     expect(screen.getByLabelText('Take this job down')).toBeTruthy();
     expect(screen.queryByText('Cancel and refund')).toBeNull();
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
@@ -320,13 +394,13 @@ describe('Fix 8: take-down wording', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const confirm = lastAlert();
     // Fix D: the confirmation matches the button.
     expect(confirm.title).toBe('Take this job down?');
-    expect(confirm.message).toContain("You haven't been charged for it, so there's nothing to refund.");
+    expect(confirm.message).toContain("You haven't been charged, so there's nothing to refund.");
     const go = confirm.buttons.find((b: any) => b.style === 'destructive');
-    expect(go.text).toBe('Take it down');
+    expect(go.text).toBe('Yes, take it down');
     expect(mockCancel).not.toHaveBeenCalled();
     await act(async () => {
       go.onPress();
@@ -338,14 +412,15 @@ describe('Fix 8: take-down wording', () => {
 
   it('the confirmation re-reads on tap and acts on the fresh answer, not the one on screen', async () => {
     render(<BountyDashboard />);
-    await screen.findByText("You haven't paid anything yet.");
+    openOtherOptions();
+    await screen.findByText(/You haven't paid anything yet\./);
     // Paid for in the meantime (e.g. on another device).
     mockPlan.mockResolvedValue({ refundAmount: 60, destination: 'wallet' });
     mockFundingRequirement.mockResolvedValue({ bountyId: 'b1', fundingMode: 'at_accept', alreadyFunded: true });
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     expect(lastAlert().title).toBe('Cancel and refund?');
     await act(async () => {
       lastAlert().buttons.find((b: any) => b.style === 'destructive').onPress();
@@ -358,11 +433,12 @@ describe('Fix 8: take-down wording', () => {
     mockPlan.mockResolvedValue({ refundAmount: 60, destination: 'wallet' });
     mockFundingRequirement.mockResolvedValue({ bountyId: 'b1', fundingMode: 'at_accept', alreadyFunded: true });
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(await screen.findByLabelText('Cancel and refund')).toBeTruthy();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Cancel and refund'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     expect(lastAlert().message).toContain('$60 goes back to your Bounty balance.');
     await act(async () => {
       lastAlert().buttons.find((b: any) => b.style === 'destructive').onPress();
@@ -374,6 +450,7 @@ describe('Fix 8: take-down wording', () => {
   it('a for-honor job has no money to refund either', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, is_for_honor: true, amount: 0 };
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(screen.getByLabelText('Take this job down')).toBeTruthy();
     expect(mockPlan).not.toHaveBeenCalled();
   });
@@ -389,8 +466,9 @@ describe('A: a failed funding read is never shown as payment', () => {
 
   it('the Payment card and button say neither "held" nor "refund"', async () => {
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(await screen.findByText(/couldn't check your payment/i)).toBeTruthy();
-    expect(screen.queryByText(/held safely in escrow/i)).toBeNull();
+    expect(screen.queryByText(/is with Bounty\. Nobody is paid until you approve/i)).toBeNull();
     expect(screen.getByLabelText('Take this job down')).toBeTruthy();
     expect(screen.queryByLabelText('Cancel and refund')).toBeNull();
     expect(mockFundingRequirement).toHaveBeenCalledWith('b1');
@@ -398,11 +476,12 @@ describe('A: a failed funding read is never shown as payment', () => {
 
   it('the confirmation hedges, but the take-down acts on the same plan as before', async () => {
     render(<BountyDashboard />);
+    openOtherOptions();
     await screen.findByText(/couldn't check your payment/i);
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     const confirm = lastAlert();
     expect(confirm.title).toBe('Take this job down?');
     expect(confirm.message).toContain("We couldn't confirm whether you've been charged for it.");
@@ -418,14 +497,16 @@ describe('A: a failed funding read is never shown as payment', () => {
   it('a confirmed charge on an at_accept job is shown as held, with refund wording', async () => {
     mockFundingRequirement.mockResolvedValue({ bountyId: 'b1', fundingMode: 'at_accept', alreadyFunded: true });
     render(<BountyDashboard />);
-    expect(await screen.findByText(/Held safely in escrow/)).toBeTruthy();
+    openOtherOptions();
+    expect(await screen.findByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
     expect(screen.getByLabelText('Cancel and refund')).toBeTruthy();
   });
 
   it('an at_post job is not re-read (its fallback and real answers agree)', async () => {
     mockBounty = { ...OPEN_AT_ACCEPT, funding_mode: 'at_post' };
     render(<BountyDashboard />);
-    expect(await screen.findByText(/Held safely in escrow/)).toBeTruthy();
+    openOtherOptions();
+    expect(await screen.findByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
     expect(mockFundingRequirement).not.toHaveBeenCalled();
   });
 });
@@ -437,32 +518,36 @@ describe('C: Applications card', () => {
 
   it('unpaid: says you are charged only when you accept', async () => {
     render(<BountyDashboard />);
-    expect(
-      await screen.findByText("Review who applied and choose the hunter you want. You're charged only when you accept.")
-    ).toBeTruthy();
+    openOtherOptions();
+    expect(await screen.findByText(/You only pay when you choose someone\./)).toBeTruthy();
+    expect(screen.getByText('3 people want to help.')).toBeTruthy();
   });
 
   it('paid up front: says so, and never "charged only when you accept"', async () => {
     mockBounty = { ...OPEN_AT_ACCEPT, funding_mode: 'at_post' };
     mockPlan.mockResolvedValue({ refundAmount: 60, destination: 'wallet' });
     render(<BountyDashboard />);
-    expect(
-      await screen.findByText("Review who applied and choose the hunter you want. You've already paid for this job.")
-    ).toBeTruthy();
-    expect(screen.queryByText(/charged only when you accept/)).toBeNull();
+    openOtherOptions();
+    expect(await screen.findByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
+    expect(screen.queryByText(/You only pay when you choose/)).toBeNull();
   });
 
   it('checking or unknown: makes no payment claim', async () => {
     mockPlan.mockReturnValue(new Promise(() => {}));
     render(<BountyDashboard />);
-    expect(screen.getByText('Review who applied and choose the hunter you want.')).toBeTruthy();
+    openOtherOptions();
+    expect(screen.getByText('3 people want to help.')).toBeTruthy();
+    expect(screen.getByText(/Checking your payment…/)).toBeTruthy();
+    expect(screen.queryByText(/You only pay when you choose/)).toBeNull();
+    expect(screen.queryByText(/is with Bounty/)).toBeNull();
   });
 });
 
 describe('QA pass 2: resilience (2026-11-15)', () => {
   it('coming back to the page re-reads it; the first focus does not double the initial load', async () => {
     render(<BountyDashboard />);
-    await screen.findByText("You haven't paid anything yet.");
+    openOtherOptions();
+    await screen.findByText(/You haven't paid anything yet\./);
     expect(mockRefresh).not.toHaveBeenCalled();
     // e.g. back from Requests after accepting an offer.
     await act(async () => {
@@ -474,27 +559,30 @@ describe('QA pass 2: resilience (2026-11-15)', () => {
   it('a failed payment read offers "Check again", which re-reads and shows the real answer', async () => {
     mockPlan.mockRejectedValueOnce(new Error('offline'));
     render(<BountyDashboard />);
+    openOtherOptions();
     expect(await screen.findByText(/couldn't check your payment/i)).toBeTruthy();
     const retry = screen.getByLabelText('Check payment again');
     expect(retry.props.accessibilityRole ?? 'button').toBe('button');
     await act(async () => {
       fireEvent.press(retry);
     });
-    expect(await screen.findByText("You haven't paid anything yet.")).toBeTruthy();
+    expect(await screen.findByText(/You haven't paid anything yet\./)).toBeTruthy();
     expect(screen.queryByLabelText('Check payment again')).toBeNull();
     expect(mockPlan).toHaveBeenCalledTimes(2);
   });
 
   it('"Check again" only appears when the read failed', async () => {
     render(<BountyDashboard />);
-    await screen.findByText("You haven't paid anything yet.");
+    openOtherOptions();
+    await screen.findByText(/You haven't paid anything yet\./);
     expect(screen.queryByLabelText('Check payment again')).toBeNull();
   });
 
   it('a double tap on "Take this job down" reads once and shows one confirmation', async () => {
     let resolvePlan: (v: unknown) => void = () => {};
     render(<BountyDashboard />);
-    await screen.findByText("You haven't paid anything yet.");
+    openOtherOptions();
+    await screen.findByText(/You haven't paid anything yet\./);
     mockPlan.mockClear();
     mockPlan.mockReturnValue(new Promise(r => { resolvePlan = r; }));
     const button = screen.getByLabelText('Take this job down');
@@ -504,19 +592,20 @@ describe('QA pass 2: resilience (2026-11-15)', () => {
       resolvePlan({ refundAmount: 0, destination: null });
     });
     expect(mockPlan).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getAllByTestId('confirm-dialog')).toHaveLength(1));
     expect(lastAlert().title).toBe('Take this job down?');
     expect(mockCancel).not.toHaveBeenCalled();
   });
 
   it('a failed take-down check says nothing changed and does not cancel', async () => {
     render(<BountyDashboard />);
-    await screen.findByText("You haven't paid anything yet.");
+    openOtherOptions();
+    await screen.findByText(/You haven't paid anything yet\./);
     mockPlan.mockRejectedValue(new Error('offline'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Take this job down'));
     });
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    await waitFor(() => expect(lastAlert().title).toBeTruthy());
     expect(lastAlert().title).toBe("Can't take this job down right now");
     expect(lastAlert().message).toContain('nothing was changed');
     expect(mockCancel).not.toHaveBeenCalled();
@@ -526,9 +615,9 @@ describe('QA pass 2: resilience (2026-11-15)', () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
     mockLifecycleArgs = { submissionStatus: 'pending' };
     render(<BountyDashboard />);
-    const primary = resolveBountyLifecycle({ bounty: mockBounty, role: 'poster', submissionStatus: 'pending' } as any)
-      .primaryAction!.label;
-    fireEvent.press(screen.getByLabelText(primary));
+    openOtherOptions();
+    // The workspace shows the resolver's review action as the handoff's \"Review the completed work\".
+    fireEvent.press(screen.getByLabelText('Review the completed work'));
     expect(screen.getByTestId('poster-review-modal')).toBeTruthy();
     await act(async () => {
       fireEvent.press(screen.getByTestId('poster-review-modal-close'));
@@ -539,7 +628,8 @@ describe('QA pass 2: resilience (2026-11-15)', () => {
 
   it('the payment status line is a polite live region (announced when "Checking…" resolves)', async () => {
     render(<BountyDashboard />);
-    await screen.findByText("You haven't paid anything yet.");
+    openOtherOptions();
+    await screen.findByText(/You haven't paid anything yet\./);
     expect(screen.getByTestId('bounty-payment-state').props.accessibilityLiveRegion).toBe('polite');
   });
 });

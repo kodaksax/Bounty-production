@@ -435,8 +435,27 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
         {/* Activity section removed per requirements */}
 
-        {/* History Link (raised by 20px) */}
+        {/* Past jobs (Focus-first P.1): finished and cancelled work from both sides. */}
         <View style={{ marginTop: -20 }} className="px-4 py-2">
+          <TouchableOpacity
+            className="flex-row items-center justify-between rounded-lg p-3 touch-target-min"
+            style={{ backgroundColor: theme.surface }}
+            onPress={() => router.push('/profile/past-jobs' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Past jobs"
+            accessibilityHint="Opens the jobs you finished, posted, or cancelled"
+            testID="profile-past-jobs"
+          >
+            <View className="flex-row items-center">
+              <MaterialIcons name="task-alt" size={20} color={theme.textSecondary} />
+              <Text className="text-sm font-medium ml-2" style={{ color: theme.text }}>Past jobs</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* History Link */}
+        <View className="px-4 py-2">
           <TouchableOpacity
             className="flex-row items-center justify-between rounded-lg p-3 touch-target-min"
             style={{ backgroundColor: theme.surface }}

@@ -57,6 +57,34 @@ export interface CancelBountyPaymentResult {
   reused?: boolean;
 }
 
+export type BountyPaymentSettlement = 'released' | 'pending' | 'unknown';
+
+/** Payment confirmation for completed-job copy; lifecycle completion alone is not settlement. */
+export async function getBountyPaymentSettlementStates(
+  bountyIds: readonly string[]
+): Promise<Map<string, BountyPaymentSettlement>> {
+  const states = new Map<string, BountyPaymentSettlement>();
+  const ids = Array.from(new Set(bountyIds.map(String).filter(Boolean)));
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const batch = ids.slice(offset, offset + 100);
+    const { data, error } = await supabase
+      .from('bounty_payments')
+      .select('bounty_id, status, settlement_state')
+      .in('bounty_id', batch);
+    if (error) throw error;
+    for (const payment of data ?? []) {
+      const state: BountyPaymentSettlement =
+        payment.status === 'released' && payment.settlement_state === 'stripe_settled'
+          ? 'released'
+          : payment.status === 'release_pending' || payment.settlement_state === 'stripe_pending'
+            ? 'pending'
+            : 'unknown';
+      states.set(String(payment.bounty_id), state);
+    }
+  }
+  return states;
+}
+
 const TERMINAL_CANCEL_STATUSES = new Set(['canceled', 'refunded']);
 
 /**

@@ -648,7 +648,7 @@ app.get('/api/bounties', async (req, res) => {
     const limitParam = parseInt(req.query.limit, 10);
     const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 100) : 20;
 
-    const querySelect = `SELECT id, title, description, amount, category, poster_id, status, work_type, is_time_sensitive, deadline, created_at, username, avatar, location, average_rating, rating_count FROM bounties`;
+    const querySelect = `SELECT id, title, description, amount, category, poster_id, accepted_by, completed_at, payment_architecture_version, status, work_type, is_time_sensitive, deadline, created_at, username, avatar, location, average_rating, rating_count FROM bounties`;
     const conditions = [];
     const params = [];
 
@@ -695,8 +695,10 @@ app.get('/api/bounties', async (req, res) => {
       query += ' WHERE ' + conditions.join(' AND ');
     }
 
-    query += ' ORDER BY created_at DESC, id DESC LIMIT ?';
-    params.push(limit);
+    const offsetParam = Number.parseInt(req.query.offset, 10);
+    const offset = Number.isFinite(offsetParam) ? Math.max(0, offsetParam) : (Math.max(1, Number.parseInt(req.query.page, 10) || 1) - 1) * limit;
+    query += ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
 
     const [rows] = await conn.execute(query, params);
 
@@ -709,6 +711,9 @@ app.get('/api/bounties', async (req, res) => {
       category: b.category,
       poster_id: b.poster_id,
       status: b.status,
+      accepted_by: b.accepted_by,
+      completed_at: b.completed_at,
+      payment_architecture_version: b.payment_architecture_version,
       created_at: b.created_at,
       username: b.username,
       avatar: b.avatar,
@@ -719,7 +724,7 @@ app.get('/api/bounties', async (req, res) => {
       distance: b.location ? Math.floor(Math.random() * 20) + 1 : undefined
     }));
 
-    res.json({ data: bounties, meta: { limit, count: bounties.length } });
+    res.json({ data: bounties, meta: { limit, offset, count: bounties.length } });
   } catch (error) {
     handleError(res, error, 'Failed to fetch bounties');
   } finally {
@@ -1312,7 +1317,11 @@ app.get('/api/bounty-requests', async (req, res) => {
       query += ' WHERE ' + conditions.join(' AND ');
     }
     
-    query += ' ORDER BY br.created_at DESC';
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+    query += ' ORDER BY br.created_at DESC, br.id DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
     
     const [rows] = await conn.execute(query, params);
     

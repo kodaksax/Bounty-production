@@ -20,7 +20,9 @@ import { bountyRequestService } from 'lib/services/bounty-request-service'
 import { bountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types'
 import { markBountyRemovedLocally } from 'lib/utils/bounty-visibility'
+import { useConfirmDialog, withdrawOfferCopy } from '../components/poster/confirm-dialog'
 import type { ManageAction } from '../lib/my-jobs/manage-actions'
+import { describeTakeDown, readOpenJobMoney } from '../lib/my-jobs/take-down'
 import type { MyJob, MyOffer } from '../lib/my-jobs/types'
 import { saveStructuredBountyEdit } from '../lib/services/bounty-requirements-service'
 import { BountyRefundFailedError, cancelAndRefundBounty } from '../lib/services/bounty-cancel-refund'
@@ -41,6 +43,7 @@ type Deps = Pick<
 export function useJobManagement(deps: Deps) {
   const { userId, setMyBounties, reloadPosted, reloadOffers, hideForHunter, markHiddenLocally, setError } = deps
   const { refundEscrow } = useWallet()
+  const { ask, dialog: confirmDialog } = useConfirmDialog()
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
   // Bounty ids with a take-down (refund + delete) in flight.
   const takingDownRef = useRef<Set<string>>(new Set())
@@ -110,51 +113,58 @@ export function useJobManagement(deps: Deps) {
 
   // ── Posted-job actions ──────────────────────────────────────────────────
   const takeDown = React.useCallback(
-    (bounty: Bounty) => {
-      Alert.alert(
-        'Take this job down?',
-        "It will be removed, along with any offers. This can't be undone. Anything you paid is refunded.",
-        [
-          { text: 'Keep my job', style: 'cancel' },
-          {
-            text: 'Yes, take it down',
-            style: 'destructive',
-            onPress: async () => {
-              const key = String(bounty.id)
-              if (takingDownRef.current.has(key)) return
-              takingDownRef.current.add(key)
-              try {
-                // Refund FIRST (when anything is held), then delete — the one
-                // path shared with the job screen's "Cancel and refund".
-                try {
-                  await cancelAndRefundBounty(bounty, { refundEscrow })
-                } catch (cancelError) {
-                  if (cancelError instanceof BountyRefundFailedError) {
-                    Alert.alert(
-                      'Refund failed',
-                      "We couldn't refund the money held for this job, so it wasn't taken down. Please contact support."
-                    )
-                    return
-                  }
-                  throw cancelError
-                }
-                markBountyRemovedLocally(bounty.id)
-                setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
-                await reloadPosted()
-              } catch (err) {
-                const friendly = getUserFriendlyError(err)
-                setError(friendly.message)
-                Alert.alert(friendly.title, friendly.message)
-              } finally {
-                takingDownRef.current.delete(key)
+    async (bounty: Bounty) => {
+      const key = String(bounty.id)
+      if (takingDownRef.current.has(key)) return
+      takingDownRef.current.add(key)
+      // Read what's held first, so the dialog tells the truth for this job and
+      // the take-down acts on that same plan (J.4).
+      let money: Awaited<ReturnType<typeof readOpenJobMoney>>
+      try {
+        money = await readOpenJobMoney(bounty)
+      } catch {
+        Alert.alert(
+          "Can't take this job down right now",
+          "We couldn't check what's been paid for this job, so nothing was changed. Check your connection and try again."
+        )
+        return
+      } finally {
+        takingDownRef.current.delete(key)
+      }
+      ask({
+        ...describeTakeDown(bounty, money.plan, money.charge),
+        onConfirm: async () => {
+          if (takingDownRef.current.has(key)) return
+          takingDownRef.current.add(key)
+          try {
+            // Refund FIRST (when anything is held), then delete — the one
+            // path shared with the job screen's "Cancel and refund".
+            try {
+              await cancelAndRefundBounty(bounty, { refundEscrow }, money.plan)
+            } catch (cancelError) {
+              if (cancelError instanceof BountyRefundFailedError) {
+                Alert.alert(
+                  'Refund failed',
+                  "We couldn't refund the money held for this job, so it wasn't taken down. Please contact support."
+                )
+                return
               }
-            },
-          },
-        ],
-        { cancelable: true }
-      )
+              throw cancelError
+            }
+            markBountyRemovedLocally(bounty.id)
+            setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
+            await reloadPosted()
+          } catch (err) {
+            const friendly = getUserFriendlyError(err)
+            setError(friendly.message)
+            Alert.alert(friendly.title, friendly.message)
+          } finally {
+            takingDownRef.current.delete(key)
+          }
+        },
+      })
     },
-    [refundEscrow, setMyBounties, reloadPosted, setError]
+    [refundEscrow, setMyBounties, reloadPosted, setError, ask]
   )
 
   const discardCancelled = React.useCallback(
@@ -231,7 +241,7 @@ export function useJobManagement(deps: Deps) {
           setEditingBounty(job.bounty)
           return
         case 'take_down':
-          takeDown(job.bounty)
+          void takeDown(job.bounty)
           return
         case 'discard_cancelled':
           discardCancelled(job.bounty)
@@ -250,39 +260,29 @@ export function useJobManagement(deps: Deps) {
   // ── Offers ──────────────────────────────────────────────────────────────
   const withdrawOffer = React.useCallback(
     (offer: MyOffer) => {
-      const poster = offer.posterName?.split(/\s+/)[0] ?? 'The poster'
-      Alert.alert(
-        'Withdraw your offer?',
-        `${poster} won't see your offer any more. You can offer again while the job is open.\n\nNothing was held, so nothing changes in your wallet.`,
-        [
-          { text: 'Keep my offer', style: 'cancel' },
-          {
-            text: 'Yes, withdraw',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                // Deletes the pending request and emits application_withdrawn
-                // only on a confirmed success (lib/services/application-withdrawal).
-                await withdrawApplication({ bountyId: offer.bountyId, currentUserId: userId, surface: SURFACE })
-                try {
-                  // Reload so the row only disappears once it's really gone.
-                  await reloadOffers()
-                } catch (refreshError) {
-                  console.warn('Failed to refresh offers after withdrawal:', refreshError)
-                }
-                showToast({ message: 'Your offer has been withdrawn.' })
-              } catch (err) {
-                console.error('Error withdrawing offer:', err)
-                const friendly = getUserFriendlyError(err)
-                Alert.alert(friendly.title, friendly.message)
-              }
-            },
-          },
-        ],
-        { cancelable: true }
-      )
+      ask({
+        ...withdrawOfferCopy(offer.posterName?.split(/\s+/)[0] ?? null),
+        onConfirm: async () => {
+          try {
+            // Deletes the pending request and emits application_withdrawn
+            // only on a confirmed success (lib/services/application-withdrawal).
+            await withdrawApplication({ bountyId: offer.bountyId, currentUserId: userId, surface: SURFACE })
+            try {
+              // Reload so the row only disappears once it's really gone.
+              await reloadOffers()
+            } catch (refreshError) {
+              console.warn('Failed to refresh offers after withdrawal:', refreshError)
+            }
+            showToast({ message: 'Your offer has been withdrawn.' })
+          } catch (err) {
+            console.error('Error withdrawing offer:', err)
+            const friendly = getUserFriendlyError(err)
+            Alert.alert(friendly.title, friendly.message)
+          }
+        },
+      })
     },
-    [userId, reloadOffers]
+    [userId, reloadOffers, ask]
   )
 
   /**
@@ -322,6 +322,7 @@ export function useJobManagement(deps: Deps) {
     runJobAction,
     withdrawOffer,
     removeOffer,
+    confirmDialog,
     edit: { bounty: editingBounty, close: closeEdit, save: handleSaveEdit },
   }
 }

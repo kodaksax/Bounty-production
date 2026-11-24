@@ -4,10 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FEED_FALLBACK, useSafeBack } from '../../../../hooks/useSafeBack';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  FlatList,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,16 +21,15 @@ import { bountyService } from '../../../../lib/services/bounty-service';
 import { completionService, type ProofItem } from '../../../../lib/services/completion-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { disputeService } from '../../../../lib/services/dispute-service';
-import { messageService } from '../../../../lib/services/message-service';
-import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
-// The completion-message field lives in this list's header, so the list is
-// what has to inset for the keyboard.
-import { keyboardAwareListProps } from '../../../../components/ui/keyboard-avoiding';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { withAlpha } from '../../../../lib/utils';
-import { HunterStageTimeline, type HunterStage } from '../../../../components/hunter-stage-timeline';
+import { ConsequenceList, FlowNav, FlowTitle, OtherOptions, PinnedFooter, PosterButton, ProofPhotos, WorkspaceLayout } from '../../../../components/poster';
+import { useAuthContext } from '../../../../hooks/use-auth-context';
+import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
+import { firstName } from '../../../../lib/my-jobs/format';
+import { hunterMoney } from '../../../../lib/utils/hunter-stage-copy';
 
 export default function HunterReviewAndVerifyScreen() {
   const { theme } = useAppThemeContext();
@@ -52,10 +48,8 @@ export default function HunterReviewAndVerifyScreen() {
   const [request, setRequest] = useState<BountyRequest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentStage] = useState<HunterStage>('review_verify');
   const [messageText, setMessageText] = useState('');
   const [proofItems, setProofItems] = useState<ProofItem[]>([]);
-  const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0); // in seconds
   const [startTime] = useState(Date.now());
@@ -95,6 +89,32 @@ export default function HunterReviewAndVerifyScreen() {
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [bountyId]);
 
+  // For the poster's name in the copy (the same lifecycle every job screen reads).
+  const { session } = useAuthContext();
+  const lifecycle = useBountyLifecycle(routeBountyId, session?.user?.id ?? currentUserId ?? null);
+
+  // Sending again after a requested change (M.3 → H.8): start from the
+  // submission that was sent back, the same contract the job thread's
+  // SubmitWorkSheet uses (its message and proof_items).
+  const prefilledRef = React.useRef(false);
+  useEffect(() => {
+    if (!routeBountyId || prefilledRef.current) return;
+    let active = true;
+    completionService
+      .getSubmission(routeBountyId)
+      .then((sub) => {
+        if (!active || !sub || prefilledRef.current) return;
+        if (sub.status !== 'revision_requested' || String(sub.hunter_id) !== String(currentUserId)) return;
+        prefilledRef.current = true;
+        setMessageText((current) => (current.trim() ? current : sub.message ?? ''));
+        setProofItems((current) => (current.length > 0 ? current : (Array.isArray(sub.proof_items) ? (sub.proof_items as ProofItem[]) : [])));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [routeBountyId, currentUserId]);
+
   useEffect(() => {
     if (!routeBountyId) {
       setError('Invalid bounty id');
@@ -102,7 +122,6 @@ export default function HunterReviewAndVerifyScreen() {
       return;
     }
     loadData(routeBountyId);
-    loadConversation(routeBountyId);
     loadProofItems();
     loadActiveDispute(routeBountyId);
 
@@ -173,16 +192,6 @@ export default function HunterReviewAndVerifyScreen() {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const loadConversation = async (idStr: string) => {
-    try {
-      const conversations = await messageService.getConversations();
-      const bountyConv = conversations.find((c) => String(c.bountyId) === idStr);
-      setConversation(bountyConv || null);
-    } catch (err) {
-      console.error('Error loading conversation:', err);
     }
   };
 
@@ -274,24 +283,13 @@ export default function HunterReviewAndVerifyScreen() {
         // Update bounty status to indicate submission pending review
         // (In real implementation, backend should handle this)
 
-        Alert.alert(
-          'Submission Successful',
-          'Your work has been submitted for review. The poster will verify and release payment.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigate to payout screen (waiting state)
-                if (routeBountyId) {
-                  router.push({
-                    pathname: '/in-progress/[bountyId]/hunter/payout',
-                    params: { bountyId: routeBountyId },
-                  });
-                }
-              },
-            },
-          ]
-        );
+        // Straight to the waiting step (H.9), which says "Sent to {Poster}."
+        if (routeBountyId) {
+          router.replace({
+            pathname: '/in-progress/[bountyId]/hunter/payout',
+            params: { bountyId: routeBountyId, sent: 'work' },
+          });
+        }
       } catch (err) {
         console.error('Error requesting review:', err);
         Alert.alert("Couldn't request review", "Please try again.");
@@ -334,36 +332,19 @@ export default function HunterReviewAndVerifyScreen() {
     return `${hours}h ${remainingMinutes}m`;
   };
 
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes) return '0 KB';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+  const posterFirst = firstName(lifecycle.otherParty.name);
+  // Start of a sentence vs inside one; only the fallback changes case.
+  const Poster = posterFirst ?? 'The poster';
+  const poster = posterFirst ?? 'the poster';
+  const uploading = isUploadingProof || isPickingProof;
+  const money = bounty ? hunterMoney(bounty.amount) : null;
 
-  const renderProofItem = ({ item }: { item: ProofItem }) => (
-    <View style={styles.proofItem}>
-      <View style={styles.proofIcon}>
-        <MaterialIcons
-          name={item.type === 'image' ? 'image' : 'insert-drive-file'}
-          size={32}
-          color={theme.primaryLight}
-        />
-      </View>
-      <View style={styles.proofInfo}>
-        <Text style={styles.proofName} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
-      </View>
-      <TouchableOpacity accessibilityLabel="Close" accessibilityRole="button"
-        style={styles.removeButton}
-        onPress={() => handleRemoveProof(item.id)}
-      >
-        <MaterialIcons name="close" size={20} color={theme.errorText} />
-      </TouchableOpacity>
-    </View>
-  );
+  const askRemoveProof = (item: ProofItem) => {
+    Alert.alert('Remove this photo?', item.name || 'This attachment will not be sent.', [
+      { text: 'Keep it', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => handleRemoveProof(item.id) },
+    ]);
+  };
 
   if (isLoading) {
     return (
@@ -391,214 +372,130 @@ export default function HunterReviewAndVerifyScreen() {
     );
   }
 
+  const primaryLabel = hasActiveDispute
+    ? 'Locked (dispute open)'
+    : uploading
+      ? 'Uploading photo…'
+      : `Send to ${poster} for approval`;
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={styles.backIcon} onPress={goBack}>
-          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Submit your work</Text>
+    <WorkspaceLayout
+      background="card"
+      testID="hunter-send-work"
+      footer={
+        <PinnedFooter>
+          <PosterButton
+            label={primaryLabel}
+            loading={isSubmitting}
+            loadingLabel="Sending your work"
+            disabled={hasActiveDispute || uploading}
+            onPress={handleRequestReview}
+            testID="send-work"
+          />
+        </PinnedFooter>
+      }
+    >
+      <FlowNav label="Back to the job" onBack={goBack} />
+      <FlowTitle title={`Tell ${poster} it's done`} />
+
+      <View style={styles.focusField}>
+        <Text style={styles.focusLabel}>{`Note for ${poster}`}</Text>
+        <TextInput
+          style={styles.messageTextArea}
+          placeholder="What you did, and anything they should check"
+          placeholderTextColor={withAlpha(theme.text, 0.4)}
+          value={messageText}
+          onChangeText={setMessageText}
+          multiline
+          numberOfLines={4}
+          maxLength={1000}
+          textAlignVertical="top"
+          accessibilityLabel={`Note for ${poster}`}
+        />
       </View>
 
-      <FlatList
-        {...keyboardAwareListProps}
-        style={styles.scrollView}
-        data={proofItems}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={() => (
-          <>
-            {/* Bounty Info Card with Timer */}
-            <View style={styles.bountyInfoCard}>
-              <Text style={styles.bountyTitle} numberOfLines={2}>
-                {bounty.title}
-              </Text>
-              <View style={styles.timerContainer}>
-                <Text style={styles.timerLabel}>Time on this task</Text>
-                <Text style={styles.timerValue}>{formatTime(timeElapsed)}</Text>
-                <Text style={styles.timerHint}>Track your time on this task</Text>
-              </View>
-              <View style={styles.amountRow}>
-                <Text style={styles.bountyAmount}>
-                  {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
-                </Text>
-              </View>
-            </View>
-
-            {/* Timeline */}
-            <HunterStageTimeline currentStage={currentStage} />
-
-            {/* Message Input */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Notes for the poster</Text>
-              <TextInput
-                style={styles.messageTextArea}
-                placeholder="Describe your completed work..."
-                placeholderTextColor={withAlpha(theme.text, 0.4)}
-                value={messageText}
-                onChangeText={setMessageText}
-                multiline
-                numberOfLines={4}
-                maxLength={1000}
-                textAlignVertical="top"
-              />
-              {/* Conversation quick action: use loaded conversation if present */}
-              <View style={{ marginTop: 12 }}>
-                {conversation ? (
-                  <TouchableOpacity accessibilityRole="button"
-                    style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
-                    onPress={() => {
-                      try {
-                        (router as any).push(`/messages/${conversation.id}`);
-                      } catch (e) {
-                        console.warn('Unable to open conversation route', e);
-                        Alert.alert('Unable to Open Conversation', 'We could not open the conversation. Please try again.');
-                      }
-                    }}
-                  >
-                    <MaterialIcons name="chat" size={18} color={theme.text} />
-                    <Text style={styles.addProofText}>Open conversation</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity accessibilityRole="button"
-                    style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
-                    onPress={async () => {
-                      try {
-                        if (!routeBountyId || !bounty?.user_id) return;
-                        const conv = await messageService.getOrCreateConversation([String(bounty.user_id)], '', routeBountyId || undefined);
-                        if (conv) {
-                          (router as any).push(`/messages/${conv.id}`);
-                        }
-                      } catch (e) {
-                        console.warn('Unable to open or create conversation route', e);
-                        Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.');
-                        try {
-                          if (routeBountyId) (router as any).push(`/messages/new?bountyId=${routeBountyId}`);
-                        } catch (err) {
-                          console.warn('Fallback to new message route failed', err);
-                          Alert.alert('Unable to Open Composer', 'Opening the message composer failed. Please try again later.');
-                        }
-                      }
-                    }}
-                  >
-                    <MaterialIcons name="chat-bubble-outline" size={18} color={theme.text} />
-                    <Text style={styles.addProofText}>Message the poster</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </>
-        )}
-        ListEmptyComponent={() => (
-          <>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Proof of your work</Text>
-              <Text style={styles.sectionSubtitle}>
-                Attach images or files showing your completed work
-              </Text>
-              <View style={styles.emptyProof}>
-                <MaterialIcons name="attachment" size={48} color={theme.primaryLight} />
-                <Text style={styles.emptyProofText}>No proof attached yet</Text>
-              </View>
-            </View>
-          </>
-        )}
-        renderItem={renderProofItem}
-        ListFooterComponent={() => (
-          <>
-            {hasActiveDispute && (
-              <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute." />
-            )}
-            <TouchableOpacity accessibilityRole="button"
-              style={[styles.addProofButton, (hasActiveDispute || isUploadingProof || isPickingProof) && styles.submitButtonDisabled]}
-              onPress={handleAddProof}
-              disabled={hasActiveDispute || isUploadingProof || isPickingProof}
-            >
-              {isUploadingProof || isPickingProof ? (
-                <ActivityIndicator size="small" color={theme.text} />
-              ) : (
-                <MaterialIcons name={hasActiveDispute ? 'lock' : 'add'} size={20} color={theme.text} />
-              )}
-              <Text style={styles.addProofText}>
-                {hasActiveDispute
-                  ? 'Locked (Dispute Open)'
-                  : isUploadingProof
-                    ? 'Uploading…'
-                    : isPickingProof
-                      ? 'Selecting…'
-                      : 'Add Proof'}
-              </Text>
-            </TouchableOpacity>
-            <View style={{ height: 12 }} />
-            <TouchableOpacity accessibilityRole="button"
-              style={[styles.submitButton, (isSubmitting || hasActiveDispute || isUploadingProof || isPickingProof) && styles.submitButtonDisabled]}
-              onPress={handleRequestReview}
-              disabled={isSubmitting || hasActiveDispute || isUploadingProof || isPickingProof}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color={theme.onPrimary} />
-              ) : (
-                <Text style={styles.submitButtonText}>
-                  {hasActiveDispute
-                    ? 'Locked (Dispute Open)'
-                    : isUploadingProof || isPickingProof
-                      ? 'Uploading proof…'
-                      : 'Submit'}
-                </Text>
-              )}
-            </TouchableOpacity>
-            <View style={{ height: 12 }} />
-            {/* Raise Dispute / View Dispute Button */}
-            {hasActiveDispute ? (
-              <TouchableOpacity accessibilityRole="button"
-                style={styles.disputeButton}
-                onPress={() => (router as any).push(`/dispute/${activeDisputeId}`)}
-              >
-                <MaterialIcons name="gavel" size={18} color={theme.warningText} />
-                <Text style={styles.disputeButtonText}>View dispute</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity accessibilityRole="button"
-                style={styles.disputeButton}
-                onPress={() => setShowDisputeModal(true)}
-              >
-                <MaterialIcons name="gavel" size={18} color={theme.warningText} />
-                <Text style={styles.disputeButtonText}>Open a dispute</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Workflow Dispute Modal */}
-            {bounty && routeBountyId && (
-              <WorkflowDisputeModal
-                visible={showDisputeModal}
-                bountyId={routeBountyId}
-                bountyTitle={bounty.title}
-                initiatorId={currentUserId}
-                respondentId={String(bounty.poster_id || bounty.user_id)}
-                stage="review_verify"
-                onClose={() => setShowDisputeModal(false)}
-                onDisputeCreated={(disputeId) => {
-                  setShowDisputeModal(false);
-                  setHasActiveDispute(true);
-                  setActiveDisputeId(disputeId);
-                  Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
-                    { text: 'View Dispute', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
-                    { text: 'OK' },
-                  ]);
-                }}
-              />
-            )}
-          </>
-        )}
+      <ProofPhotos
+        label={`Photos (${proofItems.length})`}
+        cols={3}
+        height={96}
+        items={proofItems.map((item) => ({
+          key: item.id,
+          uri: item.type === 'image' ? item.uri || item.url || null : null,
+          label: item.name || 'Attachment',
+          icon: item.type === 'image' ? 'photo' : 'insert-drive-file',
+          onPress: () => askRemoveProof(item),
+        }))}
+        addTile={{ label: uploading ? 'Uploading…' : 'Add photo', onPress: handleAddProof, disabled: hasActiveDispute || uploading }}
       />
-    </View>
+
+      {hasActiveDispute && (
+        <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute." />
+      )}
+
+      <ConsequenceList
+        label="WHAT HAPPENS NEXT"
+        items={[
+          { icon: 'rate-review', title: `${Poster} checks your work`, detail: 'They can approve it or ask for a change.' },
+          ...(bounty.is_for_honor || !money
+            ? []
+            : [
+                { icon: 'lock' as const, title: `${money.gross} stays held until then`, detail: 'Nobody is paid yet.' },
+                { icon: 'account-balance-wallet' as const, title: `You get ${money.net} when ${poster} approves` },
+              ]),
+        ]}
+      />
+
+      <OtherOptions
+        label="More"
+        items={[
+          {
+            key: 'message',
+            label: `Message ${poster}`,
+            icon: 'chat-bubble-outline',
+            onPress: () => {
+              if (!routeBountyId) return;
+              router.push({ pathname: '/tabs/bounty-thread/[bountyId]', params: { bountyId: routeBountyId, role: 'hunter' } } as never);
+            },
+          },
+          hasActiveDispute
+            ? { key: 'view_dispute', label: 'View dispute', icon: 'gavel', onPress: () => (router as any).push(`/dispute/${activeDisputeId}`) }
+            : { key: 'open_dispute', label: 'Open a dispute', icon: 'gavel', onPress: () => setShowDisputeModal(true) },
+        ]}
+      />
+      {/* The task timer, off the main path. */}
+      <Text style={styles.timerHint} accessibilityLabel={`Time on this task: ${formatTime(timeElapsed)}`}>
+        {`Time on this task: ${formatTime(timeElapsed)}`}
+      </Text>
+
+      {/* Workflow Dispute Modal */}
+      {bounty && routeBountyId && (
+        <WorkflowDisputeModal
+          visible={showDisputeModal}
+          bountyId={routeBountyId}
+          bountyTitle={bounty.title}
+          initiatorId={currentUserId}
+          respondentId={String(bounty.poster_id || bounty.user_id)}
+          stage="review_verify"
+          onClose={() => setShowDisputeModal(false)}
+          onDisputeCreated={(disputeId) => {
+            setShowDisputeModal(false);
+            setHasActiveDispute(true);
+            setActiveDisputeId(disputeId);
+            Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
+              { text: 'View Dispute', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
+              { text: 'OK' },
+            ]);
+          }}
+        />
+      )}
+    </WorkspaceLayout>
   );
 }
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
+  focusField: { gap: 6 },
+  focusLabel: { color: theme.poster.ink2, fontSize: 15, fontWeight: '700' },
   container: {
     flex: 1,
     backgroundColor: theme.background,

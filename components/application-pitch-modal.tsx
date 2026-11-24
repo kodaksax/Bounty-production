@@ -1,13 +1,15 @@
 import * as React from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getPitchPrompt, getPitchRequirement, PITCH_REQUIRED_MIN_LENGTH } from '../lib/utils/pitch-requirement';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
-import { AppModal } from './ui/app-modal';
-import { Button } from './ui/button';
+import { AppModal, useModalContentHeight } from './ui/app-modal';
 import { TrustSafetyNotice } from './ui/trust-safety-notice';
 import { trustSafetyStrings } from '../lib/strings/trust-safety';
 import { detectOffPlatformRisk } from '../lib/utils/off-platform-risk';
+import { describeOfferSheet } from '../lib/utils/hunter-stage-copy';
+import { ConsequenceList } from './poster/blocks';
+import { PosterButton } from './poster/poster-button';
 
 export interface ApplicationPitchModalProps {
   visible: boolean;
@@ -30,6 +32,9 @@ export interface ApplicationPitchModalProps {
   onPitchSubmitted?: (pitch: string) => void;
   /** Fired when the primary action is pressed but the pitch is still too short. */
   onPitchBlocked?: (pitchLength: number) => void;
+  /** For "Offer to do …" and "If Jordan chooses you" (Focus-first H.2). */
+  jobTitle?: string;
+  posterName?: string | null;
 }
 
 /**
@@ -50,9 +55,12 @@ export function ApplicationPitchModal({
   onPitchStarted,
   onPitchSubmitted,
   onPitchBlocked,
+  jobTitle,
+  posterName,
 }: ApplicationPitchModalProps) {
   const { theme } = useAppThemeContext();
   const styles = React.useMemo(() => makeStyles(theme), [theme]);
+  const modalContentHeight = useModalContentHeight();
 
   const [pitch, setPitch] = React.useState('');
   // Set the first time a required pitch is submitted too short, so the button
@@ -101,25 +109,36 @@ export function ApplicationPitchModal({
     onSubmit(trimmed.length > 0 ? trimmed : null);
   };
 
-  const title = isForHonor ? 'Apply for this bounty?' : `Apply and earn $${netEarnings.toFixed(2)}?`;
-  const description = isForHonor
-    ? "The poster gets your application and can accept it. This is an honor bounty: no funds are held or paid. You can withdraw any time before they accept."
-    : `The poster gets your application and can accept it. If they do, $${grossAmount.toFixed(2)} is held in escrow before you start, and $${netEarnings.toFixed(2)} lands in your wallet once they approve your work. You can withdraw the application any time before they accept.`;
-
-  const primaryLabel = isForHonor ? 'Apply' : `Apply — earn $${netEarnings.toFixed(2)}`;
+  // Focus-first H.2. The amounts are calculateHunterEarnings' (via the
+  // caller's grossAmount, and describeOfferSheet for the take-home and fee).
+  const sheet = describeOfferSheet({
+    title: jobTitle,
+    posterName: posterName ?? null,
+    amount: isForHonor ? null : grossAmount,
+    isForHonor,
+  });
+  const primaryLabel = sheet.send;
 
   return (
     <AppModal visible={visible} onRequestClose={onCancel} variant="sheet" dismissable={!isSubmitting}>
-      <View style={styles.card}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.description}>{description}</Text>
-        <TrustSafetyNotice message={trustSafetyStrings.beforeAcceptance} />
+      <View style={[styles.card, modalContentHeight != null && { maxHeight: modalContentHeight }]}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.cardContent}
+        >
+          <Text style={styles.title} accessibilityRole="header">{sheet.title}</Text>
+          <ConsequenceList
+            label={sheet.label}
+            items={sheet.items.map((item) => ({ ...item, icon: item.icon as never }))}
+            testID="offer-consequences"
+          />
+          <TrustSafetyNotice message={trustSafetyStrings.beforeAcceptance} />
 
-        <View style={styles.pitchSection}>
+          <View style={styles.pitchSection}>
           <View style={styles.pitchLabelRow}>
-            <Text style={styles.pitchLabel}>Why me?</Text>
+            <Text style={styles.pitchLabel}>{requirement === 'required' ? 'Why you?' : sheet.field}</Text>
             {requirement === 'required' && <Text style={styles.requiredTag}>Required</Text>}
-            {requirement === 'optional' && <Text style={styles.optionalTag}>Optional</Text>}
           </View>
           <Text style={styles.pitchPrompt}>{prompt}</Text>
           <TextInput
@@ -152,22 +171,19 @@ export function ApplicationPitchModal({
               </Text>
             </View>
           )}
-        </View>
+          </View>
 
-        <View style={styles.actions}>
-          <Button variant="ghost" onPress={onCancel} disabled={isSubmitting} style={styles.cancelButton}>
-            Cancel
-          </Button>
-          <Button
-            variant="default"
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-            style={styles.submitButton}
-            accessibilityState={{ disabled: isSubmitting }}
-          >
-            {isSubmitting ? <ActivityIndicator size="small" color="#fff" /> : primaryLabel}
-          </Button>
-        </View>
+          <View style={styles.focusActions}>
+            <PosterButton
+              label={primaryLabel}
+              onPress={handleSubmit}
+              loading={isSubmitting}
+              loadingLabel="Sending your offer"
+              testID="offer-send"
+            />
+            <PosterButton kind="neutral" label={sheet.cancel} onPress={onCancel} disabled={isSubmitting} testID="offer-cancel" />
+          </View>
+        </ScrollView>
       </View>
     </AppModal>
   );
@@ -175,6 +191,7 @@ export function ApplicationPitchModal({
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
+    focusActions: { gap: 10, marginTop: 4 },
     card: {
       width: '100%',
       backgroundColor: theme.surface,
@@ -186,6 +203,7 @@ function makeStyles(theme: AppTheme) {
       paddingTop: 20,
       paddingBottom: 28,
     },
+    cardContent: { flexGrow: 1, gap: 12 },
     title: {
       fontSize: 18,
       fontWeight: '700',

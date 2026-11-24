@@ -57,6 +57,12 @@ export interface BountyThreadEvent {
   yourTurn: boolean;
   /** False once a later event has superseded the card. */
   live: boolean;
+  /**
+   * True when a later card replaced this one's content — "You sent the work"
+   * once a change was asked for. Drawn faded (Focus-first M.3). Narrower than
+   * `!live`: a card that simply happened earlier is not superseded.
+   */
+  superseded?: boolean;
   /** Free text carried by the card (pitch, completion note, feedback, reason). */
   note?: string | null;
   /** Kind-specific extras. */
@@ -253,6 +259,7 @@ export function buildBountyThreadEvents(input: BountyThreadInput): BountyThreadE
       live: awaitingReview,
       note: submission.message ?? null,
       meta: { proofCount, revisionCount: submission.revision_count ?? 0 },
+      superseded: hasRevision,
     });
 
     if (hasRevision) {
@@ -352,4 +359,125 @@ export function buildBountyThreadEvents(input: BountyThreadInput): BountyThreadE
 /** True when any card in the thread is waiting on the viewer. */
 export function threadNeedsViewer(events: BountyThreadEvent[]): boolean {
   return events.some(e => e.yourTurn);
+}
+
+// ── The pinned "next step" card (Focus-first M.1–M.3, H.6) ────────────────
+
+/** Actions the thread pins above the message box. Accept/decline keeps its two buttons on the card. */
+const PINNABLE: ReadonlySet<BountyThreadAction> = new Set(['submit_work', 'resubmit_work', 'review_and_pay', 'respond_cancellation']);
+
+export interface PinnedThreadCard {
+  event: BountyThreadEvent;
+  /** The viewer acts (YOUR NEXT STEP, with a button) or waits (WAITING FOR …, no button). */
+  mode: 'your_turn' | 'waiting';
+}
+
+/**
+ * The one card pinned above the message box: the viewer's own next step when
+ * there is one, otherwise the latest live card that is waiting on the other
+ * person. Null when nothing is open (or when the only step is accepting or
+ * passing on an application, which keeps its buttons on the card).
+ */
+export function selectPinnedThreadCard(events: readonly BountyThreadEvent[], role: BountyThreadRole): PinnedThreadCard | null {
+  if (events.some((e) => e.kind === 'dispute_opened' && e.live)) return null;
+
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind !== 'cancellation_requested' || !e.live) continue;
+    return { event: e, mode: e.yourTurn ? 'your_turn' : 'waiting' };
+  }
+
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.yourTurn && e.action && PINNABLE.has(e.action)) return { event: e, mode: 'your_turn' };
+  }
+  // DESIGN-GAP: an application waiting on the poster keeps its own Accept / Pass
+  // buttons on its card (existing, tested behaviour) and is not pinned.
+  if (events.some((e) => e.yourTurn && e.action === 'accept_or_decline')) return null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (!e.live || e.yourTurn) continue;
+    const waits =
+      (e.kind === 'work_submitted' && role === 'hunter') ||
+      (e.kind === 'applied' && role === 'hunter') ||
+      (e.kind === 'hired' && role === 'poster') ||
+      (e.kind === 'revision_requested' && role === 'poster') ||
+      (e.kind === 'cancellation_requested' && e.action === 'view_cancellation');
+    if (waits) return { event: e, mode: 'waiting' };
+  }
+  return null;
+}
+
+export interface PinnedCardCopy {
+  label: string;
+  title: string;
+  text: string | null;
+  /** Only when it is the viewer's turn. */
+  button: string | null;
+}
+
+/**
+ * The pinned card's words, in the handoff's copy with live names and money.
+ * `amount` is the reward ("$80"), `takeHome` the hunter's net ("$76"), both
+ * null for a for-honor job, which then has no money sentence.
+ */
+export function describePinnedCard(
+  pinned: PinnedThreadCard,
+  role: BountyThreadRole,
+  otherName: string,
+  money: { amount: string | null; takeHome: string | null }
+): PinnedCardCopy {
+  const named = !!otherName.trim();
+  const other = named ? otherName.trim() : role === 'poster' ? 'your helper' : 'the poster';
+  // At the start of a sentence. Only the fallback is capitalised: a username is shown as written.
+  const Other = named ? other : other.charAt(0).toUpperCase() + other.slice(1);
+  const OTHER = other.toUpperCase();
+  const { amount, takeHome } = money;
+  const e = pinned.event;
+  if (pinned.mode === 'your_turn') {
+    switch (e.action) {
+      case 'review_and_pay':
+        return { label: 'YOUR NEXT STEP', title: 'Check the work, then decide about payment', text: null, button: 'Review the completed work' };
+      case 'resubmit_work':
+        return {
+          label: 'YOUR NEXT STEP',
+          title: 'Make the change, then send the work again',
+          text: amount ? `${amount} is still held. Nothing is paid until ${other} approves.` : null,
+          button: 'Send updated work',
+        };
+      case 'respond_cancellation':
+        return { label: 'YOUR NEXT STEP', title: `${Other} asked to cancel`, text: null, button: 'Respond to the request' };
+      case 'submit_work':
+      default:
+        return {
+          label: 'YOUR NEXT STEP',
+          // DESIGN-GAP: the handoff's "When the TV is up" is job-specific; "the job" stands in.
+          title: `When the job is done, tell ${other} it's done`,
+          text: null,
+          button: `Tell ${other} it's done`,
+        };
+    }
+  }
+  switch (e.kind) {
+    case 'work_submitted':
+      return {
+        label: `WAITING FOR ${OTHER}`,
+        title: `${Other} is checking your work`,
+        text: amount && takeHome ? `${amount} is still held. You get ${takeHome} when ${other} approves.` : null,
+        button: null,
+      };
+    case 'applied':
+      return { label: `WAITING FOR ${OTHER}`, title: `${Other} hasn't chosen yet`, text: amount ? 'Nothing is held yet.' : null, button: null };
+    case 'hired':
+      return {
+        label: `WAITING FOR ${OTHER}`,
+        title: `${Other} is working on it`,
+        text: amount ? `Your ${amount} is held by Bounty. Nobody is paid until you approve.` : null,
+        button: null,
+      };
+    case 'revision_requested':
+      return { label: `WAITING FOR ${OTHER}`, title: `${Other} is making the change you asked for`, text: null, button: null };
+    default:
+      return { label: `WAITING FOR ${OTHER}`, title: `${Other} is looking at your request`, text: null, button: null };
+  }
 }

@@ -42,10 +42,12 @@ interface Visit {
 export function useApplicationDecisionVisit({
   request,
   enabled,
+  surface = 'bounty_thread',
 }: {
   request: BountyRequestWithDetails | null
   /** Poster viewing a pending application. */
   enabled: boolean
+  surface?: 'bounty_thread' | 'workspace_person'
 }): { markEngaged: (action: ApplicationEngagement) => void } {
   const visitRef = useRef<Visit | null>(null)
   const engagedRef = useRef(false)
@@ -67,11 +69,11 @@ export function useApplicationDecisionVisit({
     void analyticsService
       .trackEvent('application_viewed', {
         ...buildApplicationEventProps(current),
-        surface: 'bounty_thread',
+        surface,
         first_view_this_session: firstView,
       })
       .catch(() => {})
-  }, [])
+  }, [surface])
 
   /** `trigger` null = the application stopped being pending: close silently. */
   const endVisit = useCallback((trigger: 'leave' | 'background' | null) => {
@@ -81,12 +83,12 @@ export function useApplicationDecisionVisit({
     void analyticsService
       .trackEvent('application_dismissed', {
         ...buildApplicationEventProps(visit.request),
-        surface: 'bounty_thread',
+        surface,
         trigger,
         dwell_ms: Math.round((Date.now() - visit.startedAt) / 100) * 100,
       })
       .catch(() => {})
-  }, [])
+  }, [surface])
 
   // A different application (or none) means a fresh engagement slate.
   useEffect(() => {

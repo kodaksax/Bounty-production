@@ -1,10 +1,11 @@
 import { palette } from './colors';
+import { derivePosterPalette, type PosterPaletteSource } from './poster-palette';
 import { fonts, radius, shadows, spacing, textStyles, typography } from './tokens';
 import type { AppTheme } from './types';
 
 // Light theme — #008E2A green leads on warm cream: #F1EBE3 screens, white
 // cards, #D7CBBD lines, graphite text.
-export const lightTheme: AppTheme = {
+const lightBase: PosterPaletteSource = {
   foreground:        palette.ink,         // #31363F — primary text/icons
   accent1:           palette.green[600],  // #008E2A — brand / CTA (lead)
   accent2:           palette.green[700],  // #00701F — highlight (lead-deep)
@@ -63,3 +64,5 @@ export const lightTheme: AppTheme = {
   shadows,
   fonts,
 };
+
+export const lightTheme: AppTheme = { ...lightBase, poster: derivePosterPalette(lightBase) };

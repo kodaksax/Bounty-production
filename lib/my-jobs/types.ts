@@ -73,7 +73,7 @@ export interface MyJob {
   /** What just happened, in a few words: "3 people want to help". */
   status: JobStatusLine;
   /** One or two sentences: what it means, and the money truth. */
-  detail: string;
+  detail: string | null;
   /** "Posted Monday · newest offer today". Null when there is nothing to add. */
   historyLine: string | null;
   cta: { label: string; target: JobTarget };

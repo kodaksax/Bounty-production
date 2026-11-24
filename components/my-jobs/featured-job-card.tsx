@@ -1,21 +1,29 @@
 /**
- * The one job that needs you, as the whole of My Jobs (design F.1 / H.4 / H.11).
+ * The one job that needs you, as the whole of My Jobs (design F.1 / S.2 /
+ * F.end on the poster side, H.4 / H.11 on both).
  *
- * Reads top to bottom as the four questions: whose job and how much, what
- * happened, what it means (with the money truth), and one next step under
- * the thumb. Anything else you can do with the job sits behind "Other options".
+ * Laid out as the handoff's `feature` block: the job's photo (or its
+ * category icon) with what it needs in words on the top-left pill and, for an
+ * account that works both sides, which side it is on the bottom-left; then
+ * whose job and how much, the title, what just happened, what it means with
+ * the money truth, the story so far, and one green next step. Anything else
+ * you can do with the job sits behind "Other options".
  */
 import { MaterialIcons } from '@expo/vector-icons'
 import { Image as ExpoImage } from 'expo-image'
 import * as React from 'react'
 import { useMemo, useState } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { StyleSheet, Text, TouchableOpacity, View, type LayoutChangeEvent } from 'react-native'
+import { getFeaturedFlag } from '../../lib/my-jobs/format'
 import type { ManageAction } from '../../lib/my-jobs/manage-actions'
 import type { MyJob } from '../../lib/my-jobs/types'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
+import { FOCUS, type PosterPalette } from '../../lib/themes/poster-palette'
 import type { AppTheme } from '../../lib/themes/types'
 import type { BountyLifecycleTone } from '../../lib/utils/bounty-lifecycle'
-import { JobSideLabel, ManageActionsList, NeedsYouMarker } from './job-bits'
+import { PosterButton } from '../poster/poster-button'
+import { SidePill } from '../poster/side-label'
+import { ManageActionsList } from './job-bits'
 
 export interface FeaturedJobCardProps {
   job: MyJob
@@ -23,31 +31,61 @@ export interface FeaturedJobCardProps {
   manageActions: ManageAction[]
   onPrimary: () => void
   onManageAction: (action: ManageAction) => void
+  /** Set when the main action goes to messages, so the job's own screen stays one tap away. */
+  onOpenJob?: () => void
+  /** Photo height; the screen shrinks it so everything below the card fits. */
+  heroHeight?: number
+  /** Where the card sits in the scroll content. */
+  onLayout?: (e: LayoutChangeEvent) => void
+  /** Height of everything under the photo, with "Other options" closed. */
+  onBodyHeight?: (height: number) => void
+}
+
+/** The smallest photo that still fits its pills: one on top, or one on top and one below. */
+export function minHeroHeight(showSideLabel: boolean): number {
+  return showSideLabel ? 116 : 72
 }
 
 export function toneColor(theme: AppTheme, tone: BountyLifecycleTone): string {
+  const p = theme.poster
   switch (tone) {
     case 'action':
     case 'positive':
-      return theme.primaryLight
+      return p.gt
     case 'warning':
-      return theme.warningText
+      return p.wt
     case 'neutral':
-      return theme.textSecondary
+      return p.ink2
     default:
-      return theme.text
+      return p.ink
   }
 }
 
-export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, onManageAction }: FeaturedJobCardProps) {
+function flagColor(p: PosterPalette, kind: ReturnType<typeof getFeaturedFlag>['kind']): string {
+  switch (kind) {
+    case 'attn':
+      return p.w
+    case 'done':
+      return p.g
+    case 'help':
+      return p.it
+    default:
+      return p.ink2
+  }
+}
+
+export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, onManageAction, onOpenJob, heroHeight, onLayout, onBodyHeight }: FeaturedJobCardProps) {
   const { theme } = useAppThemeContext()
+  const p = theme.poster
   const s = useMemo(() => makeStyles(theme), [theme])
   const [optionsOpen, setOptionsOpen] = useState(false)
   const statusColor = toneColor(theme, job.status.tone)
+  const flag = getFeaturedFlag(job)
+  const side = job.side === 'posted' ? 'posted' : job.finished ? 'did' : 'doing'
 
   return (
-    <View style={s.card} testID="featured-job-card">
-      <View style={s.hero}>
+    <View style={s.card} onLayout={onLayout} testID="featured-job-card">
+      <View style={[s.hero, heroHeight != null && { height: heroHeight }]}>
         {job.coverUri ? (
           <ExpoImage
             source={{ uri: job.coverUri }}
@@ -56,44 +94,42 @@ export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, 
             accessibilityLabel={job.side === 'posted' ? 'Your photo of the job' : 'Photo of the job'}
           />
         ) : (
-          <MaterialIcons name={job.icon} size={44} color={theme.text} style={{ opacity: 0.8 }} />
+          <MaterialIcons name={job.icon} size={44} color={p.photoInk} />
         )}
-        {job.needsYou || job.finished ? (
-          <View style={[s.heroPill, s.heroPillTop]}>
-            {job.needsYou ? (
-              <NeedsYouMarker />
-            ) : (
-              <View style={s.row}>
-                <MaterialIcons name="check-circle" size={16} color={theme.primaryLight} />
-                <Text style={[s.heroPillText, { color: theme.primaryLight }]}>Finished</Text>
-              </View>
-            )}
-          </View>
-        ) : null}
+        <View style={[s.pill, s.pillTop]} testID="featured-job-flag" accessibilityLabel={flag.text}>
+          <MaterialIcons name={flag.icon} size={18} color={flagColor(p, flag.kind)} />
+          <Text style={s.pillText}>{flag.text}</Text>
+        </View>
         {showSideLabel ? (
           <View style={s.heroSide}>
-            <JobSideLabel side={job.side} finished={job.finished} />
+            <SidePill side={side} size="large" testID={`side-label-${job.side}`} />
           </View>
         ) : null}
       </View>
 
-      <View style={s.body}>
-        <Text style={s.context} numberOfLines={1}>
+      <View
+        style={s.body}
+        onLayout={(e) => {
+          // Opening the options should scroll, not squeeze the photo.
+          if (!optionsOpen) onBodyHeight?.(e.nativeEvent.layout.height)
+        }}
+      >
+        <Text style={s.kicker} numberOfLines={1}>
           {job.contextLine}
         </Text>
         <Text style={s.title} accessibilityRole="header" numberOfLines={3}>
           {job.title}
         </Text>
 
-        <View style={[s.row, { marginTop: 10 }]} testID="featured-job-status">
-          <MaterialIcons name={job.status.icon} size={22} color={statusColor} />
+        <View style={s.statusRow} testID="featured-job-status">
+          <MaterialIcons name={job.status.icon} size={26} color={statusColor} />
           <Text style={[s.status, { color: statusColor }]}>{job.status.text}</Text>
         </View>
         {job.detail ? <Text style={s.detail}>{job.detail}</Text> : null}
 
         {job.historyLine ? (
           <View style={s.history}>
-            <MaterialIcons name="history" size={16} color={theme.textSecondary} />
+            <MaterialIcons name="history" size={18} color={p.ink2} />
             <Text style={s.historyText}>{job.historyLine}</Text>
           </View>
         ) : null}
@@ -107,8 +143,10 @@ export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, 
           testID="featured-job-cta"
         >
           <Text style={s.ctaText}>{job.cta.label}</Text>
-          <MaterialIcons name="arrow-forward" size={22} color={theme.onPrimary} />
+          <MaterialIcons name="arrow-forward" size={26} color={p.onFill} />
         </TouchableOpacity>
+
+        {onOpenJob ? <PosterButton kind="text" label="See the job" onPress={onOpenJob} testID="featured-job-open" /> : null}
 
         {manageActions.length > 0 ? (
           <View style={s.options}>
@@ -121,7 +159,7 @@ export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, 
               testID="featured-job-options"
             >
               <Text style={s.optionsText}>Other options</Text>
-              <MaterialIcons name={optionsOpen ? 'expand-less' : 'expand-more'} size={20} color={theme.textSecondary} />
+              <MaterialIcons name={optionsOpen ? 'expand-less' : 'expand-more'} size={20} color={p.ink2} />
             </TouchableOpacity>
             {optionsOpen ? (
               <ManageActionsList actions={manageActions} onSelect={onManageAction} title={job.title} />
@@ -134,67 +172,71 @@ export function FeaturedJobCard({ job, showSideLabel, manageActions, onPrimary, 
 }
 
 function makeStyles(t: AppTheme) {
+  const p = t.poster
   return StyleSheet.create({
     card: {
-      backgroundColor: t.surface,
-      borderRadius: 24,
+      backgroundColor: p.card,
+      borderRadius: FOCUS.featureRadius,
       overflow: 'hidden',
-      borderWidth: 1,
-      ...t.insetBorder,
-      ...t.shadows.sm,
+      ...t.shadows.lg,
     },
     hero: {
-      height: 180,
-      backgroundColor: t.surfaceSecondary,
+      height: FOCUS.featureHero,
+      backgroundColor: p.photo,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    heroPill: {
+    pill: {
       position: 'absolute',
-      backgroundColor: t.surface,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: p.card,
       borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingVertical: 7,
+      paddingLeft: 10,
+      paddingRight: 13,
+      ...t.shadows.sm,
     },
-    heroPillTop: { top: 12, left: 12 },
-    heroPillText: { fontSize: 14, fontWeight: '700' },
-    heroSide: { position: 'absolute', bottom: 12, left: 12 },
-    body: { padding: 20, gap: 4 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    context: { color: t.textSecondary, fontSize: 15, fontWeight: '600' },
-    title: { color: t.text, fontSize: 24, fontWeight: '800', lineHeight: 30, marginTop: 2 },
-    status: { flex: 1, fontSize: 19, fontWeight: '800' },
-    detail: { color: t.textSecondary, fontSize: 16, lineHeight: 23, marginTop: 4 },
+    pillTop: { top: 14, left: 14 },
+    pillText: { color: p.ink, fontSize: 15, fontWeight: '800' },
+    heroSide: { position: 'absolute', bottom: 14, left: 14 },
+    body: { paddingTop: 22, paddingHorizontal: 22, paddingBottom: 24, gap: 10 },
+    kicker: { color: p.ink2, fontSize: 15, fontWeight: '700' },
+    title: { color: p.ink, fontSize: FOCUS.featureTitle, fontWeight: '800', lineHeight: 30, letterSpacing: -0.3 },
+    statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 2 },
+    status: { flex: 1, fontSize: FOCUS.featureStatus, fontWeight: '800', lineHeight: 26 },
+    detail: { color: p.ink2, fontSize: FOCUS.body, lineHeight: 25 },
     history: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      gap: 6,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: t.border,
-      marginTop: 12,
+      gap: 8,
+      borderTopWidth: 1,
+      borderTopColor: p.line,
+      marginTop: 2,
       paddingTop: 12,
     },
-    historyText: { flex: 1, color: t.textSecondary, fontSize: 14, lineHeight: 20 },
+    historyText: { flex: 1, color: p.ink2, fontSize: 15, lineHeight: 22 },
     cta: {
-      marginTop: 16,
-      minHeight: 56,
-      borderRadius: 16,
-      backgroundColor: t.primary,
+      marginTop: 6,
+      minHeight: FOCUS.featureAction,
+      borderRadius: 18,
+      backgroundColor: p.g,
       paddingHorizontal: 20,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
+      gap: 10,
     },
-    ctaText: { flex: 1, color: t.onPrimary, fontSize: 18, fontWeight: '800' },
-    options: { marginTop: 8 },
+    ctaText: { flex: 1, color: p.onFill, fontSize: 19, fontWeight: '700' },
+    options: { marginTop: 2 },
     optionsToggle: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 4,
-      minHeight: 44,
+      minHeight: FOCUS.minTouch,
     },
-    optionsText: { color: t.textSecondary, fontSize: 15, fontWeight: '700' },
+    optionsText: { color: p.ink2, fontSize: 15, fontWeight: '700' },
   })
 }

@@ -5,7 +5,6 @@ import { FEED_FALLBACK, useSafeBack } from '../../../../hooks/useSafeBack';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -24,17 +23,23 @@ import { describeBountyUpdateError } from '../../../../lib/services/bounty-updat
 import { bountyHoldsUnreleasedEscrow } from '../../../../lib/utils/payment-architecture';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
-import { PLATFORM_FEE_DISPLAY, calculateHunterEarnings } from '../../../../lib/constants/fees';
-import { useWallet } from '../../../../lib/wallet-context';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 import { withAlpha } from '../../../../lib/utils';
-import { HunterStageTimeline, type HunterStage } from '../../../../components/hunter-stage-timeline';
+import { HunterStageScreen } from '../../../../components/hunter/hunter-stage-view';
+import { useHunterHelp } from '../../../../components/hunter/use-hunter-help';
+import { useAuthContext } from '../../../../hooks/use-auth-context';
+import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
+import { firstName, formatJobAmount } from '../../../../lib/my-jobs/format';
+import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
+import { bountyAppTabPath } from '../../../../lib/navigation/bounty-app-tab';
+import { trackWorkspacePrimaryTapped } from '../../../../lib/services/focus-analytics';
+import { describeHunterStage, hunterReceiptRows, type HunterActionKey } from '../../../../lib/utils/hunter-stage-copy';
 
 export default function HunterPayoutScreen() {
   const { theme } = useAppThemeContext();
   const styles = React.useMemo(() => makeStyles(theme), [theme]);
-  const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
+  const { bountyId, sent } = useLocalSearchParams<{ bountyId?: string; sent?: string }>();
   const router = useRouter();
   // Push notifications can open this screen with nothing under it; fall
   // back to this bounty's hunter hub rather than leaving back dead.
@@ -43,21 +48,25 @@ export default function HunterPayoutScreen() {
   );
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
-  const { balance } = useWallet();
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [request, setRequest] = useState<BountyRequest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentStage] = useState<HunterStage>('payout');
   const [isPaidOut, setIsPaidOut] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   // submitted_at of this hunter's submission while it waits on the poster.
   const [pendingSubmittedAt, setPendingSubmittedAt] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const worksBothSides = useWorksBothSides(currentUserId);
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [bountyId]);
+
+  // The resolved lifecycle (shared with the poster and My Jobs) drives the copy.
+  const { session } = useAuthContext();
+  const lifecycle = useBountyLifecycle(routeBountyId, session?.user?.id ?? currentUserId ?? null);
 
   useEffect(() => {
     if (!routeBountyId) {
@@ -82,7 +91,10 @@ export default function HunterPayoutScreen() {
       setBounty(bountyData);
 
       // Check if bounty is completed (poster released payout)
-      setIsPaidOut(bountyData.status === 'completed');
+      setIsPaidOut(
+        bountyData.status === 'completed' ||
+          (bountyData.status === 'archived' && !!(bountyData as any).completed_at)
+      );
 
       // The review deadline is informational: never block the screen on it.
       completionService
@@ -227,10 +239,78 @@ export default function HunterPayoutScreen() {
     );
   };
 
-  // "The poster has until Friday at 3:00 PM to approve…" (trust-spine T6).
+  // "Jordan has until Tuesday at 12:40 pm to approve…" (trust-spine T6).
+  // getReviewDeadlineStatus returns nothing while REVIEW_WINDOW_ENABLED is off.
   const reviewDeadline = isPaidOut ? null : getReviewDeadlineStatus(pendingSubmittedAt, 'hunter');
 
-  if (isLoading) {
+  const posterFirst = firstName(lifecycle.otherParty.name);
+  const view = React.useMemo(() => {
+    if (!bounty || !lifecycle.state) return null;
+    return describeHunterStage({
+      bounty: bounty as any,
+      lifecycle: lifecycle.state,
+      posterName: lifecycle.otherParty.name,
+      requestStatus: request?.status ?? null,
+      submission: lifecycle.submission,
+      hasDispute: lifecycle.hasDispute,
+      reviewDeadline: reviewDeadline ? reviewDeadline.deadline : null,
+    });
+  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, request?.status, reviewDeadline]);
+
+  // H.9: "Sent to Jordan." straight after sending the work.
+  React.useEffect(() => {
+    if (sent === 'work' && view?.screenId === 'H.9') setToast(`Sent to ${posterFirst ?? 'the poster'}.`);
+  }, [sent, view?.screenId, posterFirst]);
+
+  const openThread = React.useCallback(() => {
+    if (!routeBountyId) return;
+    router.push({ pathname: '/tabs/bounty-thread/[bountyId]', params: { bountyId: routeBountyId, role: 'hunter' } } as never);
+  }, [routeBountyId, router]);
+
+  const contactSupport = React.useCallback(() => {
+    if (!routeBountyId) return;
+    router.push({ pathname: '/support/contact', params: { bountyId: routeBountyId, bountyTitle: bounty?.title ?? '' } } as never);
+  }, [routeBountyId, bounty?.title, router]);
+
+  const help = useHunterHelp({
+    bountyId: routeBountyId,
+    posterName: posterFirst,
+    working: view?.screenId === 'H.9',
+    workSubmitted: true,
+    disputeOpen: lifecycle.hasDispute,
+    heldAmount: bounty && !bounty.is_for_honor ? formatJobAmount(bounty.amount) : null,
+    openThread,
+    requestCancellation: () => {},
+    contactSupport,
+  });
+
+  const onAction = React.useCallback(
+    (key: HunterActionKey) => {
+      if (!routeBountyId || !view) return;
+      if (view.primary?.key === key) trackWorkspacePrimaryTapped({ bountyId: routeBountyId, side: 'doing', screenId: view.screenId, action: key });
+      switch (key) {
+        case 'message':
+          openThread();
+          return;
+        case 'see_wallet':
+          router.push(bountyAppTabPath('wallet') as never);
+          return;
+        case 'find_work':
+          router.replace(bountyAppTabPath('bounty') as never);
+          return;
+        case 'see_report':
+        case 'add_info':
+          if (lifecycle.disputeId) router.push(`/dispute/${lifecycle.disputeId}` as never);
+          else router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId, from: 'in-progress' } } as never);
+          return;
+        default:
+          return;
+      }
+    },
+    [routeBountyId, view, openThread, router, lifecycle.disputeId]
+  );
+
+  if (isLoading || lifecycle.isLoading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
         <HunterDashboardSkeleton />
@@ -238,7 +318,7 @@ export default function HunterPayoutScreen() {
     );
   }
 
-  if (error || !bounty || !request) {
+  if (error || !bounty || !request || !view) {
     return (
       <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
         <MaterialIcons name="error-outline" size={48} color={theme.errorText} />
@@ -257,178 +337,35 @@ export default function HunterPayoutScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity accessibilityLabel="Go back" accessibilityRole="button" style={styles.backIcon} onPress={goBack}>
-          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payment</Text>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Bounty Info Card */}
-        <View style={styles.bountyInfoCard}>
-          <Text style={styles.bountyTitle} numberOfLines={2}>
-            {bounty.title}
-          </Text>
-          <Text style={styles.bountyAmount}>
-            {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
-          </Text>
-        </View>
-
-        {/* Timeline */}
-        <HunterStageTimeline currentStage={currentStage} />
-
-        {/* Payout Status */}
-        {!bounty.is_for_honor && (
-          <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
-        )}
-        {!isPaidOut ? (
-          <View style={styles.waitingPanel}>
-            <MaterialIcons name="hourglass-empty" size={32} color={theme.warningText} />
-            <Text style={styles.waitingTitle}>Waiting for approval</Text>
-            <Text style={styles.waitingText}>
-              {bounty.is_for_honor
-                ? "Your work is with the poster for review. You'll be notified as soon as they approve it — nothing to do until then."
-                : `Your work is with the poster for review. When they approve it, $${calculateHunterEarnings(
-                    bounty.amount
-                  ).net.toFixed(
-                    2
-                  )} can be released through Bounty. Processing or dispute review may delay payment. You'll be notified of updates.`}
-            </Text>
-            {reviewDeadline && (
-              <View style={styles.deadlineRow} accessibilityRole="text">
-                <MaterialIcons
-                  name={reviewDeadline.overdue ? 'support-agent' : 'schedule'}
-                  size={16}
-                  color={theme.warningText}
-                />
-                <Text style={styles.deadlineText}>{reviewDeadline.message}</Text>
-              </View>
-            )}
-            <View style={styles.statusBadge}>
-              <MaterialIcons name="pending" size={16} color={theme.warningText} />
-              <Text style={styles.statusText}>Waiting on the poster</Text>
-            </View>
-          </View>
-        ) : (
-          <>
-            {/* Success Panel */}
-            <View style={styles.successPanel}>
-              <MaterialIcons name="check-circle" size={48} color={theme.primaryLight} />
-              <Text style={styles.successTitle}>
-                {bounty.is_for_honor ? 'Completed for Honor' : 'Bounty Completed'}
-              </Text>
-              <Text style={styles.successText}>
-                {bounty.is_for_honor
-                  ? 'The poster has approved your work.'
-                  : 'The bounty is marked complete. Check Wallet for payment status and available funds.'}
-              </Text>
-              {!bounty.is_for_honor && (
-                <View style={styles.payoutAmountCard}>
-                  <Text style={styles.payoutLabel}>Your earnings</Text>
-                  <Text style={styles.payoutAmount}>
-                    ${calculateHunterEarnings(bounty.amount).net.toFixed(2)}
-                  </Text>
-                  <Text style={styles.payoutSubtext}>Check Wallet for when it’s available</Text>
-                </View>
-              )}
-              {bounty.is_for_honor && (
-                <View style={styles.honorCard}>
-                  <MaterialIcons name="favorite" size={32} color={theme.primaryLight} />
-                  <Text style={styles.honorTitle}>Completed for Honor</Text>
-                  <Text style={styles.honorText}>
-                    Thank you for contributing to the community!
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Hunter -> poster rating. Where the "Please rate the poster"
-                notification lands; renders only when the server says this
-                hunter can still rate (completed transaction, not yet rated). */}
-            {routeBountyId && <RateCounterpartyCard bountyId={routeBountyId} />}
-
-            {/* Current Balance */}
-            {!bounty.is_for_honor && (
-              <View style={styles.balanceCard}>
-                <Text style={styles.balanceLabel}>Wallet balance</Text>
-                <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
-              </View>
-            )}
-
-            {/* Receipt */}
-            {!bounty.is_for_honor && (
-              <View style={styles.receiptCard}>
-                <View style={styles.receiptHeader}>
-                  <MaterialIcons name="receipt" size={24} color={theme.primaryLight} />
-                  <Text style={styles.receiptTitle}>Receipt</Text>
-                </View>
-                <View style={styles.receiptDivider} />
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Bounty</Text>
-                  <Text style={styles.receiptValue}>{bounty.title}</Text>
-                </View>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Bounty amount</Text>
-                  <Text style={styles.receiptValue}>
-                    ${calculateHunterEarnings(bounty.amount).gross.toFixed(2)}
-                  </Text>
-                </View>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Service fee ({PLATFORM_FEE_DISPLAY})</Text>
-                  <Text style={styles.receiptValue}>
-                    −${calculateHunterEarnings(bounty.amount).fee.toFixed(2)}
-                  </Text>
-                </View>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Paid to you</Text>
-                  <Text style={styles.receiptValue}>
-                    ${calculateHunterEarnings(bounty.amount).net.toFixed(2)}
-                  </Text>
-                </View>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Date</Text>
-                  <Text style={styles.receiptValue}>{new Date().toLocaleDateString()}</Text>
-                </View>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Status</Text>
-                  <View style={styles.statusPill}>
-                    <MaterialIcons name="check-circle" size={16} color={theme.primaryLight} />
-                    <Text style={styles.statusPillText}>Completed</Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Actions */}
-            <View style={styles.actionsContainer}>
-              <TouchableOpacity accessibilityRole="button"
-                style={[styles.actionButton, styles.archiveButton]}
-                onPress={handleArchive}
-                disabled={isProcessing}
-              >
-                <MaterialIcons name="archive" size={20} color={theme.onPrimary} />
-                <Text style={styles.actionButtonText}>Archive</Text>
-              </TouchableOpacity>
-              <TouchableOpacity accessibilityRole="button"
-                style={[styles.actionButton, styles.deleteButton]}
-                onPress={handleDelete}
-                disabled={isProcessing}
-              >
-                <MaterialIcons name="delete" size={20} color={theme.onPrimary} />
-                <Text style={styles.actionButtonText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </View>
+    <HunterStageScreen
+      view={view}
+      bounty={bounty as any}
+      posterName={lifecycle.otherParty.name}
+      worksBothSides={worksBothSides}
+      onBack={goBack}
+      onAction={onAction}
+      toast={toast}
+      onToastHide={() => setToast(null)}
+      receipt={bounty.is_for_honor ? null : hunterReceiptRows(lifecycle.otherParty.name, bounty.amount)}
+      // Hunter -> poster rating. Where the "Please rate the poster"
+      // notification lands; renders only when the server says this hunter
+      // can still rate (completed transaction, not yet rated).
+      rating={isPaidOut && routeBountyId ? <RateCounterpartyCard bountyId={routeBountyId} /> : null}
+      help={help}
+      moreExtra={
+        isPaidOut && bounty.status !== 'archived'
+          ? [
+              { key: 'archive', label: 'Archive', icon: 'archive', busy: isProcessing, onPress: handleArchive },
+              { key: 'delete', label: 'Delete', icon: 'delete', danger: true, busy: isProcessing, onPress: handleDelete },
+            ]
+          : []
+      }
+    >
+      {/* Payout Status */}
+      {!bounty.is_for_honor && (
+        <TrustSafetyNotice message={trustSafetyStrings.paymentProtection} />
+      )}
+    </HunterStageScreen>
   );
 }
 

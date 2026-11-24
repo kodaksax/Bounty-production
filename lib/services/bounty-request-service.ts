@@ -286,6 +286,8 @@ export const bountyRequestService = {
     status?: string;
     bountyId?: string | number;
     userId?: string;
+    page?: number;
+    pageSize?: number;
     /**
      * Rethrow instead of resolving `[]`, so a caller can tell "you have no
      * requests" from "we couldn't load them" (My Jobs keeps its last list).
@@ -298,9 +300,14 @@ export const bountyRequestService = {
         let rq: any = supabase.from('bounty_requests').select('*');
         // Guard `.order()` for minimal test mocks
         if (typeof rq.order === 'function') rq = rq.order('created_at', { ascending: false });
+        if (typeof rq.order === 'function') rq = rq.order('id', { ascending: false });
         if (options?.status) rq = rq.eq('status', options.status);
         if (options?.bountyId) rq = rq.eq('bounty_id', String(options.bountyId));
         if (options?.userId) rq = rq.eq('hunter_id', options.userId);
+        if (options?.page && options?.pageSize && typeof rq.range === 'function') {
+          const from = (Math.max(1, options.page) - 1) * Math.max(1, options.pageSize);
+          rq = rq.range(from, from + Math.max(1, options.pageSize) - 1);
+        }
 
         const { data: reqs, error } = await rq;
         if (error) throw error;
@@ -411,7 +418,9 @@ export const bountyRequestService = {
       const params = new URLSearchParams();
       if (options?.status) params.append('status', options.status);
       if (options?.bountyId) params.append('bounty_id', String(options.bountyId));
-      if (options?.userId) params.append('hunter_id', options.userId);
+      if (options?.userId) params.append('user_id', options.userId);
+      if (options?.page) params.append('page', String(options.page));
+      if (options?.pageSize) params.append('limit', String(options.pageSize));
 
       // Backend returns joined bounty + profile details on the same endpoint
       const url = `${API_BASE_URL}/api/bounty-requests${params.toString() ? `?${params.toString()}` : ''}`;

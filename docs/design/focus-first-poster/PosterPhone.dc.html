@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <link rel="stylesheet" href="_ds/bounty-design-system-106e87c4-eebe-469e-926e-ec0ce20ed839/tokens/typography.css">
+  <script src="_ds/bounty-design-system-106e87c4-eebe-469e-926e-ec0ce20ed839/_ds_bundle.js"></script>
+  <style>:root{--p-bg:#F1EBE3;--p-card:#FFFFFF;--p-ink:#31363F;--p-ink2:#585E69;--p-line:#E2DBD1;--p-chip:#EAE3D9;--p-g:#008E2A;--p-gt:#00701F;--p-gpill:#00701F;--p-gpillfg:#FFFFFF;--p-gtint:#E2F0E4;--p-w:#C98A3A;--p-wt:#7A4F14;--p-wtint:#F7EAD6;--p-e:#C24A42;--p-etint:#F6E0DE;--p-it:#2C5597;--p-itint:#E1E9F5;--p-dt:#43449E;--p-dtint:#E5E5F6;--p-ft:#653A99;--p-ftint:#EEE6F7;--p-photo:#D8CDBF;--p-scrim:rgba(20,22,26,.5)} [data-pt="dark"]{--p-bg:#1B1E24;--p-card:#22262C;--p-ink:#F1EBE3;--p-ink2:#C2BCB3;--p-line:#353A42;--p-chip:#2D3239;--p-g:#008E2A;--p-gt:#1FAE49;--p-gpill:#1FAE49;--p-gpillfg:#0E1A12;--p-gtint:#1D3324;--p-w:#C98A3A;--p-wt:#E9B872;--p-wtint:#3A2F20;--p-e:#C24A42;--p-etint:#3B2523;--p-it:#A3C1F2;--p-itint:#232E40;--p-dt:#BDBEF6;--p-dtint:#2B2C42;--p-ft:#CDAEF2;--p-ftint:#2F2742;--p-photo:#4A4F57;--p-scrim:rgba(0,0,0,.6)}</style>
+</helmet>
+<div id="{{ v.id }}" style="width:406px;display:flex;flex-direction:column;gap:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#31363F">
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:14px;font-weight:800;background:#31363F;color:#FFFFFF;border-radius:6px;padding:4px 8px">{{ v.num }}</span><span style="font-size:14px;font-weight:800;border-radius:6px;padding:4px 8px;background:{{ v.layerBg }};color:{{ v.layerFg }}">{{ v.layer }}</span><sc-if value="{{ v.isDark }}"><span style="font-size:14px;font-weight:800;border-radius:6px;padding:4px 8px;background:#1B1E24;color:#F1EBE3">DARK</span></sc-if></div>
+    <div style="font-size:18px;font-weight:800;line-height:1.3">{{ v.label }}</div>
+    <div style="font-family:var(--font-mono);font-size:14px;color:#585E69">{{ v.route }}</div>
+  </div>
+  <div style="width:406px;box-sizing:border-box;border-radius:52px;background:#0B0F14;padding:8px;box-shadow:0 24px 60px rgba(17,24,39,.22)">
+    <div data-pt="{{ v.theme }}" style="border-radius:44px;overflow:hidden;background:{{ v.bg }};min-height:844px;height:{{ v.h }};display:flex;flex-direction:column;position:relative;color:var(--p-ink)">
+      <div style="height:50px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 32px;font-size:16px;font-weight:600;color:{{ v.sbCol }};background:{{ v.sbBg }}"><span>9:41</span><span style="display:flex;gap:4px;font-family:'Material Icons';font-weight:400;font-size:18px;line-height:1"><span>signal_cellular_alt</span><span>wifi</span><span>battery_full</span></span></div>
+      <div style="padding:4px 20px 24px;display:flex;flex-direction:column;gap:16px;flex:1">
+        <sc-for list="{{ v.blocks }}" as="b" hint-placeholder-count="5"><dc-import name="PosterBlock" b="{{ b }}" hint-size="100%,60px"></dc-import></sc-for>
+      </div>
+      <sc-if value="{{ v.hasFoot }}" hint-placeholder-val="{{ false }}"><div style="padding:{{ v.footPad }};display:flex;flex-direction:column;gap:10px;background:{{ v.footBg }};border-top:{{ v.footBd }}"><sc-for list="{{ v.foot }}" as="b" hint-placeholder-count="1"><dc-import name="PosterBlock" b="{{ b }}" hint-size="100%,56px"></dc-import></sc-for></div></sc-if>
+      <sc-if value="{{ v.hasOverlay }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;background:var(--p-scrim)"></div>
+        <sc-if value="{{ v.isSheet }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:0;right:0;bottom:0;background:var(--p-card);border-radius:28px 28px 0 0;padding:10px 20px 30px;display:flex;flex-direction:column;gap:14px" role="dialog"><sc-for list="{{ v.overlay }}" as="b" hint-placeholder-count="3"><dc-import name="PosterBlock" b="{{ b }}" hint-size="100%,56px"></dc-import></sc-for></div></sc-if>
+        <sc-if value="{{ v.isDialog }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px"><div style="background:var(--p-card);border-radius:24px;padding:24px;display:flex;flex-direction:column;gap:16px;width:100%;box-sizing:border-box;box-shadow:0 12px 40px rgba(0,0,0,.25)" role="alertdialog"><sc-for list="{{ v.overlay }}" as="b" hint-placeholder-count="3"><dc-import name="PosterBlock" b="{{ b }}" hint-size="100%,56px"></dc-import></sc-for></div></div></sc-if>
+      </sc-if>
+    </div>
+  </div>
+  <sc-if value="{{ v.hasAnn }}" hint-placeholder-val="{{ true }}">
+    <div style="background:#FFFFFF;border-radius:16px;border:1px solid #E2DBD1;overflow:hidden">
+      <div style="display:grid;grid-template-columns:1fr 56px 1.1fr 66px;gap:8px;padding:9px 12px;background:#31363F;color:#FFFFFF;font-size:13px;font-weight:800"><span>Element</span><span>Class</span><span>Built on</span><span>Layer</span></div>
+      <sc-for list="{{ v.ann }}" as="a" hint-placeholder-count="4">
+        <div style="display:flex;flex-direction:column;gap:4px;padding:9px 12px;border-top:1px solid #EFEAE3">
+          <div style="display:grid;grid-template-columns:1fr 56px 1.1fr 66px;gap:8px;font-size:14px;line-height:1.35;align-items:start"><span style="font-weight:700">{{ a.el }}</span><span style="font-weight:800;font-size:13px;border-radius:6px;padding:2px 5px;text-align:center;background:{{ a.cBg }};color:{{ a.cFg }}">{{ a.cls }}</span><span style="color:#585E69;font-size:13px;font-family:var(--font-mono);word-break:break-word">{{ a.on }}</span><span style="font-weight:800;font-size:13px;color:{{ a.lFg }}">{{ a.layer }}</span></div>
+          <sc-if value="{{ a.hasOd }}"><div style="font-size:13px;font-weight:700;color:#2C5597">Open: {{ a.od }}</div></sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+  <sc-if value="{{ v.hasSpec }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:16px;border:1px solid #E2DBD1;padding:2px 14px"><sc-for list="{{ v.spec }}" as="r" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:92px 1fr;gap:10px;padding:9px 0;border-bottom:{{ r.bb }};font-size:14px;line-height:1.45"><span style="font-weight:800;color:#585E69">{{ r.k }}</span><div style="display:flex;flex-direction:column;gap:5px"><sc-for list="{{ r.vals }}" as="x" hint-placeholder-count="1"><span style="display:flex;gap:6px;align-items:flex-start"><sc-if value="{{ x.hasTag }}"><span style="font-size:12px;font-weight:800;border-radius:5px;padding:1px 6px;background:{{ x.bg }};color:{{ x.fg }};white-space:nowrap;margin-top:1px">{{ x.tag }}</span></sc-if><span>{{ x.t }}</span></span></sc-for></div></div></sc-for></div></sc-if>
+  <sc-for list="{{ v.notes }}" as="n" hint-placeholder-count="1"><div style="display:flex;gap:8px;font-size:15px;line-height:1.5;color:#31363F"><span style="color:#008E2A;font-weight:800">—</span><span>{{ n }}</span></div></sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:420,&quot;height&quot;:1100},&quot;p&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props.p || {};
+    const L = { MVP: ['#E2F0E4', '#00701F'], Future: ['#EEE6F7', '#653A99'], 'MVP + ops': ['#F7EAD6', '#7A4F14'], 'MVP + E': ['#EEE6F7', '#653A99'], Before: ['#F6E0DE', '#9E332C'] };
+    const layer = p.layer || 'MVP';
+    const bgKey = p.bg || 'bg';
+    const clsCol = (c) => /F/.test(c) ? ['#F7EAD6', '#7A4F14'] : /E/.test(c) ? ['#EEE6F7', '#653A99'] : ['#E2F0E4', '#00701F'];
+    const ann = (p.ann || []).map(a => { const cc = clsCol(a[1] || ''); const lay = a[3] || 'MVP'; return { el: a[0], cls: a[1], on: a[2] || '—', layer: lay, od: a[4] || '', hasOd: !!a[4], cBg: cc[0], cFg: cc[1], lFg: /Future/.test(lay) ? '#653A99' : '#00701F' }; });
+    const foot = p.foot || [];
+    const tabOnly = foot.length === 1 && foot[0].t === 'tabbar';
+    const ov = p.overlay || null;
+    return { v: {
+      id: p.id, num: p.num, label: p.label, route: p.route || '', layer, layerBg: (L[layer] || L.MVP)[0], layerFg: (L[layer] || L.MVP)[1],
+      theme: p.theme || 'light', isDark: p.theme === 'dark',
+      bg: bgKey === 'card' ? 'var(--p-card)' : bgKey === 'black' ? '#0B0F14' : 'var(--p-bg)',
+      sbCol: bgKey === 'black' ? '#FFFFFF' : 'var(--p-ink)', sbBg: p.chat ? 'var(--p-card)' : 'transparent',
+      h: (ov || p.fixed) ? '844px' : 'auto',
+      blocks: p.blocks || [], foot, hasFoot: foot.length > 0,
+      footPad: tabOnly ? '0 20px 30px' : '12px 20px 30px', footBg: tabOnly ? 'transparent' : 'var(--p-card)', footBd: tabOnly ? 'none' : '1px solid var(--p-line)',
+      hasOverlay: !!ov, isSheet: !!ov && ov.type !== 'dialog', isDialog: !!ov && ov.type === 'dialog', overlay: ov ? ov.blocks : [],
+      ann, hasAnn: ann.length > 0, notes: p.notes || [],
+      hasSpec: !!p.spec, spec: (() => {
+        if (!p.spec) return [];
+        const T = { V: ['Verified', '#E2F0E4', '#00701F'], P: ['Proposed UI', '#E1E9F5', '#2C5597'], E: ['New eng', '#EEE6F7', '#653A99'], O: ['Ops / policy', '#F7EAD6', '#7A4F14'] };
+        const s = p.spec;
+        const plain = (x) => (Array.isArray(x) ? x : [x]).filter(Boolean).map(t => ({ t, hasTag: false }));
+        const tagged = (arr) => (arr || []).map(x => { const k = T[x[0]] || T.P; return { t: x[1], hasTag: true, tag: k[0], bg: k[1], fg: k[2] }; });
+        const rows = [['Goal', plain(s.goal)], ['Primary', plain(s.primary)], ['Secondary', plain(s.secondary)], ['Needs to know', plain(s.info)], ['Entry → exit', plain(s.flow)], ['Backend', tagged(s.backend)], ['Verify', plain(s.verify)]].filter(r => r[1].length);
+        return rows.map((r, i) => ({ k: r[0], vals: r[1], bb: i < rows.length - 1 ? '1px solid #EFEAE3' : 'none' }));
+      })(),
+    } };
+  }
+}
+</script>
+</body>
+</html>

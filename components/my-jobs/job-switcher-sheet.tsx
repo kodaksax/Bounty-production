@@ -14,7 +14,9 @@ import type { ManageAction } from '../../lib/my-jobs/manage-actions'
 import { getJobManageActions } from '../../lib/my-jobs/manage-actions'
 import type { MyJob } from '../../lib/my-jobs/types'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
+import { FOCUS } from '../../lib/themes/poster-palette'
 import type { AppTheme } from '../../lib/themes/types'
+import { PosterButton } from '../poster/poster-button'
 import { JobThumb, ManageActionsList, NeedsYouMarker } from './job-bits'
 import { MyJobsSheet, SheetSectionLabel } from './my-jobs-sheet'
 
@@ -70,7 +72,7 @@ export function JobSwitcherSheet({
             accessibilityState={{ selected: showing }}
             accessibilityLabel={`${job.title}. ${job.status.text}${job.needsYou ? '. Needs you' : ''}${showing ? '. Showing' : ''}`}
           >
-            <JobThumb coverUri={job.coverUri} icon={job.icon} size={48} />
+            <JobThumb coverUri={job.coverUri} icon={job.icon} size={50} />
             <View style={{ flex: 1 }}>
               <Text style={s.rowTitle} numberOfLines={2}>
                 {job.title}
@@ -126,7 +128,7 @@ export function JobSwitcherSheet({
 
       {showGroups && posted.length > 0 ? <SheetSectionLabel>Jobs you posted</SheetSectionLabel> : null}
       {posted.map(renderRow)}
-      {showGroups && doing.length > 0 ? <SheetSectionLabel>Work you're doing</SheetSectionLabel> : null}
+      {showGroups && doing.length > 0 ? <SheetSectionLabel>{"Work you're doing"}</SheetSectionLabel> : null}
       {doing.map(renderRow)}
 
       {totalOffers > 0 ? (
@@ -162,35 +164,28 @@ export function JobSwitcherSheet({
         </>
       ) : null}
 
-      <TouchableOpacity
-        onPress={onPostJob}
-        style={s.post}
-        accessibilityRole="button"
-        accessibilityLabel="Post another job"
-      >
-        <MaterialIcons name="add" size={22} color={theme.primaryLight} />
-        <Text style={s.postText}>Post another job</Text>
-      </TouchableOpacity>
+      <PosterButton kind="secondary" icon="add" label="Post another job" onPress={onPostJob} testID="switcher-post-job" />
     </MyJobsSheet>
   )
 }
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
-    hint: { color: t.textSecondary, fontSize: 14, lineHeight: 20 },
+    hint: { color: t.poster.ink2, fontSize: 17, lineHeight: 25 },
+    // Handoff block `selrow`: 76pt rows, a 2pt edge, the current job tinted.
     row: {
       borderRadius: 18,
-      borderWidth: 1.5,
-      borderColor: t.border,
-      backgroundColor: t.surface,
+      borderWidth: 2,
+      borderColor: t.poster.line,
+      backgroundColor: t.poster.card,
     },
-    rowShowing: { borderColor: t.primary, backgroundColor: t.primaryTint },
+    rowShowing: { borderColor: t.poster.g, backgroundColor: t.poster.gtint },
     rowMain: { flexDirection: 'row', alignItems: 'center' },
-    rowTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, minHeight: 72 },
-    rowTitle: { color: t.text, fontSize: 16, fontWeight: '800' },
-    rowStatus: { color: t.textSecondary, fontSize: 14, marginTop: 2 },
+    rowTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, paddingHorizontal: 14, minHeight: FOCUS.selrowMin },
+    rowTitle: { color: t.poster.ink, fontSize: 17, fontWeight: '700', lineHeight: 22 },
+    rowStatus: { color: t.poster.ink2, fontSize: 15, marginTop: 3 },
     showing: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-    showingText: { color: t.primaryLight, fontSize: 14, fontWeight: '800' },
+    showingText: { color: t.poster.gt, fontSize: 14, fontWeight: '800' },
     more: { width: 44, minHeight: 44, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
     menu: {
       borderTopWidth: StyleSheet.hairlineWidth,
@@ -211,7 +206,5 @@ function makeStyles(t: AppTheme) {
     },
     offersText: { flex: 1, color: t.primaryLight, fontSize: 16, fontWeight: '800' },
     finishedToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },
-    post: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 52 },
-    postText: { color: t.primaryLight, fontSize: 16, fontWeight: '800' },
   })
 }

@@ -1,51 +1,42 @@
 /**
- * app/in-progress/[bountyId]/hunter — the Hunter's entry point for one bounty.
+ * app/in-progress/[bountyId]/hunter — the hunter's workspace for one job
+ * (Focus-first "both sides" handoff).
  *
- * This used to be a pure router that called `router.back()` for every state it
- * didn't have a screen for: no application, a rejected application, a load
- * failure, a missing bounty. Reached from a notification or a deep link there
- * was nothing to go back TO, and reached from the public bounty view (whose
- * "View your application" button lands here) a rejected hunter bounced straight
- * back to the button that sent them — a loop with no explanation anywhere in it.
- *
- * It now still forwards to the active work screens when there is active work,
- * but every other state renders here, in place, with the same lifecycle copy
- * the poster is reading from their side: what happened, what it means, and
- * where to go next.
+ * Steps with their own screen are forwarded there, as before: chosen and
+ * working → work-in-progress (H.5 / H.7), work sent and waiting → payout
+ * (H.9), approved → payout (H.10). Every other state renders here, in place,
+ * with the shared workspace layout: an offer waiting for an answer (H.3), an
+ * offer that didn't go ahead (X.1), and anything else in the lifecycle's own
+ * words — never a router.back() dead end.
  */
-import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  Alert,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HunterStageScreen } from '../../../../components/hunter/hunter-stage-view';
+import { useHunterHelp } from '../../../../components/hunter/use-hunter-help';
 import { NotFoundScreen } from '../../../../components/not-found-screen';
-import { BountyStatusPanel } from '../../../../components/ui/bounty-status-panel';
-import { Stepper } from '../../../../components/ui/stepper';
+import { NoteBox, PosterButton } from '../../../../components/poster';
+import { useConfirmDialog, withdrawOfferCopy } from '../../../../components/poster/confirm-dialog';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
-import { getUserFriendlyError } from '../../../../lib/utils/error-messages';
+import { firstName } from '../../../../lib/my-jobs/format';
+import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
+import { bountyAppTabPath } from '../../../../lib/navigation/bounty-app-tab';
 import { ROUTES } from '../../../../lib/routes';
-import { discardApplication } from '../../../../lib/services/application-withdrawal';
-import { messageService } from '../../../../lib/services/message-service';
+import { discardApplication, withdrawApplication } from '../../../../lib/services/application-withdrawal';
+import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
+import { trackWorkspacePrimaryTapped } from '../../../../lib/services/focus-analytics';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
-import type { AppTheme } from '../../../../lib/themes/types';
-import type { BountyActionKey } from '../../../../lib/utils/bounty-lifecycle';
-import { getBountyStages } from '../../../../lib/utils/bounty-lifecycle';
+import { getUserFriendlyError } from '../../../../lib/utils/error-messages';
+import { describeHunterStage, type HunterActionKey } from '../../../../lib/utils/hunter-stage-copy';
 
 const FEED_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?tab=bounty`;
-const MY_WORK_ROUTE = `${ROUTES.TABS.BOUNTY_APP}?tab=messages&initialTab=inProgress`;
+const MY_JOBS_ROUTE = bountyAppTabPath('messages', 'inProgress');
 
 export default function HunterFlowIndex() {
-  const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
+  const { bountyId, sent } = useLocalSearchParams<{ bountyId?: string; sent?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // Until the session restores every viewer looks anonymous, which would
@@ -54,41 +45,80 @@ export default function HunterFlowIndex() {
   const { session, isLoading: isAuthLoading } = useAuthContext();
   const currentUserId = session?.user?.id ?? null;
   const { theme } = useAppThemeContext();
-  const s = useMemo(() => makeStyles(theme), [theme]);
+  const worksBothSides = useWorksBothSides(currentUserId);
 
   const routeBountyId = useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [bountyId]);
 
-  const { bounty, role, state, otherParty, requestStatus, isLoading, error, notFound, refresh } =
-    useBountyLifecycle(routeBountyId, currentUserId);
+  const {
+    bounty,
+    role,
+    state,
+    otherParty,
+    requestStatus,
+    requestRejectionSource,
+    submission,
+    hasDispute,
+    disputeId,
+    isLoading,
+    error,
+    notFound,
+    refresh,
+  } = useBountyLifecycle(routeBountyId, currentUserId);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [busyAction, setBusyAction] = useState<BountyActionKey | null>(null);
+  const [busyAction, setBusyAction] = useState<HunterActionKey | null>(null);
+  const { ask, dialog: confirmDialog } = useConfirmDialog();
+  const [toast, setToast] = useState<string | null>(null);
+  const [yourNote, setYourNote] = useState<string | null>(null);
 
   // Forward only when there is a dedicated screen for the state. Everything
   // else is rendered below rather than bounced.
   const forwardTarget = useMemo(() => {
     if (!bounty || !routeBountyId) return null;
     if (role === 'poster') return { pathname: '/postings/[bountyId]', params: { bountyId: routeBountyId } };
-    if (requestStatus === 'accepted' && currentUserId &&
-      String(bounty.accepted_by ?? '') === String(currentUserId)) {
-      if (bounty.status === 'completed')
+    if (requestStatus === 'accepted' && currentUserId && String(bounty.accepted_by ?? '') === String(currentUserId)) {
+      if (
+        bounty.status === 'completed' ||
+        (bounty.status === 'archived' && !!(bounty as any).completed_at) ||
+        state?.status === 'submitted_for_review'
+      ) {
         return { pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: routeBountyId } };
-      if (bounty.status === 'in_progress')
-        return {
-          pathname: '/in-progress/[bountyId]/hunter/work-in-progress',
-          params: { bountyId: routeBountyId },
-        };
+      }
+      if (bounty.status === 'in_progress') {
+        return { pathname: '/in-progress/[bountyId]/hunter/work-in-progress', params: { bountyId: routeBountyId } };
+      }
     }
     return null;
-  }, [bounty, role, requestStatus, routeBountyId, currentUserId]);
+  }, [bounty, role, requestStatus, routeBountyId, currentUserId, state?.status]);
 
   React.useEffect(() => {
     if (isAuthLoading || isLoading || !forwardTarget) return;
     router.replace(forwardTarget as never);
   }, [isAuthLoading, isLoading, forwardTarget, router]);
+
+  // H.3: "Offer sent to Jordan." when arriving from the offer sheet.
+  const posterFirst = firstName(otherParty.name);
+  React.useEffect(() => {
+    if (sent === 'offer' && state?.status === 'applied') setToast(`Offer sent to ${posterFirst ?? 'the poster'}.`);
+  }, [sent, state?.status, posterFirst]);
+
+  // H.3: the note the hunter sent with the offer.
+  React.useEffect(() => {
+    let active = true;
+    if (!routeBountyId || !currentUserId || state?.status !== 'applied') return;
+    bountyRequestService
+      .getAll({ bountyId: routeBountyId, userId: currentUserId })
+      .then((rows) => {
+        if (active) setYourNote(((rows ?? [])[0] as any)?.message?.trim() || null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [routeBountyId, currentUserId, state?.status]);
 
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -99,51 +129,54 @@ export default function HunterFlowIndex() {
     }
   }, [refresh]);
 
-  const handleMessage = useCallback(async () => {
-    if (!bounty || !otherParty.id) {
-      Alert.alert('No conversation yet', 'There is no one to message on this bounty right now.');
-      return;
-    }
-    setBusyAction('message');
-    try {
-      const conversation = await messageService.getOrCreateConversation(
-        [String(otherParty.id)],
-        '',
-        String(bounty.id)
-      );
-      if (!conversation?.id) throw new Error('no conversation');
-      router.push(`/tabs/messenger/${encodeURIComponent(String(conversation.id))}` as never);
-    } catch {
-      Alert.alert(
-        "Couldn't open the conversation",
-        'Check your connection and try again — nothing was lost.'
-      );
-    } finally {
-      setBusyAction(null);
-    }
-  }, [bounty, otherParty.id, router]);
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace(MY_JOBS_ROUTE as never);
+  }, [router]);
+
+  const openThread = useCallback(() => {
+    if (!routeBountyId) return;
+    router.push({ pathname: '/tabs/bounty-thread/[bountyId]', params: { bountyId: routeBountyId, role: 'hunter' } } as never);
+  }, [routeBountyId, router]);
+
+  // S.3, the same confirmation My Jobs uses. withdrawApplication only works
+  // for a pending offer; a chosen one gets its clear error.
+  const handleWithdraw = useCallback(() => {
+    if (!routeBountyId) return;
+    ask({
+      ...withdrawOfferCopy(posterFirst),
+      onConfirm: async () => {
+        setBusyAction('withdraw');
+        try {
+          // TODO(E): a withdrawn offer is deleted, so "Your offers" can't list
+          // it (S.2), and the poster isn't told (S.3).
+          await withdrawApplication({ bountyId: routeBountyId, currentUserId: currentUserId ?? undefined, surface: 'hunter_detail' });
+          router.replace(MY_JOBS_ROUTE as never);
+        } catch (err: any) {
+          Alert.alert('Could not withdraw', err?.message || 'Please try again.');
+        } finally {
+          setBusyAction(null);
+        }
+      },
+    });
+  }, [routeBountyId, posterFirst, currentUserId, router, ask]);
 
   const handleDiscardApplication = useCallback(() => {
     if (!routeBountyId) return;
     Alert.alert(
-      'Discard Application',
-      "Remove this rejected application from your list? This can't be undone.",
+      'Remove from my list?',
+      "This job will be removed from your list. This can't be undone.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Discard',
+          text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            setBusyAction('discard_application');
+            setBusyAction('remove');
             try {
-              await discardApplication({
-                bountyId: routeBountyId,
-                currentUserId: currentUserId ?? undefined,
-                surface: 'hunter_detail',
-              });
-              // The bounty is now hidden from this hunter's work list (the
-              // list reloads the hidden set on mount), so leave the screen.
-              router.replace(MY_WORK_ROUTE as never);
+              await discardApplication({ bountyId: routeBountyId, currentUserId: currentUserId ?? undefined, surface: 'hunter_detail' });
+              // The bounty is now hidden from this hunter's list, so leave the screen.
+              router.replace(MY_JOBS_ROUTE as never);
             } catch (err) {
               const friendly = getUserFriendlyError(err);
               Alert.alert(friendly.title, friendly.message);
@@ -157,31 +190,17 @@ export default function HunterFlowIndex() {
     );
   }, [routeBountyId, currentUserId, router]);
 
-  const handlers = useMemo((): Partial<Record<BountyActionKey, () => void>> => {
+  // The lifecycle's actions that still have a home here.
+  const handlers = useMemo(() => {
     if (!routeBountyId) return {};
     return {
       find_bounties: () => router.replace(FEED_ROUTE as never),
-      view_bounty: () =>
-        router.push({ pathname: '/bounty/[id]/public', params: { id: routeBountyId } } as never),
-      apply: () =>
-        router.push({ pathname: '/bounty/[id]/public', params: { id: routeBountyId } } as never),
-      message: handleMessage,
+      view_bounty: () => router.push({ pathname: '/bounty/[id]/public', params: { id: routeBountyId } } as never),
       discard_application: handleDiscardApplication,
       view_dispute: () =>
-        router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
-      open_dispute: () =>
-        router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
-      respond_cancellation: () =>
-        router.push({
-          pathname: '/bounty/[id]/cancellation-response',
-          params: { id: routeBountyId },
-        } as never),
-      // The hunter is the only party who can ASK to cancel: this is their exit
-      // from work they can't finish. Approving it returns the poster's escrow
-      // in full, so it goes through the request/approve flow rather than
-      // cancelling anything outright.
-      cancel_bounty: () =>
-        router.push({ pathname: '/bounty/[id]/cancel', params: { id: routeBountyId } } as never),
+        disputeId
+          ? router.push(`/dispute/${disputeId}` as never)
+          : router.push({ pathname: '/bounty/[id]/dispute', params: { id: routeBountyId } } as never),
       // The real support form, not /tabs/need-help-screen (the Post-a-Bounty
       // composer), with the job attached so support knows which one.
       contact_support: () =>
@@ -190,16 +209,67 @@ export default function HunterFlowIndex() {
           params: { bountyId: routeBountyId, bountyTitle: bounty?.title ?? '' },
         } as never),
     };
-  }, [routeBountyId, bounty?.title, handleMessage, handleDiscardApplication, router]);
+  }, [routeBountyId, bounty?.title, handleDiscardApplication, router, disputeId]);
 
-  const goBack = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace(MY_WORK_ROUTE as never);
-  }, [router]);
+  const help = useHunterHelp({
+    bountyId: routeBountyId,
+    posterName: posterFirst,
+    working: false,
+    workSubmitted: false,
+    disputeOpen: hasDispute,
+    heldAmount: null,
+    openThread,
+    requestCancellation: () => {},
+    contactSupport: () => handlers.contact_support?.(),
+  });
+
+  const view = useMemo(() => {
+    if (!bounty || !state) return null;
+    return describeHunterStage({
+      bounty: bounty as any,
+      lifecycle: state,
+      posterName: otherParty.name,
+      requestStatus,
+      requestRejectionSource,
+      submission,
+      hasDispute,
+    });
+  }, [bounty, state, otherParty.name, requestStatus, requestRejectionSource, submission, hasDispute]);
+
+  const onAction = useCallback(
+    (key: HunterActionKey) => {
+      if (!routeBountyId || !view) return;
+      if (view.primary?.key === key) trackWorkspacePrimaryTapped({ bountyId: routeBountyId, side: 'doing', screenId: view.screenId, action: key });
+      switch (key) {
+        case 'back_to_jobs':
+          goBack();
+          return;
+        case 'withdraw':
+          handleWithdraw();
+          return;
+        case 'find_work':
+          handlers.find_bounties?.();
+          return;
+        case 'remove':
+          handleDiscardApplication();
+          return;
+        case 'message':
+          openThread();
+          return;
+        case 'see_report':
+        case 'add_info':
+          handlers.view_dispute?.();
+          return;
+        default:
+          return;
+      }
+    },
+    [routeBountyId, view, goBack, handleWithdraw, handlers, handleDiscardApplication, openThread]
+  );
 
   if (isAuthLoading || isLoading || forwardTarget) {
     return (
-      <View style={[s.container, { paddingTop: insets.top }]}>
+      <View style={[styles.flex, { paddingTop: insets.top, backgroundColor: theme.background }]}>
         <HunterDashboardSkeleton />
       </View>
     );
@@ -217,160 +287,51 @@ export default function HunterFlowIndex() {
     );
   }
 
-  if (error || !bounty || !state) {
+  if (error || !bounty || !state || !view) {
     return (
-      <SafeAreaView style={s.centered}>
-        <MaterialIcons name="cloud-off" size={48} color={theme.textSecondary} />
-        <Text style={s.errorTitle}>{"Couldn't load this bounty"}</Text>
-        <Text style={s.centeredText}>
-          {"You're offline or the connection dropped. Your application and any work you've submitted are unaffected."}
-        </Text>
-        <TouchableOpacity accessibilityRole="button" style={s.retryButton} onPress={onRefresh}>
-          <Text style={s.retryButtonText}>Try again</Text>
-        </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" style={s.textButton} onPress={goBack}>
-          <Text style={s.textButtonText}>Go back</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={[styles.centered, { backgroundColor: theme.poster.bg }]}>
+        <NoteBox
+          tone="e"
+          icon="cloud-off"
+          title={"Couldn't load this job"}
+          text="You're offline or the connection dropped."
+          text2="Your offer and any work you've sent are unaffected."
+        />
+        <PosterButton label="Try again" icon="refresh" onPress={onRefresh} />
+        <PosterButton kind="text" label="Go back" onPress={goBack} />
       </SafeAreaView>
     );
   }
 
-  const stages = getBountyStages(role === 'poster' ? 'poster' : 'hunter');
-
   return (
-    <SafeAreaView style={s.container} edges={['top']}>
-      <View style={s.header}>
-        <TouchableOpacity
-          style={s.headerIcon}
-          onPress={goBack}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>
-          Your application
-        </Text>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.text}
-            colors={[theme.primary]}
-          />
-        }
-      >
-        <View style={s.heroCard}>
-          <Text style={s.heroTitle} numberOfLines={3}>
-            {bounty.title}
-          </Text>
-          <View style={s.heroMetaRow}>
-            {bounty.is_for_honor ? (
-              <Text style={s.heroAmount}>For honor</Text>
-            ) : (
-              <Text style={s.heroAmount}>${bounty.amount}</Text>
-            )}
-            {!!otherParty.name && <Text style={s.mutedSmall}>Posted by {otherParty.name}</Text>}
-          </View>
-        </View>
-
-        <BountyStatusPanel
-          state={state}
-          role="hunter"
-          otherPartyName={otherParty.name}
-          onAction={handlers}
-          busyAction={busyAction}
-        />
-
-        <View style={s.card}>
-          <Text style={s.sectionTitle}>Where this stands</Text>
-          <Stepper stages={stages} activeIndex={state.stageIndex} variant="compact" />
-        </View>
-
-        {!!bounty.description && (
-          <View style={s.card}>
-            <Text style={s.sectionTitle}>What was asked for</Text>
-            <Text style={s.cardBody}>{bounty.description}</Text>
-          </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+    <HunterStageScreen
+      view={view}
+      bounty={bounty as any}
+      posterName={otherParty.name}
+      worksBothSides={worksBothSides}
+      onBack={goBack}
+      onAction={onAction}
+      busyKey={busyAction}
+      toast={toast}
+      onToastHide={() => setToast(null)}
+      yourNote={yourNote}
+      refreshing={isRefreshing}
+      onRefresh={onRefresh}
+      help={help}
+      moreExtra={
+        view.screenId === 'X.1' || view.screenId === 'H.3'
+          ? []
+          : state.secondaryActions.some((a) => a.key === 'discard_application')
+            ? [{ key: 'discard', label: 'Remove from my list', icon: 'delete-outline', danger: true, onPress: handleDiscardApplication }]
+            : []
+      }
+    >
+      {confirmDialog}
+    </HunterStageScreen>
   );
 }
 
-function makeStyles(t: AppTheme) {
-  return StyleSheet.create({
-    container: { flex: 1, backgroundColor: t.background },
-    centered: {
-      flex: 1,
-      backgroundColor: t.background,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 12,
-      padding: 32,
-    },
-    centeredText: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
-    errorTitle: { color: t.text, fontSize: 18, fontWeight: '700' },
-    retryButton: {
-      backgroundColor: t.primary,
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-      borderRadius: 12,
-      marginTop: 8,
-      minHeight: 44,
-      justifyContent: 'center',
-    },
-    retryButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
-    textButton: { paddingHorizontal: 24, paddingVertical: 12, minHeight: 44, justifyContent: 'center' },
-    textButtonText: { color: t.primaryLight, fontSize: 14, fontWeight: '600' },
-
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 8,
-      paddingVertical: 8,
-      borderBottomWidth: 1,
-      borderBottomColor: t.border,
-    },
-    headerIcon: {
-      padding: 10,
-      minWidth: 44,
-      minHeight: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    headerTitle: { flex: 1, color: t.text, fontSize: 17, fontWeight: '700' },
-
-    content: { padding: 16 },
-    heroCard: {
-      backgroundColor: t.surface,
-      borderRadius: 16,
-      borderWidth: 1,
-      ...t.insetBorder, // pressed-in edge: dark top → light bottom
-      padding: 16,
-      marginBottom: 16,
-      gap: 8,
-    },
-    heroTitle: { color: t.text, fontSize: 18, fontWeight: '700', lineHeight: 25 },
-    heroMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
-    heroAmount: { color: t.text, fontSize: 18, fontWeight: '800' },
-    mutedSmall: { color: t.textSecondary, fontSize: 12 },
-
-    card: {
-      backgroundColor: t.surface,
-      borderRadius: 16,
-      borderWidth: 1,
-      ...t.insetBorder, // pressed-in edge: dark top → light bottom
-      padding: 16,
-      marginBottom: 16,
-      gap: 10,
-    },
-    sectionTitle: { color: t.text, fontSize: 15, fontWeight: '700' },
-    cardBody: { color: t.text, fontSize: 14, lineHeight: 20 },
-  });
-}
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  centered: { flex: 1, justifyContent: 'center', gap: 12, padding: 24 },
+});
