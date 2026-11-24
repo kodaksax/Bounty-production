@@ -1,9 +1,8 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { Alert } from 'react-native'
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service'
 import { bountyRequestService } from 'lib/services/bounty-request-service'
 import { analyticsService } from 'lib/services/analytics-service'
-import { useSingleFlight } from './useSingleFlight'
 
 interface UseRejectRequestParams {
   /** The applicant list currently on screen, used to resolve bounty/hunter/trust-tier context for analytics. */
@@ -66,13 +65,24 @@ export function useRejectRequest({
     }
   }, [bountyRequests, setBountyRequests, setIsLoading, setError])
 
-  // One decline at a time: a second confirmation tapped while the first is
-  // deleting joins it, rather than deleting an already-deleted request and
-  // surfacing "Failed to reject request" for a decline that worked.
-  const rejectFlight = useSingleFlight()
+  // A second confirmation for the same request joins its deletion, while
+  // different requests can be declined independently.
+  const rejectFlights = useRef(new Map<string, Promise<void>>())
   const handleRejectRequest = useCallback(
-    (requestId: string | number) => rejectFlight.run(() => rejectRequestOnce(requestId)),
-    [rejectFlight, rejectRequestOnce]
+    (requestId: string | number) => {
+      const key = String(requestId)
+      const existing = rejectFlights.current.get(key)
+      if (existing) return existing
+
+      const promise = rejectRequestOnce(requestId).finally(() => {
+        if (rejectFlights.current.get(key) === promise) {
+          rejectFlights.current.delete(key)
+        }
+      })
+      rejectFlights.current.set(key, promise)
+      return promise
+    },
+    [rejectRequestOnce]
   )
 
   return { handleRejectRequest }

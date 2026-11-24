@@ -146,7 +146,7 @@ export function MessengerScreen({
       return
     }
 
-    await markConversationReadSafe(conversation.id)
+    void markConversationReadSafe(conversation.id)
 
     setActiveConversation(conversation.id)
     setShowChat(true)

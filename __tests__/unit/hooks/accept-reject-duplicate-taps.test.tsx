@@ -86,10 +86,10 @@ function renderAccept(params: Record<string, unknown> = {}) {
   ).result;
 }
 
-function renderReject() {
+function renderReject(requests = [request]) {
   return renderHook(() =>
     useRejectRequest({
-      bountyRequests: [request],
+      bountyRequests: requests,
       setBountyRequests: jest.fn(),
       setIsLoading: jest.fn(),
       setError: jest.fn(),
@@ -188,5 +188,29 @@ describe('Decline (reject application)', () => {
       await result.current.handleRejectRequest('req-1');
     });
     expect(mockDelete).toHaveBeenCalledTimes(2);
+  });
+
+  test('declines for different requests run independently', async () => {
+    const first = deferred<boolean>();
+    const second = deferred<boolean>();
+    mockDelete.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const result = renderReject([
+      request,
+      { ...request, id: 'req-2', hunter_id: 'hunter-2' },
+    ]);
+
+    let firstDecline!: Promise<void>;
+    let secondDecline!: Promise<void>;
+    act(() => {
+      firstDecline = result.current.handleRejectRequest('req-1');
+      secondDecline = result.current.handleRejectRequest('req-2');
+    });
+
+    expect(mockDelete).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      first.resolve(true);
+      second.resolve(true);
+      await Promise.all([firstDecline, secondDecline]);
+    });
   });
 });

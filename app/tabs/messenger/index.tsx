@@ -100,7 +100,7 @@ export function MessengerScreen({
       return
     }
 
-    await Promise.all(conversation.backingConversationIds.map(id => markConversationReadSafe(id)))
+    void Promise.all(conversation.backingConversationIds.map(id => markConversationReadSafe(id)))
     setActiveConversation(conversation.id)
     onConversationModeChange?.(true)
   }
