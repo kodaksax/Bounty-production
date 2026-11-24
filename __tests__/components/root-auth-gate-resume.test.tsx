@@ -75,7 +75,15 @@ describe('root auth gate — resume last tab', () => {
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith('/tabs/bounty-app?tab=wallet')
     );
-    expect(mockGetRestorableLastScreen).toHaveBeenCalledWith('user-1');
+    expect(mockGetRestorableLastScreen).toHaveBeenCalledWith('user-1', undefined, {
+      includeFeed: true,
+    });
+  });
+
+  it('control lands on the feed when the last tab was the feed', async () => {
+    mockGetRestorableLastScreen.mockResolvedValue('bounty');
+    render(<Index />);
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/tabs/bounty-app'));
   });
 
   it('lands on the feed when there is nothing to restore', async () => {

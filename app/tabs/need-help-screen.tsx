@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import { View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { getBottomNavBaseClearance } from "../../lib/constants/navigation"
+import { APP_LAUNCH_ENTRY } from "../../lib/experiments/home-post-navigation"
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext"
 
 interface NeedHelpScreenProps {
@@ -74,7 +75,10 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
         // CreateBountyFlow fires nothing while inactive — so whenever this
         // instance reports anything, a deliberate navigation got the poster
         // here. Instances remounted on leave sit inactive until the next one.
-        deliberateTap
+        // The exception is a post_first cold start (home_post_navigation_test),
+        // which opens the app here: no composer_opened, and bounty_started
+        // reports deliberate_entry false.
+        deliberateTap={entryPoint !== APP_LAUNCH_ENTRY}
         isActive={isActive}
         topInset={insets.top}
         onComplete={() => {
