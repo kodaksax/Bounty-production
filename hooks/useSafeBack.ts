@@ -1,6 +1,7 @@
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { useCallback, useRef } from 'react';
+import { navigationGuard } from '../lib/navigation/navigation-guard';
 
 /** The bounty feed tab — the neutral place to land when there is nowhere to go back to. */
 export const FEED_FALLBACK: Href = { pathname: '/tabs/bounty-app', params: { tab: 'bounty' } };
@@ -27,6 +28,10 @@ export function useSafeBack(fallback: Href = FEED_FALLBACK) {
   fallbackRef.current = fallback;
 
   return useCallback(() => {
+    // A second tap on the same back button, while the first back is still
+    // animating, would find canGoBack() already false (the stack just shrank)
+    // and replace the screen it landed on with the fallback.
+    if (navigationGuard.isBackSettling()) return;
     if (canGoBack()) back();
     else replace(fallbackRef.current);
   }, [back, canGoBack, replace]);

@@ -25,6 +25,7 @@ import { ScreenLoader } from '../../../components/ui/screen-loader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from '../../../components/ui/keyboard-avoiding';
 import { withReplayMask } from '../../../components/replay-mask';
+import { useSingleFlightCallback } from 'hooks/useSingleFlight';
 
 const CANCELLATION_REASON_OPTIONS: { label: string; value: CancellationReasonCategory }[] = [
   { label: 'Changed my mind', value: 'changed_mind' },
@@ -93,7 +94,8 @@ function CancellationRequestScreen() {
     }
   };
 
-  const handleSubmitCancellation = async () => {
+  // Single-flight: a double tap files one cancellation request, not two.
+  const handleSubmitCancellation = useSingleFlightCallback(async () => {
     if (!reason.trim()) {
       Alert.alert("Something went wrong", 'Please provide a reason for cancellation');
       return;
@@ -147,7 +149,7 @@ function CancellationRequestScreen() {
     } finally {
       setSubmitting(false);
     }
-  };
+  });
 
   const handleContactSupport = () => {
     const subject = bounty ? EMAIL_SUBJECTS.cancellation(bounty.title) : EMAIL_SUBJECTS.general;

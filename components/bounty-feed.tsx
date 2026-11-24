@@ -102,6 +102,7 @@ import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
 import { withTimeout } from '../lib/utils/withTimeout';
 import { withAlpha } from '../lib/utils';
+import { runNavigationPress } from '../lib/navigation/navigation-guard';
 
 export type BountyFeedHandle = {
   refresh: () => void;
@@ -2043,10 +2044,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           onTabVisibleChange={setProgressTabVisible}
           tabContentColor={gridBannerCoversStatusBar ? '#ffffff' : theme.text}
           onPressItem={bounty =>
-            router.push({
-              pathname: '/postings/[bountyId]',
-              params: { bountyId: String(bounty.id) },
-            } as never)
+            runNavigationPress(() =>
+              router.push({
+                pathname: '/postings/[bountyId]',
+                params: { bountyId: String(bounty.id) },
+              } as never)
+            )
           }
         />
       )}

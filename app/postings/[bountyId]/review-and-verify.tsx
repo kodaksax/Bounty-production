@@ -39,6 +39,7 @@ import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { withAlpha } from '../../../lib/utils';
 import { useMemo } from 'react';
+import { useSingleFlightCallback } from 'hooks/useSingleFlight';
 
 interface ProofItem {
   id: string;
@@ -302,7 +303,8 @@ export default function ReviewAndVerifyScreen() {
     setRating(value);
   };
 
-  const handleApprove = async (): Promise<boolean> => {
+  // Single-flight: a double tap approves and releases once (useSingleFlightCallback).
+  const handleApprove = useSingleFlightCallback(async (): Promise<boolean> => {
     // Rating is optional -- approving and releasing payment must never
     // depend on it. A poster who skips (rating stays 0) still gets a
     // rating_reminder notification ~24h later if they never come back to
@@ -417,7 +419,7 @@ export default function ReviewAndVerifyScreen() {
     } finally {
       setIsRequestingRevision(false);
     }
-  };
+  });
 
   // Approving releases the payment and cannot be undone, so it is confirmed
   // first, in the same words as PosterReviewModal's payout step. It used to

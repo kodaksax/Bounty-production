@@ -44,6 +44,7 @@ import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
 import { TrustSafetyNotice } from 'components/ui/trust-safety-notice';
 import type { AcceptFundingGate as AcceptFundingGateState } from 'hooks/useAcceptFunding';
 import { useWalletDeposit } from 'hooks/use-wallet-deposit';
+import { useSingleFlight } from 'hooks/useSingleFlight';
 import { getFloatingTabBarTop } from 'components/ui/floating-tab-bar';
 import { getBottomNavContentGap } from 'lib/constants/navigation';
 import { usePaymentPromiseCopy } from 'lib/experiments/payment-promise-copy';
@@ -245,7 +246,13 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
     gate.onConfirm();
   };
 
-  const handlePayWithCard = async () => {
+  // The three pay buttons share one synchronous lock, taken before
+  // gate.onPaymentStarted: `busy` is React state and still reads false for a
+  // second tap that lands before the re-render, which would record a second
+  // payment attempt and race the first one's outcome.
+  const payFlight = useSingleFlight();
+
+  const handlePayWithCard = () => payFlight.run(async () => {
     // Guarded here as well as via `disabled`: an empty method list while
     // Stripe is still loading must never be mistaken for "no card on file".
     if (busy || stripeLoading) return;
@@ -260,17 +267,17 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
     }
     if (gate.onPaymentStarted('card') === false) return;
     resolveOutcome(await payWithCard(chargeAmount), chargeAmount);
-  };
+  });
 
-  const handleApplePay = async () => {
+  const handleApplePay = () => payFlight.run(async () => {
     if (busy) return;
     hapticFeedback.light();
     if (gate.onPaymentStarted('applePay') === false) return;
     resolveOutcome(await payWithApplePay(chargeAmount), chargeAmount);
-  };
+  });
 
   /** Apple Pay / Google Pay / saved or new card, in Stripe's own sheet. */
-  const handlePaymentSheet = async () => {
+  const handlePaymentSheet = () => payFlight.run(async () => {
     if (busy) return;
     hapticFeedback.light();
     if (!sheetAvailable) {
@@ -280,7 +287,7 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
     }
     if (gate.onPaymentStarted('paymentSheet') === false) return;
     resolveOutcome(await payWithPaymentSheet(chargeAmount), chargeAmount);
-  };
+  });
 
   const handlePrimaryPay = () => {
     // Until the saved-card list has loaded, "no card" is unknown, not false;

@@ -11,6 +11,7 @@ import { describePaymentFailure } from '../lib/utils/payment-failure-message';
 import { failureEventProps, type FailureEventProps } from '../lib/utils/stripe-error';
 import { useWallet } from '../lib/wallet-context';
 import { useAuthContext } from './use-auth-context';
+import { useSingleFlight } from './useSingleFlight';
 
 export interface DepositSuccessInfo {
   amount: number;
@@ -403,6 +404,14 @@ Platform.OS === 'ios'
     }
   };
 
+  // One deposit at a time, across all three payment methods. `isProcessing`
+  // is React state, so it disables the buttons a render late: a fast double
+  // tap could start a second PaymentIntent while the first was confirming
+  // (createPaymentIntentSecure's own duplicate check is released once the
+  // intent is created, before confirmation). A call made while a deposit is
+  // in flight receives that deposit's outcome instead of starting another.
+  const depositFlight = useSingleFlight();
+
   return {
     isProcessing,
     isApplePayAvailable,
@@ -421,9 +430,9 @@ Platform.OS === 'ios'
     stripeLoading,
     stripeError,
     loadPaymentMethods,
-    payWithCard,
-    payWithApplePay,
-    payWithPaymentSheet,
+    payWithCard: (numAmount: number) => depositFlight.run(() => payWithCard(numAmount)),
+    payWithApplePay: (numAmount: number) => depositFlight.run(() => payWithApplePay(numAmount)),
+    payWithPaymentSheet: (numAmount: number) => depositFlight.run(() => payWithPaymentSheet(numAmount)),
   };
 }
 

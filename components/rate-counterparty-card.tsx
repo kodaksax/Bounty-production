@@ -8,6 +8,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import type { MyRatingStatus } from '../lib/types';
 import { RatingStars } from './ui/rating-stars';
+import { useSingleFlight } from '../hooks/useSingleFlight';
 
 /**
  * Inline "rate the other side of this job" card. Used on the hunter's payout
@@ -29,6 +30,7 @@ export function RateCounterpartyCard({ bountyId }: { bountyId: string }) {
   const [phase, setPhase] = useState<'loading' | 'form' | 'submitting' | 'done' | 'hidden'>('loading');
   const [error, setError] = useState<string | null>(null);
   const shownLoggedRef = useRef(false);
+  const submitFlight = useSingleFlight();
 
   useEffect(() => {
     let mounted = true;
@@ -65,7 +67,8 @@ export function RateCounterpartyCard({ bountyId }: { bountyId: string }) {
     );
   }
 
-  const handleSubmit = async () => {
+  // Single-flight: `phase` is state; a double tap must submit one rating.
+  const handleSubmit = () => submitFlight.run(async () => {
     if (rating === 0) return;
     const trimmed = comment.trim();
     setPhase('submitting');
@@ -96,7 +99,7 @@ export function RateCounterpartyCard({ bountyId }: { bountyId: string }) {
       setError("Your rating couldn't be saved. Please try again.");
       setPhase('form');
     }
-  };
+  });
 
   const handleSkip = () => {
     void analyticsService

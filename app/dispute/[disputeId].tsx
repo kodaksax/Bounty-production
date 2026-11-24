@@ -25,6 +25,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { withAlpha } from '../../lib/utils';
 import { showToast } from '../../lib/toast';
+import { useSingleFlightCallback } from 'hooks/useSingleFlight'
 
 type CommentItem = {
   id: string
@@ -171,7 +172,8 @@ function DisputeDetailScreen() {
     load()
   }, [loadDispute, loadComments, loadEvidence])
 
-  const handleSendComment = async () => {
+  // Single-flight: a double tap on Send posts the comment once.
+  const handleSendComment = useSingleFlightCallback(async () => {
     if (!newComment.trim() || !disputeId || !currentUserId) return
     try {
       setIsSendingComment(true)
@@ -192,7 +194,7 @@ function DisputeDetailScreen() {
     } finally {
       setIsSendingComment(false)
     }
-  }
+  })
 
   const handleAddTextEvidence = async () => {
     if (!textEvidence.trim() || !disputeId || !currentUserId) return

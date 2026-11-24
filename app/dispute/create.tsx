@@ -21,6 +21,7 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { withAlpha } from '../../lib/utils';
 import { showToast } from '../../lib/toast';
+import { useSingleFlightCallback } from 'hooks/useSingleFlight';
 
 type LocalEvidenceItem = {
   id: string;
@@ -84,7 +85,8 @@ function CreateDisputeScreen() {
     setEvidence(evidence.filter((e) => e.id !== id));
   };
 
-  const executeSubmit = async () => {
+  // Single-flight: one dispute per confirmation, even if confirmed twice.
+  const executeSubmit = useSingleFlightCallback(async () => {
     setIsSubmitting(true);
     setShowWebConfirm(false);
     try {
@@ -127,7 +129,7 @@ function CreateDisputeScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  });
 
   const handleSubmit = async () => {
     if (!userId) {

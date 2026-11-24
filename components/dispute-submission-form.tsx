@@ -15,6 +15,7 @@ import { generateEvidenceId } from '../lib/utils/dispute-helpers';
 import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
 import { withAlpha } from '../lib/utils';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { useSingleFlightCallback } from 'hooks/useSingleFlight';
 
 interface DisputeSubmissionFormProps {
   bountyTitle: string;
@@ -115,7 +116,8 @@ export function DisputeSubmissionForm({
     setEvidence(evidence.filter(e => e.id !== id));
   };
 
-  const handleSubmit = async () => {
+  // Single-flight: a double tap submits the dispute once.
+  const handleSubmit = useSingleFlightCallback(async () => {
     if (!reason.trim()) {
       Alert.alert("Something went wrong", 'Please provide a reason for the dispute');
       return;
@@ -127,7 +129,7 @@ export function DisputeSubmissionForm({
       console.error('Error submitting dispute:', error);
       Alert.alert("Couldn't submit dispute", "Please try again.");
     }
-  };
+  });
 
   return (
     <KeyboardAwareScrollView className="flex-1">

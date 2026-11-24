@@ -41,6 +41,7 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { duration, easeIn, easeOut } from '../../lib/motion';
+import { runNavigationPress } from '../../lib/navigation/navigation-guard';
 
 // From the app-wide motion tokens (lib/motion.ts): opens decelerate in,
 // closes accelerate out and finish sooner than they arrived.
@@ -70,6 +71,12 @@ export function useModalOrigin<T = unknown>() {
   const [origin, setOrigin] = useState<ModalOrigin | null>(null);
 
   const openFrom = useCallback((open: () => void) => {
+    // Opening a dialog from a card is a navigation tap: tapping two cards in
+    // quick succession opens the first one's dialog only, not two stacked.
+    runNavigationPress(() => openMeasured(open));
+  }, []);
+
+  const openMeasured = (open: () => void) => {
     const node = originRef.current as Measurable | null;
     let opened = false;
     const openOnce = () => {
@@ -89,7 +96,7 @@ export function useModalOrigin<T = unknown>() {
     // measureInWindow answers within the frame; never let a dropped callback
     // swallow the tap.
     setTimeout(openOnce, 50);
-  }, []);
+  };
 
   return { originRef, origin, openFrom };
 }

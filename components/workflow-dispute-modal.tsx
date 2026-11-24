@@ -19,6 +19,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import type { LocalDisputeEvidence } from '../lib/types'
 import { withAlpha } from '../lib/utils';
+import { useSingleFlight } from '../hooks/useSingleFlight'
 
 /** Pinned footer (12pt padding + 48pt button + 12pt padding) plus breathing room. */
 const FOOTER_CLEARANCE = 88
@@ -68,6 +69,8 @@ export function WorkflowDisputeModal({
   const [textEvidence, setTextEvidence] = useState('')
   const [linkEvidence, setLinkEvidence] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // Two confirmations (from a double tap on Submit) must create one dispute.
+  const submitFlight = useSingleFlight()
 
   const { pickAttachment } = useAttachmentUpload({
     bucket: 'bounty-attachments',
@@ -183,7 +186,7 @@ export function WorkflowDisputeModal({
         {
           text: 'Submit Dispute',
           style: 'destructive',
-          onPress: async () => {
+          onPress: () => submitFlight.run(async () => {
             try {
               setIsSubmitting(true)
               const dispute = await disputeService.createWorkflowDispute(
@@ -207,7 +210,7 @@ export function WorkflowDisputeModal({
             } finally {
               setIsSubmitting(false)
             }
-          },
+          }),
         },
       ]
     )

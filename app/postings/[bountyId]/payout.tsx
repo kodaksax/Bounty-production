@@ -40,6 +40,7 @@ import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
 import { withAlpha } from '../../../lib/utils';
 import { useMemo } from 'react';
+import { useSingleFlightCallback } from 'hooks/useSingleFlight';
 
 export default function PayoutScreen() {
   const { theme } = useAppThemeContext();
@@ -101,7 +102,9 @@ export default function PayoutScreen() {
     }
   };
 
-  const handleReleasePayout = async () => {
+  // Single-flight: `isProcessing` disables the button a render late, so a fast
+  // double tap could send a second release (useSingleFlightCallback).
+  const handleReleasePayout = useSingleFlightCallback(async () => {
     if (!bounty || bounty.is_for_honor) {
       Alert.alert("Something went wrong", 'Cannot release payout for honor bounties.');
       return;
@@ -258,7 +261,7 @@ export default function PayoutScreen() {
     } finally {
       setIsProcessing(false);
     }
-  };
+  });
 
   const handleMarkComplete = async () => {
     if (!bounty) return;

@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { Alert } from 'react-native'
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service'
 import { bountyRequestService } from 'lib/services/bounty-request-service'
@@ -18,7 +18,7 @@ export function useRejectRequest({
   setIsLoading,
   setError,
 }: UseRejectRequestParams) {
-  const handleRejectRequest = useCallback(async (requestId: string | number) => {
+  const rejectRequestOnce = useCallback(async (requestId: string | number) => {
     try {
       // Show quick-refresh indicator for requests
       setIsLoading((prev) => ({ ...prev, requests: true }))
@@ -64,6 +64,26 @@ export function useRejectRequest({
       setIsLoading((prev) => ({ ...prev, requests: false }))
     }
   }, [bountyRequests, setBountyRequests, setIsLoading, setError])
+
+  // A second confirmation for the same request joins its deletion, while
+  // different requests can be declined independently.
+  const rejectFlights = useRef(new Map<string, Promise<void>>())
+  const handleRejectRequest = useCallback(
+    (requestId: string | number) => {
+      const key = String(requestId)
+      const existing = rejectFlights.current.get(key)
+      if (existing) return existing
+
+      const promise = rejectRequestOnce(requestId).finally(() => {
+        if (rejectFlights.current.get(key) === promise) {
+          rejectFlights.current.delete(key)
+        }
+      })
+      rejectFlights.current.set(key, promise)
+      return promise
+    },
+    [rejectRequestOnce]
+  )
 
   return { handleRejectRequest }
 }

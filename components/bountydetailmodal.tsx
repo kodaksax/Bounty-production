@@ -47,6 +47,7 @@ import { trustSafetyStrings } from '../lib/strings/trust-safety'
 import { getApplicationSafetyMessage } from '../lib/utils/bounty-lifecycle'
 import { detectOffPlatformRisk } from '../lib/utils/off-platform-risk'
 import { withAlpha } from '../lib/utils';
+import { useSingleFlightCallback } from 'hooks/useSingleFlight'
 
 // Alert defer delay to allow React to process state updates before showing alert
 const ALERT_DEFER_DELAY = 100;
@@ -478,7 +479,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   }, [bounty.id, currentUserId])
 
   // Handle apply for bounty
-  const handleApplyForBounty = async (confirmed = false) => {
+  // Single-flight: `isApplying` is state and disables Apply a render late; a
+  // double tap must not send the application twice.
+  const handleApplyForBounty = useSingleFlightCallback(async (confirmed = false) => {
     triggerHaptic('medium') // Medium haptic for apply action
 
     const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
@@ -700,7 +703,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         { cancelable: true }
       )
     }
-  }
+  })
 
   const { width, height } = Dimensions.get('window')
 

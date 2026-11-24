@@ -218,3 +218,48 @@ describe('approveAndRelease', () => {
     expect(trackEvent).not.toHaveBeenCalled();
   });
 });
+
+describe('approveAndRelease duplicate protection', () => {
+  function gate() {
+    let open!: () => void;
+    const promise = new Promise<boolean>((res) => {
+      open = () => res(true);
+    });
+    return { promise, open };
+  }
+
+  test('a double-tapped approve releases once; both callers get the result', async () => {
+    const release = gate();
+    const releaseFn = jest.fn(() => release.promise);
+    const approveFn = jest.fn(async () => true);
+    const opts = { bountyId: 'dup-1', hunterId: 'h1', title: 't', isForHonor: false, releaseFn, approveFn };
+
+    const first = approveAndRelease(opts);
+    const second = approveAndRelease(opts);
+    release.open();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    expect(releaseFn).toHaveBeenCalledTimes(1);
+    expect(approveFn).toHaveBeenCalledTimes(1);
+  });
+
+  test('two different bounties release independently', async () => {
+    const releaseFn = jest.fn(async () => true);
+    const approveFn = jest.fn(async () => true);
+    await Promise.all([
+      approveAndRelease({ bountyId: 'dup-2', hunterId: 'h', title: 't', isForHonor: false, releaseFn, approveFn }),
+      approveAndRelease({ bountyId: 'dup-3', hunterId: 'h', title: 't', isForHonor: false, releaseFn, approveFn }),
+    ]);
+    expect(releaseFn).toHaveBeenCalledTimes(2);
+  });
+
+  test('after a failed release the poster can retry', async () => {
+    const releaseFn = jest.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const approveFn = jest.fn(async () => true);
+    const opts = { bountyId: 'dup-4', hunterId: 'h', title: 't', isForHonor: false, releaseFn, approveFn };
+
+    await expect(approveAndRelease(opts)).resolves.toBe(false);
+    await expect(approveAndRelease(opts)).resolves.toBe(true);
+    expect(releaseFn).toHaveBeenCalledTimes(2);
+  });
+});

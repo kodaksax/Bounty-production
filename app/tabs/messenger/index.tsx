@@ -25,6 +25,7 @@ import type { Conversation } from "../../../lib/types"
 import { buildVisibleConversationRows, type ConversationRow } from "../../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "../chat-detail-screen"
 import { withReplayMask } from '../../../components/replay-mask';
+import { runNavigationPress } from '../../../lib/navigation/navigation-guard';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 
 // Helper to format conversation time
@@ -79,9 +80,11 @@ export function MessengerScreen({
     }
   }, [refresh])
 
-  const handleConversationClick = async (conversation: ConversationRow) => {
-    await Promise.all(conversation.backingConversationIds.map(id => markConversationReadSafe(id)))
+  // One conversation opens per tap (lib/navigation/navigation-guard.ts).
+  const handleConversationClick = (conversation: ConversationRow) =>
+    runNavigationPress(() => void openConversation(conversation))
 
+  const openConversation = async (conversation: ConversationRow) => {
     // A 1:1 row opens the merged thread with that person — the same screen
     // the profile Message button opens — so every route into a direct
     // conversation shows the full history, not just this one bounty's chat.
@@ -89,10 +92,15 @@ export function MessengerScreen({
       ? conversation.participantIds?.find(id => id !== currentUserId)
       : undefined
     if (otherUserId) {
+      // Navigate first: the merged thread marks its conversations read itself,
+      // and waiting on the network here left a window in which a second tap
+      // could still open the chat again.
+      void Promise.all(conversation.backingConversationIds.map(id => markConversationReadSafe(id)))
       router.push(ROUTES.MESSAGES.WITH_USER(otherUserId) as any)
       return
     }
 
+    void Promise.all(conversation.backingConversationIds.map(id => markConversationReadSafe(id)))
     setActiveConversation(conversation.id)
     onConversationModeChange?.(true)
   }

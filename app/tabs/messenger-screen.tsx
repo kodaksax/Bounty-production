@@ -53,6 +53,7 @@ import {
   type ConversationRow,
 } from "../../lib/utils/conversation-rows"
 import { ChatDetailScreen } from "./chat-detail-screen"
+import { runNavigationPress } from "../../lib/navigation/navigation-guard"
 
 const { width } = Dimensions.get("window")
 
@@ -128,7 +129,12 @@ export function MessengerScreen({
     }
   }
 
-  const handleConversationClick = async (conversation: ConversationRow) => {
+  // One conversation opens per tap: a double tap, or tapping a second row
+  // while the first is opening, is ignored (lib/navigation/navigation-guard.ts).
+  const handleConversationClick = (conversation: ConversationRow) =>
+    runNavigationPress(() => void openConversation(conversation))
+
+  const openConversation = async (conversation: ConversationRow) => {
     // A 1:1 row opens the merged thread with that person — the same screen
     // the profile Message button opens — so every route into a direct
     // conversation shows the full history, not just this one bounty's chat.
@@ -140,7 +146,7 @@ export function MessengerScreen({
       return
     }
 
-    await markConversationReadSafe(conversation.id)
+    void markConversationReadSafe(conversation.id)
 
     setActiveConversation(conversation.id)
     setShowChat(true)
@@ -247,7 +253,7 @@ export function MessengerScreen({
   const handleUserPress = useCallback(
     (user: UserProfile) => {
       Keyboard.dismiss()
-      router.push(ROUTES.MESSAGES.WITH_USER(user.id) as any)
+      runNavigationPress(() => router.push(ROUTES.MESSAGES.WITH_USER(user.id) as any))
     },
     [router]
   )
