@@ -6,7 +6,6 @@ import {
     AccessibilityInfo,
     ActivityIndicator,
     Alert,
-    FlatList,
     Modal,
     ScrollView,
     StyleSheet,
@@ -17,7 +16,6 @@ import {
 } from 'react-native';
 import { SlideInScreen } from './ui/slide-in-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { analyticsService } from '../lib/services/analytics-service';
 import { approveAndRelease } from '../lib/services/completion-approval';
@@ -28,10 +26,10 @@ import type { AppTheme } from '../lib/themes/types';
 import type { Attachment } from '../lib/types';
 import { getCurrentUserId } from '../lib/utils/data-utils';
 import { useWallet } from '../lib/wallet-context';
-import { ConsequenceList, FlowTitle } from './poster/blocks';
+import { ConsequenceList, FlowTitle, NoteBox } from './poster/blocks';
+import { ProofPhotos } from './poster/media';
 import { firstName, formatJobAmount } from '../lib/my-jobs/format';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { RatingStars } from './ui/rating-stars';
 import { KeyboardAwareScrollView } from './ui/keyboard-avoiding';
 import { withAlpha } from '../lib/utils';
@@ -101,7 +99,6 @@ export function PosterReviewModal({
   const [ratingComment, setRatingComment] = useState('');
   const [revisionFeedback, setRevisionFeedback] = useState('');
   const [showRevisionForm, setShowRevisionForm] = useState(false);
-  const [showPayoutWarning, setShowPayoutWarning] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
   // A failed load is not "No submission yet": it says so and offers a retry.
@@ -124,6 +121,9 @@ export function PosterReviewModal({
   const [showPayConfirm, setShowPayConfirm] = useState(false);
   const payConfirmQuestionRef = useRef<React.ElementRef<typeof Text> | null>(null);
   const ratingPromptLoggedRef = useRef(false);
+  // Bumped on every load and on close, so a load that finishes after the
+  // sheet closed (or after a newer load started) changes nothing.
+  const loadSeqRef = useRef(0);
 
   const formattedPayoutAmount = useMemo(() => {
     try {
@@ -171,7 +171,6 @@ export function PosterReviewModal({
     if (!visible) {
       setViewerVisible(false);
       setSelectedAttachment(null);
-      setShowPayoutWarning(false);
       setShowPayConfirm(false);
       setShowRatingForm(false);
       setShowRevisionForm(false);
@@ -181,11 +180,15 @@ export function PosterReviewModal({
       setIsProcessing(false);
       setSubmission(null);
       setHunterProfile(null);
+      // Reopening starts on the loading state, never on a frame of the
+      // previous opening's result.
+      setIsLoading(true);
       setLoadFailed(false);
       setApprovedHere(false);
       sendingRef.current = false;
       releasingRef.current = false;
       ratingPromptLoggedRef.current = false;
+      loadSeqRef.current += 1;
     }
   }, [visible]);
 
@@ -202,32 +205,6 @@ export function PosterReviewModal({
     }, 150);
     return () => clearTimeout(timer);
   }, [showPayConfirm]);
-
-  // Reopening this modal on a submission that's already approved (from the
-  // "Review" tap targets in my-posting-expandable.tsx, or the rating_reminder
-  // notification's deep link) should land straight on the rating step rather
-  // than the read-only submission view -- unless the poster already rated
-  // this hunter for this bounty, in which case there's nothing left to do
-  // here. hasRated is a best-effort check: on failure this falls back to not
-  // auto-opening the form, which just means the poster sees the submission
-  // view instead -- never a hard error.
-  useEffect(() => {
-    let mounted = true;
-    async function checkExistingRating() {
-      if (!visible || !submission || submission.status !== 'approved') return;
-      const targetHunterId = hunterId || submission?.hunter_id || '';
-      const posterId = getCurrentUserId();
-      if (!targetHunterId || !posterId) return;
-      try {
-        const alreadyRated = await ratingsService.hasRated(posterId, bountyId, targetHunterId);
-        if (mounted && !alreadyRated) setShowRatingForm(true);
-      } catch {
-        /* best-effort */
-      }
-    }
-    checkExistingRating();
-    return () => { mounted = false; };
-  }, [visible, submission, hunterId, bountyId]);
 
   useEffect(() => {
     if (visible && startOnRating) setShowRatingForm(true);
@@ -249,18 +226,39 @@ export function PosterReviewModal({
   }, [showRatingForm, bountyId]);
 
   const loadSubmission = async () => {
+    const seq = ++loadSeqRef.current;
     try {
       setIsLoading(true);
       setLoadFailed(false);
       const data = await completionService.getSubmissionForReview(bountyId, hunterId);
+      // Reopened on work that's already approved (my-posting-expandable's
+      // "Review" taps): land straight on the rating step, unless this hunter
+      // was already rated for this bounty. Checked before the loading state
+      // ends, so the sheet never shows another step first and then jumps.
+      // Best-effort: if the check fails, the sheet just says it's approved.
+      let openRating = false;
+      if (data?.status === 'approved') {
+        const targetHunterId = hunterId || data.hunter_id || '';
+        const posterId = getCurrentUserId();
+        if (targetHunterId && posterId) {
+          try {
+            openRating = !(await ratingsService.hasRated(posterId, bountyId, targetHunterId));
+          } catch {
+            /* best-effort */
+          }
+        }
+      }
+      if (seq !== loadSeqRef.current) return;
       setSubmission(data);
+      if (openRating) setShowRatingForm(true);
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       console.error('Error loading submission:', err);
       // Shown inline with a retry (see render). The rating-only sheet doesn't
       // need the submission at all, so it carries on without one.
       setLoadFailed(true);
     } finally {
-      setIsLoading(false);
+      if (seq === loadSeqRef.current) setIsLoading(false);
     }
   };
 
@@ -296,7 +294,6 @@ export function PosterReviewModal({
       // confirmed "nothing was paid", so the copy claims neither.
       if (!ok) {
         Alert.alert(paymentNotConfirmedTitle(isForHonor), paymentNotConfirmedMessage(isForHonor));
-        setShowPayoutWarning(true);
         // Back to the single "Approve and pay" button: the alert asks the
         // poster to check the job before trying again, so the "Yes, pay"
         // step is not left armed.
@@ -307,7 +304,6 @@ export function PosterReviewModal({
       triggerHaptic('success');
       setApprovedHere(true);
       setShowPayConfirm(false);
-      setShowPayoutWarning(false);
       setShowRatingForm(true);
       return true;
     } catch (err) {
@@ -316,7 +312,6 @@ export function PosterReviewModal({
       // act on (no payout account, session expired), so show it.
       const reason = err instanceof Error && err.message ? `${err.message}\n\n` : '';
       Alert.alert(paymentNotConfirmedTitle(isForHonor), `${reason}${paymentNotConfirmedMessage(isForHonor)}`);
-      setShowPayoutWarning(true);
       setShowPayConfirm(false);
       return false;
     } finally {
@@ -357,9 +352,8 @@ export function PosterReviewModal({
 
   const handleHeaderClose = () => {
     if (showRevisionForm) { setShowRevisionForm(false); return; }
-    // Steps back one at a time: "Yes, pay" → "Approve and pay" → review.
+    // Steps back one at a time: "Yes, pay" → "Approve and pay" → closed.
     if (showPayConfirm) { setShowPayConfirm(false); return; }
-    if (showPayoutWarning) { setShowPayoutWarning(false); return; }
     closeSheet();
   };
 
@@ -504,6 +498,23 @@ export function PosterReviewModal({
 
   if (!visible) return null;
 
+  // Inside a step (asking for changes, or the "Yes, pay" confirmation), the
+  // header steps back one level; on the review itself it closes the sheet.
+  const steppedIn = showRevisionForm || showPayConfirm;
+
+  // The proof, as the design's review screen (I) shows it: photos in a grid,
+  // any other file as a row. Both open the attachment viewer.
+  const proofItems: ProofItem[] = Array.isArray(submission?.proof_items) ? submission!.proof_items : [];
+  const proofPhotos = proofItems
+    .filter((item) => item.type === 'image')
+    .map((item, i) => ({
+      key: String(item.id ?? i),
+      uri: (item as any).url || (item as any).remoteUri || item.uri || null,
+      label: item.name || `Photo ${i + 1}`,
+      onPress: () => handleAttachmentPress(item),
+    }));
+  const proofFiles = proofItems.filter((item) => item.type !== 'image');
+
   // Shared by the normal flow (after approval) and startOnRating (a completed
   // job's "Leave a review", which may have no submission row to show).
   const ratingForm = (
@@ -594,11 +605,11 @@ export function PosterReviewModal({
               style={s.closeButton}
               onPress={handleHeaderClose}
               disabled={isProcessing}
-              accessibilityLabel={showRevisionForm || showPayoutWarning ? 'Back to previous step' : 'Close'}
+              accessibilityLabel={steppedIn ? 'Back to previous step' : 'Close'}
               accessibilityState={{ disabled: isProcessing }}
             >
               <MaterialIcons
-                name={(showRevisionForm || showPayoutWarning) ? 'arrow-back' : 'close'}
+                name={steppedIn ? 'arrow-back' : 'close'}
                 size={24}
                 color={theme.text}
               />
@@ -606,11 +617,9 @@ export function PosterReviewModal({
             <Text style={s.headerTitle} accessibilityRole="header">
               {showRevisionForm
                 ? 'Request Changes'
-                : showPayoutWarning
-                  ? 'Confirm Payout'
-                  : showRatingForm || startOnRating
-                    ? 'Leave a review'
-                    : 'Review Submission'}
+                : showRatingForm || startOnRating
+                  ? 'Leave a review'
+                  : 'Review the work'}
             </Text>
             <View style={s.headerSpacer} />
           </View>
@@ -643,7 +652,70 @@ export function PosterReviewModal({
               <Text style={s.emptyText}>No submission yet</Text>
               <Text style={s.emptySubtext}>Waiting for {displayHunterName} to submit their work.</Text>
             </View>
-          ) : showPayoutWarning ? (
+          ) : showRatingForm ? (
+            ratingForm
+          ) : showRevisionForm ? (
+            <KeyboardAwareScrollView
+              style={s.scrollView}
+              contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
+            >
+              <View style={s.revisionFormContainer}>
+                <MaterialIcons name="feedback" size={64} color={theme.warningText} />
+                <Text style={s.revisionTitle}>Request Changes</Text>
+                <Text style={s.revisionSubtitle}>Explain what needs to be improved or changed.</Text>
+                <TextInput
+                  style={s.feedbackInput}
+                  placeholder="Describe the changes needed..."
+                  placeholderTextColor={theme.textDisabled}
+                  value={revisionFeedback}
+                  onChangeText={setRevisionFeedback}
+                  multiline
+                  numberOfLines={6}
+                  maxLength={1000}
+                  textAlignVertical="top"
+                />
+                <View style={s.buttonRow}>
+                  <TouchableOpacity accessibilityRole="button" style={s.secondaryButton} onPress={() => setShowRevisionForm(false)}>
+                    <Text style={s.secondaryButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity accessibilityRole="button"
+                    style={[s.primaryButton, isProcessing && s.buttonDisabled]}
+                    onPress={handleRequestRevision}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={s.buttonText}>Send Feedback</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAwareScrollView>
+          ) : submission.status !== 'pending' ? (
+            // Only pending work can be approved. Reopening on work that was
+            // already approved, sent back or turned down says where it stands
+            // and offers no payment.
+            <View style={s.emptyContainer} testID="review-not-pending">
+              <MaterialIcons
+                name={submission.status === 'approved' ? 'check-circle' : 'history'}
+                size={64}
+                color={submission.status === 'approved' ? theme.success : theme.textSecondary}
+              />
+              <Text style={s.emptyText}>
+                {submission.status === 'approved'
+                  ? 'You already approved this work'
+                  : submission.status === 'revision_requested'
+                    ? `You asked ${helperFirst} for a change`
+                    : 'This work was turned down'}
+              </Text>
+              <Text style={s.emptySubtext}>
+                {submission.status === 'revision_requested'
+                  ? `${helperFirst} will send the work again when it's done.`
+                  : "There's nothing to approve here."}
+              </Text>
+            </View>
+          ) : (
             <ScrollView
               style={s.scrollView}
               contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
@@ -652,6 +724,27 @@ export function PosterReviewModal({
             >
               <View style={s.focusApprove} testID="approve-consequences">
                 <FlowTitle title="Is the job finished?" />
+                {submission.message?.trim() ? (
+                  <NoteBox
+                    tone="n"
+                    title={`${helperFirst}'s note`}
+                    text={`“${submission.message.trim()}”`}
+                    testID="review-note"
+                  />
+                ) : null}
+                {proofPhotos.length > 0 ? (
+                  <ProofPhotos items={proofPhotos} cols={2} height={120} testID="review-proof-photos" />
+                ) : null}
+                {proofFiles.length > 0 ? (
+                  <View style={s.proofList}>
+                    {proofFiles.map((item) => (
+                      <React.Fragment key={item.id}>{renderProofItem({ item })}</React.Fragment>
+                    ))}
+                  </View>
+                ) : null}
+                {proofPhotos.length === 0 && proofFiles.length === 0 ? (
+                  <Text style={s.noProofText}>No photos or files were attached.</Text>
+                ) : null}
                 <ConsequenceList
                   label="IF YOU APPROVE"
                   items={
@@ -733,7 +826,7 @@ export function PosterReviewModal({
               <View style={s.warningActions}>
                 <TouchableOpacity accessibilityRole="button"
                   style={[s.warningCancelButton, isProcessing && s.buttonDisabled]}
-                  onPress={() => { setShowPayConfirm(false); setShowPayoutWarning(false); setShowRevisionForm(true); }}
+                  onPress={() => { setShowPayConfirm(false); setShowRevisionForm(true); }}
                   disabled={isProcessing}
                   accessibilityLabel="Something isn't finished"
                   accessibilityHint="Ask for a change instead of approving."
@@ -741,129 +834,6 @@ export function PosterReviewModal({
                 >
                   <MaterialIcons name="edit-note" size={18} color={theme.textSecondary} />
                   <Text style={s.warningCancelText}>{"Something isn't finished"}</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          ) : showRatingForm ? (
-            ratingForm
-          ) : showRevisionForm ? (
-            <KeyboardAwareScrollView
-              style={s.scrollView}
-              contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
-            >
-              <View style={s.revisionFormContainer}>
-                <MaterialIcons name="feedback" size={64} color={theme.warningText} />
-                <Text style={s.revisionTitle}>Request Changes</Text>
-                <Text style={s.revisionSubtitle}>Explain what needs to be improved or changed.</Text>
-                <TextInput
-                  style={s.feedbackInput}
-                  placeholder="Describe the changes needed..."
-                  placeholderTextColor={theme.textDisabled}
-                  value={revisionFeedback}
-                  onChangeText={setRevisionFeedback}
-                  multiline
-                  numberOfLines={6}
-                  maxLength={1000}
-                  textAlignVertical="top"
-                />
-                <View style={s.buttonRow}>
-                  <TouchableOpacity accessibilityRole="button" style={s.secondaryButton} onPress={() => setShowRevisionForm(false)}>
-                    <Text style={s.secondaryButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity accessibilityRole="button"
-                    style={[s.primaryButton, isProcessing && s.buttonDisabled]}
-                    onPress={handleRequestRevision}
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={s.buttonText}>Send Feedback</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </KeyboardAwareScrollView>
-          ) : (
-            <ScrollView
-              style={s.scrollView}
-              contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
-            >
-              <View style={s.hunterInfo}>
-                <Avatar style={s.hunterAvatar}>
-                  <AvatarImage src={hunterProfile?.avatar || undefined} alt={hunterProfile?.username || displayHunterName} />
-                  <AvatarFallback>
-                    <Text style={s.avatarFallbackText}>
-                      {(hunterProfile?.username || displayHunterName)?.charAt(0)?.toUpperCase() || '?'}
-                    </Text>
-                  </AvatarFallback>
-                </Avatar>
-                <View style={s.hunterDetails}>
-                  <View style={s.hunterNameRow}>
-                    <Text style={s.hunterName}>{hunterProfile?.username || displayHunterName}</Text>
-                    {hunterProfile?.verificationStatus && hunterProfile.verificationStatus !== 'unverified' && (
-                      <VerificationBadge
-                        status={hunterProfile.verificationStatus as VerificationLevel}
-                        size="small"
-                        showLabel={false}
-                        showExplanation={false}
-                      />
-                    )}
-                  </View>
-                  <Text style={s.submittedText}>
-                    Submitted {new Date(submission.submitted_at!).toLocaleDateString()}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={s.section}>
-                <Text style={s.sectionTitle}>Message from Hunter</Text>
-                <View style={s.messageBox}>
-                  <Text style={s.messageText}>{submission.message}</Text>
-                </View>
-              </View>
-
-              <View style={s.section}>
-                <Text style={s.sectionTitle}>Proof of Completion</Text>
-                {submission.proof_items && submission.proof_items.length > 0 ? (
-                  <FlatList
-                    data={submission.proof_items}
-                    renderItem={renderProofItem}
-                    keyExtractor={(item) => item.id}
-                    scrollEnabled={false}
-                    contentContainerStyle={s.proofList}
-                  />
-                ) : (
-                  <View style={s.emptyProof}>
-                    <Text style={s.emptyProofText}>No proof attached</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Action buttons — unique colors preserved */}
-              <View style={s.actionButtons}>
-                <TouchableOpacity accessibilityRole="button"
-                  style={s.rejectButton}
-                  onPress={() => setShowRevisionForm(true)}
-                  disabled={isProcessing}
-                >
-                  <MaterialIcons name="feedback" size={20} color="#fff" />
-                  <Text style={s.rejectButtonText}>Request Changes</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity accessibilityRole="button"
-                  style={[s.approveButton, isProcessing && s.buttonDisabled]}
-                  onPress={() => setShowPayoutWarning(true)}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <MaterialIcons name="check-circle" size={20} color="#fff" />
-                      <Text style={s.approveButtonText}>Proceed to Payout</Text>
-                    </>
-                  )}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -989,69 +959,6 @@ function makeStyles(t: AppTheme) {
       fontSize: 14,
       textAlign: 'center',
     },
-    hunterInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : withAlpha(t.primary, 0.07),
-      padding: 16,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.2),
-    },
-    hunterAvatar: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: t.isDark ? withAlpha(t.primary, 0.3) : withAlpha(t.primary, 0.12),
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    avatarFallbackText: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: t.primaryLight,
-    },
-    hunterDetails: {
-      flex: 1,
-    },
-    hunterNameRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    hunterName: {
-      color: t.text,
-      fontSize: 18,
-      fontWeight: '600',
-    },
-    submittedText: {
-      color: t.isDark ? t.primaryLight : t.primary,
-      fontSize: 13,
-      marginTop: 4,
-    },
-    section: {
-      gap: 12,
-    },
-    sectionTitle: {
-      color: t.isDark ? t.primaryLight : t.primary,
-      fontSize: 14,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    messageBox: {
-      backgroundColor: t.isDark ? withAlpha(t.primary, 0.2) : t.surfaceSecondary,
-      padding: 16,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: t.isDark ? withAlpha(t.primary, 0.2) : t.border,
-    },
-    messageText: {
-      color: t.text,
-      fontSize: 15,
-      lineHeight: 22,
-    },
     proofList: {
       gap: 12,
     },
@@ -1086,51 +993,9 @@ function makeStyles(t: AppTheme) {
       color: t.isDark ? t.primaryLight : t.primary,
       fontSize: 12,
     },
-    emptyProof: {
-      padding: 24,
-      backgroundColor: t.isDark ? withAlpha(t.primary, 0.1) : t.surfaceSecondary,
-      borderRadius: 12,
-      alignItems: 'center',
-    },
-    emptyProofText: {
+    noProofText: {
       color: t.textSecondary,
       fontSize: 14,
-    },
-    actionButtons: {
-      flexDirection: 'row',
-      gap: 12,
-    },
-    // Unique colors — kept exactly as designed
-    rejectButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      backgroundColor: t.error,
-      paddingVertical: 16,
-      borderRadius: 12,
-    },
-    rejectButtonText: {
-      color: '#fff',
-      fontSize: 15,
-      fontWeight: '600',
-    },
-    approveButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      backgroundColor: t.primary,
-      paddingVertical: 16,
-      borderRadius: 12,
-      ...EMERALD_SHADOW,
-    },
-    approveButtonText: {
-      color: '#fff',
-      fontSize: 15,
-      fontWeight: '600',
     },
     buttonDisabled: {
       opacity: 0.5,
