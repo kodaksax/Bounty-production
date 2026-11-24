@@ -21,7 +21,11 @@ const FEATURED_COUNT = 3
 
 export function buildGridRows(
   bounties: Bounty[],
-  completenessById: Map<string, BountyCompleteness>
+  completenessById: Map<string, BountyCompleteness>,
+  // Just-posted bounties, newest first. They lead the rows under the carousel
+  // (unless their price already put them in it), so a new post is seen
+  // without scrolling past every higher-paid or complete listing.
+  pinnedIds: string[] = []
 ): GridRow[] {
   // Sort globally: highest price first, honor (no price) last
   const byPrice = [...bounties].sort((a, b) => {
@@ -47,10 +51,16 @@ export function buildGridRows(
   // preserved within each group.
   const isIncomplete = (b: Bounty) =>
     completenessById.get(String(b.id))?.isComplete === false
+  const pinRank = new Map(pinnedIds.map((id, i) => [id, i] as const))
   const remaining = byPrice.filter(b => !featuredIds.has(String(b.id)))
+  const pinned = remaining
+    .filter(b => pinRank.has(String(b.id)))
+    .sort((a, b) => pinRank.get(String(a.id))! - pinRank.get(String(b.id))!)
+  const unpinned = remaining.filter(b => !pinRank.has(String(b.id)))
   const rest = [
-    ...remaining.filter(b => !isIncomplete(b)),
-    ...remaining.filter(b => isIncomplete(b)),
+    ...pinned,
+    ...unpinned.filter(b => !isIncomplete(b)),
+    ...unpinned.filter(b => isIncomplete(b)),
   ]
 
   const rows: GridRow[] = []
