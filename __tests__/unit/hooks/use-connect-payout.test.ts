@@ -328,6 +328,12 @@ describe('useConnectPayout', () => {
     const replayKey = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).idempotencyKey;
     expect(replayKey).toBe(firstKey);
     expect(result.current.error?.code).toBe('payout_declined');
+    // Only the first response is a payout failure; the replay is a rejection
+    // (2026-11-13: replays doubled payout_failed).
+    const failureEvents = (analyticsService.trackEvent as jest.Mock).mock.calls
+      .map(c => c[0])
+      .filter(name => name !== 'payout_initiated');
+    expect(failureEvents).toEqual(['payout_failed', 'payout_rejected']);
 
     mockFetch({ ok: true, json: () => Promise.resolve(SUCCESS) });
     await act(async () => {

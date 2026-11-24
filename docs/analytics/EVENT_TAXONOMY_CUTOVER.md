@@ -456,3 +456,69 @@ Reading them:
   SQL.
 - Not backfilled. Web posts and decisions before the deploy stay missing in
   PostHog.
+
+---
+
+# Server-side payout events — 2026-11-24
+
+From the 2026-11-23 PostHog audit. PostHog had no event for a payout that
+actually reached the hunter's bank, and `payout_failed` overcounted: on
+2026-11-13 the ledger had 2 `payout.failed` rows and PostHog had 4
+`payout_failed`.
+
+**Dashboards count payouts from `source = 'stripe_webhook'` only.** The app's
+`payout_initiated`, `payout_success` and `payout_failed` (no `source`) are a
+tap, an API acceptance and a failed request. They measure the withdraw screen,
+not money.
+
+| Event | Sent by | When | `source` | uuid key |
+|---|---|---|---|---|
+| `payout_completed` | `webhooks` | `payout.paid`, and the matched withdrawal row is `completed` (this delivery promoted it, or another writer already had) | `stripe_webhook` | `payout_completed:<po id>` |
+| `payout_failed` | `webhooks` | `payout.failed` / `payout.canceled` / `payout.closed`, and **this delivery** moved the withdrawal to failed. A duplicate, an already-refunded row and a payout matching no withdrawal send nothing | `stripe_webhook` | `payout_failed:<po id>` |
+
+Rules as for the other server events: `distinct_id` is the hunter's Supabase
+user id; the uuid is a UUIDv5 of the key above
+(`supabase/functions/_shared/payout-events.ts`); the timestamp is fixed too
+(the row's `completed_at`, or Stripe's `event.created` for a failure), because
+PostHog only merges a resend with the same uuid on the same day; `app_env`
+from `resolveAppEnv`. The key is the event name, not Stripe's event type, so
+`payout.failed` followed by `payout.closed` cannot make two.
+
+Properties: `role: 'hunter'`, `amount` (the ledger withdrawal amount, which is
+what `bounty_events.amount` records), `currency`, `method` (`standard` |
+`instant`), `payout_architecture` (`connect_native` | `legacy_transfer`),
+`failure_code` (Stripe `payout.failure_code`; null on `payout_completed` and on
+most cancellations), `outcome` on failures (`failed` | `canceled`),
+`stripe_payout_id`, `transaction_id` (`wallet_transactions.id`),
+`platform: 'server'`. No bank name, last4, account id or `failure_message`.
+
+Reading them:
+
+- **Not every ledger `payout.failed` has a `payout_failed`.** `bounty_events`
+  writes `payout.<status>` on every withdrawal status change, from any
+  function. A withdrawal that fails before Stripe creates a payout never
+  reaches a payout webhook. Both 2026-11-13 failures were this kind: the
+  platform balance was short (`balance_insufficient` at `transfer_create` in
+  `/connect/transfer`), with no transfer and no payout. Those rows have
+  `correlation_id` null; transfer failures and reversals carry a `tr_…` id.
+  Their only PostHog trace is the client `payout_failed` with
+  `code: 'platform_balance_insufficient'`.
+- Rows completed by reconciliation or another writer get their
+  `payout_completed` when Stripe's `payout.paid` arrives. `payout.manually_paid`
+  (admin "settled outside Stripe") has no event.
+- Not backfilled. Payouts before the deploy have no server event.
+- Reconciliation: [`payout-reconciliation.sql`](payout-reconciliation.sql). It
+  generates the PostHog query from the ledger rows and returns one line per
+  `bounty_events` row with its count of matching PostHog events (distinct
+  uuids, same user, same amount).
+
+The client fix in the same change: a second Withdraw tap with the same
+idempotency key gets the server's replay of the recorded row
+(`duplicate: true`). When that row had failed, the screen logged a new
+`payout_failed` (code `transfer_failed`, `stripeAttempted: true`) although
+Stripe was not called again. That is how 2 failures became 4.
+`classifyPayoutFailure` now returns `payout_rejected` for any replay, on both
+`/connect/transfer` (`withdraw-with-bank-screen.tsx`) and the Connect-native
+routes (`use-connect-payout.tsx`). The app's failure code is in `code`, not
+`error_code`: the 11-13 events carried `platform_balance_insufficient`, and the
+audit read the wrong property.

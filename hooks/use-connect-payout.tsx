@@ -299,17 +299,27 @@ export function useConnectPayout(): UseConnectPayoutResult {
           if (payoutResult.duplicate) {
             idempotencyKeyRef.current = null;
           }
+          // A duplicate is the server replaying a payout it already recorded,
+          // not a new Stripe outcome: payout_rejected, not a second failure.
           void analyticsService
-            .trackEvent('payout_failed', {
+            .trackEvent(
+              classifyPayoutFailure({
+                code: 'payout_declined',
+                stripeAttempted: true,
+                duplicate: payoutResult.duplicate,
+              }),
+              {
               amount: payoutResult.amountCents / 100,
               currency: payoutResult.currency,
               method:
                 input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
               code: 'payout_declined',
+              duplicate: payoutResult.duplicate,
               reason: `stripe_status_${payoutResult.status}`,
               payoutId: payoutResult.payoutId ?? undefined,
               requestId,
-            })
+              }
+            )
             .catch(() => {
               /* analytics is best-effort */
             });

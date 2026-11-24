@@ -12,4 +12,9 @@ describe('withdraw-with-bank-screen success handling', () => {
     expect(source).toContain('if (payoutStatus && FAILED_WITHDRAWAL_STATUSES.has(payoutStatus))');
     expect(source).toContain("replayError.code = 'transfer_failed'");
   });
+
+  test('passes the server duplicate flag to classifyPayoutFailure so a replay is not a second payout_failed', () => {
+    expect(source).toContain('replayError.duplicate = successData?.duplicate === true');
+    expect(source).toContain('duplicate: error?.duplicate,');
+  });
 });

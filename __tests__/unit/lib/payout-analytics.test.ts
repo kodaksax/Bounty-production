@@ -36,6 +36,28 @@ describe('classifyPayoutFailure', () => {
     expect(classifyPayoutFailure({ code: 'no_bank_account' })).toBe('payout_rejected');
   });
 
+  test('an idempotent replay of an already-failed withdrawal is payout_rejected, not a second payout_failed', () => {
+    // 2026-11-13: the second tap replayed a failed row (duplicate: true). The
+    // screen marks that stripeAttempted=true because the ORIGINAL attempt
+    // reached Stripe; this request did not, so it must not count as a failure.
+    expect(
+      classifyPayoutFailure({ code: 'transfer_failed', stripeAttempted: true, duplicate: true })
+    ).toBe('payout_rejected');
+    expect(
+      classifyPayoutFailure({ code: 'payout_declined', stripeAttempted: true, duplicate: true })
+    ).toBe('payout_rejected');
+    // The first, real attempt is unchanged.
+    expect(
+      classifyPayoutFailure({ code: 'platform_balance_insufficient', stripeAttempted: true, duplicate: false })
+    ).toBe('payout_failed');
+  });
+
+  test('withdrawal_already_in_progress still wins over duplicate', () => {
+    expect(
+      classifyPayoutFailure({ code: 'withdrawal_already_in_progress', duplicate: true })
+    ).toBe('payout_already_pending');
+  });
+
   test('no code at all (network error, timeout, abort) stays payout_failed', () => {
     expect(classifyPayoutFailure({})).toBe('payout_failed');
     expect(classifyPayoutFailure({ stripeAttempted: undefined })).toBe('payout_failed');
