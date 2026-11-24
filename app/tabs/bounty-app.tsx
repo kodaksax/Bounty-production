@@ -33,7 +33,7 @@ import { useBountyDraftInProgress } from '../hooks/useBountyDraft'
 import { useAdmin } from '../../lib/admin-context'
 import { ROUTES } from '../../lib/routes'
 import { screenNameForBountyAppTab } from '../../lib/analytics/screen-name'
-import { trackScreenView } from '../../lib/analytics/screen-tracking'
+import { clearShellTab, trackShellTabView } from '../../lib/analytics/screen-tracking'
 import { ReplayMask } from '../../components/replay-mask'
 import { API_TIMEOUTS } from '../../lib/config/network'
 import { authProfileService } from '../../lib/services/auth-profile-service'
@@ -213,11 +213,12 @@ function BountyAppInner() {
       ? (source === 'notification' ? 'notification' : 'push')
       : 'tab'
     isFirstActiveScreenReport.current = false
-    trackScreenView(screenNameForBountyAppTab(activeScreen), { source: navSource })
+    trackShellTabView(screenNameForBountyAppTab(activeScreen), { source: navSource })
     // Only the tab identity should retrigger this — `source` is read once,
     // on the very first report.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeScreen])
+  useEffect(() => clearShellTab, [])
 
   const [showBottomNav, setShowBottomNav] = useState(true)
   const [pendingInitialTab, setPendingInitialTab] = useState<string | undefined>(paramInitialTab)

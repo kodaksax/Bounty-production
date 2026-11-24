@@ -122,3 +122,48 @@ describe('PostHog person property contract', () => {
     expect(attributionFunction).not.toContain('claim_marketing_attribution');
   });
 });
+
+// 20261124200000: lifetime_gmv is credited to both sides of a bounty, so it
+// gets per-side twins that can be summed. Verified end to end on PGlite
+// (trigger, dry-run backfill, backfill, rollback) on 2026-11-24.
+describe('lifetime_spend / lifetime_earnings (20261124200000)', () => {
+  const split = read('supabase/migrations/20261124200000_lifetime_spend_earnings_person_properties.sql');
+  const splitDown = read(
+    'supabase/rollbacks/production/20261124200000_lifetime_spend_earnings_person_properties.down.sql'
+  );
+
+  test.each(['lifetime_spend', 'lifetime_earnings', 'lifetime_gmv'])(
+    'snapshot sends %s',
+    property => {
+      expect(split).toContain(`'${property}', v_`);
+    }
+  );
+
+  it('credits spend to the poster at the gross and earnings to the hunter at the payout', () => {
+    expect(split).toContain("VALUES (v_poster_id, 'lifetime_spend', NEW.bounty_id::text, v_gross)");
+    expect(split).toContain(
+      "VALUES (v_hunter_id, 'lifetime_earnings', NEW.bounty_id::text, COALESCE(abs(NEW.amount), 0))"
+    );
+  });
+
+  it('keeps lifetime_gmv on both sides (history) and allows the new metrics', () => {
+    expect(split).toContain("VALUES (v_hunter_id, 'lifetime_gmv', NEW.bounty_id::text, v_gross)");
+    expect(split).toContain("VALUES (v_poster_id, 'lifetime_gmv', NEW.bounty_id::text, v_gross)");
+    expect(split).toContain("'lifetime_spend'::text,");
+    expect(split).toContain("'lifetime_earnings'::text");
+  });
+
+  it('backfills only on request, dry run by default, and is not callable by app roles', () => {
+    expect(split).toContain('p_dry_run boolean DEFAULT true');
+    expect(split).toContain(
+      'REVOKE ALL ON FUNCTION public.backfill_lifetime_split_facts(boolean, text) FROM PUBLIC, anon, authenticated;'
+    );
+    expect(split).not.toMatch(/SELECT\s+public\.backfill_lifetime_split_facts\(\s*false/);
+  });
+
+  it('ships a rollback that removes the new facts and restores the five metrics', () => {
+    expect(splitDown).toContain("WHERE metric IN ('lifetime_spend', 'lifetime_earnings');");
+    expect(splitDown).not.toContain("'lifetime_spend'::text");
+    expect(splitDown).toContain('DROP FUNCTION IF EXISTS public.backfill_lifetime_split_facts(boolean, text);');
+  });
+});

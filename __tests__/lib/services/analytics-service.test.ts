@@ -107,14 +107,31 @@ describe('trackEvent()', () => {
     );
   });
 
-  test('includes userId in enriched properties after identify', async () => {
+  test('includes user_id (and no camelCase userId) after identify', async () => {
     await analyticsService.identifyUser('user-99');
     await analyticsService.trackEvent('bounty_viewed');
 
     expect(mockCapture).toHaveBeenCalledWith(
       'bounty_viewed',
-      expect.objectContaining({ userId: 'user-99' })
+      expect.objectContaining({ user_id: 'user-99' })
     );
+    const sent = mockCapture.mock.calls[mockCapture.mock.calls.length - 1][1] as Record<string, unknown>;
+    expect(sent).not.toHaveProperty('userId');
+  });
+
+  test('a caller-supplied userId is folded into user_id, never sent as userId', async () => {
+    // Before identify(): the caller's id is the only one there is.
+    await analyticsService.trackEvent('email_verified', { userId: 'user-7' } as never);
+    let sent = mockCapture.mock.calls[mockCapture.mock.calls.length - 1][1] as Record<string, unknown>;
+    expect(sent).toMatchObject({ user_id: 'user-7' });
+    expect(sent).not.toHaveProperty('userId');
+
+    // After identify(): the identified user wins.
+    await analyticsService.identifyUser('user-99');
+    await analyticsService.trackEvent('payment_sca_required', { userId: 'user-7' } as never);
+    sent = mockCapture.mock.calls[mockCapture.mock.calls.length - 1][1] as Record<string, unknown>;
+    expect(sent).toMatchObject({ user_id: 'user-99' });
+    expect(sent).not.toHaveProperty('userId');
   });
 
   test('works without optional properties', async () => {
@@ -200,7 +217,7 @@ describe('incrementUserProperty()', () => {
     expect(mockCapture).toHaveBeenCalledWith('user_property_incremented', {
       property: 'bounties_posted',
       increment: 1,
-      userId: null,
+      user_id: null,
     });
   });
 

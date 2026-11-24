@@ -53,7 +53,7 @@ For bounty posting and payment flows, failures are surfaced to users via alerts/
 4. Property naming migration support
 
 - Event properties now dual-send snake_case and camelCase keys when only one form is provided.
-- Included both `user_id` and `userId` on tracked events.
+- Included both `user_id` and `userId` on tracked events. (`userId` retired 2026-11-24: events carry `user_id` only. See "Audit fixes — 2026-11-24".)
 
 ## Dashboard Risk and Migration Guidance
 
@@ -391,3 +391,158 @@ What it does not cover:
   or dispatch. Its only use is gating the poster quality nudge (score below 70
   in `fn_escalate_stale_bounty_liquidity_unlocked`). Do not read a rank effect
   into it.
+
+# Audit fixes — 2026-11-24
+
+From the 2026-11-23 PostHog audit. Analytics only.
+
+## `$screen` counts screens that settled (750 ms)
+
+`lib/analytics/screen-tracking.ts` reports a screen only once it has been on
+top for `SCREEN_SETTLE_MS` (750 ms). The event is stamped with the time the
+screen appeared, and `seconds_on_previous_screen` runs from one reported
+screen appearing to the next. A screen replaced sooner is never reported.
+
+The audit's "same screen, same person, within 2 s" count (421 of 8,590
+`$screen` events, 30 days) contained no double mounts. Read one by one, the
+pairs were:
+
+| Pattern | Pairs | What it was |
+| --- | --- | --- |
+| Tab bounce (A → B → A, all `tab`) | ~200 | Real swipes. The pager commits a tab when it comes to rest, so Home → Wallet → Home committed Wallet for 300–1,200 ms. |
+| `onboarding_style` → `onboarding` → `onboarding_style` | ~85 | `useSegments()` reporting the onboarding index for under 100 ms during a `router.replace`. |
+| `search` ↔ `profile_other` | ~88 | About 40 were `search` flashing under an open profile (under 500 ms); the rest were people opening a profile and going back. |
+| Same uuid twice (Android) | ~43 | The SDK sending one event in two batches. PostHog skew-corrects each batch's `sent_at`, so the copies land 40–700 ms apart. |
+
+Redirect gates (`home` = `app/index.tsx`, `onboarding` =
+`app/onboarding/index.tsx`) were the largest group of short screens outside
+those pairs: 651 of 962 `home` views lasted under 750 ms.
+
+Effects of the change. Replaying the 30 days with a 750 ms window keeps about
+75% of `$screen` events. What drops is almost all loaders, redirect gates and
+tabs swiped through:
+- `home` drops most;
+- `wallet` loses about 30% (it sits between Home and Messages in the swipe
+  order).
+
+Compare `$screen` per screen across the release only with an annotation in
+place.
+
+Also changed: going Back from a pushed screen to the tab shell
+(`app/tabs/bounty-app.tsx`) now reports the shell's current tab, with
+`navigation_source = 'back'`. Before, nothing was reported until the next tab
+switch, so paths showed `bounty_detail` → `messages` with the feed in between
+missing.
+
+## Not duplicates: `composer_opened` and `app_opened`
+
+- **`composer_opened`.** 54 of its 56 "within 2 s" pairs had the person leave
+  the Post tab in between. Leaving remounts the composer (step 1, a fresh
+  funnel instance with its own `post_step_abandoned`), so a quick swipe away
+  and back is a second real open. Requiring a 1 s stay would still leave 1.3%
+  and drop a third of real opens, so it was not changed.
+- **`app_opened`.** It is 0.31% on 2.1.4. 14 of the 17 recent Android pairs
+  share a uuid: they are SDK resends, not a second startup. The
+  `processStartupInitDone` guard (2026-09-25) holds.
+
+**Count duplicates by uuid first.** PostHog merges same-uuid rows only
+eventually, so raw `count()` includes resends. Views counted under the settle
+rule carry `settle_ms = 750`. That is the only way to tell them from older
+`$screen` events, since an OTA update keeps `$app_version`. `app_opened` and
+`composer_opened` are limited to 2.1.3 and later, which have the 09-25
+guard.
+
+```sql
+-- 2-second repeats, 7 days, resends removed
+SELECT event, count() AS total, countIf(gap_ms <= 2000) AS repeats_2s,
+       round(100 * countIf(gap_ms <= 2000) / count(), 2) AS pct
+FROM (
+  SELECT event,
+         toUnixTimestamp64Milli(ts) - lagInFrame(toUnixTimestamp64Milli(ts), 1, 0)
+           OVER (PARTITION BY event, pid, sn ORDER BY ts
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS gap_ms
+  FROM (
+    SELECT event, uuid, any(person_id) AS pid, min(timestamp) AS ts,
+           any(coalesce(toString(properties.screen_name), '')) AS sn
+    FROM events
+    WHERE timestamp >= now() - INTERVAL 7 DAY
+      AND (
+        (event = '$screen' AND properties.settle_ms IS NOT NULL)
+        OR (event IN ('app_opened', 'composer_opened')
+            AND toString(properties.$app_version) IN ('2.1.3', '2.1.4', '2.1.5'))
+      )
+    GROUP BY event, uuid
+  )
+)
+GROUP BY event
+```
+
+Extend the version list as new builds ship.
+
+## Person properties: `lifetime_spend`, `lifetime_earnings`, `lifetime_gmv`
+
+Sent by `enqueue_analytics_person_snapshot()` (server, `$set`), built from
+`analytics_user_facts`. All three are written when a `release`
+`wallet_transactions` row completes. Migration:
+`20261124200000_lifetime_spend_earnings_person_properties.sql`.
+
+| Property | Who | Amount per completed bounty | Sum across persons |
+| --- | --- | --- | --- |
+| `lifetime_spend` | poster (`COALESCE(poster_id, user_id)`) | escrowed gross | = GMV |
+| `lifetime_earnings` | hunter (`accepted_by`) | the release row itself: what the hunter was paid, after the platform fee | = hunter payouts |
+| `lifetime_gmv` | **both** poster and hunter | escrowed gross, to each | **Never sum.** Counts every bounty twice. |
+
+`lifetime_gmv` is kept unchanged for history and existing insights. For
+marketplace GMV, sum `lifetime_spend` or, better, sum `bounty_events` or
+`wallet_transactions` in Supabase. For one person, `lifetime_gmv` is "gross
+of the bounties this person was on either side of".
+
+Gaps:
+- A release whose bounty has no `accepted_by` (30 of 54 completed releases on
+  2026-11-24, mostly internal) gives the hunter no `lifetime_earnings`, the
+  same as `bounties_completed` and the hunter's `lifetime_gmv`.
+- Historical releases are filled by `backfill_lifetime_split_facts(false)`,
+  run once after a dry run.
+
+## `role` and the behavioural "both" segment
+
+`role` has two writers, and the last write wins:
+- **Client.** `hooks/useCompleteOnboarding.ts` and
+  `lib/services/role-inference-service.ts` write the declared role.
+- **Server.** `enqueue_analytics_person_snapshot()` writes `both` when
+  `bounties_posted > 0 AND bounties_claimed > 0`, `poster` or `hunter` from
+  either count alone, and `profiles.primary_role` otherwise.
+
+So `role` is mostly the declared role, with `both` mostly behavioural. Do
+not use it as a segment. (Not changed.)
+
+Behavioural segments:
+
+- **Posted and was hired as a hunter:** `bounties_posted > 0` AND
+  `bounties_claimed > 0`. `bounties_claimed` counts `bounty_requests` that
+  reached `accepted`, not applications sent. On 2026-11-24 it matched 6
+  external persons, the same 6 that have `role = both`.
+- **Posted and applied** (applied at all, accepted or not): there is no
+  person property. Use a behavioural cohort: performed `bounty_published` AND
+  performed `application_submitted`, ever. On 2026-11-24 Supabase had 17
+  external accounts that own a bounty and sent at least one application.
+  Exclude internal accounts with cohort 473053 or `is_internal`.
+
+## `user_id` only
+
+Events from `analyticsService.trackEvent` carry `user_id` and no longer
+`userId`. Before retiring it, these were checked on 2026-11-24 and none read
+`userId` (or `user_id`):
+- insights;
+- cohorts;
+- actions;
+- feature flags;
+- dashboards;
+- destination (hog function) filters;
+- workflows (hog flows);
+- data-modeling views;
+- experiments;
+- notebooks;
+- alerts.
+
+A caller that still passes `userId` has it folded into `user_id`.

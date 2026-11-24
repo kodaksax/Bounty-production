@@ -876,7 +876,7 @@ const normalizePropertyKeys = (properties?: AnalyticsProperties): AnalyticsPrope
 // narrower than AnalyticsProperties (which also allows string[] and undefined).
 // Arrays are joined so the value still reaches the dashboard instead of being dropped.
 // Takes Record<string, unknown> rather than AnalyticsProperties because callers
-// (e.g. trackEvent's enrichedProperties) legitimately widen fields like `userId`
+// (e.g. trackEvent's enrichedProperties) legitimately widen fields like `user_id`
 // to `string | null`, which AnalyticsProperties' index signature doesn't allow.
 const toHeyCatchProperties = (
   properties: Record<string, unknown>
@@ -1002,13 +1002,21 @@ class AnalyticsService {
     options?: { setPersonProperties?: AnalyticsProperties }
   ): Promise<void> {
     try {
-      const normalizedProperties = normalizePropertyKeys(properties);
+      // user_id only: the camelCase `userId` twin was retired 2026-11-24 (no
+      // saved insight, cohort, action, flag, destination or workflow read it).
+      // A caller still passing `userId` (payment_security_warning,
+      // payment_sca_required, email_verified) has it folded into user_id, the
+      // caller's value used only before identify() has run.
+      const { userId: callerUserId, ...normalizedProperties } = normalizePropertyKeys(properties);
       const enrichedProperties = {
         ...normalizedProperties,
         platform: Platform.OS,
         timestamp: new Date().toISOString(),
-        userId: this.userId,
-        user_id: this.userId,
+        user_id:
+          this.userId ??
+          (typeof callerUserId === 'string' ? callerUserId : null) ??
+          (normalizedProperties.user_id as string | null | undefined) ??
+          null,
       };
 
       // Track in PostHog via the shared client. The helper is a no-op when
@@ -1108,7 +1116,7 @@ class AnalyticsService {
       posthogCapture('user_property_incremented', {
         property,
         increment: value,
-        userId: this.userId,
+        user_id: this.userId,
       });
     } catch (error) {
       console.error('[Analytics] Failed to increment user property:', error);
